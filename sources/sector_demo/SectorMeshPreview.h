@@ -1,0 +1,57 @@
+#pragma once
+
+#include "engine/assets/AssetManager.h"
+#include "engine/input/Input.h"
+#include "sector_demo/SectorTypes.h"
+
+#include <raylib.h>
+
+#include <string>
+#include <unordered_map>
+
+namespace game {
+
+class SectorMeshPreview {
+public:
+    bool Rebuild(
+            engine::AssetManager& assets,
+            const SectorMap& map,
+            const char* scopeName,
+            std::string& error);
+    void Shutdown(engine::AssetManager& assets);
+
+    void Enter();
+    void Leave();
+
+    void Update(engine::Input& input, float dt);
+    void Render(engine::AssetManager& assets);
+
+    bool IsReady() const { return initialized; }
+    Vector3 Position() const { return position; }
+    size_t SectorCount() const { return sectorCount; }
+    size_t BatchCount() const { return meshes.batches.size(); }
+    int TriangleCount() const { return meshes.triangleCount; }
+    float AssetProgress(engine::AssetManager& assets) const;
+
+private:
+    static std::string ResolveAssetPath(const std::string& path);
+    engine::TextureHandle TextureForId(const std::string& textureId) const;
+    void UpdateCamera();
+
+    SectorMeshBuildResult meshes;
+    std::unordered_map<std::string, engine::TextureHandle> textureHandlesById;
+    engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();
+    Material material = {};
+    Texture2D defaultMaterialTexture = {};
+    bool materialLoaded = false;
+    bool initialized = false;
+    bool mouseLookEnabled = true;
+    size_t sectorCount = 0;
+
+    Camera3D camera = {};
+    Vector3 position = {};
+    float yawRadians = 0.0f;
+    float pitchRadians = 0.0f;
+};
+
+} // namespace game

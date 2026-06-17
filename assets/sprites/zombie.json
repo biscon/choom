@@ -1,0 +1,372 @@
+{ "frames": {
+   "zombie (base) #Idle 0": {
+    "frame": { "x": 320, "y": 640, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 1": {
+    "frame": { "x": 0, "y": 480, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 2": {
+    "frame": { "x": 160, "y": 480, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 3": {
+    "frame": { "x": 320, "y": 480, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 4": {
+    "frame": { "x": 480, "y": 480, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 5": {
+    "frame": { "x": 640, "y": 480, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 6": {
+    "frame": { "x": 800, "y": 480, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 7": {
+    "frame": { "x": 960, "y": 480, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 8": {
+    "frame": { "x": 0, "y": 640, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 9": {
+    "frame": { "x": 160, "y": 640, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 10": {
+    "frame": { "x": 960, "y": 320, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 11": {
+    "frame": { "x": 480, "y": 640, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 12": {
+    "frame": { "x": 640, "y": 640, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 13": {
+    "frame": { "x": 800, "y": 640, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 14": {
+    "frame": { "x": 960, "y": 640, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Idle 15": {
+    "frame": { "x": 0, "y": 800, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Walk 0": {
+    "frame": { "x": 160, "y": 800, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 1": {
+    "frame": { "x": 320, "y": 800, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 2": {
+    "frame": { "x": 480, "y": 800, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 3": {
+    "frame": { "x": 640, "y": 800, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 4": {
+    "frame": { "x": 480, "y": 160, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 5": {
+    "frame": { "x": 160, "y": 0, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 6": {
+    "frame": { "x": 320, "y": 0, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 7": {
+    "frame": { "x": 480, "y": 0, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 8": {
+    "frame": { "x": 640, "y": 0, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 9": {
+    "frame": { "x": 800, "y": 0, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 10": {
+    "frame": { "x": 960, "y": 0, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 11": {
+    "frame": { "x": 0, "y": 160, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 12": {
+    "frame": { "x": 160, "y": 160, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 13": {
+    "frame": { "x": 320, "y": 160, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 14": {
+    "frame": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #Walk 15": {
+    "frame": { "x": 640, "y": 160, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 85
+   },
+   "zombie (base) #MeleeAttack 0": {
+    "frame": { "x": 800, "y": 160, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #MeleeAttack 1": {
+    "frame": { "x": 960, "y": 160, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #MeleeAttack 2": {
+    "frame": { "x": 0, "y": 320, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #MeleeAttack 3": {
+    "frame": { "x": 160, "y": 320, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #MeleeAttack 4": {
+    "frame": { "x": 320, "y": 320, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #MeleeAttack 5": {
+    "frame": { "x": 480, "y": 320, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #MeleeAttack 6": {
+    "frame": { "x": 640, "y": 320, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #MeleeAttack 7": {
+    "frame": { "x": 800, "y": 320, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 120
+   },
+   "zombie (base) #Hurt 0": {
+    "frame": { "x": 800, "y": 160, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 75
+   },
+   "zombie (base) #Hurt 1": {
+    "frame": { "x": 960, "y": 160, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 75
+   },
+   "zombie (base) #Hurt 2": {
+    "frame": { "x": 0, "y": 320, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 75
+   },
+   "zombie (base) #Hurt 3": {
+    "frame": { "x": 160, "y": 320, "w": 160, "h": 160 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 160 },
+    "sourceSize": { "w": 160, "h": 160 },
+    "duration": 75
+   }
+ },
+ "meta": {
+  "app": "http://www.aseprite.org/",
+  "version": "1.3.17-x64",
+  "image": "zombie.png",
+  "format": "RGBA8888",
+  "size": { "w": 1120, "h": 960 },
+  "scale": "1",
+  "frameTags": [
+   { "name": "Idle", "from": 0, "to": 15, "direction": "forward", "color": "#000000ff" },
+   { "name": "Walk", "from": 16, "to": 31, "direction": "forward", "color": "#000000ff" },
+   { "name": "MeleeAttack", "from": 32, "to": 39, "direction": "forward", "color": "#000000ff" },
+   { "name": "Hurt", "from": 40, "to": 43, "direction": "pingpong", "repeat": "2", "color": "#000000ff" }
+  ],
+  "layers": [
+   { "name": "base", "opacity": 255, "blendMode": "normal" }
+  ]
+ }
+}

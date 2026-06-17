@@ -1,0 +1,140 @@
+cmake_minimum_required(VERSION 3.15)
+project(engine LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# -------------------------------
+# Source collection
+# -------------------------------
+# Automatically gather every .cpp/.c/.h file under sources/
+file(GLOB_RECURSE PROJECT_SOURCES
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/sources/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/sources/*.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/sources/*.h"
+)
+
+add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
+
+target_include_directories(${PROJECT_NAME} PRIVATE sources)
+target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
+
+if(UNIX AND NOT APPLE)
+    target_link_libraries(${PROJECT_NAME} PRIVATE X11 Xcursor)
+endif()
+
+# -------------------------------
+# Build Type Flags
+# -------------------------------
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message(STATUS "Configuring Debug build")
+
+    target_compile_options(${PROJECT_NAME} PRIVATE
+            -fno-strict-aliasing
+            -g
+    )
+    if(WIN32)
+        target_link_options(${PROJECT_NAME} PRIVATE
+                -static
+        )
+    endif ()
+
+    if (NOT WIN32)
+        target_compile_options(${PROJECT_NAME} PRIVATE
+                #-fsanitize=address
+                -fno-omit-frame-pointer
+                -Wreturn-type
+                -Wunused-result
+                -Wuninitialized
+                -Wno-conversion
+                -Wno-sign-conversion
+        )
+        target_link_options(${PROJECT_NAME} PRIVATE
+                #-fsanitize=address
+        )
+    endif()
+endif()
+
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    message(STATUS "Configuring Release build")
+
+    target_compile_options(${PROJECT_NAME} PRIVATE
+            -O3
+            -flto
+            -fno-strict-aliasing
+            -DNDEBUG
+    )
+    if(WIN32)
+        target_link_options(${PROJECT_NAME} PRIVATE
+                -static
+                -Wl,-subsystem,windows
+        )
+    endif()
+endif()
+
+# -------------------------------
+# Raylib FetchContent
+# -------------------------------
+include(FetchContent)
+set(FETCHCONTENT_QUIET FALSE)
+
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
+
+if(APPLE)
+    set(USE_EXTERNAL_GLFW ON CACHE BOOL "" FORCE)
+endif()
+
+FetchContent_Declare(
+        raylib
+        GIT_REPOSITORY "https://github.com/raysan5/raylib.git"
+        GIT_TAG "6.0"
+        GIT_PROGRESS TRUE
+)
+
+FetchContent_MakeAvailable(raylib)
+
+# -------------------------------
+# ASSETS_PATH define
+# -------------------------------
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    # When you ship the game: expects ./assets/ next to executable
+    target_compile_definitions(${PROJECT_NAME} PUBLIC ASSETS_PATH="./assets/")
+else()
+    # During development: absolute path (CLion, hot reload, etc)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+endif()
+
+# ---------------------------------------------------------
+# Packaging: only active in Release builds
+# ---------------------------------------------------------
+
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+
+    set(PACKAGE_DIR "${CMAKE_BINARY_DIR}/dist")
+
+    add_custom_target(package_game ALL
+            COMMENT "Packaging game into ${PACKAGE_DIR}"
+    )
+
+    # Always start fresh
+    add_custom_command(TARGET package_game PRE_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${PACKAGE_DIR}"
+            COMMENT "Cleaning old package directory"
+    )
+
+    # Copy executable
+    add_custom_command(TARGET package_game POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${PACKAGE_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> "${PACKAGE_DIR}/"
+    )
+
+    # Copy assets folder
+    add_custom_command(TARGET package_game POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/assets"
+            "${PACKAGE_DIR}/assets"
+    )
+
+endif()
