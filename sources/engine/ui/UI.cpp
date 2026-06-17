@@ -843,12 +843,14 @@ UIScrollAreaResult BeginScrollArea(
         const char* id,
         Rectangle bounds,
         Vector2 contentSize,
-        UIScrollState& state)
+        UIScrollState& state,
+        bool drawFrame)
 {
     assert(!ui.inScrollArea && "Nested scroll areas are not supported.");
     UIScrollAreaResult result;
     result.bounds = bounds;
     result.contentSize = contentSize;
+    result.drawFrame = drawFrame;
 
     if (ui.inScrollArea) {
         return result;
@@ -856,7 +858,7 @@ UIScrollAreaResult BeginScrollArea(
 
     const uint32_t scrollId = HashId(id);
 
-    Rectangle viewport = ScrollClientBounds(config, bounds);
+    Rectangle viewport = drawFrame ? ScrollClientBounds(config, bounds) : bounds;
     bool scrollX = contentSize.x > viewport.width;
     bool scrollY = contentSize.y > viewport.height;
     if (scrollY) {
@@ -900,7 +902,7 @@ UIScrollAreaResult BeginScrollArea(
             config.scrollbarMinThumbSize
     );
 
-    if (Contains(bounds, ui.mousePosition)) {
+    if (scrollY && Contains(bounds, ui.mousePosition)) {
         input.ForEachEvent(
                 InputEventType::MouseWheel,
                 true,
@@ -995,7 +997,9 @@ UIScrollAreaResult BeginScrollArea(
             }
     );
 
-    DrawWidgetBackgroundRaw(config, bounds, config.panelColor, config.borderColor);
+    if (drawFrame) {
+        DrawWidgetBackgroundRaw(config, bounds, config.panelColor, config.borderColor);
+    }
 
     ui.inScrollArea = true;
     ui.scrollAreaId = scrollId;
@@ -1032,7 +1036,9 @@ void EndScrollArea(
     state.offset.x = ClampScrollOffset(state.offset.x, scrollArea.contentSize.x, scrollArea.viewport.width);
     state.offset.y = ClampScrollOffset(state.offset.y, scrollArea.contentSize.y, scrollArea.viewport.height);
 
-    DrawRectangleLinesEx(scrollArea.bounds, config.borderThickness, config.borderColor);
+    if (scrollArea.drawFrame) {
+        DrawRectangleLinesEx(scrollArea.bounds, config.borderThickness, config.borderColor);
+    }
 
     if (scrollArea.scrollY) {
         const Rectangle track = VerticalScrollTrack(config, scrollArea);

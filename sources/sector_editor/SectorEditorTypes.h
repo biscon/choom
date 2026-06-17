@@ -56,6 +56,12 @@ enum class TexturePickerTargetKind {
     EdgeUpperWall
 };
 
+enum class EdgeUvPart {
+    Wall,
+    Lower,
+    Upper
+};
+
 struct TexturePickerState {
     bool open = false;
     TexturePickerTargetKind target = TexturePickerTargetKind::None;
@@ -88,6 +94,7 @@ struct SectorEditorState {
 
     int selectedSectorIndex = -1;
     int selectedEdgeIndex = -1;
+    EdgeUvPart selectedEdgeUvPart = EdgeUvPart::Wall;
     int hoveredSectorIndex = -1;
     int hoveredEdgeSectorIndex = -1;
     int hoveredEdgeIndex = -1;
@@ -127,7 +134,7 @@ struct SectorEditorUiState {
     engine::UIFloatInputState edgeUvScaleVInput;
     engine::UIFloatInputState edgeUvOffsetUInput;
     engine::UIFloatInputState edgeUvOffsetVInput;
-    engine::UIScrollState sectorListScroll;
+    engine::UIScrollState inspectorScroll;
     char selectedSectorIdBuffer[64] = {};
     int idBufferSectorIndex = -1;
     std::string idEditError;

@@ -15,6 +15,13 @@ struct SectorPoint {
     float y = 0.0f;
 };
 
+struct SectorEdgePartUvOverride {
+    Vector2 uvScale = {1.0f, 1.0f};
+    Vector2 uvOffset = {0.0f, 0.0f};
+    bool hasUvScale = false;
+    bool hasUvOffset = false;
+};
+
 struct SectorEdgeOverride {
     int edgeIndex = -1;
 
@@ -26,10 +33,9 @@ struct SectorEdgeOverride {
     bool hasLowerWallTexture = false;
     bool hasUpperWallTexture = false;
 
-    Vector2 uvScale = {1.0f, 1.0f};
-    Vector2 uvOffset = {0.0f, 0.0f};
-    bool hasUvScale = false;
-    bool hasUvOffset = false;
+    SectorEdgePartUvOverride wallUv;
+    SectorEdgePartUvOverride lowerUv;
+    SectorEdgePartUvOverride upperUv;
 };
 
 struct SectorDefinition {
@@ -70,12 +76,16 @@ struct SectorTextureBinding {
     engine::TextureHandle handle = engine::NullTextureHandle();
 };
 
-struct EffectiveEdgeSettings {
-    std::string wallTextureId;
-    std::string lowerWallTextureId;
-    std::string upperWallTextureId;
+struct EffectiveEdgePartSettings {
+    std::string textureId;
     Vector2 uvScale = {1.0f, 1.0f};
     Vector2 uvOffset = {0.0f, 0.0f};
+};
+
+struct EffectiveEdgeSettings {
+    EffectiveEdgePartSettings wall;
+    EffectiveEdgePartSettings lower;
+    EffectiveEdgePartSettings upper;
 };
 
 struct EdgeNeighborInfo {
