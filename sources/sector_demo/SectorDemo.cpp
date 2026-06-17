@@ -52,7 +52,7 @@ void SectorDemo::RenderOverlay(engine::AssetManager& assets)
 
     const Vector3 position = preview.Position();
     DrawText("Sector Mesh Demo", 40, 36, 30, RAYWHITE);
-    DrawText("WASD move  |  Mouse look  |  Space/Ctrl up/down  |  F12 cursor toggle", 40, 76, 20, LIGHTGRAY);
+    DrawText("WASD move  |  Mouse look  |  Space/Ctrl up/down  |  F11 cursor toggle", 40, 76, 20, LIGHTGRAY);
     DrawText(
             TextFormat(
                     "pos %.2f %.2f %.2f   sectors %zu   batches %zu   assets %.0f%%",

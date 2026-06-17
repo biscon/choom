@@ -16,6 +16,7 @@ namespace {
 constexpr float MouseSensitivity = 0.0030f;
 constexpr float MoveSpeed = 5.0f;
 constexpr float PitchLimit = 1.45f;
+constexpr int MouseLookWarmupFrames = 2;
 
 bool StartsWith(const std::string& value, const char* prefix)
 {
@@ -123,6 +124,7 @@ void SectorMeshPreview::Enter()
     }
 
     mouseLookEnabled = true;
+    mouseLookWarmupFrames = MouseLookWarmupFrames;
     DisableCursor();
 }
 
@@ -141,12 +143,13 @@ void SectorMeshPreview::Update(engine::Input& input, float dt)
             engine::InputEventType::KeyPressed,
             true,
             [this](engine::InputEvent& event) {
-                if (event.key.key != KEY_F12) {
+                if (event.key.key != KEY_F11) {
                     return;
                 }
 
                 mouseLookEnabled = !mouseLookEnabled;
                 if (mouseLookEnabled) {
+                    mouseLookWarmupFrames = MouseLookWarmupFrames;
                     DisableCursor();
                 } else {
                     EnableCursor();
@@ -156,10 +159,14 @@ void SectorMeshPreview::Update(engine::Input& input, float dt)
     );
 
     if (mouseLookEnabled) {
-        const Vector2 mouseDelta = input.MouseDelta();
-        yawRadians += mouseDelta.x * MouseSensitivity;
-        pitchRadians -= mouseDelta.y * MouseSensitivity;
-        pitchRadians = Clamp(pitchRadians, -PitchLimit, PitchLimit);
+        if (mouseLookWarmupFrames > 0) {
+            --mouseLookWarmupFrames;
+        } else {
+            const Vector2 mouseDelta = input.MouseDelta();
+            yawRadians += mouseDelta.x * MouseSensitivity;
+            pitchRadians -= mouseDelta.y * MouseSensitivity;
+            pitchRadians = Clamp(pitchRadians, -PitchLimit, PitchLimit);
+        }
     }
 
     Vector3 forward{std::cos(yawRadians), 0.0f, std::sin(yawRadians)};
@@ -210,6 +217,19 @@ void SectorMeshPreview::Render(engine::AssetManager& assets)
         DrawMesh(batch.mesh, material, MatrixIdentity());
     }
     EndMode3D();
+}
+
+SectorMeshPreviewPose SectorMeshPreview::Pose() const
+{
+    return SectorMeshPreviewPose{position, yawRadians, pitchRadians};
+}
+
+void SectorMeshPreview::ApplyPose(const SectorMeshPreviewPose& pose)
+{
+    position = pose.position;
+    yawRadians = pose.yawRadians;
+    pitchRadians = pose.pitchRadians;
+    UpdateCamera();
 }
 
 float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const

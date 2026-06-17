@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/ui/UI.h"
+#include "sector_demo/SectorMeshPreview.h"
 #include "sector_demo/SectorTypes.h"
 
 #include <raylib.h>
@@ -56,6 +57,12 @@ enum class TexturePickerTargetKind {
     EdgeUpperWall
 };
 
+enum class EdgeUvPart {
+    Wall,
+    Lower,
+    Upper
+};
+
 struct TexturePickerState {
     bool open = false;
     TexturePickerTargetKind target = TexturePickerTargetKind::None;
@@ -88,6 +95,7 @@ struct SectorEditorState {
 
     int selectedSectorIndex = -1;
     int selectedEdgeIndex = -1;
+    EdgeUvPart selectedEdgeUvPart = EdgeUvPart::Wall;
     int hoveredSectorIndex = -1;
     int hoveredEdgeSectorIndex = -1;
     int hoveredEdgeIndex = -1;
@@ -112,6 +120,8 @@ struct SectorEditorState {
     bool showAxes = true;
     bool showSectorIds = true;
     bool dirty = false;
+    bool hasPreviewPose = false;
+    SectorMeshPreviewPose lastPreviewPose = {};
 
     engine::AssetScopeHandle editorTextureScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;
@@ -127,7 +137,7 @@ struct SectorEditorUiState {
     engine::UIFloatInputState edgeUvScaleVInput;
     engine::UIFloatInputState edgeUvOffsetUInput;
     engine::UIFloatInputState edgeUvOffsetVInput;
-    engine::UIScrollState sectorListScroll;
+    engine::UIScrollState inspectorScroll;
     char selectedSectorIdBuffer[64] = {};
     int idBufferSectorIndex = -1;
     std::string idEditError;

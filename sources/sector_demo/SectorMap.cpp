@@ -273,6 +273,73 @@ void ReadEdgeTextureField(
     hasTexture = true;
 }
 
+void ReadEdgeUvField(
+        const char* sectorId,
+        const Json& edgeJson,
+        int edgeIndex,
+        const char* field,
+        Vector2& uvValue,
+        bool& hasUvValue)
+{
+    const auto it = edgeJson.find(field);
+    if (it == edgeJson.end()) {
+        return;
+    }
+
+    Vector2 parsed{};
+    if (ReadVector2Field(edgeJson, field, parsed)) {
+        uvValue = parsed;
+        hasUvValue = true;
+    } else {
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed %s on edge %d in sector '%s'\n", field, edgeIndex, sectorId);
+    }
+}
+
+void ApplyLegacyEdgeUvScale(SectorEdgeOverride& edgeOverride, Vector2 uvScale)
+{
+    edgeOverride.wallUv.uvScale = uvScale;
+    edgeOverride.lowerUv.uvScale = uvScale;
+    edgeOverride.upperUv.uvScale = uvScale;
+    edgeOverride.wallUv.hasUvScale = true;
+    edgeOverride.lowerUv.hasUvScale = true;
+    edgeOverride.upperUv.hasUvScale = true;
+}
+
+void ApplyLegacyEdgeUvOffset(SectorEdgeOverride& edgeOverride, Vector2 uvOffset)
+{
+    edgeOverride.wallUv.uvOffset = uvOffset;
+    edgeOverride.lowerUv.uvOffset = uvOffset;
+    edgeOverride.upperUv.uvOffset = uvOffset;
+    edgeOverride.wallUv.hasUvOffset = true;
+    edgeOverride.lowerUv.hasUvOffset = true;
+    edgeOverride.upperUv.hasUvOffset = true;
+}
+
+bool HasAnyUvOverride(const SectorEdgePartUvOverride& uv)
+{
+    return uv.hasUvScale || uv.hasUvOffset;
+}
+
+void ApplyPartUvOverride(EffectiveEdgePartSettings& settings, const SectorEdgePartUvOverride& uv)
+{
+    if (uv.hasUvScale) {
+        settings.uvScale = uv.uvScale;
+    }
+    if (uv.hasUvOffset) {
+        settings.uvOffset = uv.uvOffset;
+    }
+}
+
+void WriteEdgeUvFields(Json& edgeJson, const char* scaleField, const char* offsetField, const SectorEdgePartUvOverride& uv)
+{
+    if (uv.hasUvScale) {
+        edgeJson[scaleField] = Json::array({uv.uvScale.x, uv.uvScale.y});
+    }
+    if (uv.hasUvOffset) {
+        edgeJson[offsetField] = Json::array({uv.uvOffset.x, uv.uvOffset.y});
+    }
+}
+
 void ReadEdgeOverrides(const SectorMap& map, const Json& sectorJson, SectorDefinition& sector)
 {
     const auto edgesIt = sectorJson.find("edges");
@@ -312,12 +379,18 @@ void ReadEdgeOverrides(const SectorMap& map, const Json& sectorJson, SectorDefin
         ReadEdgeTextureField(map, sector.id.c_str(), edgeJson, "lowerWallTex", edgeOverride.lowerWallTextureId, edgeOverride.hasLowerWallTexture);
         ReadEdgeTextureField(map, sector.id.c_str(), edgeJson, "upperWallTex", edgeOverride.upperWallTextureId, edgeOverride.hasUpperWallTexture);
 
+        ReadEdgeUvField(sector.id.c_str(), edgeJson, edgeIndex, "wallUvScale", edgeOverride.wallUv.uvScale, edgeOverride.wallUv.hasUvScale);
+        ReadEdgeUvField(sector.id.c_str(), edgeJson, edgeIndex, "wallUvOffset", edgeOverride.wallUv.uvOffset, edgeOverride.wallUv.hasUvOffset);
+        ReadEdgeUvField(sector.id.c_str(), edgeJson, edgeIndex, "lowerUvScale", edgeOverride.lowerUv.uvScale, edgeOverride.lowerUv.hasUvScale);
+        ReadEdgeUvField(sector.id.c_str(), edgeJson, edgeIndex, "lowerUvOffset", edgeOverride.lowerUv.uvOffset, edgeOverride.lowerUv.hasUvOffset);
+        ReadEdgeUvField(sector.id.c_str(), edgeJson, edgeIndex, "upperUvScale", edgeOverride.upperUv.uvScale, edgeOverride.upperUv.hasUvScale);
+        ReadEdgeUvField(sector.id.c_str(), edgeJson, edgeIndex, "upperUvOffset", edgeOverride.upperUv.uvOffset, edgeOverride.upperUv.hasUvOffset);
+
         const auto scaleIt = edgeJson.find("uvScale");
         if (scaleIt != edgeJson.end()) {
             Vector2 uvScale{};
             if (ReadVector2Field(edgeJson, "uvScale", uvScale)) {
-                edgeOverride.uvScale = uvScale;
-                edgeOverride.hasUvScale = true;
+                ApplyLegacyEdgeUvScale(edgeOverride, uvScale);
             } else {
                 std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed uvScale on edge %d in sector '%s'\n", edgeIndex, sector.id.c_str());
             }
@@ -327,8 +400,7 @@ void ReadEdgeOverrides(const SectorMap& map, const Json& sectorJson, SectorDefin
         if (offsetIt != edgeJson.end()) {
             Vector2 uvOffset{};
             if (ReadVector2Field(edgeJson, "uvOffset", uvOffset)) {
-                edgeOverride.uvOffset = uvOffset;
-                edgeOverride.hasUvOffset = true;
+                ApplyLegacyEdgeUvOffset(edgeOverride, uvOffset);
             } else {
                 std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed uvOffset on edge %d in sector '%s'\n", edgeIndex, sector.id.c_str());
             }
@@ -341,8 +413,9 @@ bool IsEmptyOverride(const SectorEdgeOverride& edgeOverride)
     return !edgeOverride.hasWallTexture
             && !edgeOverride.hasLowerWallTexture
             && !edgeOverride.hasUpperWallTexture
-            && !edgeOverride.hasUvScale
-            && !edgeOverride.hasUvOffset;
+            && !HasAnyUvOverride(edgeOverride.wallUv)
+            && !HasAnyUvOverride(edgeOverride.lowerUv)
+            && !HasAnyUvOverride(edgeOverride.upperUv);
 }
 
 void RemapEdgeOverridesAfterReverse(SectorDefinition& sector, const std::vector<SectorPoint>& originalPoints)
@@ -372,9 +445,9 @@ void RemapEdgeOverridesAfterReverse(SectorDefinition& sector, const std::vector<
 EffectiveEdgeSettings GetEffectiveEdgeSettings(const SectorDefinition& sector, int edgeIndex)
 {
     EffectiveEdgeSettings settings;
-    settings.wallTextureId = sector.wallTextureId;
-    settings.lowerWallTextureId = sector.lowerWallTextureId;
-    settings.upperWallTextureId = sector.upperWallTextureId;
+    settings.wall.textureId = sector.wallTextureId;
+    settings.lower.textureId = sector.lowerWallTextureId;
+    settings.upper.textureId = sector.upperWallTextureId;
 
     const SectorEdgeOverride* edgeOverride = FindEdgeOverride(sector, edgeIndex);
     if (edgeOverride == nullptr) {
@@ -382,20 +455,17 @@ EffectiveEdgeSettings GetEffectiveEdgeSettings(const SectorDefinition& sector, i
     }
 
     if (edgeOverride->hasWallTexture) {
-        settings.wallTextureId = edgeOverride->wallTextureId;
+        settings.wall.textureId = edgeOverride->wallTextureId;
     }
     if (edgeOverride->hasLowerWallTexture) {
-        settings.lowerWallTextureId = edgeOverride->lowerWallTextureId;
+        settings.lower.textureId = edgeOverride->lowerWallTextureId;
     }
     if (edgeOverride->hasUpperWallTexture) {
-        settings.upperWallTextureId = edgeOverride->upperWallTextureId;
+        settings.upper.textureId = edgeOverride->upperWallTextureId;
     }
-    if (edgeOverride->hasUvScale) {
-        settings.uvScale = edgeOverride->uvScale;
-    }
-    if (edgeOverride->hasUvOffset) {
-        settings.uvOffset = edgeOverride->uvOffset;
-    }
+    ApplyPartUvOverride(settings.wall, edgeOverride->wallUv);
+    ApplyPartUvOverride(settings.lower, edgeOverride->lowerUv);
+    ApplyPartUvOverride(settings.upper, edgeOverride->upperUv);
 
     return settings;
 }
@@ -613,12 +683,9 @@ bool SaveSectorMap(const char* path, const SectorMap& map)
                 if (edgeOverride.hasUpperWallTexture) {
                     edgeJson["upperWallTex"] = edgeOverride.upperWallTextureId;
                 }
-                if (edgeOverride.hasUvScale) {
-                    edgeJson["uvScale"] = Json::array({edgeOverride.uvScale.x, edgeOverride.uvScale.y});
-                }
-                if (edgeOverride.hasUvOffset) {
-                    edgeJson["uvOffset"] = Json::array({edgeOverride.uvOffset.x, edgeOverride.uvOffset.y});
-                }
+                WriteEdgeUvFields(edgeJson, "wallUvScale", "wallUvOffset", edgeOverride.wallUv);
+                WriteEdgeUvFields(edgeJson, "lowerUvScale", "lowerUvOffset", edgeOverride.lowerUv);
+                WriteEdgeUvFields(edgeJson, "upperUvScale", "upperUvOffset", edgeOverride.upperUv);
                 edges.push_back(std::move(edgeJson));
             }
             if (!edges.empty()) {

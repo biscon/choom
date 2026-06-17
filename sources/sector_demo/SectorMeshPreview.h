@@ -11,6 +11,12 @@
 
 namespace game {
 
+struct SectorMeshPreviewPose {
+    Vector3 position = {};
+    float yawRadians = 0.0f;
+    float pitchRadians = 0.0f;
+};
+
 class SectorMeshPreview {
 public:
     bool Rebuild(
@@ -28,6 +34,8 @@ public:
 
     bool IsReady() const { return initialized; }
     Vector3 Position() const { return position; }
+    SectorMeshPreviewPose Pose() const;
+    void ApplyPose(const SectorMeshPreviewPose& pose);
     size_t SectorCount() const { return sectorCount; }
     size_t BatchCount() const { return meshes.batches.size(); }
     int TriangleCount() const { return meshes.triangleCount; }
@@ -46,6 +54,7 @@ private:
     bool materialLoaded = false;
     bool initialized = false;
     bool mouseLookEnabled = true;
+    int mouseLookWarmupFrames = 0;
     size_t sectorCount = 0;
 
     Camera3D camera = {};

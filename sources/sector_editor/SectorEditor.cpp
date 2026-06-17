@@ -73,6 +73,37 @@ const char* ToolName(SectorEditorTool tool)
     return "Unknown";
 }
 
+const char* EdgeUvPartName(EdgeUvPart part)
+{
+    switch (part) {
+        case EdgeUvPart::Wall: return "Wall";
+        case EdgeUvPart::Lower: return "Lower";
+        case EdgeUvPart::Upper: return "Upper";
+    }
+    return "Wall";
+}
+
+const char* EdgeUvPartStatusName(EdgeUvPart part)
+{
+    switch (part) {
+        case EdgeUvPart::Wall: return "wall";
+        case EdgeUvPart::Lower: return "lower";
+        case EdgeUvPart::Upper: return "upper";
+    }
+    return "wall";
+}
+
+const char* ToolHelpText(SectorEditorTool tool)
+{
+    switch (tool) {
+        case SectorEditorTool::Select: return "Select: click edges or sectors in canvas";
+        case SectorEditorTool::Sector: return "Sector: left click add, click first closes, right click/Esc cancels, Backspace removes";
+        case SectorEditorTool::Move: return "Move: drag vertex";
+        case SectorEditorTool::Erase: return "Erase: click sector to delete";
+    }
+    return "";
+}
+
 const char* TextureTargetLabel(TexturePickerTargetKind target)
 {
     switch (target) {
@@ -298,8 +329,12 @@ bool IsEmptyEdgeOverride(const SectorEdgeOverride& edgeOverride)
     return !edgeOverride.hasWallTexture
             && !edgeOverride.hasLowerWallTexture
             && !edgeOverride.hasUpperWallTexture
-            && !edgeOverride.hasUvScale
-            && !edgeOverride.hasUvOffset;
+            && !edgeOverride.wallUv.hasUvScale
+            && !edgeOverride.wallUv.hasUvOffset
+            && !edgeOverride.lowerUv.hasUvScale
+            && !edgeOverride.lowerUv.hasUvOffset
+            && !edgeOverride.upperUv.hasUvScale
+            && !edgeOverride.upperUv.hasUvOffset;
 }
 
 bool IsConvexPolygon(const SectorDefinition& sector)
@@ -1426,7 +1461,7 @@ void SectorEditor::DrawPreviewOverlay(
             assets,
             Rectangle{panel.x + 18.0f, panel.y + 54.0f, panel.width - 36.0f, 30.0f},
             font,
-            "WASD move | Mouse look | Space/Ctrl up/down | F12 cursor | Tab/Escape return",
+            "WASD move | Mouse look | Space/Ctrl up/down | F11 cursor | Tab/Escape return",
             engine::UITextJustify::Left,
             config.mutedTextColor
     );
@@ -1870,17 +1905,6 @@ void SectorEditor::DrawToolsPanel(
         TryEnterPreview3D(assets, ui);
     }
 
-    y += rowH + gap;
-    const char* helpText = "Select: click edges or sectors in the canvas or list";
-    if (state.currentTool == SectorEditorTool::Sector) {
-        helpText = "Sector: left click add, click first closes, right click/Esc cancels, Backspace removes";
-    } else if (state.currentTool == SectorEditorTool::Move) {
-        helpText = "Move: drag an existing vertex; shared coordinates move together; Esc cancels";
-    } else if (state.currentTool == SectorEditorTool::Erase) {
-        helpText = "Erase: click sector to delete";
-    }
-    engine::Text(config, assets, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 124.0f}, font, helpText, engine::UITextJustify::Left, config.mutedTextColor);
-
     engine::EndPanel(ui, config, panel);
 }
 
@@ -1898,80 +1922,101 @@ void SectorEditor::DrawSectorsPanel(
             "sector_editor_sectors",
             BuildRightPanelRect(),
             font,
-            "Sectors"
+            "Inspector"
     );
 
-    const float rowH = 44.0f;
-    const float listHeight = 210.0f;
-    const Vector2 contentSize{panel.contentRect.width, std::max(listHeight, rowH * static_cast<float>(state.map.sectors.size()))};
+    SyncSelectedSectorIdBuffer();
+
+    const bool hasSelectedSector = state.selectedSectorIndex >= 0
+            && state.selectedSectorIndex < static_cast<int>(state.map.sectors.size());
+    if (hasSelectedSector) {
+        const SectorDefinition& selectedSector = state.map.sectors[static_cast<size_t>(state.selectedSectorIndex)];
+        if (state.selectedEdgeIndex >= 0 && state.selectedEdgeIndex >= static_cast<int>(selectedSector.points.size())) {
+            state.selectedEdgeIndex = -1;
+        }
+    }
+
+    const float rowH = 40.0f;
+    const float gap = 8.0f;
+    const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
+    const auto inspectorContentHeight = [&]() {
+        if (!hasSelectedSector) {
+            return 42.0f;
+        }
+
+        float height = 38.0f; // Sector title.
+        height += rowH + gap; // Id.
+        if (!uiState.idEditError.empty()) {
+            height += 36.0f;
+        }
+        height += rowH + gap; // Delete.
+        height += rowH + gap; // Floor.
+        height += rowH + gap; // Ceiling.
+
+        if (state.selectedEdgeIndex < 0) {
+            height += 4.0f;
+            height += 5.0f * (36.0f + gap);
+            return height;
+        }
+
+        height += 8.0f; // Spacing before separator.
+        height += 18.0f; // Separator.
+        height += 34.0f; // Selected side.
+        height += 30.0f; // From/to.
+        height += 34.0f; // Opposite side.
+
+        const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(
+                state.map,
+                state.selectedSectorIndex,
+                state.selectedEdgeIndex
+        );
+        if (neighbor.hasNeighbor) {
+            height += 38.0f + gap;
+        }
+
+        height += 3.0f * (36.0f + gap); // Edge texture rows.
+        height += 4.0f;
+        height += 38.0f + gap; // UV part buttons.
+        height += 62.0f + gap; // Scale inputs.
+        height += 62.0f + gap; // Offset inputs.
+        height += 38.0f; // Reset button.
+        return height;
+    };
+    const float contentH = inspectorContentHeight();
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
             ui,
             config,
             input,
-            "sector_editor_sector_list_scroll",
-            Rectangle{panel.contentRect.x, panel.contentRect.y, panel.contentRect.width, listHeight},
-            contentSize,
-            uiState.sectorListScroll
+            "sector_editor_inspector_scroll",
+            panel.contentRect,
+            Vector2{scrollContentW, contentH},
+            uiState.inspectorScroll,
+            false
     );
 
-    for (size_t i = 0; i < state.map.sectors.size(); ++i) {
-        const SectorDefinition& sector = state.map.sectors[i];
-        const bool selected = static_cast<int>(i) == state.selectedSectorIndex;
-        char id[64];
-        char label[160];
-        std::snprintf(id, sizeof(id), "sector_editor_sector_%zu", i);
-        std::snprintf(
-                label,
-                sizeof(label),
-                "%s  floor %.1f  ceil %.1f",
-                sector.id.c_str(),
-                sector.floorZ,
-                sector.ceilingZ
-        );
-        if (engine::ToolButton(
-                ui,
-                config,
-                input,
-                assets,
-                id,
-                Rectangle{0.0f, rowH * static_cast<float>(i), panel.contentRect.width, rowH},
-                font,
-                label,
-                selected)) {
-            SelectSector(static_cast<int>(i));
-        }
-    }
+    const float contentW = scroll.viewport.width;
+    float y = 0.0f;
 
-    engine::EndScrollArea(ui, config, input, scroll, uiState.sectorListScroll);
-    SyncSelectedSectorIdBuffer();
-
-    float y = panel.contentRect.y + listHeight + 18.0f;
-    engine::Separator(config, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 12.0f});
-    y += 20.0f;
-
-    if (state.selectedSectorIndex < 0
-            || state.selectedSectorIndex >= static_cast<int>(state.map.sectors.size())) {
-        engine::Text(config, assets, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 42.0f}, font, "Selected: none", engine::UITextJustify::Left, config.mutedTextColor);
+    if (!hasSelectedSector) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 42.0f}, font, "Selected: none", engine::UITextJustify::Left, config.mutedTextColor);
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return;
     }
 
     SectorDefinition& sector = state.map.sectors[static_cast<size_t>(state.selectedSectorIndex)];
-    const engine::UILabelFieldRowResult idRow = engine::LabelFieldRow(
-            config,
-            assets,
-            Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH},
-            font,
-            "Id",
-            96.0f
-    );
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Sector: %s", sector.id.c_str()), engine::UITextJustify::Left, config.textColor);
+    y += 38.0f;
+
+    const float labelW = 70.0f;
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, "Id", engine::UITextJustify::Left, config.mutedTextColor);
     const engine::UITextInputResult idResult = engine::TextInput(
             ui,
             config,
             input,
             assets,
             "sector_editor_selected_sector_id",
-            idRow.fieldRect,
+            Rectangle{labelW, y, contentW - labelW, rowH},
             font,
             uiState.selectedSectorIdBuffer,
             sizeof(uiState.selectedSectorIdBuffer),
@@ -1982,82 +2027,70 @@ void SectorEditor::DrawSectorsPanel(
     if (idResult.submitted) {
         TryRenameSelectedSector();
     }
-    y += rowH + config.rowSpacing;
+    y += rowH + gap;
 
     if (!uiState.idEditError.empty()) {
-        engine::Text(config, assets, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 34.0f}, font, uiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, uiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
         y += 36.0f;
     }
 
-    if (engine::Button(ui, config, input, assets, "sector_editor_delete_sector", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Delete Sector")) {
+    if (engine::Button(ui, config, input, assets, "sector_editor_delete_sector", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Sector")) {
         DeleteSelectedSector();
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return;
     }
-    y += rowH + config.rowSpacing;
+    y += rowH + gap;
 
-    const engine::UILabelFieldRowResult floorRow = engine::LabelFieldRow(
-            config,
-            assets,
-            Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH},
-            font,
-            "Floor",
-            96.0f
-    );
-    const engine::UINumericInputResult floorResult = engine::FloatInput(ui, config, input, assets, "sector_editor_floor", floorRow.fieldRect, font, sector.floorZ, uiState.floorInput, -64.0f, 64.0f, 2);
+    const float numberLabelW = 92.0f;
+    const float numberFieldW = 102.0f;
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, "Floor:", engine::UITextJustify::Right, config.mutedTextColor);
+    const engine::UINumericInputResult floorResult = engine::FloatInput(ui, config, input, assets, "sector_editor_floor", Rectangle{numberLabelW, y, numberFieldW, rowH}, font, sector.floorZ, uiState.floorInput, -64.0f, 64.0f, 2);
     if (floorResult.changed) {
         state.dirty = true;
         statusText = TextFormat("Edited sector %s", sector.id.c_str());
     }
-    y += rowH + config.rowSpacing;
+    y += rowH + gap;
 
-    const engine::UILabelFieldRowResult ceilingRow = engine::LabelFieldRow(
-            config,
-            assets,
-            Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH},
-            font,
-            "Ceiling",
-            96.0f
-    );
-    const engine::UINumericInputResult ceilingResult = engine::FloatInput(ui, config, input, assets, "sector_editor_ceiling", ceilingRow.fieldRect, font, sector.ceilingZ, uiState.ceilingInput, -64.0f, 64.0f, 2);
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, "Ceiling:", engine::UITextJustify::Right, config.mutedTextColor);
+    const engine::UINumericInputResult ceilingResult = engine::FloatInput(ui, config, input, assets, "sector_editor_ceiling", Rectangle{numberLabelW, y, numberFieldW, rowH}, font, sector.ceilingZ, uiState.ceilingInput, -64.0f, 64.0f, 2);
     if (ceilingResult.changed) {
         state.dirty = true;
         statusText = TextFormat("Edited sector %s", sector.id.c_str());
     }
-    y += rowH + config.rowSpacing;
+    y += rowH + gap;
 
-    auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TexturePickerTargetKind target, int edgeIndex = -1, const char* stateText = nullptr) {
-        const float buttonW = 86.0f;
-        const Rectangle row{panel.contentRect.x, y, panel.contentRect.width, 38.0f};
+    auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TexturePickerTargetKind target, int edgeIndex, bool overridden) {
+        const float buttonW = 38.0f;
+        const float labelColumnW = 74.0f;
+        const Rectangle row{0.0f, y, contentW, 36.0f};
+        engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
         engine::Text(
+                ui,
                 config,
                 assets,
-                Rectangle{row.x, row.y, row.width - buttonW - config.rowSpacing, row.height},
+                Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
                 font,
-                stateText == nullptr
-                        ? TextFormat("%s: %s", label, textureId.c_str())
-                        : TextFormat("%s: %s (%s)", label, textureId.c_str(), stateText),
+                textureId.c_str(),
                 engine::UITextJustify::Left,
-                config.mutedTextColor
+                overridden ? config.accentColor : config.mutedTextColor
         );
-        if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, "Pick")) {
+        if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
             OpenTexturePicker(target, state.selectedSectorIndex, edgeIndex);
         }
-        y += row.height + 6.0f;
+        y += row.height + gap;
     };
 
-    if (state.selectedEdgeIndex >= 0 && state.selectedEdgeIndex >= static_cast<int>(sector.points.size())) {
-        state.selectedEdgeIndex = -1;
-    }
-
     if (state.selectedEdgeIndex < 0) {
-        drawTextureRow("sector_editor_pick_floor", "Floor tex", sector.floorTextureId, TexturePickerTargetKind::SectorFloor);
-        drawTextureRow("sector_editor_pick_ceiling", "Ceil tex", sector.ceilingTextureId, TexturePickerTargetKind::SectorCeiling);
-        drawTextureRow("sector_editor_pick_wall", "Wall tex", sector.wallTextureId, TexturePickerTargetKind::SectorWall);
-        drawTextureRow("sector_editor_pick_lower_wall", "Lower tex", sector.lowerWallTextureId, TexturePickerTargetKind::SectorLowerWall);
-        drawTextureRow("sector_editor_pick_upper_wall", "Upper tex", sector.upperWallTextureId, TexturePickerTargetKind::SectorUpperWall);
+        y += 4.0f;
+        drawTextureRow("sector_editor_pick_floor", "Floor:", sector.floorTextureId, TexturePickerTargetKind::SectorFloor, -1, false);
+        drawTextureRow("sector_editor_pick_ceiling", "Ceil:", sector.ceilingTextureId, TexturePickerTargetKind::SectorCeiling, -1, false);
+        drawTextureRow("sector_editor_pick_wall", "Wall:", sector.wallTextureId, TexturePickerTargetKind::SectorWall, -1, false);
+        drawTextureRow("sector_editor_pick_lower_wall", "Lower:", sector.lowerWallTextureId, TexturePickerTargetKind::SectorLowerWall, -1, false);
+        drawTextureRow("sector_editor_pick_upper_wall", "Upper:", sector.upperWallTextureId, TexturePickerTargetKind::SectorUpperWall, -1, false);
     } else {
-        engine::Separator(config, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 12.0f});
+        y += 8.0f;
+        engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
         y += 18.0f;
 
         const int edgeIndex = state.selectedEdgeIndex;
@@ -2071,16 +2104,17 @@ void SectorEditor::DrawSectorsPanel(
         const bool upperOverridden = edgeOverride != nullptr && edgeOverride->hasUpperWallTexture;
 
         engine::Text(
+                ui,
                 config,
                 assets,
-                Rectangle{panel.contentRect.x, y, panel.contentRect.width, 34.0f},
+                Rectangle{0.0f, y, contentW, 34.0f},
                 font,
                 TextFormat("Selected side: %s edge %d", sector.id.c_str(), edgeIndex),
                 engine::UITextJustify::Left,
                 config.textColor
         );
         y += 34.0f;
-        engine::Text(config, assets, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 30.0f}, font, TextFormat("From %.2f, %.2f  To %.2f, %.2f", from.x, from.y, to.x, to.y), engine::UITextJustify::Left, config.mutedTextColor);
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, TextFormat("From %.2f, %.2f  To %.2f, %.2f", from.x, from.y, to.x, to.y), engine::UITextJustify::Left, config.mutedTextColor);
         y += 30.0f;
         const char* neighborText = "Opposite side: none (outer edge)";
         if (neighbor.hasNeighbor) {
@@ -2090,7 +2124,7 @@ void SectorEditor::DrawSectorsPanel(
                     neighbor.edgeIndex
             );
         }
-        engine::Text(config, assets, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 30.0f}, font, neighborText, engine::UITextJustify::Left, config.mutedTextColor);
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, neighborText, engine::UITextJustify::Left, config.mutedTextColor);
         y += 34.0f;
         if (neighbor.hasNeighbor) {
             if (engine::Button(
@@ -2099,7 +2133,7 @@ void SectorEditor::DrawSectorsPanel(
                     input,
                     assets,
                     "sector_editor_edit_opposite_edge",
-                    Rectangle{panel.contentRect.x, y, panel.contentRect.width, 38.0f},
+                    Rectangle{0.0f, y, contentW, 38.0f},
                     font,
                     "Edit opposite side")) {
                 SelectEdge(neighbor.sectorIndex, neighbor.edgeIndex);
@@ -2108,95 +2142,143 @@ void SectorEditor::DrawSectorsPanel(
                         state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)].id.c_str(),
                         neighbor.edgeIndex
                 );
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
                 engine::EndPanel(ui, config, panel);
                 return;
             }
-            y += 38.0f + config.rowSpacing;
+            y += 38.0f + gap;
         }
 
-        drawTextureRow("sector_editor_pick_edge_wall", "Edge wall", effective.wallTextureId, TexturePickerTargetKind::EdgeWall, edgeIndex, wallOverridden ? "override" : "inherited");
-        drawTextureRow("sector_editor_pick_edge_lower", "Edge lower", effective.lowerWallTextureId, TexturePickerTargetKind::EdgeLowerWall, edgeIndex, lowerOverridden ? "override" : "inherited");
-        drawTextureRow("sector_editor_pick_edge_upper", "Edge upper", effective.upperWallTextureId, TexturePickerTargetKind::EdgeUpperWall, edgeIndex, upperOverridden ? "override" : "inherited");
+        drawTextureRow("sector_editor_pick_edge_wall", "Wall:", effective.wall.textureId, TexturePickerTargetKind::EdgeWall, edgeIndex, wallOverridden);
+        drawTextureRow("sector_editor_pick_edge_lower", "Lower:", effective.lower.textureId, TexturePickerTargetKind::EdgeLowerWall, edgeIndex, lowerOverridden);
+        drawTextureRow("sector_editor_pick_edge_upper", "Upper:", effective.upper.textureId, TexturePickerTargetKind::EdgeUpperWall, edgeIndex, upperOverridden);
 
-        auto drawUvInput = [&](const char* id, const char* label, float value, engine::UIFloatInputState& inputState, float minValue, float maxValue, auto applyValue) {
-            const engine::UILabelFieldRowResult uvRow = engine::LabelFieldRow(
+        y += 4.0f;
+        const float partButtonW = (contentW - gap * 2.0f) / 3.0f;
+        const EdgeUvPart parts[] = {EdgeUvPart::Wall, EdgeUvPart::Lower, EdgeUvPart::Upper};
+        for (int i = 0; i < 3; ++i) {
+            const EdgeUvPart part = parts[i];
+            if (engine::ToolButton(
+                    ui,
                     config,
+                    input,
                     assets,
-                    Rectangle{panel.contentRect.x, y, panel.contentRect.width, 36.0f},
+                    TextFormat("sector_editor_edge_uv_part_%d", i),
+                    Rectangle{static_cast<float>(i) * (partButtonW + gap), y, partButtonW, 38.0f},
                     font,
-                    label,
-                    116.0f
-            );
+                    EdgeUvPartName(part),
+                    state.selectedEdgeUvPart == part)) {
+                state.selectedEdgeUvPart = part;
+                uiState.edgeUvScaleUInput = engine::UIFloatInputState{};
+                uiState.edgeUvScaleVInput = engine::UIFloatInputState{};
+                uiState.edgeUvOffsetUInput = engine::UIFloatInputState{};
+                uiState.edgeUvOffsetVInput = engine::UIFloatInputState{};
+                statusText = TextFormat("Editing %s UV", EdgeUvPartStatusName(part));
+            }
+        }
+        y += 38.0f + gap;
+
+        auto selectedEffectivePart = [&effective](EdgeUvPart part) -> const EffectiveEdgePartSettings& {
+            switch (part) {
+                case EdgeUvPart::Wall: return effective.wall;
+                case EdgeUvPart::Lower: return effective.lower;
+                case EdgeUvPart::Upper: return effective.upper;
+            }
+            return effective.wall;
+        };
+        auto selectedMutableUv = [](SectorEdgeOverride& edgeOverride, EdgeUvPart part) -> SectorEdgePartUvOverride& {
+            switch (part) {
+                case EdgeUvPart::Wall: return edgeOverride.wallUv;
+                case EdgeUvPart::Lower: return edgeOverride.lowerUv;
+                case EdgeUvPart::Upper: return edgeOverride.upperUv;
+            }
+            return edgeOverride.wallUv;
+        };
+        const EffectiveEdgePartSettings& selectedPart = selectedEffectivePart(state.selectedEdgeUvPart);
+
+        auto drawUvInput = [&](const char* id, const char* label, float value, engine::UIFloatInputState& inputState, float minValue, float maxValue, Rectangle bounds, auto applyValue) {
+            engine::Text(ui, config, assets, Rectangle{bounds.x, bounds.y, bounds.width, 26.0f}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
             float editedValue = value;
-            const engine::UINumericInputResult result = engine::FloatInput(ui, config, input, assets, id, uvRow.fieldRect, font, editedValue, inputState, minValue, maxValue, 3);
+            const engine::UINumericInputResult result = engine::FloatInput(ui, config, input, assets, id, Rectangle{bounds.x, bounds.y + 26.0f, bounds.width, 36.0f}, font, editedValue, inputState, minValue, maxValue, 3);
             if (result.changed && editedValue != value) {
                 SectorEdgeOverride& mutableOverride = EnsureEdgeOverride(state.selectedSectorIndex, edgeIndex);
-                applyValue(mutableOverride, editedValue);
+                SectorEdgePartUvOverride& uv = selectedMutableUv(mutableOverride, state.selectedEdgeUvPart);
+                applyValue(uv, editedValue);
                 state.dirty = true;
-                statusText = TextFormat("Changed edge %d %s", edgeIndex, label);
+                statusText = TextFormat("Updated %s UV %s", EdgeUvPartStatusName(state.selectedEdgeUvPart), label);
             }
-            y += 36.0f + 6.0f;
         };
 
+        const float uvColumnW = (contentW - gap) * 0.5f;
+        const float uvBlockH = 62.0f;
         drawUvInput(
                 "sector_editor_edge_uv_scale_u",
-                "UV scale U",
-                effective.uvScale.x,
+                "Scale U",
+                selectedPart.uvScale.x,
                 uiState.edgeUvScaleUInput,
                 0.01f,
                 64.0f,
-                [](SectorEdgeOverride& edgeOverride, float value) {
-                    edgeOverride.uvScale.x = value;
-                    edgeOverride.hasUvScale = true;
+                Rectangle{0.0f, y, uvColumnW, uvBlockH},
+                [](SectorEdgePartUvOverride& uv, float value) {
+                    uv.uvScale.x = value;
+                    uv.hasUvScale = true;
                 }
         );
         drawUvInput(
                 "sector_editor_edge_uv_scale_v",
-                "UV scale V",
-                effective.uvScale.y,
+                "Scale V",
+                selectedPart.uvScale.y,
                 uiState.edgeUvScaleVInput,
                 0.01f,
                 64.0f,
-                [](SectorEdgeOverride& edgeOverride, float value) {
-                    edgeOverride.uvScale.y = value;
-                    edgeOverride.hasUvScale = true;
+                Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH},
+                [](SectorEdgePartUvOverride& uv, float value) {
+                    uv.uvScale.y = value;
+                    uv.hasUvScale = true;
                 }
         );
+        y += uvBlockH + gap;
         drawUvInput(
                 "sector_editor_edge_uv_offset_u",
-                "UV offset U",
-                effective.uvOffset.x,
+                "Offset U",
+                selectedPart.uvOffset.x,
                 uiState.edgeUvOffsetUInput,
                 -1024.0f,
                 1024.0f,
-                [](SectorEdgeOverride& edgeOverride, float value) {
-                    edgeOverride.uvOffset.x = value;
-                    edgeOverride.hasUvOffset = true;
+                Rectangle{0.0f, y, uvColumnW, uvBlockH},
+                [](SectorEdgePartUvOverride& uv, float value) {
+                    uv.uvOffset.x = value;
+                    uv.hasUvOffset = true;
                 }
         );
         drawUvInput(
                 "sector_editor_edge_uv_offset_v",
-                "UV offset V",
-                effective.uvOffset.y,
+                "Offset V",
+                selectedPart.uvOffset.y,
                 uiState.edgeUvOffsetVInput,
                 -1024.0f,
                 1024.0f,
-                [](SectorEdgeOverride& edgeOverride, float value) {
-                    edgeOverride.uvOffset.y = value;
-                    edgeOverride.hasUvOffset = true;
+                Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH},
+                [](SectorEdgePartUvOverride& uv, float value) {
+                    uv.uvOffset.y = value;
+                    uv.hasUvOffset = true;
                 }
         );
+        y += uvBlockH + gap;
 
-        if (engine::Button(ui, config, input, assets, "sector_editor_edge_reset_uv", Rectangle{panel.contentRect.x, y, panel.contentRect.width, 38.0f}, font, "Reset UV")) {
+        if (engine::Button(ui, config, input, assets, "sector_editor_edge_reset_uv", Rectangle{0.0f, y, contentW, 38.0f}, font, TextFormat("Reset %s UV", EdgeUvPartName(state.selectedEdgeUvPart)))) {
             SectorEdgeOverride* mutableOverride = FindMutableEdgeOverride(state.selectedSectorIndex, edgeIndex);
-            if (mutableOverride != nullptr && (mutableOverride->hasUvScale || mutableOverride->hasUvOffset)) {
-                mutableOverride->uvScale = Vector2{1.0f, 1.0f};
-                mutableOverride->uvOffset = Vector2{0.0f, 0.0f};
-                mutableOverride->hasUvScale = false;
-                mutableOverride->hasUvOffset = false;
-                RemoveEdgeOverrideIfEmpty(state.selectedSectorIndex, edgeIndex);
-                state.dirty = true;
-                statusText = TextFormat("Reset edge %d UV", edgeIndex);
+            if (mutableOverride != nullptr) {
+                SectorEdgePartUvOverride& uv = selectedMutableUv(*mutableOverride, state.selectedEdgeUvPart);
+                if (uv.hasUvScale || uv.hasUvOffset) {
+                    uv.uvScale = Vector2{1.0f, 1.0f};
+                    uv.uvOffset = Vector2{0.0f, 0.0f};
+                    uv.hasUvScale = false;
+                    uv.hasUvOffset = false;
+                    RemoveEdgeOverrideIfEmpty(state.selectedSectorIndex, edgeIndex);
+                    state.dirty = true;
+                    statusText = TextFormat("Reset %s UV", EdgeUvPartStatusName(state.selectedEdgeUvPart));
+                }
             }
         }
     }
@@ -2204,6 +2286,7 @@ void SectorEditor::DrawSectorsPanel(
     // TODO: Add undo/redo and save/load.
     // TODO: Add validation issue highlighting.
 
+    engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
     engine::EndPanel(ui, config, panel);
 }
 
@@ -2337,10 +2420,11 @@ void SectorEditor::DrawStatusPanel(
             const bool hasTextureOverride = edgeOverride != nullptr
                     && (edgeOverride->hasWallTexture || edgeOverride->hasLowerWallTexture || edgeOverride->hasUpperWallTexture);
             selectedLabel = TextFormat(
-                    "%s edge %d %s",
+                    "%s edge %d %s UV %s",
                     selectedSector.id.c_str(),
                     state.selectedEdgeIndex,
-                    hasTextureOverride ? "override" : "inherited"
+                    hasTextureOverride ? "override" : "inherited",
+                    EdgeUvPartName(state.selectedEdgeUvPart)
             );
         } else {
             selectedLabel = selectedSector.id;
@@ -2351,23 +2435,15 @@ void SectorEditor::DrawStatusPanel(
     if (state.pendingSector.active) {
         pendingText = TextFormat(" | pending %zu pts", state.pendingSector.points.size());
     }
-    const char* toolHint = state.currentTool == SectorEditorTool::Erase
-            ? " | Erase: click sector to delete"
-            : "";
     const std::string shortMapPath = ShortPath(mapPath);
     const char* text = TextFormat(
-            "%s%s | map %s%s | tool %s%s%s | raw %.2f, %.2f | snap %.2f, %.2f | grid %d | selected %s",
+            "%s%s | %s%s | map %s%s | grid %d | selected %s",
             statusText.empty() ? "Map not loaded" : statusText.c_str(),
             state.dirty ? " *modified" : "",
+            ToolHelpText(state.currentTool),
+            pendingText.c_str(),
             shortMapPath.c_str(),
             state.dirty ? "*" : "",
-            ToolName(state.currentTool),
-            pendingText.c_str(),
-            toolHint,
-            state.rawMouseMap.x,
-            state.rawMouseMap.y,
-            state.snappedMouseMap.x,
-            state.snappedMouseMap.y,
             state.gridSize,
             selectedLabel.c_str()
     );
@@ -2400,6 +2476,7 @@ void SectorEditor::LoadInitialMap(const char* requestedPath)
     state.selectedSectorIndex = -1;
     state.selectedEdgeIndex = -1;
     state.hoveredSectorIndex = -1;
+    state.hasPreviewPose = false;
     state.dirty = false;
     initialized = true;
     statusText = loadPath == mapPath
@@ -2436,6 +2513,7 @@ void SectorEditor::ReloadMap(engine::AssetManager& assets)
     }
     RefreshEditorTextureAssets(assets);
     state.dirty = false;
+    state.hasPreviewPose = false;
     initialized = true;
     statusText = TextFormat("Reloaded %s", ShortPath(loadPath).c_str());
 }
@@ -2477,6 +2555,10 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
         return false;
     }
 
+    if (state.hasPreviewPose) {
+        preview.ApplyPose(state.lastPreviewPose);
+    }
+
     state.mode = SectorEditorMode::Preview3D;
     statusText = TextFormat(
             "3D preview rebuilt: %zu batches, %d triangles",
@@ -2488,6 +2570,8 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
 
 void SectorEditor::LeavePreview3D()
 {
+    state.lastPreviewPose = preview.Pose();
+    state.hasPreviewPose = true;
     state.mode = SectorEditorMode::Edit2D;
     preview.Leave();
     statusText = "Returned to 2D editor";
@@ -2662,6 +2746,7 @@ void SectorEditor::SelectSector(int sectorIndex)
 {
     state.selectedSectorIndex = sectorIndex;
     state.selectedEdgeIndex = -1;
+    uiState.inspectorScroll.offset = Vector2{};
     SyncSelectedSectorIdBuffer();
 }
 
@@ -2669,6 +2754,7 @@ void SectorEditor::SelectEdge(int sectorIndex, int edgeIndex)
 {
     state.selectedSectorIndex = sectorIndex;
     state.selectedEdgeIndex = edgeIndex;
+    uiState.inspectorScroll.offset = Vector2{};
     SyncSelectedSectorIdBuffer();
 }
 
@@ -2676,6 +2762,7 @@ void SectorEditor::ClearSelection()
 {
     state.selectedSectorIndex = -1;
     state.selectedEdgeIndex = -1;
+    uiState.inspectorScroll.offset = Vector2{};
     SyncSelectedSectorIdBuffer();
 }
 

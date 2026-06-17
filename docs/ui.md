@@ -399,6 +399,9 @@ the available viewport. The mouse wheel scrolls vertically while the pointer is
 over the scroll area. Scrollbar thumbs can be dragged with the left mouse
 button, and clicking a scrollbar track pages by one viewport.
 
+Pass `false` for the optional `drawFrame` argument when a scroll area is used
+inside an already-framed panel and should only provide clipping/scrolling.
+
 Nested scroll areas are not supported. `Option()` can be displayed as a closed
 field inside a scroll area, but dropdown overlays from inside a clipped scroll
 area are not opened in this version.

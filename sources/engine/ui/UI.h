@@ -59,6 +59,7 @@ struct UIScrollAreaResult {
     Vector2 contentSize = {};
     bool scrollX = false;
     bool scrollY = false;
+    bool drawFrame = true;
 };
 
 struct UIContext {
@@ -140,7 +141,8 @@ UIScrollAreaResult BeginScrollArea(
         const char* id,
         Rectangle bounds,
         Vector2 contentSize,
-        UIScrollState& state);
+        UIScrollState& state,
+        bool drawFrame = true);
 
 void EndScrollArea(
         UIContext& ui,

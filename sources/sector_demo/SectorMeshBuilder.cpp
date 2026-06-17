@@ -383,13 +383,13 @@ SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map)
             const auto reverse = edgeRefs.find(MakeEdgeKey(b, a));
             if (reverse == edgeRefs.end() || reverse->second.sectorIndex == static_cast<int>(sectorIndex)) {
                 AddWallQuad(
-                        BatchForTexture(batchIndexByTexture, batchBuilders, edgeSettings.wallTextureId),
+                        BatchForTexture(batchIndexByTexture, batchBuilders, edgeSettings.wall.textureId),
                         a,
                         b,
                         sector.floorZ,
                         sector.ceilingZ,
-                        edgeSettings.uvScale,
-                        edgeSettings.uvOffset
+                        edgeSettings.wall.uvScale,
+                        edgeSettings.wall.uvOffset
                 );
                 continue;
             }
@@ -397,25 +397,25 @@ SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map)
             const SectorDefinition& neighbor = map.sectors[static_cast<size_t>(reverse->second.sectorIndex)];
             if (neighbor.floorZ > sector.floorZ) {
                 AddWallQuad(
-                        BatchForTexture(batchIndexByTexture, batchBuilders, edgeSettings.lowerWallTextureId),
+                        BatchForTexture(batchIndexByTexture, batchBuilders, edgeSettings.lower.textureId),
                         a,
                         b,
                         sector.floorZ,
                         neighbor.floorZ,
-                        edgeSettings.uvScale,
-                        edgeSettings.uvOffset
+                        edgeSettings.lower.uvScale,
+                        edgeSettings.lower.uvOffset
                 );
             }
 
             if (neighbor.ceilingZ < sector.ceilingZ) {
                 AddWallQuad(
-                        BatchForTexture(batchIndexByTexture, batchBuilders, edgeSettings.upperWallTextureId),
+                        BatchForTexture(batchIndexByTexture, batchBuilders, edgeSettings.upper.textureId),
                         a,
                         b,
                         neighbor.ceilingZ,
                         sector.ceilingZ,
-                        edgeSettings.uvScale,
-                        edgeSettings.uvOffset
+                        edgeSettings.upper.uvScale,
+                        edgeSettings.upper.uvOffset
                 );
             }
         }
