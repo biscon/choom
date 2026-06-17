@@ -63,6 +63,28 @@ enum class EdgeUvPart {
     Upper
 };
 
+enum class SectorSurfaceKind {
+    None,
+    Floor,
+    Ceiling,
+    Wall,
+    LowerWall,
+    UpperWall
+};
+
+struct SectorSurfaceRef {
+    SectorSurfaceKind kind = SectorSurfaceKind::None;
+    int sectorIndex = -1;
+    int edgeIndex = -1;
+};
+
+struct SectorSurfaceHit {
+    bool hit = false;
+    SectorSurfaceRef surface;
+    Vector3 worldPosition = {};
+    float distance = 0.0f;
+};
+
 struct TexturePickerState {
     bool open = false;
     TexturePickerTargetKind target = TexturePickerTargetKind::None;
@@ -122,6 +144,8 @@ struct SectorEditorState {
     bool dirty = false;
     bool hasPreviewPose = false;
     SectorMeshPreviewPose lastPreviewPose = {};
+    SectorSurfaceHit hoveredSurface3D;
+    SectorSurfaceRef selectedSurface3D;
 
     engine::AssetScopeHandle editorTextureScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;
@@ -137,6 +161,10 @@ struct SectorEditorUiState {
     engine::UIFloatInputState edgeUvScaleVInput;
     engine::UIFloatInputState edgeUvOffsetUInput;
     engine::UIFloatInputState edgeUvOffsetVInput;
+    engine::UIFloatInputState surface3DUvScaleUInput;
+    engine::UIFloatInputState surface3DUvScaleVInput;
+    engine::UIFloatInputState surface3DUvOffsetUInput;
+    engine::UIFloatInputState surface3DUvOffsetVInput;
     engine::UIScrollState inspectorScroll;
     char selectedSectorIdBuffer[64] = {};
     int idBufferSectorIndex = -1;

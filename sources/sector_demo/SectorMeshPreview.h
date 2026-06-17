@@ -33,9 +33,12 @@ public:
     void Render(engine::AssetManager& assets);
 
     bool IsReady() const { return initialized; }
+    bool IsMouseLookEnabled() const { return mouseLookEnabled; }
     Vector3 Position() const { return position; }
+    const Camera3D& Camera() const { return camera; }
     SectorMeshPreviewPose Pose() const;
     void ApplyPose(const SectorMeshPreviewPose& pose);
+    void SetMouseLookEnabled(bool enabled);
     size_t SectorCount() const { return sectorCount; }
     size_t BatchCount() const { return meshes.batches.size(); }
     int TriangleCount() const { return meshes.triangleCount; }

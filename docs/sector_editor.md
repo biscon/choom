@@ -1,7 +1,7 @@
 # Sector Editor
 
 The sector editor is a 2D editor for `SectorMap` JSON data with an integrated
-3D mesh preview. The app starts in the editor and loads
+3D Mode. The app starts in the editor and loads
 `assets/sector_demo/sector_editor_working_level.json`.
 
 ## Coordinates
@@ -83,15 +83,20 @@ edited:
   returns it to scale `{1, 1}` and offset `{0, 0}`.
 
 Solid outer wall spans use `Wall` UV settings. Lower wall spans use `Lower` UV
-settings. Upper wall spans use `Upper` UV settings. The 3D preview uses unsaved
-in-memory UV changes when it rebuilds; graphical UV editing or wall selection in
-the 3D view is planned but not implemented.
+settings. Upper wall spans use `Upper` UV settings. 3D Mode uses unsaved
+in-memory UV changes when it rebuilds and can edit floor, ceiling, wall, lower
+wall, and upper wall UVs directly from the 3D view.
 
 Current JSON writes per-part UV fields only when that part has an override:
 `wallUvScale`, `wallUvOffset`, `lowerUvScale`, `lowerUvOffset`,
 `upperUvScale`, and `upperUvOffset`. Older maps with edge-level `uvScale` or
 `uvOffset` still load; those legacy values are applied to Wall, Lower, and
 Upper to preserve the previous shared-UV behavior.
+
+Floor and ceiling UV overrides are sector-level fields. JSON writes
+`floorUvScale`, `floorUvOffset`, `ceilingUvScale`, and `ceilingUvOffset` only
+when those values are overridden. Older maps without these fields load with
+scale `{1, 1}` and offset `{0, 0}`.
 
 ## Texture Picker
 
@@ -124,28 +129,49 @@ The Move tool only moves existing vertices. It does not split edges, insert
 vertices, delete vertices, move whole sectors, create holes/islands, or provide
 undo/redo yet.
 
-## 3D Preview
+## 3D Mode
 
-Click `Preview 3D` to rebuild raylib meshes from the current in-memory
-`SectorMap` and enter the free-fly preview. The preview uses unsaved editor
+Click `3D Mode` to rebuild raylib meshes from the current in-memory
+`SectorMap` and enter the 3D editor mode. 3D Mode uses unsaved editor
 changes, including newly drawn sectors, unsaved floor/ceiling edits, sector
 texture edits, directed edge texture overrides, and edge UV edits. Saving is not
-required before previewing.
+required before entering 3D Mode.
 
-Preview controls:
+3D Mode controls:
 
-- `WASD`: move.
-- Mouse look: look around.
-- `Space` / `Ctrl`: move up/down.
-- `F11`: toggle cursor capture.
+- Hidden cursor: fly only. `WASD` moves, mouse look rotates, and
+  `Space` / `Ctrl` move up/down. Hover, selection, and the UV panel are hidden.
+- Visible cursor: camera is locked. Hover surfaces to highlight them and click a
+  highlighted surface to select it.
+- `F11`: toggle between hidden-cursor fly mode and visible-cursor edit mode.
 - `Tab` or `Escape`: return to the 2D editor.
 
+Selectable 3D surfaces are floor, ceiling, solid wall, lower portal wall, and
+upper portal wall. Wall-like selections map to the directed sector edge and the
+same `Wall`, `Lower`, or `Upper` UV data used by the 2D edge inspector. Floor
+and ceiling selections map to the sector-level floor or ceiling UV override.
+
+When a surface is selected in visible-cursor mode, a bottom UV panel shows the
+surface type, sector id, edge index for wall-like surfaces, current texture id,
+numeric UV scale/offset fields, `Texture`, and `Reset UV`. Numeric scale uses
+`0.01..64`; numeric offset uses `-1024..1024`.
+
+UV and texture edits update the in-memory `SectorMap`, mark the map dirty, and
+rebuild the 3D Mode meshes immediately without leaving 3D Mode. The current
+camera pose and selected surface are preserved when the rebuild succeeds. Use
+`Save` later in the 2D editor to persist changes.
+
+The `Texture` button opens the same modal picker used by the 2D inspector.
+Floor and ceiling selections assign sector floor/ceiling textures. Wall, lower
+wall, and upper wall selections assign directed edge texture overrides for the
+selected wall part; choosing `<sector default>` clears that edge override.
+
 Returning to the 2D editor keeps the current map, selection, dirty state, pan,
-zoom, and last 3D preview position/look direction. The first preview after
-loading or reloading a map starts at the player start; later previews in the
-same editor session restore the last preview pose. Preview meshes are reused
-while open, unloaded on editor shutdown, and rebuilt every time `Preview 3D` is
-clicked.
+zoom, and last 3D Mode position/look direction. The first 3D Mode entry after
+loading or reloading a map starts at the player start; later entries in the
+same editor session restore the last 3D pose. Meshes are reused while open,
+unloaded on editor shutdown, and rebuilt every time `3D Mode` is clicked or a
+3D UV edit changes the map.
 
 ## Current Limitations
 
@@ -155,5 +181,5 @@ clicked.
 - No full Doom-style linedef/sidedef system.
 - No vertex insertion/deletion, edge splitting, whole-sector movement, or
   undo/redo.
-- No texture importing, thumbnail grid browser, 3D wall selection, graphical UV
+- No texture importing, thumbnail grid browser, 3D texture painting, 3D geometry
   editing, doors, lifts, lighting, mesh culling, or file dialog.

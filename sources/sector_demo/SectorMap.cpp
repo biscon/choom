@@ -340,6 +340,37 @@ void WriteEdgeUvFields(Json& edgeJson, const char* scaleField, const char* offse
     }
 }
 
+void ReadSurfaceUvField(
+        const char* sectorId,
+        const Json& sectorJson,
+        const char* field,
+        Vector2& uvValue,
+        bool& hasUvValue)
+{
+    const auto it = sectorJson.find(field);
+    if (it == sectorJson.end()) {
+        return;
+    }
+
+    Vector2 parsed{};
+    if (ReadVector2Field(sectorJson, field, parsed)) {
+        uvValue = parsed;
+        hasUvValue = true;
+    } else {
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed %s in sector '%s'\n", field, sectorId);
+    }
+}
+
+void WriteSurfaceUvFields(Json& sectorJson, const char* scaleField, const char* offsetField, const SectorSurfaceUvOverride& uv)
+{
+    if (uv.hasUvScale) {
+        sectorJson[scaleField] = Json::array({uv.uvScale.x, uv.uvScale.y});
+    }
+    if (uv.hasUvOffset) {
+        sectorJson[offsetField] = Json::array({uv.uvOffset.x, uv.uvOffset.y});
+    }
+}
+
 void ReadEdgeOverrides(const SectorMap& map, const Json& sectorJson, SectorDefinition& sector)
 {
     const auto edgesIt = sectorJson.find("edges");
@@ -580,6 +611,10 @@ bool LoadSectorMap(const char* path, SectorMap& outMap)
         sector.wallTextureId = sectorJson.value("wallTex", defaultWall);
         sector.lowerWallTextureId = sectorJson.value("lowerWallTex", sector.wallTextureId);
         sector.upperWallTextureId = sectorJson.value("upperWallTex", sector.wallTextureId);
+        ReadSurfaceUvField(sector.id.c_str(), sectorJson, "floorUvScale", sector.floorUv.uvScale, sector.floorUv.hasUvScale);
+        ReadSurfaceUvField(sector.id.c_str(), sectorJson, "floorUvOffset", sector.floorUv.uvOffset, sector.floorUv.hasUvOffset);
+        ReadSurfaceUvField(sector.id.c_str(), sectorJson, "ceilingUvScale", sector.ceilingUv.uvScale, sector.ceilingUv.hasUvScale);
+        ReadSurfaceUvField(sector.id.c_str(), sectorJson, "ceilingUvOffset", sector.ceilingUv.uvOffset, sector.ceilingUv.hasUvOffset);
         ReadEdgeOverrides(outMap, sectorJson, sector);
 
         if (sector.points.size() < 3) {
@@ -666,6 +701,8 @@ bool SaveSectorMap(const char* path, const SectorMap& map)
         sectorJson["wallTex"] = sector.wallTextureId;
         sectorJson["lowerWallTex"] = sector.lowerWallTextureId;
         sectorJson["upperWallTex"] = sector.upperWallTextureId;
+        WriteSurfaceUvFields(sectorJson, "floorUvScale", "floorUvOffset", sector.floorUv);
+        WriteSurfaceUvFields(sectorJson, "ceilingUvScale", "ceilingUvOffset", sector.ceilingUv);
         if (!sector.edgeOverrides.empty()) {
             Json edges = Json::array();
             for (const SectorEdgeOverride& edgeOverride : sector.edgeOverrides) {
