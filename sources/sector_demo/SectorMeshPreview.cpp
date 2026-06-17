@@ -169,32 +169,34 @@ void SectorMeshPreview::Update(engine::Input& input, float dt)
         }
     }
 
-    Vector3 forward{std::cos(yawRadians), 0.0f, std::sin(yawRadians)};
-    Vector3 right{-forward.z, 0.0f, forward.x};
-    Vector3 movement{};
+    if (mouseLookEnabled) {
+        Vector3 forward{std::cos(yawRadians), 0.0f, std::sin(yawRadians)};
+        Vector3 right{-forward.z, 0.0f, forward.x};
+        Vector3 movement{};
 
-    if (input.IsKeyDown(KEY_W)) {
-        movement = Vector3Add(movement, forward);
-    }
-    if (input.IsKeyDown(KEY_S)) {
-        movement = Vector3Subtract(movement, forward);
-    }
-    if (input.IsKeyDown(KEY_D)) {
-        movement = Vector3Add(movement, right);
-    }
-    if (input.IsKeyDown(KEY_A)) {
-        movement = Vector3Subtract(movement, right);
-    }
-    if (input.IsKeyDown(KEY_SPACE)) {
-        movement.y += 1.0f;
-    }
-    if (input.IsKeyDown(KEY_LEFT_CONTROL) || input.IsKeyDown(KEY_RIGHT_CONTROL)) {
-        movement.y -= 1.0f;
-    }
+        if (input.IsKeyDown(KEY_W)) {
+            movement = Vector3Add(movement, forward);
+        }
+        if (input.IsKeyDown(KEY_S)) {
+            movement = Vector3Subtract(movement, forward);
+        }
+        if (input.IsKeyDown(KEY_D)) {
+            movement = Vector3Add(movement, right);
+        }
+        if (input.IsKeyDown(KEY_A)) {
+            movement = Vector3Subtract(movement, right);
+        }
+        if (input.IsKeyDown(KEY_SPACE)) {
+            movement.y += 1.0f;
+        }
+        if (input.IsKeyDown(KEY_LEFT_CONTROL) || input.IsKeyDown(KEY_RIGHT_CONTROL)) {
+            movement.y -= 1.0f;
+        }
 
-    if (Vector3LengthSqr(movement) > 0.0001f) {
-        movement = Vector3Normalize(movement);
-        position = Vector3Add(position, Vector3Scale(movement, MoveSpeed * dt));
+        if (Vector3LengthSqr(movement) > 0.0001f) {
+            movement = Vector3Normalize(movement);
+            position = Vector3Add(position, Vector3Scale(movement, MoveSpeed * dt));
+        }
     }
 
     UpdateCamera();
@@ -230,6 +232,21 @@ void SectorMeshPreview::ApplyPose(const SectorMeshPreviewPose& pose)
     yawRadians = pose.yawRadians;
     pitchRadians = pose.pitchRadians;
     UpdateCamera();
+}
+
+void SectorMeshPreview::SetMouseLookEnabled(bool enabled)
+{
+    if (!initialized) {
+        return;
+    }
+
+    mouseLookEnabled = enabled;
+    if (mouseLookEnabled) {
+        mouseLookWarmupFrames = MouseLookWarmupFrames;
+        DisableCursor();
+    } else {
+        EnableCursor();
+    }
 }
 
 float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const

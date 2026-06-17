@@ -22,6 +22,13 @@ struct SectorEdgePartUvOverride {
     bool hasUvOffset = false;
 };
 
+struct SectorSurfaceUvOverride {
+    Vector2 uvScale = {1.0f, 1.0f};
+    Vector2 uvOffset = {0.0f, 0.0f};
+    bool hasUvScale = false;
+    bool hasUvOffset = false;
+};
+
 struct SectorEdgeOverride {
     int edgeIndex = -1;
 
@@ -48,6 +55,8 @@ struct SectorDefinition {
     std::string wallTextureId;
     std::string lowerWallTextureId;
     std::string upperWallTextureId;
+    SectorSurfaceUvOverride floorUv;
+    SectorSurfaceUvOverride ceilingUv;
     std::vector<SectorEdgeOverride> edgeOverrides;
 };
 

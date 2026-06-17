@@ -161,12 +161,22 @@ EarcutPolygon BuildEarcutPolygon(const SectorDefinition& sector)
     return polygon;
 }
 
+Vector2 ApplyUvSettings(Vector2 baseUv, Vector2 uvScale, Vector2 uvOffset)
+{
+    return Vector2{
+            baseUv.x * uvScale.x + uvOffset.x,
+            baseUv.y * uvScale.y + uvOffset.y
+    };
+}
+
 void EmitFlatSectorSurface(
         BatchBuilder& batch,
         const SectorDefinition& sector,
         float height,
         Vector3 normal,
-        bool facePositiveY)
+        bool facePositiveY,
+        Vector2 uvScale,
+        Vector2 uvOffset)
 {
     const EarcutPolygon polygon = BuildEarcutPolygon(sector);
     const std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
@@ -210,9 +220,9 @@ void EmitFlatSectorSurface(
 
         AddTriangle(
                 batch,
-                SurfaceVertex{ToWorld(pa, height), normal, Vector2{pa.x / TextureWorldSize, pa.y / TextureWorldSize}},
-                SurfaceVertex{ToWorld(pb, height), normal, Vector2{pb.x / TextureWorldSize, pb.y / TextureWorldSize}},
-                SurfaceVertex{ToWorld(pc, height), normal, Vector2{pc.x / TextureWorldSize, pc.y / TextureWorldSize}}
+                SurfaceVertex{ToWorld(pa, height), normal, ApplyUvSettings(Vector2{pa.x / TextureWorldSize, pa.y / TextureWorldSize}, uvScale, uvOffset)},
+                SurfaceVertex{ToWorld(pb, height), normal, ApplyUvSettings(Vector2{pb.x / TextureWorldSize, pb.y / TextureWorldSize}, uvScale, uvOffset)},
+                SurfaceVertex{ToWorld(pc, height), normal, ApplyUvSettings(Vector2{pc.x / TextureWorldSize, pc.y / TextureWorldSize}, uvScale, uvOffset)}
         );
     }
 }
@@ -237,20 +247,28 @@ BatchBuilder& BatchForTexture(
 
 void AddFloor(BatchBuilder& batch, const SectorDefinition& sector)
 {
-    EmitFlatSectorSurface(batch, sector, sector.floorZ, Vector3{0.0f, 1.0f, 0.0f}, true);
+    EmitFlatSectorSurface(
+            batch,
+            sector,
+            sector.floorZ,
+            Vector3{0.0f, 1.0f, 0.0f},
+            true,
+            sector.floorUv.hasUvScale ? sector.floorUv.uvScale : Vector2{1.0f, 1.0f},
+            sector.floorUv.hasUvOffset ? sector.floorUv.uvOffset : Vector2{0.0f, 0.0f}
+    );
 }
 
 void AddCeiling(BatchBuilder& batch, const SectorDefinition& sector)
 {
-    EmitFlatSectorSurface(batch, sector, sector.ceilingZ, Vector3{0.0f, -1.0f, 0.0f}, false);
-}
-
-Vector2 ApplyUvSettings(Vector2 baseUv, Vector2 uvScale, Vector2 uvOffset)
-{
-    return Vector2{
-            baseUv.x * uvScale.x + uvOffset.x,
-            baseUv.y * uvScale.y + uvOffset.y
-    };
+    EmitFlatSectorSurface(
+            batch,
+            sector,
+            sector.ceilingZ,
+            Vector3{0.0f, -1.0f, 0.0f},
+            false,
+            sector.ceilingUv.hasUvScale ? sector.ceilingUv.uvScale : Vector2{1.0f, 1.0f},
+            sector.ceilingUv.hasUvOffset ? sector.ceilingUv.uvOffset : Vector2{0.0f, 0.0f}
+    );
 }
 
 void AddWallQuad(

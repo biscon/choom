@@ -44,6 +44,7 @@ private:
     void FinishVertexDrag();
     void CancelVertexDrag(const char* message);
     void UpdatePreview3D(engine::Input& input, float dt);
+    void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingSector(const char* message);
     void RemoveLastPendingSectorPoint();
     void AddPendingSectorPoint(SectorPoint point);
@@ -59,10 +60,17 @@ private:
     void DrawVertexMoveOverlay() const;
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
     void RenderPreview3D(engine::AssetManager& assets);
+    void DrawPreviewSurfaceHighlights() const;
     void DrawPreviewOverlay(
             const engine::UIConfig& config,
             engine::AssetManager& assets,
             engine::FontHandle font) const;
+    void DrawPreviewUvPanel(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
 
     void DrawToolsPanel(
             engine::UIContext& ui,
@@ -89,6 +97,7 @@ private:
             engine::FontHandle font);
 
     bool PointInSectorPolygon(Vector2 mapPoint, const SectorDefinition& sector) const;
+    SectorSurfaceHit PickSectorSurface3D(Vector2 mousePosition, Rectangle viewportRect) const;
     int FindSectorAt(Vector2 mapPoint) const;
     bool FindEdgeNearScreenPoint(Vector2 screenPoint, SectorEdgeRef& outEdge) const;
     std::vector<SectorEdgeHitCandidate> FindEdgeHitCandidates(Vector2 screenPoint) const;
@@ -114,13 +123,23 @@ private:
     void SyncSelectedSectorIdBuffer();
     void SelectSector(int sectorIndex);
     void SelectEdge(int sectorIndex, int edgeIndex);
+    void SelectSurface3D(SectorSurfaceRef surface);
+    bool IsValidSurfaceRef(SectorSurfaceRef surface) const;
+    bool SameSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b) const;
+    void ResetSurface3DUiState();
+    Rectangle BuildPreviewUvPanelRect() const;
+    std::string CurrentTextureForSurface(SectorSurfaceRef surface) const;
+    TexturePickerTargetKind TexturePickerTargetForSurface(SectorSurfaceRef surface) const;
+    bool ApplySurface3DUvValue(SectorSurfaceRef surface, int component, float value, engine::AssetManager& assets);
+    bool ResetSurface3DUv(SectorSurfaceRef surface, engine::AssetManager& assets);
+    bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     void ClearSelection();
     SectorEdgeOverride* FindMutableEdgeOverride(int sectorIndex, int edgeIndex);
     const SectorEdgeOverride* FindEdgeOverride(int sectorIndex, int edgeIndex) const;
     SectorEdgeOverride& EnsureEdgeOverride(int sectorIndex, int edgeIndex);
     void RemoveEdgeOverrideIfEmpty(int sectorIndex, int edgeIndex);
     void OpenTexturePicker(TexturePickerTargetKind target, int sectorIndex, int edgeIndex);
-    void ApplyTexturePickerSelection();
+    void ApplyTexturePickerSelection(engine::AssetManager& assets);
     std::string CurrentTextureForTarget(TexturePickerTargetKind target, int sectorIndex, int edgeIndex) const;
     bool TargetAllowsSectorDefault(TexturePickerTargetKind target) const;
     bool TryRenameSelectedSector();

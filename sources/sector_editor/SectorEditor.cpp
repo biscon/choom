@@ -5,6 +5,7 @@
 #include "sector_demo/SectorMap.h"
 
 #include <raylib.h>
+#include <raymath.h>
 
 #include <algorithm>
 #include <cctype>
@@ -32,6 +33,7 @@ constexpr float PanPixelsPerSecond = 720.0f;
 constexpr float GeometryEpsilon = 0.001f;
 constexpr float ScreenVertexSnapPixels = 10.0f;
 constexpr float ScreenEdgePickPixels = 10.0f;
+constexpr float PreviewHighlightLift = 0.006f;
 
 Vector2 SectorPointToVector2(SectorPoint point)
 {
@@ -91,6 +93,45 @@ const char* EdgeUvPartStatusName(EdgeUvPart part)
         case EdgeUvPart::Upper: return "upper";
     }
     return "wall";
+}
+
+const char* SurfaceKindName(SectorSurfaceKind kind)
+{
+    switch (kind) {
+        case SectorSurfaceKind::Floor: return "Floor";
+        case SectorSurfaceKind::Ceiling: return "Ceiling";
+        case SectorSurfaceKind::Wall: return "Wall";
+        case SectorSurfaceKind::LowerWall: return "Lower";
+        case SectorSurfaceKind::UpperWall: return "Upper";
+        case SectorSurfaceKind::None: break;
+    }
+    return "None";
+}
+
+bool IsWallSurface(SectorSurfaceKind kind)
+{
+    return kind == SectorSurfaceKind::Wall
+            || kind == SectorSurfaceKind::LowerWall
+            || kind == SectorSurfaceKind::UpperWall;
+}
+
+EdgeUvPart SurfaceKindToEdgeUvPart(SectorSurfaceKind kind)
+{
+    switch (kind) {
+        case SectorSurfaceKind::LowerWall: return EdgeUvPart::Lower;
+        case SectorSurfaceKind::UpperWall: return EdgeUvPart::Upper;
+        case SectorSurfaceKind::Wall:
+        case SectorSurfaceKind::Floor:
+        case SectorSurfaceKind::Ceiling:
+        case SectorSurfaceKind::None:
+            break;
+    }
+    return EdgeUvPart::Wall;
+}
+
+Vector3 SectorPointToWorld(SectorPoint point, float height)
+{
+    return Vector3{point.x, height, point.y};
 }
 
 const char* ToolHelpText(SectorEditorTool tool)
@@ -569,12 +610,22 @@ void SectorEditor::RenderUI(
         engine::FontHandle font)
 {
     if (state.mode == SectorEditorMode::Preview3D) {
-        ui.hotId = 0;
-        ui.activeId = 0;
-        ui.openOptionId = 0;
-        ui.focusedId = 0;
-        uiState.keyboardCaptured = false;
+        engine::BeginUI(ui, input);
         DrawPreviewOverlay(config, assets, font);
+        if (!preview.IsMouseLookEnabled()) {
+            DrawPreviewUvPanel(ui, config, input, assets, font);
+        } else {
+            ui.hotId = 0;
+            ui.activeId = 0;
+            ui.openOptionId = 0;
+            ui.focusedId = 0;
+        }
+        DrawTexturePickerModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = ui.focusedId != 0;
+        if (state.texturePicker.open) {
+            uiState.keyboardCaptured = true;
+        }
+        engine::EndUI(ui, config, input, assets);
         return;
     }
 
@@ -1013,7 +1064,44 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
 
     if (state.mode == SectorEditorMode::Preview3D) {
         preview.Update(input, dt);
+        UpdatePreview3DSelection(input);
     }
+}
+
+void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
+{
+    if (!initialized || !preview.IsReady() || preview.IsMouseLookEnabled() || state.texturePicker.open) {
+        state.hoveredSurface3D = SectorSurfaceHit{};
+        return;
+    }
+
+    const Rectangle viewport{0.0f, 0.0f, EditorWidth, EditorHeight};
+    const Vector2 mouse = input.MousePosition();
+    const Rectangle panel = BuildPreviewUvPanelRect();
+    const bool overPanel = state.selectedSurface3D.kind != SectorSurfaceKind::None
+            && Contains(panel, mouse);
+    state.hoveredSurface3D = overPanel
+            ? SectorSurfaceHit{}
+            : PickSectorSurface3D(mouse, viewport);
+
+    input.ForEachEvent(
+            engine::InputEventType::MouseClick,
+            true,
+            [this, overPanel](engine::InputEvent& event) {
+                if (event.mouseClick.button != MOUSE_LEFT_BUTTON) {
+                    return;
+                }
+                if (overPanel || Contains(BuildPreviewUvPanelRect(), event.mouseClick.releasePosition)) {
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+                if (state.hoveredSurface3D.hit) {
+                    SelectSurface3D(state.hoveredSurface3D.surface);
+                    statusText = TextFormat("Selected 3D %s", SurfaceKindName(state.hoveredSurface3D.surface.kind));
+                    engine::ConsumeEvent(event);
+                }
+            }
+    );
 }
 
 void SectorEditor::CancelPendingSector(const char* message)
@@ -1436,6 +1524,187 @@ bool SectorEditor::ValidateSectorPolygon(const std::vector<SectorPoint>& points,
 void SectorEditor::RenderPreview3D(engine::AssetManager& assets)
 {
     preview.Render(assets);
+    DrawPreviewSurfaceHighlights();
+}
+
+SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectangle viewportRect) const
+{
+    SectorSurfaceHit best;
+    if (!preview.IsReady()) {
+        return best;
+    }
+
+    const Vector2 localMouse{
+            mousePosition.x - viewportRect.x,
+            mousePosition.y - viewportRect.y
+    };
+    const Ray ray = GetScreenToWorldRayEx(
+            localMouse,
+            preview.Camera(),
+            static_cast<int>(std::round(viewportRect.width)),
+            static_cast<int>(std::round(viewportRect.height))
+    );
+
+    auto acceptHit = [&](SectorSurfaceRef surface, Vector3 point, float distance) {
+        if (distance <= GeometryEpsilon) {
+            return;
+        }
+        if (!best.hit || distance < best.distance) {
+            best.hit = true;
+            best.surface = surface;
+            best.worldPosition = point;
+            best.distance = distance;
+        }
+    };
+
+    auto pickFlat = [&](int sectorIndex, const SectorDefinition& sector, SectorSurfaceKind kind, float height, Vector3 normal) {
+        const float denom = Vector3DotProduct(ray.direction, normal);
+        if (denom >= -GeometryEpsilon || std::fabs(ray.direction.y) <= GeometryEpsilon) {
+            return;
+        }
+
+        const float distance = (height - ray.position.y) / ray.direction.y;
+        if (distance <= GeometryEpsilon) {
+            return;
+        }
+
+        const Vector3 point = Vector3Add(ray.position, Vector3Scale(ray.direction, distance));
+        if (PointInSectorPolygon(Vector2{point.x, point.z}, sector)) {
+            acceptHit(SectorSurfaceRef{kind, sectorIndex, -1}, point, distance);
+        }
+    };
+
+    auto pickWallSpan = [&](int sectorIndex, int edgeIndex, SectorSurfaceKind kind, SectorPoint a, SectorPoint b, float bottom, float top) {
+        if (top <= bottom + GeometryEpsilon) {
+            return;
+        }
+
+        const float dx = b.x - a.x;
+        const float dz = b.y - a.y;
+        const float len2 = dx * dx + dz * dz;
+        if (len2 <= GeometryEpsilon * GeometryEpsilon) {
+            return;
+        }
+
+        const float len = std::sqrt(len2);
+        const Vector3 normal{-dz / len, 0.0f, dx / len};
+        const float denom = Vector3DotProduct(ray.direction, normal);
+        if (denom >= -GeometryEpsilon) {
+            return;
+        }
+
+        const Vector3 planePoint = SectorPointToWorld(a, bottom);
+        const float distance = Vector3DotProduct(Vector3Subtract(planePoint, ray.position), normal) / denom;
+        if (distance <= GeometryEpsilon) {
+            return;
+        }
+
+        const Vector3 point = Vector3Add(ray.position, Vector3Scale(ray.direction, distance));
+        const float along = ((point.x - a.x) * dx + (point.z - a.y) * dz) / len2;
+        if (along < -GeometryEpsilon || along > 1.0f + GeometryEpsilon) {
+            return;
+        }
+        if (point.y < bottom - GeometryEpsilon || point.y > top + GeometryEpsilon) {
+            return;
+        }
+
+        acceptHit(SectorSurfaceRef{kind, sectorIndex, edgeIndex}, point, distance);
+    };
+
+    for (size_t sectorIndex = 0; sectorIndex < state.map.sectors.size(); ++sectorIndex) {
+        const SectorDefinition& sector = state.map.sectors[sectorIndex];
+        const int sectorInt = static_cast<int>(sectorIndex);
+        pickFlat(sectorInt, sector, SectorSurfaceKind::Floor, sector.floorZ, Vector3{0.0f, 1.0f, 0.0f});
+        pickFlat(sectorInt, sector, SectorSurfaceKind::Ceiling, sector.ceilingZ, Vector3{0.0f, -1.0f, 0.0f});
+
+        for (size_t edgeIndex = 0; edgeIndex < sector.points.size(); ++edgeIndex) {
+            const SectorPoint a = sector.points[edgeIndex];
+            const SectorPoint b = sector.points[(edgeIndex + 1) % sector.points.size()];
+            const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(state.map, sectorInt, static_cast<int>(edgeIndex));
+            if (!neighbor.hasNeighbor) {
+                pickWallSpan(sectorInt, static_cast<int>(edgeIndex), SectorSurfaceKind::Wall, a, b, sector.floorZ, sector.ceilingZ);
+                continue;
+            }
+
+            const SectorDefinition& neighborSector = state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)];
+            if (neighborSector.floorZ > sector.floorZ) {
+                pickWallSpan(sectorInt, static_cast<int>(edgeIndex), SectorSurfaceKind::LowerWall, a, b, sector.floorZ, neighborSector.floorZ);
+            }
+            if (neighborSector.ceilingZ < sector.ceilingZ) {
+                pickWallSpan(sectorInt, static_cast<int>(edgeIndex), SectorSurfaceKind::UpperWall, a, b, neighborSector.ceilingZ, sector.ceilingZ);
+            }
+        }
+    }
+
+    return best;
+}
+
+void SectorEditor::DrawPreviewSurfaceHighlights() const
+{
+    if (!preview.IsReady() || preview.IsMouseLookEnabled()) {
+        return;
+    }
+
+    auto drawSurface = [this](SectorSurfaceRef surface, Color color, float thickness) {
+        if (!IsValidSurfaceRef(surface)) {
+            return;
+        }
+
+        const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
+        if (surface.kind == SectorSurfaceKind::Floor || surface.kind == SectorSurfaceKind::Ceiling) {
+            const float lift = surface.kind == SectorSurfaceKind::Floor ? PreviewHighlightLift : -PreviewHighlightLift;
+            const float height = (surface.kind == SectorSurfaceKind::Floor ? sector.floorZ : sector.ceilingZ) + lift;
+            for (size_t i = 0; i < sector.points.size(); ++i) {
+                const SectorPoint a = sector.points[i];
+                const SectorPoint b = sector.points[(i + 1) % sector.points.size()];
+                DrawLine3D(SectorPointToWorld(a, height), SectorPointToWorld(b, height), color);
+            }
+            (void)thickness;
+            return;
+        }
+
+        const SectorPoint a = sector.points[static_cast<size_t>(surface.edgeIndex)];
+        const SectorPoint b = sector.points[(static_cast<size_t>(surface.edgeIndex) + 1) % sector.points.size()];
+        float bottom = sector.floorZ;
+        float top = sector.ceilingZ;
+        const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(state.map, surface.sectorIndex, surface.edgeIndex);
+        if (surface.kind == SectorSurfaceKind::LowerWall && neighbor.hasNeighbor) {
+            top = state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)].floorZ;
+        } else if (surface.kind == SectorSurfaceKind::UpperWall && neighbor.hasNeighbor) {
+            bottom = state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)].ceilingZ;
+        }
+        if (top <= bottom + GeometryEpsilon) {
+            return;
+        }
+
+        const float dx = b.x - a.x;
+        const float dz = b.y - a.y;
+        const float len = std::sqrt(dx * dx + dz * dz);
+        Vector3 offset{};
+        if (len > GeometryEpsilon) {
+            offset = Vector3Scale(Vector3{-dz / len, 0.0f, dx / len}, PreviewHighlightLift);
+        }
+
+        const Vector3 ab = Vector3Add(SectorPointToWorld(a, bottom), offset);
+        const Vector3 at = Vector3Add(SectorPointToWorld(a, top), offset);
+        const Vector3 bb = Vector3Add(SectorPointToWorld(b, bottom), offset);
+        const Vector3 bt = Vector3Add(SectorPointToWorld(b, top), offset);
+        DrawLine3D(ab, at, color);
+        DrawLine3D(at, bt, color);
+        DrawLine3D(bt, bb, color);
+        DrawLine3D(bb, ab, color);
+        (void)thickness;
+    };
+
+    BeginMode3D(preview.Camera());
+    if (state.hoveredSurface3D.hit
+            && !SameSurfaceRef(state.hoveredSurface3D.surface, state.selectedSurface3D)) {
+        drawSurface(state.hoveredSurface3D.surface, Color{248, 238, 124, 235}, 2.0f);
+    }
+    if (state.selectedSurface3D.kind != SectorSurfaceKind::None) {
+        drawSurface(state.selectedSurface3D, Color{84, 204, 255, 255}, 3.0f);
+    }
+    EndMode3D();
 }
 
 void SectorEditor::DrawPreviewOverlay(
@@ -1453,15 +1722,18 @@ void SectorEditor::DrawPreviewOverlay(
             assets,
             Rectangle{panel.x + 18.0f, panel.y + 14.0f, panel.width - 36.0f, 34.0f},
             font,
-            "3D Preview",
+            "3D Mode",
             engine::UITextJustify::Left
     );
+    const char* interactionText = preview.IsMouseLookEnabled()
+            ? "WASD move | Mouse look | Space/Ctrl up/down | F11: unlock cursor/editor pick | Tab/Escape return"
+            : "F11: return to fly mode | click surface to select | Tab/Escape return";
     engine::Text(
             config,
             assets,
             Rectangle{panel.x + 18.0f, panel.y + 54.0f, panel.width - 36.0f, 30.0f},
             font,
-            "WASD move | Mouse look | Space/Ctrl up/down | F11 cursor | Tab/Escape return",
+            interactionText,
             engine::UITextJustify::Left,
             config.mutedTextColor
     );
@@ -1495,6 +1767,168 @@ void SectorEditor::DrawPreviewOverlay(
             ),
             engine::UITextJustify::Left,
             state.dirty ? Color{236, 196, 92, 255} : config.mutedTextColor
+    );
+}
+
+Rectangle SectorEditor::BuildPreviewUvPanelRect() const
+{
+    return Rectangle{330.0f, EditorHeight - 178.0f, 1260.0f, 146.0f};
+}
+
+void SectorEditor::DrawPreviewUvPanel(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    if (!IsValidSurfaceRef(state.selectedSurface3D)) {
+        state.selectedSurface3D = SectorSurfaceRef{};
+        return;
+    }
+
+    const Rectangle panel = BuildPreviewUvPanelRect();
+    DrawRectangleRec(panel, Color{12, 15, 20, 230});
+    DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
+
+    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(state.selectedSurface3D.sectorIndex)];
+    Vector2 uvScale{1.0f, 1.0f};
+    Vector2 uvOffset{0.0f, 0.0f};
+
+    if (state.selectedSurface3D.kind == SectorSurfaceKind::Floor) {
+        if (sector.floorUv.hasUvScale) {
+            uvScale = sector.floorUv.uvScale;
+        }
+        if (sector.floorUv.hasUvOffset) {
+            uvOffset = sector.floorUv.uvOffset;
+        }
+    } else if (state.selectedSurface3D.kind == SectorSurfaceKind::Ceiling) {
+        if (sector.ceilingUv.hasUvScale) {
+            uvScale = sector.ceilingUv.uvScale;
+        }
+        if (sector.ceilingUv.hasUvOffset) {
+            uvOffset = sector.ceilingUv.uvOffset;
+        }
+    } else {
+        const EffectiveEdgeSettings effective = GetEffectiveEdgeSettings(sector, state.selectedSurface3D.edgeIndex);
+        const EffectiveEdgePartSettings* part = &effective.wall;
+        if (state.selectedSurface3D.kind == SectorSurfaceKind::LowerWall) {
+            part = &effective.lower;
+        } else if (state.selectedSurface3D.kind == SectorSurfaceKind::UpperWall) {
+            part = &effective.upper;
+        }
+        uvScale = part->uvScale;
+        uvOffset = part->uvOffset;
+    }
+
+    const float margin = 18.0f;
+    const float top = panel.y + margin;
+    const float inputTop = panel.y + 78.0f;
+    const float colW = 132.0f;
+    const float gap = 14.0f;
+    const float startX = panel.x + 390.0f;
+
+    const std::string edgeLabel = IsWallSurface(state.selectedSurface3D.kind)
+            ? TextFormat(" edge %d", state.selectedSurface3D.edgeIndex)
+            : "";
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{panel.x + margin, top, 350.0f, 34.0f},
+            font,
+            TextFormat(
+                    "%s | sector %s%s",
+                    SurfaceKindName(state.selectedSurface3D.kind),
+                    sector.id.c_str(),
+                    edgeLabel.c_str()
+            ),
+            engine::UITextJustify::Left,
+            config.textColor
+    );
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{panel.x + margin, top + 38.0f, 350.0f, 30.0f},
+            font,
+            TextFormat("texture %s", CurrentTextureForSurface(state.selectedSurface3D).c_str()),
+            engine::UITextJustify::Left,
+            config.mutedTextColor
+    );
+
+    auto drawFloat = [&](const char* id, const char* label, float value, engine::UIFloatInputState& inputState, int component, float minValue, float maxValue, float x) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{x, inputTop - 28.0f, colW, 24.0f},
+                font,
+                label,
+                engine::UITextJustify::Left,
+                config.mutedTextColor
+        );
+        float edited = value;
+        const engine::UINumericInputResult result = engine::FloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                id,
+                Rectangle{x, inputTop, colW, 38.0f},
+                font,
+                edited,
+                inputState,
+                minValue,
+                maxValue,
+                3
+        );
+        if (result.changed && edited != value) {
+            ApplySurface3DUvValue(state.selectedSurface3D, component, edited, assets);
+        }
+    };
+
+    drawFloat("sector_editor_3d_uv_scale_u", "Scale U", uvScale.x, uiState.surface3DUvScaleUInput, 0, 0.01f, 64.0f, startX);
+    drawFloat("sector_editor_3d_uv_scale_v", "Scale V", uvScale.y, uiState.surface3DUvScaleVInput, 1, 0.01f, 64.0f, startX + (colW + gap));
+    drawFloat("sector_editor_3d_uv_offset_u", "Offset U", uvOffset.x, uiState.surface3DUvOffsetUInput, 2, -1024.0f, 1024.0f, startX + (colW + gap) * 2.0f);
+    drawFloat("sector_editor_3d_uv_offset_v", "Offset V", uvOffset.y, uiState.surface3DUvOffsetVInput, 3, -1024.0f, 1024.0f, startX + (colW + gap) * 3.0f);
+
+    if (engine::Button(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_3d_texture",
+            Rectangle{panel.x + panel.width - 172.0f, panel.y + panel.height - 112.0f, 146.0f, 38.0f},
+            font,
+            "Texture")) {
+        const TexturePickerTargetKind target = TexturePickerTargetForSurface(state.selectedSurface3D);
+        if (target != TexturePickerTargetKind::None) {
+            OpenTexturePicker(target, state.selectedSurface3D.sectorIndex, state.selectedSurface3D.edgeIndex);
+        }
+    }
+
+    if (engine::Button(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_3d_reset_uv",
+            Rectangle{panel.x + panel.width - 172.0f, panel.y + panel.height - 56.0f, 146.0f, 38.0f},
+            font,
+            "Reset UV")) {
+        ResetSurface3DUv(state.selectedSurface3D, assets);
+    }
+
+    input.ForEachEvent(
+            engine::InputEventType::MouseClick,
+            true,
+            [panel](engine::InputEvent& event) {
+                if (Contains(panel, event.mouseClick.releasePosition)
+                        || Contains(panel, event.mouseClick.pressPosition)) {
+                    engine::ConsumeEvent(event);
+                }
+            }
     );
 }
 
@@ -1901,7 +2335,7 @@ void SectorEditor::DrawToolsPanel(
     engine::Separator(config, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 12.0f});
     y += 22.0f;
 
-    if (engine::Button(ui, config, input, assets, "sector_editor_preview_3d", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Preview 3D")) {
+    if (engine::Button(ui, config, input, assets, "sector_editor_preview_3d", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "3D Mode")) {
         TryEnterPreview3D(assets, ui);
     }
 
@@ -2305,12 +2739,12 @@ void SectorEditor::DrawTexturePickerModal(
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
-            [this](engine::InputEvent& event) {
+            [this, &assets](engine::InputEvent& event) {
                 if (event.key.key == KEY_ESCAPE) {
                     state.texturePicker = TexturePickerState{};
                     engine::ConsumeEvent(event);
                 } else if (event.key.key == KEY_ENTER || event.key.key == KEY_KP_ENTER) {
-                    ApplyTexturePickerSelection();
+                    ApplyTexturePickerSelection(assets);
                     engine::ConsumeEvent(event);
                 }
             }
@@ -2385,7 +2819,7 @@ void SectorEditor::DrawTexturePickerModal(
     const float buttonY = modal.y + modal.height - 64.0f;
     const float buttonW = 150.0f;
     if (engine::Button(ui, config, input, assets, "sector_editor_texture_picker_select", Rectangle{modal.x + modal.width - buttonW * 2.0f - 34.0f, buttonY, buttonW, 44.0f}, font, "Select")) {
-        ApplyTexturePickerSelection();
+        ApplyTexturePickerSelection(assets);
     }
     if (engine::Button(ui, config, input, assets, "sector_editor_texture_picker_cancel", Rectangle{modal.x + modal.width - buttonW - 22.0f, buttonY, buttonW, 44.0f}, font, "Cancel")) {
         state.texturePicker = TexturePickerState{};
@@ -2536,7 +2970,7 @@ void SectorEditor::SaveMap()
 bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UIContext& ui)
 {
     if (!initialized) {
-        statusText = "Preview failed: no map loaded";
+        statusText = "3D mode failed: no map loaded";
         return false;
     }
 
@@ -2551,7 +2985,11 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     std::string error;
     if (!preview.Rebuild(assets, state.map, "sector_editor_preview", error)) {
         state.mode = SectorEditorMode::Edit2D;
-        statusText = error.empty() ? "Preview failed" : error;
+        if (StartsWith(error, "Preview failed:")) {
+            statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
+        } else {
+            statusText = error.empty() ? "3D mode failed" : error;
+        }
         return false;
     }
 
@@ -2560,8 +2998,11 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     }
 
     state.mode = SectorEditorMode::Preview3D;
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.selectedSurface3D = SectorSurfaceRef{};
+    ResetSurface3DUiState();
     statusText = TextFormat(
-            "3D preview rebuilt: %zu batches, %d triangles",
+            "3D mode rebuilt: %zu batches, %d triangles",
             preview.BatchCount(),
             preview.TriangleCount()
     );
@@ -2573,6 +3014,7 @@ void SectorEditor::LeavePreview3D()
     state.lastPreviewPose = preview.Pose();
     state.hasPreviewPose = true;
     state.mode = SectorEditorMode::Edit2D;
+    state.hoveredSurface3D = SectorSurfaceHit{};
     preview.Leave();
     statusText = "Returned to 2D editor";
 }
@@ -2758,10 +3200,63 @@ void SectorEditor::SelectEdge(int sectorIndex, int edgeIndex)
     SyncSelectedSectorIdBuffer();
 }
 
+void SectorEditor::SelectSurface3D(SectorSurfaceRef surface)
+{
+    if (!IsValidSurfaceRef(surface)) {
+        state.selectedSurface3D = SectorSurfaceRef{};
+        return;
+    }
+
+    if (!SameSurfaceRef(state.selectedSurface3D, surface)) {
+        ResetSurface3DUiState();
+    }
+    state.selectedSurface3D = surface;
+
+    if (IsWallSurface(surface.kind)) {
+        SelectEdge(surface.sectorIndex, surface.edgeIndex);
+        state.selectedEdgeUvPart = SurfaceKindToEdgeUvPart(surface.kind);
+    } else {
+        SelectSector(surface.sectorIndex);
+    }
+}
+
+bool SectorEditor::IsValidSurfaceRef(SectorSurfaceRef surface) const
+{
+    if (surface.kind == SectorSurfaceKind::None
+            || surface.sectorIndex < 0
+            || surface.sectorIndex >= static_cast<int>(state.map.sectors.size())) {
+        return false;
+    }
+
+    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
+    if (IsWallSurface(surface.kind)) {
+        return surface.edgeIndex >= 0
+                && surface.edgeIndex < static_cast<int>(sector.points.size());
+    }
+    return surface.edgeIndex < 0;
+}
+
+bool SectorEditor::SameSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b) const
+{
+    return a.kind == b.kind
+            && a.sectorIndex == b.sectorIndex
+            && a.edgeIndex == b.edgeIndex;
+}
+
+void SectorEditor::ResetSurface3DUiState()
+{
+    uiState.surface3DUvScaleUInput = engine::UIFloatInputState{};
+    uiState.surface3DUvScaleVInput = engine::UIFloatInputState{};
+    uiState.surface3DUvOffsetUInput = engine::UIFloatInputState{};
+    uiState.surface3DUvOffsetVInput = engine::UIFloatInputState{};
+}
+
 void SectorEditor::ClearSelection()
 {
     state.selectedSectorIndex = -1;
     state.selectedEdgeIndex = -1;
+    state.selectedSurface3D = SectorSurfaceRef{};
+    ResetSurface3DUiState();
     uiState.inspectorScroll.offset = Vector2{};
     SyncSelectedSectorIdBuffer();
 }
@@ -2858,6 +3353,170 @@ std::string SectorEditor::CurrentTextureForTarget(TexturePickerTargetKind target
     return std::string{};
 }
 
+std::string SectorEditor::CurrentTextureForSurface(SectorSurfaceRef surface) const
+{
+    if (!IsValidSurfaceRef(surface)) {
+        return std::string{"<none>"};
+    }
+
+    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
+    switch (surface.kind) {
+        case SectorSurfaceKind::Floor:
+            return sector.floorTextureId;
+        case SectorSurfaceKind::Ceiling:
+            return sector.ceilingTextureId;
+        case SectorSurfaceKind::Wall:
+            return GetEffectiveEdgeSettings(sector, surface.edgeIndex).wall.textureId;
+        case SectorSurfaceKind::LowerWall:
+            return GetEffectiveEdgeSettings(sector, surface.edgeIndex).lower.textureId;
+        case SectorSurfaceKind::UpperWall:
+            return GetEffectiveEdgeSettings(sector, surface.edgeIndex).upper.textureId;
+        case SectorSurfaceKind::None:
+            break;
+    }
+    return std::string{"<none>"};
+}
+
+TexturePickerTargetKind SectorEditor::TexturePickerTargetForSurface(SectorSurfaceRef surface) const
+{
+    switch (surface.kind) {
+        case SectorSurfaceKind::Floor:
+            return TexturePickerTargetKind::SectorFloor;
+        case SectorSurfaceKind::Ceiling:
+            return TexturePickerTargetKind::SectorCeiling;
+        case SectorSurfaceKind::Wall:
+            return TexturePickerTargetKind::EdgeWall;
+        case SectorSurfaceKind::LowerWall:
+            return TexturePickerTargetKind::EdgeLowerWall;
+        case SectorSurfaceKind::UpperWall:
+            return TexturePickerTargetKind::EdgeUpperWall;
+        case SectorSurfaceKind::None:
+            break;
+    }
+    return TexturePickerTargetKind::None;
+}
+
+bool SectorEditor::ApplySurface3DUvValue(SectorSurfaceRef surface, int component, float value, engine::AssetManager& assets)
+{
+    if (!IsValidSurfaceRef(surface)) {
+        return false;
+    }
+
+    auto applyComponent = [component, value](auto& uv) {
+        switch (component) {
+            case 0:
+                uv.uvScale.x = value;
+                uv.hasUvScale = true;
+                return true;
+            case 1:
+                uv.uvScale.y = value;
+                uv.hasUvScale = true;
+                return true;
+            case 2:
+                uv.uvOffset.x = value;
+                uv.hasUvOffset = true;
+                return true;
+            case 3:
+                uv.uvOffset.y = value;
+                uv.hasUvOffset = true;
+                return true;
+            default:
+                return false;
+        }
+    };
+
+    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
+    bool changed = false;
+    if (surface.kind == SectorSurfaceKind::Floor) {
+        changed = applyComponent(sector.floorUv);
+    } else if (surface.kind == SectorSurfaceKind::Ceiling) {
+        changed = applyComponent(sector.ceilingUv);
+    } else {
+        SectorEdgeOverride& edgeOverride = EnsureEdgeOverride(surface.sectorIndex, surface.edgeIndex);
+        SectorEdgePartUvOverride* uv = &edgeOverride.wallUv;
+        if (surface.kind == SectorSurfaceKind::LowerWall) {
+            uv = &edgeOverride.lowerUv;
+        } else if (surface.kind == SectorSurfaceKind::UpperWall) {
+            uv = &edgeOverride.upperUv;
+        }
+        changed = applyComponent(*uv);
+    }
+
+    if (!changed) {
+        return false;
+    }
+
+    state.dirty = true;
+    statusText = TextFormat("Updated 3D %s UV", SurfaceKindName(surface.kind));
+    return RebuildPreviewMeshesPreservingView(assets);
+}
+
+bool SectorEditor::ResetSurface3DUv(SectorSurfaceRef surface, engine::AssetManager& assets)
+{
+    if (!IsValidSurfaceRef(surface)) {
+        return false;
+    }
+
+    bool changed = false;
+    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
+    if (surface.kind == SectorSurfaceKind::Floor) {
+        changed = sector.floorUv.hasUvScale || sector.floorUv.hasUvOffset;
+        sector.floorUv = SectorSurfaceUvOverride{};
+    } else if (surface.kind == SectorSurfaceKind::Ceiling) {
+        changed = sector.ceilingUv.hasUvScale || sector.ceilingUv.hasUvOffset;
+        sector.ceilingUv = SectorSurfaceUvOverride{};
+    } else {
+        SectorEdgeOverride* edgeOverride = FindMutableEdgeOverride(surface.sectorIndex, surface.edgeIndex);
+        if (edgeOverride != nullptr) {
+            SectorEdgePartUvOverride* uv = &edgeOverride->wallUv;
+            if (surface.kind == SectorSurfaceKind::LowerWall) {
+                uv = &edgeOverride->lowerUv;
+            } else if (surface.kind == SectorSurfaceKind::UpperWall) {
+                uv = &edgeOverride->upperUv;
+            }
+            changed = uv->hasUvScale || uv->hasUvOffset;
+            *uv = SectorEdgePartUvOverride{};
+            RemoveEdgeOverrideIfEmpty(surface.sectorIndex, surface.edgeIndex);
+        }
+    }
+
+    if (!changed) {
+        return false;
+    }
+
+    ResetSurface3DUiState();
+    state.dirty = true;
+    statusText = TextFormat("Reset 3D %s UV", SurfaceKindName(surface.kind));
+    return RebuildPreviewMeshesPreservingView(assets);
+}
+
+bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& assets)
+{
+    if (!preview.IsReady()) {
+        return false;
+    }
+
+    const SectorMeshPreviewPose pose = preview.Pose();
+    const bool mouseLook = preview.IsMouseLookEnabled();
+    const SectorSurfaceRef selected = state.selectedSurface3D;
+
+    std::string error;
+    if (!preview.Rebuild(assets, state.map, "sector_editor_preview", error)) {
+        if (StartsWith(error, "Preview failed:")) {
+            statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
+        } else {
+            statusText = error.empty() ? "3D mode rebuild failed" : error;
+        }
+        state.mode = SectorEditorMode::Edit2D;
+        return false;
+    }
+
+    preview.ApplyPose(pose);
+    preview.SetMouseLookEnabled(mouseLook);
+    state.selectedSurface3D = IsValidSurfaceRef(selected) ? selected : SectorSurfaceRef{};
+    return true;
+}
+
 void SectorEditor::OpenTexturePicker(TexturePickerTargetKind target, int sectorIndex, int edgeIndex)
 {
     TexturePickerState& picker = state.texturePicker;
@@ -2905,7 +3564,7 @@ void SectorEditor::OpenTexturePicker(TexturePickerTargetKind target, int sectorI
     }
 }
 
-void SectorEditor::ApplyTexturePickerSelection()
+void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
 {
     TexturePickerState& picker = state.texturePicker;
     if (!picker.open
@@ -2987,6 +3646,9 @@ void SectorEditor::ApplyTexturePickerSelection()
     if (changed) {
         state.dirty = true;
         statusText = TextFormat("Changed %s", TextureTargetLabel(picker.target));
+        if (state.mode == SectorEditorMode::Preview3D) {
+            RebuildPreviewMeshesPreservingView(assets);
+        }
     }
 
     picker = TexturePickerState{};
