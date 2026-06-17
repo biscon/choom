@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/ui/UI.h"
+#include "sector_demo/SectorMeshPreview.h"
 #include "sector_demo/SectorTypes.h"
 
 #include <raylib.h>
@@ -119,6 +120,8 @@ struct SectorEditorState {
     bool showAxes = true;
     bool showSectorIds = true;
     bool dirty = false;
+    bool hasPreviewPose = false;
+    SectorMeshPreviewPose lastPreviewPose = {};
 
     engine::AssetScopeHandle editorTextureScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;

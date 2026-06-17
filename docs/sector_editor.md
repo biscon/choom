@@ -137,12 +137,15 @@ Preview controls:
 - `WASD`: move.
 - Mouse look: look around.
 - `Space` / `Ctrl`: move up/down.
-- `F12`: toggle cursor capture.
+- `F11`: toggle cursor capture.
 - `Tab` or `Escape`: return to the 2D editor.
 
 Returning to the 2D editor keeps the current map, selection, dirty state, pan,
-and zoom. Preview meshes are reused while open, unloaded on editor shutdown,
-and rebuilt every time `Preview 3D` is clicked.
+zoom, and last 3D preview position/look direction. The first preview after
+loading or reloading a map starts at the player start; later previews in the
+same editor session restore the last preview pose. Preview meshes are reused
+while open, unloaded on editor shutdown, and rebuilt every time `Preview 3D` is
+clicked.
 
 ## Current Limitations
 

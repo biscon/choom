@@ -1461,7 +1461,7 @@ void SectorEditor::DrawPreviewOverlay(
             assets,
             Rectangle{panel.x + 18.0f, panel.y + 54.0f, panel.width - 36.0f, 30.0f},
             font,
-            "WASD move | Mouse look | Space/Ctrl up/down | F12 cursor | Tab/Escape return",
+            "WASD move | Mouse look | Space/Ctrl up/down | F11 cursor | Tab/Escape return",
             engine::UITextJustify::Left,
             config.mutedTextColor
     );
@@ -2476,6 +2476,7 @@ void SectorEditor::LoadInitialMap(const char* requestedPath)
     state.selectedSectorIndex = -1;
     state.selectedEdgeIndex = -1;
     state.hoveredSectorIndex = -1;
+    state.hasPreviewPose = false;
     state.dirty = false;
     initialized = true;
     statusText = loadPath == mapPath
@@ -2512,6 +2513,7 @@ void SectorEditor::ReloadMap(engine::AssetManager& assets)
     }
     RefreshEditorTextureAssets(assets);
     state.dirty = false;
+    state.hasPreviewPose = false;
     initialized = true;
     statusText = TextFormat("Reloaded %s", ShortPath(loadPath).c_str());
 }
@@ -2553,6 +2555,10 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
         return false;
     }
 
+    if (state.hasPreviewPose) {
+        preview.ApplyPose(state.lastPreviewPose);
+    }
+
     state.mode = SectorEditorMode::Preview3D;
     statusText = TextFormat(
             "3D preview rebuilt: %zu batches, %d triangles",
@@ -2564,6 +2570,8 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
 
 void SectorEditor::LeavePreview3D()
 {
+    state.lastPreviewPose = preview.Pose();
+    state.hasPreviewPose = true;
     state.mode = SectorEditorMode::Edit2D;
     preview.Leave();
     statusText = "Returned to 2D editor";
