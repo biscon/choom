@@ -2,12 +2,14 @@
   "bakedLightmap": {
     "height": 2048,
     "path": "assets/sector_demo/sector_editor_working_level.lightmap.png",
-    "sourceHash": "f370885d710398fc",
+    "sourceHash": "9eb03f29d1dea4a5",
     "width": 2048
   },
   "lightmapSettings": {
     "ambientOcclusionRadius": 1.5,
-    "ambientOcclusionStrength": 0.699999988079071
+    "ambientOcclusionStrength": 0.699999988079071,
+    "indirectBounceRadius": 4.0,
+    "indirectBounceStrength": 0.20000000298023224
   },
   "playerStart": {
     "pos": [
@@ -1299,14 +1301,14 @@
         255
       ],
       "id": "light_001",
-      "intensity": 1.0,
+      "intensity": 1.7000000476837158,
       "position": [
-        8.0,
+        9.0,
         1.7999999523162842,
-        8.0
+        9.0
       ],
       "radius": 8.0,
-      "sourceRadius": 0.0
+      "sourceRadius": 0.30000001192092896
     },
     {
       "color": [

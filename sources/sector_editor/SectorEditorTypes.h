@@ -204,6 +204,7 @@ struct SectorEditorUiState {
     engine::UIFloatInputState surface3DUvScaleVInput;
     engine::UIFloatInputState surface3DUvOffsetUInput;
     engine::UIFloatInputState surface3DUvOffsetVInput;
+    engine::UIScrollState toolsScroll;
     engine::UIScrollState inspectorScroll;
     char selectedSectorIdBuffer[64] = {};
     int idBufferSectorIndex = -1;

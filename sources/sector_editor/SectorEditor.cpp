@@ -27,7 +27,7 @@ namespace {
 
 constexpr float EditorWidth = 1920.0f;
 constexpr float EditorHeight = 1080.0f;
-constexpr float LeftPanelWidth = 264.0f;
+constexpr float LeftPanelWidth = 360.0f;
 constexpr float RightPanelWidth = 384.0f;
 constexpr float BottomPanelHeight = 78.0f;
 constexpr float PanelGap = 10.0f;
@@ -2626,9 +2626,36 @@ void SectorEditor::DrawToolsPanel(
             "Tools"
     );
 
-    float y = panel.contentRect.y;
     const float rowH = 46.0f;
     const float gap = config.rowSpacing;
+    const float toolsContentH = 1050.0f;
+    const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
+    engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
+            ui,
+            config,
+            input,
+            "sector_editor_tools_scroll",
+            panel.contentRect,
+            Vector2{scrollContentW, toolsContentH},
+            uiState.toolsScroll,
+            false
+    );
+
+    const float contentW = scroll.viewport.width;
+    float y = 0.0f;
+    const auto separator = [&]() {
+        engine::Separator(
+                config,
+                Rectangle{
+                        scroll.viewport.x,
+                        scroll.viewport.y - uiState.toolsScroll.offset.y + y,
+                        contentW,
+                        12.0f
+                }
+        );
+        y += 22.0f;
+    };
+
     const SectorEditorTool tools[] = {
             SectorEditorTool::Select,
             SectorEditorTool::Sector,
@@ -2644,7 +2671,7 @@ void SectorEditor::DrawToolsPanel(
                 input,
                 assets,
                 TextFormat("sector_editor_tool_%s", ToolName(tool)),
-                Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH},
+                Rectangle{0.0f, y, contentW, rowH},
                 font,
                 ToolName(tool),
                 state.currentTool == tool)) {
@@ -2659,36 +2686,28 @@ void SectorEditor::DrawToolsPanel(
         y += rowH + gap;
     }
 
-    engine::Separator(config, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 12.0f});
-    y += 22.0f;
+    separator();
 
-    const float halfButtonW = (panel.contentRect.width - gap) * 0.5f;
-    if (engine::Button(ui, config, input, assets, "sector_editor_save", Rectangle{panel.contentRect.x, y, halfButtonW, rowH}, font, "Save")) {
+    const float halfButtonW = (contentW - gap) * 0.5f;
+    if (engine::Button(ui, config, input, assets, "sector_editor_save", Rectangle{0.0f, y, halfButtonW, rowH}, font, "Save")) {
         SaveMap();
     }
-    if (engine::Button(ui, config, input, assets, "sector_editor_reload", Rectangle{panel.contentRect.x + halfButtonW + gap, y, halfButtonW, rowH}, font, "Reload")) {
+    if (engine::Button(ui, config, input, assets, "sector_editor_reload", Rectangle{halfButtonW + gap, y, halfButtonW, rowH}, font, "Reload")) {
         ReloadMap(assets);
     }
     y += rowH + gap;
 
-    if (engine::Button(ui, config, input, assets, "sector_editor_add_map_texture", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Add Map Texture")) {
+    if (engine::Button(ui, config, input, assets, "sector_editor_add_map_texture", Rectangle{0.0f, y, contentW, rowH}, font, "Add Map Texture")) {
         OpenAddMapTextureModal(assets);
     }
     y += rowH + gap;
 
-    engine::Text(ui, config, assets, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 28.0f}, font, "Lightmap Settings", engine::UITextJustify::Left, config.mutedTextColor);
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 28.0f}, font, "Lightmap Settings", engine::UITextJustify::Left, config.mutedTextColor);
     y += 32.0f;
 
-    const float lightmapLabelW = 112.0f;
+    const float lightmapLabelW = 180.0f;
     const auto drawLightmapSetting = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals, const char* status) {
-        const engine::UILabelFieldRowResult row = engine::LabelFieldRow(
-                config,
-                assets,
-                Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH},
-                font,
-                label,
-                lightmapLabelW
-        );
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, lightmapLabelW, rowH}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
         float edited = value;
         const engine::UINumericInputResult result = engine::FloatInput(
                 ui,
@@ -2696,7 +2715,7 @@ void SectorEditor::DrawToolsPanel(
                 input,
                 assets,
                 id,
-                row.fieldRect,
+                Rectangle{lightmapLabelW + gap, y, std::max(0.0f, contentW - lightmapLabelW - gap), rowH},
                 font,
                 edited,
                 inputState,
@@ -2757,29 +2776,22 @@ void SectorEditor::DrawToolsPanel(
             "Updated bounce strength"
     );
 
-    if (engine::Button(ui, config, input, assets, "sector_editor_bake_lightmaps", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Bake Lightmaps")) {
+    if (engine::Button(ui, config, input, assets, "sector_editor_bake_lightmaps", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
         BakeLightmaps();
     }
     y += rowH + gap;
 
-    engine::Separator(config, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 12.0f});
-    y += 22.0f;
+    separator();
 
-    const engine::UILabelFieldRowResult gridRow = engine::LabelFieldRow(
-            config,
-            assets,
-            Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH},
-            font,
-            "Grid",
-            64.0f
-    );
+    const float gridLabelW = 64.0f;
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, gridLabelW, rowH}, font, "Grid", engine::UITextJustify::Left, config.mutedTextColor);
     engine::IntInput(
             ui,
             config,
             input,
             assets,
             "sector_editor_grid",
-            gridRow.fieldRect,
+            Rectangle{gridLabelW + gap, y, std::max(0.0f, contentW - gridLabelW - gap), rowH},
             font,
             state.gridSize,
             uiState.gridSizeInput,
@@ -2789,20 +2801,20 @@ void SectorEditor::DrawToolsPanel(
     );
     y += rowH + gap;
 
-    engine::Checkbox(ui, config, input, assets, "sector_editor_show_grid", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Show grid", state.showGrid);
+    engine::Checkbox(ui, config, input, assets, "sector_editor_show_grid", Rectangle{0.0f, y, contentW, rowH}, font, "Show grid", state.showGrid);
     y += rowH + gap;
-    engine::Checkbox(ui, config, input, assets, "sector_editor_show_axes", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Show axes", state.showAxes);
+    engine::Checkbox(ui, config, input, assets, "sector_editor_show_axes", Rectangle{0.0f, y, contentW, rowH}, font, "Show axes", state.showAxes);
     y += rowH + gap;
-    engine::Checkbox(ui, config, input, assets, "sector_editor_show_ids", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Show ids", state.showSectorIds);
+    engine::Checkbox(ui, config, input, assets, "sector_editor_show_ids", Rectangle{0.0f, y, contentW, rowH}, font, "Show ids", state.showSectorIds);
     y += rowH + gap;
 
-    engine::Separator(config, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 12.0f});
-    y += 22.0f;
+    separator();
 
-    if (engine::Button(ui, config, input, assets, "sector_editor_preview_3d", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "3D Mode")) {
+    if (engine::Button(ui, config, input, assets, "sector_editor_preview_3d", Rectangle{0.0f, y, contentW, rowH}, font, "3D Mode")) {
         TryEnterPreview3D(assets, ui);
     }
 
+    engine::EndScrollArea(ui, config, input, scroll, uiState.toolsScroll);
     engine::EndPanel(ui, config, panel);
 }
 
