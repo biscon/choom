@@ -46,6 +46,9 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
+constexpr int kSectorLightmapBakeVersion = 2;
+constexpr int kDirectSoftShadowSampleCount = 8;
+constexpr int kAmbientOcclusionSampleCount = 12;
 
 bool BuildSectorLightmapLayout(
         const SectorMap& map,

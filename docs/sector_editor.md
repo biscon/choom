@@ -33,7 +33,8 @@ The sector editor is a 2D editor for `SectorMap` JSON data with an integrated
 - `Save` and `Reload`: write/read the current map JSON path.
 - `Add Map Texture`: add an existing project PNG from `assets/images` to the
   current map texture table.
-- `Bake Lightmaps`: bake static point-light direct lighting to a shared atlas.
+- `Bake Lightmaps`: bake static point-light direct lighting and ambient
+  occlusion to a shared atlas.
 
 ## Sector Inspector
 
@@ -97,31 +98,72 @@ Static light defaults:
 - Color: white.
 - Intensity: `1.0`, clamped to `0.0..8.0`.
 - Radius: `8.0`, clamped to `0.1..64.0`.
+- Source radius: new lights default to `0.25`, clamped to `0.0..8.0` and capped
+  to half the light radius.
 - Generated IDs use `light_001`, `light_002`, and so on.
 
 In Select mode, clicking near a light icon selects it before sector or edge
 selection. The inspector shows ID, X/Y/Z position, intensity, radius, RGB
-channels, and a color swatch. The Erase tool or `Delete` removes the selected
-or clicked light without confirmation. There is still no undo/redo.
+channels, source radius, and a color swatch. `sourceRadius` controls the baked
+emitting size: `0.0` keeps the hard point-light shadow path, while nonzero values
+use deterministic finite-source samples to create baked soft penumbrae. The
+Erase tool or `Delete` removes the selected or clicked light without
+confirmation. There is still no undo/redo.
 
 Static lights are saved in map JSON as `staticLights`. Older maps without the
-field still load normally.
+field still load normally. Older static lights without `sourceRadius` load as
+`0.0`, preserving the previous hard-shadow look until edited.
+
+```json
+{
+  "id": "light_001",
+  "position": [4.0, 2.0, 3.0],
+  "color": [255, 185, 110],
+  "intensity": 2.0,
+  "radius": 8.0,
+  "sourceRadius": 0.35
+}
+```
 
 ## Baked Lightmaps
 
-`Bake Lightmaps` bakes direct colored lighting from static point lights into a
-single shared lightmap atlas. The output path is derived from the current map
-path. For example:
+`Bake Lightmaps` bakes direct colored lighting from static point lights and
+ambient occlusion into a single shared lightmap atlas. The output path is
+derived from the current map path. For example:
 
 ```text
 assets/sector_demo/sector_editor_working_level.json
 assets/sector_demo/sector_editor_working_level.lightmap.png
 ```
 
+The left tools panel includes compact lightmap settings:
+
+- `AO radius`: world-space ray distance for baked ambient occlusion, clamped to
+  `0.05..16.0`.
+- `AO strength`: how much gathered occlusion darkens sector ambient, clamped to
+  `0.0..1.0`; `0.0` disables AO ray work.
+
+Map JSON saves these settings as:
+
+```json
+"lightmapSettings": {
+  "ambientOcclusionRadius": 1.25,
+  "ambientOcclusionStrength": 0.55
+}
+```
+
+The baked PNG stores:
+
+```text
+RGB = baked direct static point-light contribution
+A   = baked ambient-occlusion factor, where 255 is fully open
+```
+
 The map stores `bakedLightmap` metadata with the asset-relative atlas path,
-dimensions, and a deterministic source hash. The hash includes sector geometry,
-floor and ceiling heights, static light values, and the fixed bake settings. It
-does not include the baked metadata itself.
+dimensions, and a deterministic source hash. The hash includes the bake format
+version, sector geometry, floor and ceiling heights, static light values
+including `sourceRadius`, AO settings, and fixed bake sample counts. It does not
+include the baked metadata itself.
 
 3D Mode uses the baked atlas only when the metadata exists, the atlas file can
 be found, and the stored source hash matches the current in-memory map. If a
@@ -131,12 +173,28 @@ and rendering falls back to sector ambient lighting only.
 Lighting combines as:
 
 ```text
-finalColor = baseTexture * clamp(sectorAmbientVertexColor + bakedLightmapDirectLighting, 0..1)
+bakedSample = texture(lightmapAtlas, secondaryUv)
+ambient = sectorAmbientVertexColor * bakedSample.a
+direct = bakedSample.rgb
+finalColor = baseTexture * clamp(ambient + direct, 0..1)
 ```
 
-Sector ambient remains the baseline mood/darkness layer. A sector with ambient
-intensity `0.0` can still be lit by baked direct light. Maps without valid
-baked data continue to render with ambient vertex lighting only.
+Ambient occlusion modulates only the sector ambient layer; it does not darken
+the baked direct point-light contribution. Sector ambient remains the baseline
+mood/darkness layer. A sector with ambient intensity `0.0` can still be lit by
+baked direct light. Maps without valid baked data continue to render with
+ambient vertex lighting only.
+
+In 3D Mode, `F1` toggles baked ambient occlusion on and off for visual
+debugging. This only changes the shader's use of lightmap alpha: AO off renders
+sector ambient without AO darkening while keeping baked direct RGB lighting
+visible. The toggle does not rebake lighting, reload textures, rebuild meshes,
+mark the map dirty, or save to level JSON.
+
+The bake format version is currently `2`. Existing version-1 bakes only contain
+direct RGB lighting, so they intentionally become `Lightmap stale - rebake
+required` after this update. The maps still load normally; rebake to generate
+AO alpha.
 
 Current bake characteristics:
 
@@ -145,14 +203,19 @@ Current bake characteristics:
 - At least `2` texels of chart gutter.
 - Wall charts are rectangular; floor and ceiling charts are one chart per
   generated triangle.
-- Colored direct point-light contribution only.
-- Hard static shadows from sector geometry using CPU ray tests.
-- No bounce lighting, GI, AO, dynamic light contribution, soft shadows,
-  shadow maps, probes, normal maps, or PBR.
+- Colored direct point-light contribution in RGB.
+- Ambient occlusion factor in alpha.
+- Hard static shadows when `sourceRadius` is `0.0`.
+- Baked soft shadows from 8 deterministic finite-source samples when
+  `sourceRadius` is nonzero.
+- Baked AO from 12 deterministic cosine-weighted hemisphere samples.
+- No bounce lighting, GI, colored indirect light, dynamic light contribution,
+  dynamic shadows, shadow maps, SSAO, probes, normal maps, PBR, bake threading,
+  BVH acceleration, or multi-atlas support.
 
 The 2D status bar and 3D overlay show `Lightmap valid`, `Lightmap stale -
-rebake required`, or `No baked lightmap`. Re-bake after geometry or static-light
-changes.
+rebake required`, or `No baked lightmap`. Re-bake after geometry, static-light,
+source-radius, or AO-setting changes.
 
 ## Edge Inspector
 
@@ -293,6 +356,8 @@ required before entering 3D Mode.
 - Visible cursor: camera is locked. Hover surfaces to highlight them and click a
   highlighted surface to select it.
 - `F11`: toggle between hidden-cursor fly mode and visible-cursor edit mode.
+- `F1`: toggle baked ambient occlusion for visual comparison. The toggle affects
+  sector ambient lighting only; baked direct light remains visible.
 - `Tab` or `Escape`: return to the 2D editor.
 
 Selectable 3D surfaces are floor, ceiling, solid wall, lower portal wall, and

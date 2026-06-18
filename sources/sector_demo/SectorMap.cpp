@@ -132,6 +132,22 @@ float ClampLightRadius(float value)
     return std::clamp(value, 0.1f, 64.0f);
 }
 
+float ClampLightSourceRadius(float value, float lightRadius)
+{
+    const float clamped = std::clamp(value, 0.0f, 8.0f);
+    return std::min(clamped, std::max(0.0f, lightRadius * 0.5f));
+}
+
+float ClampAmbientOcclusionRadius(float value)
+{
+    return std::clamp(value, 0.05f, 16.0f);
+}
+
+float ClampAmbientOcclusionStrength(float value)
+{
+    return std::clamp(value, 0.0f, 1.0f);
+}
+
 void ReadAmbientColorField(const Json& sectorJson, SectorDefinition& sector)
 {
     const auto it = sectorJson.find("ambientColor");
@@ -255,8 +271,47 @@ void ReadStaticLights(const Json& root, SectorMap& outMap)
 
         light.intensity = ClampLightIntensity(intensityIt->get<float>());
         light.radius = ClampLightRadius(radiusIt->get<float>());
+        const auto sourceRadiusIt = lightJson.find("sourceRadius");
+        if (sourceRadiusIt != lightJson.end() && sourceRadiusIt->is_number()) {
+            light.sourceRadius = ClampLightSourceRadius(sourceRadiusIt->get<float>(), light.radius);
+        } else {
+            light.sourceRadius = 0.0f;
+        }
         outMap.staticLights.push_back(std::move(light));
     }
+}
+
+void ReadLightmapSettings(const Json& root, SectorMap& outMap)
+{
+    const auto settingsIt = root.find("lightmapSettings");
+    if (settingsIt == root.end()) {
+        return;
+    }
+    if (!settingsIt->is_object()) {
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed lightmapSettings field\n");
+        return;
+    }
+
+    SectorLightmapBakeSettings settings = outMap.lightmapSettings;
+    const auto radiusIt = settingsIt->find("ambientOcclusionRadius");
+    if (radiusIt != settingsIt->end()) {
+        if (radiusIt->is_number()) {
+            settings.ambientOcclusionRadius = ClampAmbientOcclusionRadius(radiusIt->get<float>());
+        } else {
+            std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed ambientOcclusionRadius\n");
+        }
+    }
+
+    const auto strengthIt = settingsIt->find("ambientOcclusionStrength");
+    if (strengthIt != settingsIt->end()) {
+        if (strengthIt->is_number()) {
+            settings.ambientOcclusionStrength = ClampAmbientOcclusionStrength(strengthIt->get<float>());
+        } else {
+            std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed ambientOcclusionStrength\n");
+        }
+    }
+
+    outMap.lightmapSettings = settings;
 }
 
 void ReadBakedLightmapMetadata(const Json& root, SectorMap& outMap)
@@ -941,6 +996,7 @@ bool LoadSectorMap(const char* path, SectorMap& outMap)
     }
 
     ReadStaticLights(root, outMap);
+    ReadLightmapSettings(root, outMap);
     ReadBakedLightmapMetadata(root, outMap);
 
     const auto playerIt = root.find("playerStart");
@@ -1059,9 +1115,15 @@ bool SaveSectorMap(const char* path, const SectorMap& map)
             });
             lightJson["intensity"] = ClampLightIntensity(light.intensity);
             lightJson["radius"] = ClampLightRadius(light.radius);
+            lightJson["sourceRadius"] = ClampLightSourceRadius(light.sourceRadius, light.radius);
             root["staticLights"].push_back(std::move(lightJson));
         }
     }
+
+    Json lightmapSettings;
+    lightmapSettings["ambientOcclusionRadius"] = ClampAmbientOcclusionRadius(map.lightmapSettings.ambientOcclusionRadius);
+    lightmapSettings["ambientOcclusionStrength"] = ClampAmbientOcclusionStrength(map.lightmapSettings.ambientOcclusionStrength);
+    root["lightmapSettings"] = std::move(lightmapSettings);
 
     if (!map.bakedLightmap.path.empty()
             && map.bakedLightmap.width > 0

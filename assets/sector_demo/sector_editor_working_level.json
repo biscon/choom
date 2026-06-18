@@ -1,9 +1,13 @@
 {
   "bakedLightmap": {
-    "height": 1024,
+    "height": 2048,
     "path": "assets/sector_demo/sector_editor_working_level.lightmap.png",
-    "sourceHash": "cad28697defece50",
-    "width": 1024
+    "sourceHash": "f370885d710398fc",
+    "width": 2048
+  },
+  "lightmapSettings": {
+    "ambientOcclusionRadius": 1.5,
+    "ambientOcclusionStrength": 0.699999988079071
   },
   "playerStart": {
     "pos": [
@@ -97,7 +101,7 @@
         255,
         255
       ],
-      "ambientIntensity": 1.0,
+      "ambientIntensity": 0.125,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.5,
@@ -232,7 +236,7 @@
         255,
         255
       ],
-      "ambientIntensity": 1.0,
+      "ambientIntensity": 0.125,
       "ceiling": 2.5,
       "ceilingTex": "ceiling",
       "floor": -0.5,
@@ -266,7 +270,7 @@
         255,
         255
       ],
-      "ambientIntensity": 1.0,
+      "ambientIntensity": 0.125,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.0,
@@ -308,7 +312,7 @@
         255,
         255
       ],
-      "ambientIntensity": 1.0,
+      "ambientIntensity": 0.125,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.0,
@@ -358,7 +362,7 @@
         255,
         255
       ],
-      "ambientIntensity": 1.0,
+      "ambientIntensity": 0.125,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.25,
@@ -392,7 +396,7 @@
         255,
         255
       ],
-      "ambientIntensity": 1.0,
+      "ambientIntensity": 0.125,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.5,
@@ -430,7 +434,7 @@
         255,
         255
       ],
-      "ambientIntensity": 1.0,
+      "ambientIntensity": 0.125,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.5,
@@ -460,7 +464,7 @@
         255,
         255
       ],
-      "ambientIntensity": 1.0,
+      "ambientIntensity": 0.125,
       "ceiling": 4.0,
       "ceilingTex": "ceiling",
       "floor": 0.75,
@@ -494,7 +498,7 @@
         255,
         255
       ],
-      "ambientIntensity": 1.0,
+      "ambientIntensity": 0.125,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.0,
@@ -528,7 +532,7 @@
         255,
         255
       ],
-      "ambientIntensity": 1.0,
+      "ambientIntensity": 0.125,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.25,
@@ -562,7 +566,7 @@
         255,
         255
       ],
-      "ambientIntensity": 1.0,
+      "ambientIntensity": 0.125,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "edges": [
@@ -1301,7 +1305,8 @@
         1.7999999523162842,
         8.0
       ],
-      "radius": 8.0
+      "radius": 8.0,
+      "sourceRadius": 0.0
     },
     {
       "color": [
@@ -1316,7 +1321,24 @@
         1.7999999523162842,
         1.0
       ],
-      "radius": 5.0
+      "radius": 5.0,
+      "sourceRadius": 0.0
+    },
+    {
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "id": "light_003",
+      "intensity": 1.0,
+      "position": [
+        27.0,
+        1.7999999523162842,
+        13.0
+      ],
+      "radius": 16.0,
+      "sourceRadius": 0.5
     }
   ],
   "textures": {

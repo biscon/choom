@@ -158,6 +158,22 @@ float ClampLightRadius(float value)
     return std::clamp(value, 0.1f, 64.0f);
 }
 
+float ClampLightSourceRadius(float value, float lightRadius)
+{
+    const float clamped = std::clamp(value, 0.0f, 8.0f);
+    return std::min(clamped, std::max(0.0f, lightRadius * 0.5f));
+}
+
+float ClampAmbientOcclusionRadius(float value)
+{
+    return std::clamp(value, 0.05f, 16.0f);
+}
+
+float ClampAmbientOcclusionStrength(float value)
+{
+    return std::clamp(value, 0.0f, 1.0f);
+}
+
 int ClampAmbientChannel(int value)
 {
     return std::clamp(value, 0, 255);
@@ -1233,6 +1249,15 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
             engine::InputEventType::KeyPressed,
             true,
             [this](engine::InputEvent& event) {
+                if (event.key.key == KEY_F1) {
+                    state.useBakedAmbientOcclusion = !state.useBakedAmbientOcclusion;
+                    statusText = state.useBakedAmbientOcclusion
+                            ? "Baked AO enabled"
+                            : "Baked AO disabled";
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
@@ -1624,6 +1649,7 @@ void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
     light.color = WHITE;
     light.intensity = 1.0f;
     light.radius = 8.0f;
+    light.sourceRadius = 0.25f;
 
     state.map.staticLights.push_back(std::move(light));
     SelectLight(static_cast<int>(state.map.staticLights.size()) - 1);
@@ -1865,7 +1891,7 @@ bool SectorEditor::ValidateSectorPolygon(const std::vector<SectorPoint>& points,
 
 void SectorEditor::RenderPreview3D(engine::AssetManager& assets)
 {
-    preview.Render(assets);
+    preview.Render(assets, state.useBakedAmbientOcclusion);
     DrawPreviewSurfaceHighlights();
 }
 
@@ -2014,8 +2040,8 @@ void SectorEditor::DrawPreviewOverlay(
             engine::UITextJustify::Left
     );
     const char* interactionText = preview.IsMouseLookEnabled()
-            ? "WASD move | Mouse look | Space/Ctrl up/down | F11: unlock cursor/editor pick | Tab/Escape return"
-            : "F11: return to fly mode | click surface to select | Tab/Escape return";
+            ? "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F11 cursor | Tab/Escape return"
+            : "F1 AO | F11 cursor | click surface to select | Tab/Escape return";
     engine::Text(
             config,
             assets,
@@ -2048,9 +2074,10 @@ void SectorEditor::DrawPreviewOverlay(
             Rectangle{panel.x + 18.0f, panel.y + 130.0f, panel.width - 36.0f, 30.0f},
             font,
             TextFormat(
-                    "assets %.0f%% | Lightmap: %s | %s%s",
+                    "assets %.0f%% | Lightmap: %s | AO: %s | %s%s",
                     preview.AssetProgress(assets) * 100.0f,
                     preview.LightmapStatusText(),
+                    state.useBakedAmbientOcclusion ? "on" : "off",
                     statusText.empty() ? "Ready" : statusText.c_str(),
                     state.dirty ? " | unsaved changes" : ""
             ),
@@ -2504,6 +2531,17 @@ void SectorEditor::DrawStaticLights() const
                     WithAlpha(color, selected ? 150 : 90)
             );
         }
+        if (selected && light.sourceRadius > 0.0f) {
+            const float sourceRadiusPixels = light.sourceRadius * state.viewZoom;
+            if (sourceRadiusPixels >= 3.0f) {
+                DrawCircleLines(
+                        static_cast<int>(std::round(center.x)),
+                        static_cast<int>(std::round(center.y)),
+                        sourceRadiusPixels,
+                        WithAlpha(color, 210)
+                );
+            }
+        }
 
         DrawCircleV(center, selected ? 7.0f : 5.5f, color);
         DrawCircleLines(static_cast<int>(std::round(center.x)), static_cast<int>(std::round(center.y)), selected ? 11.0f : 9.0f, Color{20, 24, 32, 255});
@@ -2620,6 +2658,65 @@ void SectorEditor::DrawToolsPanel(
     }
     y += rowH + gap;
 
+    engine::Text(ui, config, assets, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 28.0f}, font, "Lightmap Settings", engine::UITextJustify::Left, config.mutedTextColor);
+    y += 32.0f;
+
+    const float lightmapLabelW = 96.0f;
+    const auto drawLightmapSetting = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals, const char* status) {
+        const engine::UILabelFieldRowResult row = engine::LabelFieldRow(
+                config,
+                assets,
+                Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH},
+                font,
+                label,
+                lightmapLabelW
+        );
+        float edited = value;
+        const engine::UINumericInputResult result = engine::FloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                id,
+                row.fieldRect,
+                font,
+                edited,
+                inputState,
+                minValue,
+                maxValue,
+                decimals
+        );
+        if (result.changed && edited != value) {
+            value = edited;
+            state.dirty = true;
+            statusText = status;
+        }
+        y += rowH + gap;
+    };
+
+    state.map.lightmapSettings.ambientOcclusionRadius = ClampAmbientOcclusionRadius(state.map.lightmapSettings.ambientOcclusionRadius);
+    state.map.lightmapSettings.ambientOcclusionStrength = ClampAmbientOcclusionStrength(state.map.lightmapSettings.ambientOcclusionStrength);
+    drawLightmapSetting(
+            "sector_editor_ao_radius",
+            "AO radius",
+            state.map.lightmapSettings.ambientOcclusionRadius,
+            uiState.ambientOcclusionRadiusInput,
+            0.05f,
+            16.0f,
+            2,
+            "Updated AO radius"
+    );
+    drawLightmapSetting(
+            "sector_editor_ao_strength",
+            "AO strength",
+            state.map.lightmapSettings.ambientOcclusionStrength,
+            uiState.ambientOcclusionStrengthInput,
+            0.0f,
+            1.0f,
+            3,
+            "Updated AO strength"
+    );
+
     if (engine::Button(ui, config, input, assets, "sector_editor_bake_lightmaps", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Bake Lightmaps")) {
         BakeLightmaps();
     }
@@ -2711,7 +2808,7 @@ void SectorEditor::DrawSectorsPanel(
                 height += 36.0f;
             }
             height += rowH + gap; // Delete.
-            height += 5.0f * (rowH + gap); // Position/intensity/radius.
+            height += 6.0f * (rowH + gap); // Position/intensity/radius/source radius.
             height += 3.0f * (rowH + gap); // RGB.
             height += 36.0f + gap; // Swatch.
             height += rowH + gap; // Bake.
@@ -2839,6 +2936,32 @@ void SectorEditor::DrawSectorsPanel(
         light.intensity = ClampLightIntensity(light.intensity);
         drawLightFloat("sector_editor_light_radius", "Radius:", light.radius, uiState.lightRadiusInput, 0.1f, 64.0f, 2);
         light.radius = ClampLightRadius(light.radius);
+        light.sourceRadius = ClampLightSourceRadius(light.sourceRadius, light.radius);
+        {
+            engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, "Source:", engine::UITextJustify::Right, config.mutedTextColor);
+            float edited = light.sourceRadius;
+            const engine::UINumericInputResult result = engine::FloatInput(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_light_source_radius",
+                    Rectangle{numberLabelW, y, numberFieldW, rowH},
+                    font,
+                    edited,
+                    uiState.lightSourceRadiusInput,
+                    0.0f,
+                    8.0f,
+                    3
+            );
+            edited = ClampLightSourceRadius(edited, light.radius);
+            if (result.changed && edited != light.sourceRadius) {
+                light.sourceRadius = edited;
+                state.dirty = true;
+                statusText = "Updated light source radius";
+            }
+            y += rowH + gap;
+        }
 
         auto drawLightChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
             engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
@@ -4082,6 +4205,7 @@ void SectorEditor::SelectLight(int lightIndex)
     uiState.lightZInput = engine::UIFloatInputState{};
     uiState.lightIntensityInput = engine::UIFloatInputState{};
     uiState.lightRadiusInput = engine::UIFloatInputState{};
+    uiState.lightSourceRadiusInput = engine::UIFloatInputState{};
     uiState.lightRedInput = engine::UIIntInputState{};
     uiState.lightGreenInput = engine::UIIntInputState{};
     uiState.lightBlueInput = engine::UIIntInputState{};

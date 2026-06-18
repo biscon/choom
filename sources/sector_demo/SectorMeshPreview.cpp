@@ -51,14 +51,17 @@ in vec4 fragColor;
 uniform sampler2D texture0;
 uniform sampler2D texture1;
 uniform float useLightmap;
+uniform float useBakedAmbientOcclusion;
 
 out vec4 finalColor;
 
 void main()
 {
     vec4 baseColor = texture(texture0, fragTexCoord);
-    vec3 ambient = fragColor.rgb;
-    vec3 bakedDirect = (useLightmap > 0.5) ? texture(texture1, fragTexCoord2).rgb : vec3(0.0);
+    vec4 bakedSample = (useLightmap > 0.5) ? texture(texture1, fragTexCoord2) : vec4(0.0, 0.0, 0.0, 1.0);
+    float aoFactor = (useBakedAmbientOcclusion > 0.5) ? bakedSample.a : 1.0;
+    vec3 ambient = fragColor.rgb * aoFactor;
+    vec3 bakedDirect = bakedSample.rgb;
     vec3 lighting = clamp(ambient + bakedDirect, 0.0, 1.0);
     finalColor = vec4(baseColor.rgb * lighting, baseColor.a * fragColor.a);
 }
@@ -152,6 +155,7 @@ bool SectorMeshPreview::Rebuild(
     material.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(material.shader, "texture0");
     material.shader.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(material.shader, "texture1");
     useLightmapLoc = GetShaderLocation(material.shader, "useLightmap");
+    useBakedAmbientOcclusionLoc = GetShaderLocation(material.shader, "useBakedAmbientOcclusion");
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
 
@@ -286,7 +290,7 @@ void SectorMeshPreview::Update(engine::Input& input, float dt)
     UpdateCamera();
 }
 
-void SectorMeshPreview::Render(engine::AssetManager& assets)
+void SectorMeshPreview::Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion)
 {
     if (!initialized) {
         return;
@@ -295,11 +299,15 @@ void SectorMeshPreview::Render(engine::AssetManager& assets)
     BeginMode3D(camera);
     const Texture2D* lightmap = assets.GetTexture(lightmapTexture);
     float useLightmap = lightmap != nullptr ? 1.0f : 0.0f;
+    float useAo = useBakedAmbientOcclusion ? 1.0f : 0.0f;
     material.maps[MATERIAL_MAP_SPECULAR].texture = (lightmap != nullptr)
             ? *lightmap
             : Texture2D{};
     if (useLightmapLoc >= 0) {
         SetShaderValue(material.shader, useLightmapLoc, &useLightmap, SHADER_UNIFORM_FLOAT);
+    }
+    if (useBakedAmbientOcclusionLoc >= 0) {
+        SetShaderValue(material.shader, useBakedAmbientOcclusionLoc, &useAo, SHADER_UNIFORM_FLOAT);
     }
     for (const SectorMeshBatch& batch : meshes.batches) {
         const engine::TextureHandle textureHandle = TextureForId(batch.textureId);

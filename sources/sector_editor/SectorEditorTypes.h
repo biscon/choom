@@ -162,6 +162,7 @@ struct SectorEditorState {
     bool showAxes = true;
     bool showSectorIds = true;
     bool dirty = false;
+    bool useBakedAmbientOcclusion = true;
     bool hasPreviewPose = false;
     SectorMeshPreviewPose lastPreviewPose = {};
     SectorSurfaceHit hoveredSurface3D;
@@ -187,6 +188,9 @@ struct SectorEditorUiState {
     engine::UIFloatInputState lightZInput;
     engine::UIFloatInputState lightIntensityInput;
     engine::UIFloatInputState lightRadiusInput;
+    engine::UIFloatInputState lightSourceRadiusInput;
+    engine::UIFloatInputState ambientOcclusionRadiusInput;
+    engine::UIFloatInputState ambientOcclusionStrengthInput;
     engine::UIIntInputState lightRedInput;
     engine::UIIntInputState lightGreenInput;
     engine::UIIntInputState lightBlueInput;

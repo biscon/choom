@@ -33,9 +33,15 @@ struct RasterHit {
     int triangleIndex = -1;
 };
 
+struct RayHit {
+    bool hit = false;
+    float distance = 0.0f;
+};
+
 constexpr float BakeEpsilon = 0.0001f;
 constexpr float RayOriginEpsilon = 0.01f;
 constexpr float RayHitEpsilon = 0.001f;
+constexpr float Pi = 3.14159265358979323846f;
 
 uint64_t FnvAppendByte(uint64_t hash, uint8_t value)
 {
@@ -130,7 +136,7 @@ bool RasterizeSurfacePoint(
     return false;
 }
 
-bool RayIntersectsTriangle(Vector3 origin, Vector3 direction, const BakeTriangle& tri, float maxDistance)
+bool RayIntersectsTriangle(Vector3 origin, Vector3 direction, const BakeTriangle& tri, float maxDistance, float& outDistance)
 {
     const Vector3 edge1 = Vector3Subtract(tri.b, tri.a);
     const Vector3 edge2 = Vector3Subtract(tri.c, tri.a);
@@ -154,7 +160,17 @@ bool RayIntersectsTriangle(Vector3 origin, Vector3 direction, const BakeTriangle
     }
 
     const float t = invDet * Vector3DotProduct(edge2, q);
-    return t > RayHitEpsilon && t < maxDistance;
+    if (t > RayHitEpsilon && t < maxDistance) {
+        outDistance = t;
+        return true;
+    }
+    return false;
+}
+
+bool RayIntersectsTriangle(Vector3 origin, Vector3 direction, const BakeTriangle& tri, float maxDistance)
+{
+    float distance = 0.0f;
+    return RayIntersectsTriangle(origin, direction, tri, maxDistance, distance);
 }
 
 bool IsOccluded(
@@ -185,6 +201,161 @@ bool IsOccluded(
     }
 
     return false;
+}
+
+RayHit TraceRay(
+        Vector3 origin,
+        Vector3 direction,
+        float maxDistance,
+        int sourceSurfaceIndex,
+        int sourceTriangleIndex,
+        const std::vector<BakeTriangle>& triangles)
+{
+    RayHit closest{};
+    closest.distance = maxDistance;
+    for (const BakeTriangle& tri : triangles) {
+        if (tri.surfaceIndex == sourceSurfaceIndex && tri.triangleIndex == sourceTriangleIndex) {
+            continue;
+        }
+
+        float distance = 0.0f;
+        if (RayIntersectsTriangle(origin, direction, tri, maxDistance, distance)
+                && (!closest.hit || distance < closest.distance)) {
+            closest.hit = true;
+            closest.distance = distance;
+        }
+    }
+    return closest;
+}
+
+float RadicalInverseBase2(unsigned int value)
+{
+    value = (value << 16u) | (value >> 16u);
+    value = ((value & 0x55555555u) << 1u) | ((value & 0xaaaaaaaau) >> 1u);
+    value = ((value & 0x33333333u) << 2u) | ((value & 0xccccccccu) >> 2u);
+    value = ((value & 0x0f0f0f0fu) << 4u) | ((value & 0xf0f0f0f0u) >> 4u);
+    value = ((value & 0x00ff00ffu) << 8u) | ((value & 0xff00ff00u) >> 8u);
+    return static_cast<float>(value) * 2.3283064365386963e-10f;
+}
+
+void BuildOrthonormalBasis(Vector3 normal, Vector3& tangent, Vector3& bitangent)
+{
+    const Vector3 up = std::fabs(normal.y) < 0.999f ? Vector3{0.0f, 1.0f, 0.0f} : Vector3{1.0f, 0.0f, 0.0f};
+    tangent = Vector3Normalize(Vector3CrossProduct(up, normal));
+    bitangent = Vector3CrossProduct(normal, tangent);
+}
+
+Vector3 FibonacciSphereSample(int sampleIndex, int sampleCount)
+{
+    const float goldenAngle = Pi * (3.0f - std::sqrt(5.0f));
+    const float y = 1.0f - (2.0f * (static_cast<float>(sampleIndex) + 0.5f) / static_cast<float>(sampleCount));
+    const float radius = std::sqrt(std::max(0.0f, 1.0f - y * y));
+    const float theta = goldenAngle * static_cast<float>(sampleIndex);
+    return Vector3{std::cos(theta) * radius, y, std::sin(theta) * radius};
+}
+
+Vector3 CosineHemisphereSample(Vector3 normal, int sampleIndex, int sampleCount)
+{
+    Vector3 tangent{};
+    Vector3 bitangent{};
+    BuildOrthonormalBasis(normal, tangent, bitangent);
+
+    const float u = (static_cast<float>(sampleIndex) + 0.5f) / static_cast<float>(sampleCount);
+    const float v = RadicalInverseBase2(static_cast<unsigned int>(sampleIndex + 1));
+    const float r = std::sqrt(u);
+    const float theta = 2.0f * Pi * v;
+    const float x = r * std::cos(theta);
+    const float z = r * std::sin(theta);
+    const float y = std::sqrt(std::max(0.0f, 1.0f - u));
+
+    return Vector3Normalize(Vector3Add(
+            Vector3Add(Vector3Scale(tangent, x), Vector3Scale(normal, y)),
+            Vector3Scale(bitangent, z)
+    ));
+}
+
+Vector3 EvaluateDirectLightSample(
+        const SectorStaticPointLight& light,
+        Vector3 lightPosition,
+        const RasterHit& hit,
+        int surfaceIndex,
+        const std::vector<BakeTriangle>& triangles)
+{
+    const Vector3 toLight = Vector3Subtract(lightPosition, hit.position);
+    const float distance = Vector3Length(toLight);
+    if (distance <= RayHitEpsilon || distance > light.radius) {
+        return Vector3{};
+    }
+
+    const Vector3 lightDir = Vector3Scale(toLight, 1.0f / distance);
+    const float lambert = std::max(Vector3DotProduct(hit.normal, lightDir), 0.0f);
+    if (lambert <= 0.0f) {
+        return Vector3{};
+    }
+
+    if (IsOccluded(hit.position, hit.normal, lightPosition, surfaceIndex, hit.triangleIndex, triangles)) {
+        return Vector3{};
+    }
+
+    const float t = std::clamp(1.0f - distance / light.radius, 0.0f, 1.0f);
+    const float attenuation = t * t;
+    const float scale = light.intensity * attenuation * lambert;
+    return Vector3{
+            (static_cast<float>(light.color.r) / 255.0f) * scale,
+            (static_cast<float>(light.color.g) / 255.0f) * scale,
+            (static_cast<float>(light.color.b) / 255.0f) * scale
+    };
+}
+
+Vector3 EvaluateDirectLight(
+        const SectorStaticPointLight& light,
+        const RasterHit& hit,
+        int surfaceIndex,
+        const std::vector<BakeTriangle>& triangles)
+{
+    if (light.radius <= 0.0f || light.intensity <= 0.0f) {
+        return Vector3{};
+    }
+
+    const float sourceRadius = std::min(std::clamp(light.sourceRadius, 0.0f, 8.0f), light.radius * 0.5f);
+    if (sourceRadius <= BakeEpsilon) {
+        return EvaluateDirectLightSample(light, light.position, hit, surfaceIndex, triangles);
+    }
+
+    Vector3 direct{};
+    for (int i = 0; i < kDirectSoftShadowSampleCount; ++i) {
+        const Vector3 sampleOffset = Vector3Scale(FibonacciSphereSample(i, kDirectSoftShadowSampleCount), sourceRadius);
+        const Vector3 samplePosition = Vector3Add(light.position, sampleOffset);
+        direct = Vector3Add(direct, EvaluateDirectLightSample(light, samplePosition, hit, surfaceIndex, triangles));
+    }
+    return Vector3Scale(direct, 1.0f / static_cast<float>(kDirectSoftShadowSampleCount));
+}
+
+float BakeAmbientOcclusion(
+        const RasterHit& hit,
+        int surfaceIndex,
+        float radius,
+        float strength,
+        const std::vector<BakeTriangle>& triangles)
+{
+    if (strength <= 0.0f || radius <= BakeEpsilon) {
+        return 1.0f;
+    }
+
+    const Vector3 origin = Vector3Add(hit.position, Vector3Scale(hit.normal, RayOriginEpsilon));
+    float occlusion = 0.0f;
+    for (int i = 0; i < kAmbientOcclusionSampleCount; ++i) {
+        const Vector3 direction = CosineHemisphereSample(hit.normal, i, kAmbientOcclusionSampleCount);
+        const RayHit rayHit = TraceRay(origin, direction, radius, surfaceIndex, hit.triangleIndex, triangles);
+        if (!rayHit.hit) {
+            continue;
+        }
+
+        occlusion += 1.0f - std::clamp(rayHit.distance / radius, 0.0f, 1.0f);
+    }
+
+    const float averageOcclusion = occlusion / static_cast<float>(kAmbientOcclusionSampleCount);
+    return std::clamp(1.0f - strength * averageOcclusion, 0.0f, 1.0f);
 }
 
 std::vector<BakeTriangle> BuildBakeTriangles(const SectorGeneratedGeometry& geometry)
@@ -398,6 +569,8 @@ bool BakeSectorLightmap(
     std::vector<Color> pixels(static_cast<size_t>(width * height), Color{0, 0, 0, 255});
     std::vector<unsigned char> valid(static_cast<size_t>(width * height), 0);
     const std::vector<BakeTriangle> triangles = BuildBakeTriangles(geometry);
+    const float aoRadius = std::clamp(map.lightmapSettings.ambientOcclusionRadius, 0.05f, 16.0f);
+    const float aoStrength = std::clamp(map.lightmapSettings.ambientOcclusionStrength, 0.0f, 1.0f);
 
     for (const SectorLightmapChart& chart : layout.charts) {
         if (chart.surfaceIndex < 0 || chart.surfaceIndex >= static_cast<int>(geometry.surfaces.size())) {
@@ -417,40 +590,18 @@ bool BakeSectorLightmap(
                 }
 
                 Vector3 direct{};
-                for (const SectorStaticPointLight& light : map.staticLights) {
-                    if (light.radius <= 0.0f || light.intensity <= 0.0f) {
-                        continue;
+                if (!map.staticLights.empty()) {
+                    for (const SectorStaticPointLight& light : map.staticLights) {
+                        direct = Vector3Add(direct, EvaluateDirectLight(light, hit, chart.surfaceIndex, triangles));
                     }
-
-                    const Vector3 toLight = Vector3Subtract(light.position, hit.position);
-                    const float distance = Vector3Length(toLight);
-                    if (distance <= RayHitEpsilon || distance > light.radius) {
-                        continue;
-                    }
-
-                    const Vector3 lightDir = Vector3Scale(toLight, 1.0f / distance);
-                    const float lambert = std::max(Vector3DotProduct(hit.normal, lightDir), 0.0f);
-                    if (lambert <= 0.0f) {
-                        continue;
-                    }
-
-                    if (IsOccluded(hit.position, hit.normal, light.position, chart.surfaceIndex, hit.triangleIndex, triangles)) {
-                        continue;
-                    }
-
-                    const float t = std::clamp(1.0f - distance / light.radius, 0.0f, 1.0f);
-                    const float attenuation = t * t;
-                    const float scale = light.intensity * attenuation * lambert;
-                    direct.x += (static_cast<float>(light.color.r) / 255.0f) * scale;
-                    direct.y += (static_cast<float>(light.color.g) / 255.0f) * scale;
-                    direct.z += (static_cast<float>(light.color.b) / 255.0f) * scale;
                 }
 
                 direct.x = std::clamp(direct.x, 0.0f, 1.0f);
                 direct.y = std::clamp(direct.y, 0.0f, 1.0f);
                 direct.z = std::clamp(direct.z, 0.0f, 1.0f);
+                const float aoFactor = BakeAmbientOcclusion(hit, chart.surfaceIndex, aoRadius, aoStrength, triangles);
                 const size_t pixelIndex = static_cast<size_t>(y * width + x);
-                pixels[pixelIndex] = Color{FloatToByte(direct.x), FloatToByte(direct.y), FloatToByte(direct.z), 255};
+                pixels[pixelIndex] = Color{FloatToByte(direct.x), FloatToByte(direct.y), FloatToByte(direct.z), FloatToByte(aoFactor)};
                 valid[pixelIndex] = 1;
             }
         }
@@ -489,11 +640,16 @@ bool BakeSectorLightmap(
 std::string ComputeSectorLightmapSourceHash(const SectorMap& map)
 {
     uint64_t hash = 14695981039346656037ull;
-    FnvAppendString(hash, "sector-lightmap-v1");
+    FnvAppendString(hash, "sector-lightmap");
+    FnvAppendInt(hash, kSectorLightmapBakeVersion);
     FnvAppendInt(hash, SectorLightmapAtlasWidth);
     FnvAppendInt(hash, SectorLightmapAtlasHeight);
     FnvAppendInt(hash, SectorLightmapGutterTexels);
     FnvAppendFloat(hash, SectorLightmapTexelsPerWorldUnit);
+    FnvAppendInt(hash, kDirectSoftShadowSampleCount);
+    FnvAppendInt(hash, kAmbientOcclusionSampleCount);
+    FnvAppendFloat(hash, std::clamp(map.lightmapSettings.ambientOcclusionRadius, 0.05f, 16.0f));
+    FnvAppendFloat(hash, std::clamp(map.lightmapSettings.ambientOcclusionStrength, 0.0f, 1.0f));
 
     FnvAppendInt(hash, static_cast<int>(map.sectors.size()));
     for (const SectorDefinition& sector : map.sectors) {
@@ -516,6 +672,7 @@ std::string ComputeSectorLightmapSourceHash(const SectorMap& map)
         FnvAppendInt(hash, static_cast<int>(light.color.b));
         FnvAppendFloat(hash, light.intensity);
         FnvAppendFloat(hash, light.radius);
+        FnvAppendFloat(hash, std::min(std::clamp(light.sourceRadius, 0.0f, 8.0f), light.radius * 0.5f));
     }
 
     return HashToString(hash);
