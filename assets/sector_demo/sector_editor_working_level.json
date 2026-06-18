@@ -2,7 +2,7 @@
   "bakedLightmap": {
     "height": 2048,
     "path": "assets/sector_demo/sector_editor_working_level.lightmap.png",
-    "sourceHash": "5ce45747bd38230a",
+    "sourceHash": "caaf8139354161de",
     "width": 2048
   },
   "lightmapSettings": {
@@ -1372,7 +1372,7 @@
         264.0
       ],
       "radius": 64.0,
-      "sourceRadius": 4.0
+      "sourceRadius": 0.0
     }
   ],
   "textures": {

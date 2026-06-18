@@ -38,6 +38,7 @@ struct SectorLightmapRaycastStats {
     uint64_t aabbHits = 0;
     uint64_t triangleTests = 0;
     uint64_t triangleHits = 0;
+    uint64_t logicalSelfHitsIgnored = 0;
 };
 
 struct SectorLightmapBakeResult {
@@ -108,7 +109,7 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-constexpr int kSectorLightmapBakeVersion = 4;
+constexpr int kSectorLightmapBakeVersion = 5;
 constexpr int kDirectSoftShadowSampleCount = 8;
 constexpr int kAmbientOcclusionSampleCount = 12;
 constexpr int kIndirectBounceSampleCount = 8;
