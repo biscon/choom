@@ -30,7 +30,7 @@ public:
     void Leave();
 
     void Update(engine::Input& input, float dt);
-    void Render(engine::AssetManager& assets);
+    void Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
 
     bool IsReady() const { return initialized; }
     bool IsMouseLookEnabled() const { return mouseLookEnabled; }
@@ -58,6 +58,7 @@ private:
     Texture2D defaultMaterialTexture = {};
     bool materialLoaded = false;
     int useLightmapLoc = -1;
+    int useBakedAmbientOcclusionLoc = -1;
     int lightmapStatus = 0;
     bool initialized = false;
     bool mouseLookEnabled = true;

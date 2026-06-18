@@ -33,7 +33,8 @@ The sector editor is a 2D editor for `SectorMap` JSON data with an integrated
 - `Save` and `Reload`: write/read the current map JSON path.
 - `Add Map Texture`: add an existing project PNG from `assets/images` to the
   current map texture table.
-- `Bake Lightmaps`: bake static point-light direct lighting to a shared atlas.
+- `Bake Lightmaps`: bake static point-light direct lighting and ambient
+  occlusion to a shared atlas.
 
 ## Sector Inspector
 
@@ -97,20 +98,39 @@ Static light defaults:
 - Color: white.
 - Intensity: `1.0`, clamped to `0.0..8.0`.
 - Radius: `8.0`, clamped to `0.1..64.0`.
+- Source radius: new lights default to `0.25`, clamped to `0.0..8.0` and capped
+  to half the light radius.
 - Generated IDs use `light_001`, `light_002`, and so on.
 
 In Select mode, clicking near a light icon selects it before sector or edge
 selection. The inspector shows ID, X/Y/Z position, intensity, radius, RGB
-channels, and a color swatch. The Erase tool or `Delete` removes the selected
-or clicked light without confirmation. There is still no undo/redo.
+channels, source radius, and a color swatch. `sourceRadius` controls the baked
+emitting size: `0.0` keeps the hard point-light shadow path, while nonzero values
+use deterministic finite-source samples to create baked soft penumbrae. The
+Erase tool or `Delete` removes the selected or clicked light without
+confirmation. There is still no undo/redo.
 
 Static lights are saved in map JSON as `staticLights`. Older maps without the
-field still load normally.
+field still load normally. Older static lights without `sourceRadius` load as
+`0.0`, preserving the previous hard-shadow look until edited.
+
+```json
+{
+  "id": "light_001",
+  "position": [4.0, 2.0, 3.0],
+  "color": [255, 185, 110],
+  "intensity": 2.0,
+  "radius": 8.0,
+  "sourceRadius": 0.35
+}
+```
 
 ## Baked Lightmaps
 
-`Bake Lightmaps` bakes direct colored lighting from static point lights into a
-single shared lightmap atlas. The output path is derived from the current map
+`Bake Lightmaps` starts an asynchronous worker-thread bake of direct colored
+lighting from static point lights, one-bounce indirect fill, and ambient
+occlusion into a single shared lightmap atlas. The editor window keeps
+rendering while the bake runs. The output path is derived from the current map
 path. For example:
 
 ```text
@@ -118,41 +138,144 @@ assets/sector_demo/sector_editor_working_level.json
 assets/sector_demo/sector_editor_working_level.lightmap.png
 ```
 
+The left tools panel includes compact lightmap settings:
+
+- `AO radius`: world-space ray distance for baked ambient occlusion, clamped to
+  `0.05..16.0`.
+- `AO strength`: how much gathered occlusion darkens sector ambient, clamped to
+  `0.0..1.0`; `0.0` disables AO ray work.
+- `Bounce radius`: maximum world-space distance for one-bounce indirect gather
+  rays, clamped to `0.05..16.0`.
+- `Bounce strength`: artist-facing multiplier for indirect fill, clamped to
+  `0.0..1.0`; `0.0` disables bounce ray work.
+
+Map JSON saves these settings as:
+
+```json
+"lightmapSettings": {
+  "ambientOcclusionRadius": 1.25,
+  "ambientOcclusionStrength": 0.55,
+  "indirectBounceRadius": 4.0,
+  "indirectBounceStrength": 0.2
+}
+```
+
+The baked PNG stores:
+
+```text
+RGB = baked direct static point-light contribution + one-bounce indirect light
+A   = baked ambient-occlusion factor, where 255 is fully open
+```
+
 The map stores `bakedLightmap` metadata with the asset-relative atlas path,
-dimensions, and a deterministic source hash. The hash includes sector geometry,
-floor and ceiling heights, static light values, and the fixed bake settings. It
-does not include the baked metadata itself.
+dimensions, and a deterministic source hash. The hash includes the bake format
+version, sector geometry, floor and ceiling heights, static light values
+including `sourceRadius`, AO settings, bounce settings, fixed bake sample
+counts, and the neutral bounce albedo constant. It does not include the baked
+metadata itself.
 
 3D Mode uses the baked atlas only when the metadata exists, the atlas file can
 be found, and the stored source hash matches the current in-memory map. If a
 geometry or static-light edit changes the hash, the bake is reported as stale
-and rendering falls back to sector ambient lighting only.
+and rendering falls back to sector ambient lighting only. When an asynchronous
+bake finishes, the main thread validates this same source hash before
+installing the generated PNG. If the map changed during the bake, the temporary
+output is discarded and the previous lightmap remains intact.
 
 Lighting combines as:
 
 ```text
-finalColor = baseTexture * clamp(sectorAmbientVertexColor + bakedLightmapDirectLighting, 0..1)
+bakedSample = texture(lightmapAtlas, secondaryUv)
+ambient = sectorAmbientVertexColor * bakedSample.a
+direct = bakedSample.rgb
+finalColor = baseTexture * clamp(ambient + direct, 0..1)
 ```
 
-Sector ambient remains the baseline mood/darkness layer. A sector with ambient
-intensity `0.0` can still be lit by baked direct light. Maps without valid
-baked data continue to render with ambient vertex lighting only.
+Ambient occlusion modulates only the sector ambient layer; it does not darken
+the baked direct or indirect contribution. Sector ambient remains the baseline
+mood/darkness layer. A sector with ambient intensity `0.0` can still be lit by
+baked light. Maps without valid baked data continue to render with ambient
+vertex lighting only.
+
+The indirect pass is currently one bounce only. It shoots 8 deterministic
+cosine-weighted hemisphere rays from each valid chart texel, finds the first
+nearby visible surface hit, maps that hit back through its secondary lightmap
+UV, and samples only the direct-light float buffer. It uses a fixed neutral grey
+reflectance for now. It does not recursively feed indirect results back into
+the bake, and it does not use sector ambient or base-texture pixels as bounce
+sources.
+
+In 3D Mode, `F1` toggles baked ambient occlusion on and off for visual
+debugging. This only changes the shader's use of lightmap alpha: AO off renders
+sector ambient without AO darkening while keeping baked direct RGB lighting
+visible. The toggle does not rebake lighting, reload textures, rebuild meshes,
+mark the map dirty, or save to level JSON.
+
+The bake format version is currently `3`. Existing version-2 bakes contain
+direct RGB lighting plus AO alpha, so they intentionally become `Lightmap stale
+- rebake required` after this update. The maps still load normally; rebake to
+generate indirect RGB.
 
 Current bake characteristics:
 
-- Fixed `1024 x 1024` atlas.
+- Fixed `2048 x 2048` atlas.
 - About `8` texels per world unit.
 - At least `2` texels of chart gutter.
 - Wall charts are rectangular; floor and ceiling charts are one chart per
   generated triangle.
-- Colored direct point-light contribution only.
-- Hard static shadows from sector geometry using CPU ray tests.
-- No bounce lighting, GI, AO, dynamic light contribution, soft shadows,
-  shadow maps, probes, normal maps, or PBR.
+- Colored direct point-light contribution in RGB.
+- One-bounce indirect light is added to RGB.
+- Ambient occlusion factor in alpha.
+- Hard static shadows when `sourceRadius` is `0.0`.
+- Baked soft shadows from 8 deterministic finite-source samples when
+  `sourceRadius` is nonzero.
+- Baked AO from 12 deterministic cosine-weighted hemisphere samples.
+- Baked indirect fill from 8 deterministic cosine-weighted hemisphere samples.
+- Bake-local static BVH acceleration for direct shadow rays, soft-shadow source
+  samples, AO rays, and one-bounce indirect gather rays.
+- Worker-thread execution for the CPU bake, with one bake worker at a time.
+- No recursive bounces, path tracing, texture/material-colored bounce, dynamic
+  light contribution, dynamic shadows, shadow maps, SSAO, probes, normal maps,
+  PBR, GI denoising, parallel ray batches, runtime BVH usage, or multi-atlas
+  support.
+
+Every bake builds a static BVH from that bake's generated triangle list after
+lightmap layout exists and before lighting rays are cast. The BVH stores only
+triangle indices; the generated bake triangles remain the source of
+world-space positions, normals, and lightmap UVs. This is a CPU bake
+optimization only. It is not reused between bakes, and it is not used by
+runtime rendering, gameplay collision, or editor picking.
+
+While baking, a centered modal shows the current phase, approximate progress,
+and elapsed time. Phases include layout, BVH build, direct lighting, ambient
+occlusion, indirect bounce, and dilation/output. Progress is coarse and
+weighted by phase, so it is intended to show forward movement rather than exact
+timing. The modal blocks normal editor interaction: map edits, texture pickers,
+save/reload, and 3D Mode entry are unavailable until the bake completes,
+fails, or is cancelled.
+
+`Cancel` requests cancellation and waits for the worker to exit at the next
+coarse chunk boundary. Cancellation does not replace the current lightmap PNG
+or baked metadata, and temporary bake output is removed. If the bake fails, the
+previous valid lightmap remains intact.
+
+The worker performs CPU-only work and writes a temporary PNG. GPU upload and
+texture refresh happen later on the main thread through the existing asset
+manager. Newly baked lightmaps keep bilinear filtering. If 3D Mode is entered
+after a bake, its preview scope requests the freshly installed atlas; if a
+future bake completes while 3D Mode is active, the preview is rebuilt on the
+main thread.
 
 The 2D status bar and 3D overlay show `Lightmap valid`, `Lightmap stale -
-rebake required`, or `No baked lightmap`. Re-bake after geometry or static-light
-changes.
+rebake required`, or `No baked lightmap`. Re-bake after geometry, static-light,
+source-radius, AO-setting, or bounce-setting changes.
+
+After a successful bake, the console prints a report with atlas dimensions,
+valid chart texels, valid atlas occupancy, allocated chart rectangle area,
+chart rectangle occupancy, chart payload efficiency, static geometry triangle
+count, BVH node/leaf counts, BVH leaf statistics, static light count, per-pass
+ray/AABB/triangle-test statistics, and timings for layout, BVH build, direct
+lighting, AO, indirect bounce, gutter dilation/export, and total bake time.
 
 ## Edge Inspector
 
@@ -293,6 +416,8 @@ required before entering 3D Mode.
 - Visible cursor: camera is locked. Hover surfaces to highlight them and click a
   highlighted surface to select it.
 - `F11`: toggle between hidden-cursor fly mode and visible-cursor edit mode.
+- `F1`: toggle baked ambient occlusion for visual comparison. The toggle affects
+  sector ambient lighting only; baked direct light remains visible.
 - `Tab` or `Escape`: return to the 2D editor.
 
 Selectable 3D surfaces are floor, ceiling, solid wall, lower portal wall, and
@@ -330,9 +455,10 @@ unloaded on editor shutdown, and rebuilt every time `3D Mode` is clicked or a
 - No full Doom-style linedef/sidedef system.
 - No vertex insertion/deletion, edge splitting, whole-sector movement, or
   undo/redo.
-- Lightmaps are single-atlas, synchronous, fixed-resolution, direct-light only,
-  and brute-force raycasted; there is no bake progress UI or acceleration
-  structure yet.
+- Lightmaps are single-atlas, synchronous, fixed-resolution, CPU ray traced
+  with a bake-local BVH, and direct plus one indirect bounce; there is no bake
+  progress UI, threading, GPU acceleration, BVH reuse between bakes, dynamic
+  lighting, or multi-atlas support.
 - No external texture importing, texture copying, texture removal, unused
   texture cleanup, normal/material maps, thumbnail grid browser, texture search,
   3D texture painting, 3D geometry editing, doors, lifts, dynamic lights,

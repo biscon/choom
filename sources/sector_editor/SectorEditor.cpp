@@ -11,12 +11,14 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -26,7 +28,7 @@ namespace {
 
 constexpr float EditorWidth = 1920.0f;
 constexpr float EditorHeight = 1080.0f;
-constexpr float LeftPanelWidth = 264.0f;
+constexpr float LeftPanelWidth = 360.0f;
 constexpr float RightPanelWidth = 384.0f;
 constexpr float BottomPanelHeight = 78.0f;
 constexpr float PanelGap = 10.0f;
@@ -158,6 +160,32 @@ float ClampLightRadius(float value)
     return std::clamp(value, 0.1f, 64.0f);
 }
 
+float ClampLightSourceRadius(float value, float lightRadius)
+{
+    const float clamped = std::clamp(value, 0.0f, 8.0f);
+    return std::min(clamped, std::max(0.0f, lightRadius * 0.5f));
+}
+
+float ClampAmbientOcclusionRadius(float value)
+{
+    return std::clamp(value, 0.05f, 16.0f);
+}
+
+float ClampAmbientOcclusionStrength(float value)
+{
+    return std::clamp(value, 0.0f, 1.0f);
+}
+
+float ClampIndirectBounceRadius(float value)
+{
+    return std::clamp(value, 0.05f, 16.0f);
+}
+
+float ClampIndirectBounceStrength(float value)
+{
+    return std::clamp(value, 0.0f, 1.0f);
+}
+
 int ClampAmbientChannel(int value)
 {
     return std::clamp(value, 0, 255);
@@ -172,6 +200,92 @@ Color SectorAmbientPreviewColor(const SectorDefinition& sector, unsigned char al
             static_cast<unsigned char>(ClampAmbientChannel(static_cast<int>(std::lround(static_cast<float>(sector.ambientColor.b) * intensity)))),
             alpha
     };
+}
+
+const char* LightmapBakePhaseText(SectorLightmapBakePhase phase)
+{
+    switch (phase) {
+        case SectorLightmapBakePhase::Idle: return "Waiting...";
+        case SectorLightmapBakePhase::Preparing: return "Preparing bake...";
+        case SectorLightmapBakePhase::BuildingLayout: return "Building lightmap layout...";
+        case SectorLightmapBakePhase::BuildingBvh: return "Building BVH...";
+        case SectorLightmapBakePhase::DirectLighting: return "Baking direct lighting...";
+        case SectorLightmapBakePhase::AmbientOcclusion: return "Baking ambient occlusion...";
+        case SectorLightmapBakePhase::IndirectBounce: return "Baking indirect bounce...";
+        case SectorLightmapBakePhase::DilatingAndEncoding: return "Dilating charts and writing lightmap...";
+        case SectorLightmapBakePhase::InstallingResult: return "Installing lightmap...";
+        case SectorLightmapBakePhase::Completed: return "Lightmap bake complete";
+        case SectorLightmapBakePhase::Cancelled: return "Lightmap bake cancelled";
+        case SectorLightmapBakePhase::Failed: return "Lightmap bake failed";
+    }
+    return "Baking lightmap...";
+}
+
+float LightmapBakePhaseProgressBase(SectorLightmapBakePhase phase)
+{
+    switch (phase) {
+        case SectorLightmapBakePhase::Idle: return 0.0f;
+        case SectorLightmapBakePhase::Preparing: return 0.00f;
+        case SectorLightmapBakePhase::BuildingLayout: return 0.01f;
+        case SectorLightmapBakePhase::BuildingBvh: return 0.03f;
+        case SectorLightmapBakePhase::DirectLighting: return 0.05f;
+        case SectorLightmapBakePhase::AmbientOcclusion: return 0.20f;
+        case SectorLightmapBakePhase::IndirectBounce: return 0.55f;
+        case SectorLightmapBakePhase::DilatingAndEncoding: return 0.90f;
+        case SectorLightmapBakePhase::InstallingResult: return 0.98f;
+        case SectorLightmapBakePhase::Completed: return 1.0f;
+        case SectorLightmapBakePhase::Cancelled: return 1.0f;
+        case SectorLightmapBakePhase::Failed: return 1.0f;
+    }
+    return 0.0f;
+}
+
+float LightmapBakePhaseProgressWeight(SectorLightmapBakePhase phase)
+{
+    switch (phase) {
+        case SectorLightmapBakePhase::Preparing: return 0.01f;
+        case SectorLightmapBakePhase::BuildingLayout: return 0.02f;
+        case SectorLightmapBakePhase::BuildingBvh: return 0.02f;
+        case SectorLightmapBakePhase::DirectLighting: return 0.15f;
+        case SectorLightmapBakePhase::AmbientOcclusion: return 0.35f;
+        case SectorLightmapBakePhase::IndirectBounce: return 0.35f;
+        case SectorLightmapBakePhase::DilatingAndEncoding: return 0.10f;
+        case SectorLightmapBakePhase::InstallingResult: return 0.02f;
+        default: return 0.0f;
+    }
+}
+
+float LightmapBakeOverallProgress(SectorLightmapBakePhase phase, uint32_t completedWork, uint32_t totalWork)
+{
+    if (phase == SectorLightmapBakePhase::Completed
+            || phase == SectorLightmapBakePhase::Cancelled
+            || phase == SectorLightmapBakePhase::Failed) {
+        return 1.0f;
+    }
+    const float local = totalWork > 0
+            ? std::clamp(static_cast<float>(completedWork) / static_cast<float>(totalWork), 0.0f, 1.0f)
+            : 0.0f;
+    return std::clamp(
+            LightmapBakePhaseProgressBase(phase) + LightmapBakePhaseProgressWeight(phase) * local,
+            0.0f,
+            1.0f
+    );
+}
+
+std::string MakeTemporaryLightmapPath(const std::string& finalOutputPath)
+{
+    std::filesystem::path path(finalOutputPath);
+    path.replace_extension(".tmp.png");
+    return path.generic_string();
+}
+
+void DeleteFileIfExists(const std::string& path)
+{
+    if (path.empty()) {
+        return;
+    }
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
 }
 
 std::string GeneratedTextureIdBase(const std::string& assetPath)
@@ -697,6 +811,7 @@ bool SectorEditor::Init(engine::AssetManager& assets, const char* path)
 
 void SectorEditor::Shutdown(engine::AssetManager& assets)
 {
+    ShutdownLightmapBake();
     preview.Shutdown(assets);
     if (!engine::IsNull(state.editorTextureScope)) {
         assets.UnloadScope(state.editorTextureScope);
@@ -715,6 +830,12 @@ void SectorEditor::Shutdown(engine::AssetManager& assets)
 
 void SectorEditor::Update(engine::Input& input, float dt)
 {
+    if (IsLightmapBakeBlocking()) {
+        CancelVertexDrag(nullptr);
+        CancelPendingSector(nullptr);
+        return;
+    }
+
     if (state.mode == SectorEditorMode::Preview3D) {
         UpdatePreview3D(input, dt);
         return;
@@ -764,8 +885,16 @@ void SectorEditor::RenderUI(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
+    PollLightmapBakeResult(assets);
+
     if (state.mode == SectorEditorMode::Preview3D) {
         engine::BeginUI(ui, input);
+        if (IsLightmapBakeBlocking()) {
+            DrawLightmapBakeModal(ui, config, input, assets, font);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
         DrawPreviewOverlay(config, assets, font);
         if (!preview.IsMouseLookEnabled()) {
             DrawPreviewUvPanel(ui, config, input, assets, font);
@@ -785,6 +914,12 @@ void SectorEditor::RenderUI(
     }
 
     engine::BeginUI(ui, input);
+    if (IsLightmapBakeBlocking()) {
+        DrawLightmapBakeModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
     if (state.addMapTexture.open) {
         DrawAddMapTextureModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
@@ -1233,6 +1368,15 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
             engine::InputEventType::KeyPressed,
             true,
             [this](engine::InputEvent& event) {
+                if (event.key.key == KEY_F1) {
+                    state.useBakedAmbientOcclusion = !state.useBakedAmbientOcclusion;
+                    statusText = state.useBakedAmbientOcclusion
+                            ? "Baked AO enabled"
+                            : "Baked AO disabled";
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
@@ -1624,6 +1768,7 @@ void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
     light.color = WHITE;
     light.intensity = 1.0f;
     light.radius = 8.0f;
+    light.sourceRadius = 0.25f;
 
     state.map.staticLights.push_back(std::move(light));
     SelectLight(static_cast<int>(state.map.staticLights.size()) - 1);
@@ -1633,32 +1778,262 @@ void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
 
 bool SectorEditor::BakeLightmaps()
 {
+    return StartLightmapBake();
+}
+
+bool SectorEditor::StartLightmapBake()
+{
+    if (lightmapBake.progress.running.load() || lightmapBake.worker.joinable() || lightmapBake.modalOpen) {
+        statusText = "Lightmap bake already running";
+        return false;
+    }
+
     if (state.map.sectors.empty()) {
         statusText = "Bake failed: no sectors";
         return false;
     }
 
-    SectorLightmapLayout layout;
-    std::string error;
-    if (!BuildSectorLightmapLayout(state.map, layout, error)) {
-        statusText = error.empty() ? "Bake failed" : error;
+    const std::string assetRelativePath = MakeSectorLightmapPathForMapPath(mapPath);
+    const std::string finalOutputPath = ResolveSectorAssetPath(assetRelativePath);
+    const std::string temporaryOutputPath = MakeTemporaryLightmapPath(finalOutputPath);
+
+    SectorLightmapBakeInput input;
+    input.mapSnapshot = state.map;
+    input.expectedSourceHash = ComputeSectorLightmapSourceHash(state.map);
+    input.finalOutputPath = finalOutputPath;
+    input.temporaryOutputPath = temporaryOutputPath;
+
+    DeleteFileIfExists(temporaryOutputPath);
+
+    lightmapBake.progress.phase.store(SectorLightmapBakePhase::Preparing);
+    lightmapBake.progress.completedWork.store(0);
+    lightmapBake.progress.totalWork.store(1);
+    lightmapBake.progress.cancelRequested.store(false);
+    lightmapBake.progress.running.store(true);
+    lightmapBake.modalOpen = true;
+    lightmapBake.awaitingAcknowledgement = false;
+    lightmapBake.cancelButtonPressed = false;
+    lightmapBake.terminalMessage.clear();
+    lightmapBake.terminalSuccess = false;
+    lightmapBake.terminalCancelled = false;
+    lightmapBake.temporaryOutputPath = temporaryOutputPath;
+    lightmapBake.startTimeSeconds = GetTime();
+    lightmapBake.completedTimeSeconds = 0.0;
+    {
+        std::lock_guard<std::mutex> lock(lightmapBake.resultMutex);
+        lightmapBake.pendingResult.reset();
+    }
+
+    LightmapBakeProgress* progress = &lightmapBake.progress;
+    std::mutex* resultMutex = &lightmapBake.resultMutex;
+    std::optional<SectorLightmapBakeAsyncResult>* pendingResult = &lightmapBake.pendingResult;
+
+    lightmapBake.worker = std::thread([input = std::move(input), progress, resultMutex, pendingResult]() mutable {
+        SectorLightmapBakeAsyncResult asyncResult;
+        asyncResult.expectedSourceHash = input.expectedSourceHash;
+        asyncResult.sourceMapRevision = input.editorMapRevision;
+        asyncResult.finalOutputPath = input.finalOutputPath;
+        asyncResult.temporaryOutputPath = input.temporaryOutputPath;
+
+        SectorLightmapBakeCallbacks callbacks;
+        callbacks.onProgress = [progress](SectorLightmapBakePhase phase, uint32_t completedWork, uint32_t totalWork) {
+            progress->phase.store(phase);
+            progress->completedWork.store(completedWork);
+            progress->totalWork.store(totalWork);
+        };
+        callbacks.isCancellationRequested = [progress]() {
+            return progress->cancelRequested.load();
+        };
+
+        std::string error;
+        const bool succeeded = BakeSectorLightmap(input, callbacks, asyncResult.bakeResult, error);
+        asyncResult.cancelled = !succeeded && progress->cancelRequested.load();
+        asyncResult.succeeded = succeeded && !asyncResult.cancelled;
+        asyncResult.errorMessage = error.empty()
+                ? (asyncResult.cancelled ? "Bake cancelled" : "Bake failed")
+                : error;
+        if (asyncResult.succeeded) {
+            asyncResult.bakeReportText = FormatSectorLightmapBakeReport(asyncResult.bakeResult);
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(*resultMutex);
+            *pendingResult = std::move(asyncResult);
+        }
+
+        if (progress->cancelRequested.load()) {
+            progress->phase.store(SectorLightmapBakePhase::Cancelled);
+        } else if (succeeded) {
+            progress->phase.store(SectorLightmapBakePhase::Completed);
+        } else {
+            progress->phase.store(SectorLightmapBakePhase::Failed);
+        }
+        progress->completedWork.store(1);
+        progress->totalWork.store(1);
+        progress->running.store(false);
+    });
+
+    statusText = "Baking lightmap...";
+    return true;
+}
+
+void SectorEditor::PollLightmapBakeResult(engine::AssetManager& assets)
+{
+    std::optional<SectorLightmapBakeAsyncResult> pending;
+    {
+        std::lock_guard<std::mutex> lock(lightmapBake.resultMutex);
+        if (lightmapBake.pendingResult.has_value()) {
+            pending = std::move(lightmapBake.pendingResult);
+            lightmapBake.pendingResult.reset();
+        }
+    }
+
+    if (!pending.has_value()) {
+        return;
+    }
+
+    JoinLightmapBakeWorker();
+    lightmapBake.completedTimeSeconds = GetTime();
+    ConsumeLightmapBakeResult(*pending, assets);
+}
+
+void SectorEditor::RequestLightmapBakeCancel()
+{
+    if (!lightmapBake.progress.running.load()) {
+        return;
+    }
+    lightmapBake.progress.cancelRequested.store(true);
+    lightmapBake.cancelButtonPressed = true;
+    statusText = "Cancelling bake...";
+}
+
+void SectorEditor::JoinLightmapBakeWorker()
+{
+    if (lightmapBake.worker.joinable()) {
+        lightmapBake.worker.join();
+    }
+}
+
+void SectorEditor::ShutdownLightmapBake()
+{
+    if (lightmapBake.progress.running.load()) {
+        lightmapBake.progress.cancelRequested.store(true);
+    }
+    JoinLightmapBakeWorker();
+    DeleteFileIfExists(lightmapBake.temporaryOutputPath);
+    lightmapBake.temporaryOutputPath.clear();
+    {
+        std::lock_guard<std::mutex> lock(lightmapBake.resultMutex);
+        if (lightmapBake.pendingResult.has_value()) {
+            DeleteFileIfExists(lightmapBake.pendingResult->temporaryOutputPath);
+            lightmapBake.pendingResult.reset();
+        }
+    }
+    lightmapBake.modalOpen = false;
+    lightmapBake.awaitingAcknowledgement = false;
+    lightmapBake.progress.running.store(false);
+    lightmapBake.progress.cancelRequested.store(false);
+    lightmapBake.progress.phase.store(SectorLightmapBakePhase::Idle);
+}
+
+bool SectorEditor::IsLightmapBakeBlocking() const
+{
+    return lightmapBake.modalOpen || lightmapBake.progress.running.load();
+}
+
+bool SectorEditor::ConsumeLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets)
+{
+    lightmapBake.progress.phase.store(result.cancelled
+            ? SectorLightmapBakePhase::Cancelled
+            : (result.succeeded ? SectorLightmapBakePhase::InstallingResult : SectorLightmapBakePhase::Failed));
+
+    if (result.cancelled) {
+        DeleteFileIfExists(result.temporaryOutputPath);
+        lightmapBake.terminalMessage = "Lightmap bake cancelled";
+        lightmapBake.terminalCancelled = true;
+        lightmapBake.awaitingAcknowledgement = true;
+        statusText = lightmapBake.terminalMessage;
         return false;
     }
+
+    if (!result.succeeded) {
+        DeleteFileIfExists(result.temporaryOutputPath);
+        lightmapBake.terminalMessage = result.errorMessage.empty() ? "Bake failed" : result.errorMessage;
+        lightmapBake.terminalSuccess = false;
+        lightmapBake.awaitingAcknowledgement = true;
+        statusText = lightmapBake.terminalMessage;
+        TraceLog(LOG_WARNING, "%s", lightmapBake.terminalMessage.c_str());
+        return false;
+    }
+
+    const bool installed = InstallLightmapBakeResult(result, assets);
+    lightmapBake.modalOpen = false;
+    lightmapBake.awaitingAcknowledgement = false;
+    lightmapBake.cancelButtonPressed = false;
+    lightmapBake.terminalSuccess = installed;
+    lightmapBake.terminalCancelled = false;
+    lightmapBake.temporaryOutputPath.clear();
+    lightmapBake.progress.phase.store(installed ? SectorLightmapBakePhase::Completed : SectorLightmapBakePhase::Failed);
+    return installed;
+}
+
+bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets)
+{
+    if (ComputeSectorLightmapSourceHash(state.map) != result.expectedSourceHash) {
+        DeleteFileIfExists(result.temporaryOutputPath);
+        statusText = "Bake discarded: map changed during bake";
+        return false;
+    }
+
+    std::error_code ec;
+    if (!std::filesystem::exists(result.temporaryOutputPath, ec) || ec) {
+        DeleteFileIfExists(result.temporaryOutputPath);
+        statusText = "Bake failed: temporary lightmap output missing";
+        return false;
+    }
+
+    const std::filesystem::path finalPath(result.finalOutputPath);
+    if (!finalPath.parent_path().empty()) {
+        std::filesystem::create_directories(finalPath.parent_path(), ec);
+        if (ec) {
+            DeleteFileIfExists(result.temporaryOutputPath);
+            statusText = TextFormat("Bake failed: could not create output directory: %s", ec.message().c_str());
+            return false;
+        }
+    }
+
+    std::filesystem::copy_file(
+            result.temporaryOutputPath,
+            result.finalOutputPath,
+            std::filesystem::copy_options::overwrite_existing,
+            ec
+    );
+    if (ec) {
+        DeleteFileIfExists(result.temporaryOutputPath);
+        statusText = TextFormat("Bake failed: could not install lightmap: %s", ec.message().c_str());
+        return false;
+    }
+    DeleteFileIfExists(result.temporaryOutputPath);
 
     const std::string assetRelativePath = MakeSectorLightmapPathForMapPath(mapPath);
-    const std::string outputPath = ResolveSectorAssetPath(assetRelativePath);
-    SectorLightmapBakeResult result;
-    if (!BakeSectorLightmap(state.map, layout, outputPath.c_str(), result, error)) {
-        statusText = error.empty() ? "Bake failed" : error;
-        return false;
+    state.map.bakedLightmap.path = assetRelativePath;
+    state.map.bakedLightmap.width = result.bakeResult.width;
+    state.map.bakedLightmap.height = result.bakeResult.height;
+    state.map.bakedLightmap.sourceHash = result.bakeResult.sourceHash;
+    state.dirty = true;
+
+    std::istringstream report(result.bakeReportText);
+    std::string line;
+    while (std::getline(report, line)) {
+        TraceLog(LOG_INFO, "%s", line.c_str());
+    }
+    TraceLog(LOG_INFO, "INFO: Lightmap bake completed asynchronously in %.2fs", result.bakeResult.totalBakeSeconds);
+
+    if (state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        RebuildPreviewMeshesPreservingView(assets);
     }
 
-    state.map.bakedLightmap.path = assetRelativePath;
-    state.map.bakedLightmap.width = result.width;
-    state.map.bakedLightmap.height = result.height;
-    state.map.bakedLightmap.sourceHash = result.sourceHash;
-    state.dirty = true;
-    statusText = TextFormat("Baked lightmap: %dx%d", result.width, result.height);
+    statusText = TextFormat("Baked lightmap in %.1fs", result.bakeResult.totalBakeSeconds);
     return true;
 }
 
@@ -1865,7 +2240,7 @@ bool SectorEditor::ValidateSectorPolygon(const std::vector<SectorPoint>& points,
 
 void SectorEditor::RenderPreview3D(engine::AssetManager& assets)
 {
-    preview.Render(assets);
+    preview.Render(assets, state.useBakedAmbientOcclusion);
     DrawPreviewSurfaceHighlights();
 }
 
@@ -2014,8 +2389,8 @@ void SectorEditor::DrawPreviewOverlay(
             engine::UITextJustify::Left
     );
     const char* interactionText = preview.IsMouseLookEnabled()
-            ? "WASD move | Mouse look | Space/Ctrl up/down | F11: unlock cursor/editor pick | Tab/Escape return"
-            : "F11: return to fly mode | click surface to select | Tab/Escape return";
+            ? "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F11 cursor | Tab/Escape return"
+            : "F1 AO | F11 cursor | click surface to select | Tab/Escape return";
     engine::Text(
             config,
             assets,
@@ -2048,9 +2423,10 @@ void SectorEditor::DrawPreviewOverlay(
             Rectangle{panel.x + 18.0f, panel.y + 130.0f, panel.width - 36.0f, 30.0f},
             font,
             TextFormat(
-                    "assets %.0f%% | Lightmap: %s | %s%s",
+                    "assets %.0f%% | Lightmap: %s | AO: %s | %s%s",
                     preview.AssetProgress(assets) * 100.0f,
                     preview.LightmapStatusText(),
+                    state.useBakedAmbientOcclusion ? "on" : "off",
                     statusText.empty() ? "Ready" : statusText.c_str(),
                     state.dirty ? " | unsaved changes" : ""
             ),
@@ -2504,6 +2880,17 @@ void SectorEditor::DrawStaticLights() const
                     WithAlpha(color, selected ? 150 : 90)
             );
         }
+        if (selected && light.sourceRadius > 0.0f) {
+            const float sourceRadiusPixels = light.sourceRadius * state.viewZoom;
+            if (sourceRadiusPixels >= 3.0f) {
+                DrawCircleLines(
+                        static_cast<int>(std::round(center.x)),
+                        static_cast<int>(std::round(center.y)),
+                        sourceRadiusPixels,
+                        WithAlpha(color, 210)
+                );
+            }
+        }
 
         DrawCircleV(center, selected ? 7.0f : 5.5f, color);
         DrawCircleLines(static_cast<int>(std::round(center.x)), static_cast<int>(std::round(center.y)), selected ? 11.0f : 9.0f, Color{20, 24, 32, 255});
@@ -2570,9 +2957,36 @@ void SectorEditor::DrawToolsPanel(
             "Tools"
     );
 
-    float y = panel.contentRect.y;
     const float rowH = 46.0f;
     const float gap = config.rowSpacing;
+    const float toolsContentH = 1050.0f;
+    const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
+    engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
+            ui,
+            config,
+            input,
+            "sector_editor_tools_scroll",
+            panel.contentRect,
+            Vector2{scrollContentW, toolsContentH},
+            uiState.toolsScroll,
+            false
+    );
+
+    const float contentW = scroll.viewport.width;
+    float y = 0.0f;
+    const auto separator = [&]() {
+        engine::Separator(
+                config,
+                Rectangle{
+                        scroll.viewport.x,
+                        scroll.viewport.y - uiState.toolsScroll.offset.y + y,
+                        contentW,
+                        12.0f
+                }
+        );
+        y += 22.0f;
+    };
+
     const SectorEditorTool tools[] = {
             SectorEditorTool::Select,
             SectorEditorTool::Sector,
@@ -2588,7 +3002,7 @@ void SectorEditor::DrawToolsPanel(
                 input,
                 assets,
                 TextFormat("sector_editor_tool_%s", ToolName(tool)),
-                Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH},
+                Rectangle{0.0f, y, contentW, rowH},
                 font,
                 ToolName(tool),
                 state.currentTool == tool)) {
@@ -2603,46 +3017,112 @@ void SectorEditor::DrawToolsPanel(
         y += rowH + gap;
     }
 
-    engine::Separator(config, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 12.0f});
-    y += 22.0f;
+    separator();
 
-    const float halfButtonW = (panel.contentRect.width - gap) * 0.5f;
-    if (engine::Button(ui, config, input, assets, "sector_editor_save", Rectangle{panel.contentRect.x, y, halfButtonW, rowH}, font, "Save")) {
+    const float halfButtonW = (contentW - gap) * 0.5f;
+    if (engine::Button(ui, config, input, assets, "sector_editor_save", Rectangle{0.0f, y, halfButtonW, rowH}, font, "Save")) {
         SaveMap();
     }
-    if (engine::Button(ui, config, input, assets, "sector_editor_reload", Rectangle{panel.contentRect.x + halfButtonW + gap, y, halfButtonW, rowH}, font, "Reload")) {
+    if (engine::Button(ui, config, input, assets, "sector_editor_reload", Rectangle{halfButtonW + gap, y, halfButtonW, rowH}, font, "Reload")) {
         ReloadMap(assets);
     }
     y += rowH + gap;
 
-    if (engine::Button(ui, config, input, assets, "sector_editor_add_map_texture", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Add Map Texture")) {
+    if (engine::Button(ui, config, input, assets, "sector_editor_add_map_texture", Rectangle{0.0f, y, contentW, rowH}, font, "Add Map Texture")) {
         OpenAddMapTextureModal(assets);
     }
     y += rowH + gap;
 
-    if (engine::Button(ui, config, input, assets, "sector_editor_bake_lightmaps", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Bake Lightmaps")) {
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 28.0f}, font, "Lightmap Settings", engine::UITextJustify::Left, config.mutedTextColor);
+    y += 32.0f;
+
+    const float lightmapLabelW = 180.0f;
+    const auto drawLightmapSetting = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals, const char* status) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, lightmapLabelW, rowH}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+        float edited = value;
+        const engine::UINumericInputResult result = engine::FloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                id,
+                Rectangle{lightmapLabelW + gap, y, std::max(0.0f, contentW - lightmapLabelW - gap), rowH},
+                font,
+                edited,
+                inputState,
+                minValue,
+                maxValue,
+                decimals
+        );
+        if (result.changed && edited != value) {
+            value = edited;
+            state.dirty = true;
+            statusText = status;
+        }
+        y += rowH + gap;
+    };
+
+    state.map.lightmapSettings.ambientOcclusionRadius = ClampAmbientOcclusionRadius(state.map.lightmapSettings.ambientOcclusionRadius);
+    state.map.lightmapSettings.ambientOcclusionStrength = ClampAmbientOcclusionStrength(state.map.lightmapSettings.ambientOcclusionStrength);
+    state.map.lightmapSettings.indirectBounceRadius = ClampIndirectBounceRadius(state.map.lightmapSettings.indirectBounceRadius);
+    state.map.lightmapSettings.indirectBounceStrength = ClampIndirectBounceStrength(state.map.lightmapSettings.indirectBounceStrength);
+    drawLightmapSetting(
+            "sector_editor_ao_radius",
+            "AO radius",
+            state.map.lightmapSettings.ambientOcclusionRadius,
+            uiState.ambientOcclusionRadiusInput,
+            0.05f,
+            16.0f,
+            2,
+            "Updated AO radius"
+    );
+    drawLightmapSetting(
+            "sector_editor_ao_strength",
+            "AO strength",
+            state.map.lightmapSettings.ambientOcclusionStrength,
+            uiState.ambientOcclusionStrengthInput,
+            0.0f,
+            1.0f,
+            3,
+            "Updated AO strength"
+    );
+    drawLightmapSetting(
+            "sector_editor_bounce_radius",
+            "Bounce radius",
+            state.map.lightmapSettings.indirectBounceRadius,
+            uiState.indirectBounceRadiusInput,
+            0.05f,
+            16.0f,
+            2,
+            "Updated bounce radius"
+    );
+    drawLightmapSetting(
+            "sector_editor_bounce_strength",
+            "Bounce strength",
+            state.map.lightmapSettings.indirectBounceStrength,
+            uiState.indirectBounceStrengthInput,
+            0.0f,
+            1.0f,
+            3,
+            "Updated bounce strength"
+    );
+
+    if (engine::Button(ui, config, input, assets, "sector_editor_bake_lightmaps", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
         BakeLightmaps();
     }
     y += rowH + gap;
 
-    engine::Separator(config, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 12.0f});
-    y += 22.0f;
+    separator();
 
-    const engine::UILabelFieldRowResult gridRow = engine::LabelFieldRow(
-            config,
-            assets,
-            Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH},
-            font,
-            "Grid",
-            64.0f
-    );
+    const float gridLabelW = 64.0f;
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, gridLabelW, rowH}, font, "Grid", engine::UITextJustify::Left, config.mutedTextColor);
     engine::IntInput(
             ui,
             config,
             input,
             assets,
             "sector_editor_grid",
-            gridRow.fieldRect,
+            Rectangle{gridLabelW + gap, y, std::max(0.0f, contentW - gridLabelW - gap), rowH},
             font,
             state.gridSize,
             uiState.gridSizeInput,
@@ -2652,20 +3132,20 @@ void SectorEditor::DrawToolsPanel(
     );
     y += rowH + gap;
 
-    engine::Checkbox(ui, config, input, assets, "sector_editor_show_grid", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Show grid", state.showGrid);
+    engine::Checkbox(ui, config, input, assets, "sector_editor_show_grid", Rectangle{0.0f, y, contentW, rowH}, font, "Show grid", state.showGrid);
     y += rowH + gap;
-    engine::Checkbox(ui, config, input, assets, "sector_editor_show_axes", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Show axes", state.showAxes);
+    engine::Checkbox(ui, config, input, assets, "sector_editor_show_axes", Rectangle{0.0f, y, contentW, rowH}, font, "Show axes", state.showAxes);
     y += rowH + gap;
-    engine::Checkbox(ui, config, input, assets, "sector_editor_show_ids", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Show ids", state.showSectorIds);
+    engine::Checkbox(ui, config, input, assets, "sector_editor_show_ids", Rectangle{0.0f, y, contentW, rowH}, font, "Show ids", state.showSectorIds);
     y += rowH + gap;
 
-    engine::Separator(config, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 12.0f});
-    y += 22.0f;
+    separator();
 
-    if (engine::Button(ui, config, input, assets, "sector_editor_preview_3d", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "3D Mode")) {
+    if (engine::Button(ui, config, input, assets, "sector_editor_preview_3d", Rectangle{0.0f, y, contentW, rowH}, font, "3D Mode")) {
         TryEnterPreview3D(assets, ui);
     }
 
+    engine::EndScrollArea(ui, config, input, scroll, uiState.toolsScroll);
     engine::EndPanel(ui, config, panel);
 }
 
@@ -2711,7 +3191,7 @@ void SectorEditor::DrawSectorsPanel(
                 height += 36.0f;
             }
             height += rowH + gap; // Delete.
-            height += 5.0f * (rowH + gap); // Position/intensity/radius.
+            height += 6.0f * (rowH + gap); // Position/intensity/radius/source radius.
             height += 3.0f * (rowH + gap); // RGB.
             height += 36.0f + gap; // Swatch.
             height += rowH + gap; // Bake.
@@ -2839,6 +3319,32 @@ void SectorEditor::DrawSectorsPanel(
         light.intensity = ClampLightIntensity(light.intensity);
         drawLightFloat("sector_editor_light_radius", "Radius:", light.radius, uiState.lightRadiusInput, 0.1f, 64.0f, 2);
         light.radius = ClampLightRadius(light.radius);
+        light.sourceRadius = ClampLightSourceRadius(light.sourceRadius, light.radius);
+        {
+            engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, "Source:", engine::UITextJustify::Right, config.mutedTextColor);
+            float edited = light.sourceRadius;
+            const engine::UINumericInputResult result = engine::FloatInput(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_light_source_radius",
+                    Rectangle{numberLabelW, y, numberFieldW, rowH},
+                    font,
+                    edited,
+                    uiState.lightSourceRadiusInput,
+                    0.0f,
+                    8.0f,
+                    3
+            );
+            edited = ClampLightSourceRadius(edited, light.radius);
+            if (result.changed && edited != light.sourceRadius) {
+                light.sourceRadius = edited;
+                state.dirty = true;
+                statusText = "Updated light source radius";
+            }
+            y += rowH + gap;
+        }
 
         auto drawLightChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
             engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
@@ -3516,6 +4022,106 @@ void SectorEditor::DrawTexturePickerModal(
     );
 }
 
+void SectorEditor::DrawLightmapBakeModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    if (!IsLightmapBakeBlocking()) {
+        return;
+    }
+
+    const bool running = lightmapBake.progress.running.load();
+    const SectorLightmapBakePhase phase = lightmapBake.progress.phase.load();
+    const uint32_t completedWork = lightmapBake.progress.completedWork.load();
+    const uint32_t totalWork = lightmapBake.progress.totalWork.load();
+    const float progress = LightmapBakeOverallProgress(phase, completedWork, totalWork);
+    const double now = GetTime();
+    const double elapsed = (lightmapBake.completedTimeSeconds > 0.0 ? lightmapBake.completedTimeSeconds : now)
+            - lightmapBake.startTimeSeconds;
+
+    DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
+
+    const Rectangle modal{
+            (EditorWidth - 620.0f) * 0.5f,
+            (EditorHeight - 300.0f) * 0.5f,
+            620.0f,
+            300.0f
+    };
+    DrawRectangleRec(modal, Color{20, 24, 32, 248});
+    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
+
+    float y = modal.y + 24.0f;
+    engine::Text(config, assets, Rectangle{modal.x + 28.0f, y, modal.width - 56.0f, 42.0f}, font, "Baking lightmap", engine::UITextJustify::Left);
+    y += 58.0f;
+
+    const char* phaseText = lightmapBake.awaitingAcknowledgement && !lightmapBake.terminalMessage.empty()
+            ? lightmapBake.terminalMessage.c_str()
+            : (lightmapBake.cancelButtonPressed && running ? "Cancelling bake..." : LightmapBakePhaseText(phase));
+    const Color phaseColor = lightmapBake.awaitingAcknowledgement && !lightmapBake.terminalCancelled
+            ? config.invalidColor
+            : config.textColor;
+    engine::Text(config, assets, Rectangle{modal.x + 28.0f, y, modal.width - 56.0f, 38.0f}, font, phaseText, engine::UITextJustify::Left, phaseColor);
+    y += 52.0f;
+
+    const Rectangle track{modal.x + 28.0f, y, modal.width - 128.0f, 28.0f};
+    DrawRectangleRec(track, config.widgetColor);
+    DrawRectangleLinesEx(track, 1.0f, config.borderColor);
+    const Rectangle fill{track.x, track.y, track.width * progress, track.height};
+    DrawRectangleRec(fill, config.accentColor);
+    engine::Text(
+            config,
+            assets,
+            Rectangle{track.x + track.width + 14.0f, y - 4.0f, 72.0f, 36.0f},
+            font,
+            TextFormat("%d%%", static_cast<int>(std::round(progress * 100.0f))),
+            engine::UITextJustify::Right
+    );
+    y += 56.0f;
+
+    engine::Text(
+            config,
+            assets,
+            Rectangle{modal.x + 28.0f, y, modal.width - 56.0f, 38.0f},
+            font,
+            TextFormat("Elapsed: %.1fs", std::max(0.0, elapsed)),
+            engine::UITextJustify::Left,
+            config.mutedTextColor
+    );
+
+    const float buttonW = 150.0f;
+    const float buttonH = 44.0f;
+    const Rectangle button{modal.x + modal.width - buttonW - 28.0f, modal.y + modal.height - buttonH - 24.0f, buttonW, buttonH};
+    if (running) {
+        if (lightmapBake.cancelButtonPressed) {
+            DrawRectangleRec(button, config.disabledColor);
+            DrawRectangleLinesEx(button, config.borderThickness, config.borderColor);
+            engine::Text(config, assets, button, font, "Cancel", engine::UITextJustify::Center, config.mutedTextColor);
+        } else if (engine::Button(ui, config, input, assets, "sector_editor_lightmap_bake_cancel", button, font, "Cancel")) {
+            RequestLightmapBakeCancel();
+        }
+    } else if (lightmapBake.awaitingAcknowledgement) {
+        if (engine::Button(ui, config, input, assets, "sector_editor_lightmap_bake_close", button, font, "Close")) {
+            lightmapBake.modalOpen = false;
+            lightmapBake.awaitingAcknowledgement = false;
+            lightmapBake.cancelButtonPressed = false;
+            lightmapBake.terminalMessage.clear();
+            lightmapBake.temporaryOutputPath.clear();
+            lightmapBake.progress.phase.store(SectorLightmapBakePhase::Idle);
+        }
+    }
+
+    input.ForEachEvent(
+            engine::InputEventType::Any,
+            true,
+            [](engine::InputEvent& event) {
+                engine::ConsumeEvent(event);
+            }
+    );
+}
+
 void SectorEditor::DrawStatusPanel(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -4082,6 +4688,7 @@ void SectorEditor::SelectLight(int lightIndex)
     uiState.lightZInput = engine::UIFloatInputState{};
     uiState.lightIntensityInput = engine::UIFloatInputState{};
     uiState.lightRadiusInput = engine::UIFloatInputState{};
+    uiState.lightSourceRadiusInput = engine::UIFloatInputState{};
     uiState.lightRedInput = engine::UIIntInputState{};
     uiState.lightGreenInput = engine::UIIntInputState{};
     uiState.lightBlueInput = engine::UIIntInputState{};

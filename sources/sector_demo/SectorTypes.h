@@ -79,6 +79,14 @@ struct SectorStaticPointLight {
     Color color = WHITE;
     float intensity = 1.0f;
     float radius = 8.0f;
+    float sourceRadius = 0.0f;
+};
+
+struct SectorLightmapBakeSettings {
+    float ambientOcclusionRadius = 1.25f;
+    float ambientOcclusionStrength = 0.55f;
+    float indirectBounceRadius = 4.0f;
+    float indirectBounceStrength = 0.20f;
 };
 
 struct SectorLightmapMetadata {
@@ -92,6 +100,7 @@ struct SectorMap {
     std::unordered_map<std::string, SectorTextureDefinition> texturesById;
     std::vector<SectorDefinition> sectors;
     std::vector<SectorStaticPointLight> staticLights;
+    SectorLightmapBakeSettings lightmapSettings;
     SectorLightmapMetadata bakedLightmap;
     Vector3 playerStartPosition = {0.0f, 1.6f, 0.0f};
     float playerStartYawRadians = 0.0f;
