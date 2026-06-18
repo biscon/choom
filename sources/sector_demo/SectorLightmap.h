@@ -23,8 +23,8 @@ struct SectorLightmapChart {
 };
 
 struct SectorLightmapLayout {
-    int atlasWidth = 1024;
-    int atlasHeight = 1024;
+    int atlasWidth = 2048;
+    int atlasHeight = 2048;
     int gutter = 2;
     float texelsPerWorldUnit = 8.0f;
     std::vector<SectorLightmapChart> charts;
@@ -42,8 +42,8 @@ enum class SectorLightmapStatus {
     Stale
 };
 
-constexpr int SectorLightmapAtlasWidth = 1024;
-constexpr int SectorLightmapAtlasHeight = 1024;
+constexpr int SectorLightmapAtlasWidth = 2048;
+constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
 

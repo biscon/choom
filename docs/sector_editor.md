@@ -140,7 +140,7 @@ baked data continue to render with ambient vertex lighting only.
 
 Current bake characteristics:
 
-- Fixed `1024 x 1024` atlas.
+- Fixed `2048 x 2048` atlas.
 - About `8` texels per world unit.
 - At least `2` texels of chart gutter.
 - Wall charts are rectangular; floor and ceiling charts are one chart per

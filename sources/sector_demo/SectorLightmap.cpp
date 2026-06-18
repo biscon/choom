@@ -331,7 +331,7 @@ bool BuildSectorLightmapLayout(
         const int chartHeight = usableHeight + SectorLightmapGutterTexels * 2;
 
         if (chartWidth > SectorLightmapAtlasWidth || chartHeight > SectorLightmapAtlasHeight) {
-            outError = "Bake failed: a lightmap chart is larger than the 1024 atlas";
+            outError = "Bake failed: a lightmap chart is larger than the 2048 atlas";
             return false;
         }
 
@@ -342,7 +342,7 @@ bool BuildSectorLightmapLayout(
         }
 
         if (shelfY + chartHeight > SectorLightmapAtlasHeight) {
-            outError = "Bake failed: 1024 lightmap atlas is full";
+            outError = "Bake failed: 2048 lightmap atlas is full";
             return false;
         }
 
