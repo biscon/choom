@@ -127,9 +127,9 @@ field still load normally. Older static lights without `sourceRadius` load as
 
 ## Baked Lightmaps
 
-`Bake Lightmaps` bakes direct colored lighting from static point lights and
-ambient occlusion into a single shared lightmap atlas. The output path is
-derived from the current map path. For example:
+`Bake Lightmaps` bakes direct colored lighting from static point lights,
+one-bounce indirect fill, and ambient occlusion into a single shared lightmap
+atlas. The output path is derived from the current map path. For example:
 
 ```text
 assets/sector_demo/sector_editor_working_level.json
@@ -142,28 +142,35 @@ The left tools panel includes compact lightmap settings:
   `0.05..16.0`.
 - `AO strength`: how much gathered occlusion darkens sector ambient, clamped to
   `0.0..1.0`; `0.0` disables AO ray work.
+- `Bounce radius`: maximum world-space distance for one-bounce indirect gather
+  rays, clamped to `0.05..16.0`.
+- `Bounce strength`: artist-facing multiplier for indirect fill, clamped to
+  `0.0..1.0`; `0.0` disables bounce ray work.
 
 Map JSON saves these settings as:
 
 ```json
 "lightmapSettings": {
   "ambientOcclusionRadius": 1.25,
-  "ambientOcclusionStrength": 0.55
+  "ambientOcclusionStrength": 0.55,
+  "indirectBounceRadius": 4.0,
+  "indirectBounceStrength": 0.2
 }
 ```
 
 The baked PNG stores:
 
 ```text
-RGB = baked direct static point-light contribution
+RGB = baked direct static point-light contribution + one-bounce indirect light
 A   = baked ambient-occlusion factor, where 255 is fully open
 ```
 
 The map stores `bakedLightmap` metadata with the asset-relative atlas path,
 dimensions, and a deterministic source hash. The hash includes the bake format
 version, sector geometry, floor and ceiling heights, static light values
-including `sourceRadius`, AO settings, and fixed bake sample counts. It does not
-include the baked metadata itself.
+including `sourceRadius`, AO settings, bounce settings, fixed bake sample
+counts, and the neutral bounce albedo constant. It does not include the baked
+metadata itself.
 
 3D Mode uses the baked atlas only when the metadata exists, the atlas file can
 be found, and the stored source hash matches the current in-memory map. If a
@@ -180,10 +187,18 @@ finalColor = baseTexture * clamp(ambient + direct, 0..1)
 ```
 
 Ambient occlusion modulates only the sector ambient layer; it does not darken
-the baked direct point-light contribution. Sector ambient remains the baseline
+the baked direct or indirect contribution. Sector ambient remains the baseline
 mood/darkness layer. A sector with ambient intensity `0.0` can still be lit by
-baked direct light. Maps without valid baked data continue to render with
-ambient vertex lighting only.
+baked light. Maps without valid baked data continue to render with ambient
+vertex lighting only.
+
+The indirect pass is currently one bounce only. It shoots 8 deterministic
+cosine-weighted hemisphere rays from each valid chart texel, finds the first
+nearby visible surface hit, maps that hit back through its secondary lightmap
+UV, and samples only the direct-light float buffer. It uses a fixed neutral grey
+reflectance for now. It does not recursively feed indirect results back into
+the bake, and it does not use sector ambient or base-texture pixels as bounce
+sources.
 
 In 3D Mode, `F1` toggles baked ambient occlusion on and off for visual
 debugging. This only changes the shader's use of lightmap alpha: AO off renders
@@ -191,10 +206,10 @@ sector ambient without AO darkening while keeping baked direct RGB lighting
 visible. The toggle does not rebake lighting, reload textures, rebuild meshes,
 mark the map dirty, or save to level JSON.
 
-The bake format version is currently `2`. Existing version-1 bakes only contain
-direct RGB lighting, so they intentionally become `Lightmap stale - rebake
-required` after this update. The maps still load normally; rebake to generate
-AO alpha.
+The bake format version is currently `3`. Existing version-2 bakes contain
+direct RGB lighting plus AO alpha, so they intentionally become `Lightmap stale
+- rebake required` after this update. The maps still load normally; rebake to
+generate indirect RGB.
 
 Current bake characteristics:
 
@@ -204,18 +219,36 @@ Current bake characteristics:
 - Wall charts are rectangular; floor and ceiling charts are one chart per
   generated triangle.
 - Colored direct point-light contribution in RGB.
+- One-bounce indirect light is added to RGB.
 - Ambient occlusion factor in alpha.
 - Hard static shadows when `sourceRadius` is `0.0`.
 - Baked soft shadows from 8 deterministic finite-source samples when
   `sourceRadius` is nonzero.
 - Baked AO from 12 deterministic cosine-weighted hemisphere samples.
-- No bounce lighting, GI, colored indirect light, dynamic light contribution,
-  dynamic shadows, shadow maps, SSAO, probes, normal maps, PBR, bake threading,
-  BVH acceleration, or multi-atlas support.
+- Baked indirect fill from 8 deterministic cosine-weighted hemisphere samples.
+- Bake-local static BVH acceleration for direct shadow rays, soft-shadow source
+  samples, AO rays, and one-bounce indirect gather rays.
+- No recursive bounces, path tracing, texture/material-colored bounce, dynamic
+  light contribution, dynamic shadows, shadow maps, SSAO, probes, normal maps,
+  PBR, GI denoising, bake threading, runtime BVH usage, or multi-atlas support.
+
+Every bake builds a static BVH from that bake's generated triangle list after
+lightmap layout exists and before lighting rays are cast. The BVH stores only
+triangle indices; the generated bake triangles remain the source of world-space
+positions, normals, and lightmap UVs. This is a synchronous CPU bake
+optimization only. It is not reused between bakes, and it is not used by
+runtime rendering, gameplay collision, or editor picking.
 
 The 2D status bar and 3D overlay show `Lightmap valid`, `Lightmap stale -
 rebake required`, or `No baked lightmap`. Re-bake after geometry, static-light,
-source-radius, or AO-setting changes.
+source-radius, AO-setting, or bounce-setting changes.
+
+After a successful bake, the console prints a report with atlas dimensions,
+valid chart texels, valid atlas occupancy, allocated chart rectangle area,
+chart rectangle occupancy, chart payload efficiency, static geometry triangle
+count, BVH node/leaf counts, BVH leaf statistics, static light count, per-pass
+ray/AABB/triangle-test statistics, and timings for layout, BVH build, direct
+lighting, AO, indirect bounce, gutter dilation/export, and total bake time.
 
 ## Edge Inspector
 
@@ -395,9 +428,10 @@ unloaded on editor shutdown, and rebuilt every time `3D Mode` is clicked or a
 - No full Doom-style linedef/sidedef system.
 - No vertex insertion/deletion, edge splitting, whole-sector movement, or
   undo/redo.
-- Lightmaps are single-atlas, synchronous, fixed-resolution, direct-light only,
-  and brute-force raycasted; there is no bake progress UI or acceleration
-  structure yet.
+- Lightmaps are single-atlas, synchronous, fixed-resolution, CPU ray traced
+  with a bake-local BVH, and direct plus one indirect bounce; there is no bake
+  progress UI, threading, GPU acceleration, BVH reuse between bakes, dynamic
+  lighting, or multi-atlas support.
 - No external texture importing, texture copying, texture removal, unused
   texture cleanup, normal/material maps, thumbnail grid browser, texture search,
   3D texture painting, 3D geometry editing, doors, lifts, dynamic lights,

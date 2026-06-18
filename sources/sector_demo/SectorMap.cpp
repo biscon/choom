@@ -148,6 +148,16 @@ float ClampAmbientOcclusionStrength(float value)
     return std::clamp(value, 0.0f, 1.0f);
 }
 
+float ClampIndirectBounceRadius(float value)
+{
+    return std::clamp(value, 0.05f, 16.0f);
+}
+
+float ClampIndirectBounceStrength(float value)
+{
+    return std::clamp(value, 0.0f, 1.0f);
+}
+
 void ReadAmbientColorField(const Json& sectorJson, SectorDefinition& sector)
 {
     const auto it = sectorJson.find("ambientColor");
@@ -308,6 +318,24 @@ void ReadLightmapSettings(const Json& root, SectorMap& outMap)
             settings.ambientOcclusionStrength = ClampAmbientOcclusionStrength(strengthIt->get<float>());
         } else {
             std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed ambientOcclusionStrength\n");
+        }
+    }
+
+    const auto bounceRadiusIt = settingsIt->find("indirectBounceRadius");
+    if (bounceRadiusIt != settingsIt->end()) {
+        if (bounceRadiusIt->is_number()) {
+            settings.indirectBounceRadius = ClampIndirectBounceRadius(bounceRadiusIt->get<float>());
+        } else {
+            std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed indirectBounceRadius\n");
+        }
+    }
+
+    const auto bounceStrengthIt = settingsIt->find("indirectBounceStrength");
+    if (bounceStrengthIt != settingsIt->end()) {
+        if (bounceStrengthIt->is_number()) {
+            settings.indirectBounceStrength = ClampIndirectBounceStrength(bounceStrengthIt->get<float>());
+        } else {
+            std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed indirectBounceStrength\n");
         }
     }
 
@@ -1123,6 +1151,8 @@ bool SaveSectorMap(const char* path, const SectorMap& map)
     Json lightmapSettings;
     lightmapSettings["ambientOcclusionRadius"] = ClampAmbientOcclusionRadius(map.lightmapSettings.ambientOcclusionRadius);
     lightmapSettings["ambientOcclusionStrength"] = ClampAmbientOcclusionStrength(map.lightmapSettings.ambientOcclusionStrength);
+    lightmapSettings["indirectBounceRadius"] = ClampIndirectBounceRadius(map.lightmapSettings.indirectBounceRadius);
+    lightmapSettings["indirectBounceStrength"] = ClampIndirectBounceStrength(map.lightmapSettings.indirectBounceStrength);
     root["lightmapSettings"] = std::move(lightmapSettings);
 
     if (!map.bakedLightmap.path.empty()

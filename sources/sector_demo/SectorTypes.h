@@ -85,6 +85,8 @@ struct SectorStaticPointLight {
 struct SectorLightmapBakeSettings {
     float ambientOcclusionRadius = 1.25f;
     float ambientOcclusionStrength = 0.55f;
+    float indirectBounceRadius = 4.0f;
+    float indirectBounceStrength = 0.20f;
 };
 
 struct SectorLightmapMetadata {

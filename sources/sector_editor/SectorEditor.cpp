@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -170,6 +171,16 @@ float ClampAmbientOcclusionRadius(float value)
 }
 
 float ClampAmbientOcclusionStrength(float value)
+{
+    return std::clamp(value, 0.0f, 1.0f);
+}
+
+float ClampIndirectBounceRadius(float value)
+{
+    return std::clamp(value, 0.05f, 16.0f);
+}
+
+float ClampIndirectBounceStrength(float value)
 {
     return std::clamp(value, 0.0f, 1.0f);
 }
@@ -1664,12 +1675,16 @@ bool SectorEditor::BakeLightmaps()
         return false;
     }
 
+    using Clock = std::chrono::steady_clock;
+    const auto layoutStart = Clock::now();
     SectorLightmapLayout layout;
     std::string error;
     if (!BuildSectorLightmapLayout(state.map, layout, error)) {
         statusText = error.empty() ? "Bake failed" : error;
         return false;
     }
+    const auto layoutEnd = Clock::now();
+    const double layoutSeconds = std::chrono::duration<double>(layoutEnd - layoutStart).count();
 
     const std::string assetRelativePath = MakeSectorLightmapPathForMapPath(mapPath);
     const std::string outputPath = ResolveSectorAssetPath(assetRelativePath);
@@ -1678,13 +1693,16 @@ bool SectorEditor::BakeLightmaps()
         statusText = error.empty() ? "Bake failed" : error;
         return false;
     }
+    result.layoutSeconds = layoutSeconds;
+    result.totalBakeSeconds += layoutSeconds;
+    PrintSectorLightmapBakeReport(result);
 
     state.map.bakedLightmap.path = assetRelativePath;
     state.map.bakedLightmap.width = result.width;
     state.map.bakedLightmap.height = result.height;
     state.map.bakedLightmap.sourceHash = result.sourceHash;
     state.dirty = true;
-    statusText = TextFormat("Baked lightmap: %dx%d", result.width, result.height);
+    statusText = TextFormat("Baked %d lightmap in %.2fs", result.width, result.totalBakeSeconds);
     return true;
 }
 
@@ -2661,7 +2679,7 @@ void SectorEditor::DrawToolsPanel(
     engine::Text(ui, config, assets, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 28.0f}, font, "Lightmap Settings", engine::UITextJustify::Left, config.mutedTextColor);
     y += 32.0f;
 
-    const float lightmapLabelW = 96.0f;
+    const float lightmapLabelW = 112.0f;
     const auto drawLightmapSetting = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals, const char* status) {
         const engine::UILabelFieldRowResult row = engine::LabelFieldRow(
                 config,
@@ -2696,6 +2714,8 @@ void SectorEditor::DrawToolsPanel(
 
     state.map.lightmapSettings.ambientOcclusionRadius = ClampAmbientOcclusionRadius(state.map.lightmapSettings.ambientOcclusionRadius);
     state.map.lightmapSettings.ambientOcclusionStrength = ClampAmbientOcclusionStrength(state.map.lightmapSettings.ambientOcclusionStrength);
+    state.map.lightmapSettings.indirectBounceRadius = ClampIndirectBounceRadius(state.map.lightmapSettings.indirectBounceRadius);
+    state.map.lightmapSettings.indirectBounceStrength = ClampIndirectBounceStrength(state.map.lightmapSettings.indirectBounceStrength);
     drawLightmapSetting(
             "sector_editor_ao_radius",
             "AO radius",
@@ -2715,6 +2735,26 @@ void SectorEditor::DrawToolsPanel(
             1.0f,
             3,
             "Updated AO strength"
+    );
+    drawLightmapSetting(
+            "sector_editor_bounce_radius",
+            "Bounce radius",
+            state.map.lightmapSettings.indirectBounceRadius,
+            uiState.indirectBounceRadiusInput,
+            0.05f,
+            16.0f,
+            2,
+            "Updated bounce radius"
+    );
+    drawLightmapSetting(
+            "sector_editor_bounce_strength",
+            "Bounce strength",
+            state.map.lightmapSettings.indirectBounceStrength,
+            uiState.indirectBounceStrengthInput,
+            0.0f,
+            1.0f,
+            3,
+            "Updated bounce strength"
     );
 
     if (engine::Button(ui, config, input, assets, "sector_editor_bake_lightmaps", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Bake Lightmaps")) {
