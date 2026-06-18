@@ -11,6 +11,15 @@
     {
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
+      "edges": [
+        {
+          "edge": 1,
+          "lowerUvScale": [
+            1.0,
+            0.8199999928474426
+          ]
+        }
+      ],
       "floor": 0.0,
       "floorTex": "floor",
       "id": "room_a",
@@ -38,9 +47,9 @@
     },
     {
       "ceiling": 3.0,
-      "ceilingTex": "ceiling",
+      "ceilingTex": "metal",
       "floor": 0.5,
-      "floorTex": "floor",
+      "floorTex": "cobblestone",
       "id": "raised_corridor",
       "lowerWallTex": "step_wall",
       "points": [
@@ -103,6 +112,22 @@
     {
       "ceiling": 2.5,
       "ceilingTex": "ceiling",
+      "edges": [
+        {
+          "edge": 0,
+          "lowerUvScale": [
+            1.0,
+            0.8199999928474426
+          ]
+        },
+        {
+          "edge": 1,
+          "lowerUvScale": [
+            1.0,
+            0.8199999928474426
+          ]
+        }
+      ],
       "floor": -0.5,
       "floorTex": "floor",
       "id": "lower_room",
@@ -131,6 +156,15 @@
     {
       "ceiling": 4.0,
       "ceilingTex": "ceiling",
+      "edges": [
+        {
+          "edge": 0,
+          "lowerUvScale": [
+            1.0,
+            0.8199999928474426
+          ]
+        }
+      ],
       "floor": 0.0,
       "floorTex": "floor",
       "id": "tall_room",
@@ -516,11 +550,11 @@
         ],
         [
           22.0,
-          27.0
+          26.0
         ],
         [
           19.0,
-          27.0
+          26.0
         ],
         [
           19.0,
@@ -529,13 +563,554 @@
       ],
       "upperWallTex": "upper_wall",
       "wallTex": "wall"
+    },
+    {
+      "ceiling": 3.0,
+      "ceilingTex": "ceiling",
+      "floor": 0.0,
+      "floorTex": "floor",
+      "id": "sector_013",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          22.0,
+          26.0
+        ],
+        [
+          22.0,
+          28.0
+        ],
+        [
+          19.0,
+          28.0
+        ],
+        [
+          19.0,
+          26.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 3.0,
+      "ceilingTex": "ceiling",
+      "floor": -2.0,
+      "floorTex": "metal",
+      "id": "sector_014",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          19.0,
+          28.0
+        ],
+        [
+          17.0,
+          29.0
+        ],
+        [
+          16.0,
+          27.0
+        ],
+        [
+          19.0,
+          26.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 3.0,
+      "ceilingTex": "ceiling",
+      "floor": -2.0,
+      "floorTex": "metal",
+      "id": "sector_015",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          22.0,
+          26.0
+        ],
+        [
+          25.0,
+          27.0
+        ],
+        [
+          24.0,
+          29.0
+        ],
+        [
+          22.0,
+          28.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 3.0,
+      "ceilingTex": "ceiling",
+      "floor": -2.0,
+      "floorTex": "metal",
+      "id": "sector_016",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          17.0,
+          29.0
+        ],
+        [
+          15.0,
+          30.0
+        ],
+        [
+          15.0,
+          29.0
+        ],
+        [
+          16.0,
+          27.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 3.0,
+      "ceilingTex": "ceiling",
+      "floor": -2.0,
+      "floorTex": "metal",
+      "id": "sector_017",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          25.0,
+          27.0
+        ],
+        [
+          26.0,
+          29.0
+        ],
+        [
+          26.0,
+          30.0
+        ],
+        [
+          24.0,
+          29.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 3.0,
+      "ceilingTex": "ceiling",
+      "floor": -2.0,
+      "floorTex": "metal",
+      "id": "sector_018",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          17.0,
+          29.0
+        ],
+        [
+          17.0,
+          37.0
+        ],
+        [
+          15.0,
+          37.0
+        ],
+        [
+          15.0,
+          30.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 3.0,
+      "ceilingTex": "ceiling",
+      "floor": -2.0,
+      "floorTex": "metal",
+      "id": "sector_019",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          26.0,
+          30.0
+        ],
+        [
+          26.0,
+          37.0
+        ],
+        [
+          24.0,
+          37.0
+        ],
+        [
+          24.0,
+          29.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 3.0,
+      "ceilingTex": "ceiling",
+      "floor": -2.0,
+      "floorTex": "metal",
+      "id": "sector_020",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          17.0,
+          37.0
+        ],
+        [
+          18.0,
+          38.0
+        ],
+        [
+          16.0,
+          39.0
+        ],
+        [
+          15.0,
+          37.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 3.0,
+      "ceilingTex": "ceiling",
+      "floor": -2.0,
+      "floorTex": "metal",
+      "id": "sector_021",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          24.0,
+          37.0
+        ],
+        [
+          26.0,
+          37.0
+        ],
+        [
+          25.0,
+          39.0
+        ],
+        [
+          23.0,
+          38.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 3.0,
+      "ceilingTex": "ceiling",
+      "floor": -2.0,
+      "floorTex": "metal",
+      "id": "sector_023",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          18.0,
+          38.0
+        ],
+        [
+          19.0,
+          38.0
+        ],
+        [
+          19.0,
+          40.0
+        ],
+        [
+          18.0,
+          40.0
+        ],
+        [
+          16.0,
+          39.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 3.0,
+      "ceilingTex": "ceiling",
+      "floor": -2.0,
+      "floorTex": "metal",
+      "id": "sector_024",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          25.0,
+          39.0
+        ],
+        [
+          23.0,
+          40.0
+        ],
+        [
+          22.0,
+          40.0
+        ],
+        [
+          22.0,
+          38.0
+        ],
+        [
+          23.0,
+          38.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 3.0,
+      "ceilingTex": "ceiling",
+      "floor": 0.0,
+      "floorTex": "floor",
+      "id": "sector_025",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          19.0,
+          38.0
+        ],
+        [
+          22.0,
+          38.0
+        ],
+        [
+          22.0,
+          40.0
+        ],
+        [
+          19.0,
+          40.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 4.0,
+      "ceilingTex": "ceiling",
+      "floor": -0.5,
+      "floorTex": "floor",
+      "id": "sector_022",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          19.0,
+          28.0
+        ],
+        [
+          19.0,
+          38.0
+        ],
+        [
+          18.0,
+          38.0
+        ],
+        [
+          17.0,
+          37.0
+        ],
+        [
+          17.0,
+          29.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 4.0,
+      "ceilingTex": "ceiling",
+      "floor": 0.0,
+      "floorTex": "floor",
+      "id": "sector_026",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          22.0,
+          28.0
+        ],
+        [
+          24.0,
+          29.0
+        ],
+        [
+          24.0,
+          37.0
+        ],
+        [
+          23.0,
+          38.0
+        ],
+        [
+          22.0,
+          38.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 5.0,
+      "ceilingTex": "ceiling",
+      "edges": [
+        {
+          "edge": 2,
+          "upperUvOffset": [
+            0.0,
+            0.10000000149011612
+          ]
+        },
+        {
+          "edge": 0,
+          "upperUvOffset": [
+            0.10000000149011612,
+            0.09000000357627869
+          ]
+        }
+      ],
+      "floor": 0.0,
+      "floorTex": "floor",
+      "id": "sector_027",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          19.0,
+          28.0
+        ],
+        [
+          22.0,
+          28.0
+        ],
+        [
+          22.0,
+          38.0
+        ],
+        [
+          19.0,
+          38.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ceiling": 10.0,
+      "ceilingTex": "ceiling",
+      "edges": [
+        {
+          "edge": 5,
+          "wallTex": "metal"
+        }
+      ],
+      "floor": -6.0,
+      "floorTex": "floor",
+      "id": "sector_028",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          15.0,
+          37.0
+        ],
+        [
+          13.0,
+          39.0
+        ],
+        [
+          10.0,
+          40.0
+        ],
+        [
+          5.0,
+          40.0
+        ],
+        [
+          3.0,
+          39.0
+        ],
+        [
+          1.0,
+          37.0
+        ],
+        [
+          1.0,
+          30.0
+        ],
+        [
+          3.0,
+          28.0
+        ],
+        [
+          6.0,
+          27.0
+        ],
+        [
+          10.0,
+          27.0
+        ],
+        [
+          13.0,
+          28.0
+        ],
+        [
+          15.0,
+          30.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
     }
   ],
   "textures": {
-    "ceiling": "assets/images/ceiling.png",
-    "floor": "assets/images/floor.png",
-    "step_wall": "assets/images/wall.png",
-    "upper_wall": "assets/images/wall.png",
-    "wall": "assets/images/wall.png"
+    "ceiling": {
+      "filter": "bilinear",
+      "path": "assets/images/ceiling.png"
+    },
+    "cobblestone": {
+      "filter": "point",
+      "path": "assets/images/test/cobblestone.png"
+    },
+    "floor": {
+      "filter": "bilinear",
+      "path": "assets/images/floor.png"
+    },
+    "metal": {
+      "filter": "point",
+      "path": "assets/images/test/metal.png"
+    },
+    "step_wall": {
+      "filter": "bilinear",
+      "path": "assets/images/wall.png"
+    },
+    "upper_wall": {
+      "filter": "bilinear",
+      "path": "assets/images/wall.png"
+    },
+    "wall": {
+      "filter": "bilinear",
+      "path": "assets/images/wall.png"
+    }
   }
 }

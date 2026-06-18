@@ -27,6 +27,8 @@ The sector editor is a 2D editor for `SectorMap` JSON data with an integrated
 - `Delete`: delete the selected sector.
 - `Escape`: clear selection, then return to Select tool.
 - `Save` and `Reload`: write/read the current map JSON path.
+- `Add Map Texture`: add an existing project PNG from `assets/images` to the
+  current map texture table.
 
 ## Sector Inspector
 
@@ -109,6 +111,48 @@ changed.
 The preview uses the editor asset scope and the existing asset manager. Missing
 or not-yet-ready textures show the existing placeholder image widget output.
 
+## Add Map Texture
+
+`Add Map Texture` opens a centered modal for adding an existing project PNG to
+the current map texture table. This is not an external import flow: it does not
+open native file dialogs, copy files, or browse outside the project assets
+directory.
+
+The modal scans `assets/images` recursively and lists PNG files only. Extension
+matching is case-insensitive, so `.png`, `.PNG`, and mixed-case variants are
+accepted. Stored paths are asset-relative, for example
+`assets/images/walls/brick_wall.png`, and never absolute filesystem paths.
+
+Selecting a file generates a default texture ID from the filename stem, with
+spaces and punctuation normalized to underscores. Generated IDs are made unique
+with numeric suffixes such as `_001`. The ID can be edited before adding, but it
+must be non-empty, unique in the current map texture table, and contain only
+letters, digits, underscores, and dashes.
+
+Each added texture stores a filter mode:
+
+- `Point`: nearest-neighbor sampling for pixel art.
+- `Bilinear`: smoothed sampling and the default for old texture JSON entries.
+
+After adding, the new texture ID is immediately available in the existing
+sector, edge, and 3D Mode texture pickers. Texture assignments still store only
+texture ID references on sectors and edges.
+
+Texture JSON now saves in object form:
+
+```json
+"textures": {
+  "brick_wall": {
+    "path": "assets/images/walls/brick_wall.png",
+    "filter": "point"
+  }
+}
+```
+
+Older string texture entries such as `"wall": "assets/images/wall.png"` still
+load and are treated as bilinear. Saving rewrites all texture entries using the
+new object format.
+
 ## Move Tool
 
 The Move tool reshapes existing sectors by dragging vertices. Hover a vertex in
@@ -181,5 +225,7 @@ unloaded on editor shutdown, and rebuilt every time `3D Mode` is clicked or a
 - No full Doom-style linedef/sidedef system.
 - No vertex insertion/deletion, edge splitting, whole-sector movement, or
   undo/redo.
-- No texture importing, thumbnail grid browser, 3D texture painting, 3D geometry
-  editing, doors, lifts, lighting, mesh culling, or file dialog.
+- No external texture importing, texture copying, texture removal, unused
+  texture cleanup, normal/material maps, thumbnail grid browser, texture search,
+  3D texture painting, 3D geometry editing, doors, lifts, lighting, mesh
+  culling, or file dialog.

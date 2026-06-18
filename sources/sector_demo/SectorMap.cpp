@@ -5,6 +5,7 @@
 #include <raylib.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -42,6 +43,64 @@ bool ReadStringField(const Json& object, const char* field, std::string& out)
     return true;
 }
 
+std::string LowercaseAscii(std::string value)
+{
+    for (char& ch : value) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return value;
+}
+
+SectorTextureFilter ParseTextureFilter(const std::string& value, const char* textureId)
+{
+    const std::string normalized = LowercaseAscii(value);
+    if (normalized == "point") {
+        return SectorTextureFilter::Point;
+    }
+    if (normalized == "bilinear") {
+        return SectorTextureFilter::Bilinear;
+    }
+
+    std::fprintf(
+            stderr,
+            "[SectorDemo WARNING] Unknown texture filter '%s' for id '%s'; using bilinear\n",
+            value.c_str(),
+            textureId == nullptr ? "" : textureId
+    );
+    return SectorTextureFilter::Bilinear;
+}
+
+bool ReadTextureDefinition(const std::string& id, const Json& value, SectorTextureDefinition& out)
+{
+    out = SectorTextureDefinition{};
+    out.id = id;
+
+    if (value.is_string()) {
+        out.path = value.get<std::string>();
+        out.filter = SectorTextureFilter::Bilinear;
+        return !out.path.empty();
+    }
+
+    if (!value.is_object()) {
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed texture entry for id '%s'\n", id.c_str());
+        return false;
+    }
+
+    if (!ReadStringField(value, "path", out.path) || out.path.empty()) {
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring texture id '%s' without string path\n", id.c_str());
+        return false;
+    }
+
+    std::string filter;
+    if (ReadStringField(value, "filter", filter)) {
+        out.filter = ParseTextureFilter(filter, id.c_str());
+    } else {
+        out.filter = SectorTextureFilter::Bilinear;
+    }
+
+    return true;
+}
+
 bool ReadVector2Field(const Json& object, const char* field, Vector2& out)
 {
     const auto it = object.find(field);
@@ -55,7 +114,7 @@ bool ReadVector2Field(const Json& object, const char* field, Vector2& out)
 
 bool HasTexture(const SectorMap& map, const std::string& id)
 {
-    return !id.empty() && map.texturePathsById.find(id) != map.texturePathsById.end();
+    return FindSectorTexture(map, id) != nullptr;
 }
 
 bool SamePoint(SectorPoint a, SectorPoint b)
@@ -196,12 +255,13 @@ void ValidateTextureReference(const SectorMap& map, const char* sectorId, const 
 
 std::string DefaultWallTextureId(const SectorMap& map)
 {
-    const auto it = map.texturePathsById.find("wall");
-    if (it != map.texturePathsById.end()) {
+    const auto it = map.texturesById.find("wall");
+    if (it != map.texturesById.end()) {
         return it->first;
     }
 
-    return map.texturePathsById.empty() ? std::string{} : map.texturePathsById.begin()->first;
+    const std::vector<std::string> textureIds = SortedSectorTextureIds(map);
+    return textureIds.empty() ? std::string{} : textureIds.front();
 }
 
 SectorEdgeOverride* FindEdgeOverride(SectorDefinition& sector, int edgeIndex)
@@ -473,6 +533,49 @@ void RemapEdgeOverridesAfterReverse(SectorDefinition& sector, const std::vector<
 
 } // namespace
 
+const SectorTextureDefinition* FindSectorTexture(const SectorMap& map, const std::string& id)
+{
+    if (id.empty()) {
+        return nullptr;
+    }
+
+    const auto it = map.texturesById.find(id);
+    return it == map.texturesById.end() ? nullptr : &it->second;
+}
+
+std::vector<std::string> SortedSectorTextureIds(const SectorMap& map)
+{
+    std::vector<std::string> ids;
+    ids.reserve(map.texturesById.size());
+    for (const auto& texture : map.texturesById) {
+        ids.push_back(texture.first);
+    }
+    std::sort(ids.begin(), ids.end());
+    return ids;
+}
+
+engine::TextureLoadFlags SectorTextureLoadFlags(SectorTextureFilter filter)
+{
+    switch (filter) {
+        case SectorTextureFilter::Point:
+            return engine::TextureLoad_PointFilter;
+        case SectorTextureFilter::Bilinear:
+            return engine::TextureLoad_BilinearFilter;
+    }
+    return engine::TextureLoad_BilinearFilter;
+}
+
+const char* SectorTextureFilterName(SectorTextureFilter filter)
+{
+    switch (filter) {
+        case SectorTextureFilter::Point:
+            return "point";
+        case SectorTextureFilter::Bilinear:
+            return "bilinear";
+    }
+    return "bilinear";
+}
+
 EffectiveEdgeSettings GetEffectiveEdgeSettings(const SectorDefinition& sector, int edgeIndex)
 {
     EffectiveEdgeSettings settings;
@@ -556,15 +659,13 @@ bool LoadSectorMap(const char* path, SectorMap& outMap)
     }
 
     for (const auto& item : texturesIt->items()) {
-        if (!item.value().is_string()) {
-            std::fprintf(stderr, "[SectorDemo WARNING] Ignoring non-string texture path for id '%s'\n", item.key().c_str());
-            continue;
+        SectorTextureDefinition definition;
+        if (ReadTextureDefinition(item.key(), item.value(), definition)) {
+            outMap.texturesById.emplace(item.key(), std::move(definition));
         }
-
-        outMap.texturePathsById.emplace(item.key(), item.value().get<std::string>());
     }
 
-    if (outMap.texturePathsById.empty()) {
+    if (outMap.texturesById.empty()) {
         std::fprintf(stderr, "[SectorDemo ERROR] Sector map has no valid textures\n");
         return false;
     }
@@ -667,7 +768,7 @@ bool LoadSectorMap(const char* path, SectorMap& outMap)
             "[SectorDemo] Loaded sector map '%s': %zu sectors, %zu textures\n",
             path,
             outMap.sectors.size(),
-            outMap.texturePathsById.size()
+            outMap.texturesById.size()
     );
 
     return !outMap.sectors.empty();
@@ -682,8 +783,16 @@ bool SaveSectorMap(const char* path, const SectorMap& map)
 
     Json root;
     root["textures"] = Json::object();
-    for (const auto& texture : map.texturePathsById) {
-        root["textures"][texture.first] = texture.second;
+    for (const std::string& id : SortedSectorTextureIds(map)) {
+        const SectorTextureDefinition* texture = FindSectorTexture(map, id);
+        if (texture == nullptr) {
+            continue;
+        }
+
+        Json textureJson;
+        textureJson["path"] = texture->path;
+        textureJson["filter"] = SectorTextureFilterName(texture->filter);
+        root["textures"][id] = std::move(textureJson);
     }
 
     root["sectors"] = Json::array();
@@ -756,7 +865,7 @@ bool SaveSectorMap(const char* path, const SectorMap& map)
             "[SectorDemo] Saved sector map '%s': %zu sectors, %zu textures\n",
             path,
             map.sectors.size(),
-            map.texturePathsById.size()
+            map.texturesById.size()
     );
     return true;
 }

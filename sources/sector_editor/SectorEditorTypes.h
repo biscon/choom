@@ -96,6 +96,23 @@ struct TexturePickerState {
     std::vector<const char*> optionLabels;
 };
 
+struct AddMapTextureState {
+    bool open = false;
+    bool scanned = false;
+    std::string scanMessage;
+    engine::UIScrollState scroll;
+    std::vector<std::string> paths;
+    std::vector<const char*> optionLabels;
+    int selectedPathIndex = -1;
+    char textureIdBuffer[96] = {};
+    SectorTextureFilter filter = SectorTextureFilter::Bilinear;
+    std::string validationMessage;
+    engine::AssetScopeHandle previewScope = engine::NullAssetScopeHandle();
+    engine::TextureHandle previewTexture = engine::NullTextureHandle();
+    std::string previewPath;
+    SectorTextureFilter previewFilter = SectorTextureFilter::Bilinear;
+};
+
 struct VertexDragState {
     bool active = false;
     SectorPoint originalPoint = {};
@@ -150,6 +167,7 @@ struct SectorEditorState {
     engine::AssetScopeHandle editorTextureScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;
     TexturePickerState texturePicker;
+    AddMapTextureState addMapTexture;
 };
 
 struct SectorEditorUiState {

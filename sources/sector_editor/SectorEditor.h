@@ -90,6 +90,12 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawAddMapTextureModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
     void DrawStatusPanel(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -119,6 +125,13 @@ private:
     void RefreshDefaultTextures();
     void RefreshEditorTextureAssets(engine::AssetManager& assets);
     engine::TextureHandle EditorTextureHandleForId(const std::string& textureId) const;
+    void OpenAddMapTextureModal(engine::AssetManager& assets);
+    void CloseAddMapTextureModal(engine::AssetManager& assets);
+    void RefreshAddMapTextureScan();
+    void SelectAddMapTexturePath(int pathIndex);
+    void RefreshAddMapTexturePreview(engine::AssetManager& assets);
+    bool ValidateAddMapTextureId(std::string& error) const;
+    bool AddSelectedMapTexture(engine::AssetManager& assets);
     std::string GenerateUniqueSectorId() const;
     void SyncSelectedSectorIdBuffer();
     void SelectSector(int sectorIndex);

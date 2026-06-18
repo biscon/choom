@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <utility>
@@ -62,6 +63,106 @@ std::string ResolveEditorAssetPath(const std::string& path)
         return std::string(ASSETS_PATH) + path.substr(7);
     }
     return path;
+}
+
+bool HasPngExtension(const std::filesystem::path& path)
+{
+    std::string extension = path.extension().string();
+    for (char& ch : extension) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return extension == ".png";
+}
+
+std::vector<std::string> ScanAssetImagePngs(std::string& message)
+{
+    std::vector<std::string> paths;
+    message.clear();
+
+    const std::filesystem::path assetsRoot = std::filesystem::path(ASSETS_PATH);
+    const std::filesystem::path imagesRoot = assetsRoot / "images";
+    std::error_code ec;
+    if (!std::filesystem::exists(imagesRoot, ec) || !std::filesystem::is_directory(imagesRoot, ec)) {
+        message = "assets/images was not found";
+        return paths;
+    }
+
+    std::filesystem::recursive_directory_iterator it(imagesRoot, std::filesystem::directory_options::skip_permission_denied, ec);
+    const std::filesystem::recursive_directory_iterator end;
+    if (ec) {
+        message = TextFormat("Could not scan assets/images: %s", ec.message().c_str());
+        return paths;
+    }
+
+    for (; it != end; it.increment(ec)) {
+        if (ec) {
+            message = TextFormat("Stopped scan early: %s", ec.message().c_str());
+            break;
+        }
+
+        const std::filesystem::directory_entry& entry = *it;
+        if (!entry.is_regular_file(ec) || ec || !HasPngExtension(entry.path())) {
+            ec.clear();
+            continue;
+        }
+
+        std::filesystem::path relativePath = std::filesystem::relative(entry.path(), assetsRoot, ec);
+        if (ec) {
+            ec.clear();
+            continue;
+        }
+        paths.push_back(std::string{"assets/"} + relativePath.generic_string());
+    }
+
+    std::sort(paths.begin(), paths.end());
+    if (paths.empty() && message.empty()) {
+        message = "No PNG files found under assets/images";
+    }
+    return paths;
+}
+
+bool IsValidTextureIdCharacter(char ch)
+{
+    return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_' || ch == '-';
+}
+
+bool IsValidTextureId(const std::string& id)
+{
+    if (id.empty()) {
+        return false;
+    }
+
+    for (char ch : id) {
+        if (!IsValidTextureIdCharacter(ch)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string GeneratedTextureIdBase(const std::string& assetPath)
+{
+    std::string stem = std::filesystem::path(assetPath).stem().string();
+    std::string id;
+    id.reserve(stem.size());
+    bool lastWasUnderscore = false;
+    for (char ch : stem) {
+        const unsigned char value = static_cast<unsigned char>(ch);
+        if (std::isalnum(value)) {
+            id.push_back(static_cast<char>(std::tolower(value)));
+            lastWasUnderscore = false;
+        } else if (ch == '-' || ch == '_' || std::isspace(value)) {
+            if (!lastWasUnderscore && !id.empty()) {
+                id.push_back('_');
+                lastWasUnderscore = true;
+            }
+        }
+    }
+
+    while (!id.empty() && id.back() == '_') {
+        id.pop_back();
+    }
+    return id.empty() ? "texture" : id;
 }
 
 const char* ToolName(SectorEditorTool tool)
@@ -550,6 +651,9 @@ void SectorEditor::Shutdown(engine::AssetManager& assets)
     if (!engine::IsNull(state.editorTextureScope)) {
         assets.UnloadScope(state.editorTextureScope);
     }
+    if (!engine::IsNull(state.addMapTexture.previewScope)) {
+        assets.UnloadScope(state.addMapTexture.previewScope);
+    }
     state = SectorEditorState{};
     uiState = SectorEditorUiState{};
     canvasRect = {};
@@ -567,7 +671,7 @@ void SectorEditor::Update(engine::Input& input, float dt)
     }
 
     canvasRect = BuildCanvasRect();
-    if (state.texturePicker.open) {
+    if (state.texturePicker.open || state.addMapTexture.open) {
         return;
     }
     UpdateHoverAndMouse(input);
@@ -630,6 +734,12 @@ void SectorEditor::RenderUI(
     }
 
     engine::BeginUI(ui, input);
+    if (state.addMapTexture.open) {
+        DrawAddMapTextureModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
     if (state.texturePicker.open) {
         DrawTexturePickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
@@ -640,9 +750,10 @@ void SectorEditor::RenderUI(
     DrawToolsPanel(ui, config, input, assets, font);
     DrawSectorsPanel(ui, config, input, assets, font);
     DrawStatusPanel(ui, config, assets, font);
+    DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawTexturePickerModal(ui, config, input, assets, font);
     uiState.keyboardCaptured = ui.focusedId != 0;
-    if (state.texturePicker.open) {
+    if (state.texturePicker.open || state.addMapTexture.open) {
         uiState.keyboardCaptured = true;
     }
     engine::EndUI(ui, config, input, assets);
@@ -2298,6 +2409,11 @@ void SectorEditor::DrawToolsPanel(
     }
     y += rowH + gap;
 
+    if (engine::Button(ui, config, input, assets, "sector_editor_add_map_texture", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Add Map Texture")) {
+        OpenAddMapTextureModal(assets);
+    }
+    y += rowH + gap;
+
     engine::Separator(config, Rectangle{panel.contentRect.x, y, panel.contentRect.width, 12.0f});
     y += 22.0f;
 
@@ -2724,6 +2840,161 @@ void SectorEditor::DrawSectorsPanel(
     engine::EndPanel(ui, config, panel);
 }
 
+void SectorEditor::DrawAddMapTextureModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    AddMapTextureState& modalState = state.addMapTexture;
+    if (!modalState.open) {
+        return;
+    }
+
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [this, &assets](engine::InputEvent& event) {
+                if (event.key.key == KEY_ESCAPE) {
+                    CloseAddMapTextureModal(assets);
+                    engine::ConsumeEvent(event);
+                } else if (event.key.key == KEY_ENTER || event.key.key == KEY_KP_ENTER) {
+                    AddSelectedMapTexture(assets);
+                    engine::ConsumeEvent(event);
+                }
+            }
+    );
+    if (!modalState.open) {
+        return;
+    }
+
+    RefreshAddMapTexturePreview(assets);
+
+    DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 135});
+
+    const Rectangle modal{
+            (EditorWidth - 880.0f) * 0.5f,
+            (EditorHeight - 660.0f) * 0.5f,
+            880.0f,
+            660.0f
+    };
+    DrawRectangleRec(modal, Color{20, 24, 32, 245});
+    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
+
+    float y = modal.y + 18.0f;
+    engine::Text(config, assets, Rectangle{modal.x + 22.0f, y, modal.width - 44.0f, 36.0f}, font, "Add Map Texture");
+    y += 50.0f;
+
+    const Rectangle listBounds{modal.x + 22.0f, y, 380.0f, 470.0f};
+    const Vector2 contentSize{
+            listBounds.width,
+            std::max(listBounds.height, config.listItemHeight * static_cast<float>(modalState.optionLabels.size()))
+    };
+    engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
+            ui,
+            config,
+            input,
+            "sector_editor_add_texture_scroll",
+            listBounds,
+            contentSize,
+            modalState.scroll
+    );
+    if (!modalState.optionLabels.empty()) {
+        const int oldSelection = modalState.selectedPathIndex;
+        engine::List(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_add_texture_list",
+                Rectangle{0.0f, 0.0f, listBounds.width - (scroll.scrollY ? config.scrollbarSize : 0.0f), contentSize.y},
+                font,
+                modalState.optionLabels.data(),
+                modalState.optionLabels.size(),
+                modalState.selectedPathIndex
+        );
+        if (modalState.selectedPathIndex != oldSelection) {
+            SelectAddMapTexturePath(modalState.selectedPathIndex);
+        }
+    }
+    engine::EndScrollArea(ui, config, input, scroll, modalState.scroll);
+
+    if (!modalState.scanMessage.empty()) {
+        engine::Text(
+                config,
+                assets,
+                Rectangle{listBounds.x, listBounds.y + listBounds.height + 8.0f, listBounds.width, 34.0f},
+                font,
+                modalState.scanMessage.c_str(),
+                engine::UITextJustify::Left,
+                modalState.paths.empty() ? config.invalidColor : config.mutedTextColor
+        );
+    }
+
+    const float rightX = modal.x + 430.0f;
+    y = modal.y + 68.0f;
+    const Rectangle previewBounds{rightX, y, 410.0f, 260.0f};
+    engine::Image(config, assets, previewBounds, modalState.previewTexture);
+    y += 276.0f;
+
+    const std::string selectedPath = modalState.selectedPathIndex >= 0
+            && modalState.selectedPathIndex < static_cast<int>(modalState.paths.size())
+            ? modalState.paths[static_cast<size_t>(modalState.selectedPathIndex)]
+            : std::string{};
+    engine::Text(config, assets, Rectangle{rightX, y, 410.0f, 68.0f}, font, TextFormat("Path: %s", selectedPath.empty() ? "<none>" : selectedPath.c_str()), engine::UITextJustify::Left, config.mutedTextColor);
+    y += 76.0f;
+
+    engine::Text(config, assets, Rectangle{rightX, y, 110.0f, 38.0f}, font, "Texture ID", engine::UITextJustify::Left, config.mutedTextColor);
+    engine::TextInput(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_add_texture_id",
+            Rectangle{rightX + 136.0f, y, 274.0f, 38.0f},
+            font,
+            modalState.textureIdBuffer,
+            sizeof(modalState.textureIdBuffer),
+            0,
+            sizeof(modalState.textureIdBuffer) - 1
+    );
+    y += 54.0f;
+
+    engine::Text(config, assets, Rectangle{rightX, y, 110.0f, 38.0f}, font, "Filtering", engine::UITextJustify::Left, config.mutedTextColor);
+    if (engine::ToolButton(ui, config, input, assets, "sector_editor_add_texture_filter_point", Rectangle{rightX + 136.0f, y, 132.0f, 38.0f}, font, "Point", modalState.filter == SectorTextureFilter::Point)) {
+        modalState.filter = SectorTextureFilter::Point;
+    }
+    if (engine::ToolButton(ui, config, input, assets, "sector_editor_add_texture_filter_bilinear", Rectangle{rightX + 278.0f, y, 132.0f, 38.0f}, font, "Bilinear", modalState.filter == SectorTextureFilter::Bilinear)) {
+        modalState.filter = SectorTextureFilter::Bilinear;
+    }
+    y += 54.0f;
+
+    std::string validation;
+    ValidateAddMapTextureId(validation);
+    modalState.validationMessage = validation;
+    if (!modalState.validationMessage.empty()) {
+        engine::Text(config, assets, Rectangle{rightX, y, 410.0f, 56.0f}, font, modalState.validationMessage.c_str(), engine::UITextJustify::Left, config.invalidColor);
+    }
+
+    const float buttonY = modal.y + modal.height - 64.0f;
+    const float buttonW = 150.0f;
+    if (engine::Button(ui, config, input, assets, "sector_editor_add_texture_add", Rectangle{modal.x + modal.width - buttonW * 2.0f - 34.0f, buttonY, buttonW, 44.0f}, font, "Add")) {
+        AddSelectedMapTexture(assets);
+    }
+    if (engine::Button(ui, config, input, assets, "sector_editor_add_texture_cancel", Rectangle{modal.x + modal.width - buttonW - 22.0f, buttonY, buttonW, 44.0f}, font, "Cancel")) {
+        CloseAddMapTextureModal(assets);
+    }
+
+    input.ForEachEvent(
+            engine::InputEventType::Any,
+            true,
+            [](engine::InputEvent& event) {
+                engine::ConsumeEvent(event);
+            }
+    );
+}
+
 void SectorEditor::DrawTexturePickerModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -2810,8 +3081,8 @@ void SectorEditor::DrawTexturePickerModal(
     engine::Image(config, assets, previewBounds, EditorTextureHandleForId(previewTextureId));
     y += 316.0f;
 
-    const auto pathIt = state.map.texturePathsById.find(previewTextureId);
-    const std::string path = pathIt == state.map.texturePathsById.end() ? std::string{} : pathIt->second;
+    const SectorTextureDefinition* previewTexture = FindSectorTexture(state.map, previewTextureId);
+    const std::string path = previewTexture == nullptr ? std::string{} : previewTexture->path;
     engine::Text(config, assets, Rectangle{modal.x + 402.0f, y, 376.0f, 34.0f}, font, TextFormat("Id: %s", previewTextureId.empty() ? "<none>" : previewTextureId.c_str()), engine::UITextJustify::Left, config.textColor);
     y += 38.0f;
     engine::Text(config, assets, Rectangle{modal.x + 402.0f, y, 376.0f, 72.0f}, font, TextFormat("Path: %s", path.empty() ? "<sector default>" : path.c_str()), engine::UITextJustify::Left, config.mutedTextColor);
@@ -3022,14 +3293,15 @@ void SectorEditor::LeavePreview3D()
 void SectorEditor::RefreshDefaultTextures()
 {
     auto findTexture = [this](const char* preferred, const std::string& fallback = std::string{}) {
-        const auto preferredIt = state.map.texturePathsById.find(preferred);
-        if (preferredIt != state.map.texturePathsById.end()) {
+        const auto preferredIt = state.map.texturesById.find(preferred);
+        if (preferredIt != state.map.texturesById.end()) {
             return preferredIt->first;
         }
         if (!fallback.empty()) {
             return fallback;
         }
-        return state.map.texturePathsById.empty() ? std::string{} : state.map.texturePathsById.begin()->first;
+        const std::vector<std::string> textureIds = SortedSectorTextureIds(state.map);
+        return textureIds.empty() ? std::string{} : textureIds.front();
     };
 
     state.defaultWallTextureId = findTexture("wall");
@@ -3047,7 +3319,7 @@ void SectorEditor::RefreshEditorTextureAssets(engine::AssetManager& assets)
     }
     state.editorTextureHandlesById.clear();
 
-    if (state.map.texturePathsById.empty()) {
+    if (state.map.texturesById.empty()) {
         return;
     }
 
@@ -3056,15 +3328,20 @@ void SectorEditor::RefreshEditorTextureAssets(engine::AssetManager& assets)
         return;
     }
 
-    for (const auto& entry : state.map.texturePathsById) {
-        const std::string resolvedPath = ResolveEditorAssetPath(entry.second);
+    for (const std::string& textureId : SortedSectorTextureIds(state.map)) {
+        const SectorTextureDefinition* texture = FindSectorTexture(state.map, textureId);
+        if (texture == nullptr) {
+            continue;
+        }
+
+        const std::string resolvedPath = ResolveEditorAssetPath(texture->path);
         state.editorTextureHandlesById.emplace(
-                entry.first,
+                texture->id,
                 assets.RequestTexture(
                         state.editorTextureScope,
-                        entry.first.c_str(),
+                        texture->id.c_str(),
                         resolvedPath.c_str(),
-                        engine::TextureLoad_BilinearFilter
+                        SectorTextureLoadFlags(texture->filter)
                 )
         );
     }
@@ -3074,6 +3351,152 @@ engine::TextureHandle SectorEditor::EditorTextureHandleForId(const std::string& 
 {
     const auto it = state.editorTextureHandlesById.find(textureId);
     return it == state.editorTextureHandlesById.end() ? engine::NullTextureHandle() : it->second;
+}
+
+void SectorEditor::OpenAddMapTextureModal(engine::AssetManager& assets)
+{
+    CloseAddMapTextureModal(assets);
+    state.addMapTexture.open = true;
+    RefreshAddMapTextureScan();
+    if (!state.addMapTexture.paths.empty()) {
+        SelectAddMapTexturePath(0);
+    }
+}
+
+void SectorEditor::CloseAddMapTextureModal(engine::AssetManager& assets)
+{
+    if (!engine::IsNull(state.addMapTexture.previewScope)) {
+        assets.UnloadScope(state.addMapTexture.previewScope);
+    }
+    state.addMapTexture = AddMapTextureState{};
+}
+
+void SectorEditor::RefreshAddMapTextureScan()
+{
+    AddMapTextureState& modalState = state.addMapTexture;
+    modalState.paths = ScanAssetImagePngs(modalState.scanMessage);
+    modalState.optionLabels.clear();
+    modalState.optionLabels.reserve(modalState.paths.size());
+    for (const std::string& path : modalState.paths) {
+        modalState.optionLabels.push_back(path.c_str());
+    }
+    modalState.scanned = true;
+    modalState.selectedPathIndex = modalState.paths.empty() ? -1 : 0;
+}
+
+void SectorEditor::SelectAddMapTexturePath(int pathIndex)
+{
+    AddMapTextureState& modalState = state.addMapTexture;
+    if (pathIndex < 0 || pathIndex >= static_cast<int>(modalState.paths.size())) {
+        modalState.selectedPathIndex = -1;
+        modalState.textureIdBuffer[0] = '\0';
+        return;
+    }
+
+    modalState.selectedPathIndex = pathIndex;
+    const std::string base = GeneratedTextureIdBase(modalState.paths[static_cast<size_t>(pathIndex)]);
+    std::string uniqueId = base;
+    int suffix = 1;
+    while (FindSectorTexture(state.map, uniqueId) != nullptr) {
+        char suffixBuffer[16] = {};
+        std::snprintf(suffixBuffer, sizeof(suffixBuffer), "_%03d", suffix);
+        uniqueId = base + suffixBuffer;
+        ++suffix;
+    }
+
+    std::snprintf(modalState.textureIdBuffer, sizeof(modalState.textureIdBuffer), "%s", uniqueId.c_str());
+    modalState.previewPath.clear();
+    modalState.previewTexture = engine::NullTextureHandle();
+}
+
+void SectorEditor::RefreshAddMapTexturePreview(engine::AssetManager& assets)
+{
+    AddMapTextureState& modalState = state.addMapTexture;
+    const bool hasSelection = modalState.selectedPathIndex >= 0
+            && modalState.selectedPathIndex < static_cast<int>(modalState.paths.size());
+    if (!hasSelection) {
+        modalState.previewTexture = engine::NullTextureHandle();
+        modalState.previewPath.clear();
+        return;
+    }
+
+    const std::string& path = modalState.paths[static_cast<size_t>(modalState.selectedPathIndex)];
+    if (modalState.previewTexture != engine::NullTextureHandle()
+            && modalState.previewPath == path
+            && modalState.previewFilter == modalState.filter) {
+        return;
+    }
+
+    if (!engine::IsNull(modalState.previewScope)) {
+        assets.UnloadScope(modalState.previewScope);
+        modalState.previewScope = engine::NullAssetScopeHandle();
+    }
+    modalState.previewTexture = engine::NullTextureHandle();
+    modalState.previewPath = path;
+    modalState.previewFilter = modalState.filter;
+
+    modalState.previewScope = assets.CreateScope("sector_editor_add_texture_preview");
+    if (engine::IsNull(modalState.previewScope)) {
+        return;
+    }
+
+    const std::string resolvedPath = ResolveEditorAssetPath(path);
+    modalState.previewTexture = assets.RequestTexture(
+            modalState.previewScope,
+            "selected_preview",
+            resolvedPath.c_str(),
+            SectorTextureLoadFlags(modalState.filter)
+    );
+}
+
+bool SectorEditor::ValidateAddMapTextureId(std::string& error) const
+{
+    error.clear();
+    const AddMapTextureState& modalState = state.addMapTexture;
+    if (modalState.selectedPathIndex < 0 || modalState.selectedPathIndex >= static_cast<int>(modalState.paths.size())) {
+        error = "Select a PNG file";
+        return false;
+    }
+
+    const std::string id = modalState.textureIdBuffer;
+    if (id.empty()) {
+        error = "Texture ID is required";
+        return false;
+    }
+    if (!IsValidTextureId(id)) {
+        error = "Texture ID may only contain letters, digits, underscores, and dashes";
+        return false;
+    }
+    if (FindSectorTexture(state.map, id) != nullptr) {
+        error = "Texture ID already exists";
+        return false;
+    }
+    return true;
+}
+
+bool SectorEditor::AddSelectedMapTexture(engine::AssetManager& assets)
+{
+    std::string error;
+    if (!ValidateAddMapTextureId(error)) {
+        state.addMapTexture.validationMessage = error;
+        return false;
+    }
+
+    AddMapTextureState& modalState = state.addMapTexture;
+    const std::string id = modalState.textureIdBuffer;
+    const std::string path = modalState.paths[static_cast<size_t>(modalState.selectedPathIndex)];
+
+    SectorTextureDefinition definition;
+    definition.id = id;
+    definition.path = path;
+    definition.filter = modalState.filter;
+    state.map.texturesById.emplace(id, std::move(definition));
+
+    RefreshEditorTextureAssets(assets);
+    state.dirty = true;
+    statusText = TextFormat("Added texture %s", id.c_str());
+    CloseAddMapTextureModal(assets);
+    return true;
 }
 
 bool SectorEditor::PointInSectorPolygon(Vector2 mapPoint, const SectorDefinition& sector) const
@@ -3533,13 +3956,8 @@ void SectorEditor::OpenTexturePicker(TexturePickerTargetKind target, int sectorI
         picker.textureIds.push_back(std::string{});
     }
 
-    for (const auto& entry : state.map.texturePathsById) {
-        picker.textureIds.push_back(entry.first);
-    }
-    std::sort(
-            picker.textureIds.begin() + (TargetAllowsSectorDefault(target) ? 1 : 0),
-            picker.textureIds.end()
-    );
+    const std::vector<std::string> textureIds = SortedSectorTextureIds(state.map);
+    picker.textureIds.insert(picker.textureIds.end(), textureIds.begin(), textureIds.end());
 
     const std::string currentTexture = CurrentTextureForTarget(target, sectorIndex, edgeIndex);
     const SectorEdgeOverride* edgeOverride = FindEdgeOverride(sectorIndex, edgeIndex);

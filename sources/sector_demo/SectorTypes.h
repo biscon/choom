@@ -60,8 +60,19 @@ struct SectorDefinition {
     std::vector<SectorEdgeOverride> edgeOverrides;
 };
 
+enum class SectorTextureFilter {
+    Point,
+    Bilinear
+};
+
+struct SectorTextureDefinition {
+    std::string id;
+    std::string path;
+    SectorTextureFilter filter = SectorTextureFilter::Bilinear;
+};
+
 struct SectorMap {
-    std::unordered_map<std::string, std::string> texturePathsById;
+    std::unordered_map<std::string, SectorTextureDefinition> texturesById;
     std::vector<SectorDefinition> sectors;
     Vector3 playerStartPosition = {0.0f, 1.6f, 0.0f};
     float playerStartYawRadians = 0.0f;
