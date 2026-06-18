@@ -140,6 +140,27 @@ bool IsValidTextureId(const std::string& id)
     return true;
 }
 
+float ClampAmbientIntensity(float value)
+{
+    return std::clamp(value, 0.0f, 1.0f);
+}
+
+int ClampAmbientChannel(int value)
+{
+    return std::clamp(value, 0, 255);
+}
+
+Color SectorAmbientPreviewColor(const SectorDefinition& sector, unsigned char alpha)
+{
+    const float intensity = ClampAmbientIntensity(sector.ambientIntensity);
+    return Color{
+            static_cast<unsigned char>(ClampAmbientChannel(static_cast<int>(std::lround(static_cast<float>(sector.ambientColor.r) * intensity)))),
+            static_cast<unsigned char>(ClampAmbientChannel(static_cast<int>(std::lround(static_cast<float>(sector.ambientColor.g) * intensity)))),
+            static_cast<unsigned char>(ClampAmbientChannel(static_cast<int>(std::lround(static_cast<float>(sector.ambientColor.b) * intensity)))),
+            alpha
+    };
+}
+
 std::string GeneratedTextureIdBase(const std::string& assetPath)
 {
     std::string stem = std::filesystem::path(assetPath).stem().string();
@@ -2502,6 +2523,11 @@ void SectorEditor::DrawSectorsPanel(
         height += rowH + gap; // Delete.
         height += rowH + gap; // Floor.
         height += rowH + gap; // Ceiling.
+        height += 18.0f; // Lighting separator.
+        height += 30.0f; // Lighting title.
+        height += rowH + gap; // Ambient intensity.
+        height += 3.0f * (rowH + gap); // Ambient RGB.
+        height += 36.0f + gap; // Ambient swatch.
 
         if (state.selectedEdgeIndex < 0) {
             height += 4.0f;
@@ -2609,6 +2635,76 @@ void SectorEditor::DrawSectorsPanel(
         statusText = TextFormat("Edited sector %s", sector.id.c_str());
     }
     y += rowH + gap;
+
+    engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
+    y += 18.0f;
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Lighting", engine::UITextJustify::Left, config.textColor);
+    y += 30.0f;
+
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, "Intensity:", engine::UITextJustify::Right, config.mutedTextColor);
+    float ambientIntensity = ClampAmbientIntensity(sector.ambientIntensity);
+    const engine::UINumericInputResult ambientIntensityResult = engine::FloatInput(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_ambient_intensity",
+            Rectangle{numberLabelW, y, numberFieldW, rowH},
+            font,
+            ambientIntensity,
+            uiState.ambientIntensityInput,
+            0.0f,
+            1.0f,
+            3
+    );
+    if (ambientIntensityResult.changed && ambientIntensity != sector.ambientIntensity) {
+        sector.ambientIntensity = ambientIntensity;
+        state.dirty = true;
+        statusText = "Updated sector ambient intensity";
+    }
+    y += rowH + gap;
+
+    auto drawAmbientChannel = [&](const char* id, const char* label, unsigned char& channel) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
+        int value = static_cast<int>(channel);
+        engine::UIIntInputState& inputState = (label[0] == 'R')
+                ? uiState.ambientRedInput
+                : (label[0] == 'G') ? uiState.ambientGreenInput : uiState.ambientBlueInput;
+        const engine::UINumericInputResult result = engine::IntInput(
+                ui,
+                config,
+                input,
+                assets,
+                id,
+                Rectangle{numberLabelW, y, contentW - numberLabelW, rowH},
+                font,
+                value,
+                inputState,
+                0,
+                255,
+                1
+        );
+        if (result.changed && value != static_cast<int>(channel)) {
+            channel = static_cast<unsigned char>(ClampAmbientChannel(value));
+            sector.ambientColor.a = 255;
+            state.dirty = true;
+            statusText = "Updated sector ambient color";
+        }
+        y += rowH + gap;
+    };
+    drawAmbientChannel("sector_editor_ambient_r", "R:", sector.ambientColor.r);
+    drawAmbientChannel("sector_editor_ambient_g", "G:", sector.ambientColor.g);
+    drawAmbientChannel("sector_editor_ambient_b", "B:", sector.ambientColor.b);
+
+    const Rectangle swatch{
+            scroll.viewport.x + numberLabelW,
+            scroll.viewport.y - uiState.inspectorScroll.offset.y + y + 2.0f,
+            std::min(120.0f, contentW - numberLabelW),
+            28.0f
+    };
+    DrawRectangleRec(swatch, SectorAmbientPreviewColor(sector, 255));
+    DrawRectangleLinesEx(swatch, 1.0f, config.borderColor);
+    y += 36.0f + gap;
 
     auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TexturePickerTargetKind target, int edgeIndex, bool overridden) {
         const float buttonW = 38.0f;
@@ -3612,6 +3708,10 @@ void SectorEditor::SelectSector(int sectorIndex)
     state.selectedSectorIndex = sectorIndex;
     state.selectedEdgeIndex = -1;
     uiState.inspectorScroll.offset = Vector2{};
+    uiState.ambientIntensityInput = engine::UIFloatInputState{};
+    uiState.ambientRedInput = engine::UIIntInputState{};
+    uiState.ambientGreenInput = engine::UIIntInputState{};
+    uiState.ambientBlueInput = engine::UIIntInputState{};
     SyncSelectedSectorIdBuffer();
 }
 
@@ -3620,6 +3720,10 @@ void SectorEditor::SelectEdge(int sectorIndex, int edgeIndex)
     state.selectedSectorIndex = sectorIndex;
     state.selectedEdgeIndex = edgeIndex;
     uiState.inspectorScroll.offset = Vector2{};
+    uiState.ambientIntensityInput = engine::UIFloatInputState{};
+    uiState.ambientRedInput = engine::UIIntInputState{};
+    uiState.ambientGreenInput = engine::UIIntInputState{};
+    uiState.ambientBlueInput = engine::UIIntInputState{};
     SyncSelectedSectorIdBuffer();
 }
 
@@ -3680,6 +3784,10 @@ void SectorEditor::ClearSelection()
     state.selectedEdgeIndex = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     ResetSurface3DUiState();
+    uiState.ambientIntensityInput = engine::UIFloatInputState{};
+    uiState.ambientRedInput = engine::UIIntInputState{};
+    uiState.ambientGreenInput = engine::UIIntInputState{};
+    uiState.ambientBlueInput = engine::UIIntInputState{};
     uiState.inspectorScroll.offset = Vector2{};
     SyncSelectedSectorIdBuffer();
 }

@@ -44,10 +44,41 @@ The sector editor is a 2D editor for `SectorMap` JSON data with an integrated
   with compact `>` buttons. The editor opens a centered modal texture picker instead
   of using a dropdown, so large texture lists can scroll without clipping off
   screen.
+- The `Lighting` section edits the selected sector's ambient intensity and RGB
+  tint. The swatch shows the final clamped tint that will be applied to generated
+  3D mesh vertices.
 - New sectors still receive generated IDs such as `sector_001`, using the first
   available generated ID that does not collide with existing renamed sectors.
 - Deletion has no undo/redo yet. Reloading before saving can recover unsaved
   deletes; saving persists the current sector list.
+
+## Sector Ambient Lighting
+
+Sector ambient lighting is the first simple lighting layer for mood, darkness,
+and local color tinting. It is stored per sector and applied when 3D sector
+meshes are generated.
+
+- `ambientIntensity`: range `0.0` to `1.0`; `1.0` keeps normal texture
+  brightness and `0.0` makes the surface black for this phase.
+- `ambientColor`: RGB tint stored as three `0..255` channel values.
+- Defaults are white `{255, 255, 255}` and intensity `1.0`.
+
+Generated floor, ceiling, solid wall, lower portal wall, and upper portal wall
+vertices receive `ambientColor * ambientIntensity`. Portal wall spans use the
+owning directed sector side's lighting, so two sides of a shared portal may have
+different tints. This lighting only tints/darkens the base texture; it is not
+dynamic lighting, shadows, GI, lightmaps, probes, SSAO, PBR, or fog. Future
+lighting work may add static lightmaps and cheap dynamic lights.
+
+Sector JSON saves lighting fields on each sector:
+
+```json
+"ambientColor": [90, 130, 115],
+"ambientIntensity": 0.35
+```
+
+Older maps without these fields still load with the default white/full-bright
+ambient lighting.
 
 ## Edge Inspector
 
@@ -227,5 +258,5 @@ unloaded on editor shutdown, and rebuilt every time `3D Mode` is clicked or a
   undo/redo.
 - No external texture importing, texture copying, texture removal, unused
   texture cleanup, normal/material maps, thumbnail grid browser, texture search,
-  3D texture painting, 3D geometry editing, doors, lifts, lighting, mesh
-  culling, or file dialog.
+  3D texture painting, 3D geometry editing, doors, lifts, dynamic lights,
+  shadowing, mesh culling, or file dialog.

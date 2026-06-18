@@ -112,6 +112,59 @@ bool ReadVector2Field(const Json& object, const char* field, Vector2& out)
     return true;
 }
 
+int ClampColorChannel(int value)
+{
+    return std::clamp(value, 0, 255);
+}
+
+float ClampAmbientIntensity(float value)
+{
+    return std::clamp(value, 0.0f, 1.0f);
+}
+
+void ReadAmbientColorField(const Json& sectorJson, SectorDefinition& sector)
+{
+    const auto it = sectorJson.find("ambientColor");
+    if (it == sectorJson.end()) {
+        return;
+    }
+
+    if (!it->is_array() || it->size() != 3 || !(*it)[0].is_number() || !(*it)[1].is_number() || !(*it)[2].is_number()) {
+        std::fprintf(
+                stderr,
+                "[SectorDemo WARNING] Ignoring malformed ambientColor in sector '%s'\n",
+                sector.id.c_str()
+        );
+        return;
+    }
+
+    sector.ambientColor = Color{
+            static_cast<unsigned char>(ClampColorChannel(static_cast<int>(std::lround((*it)[0].get<float>())))),
+            static_cast<unsigned char>(ClampColorChannel(static_cast<int>(std::lround((*it)[1].get<float>())))),
+            static_cast<unsigned char>(ClampColorChannel(static_cast<int>(std::lround((*it)[2].get<float>())))),
+            255
+    };
+}
+
+void ReadAmbientIntensityField(const Json& sectorJson, SectorDefinition& sector)
+{
+    const auto it = sectorJson.find("ambientIntensity");
+    if (it == sectorJson.end()) {
+        return;
+    }
+
+    if (!it->is_number()) {
+        std::fprintf(
+                stderr,
+                "[SectorDemo WARNING] Ignoring malformed ambientIntensity in sector '%s'\n",
+                sector.id.c_str()
+        );
+        return;
+    }
+
+    sector.ambientIntensity = ClampAmbientIntensity(it->get<float>());
+}
+
 bool HasTexture(const SectorMap& map, const std::string& id)
 {
     return FindSectorTexture(map, id) != nullptr;
@@ -712,6 +765,8 @@ bool LoadSectorMap(const char* path, SectorMap& outMap)
         sector.wallTextureId = sectorJson.value("wallTex", defaultWall);
         sector.lowerWallTextureId = sectorJson.value("lowerWallTex", sector.wallTextureId);
         sector.upperWallTextureId = sectorJson.value("upperWallTex", sector.wallTextureId);
+        ReadAmbientColorField(sectorJson, sector);
+        ReadAmbientIntensityField(sectorJson, sector);
         ReadSurfaceUvField(sector.id.c_str(), sectorJson, "floorUvScale", sector.floorUv.uvScale, sector.floorUv.hasUvScale);
         ReadSurfaceUvField(sector.id.c_str(), sectorJson, "floorUvOffset", sector.floorUv.uvOffset, sector.floorUv.hasUvOffset);
         ReadSurfaceUvField(sector.id.c_str(), sectorJson, "ceilingUvScale", sector.ceilingUv.uvScale, sector.ceilingUv.hasUvScale);
@@ -810,6 +865,12 @@ bool SaveSectorMap(const char* path, const SectorMap& map)
         sectorJson["wallTex"] = sector.wallTextureId;
         sectorJson["lowerWallTex"] = sector.lowerWallTextureId;
         sectorJson["upperWallTex"] = sector.upperWallTextureId;
+        sectorJson["ambientColor"] = Json::array({
+                static_cast<int>(sector.ambientColor.r),
+                static_cast<int>(sector.ambientColor.g),
+                static_cast<int>(sector.ambientColor.b)
+        });
+        sectorJson["ambientIntensity"] = ClampAmbientIntensity(sector.ambientIntensity);
         WriteSurfaceUvFields(sectorJson, "floorUvScale", "floorUvOffset", sector.floorUv);
         WriteSurfaceUvFields(sectorJson, "ceilingUvScale", "ceilingUvOffset", sector.ceilingUv);
         if (!sector.edgeOverrides.empty()) {

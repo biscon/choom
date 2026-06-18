@@ -5,6 +5,7 @@
 
 #include <raylib.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -33,6 +34,7 @@ struct SurfaceVertex {
     Vector3 position = {};
     Vector3 normal = {};
     Vector2 uv = {};
+    Color color = WHITE;
 };
 
 struct BatchBuilder {
@@ -169,6 +171,22 @@ Vector2 ApplyUvSettings(Vector2 baseUv, Vector2 uvScale, Vector2 uvOffset)
     };
 }
 
+unsigned char ClampColorByte(float value)
+{
+    return static_cast<unsigned char>(std::clamp(static_cast<int>(std::lround(value)), 0, 255));
+}
+
+Color MakeSectorVertexColor(const SectorDefinition& sector)
+{
+    const float intensity = std::clamp(sector.ambientIntensity, 0.0f, 1.0f);
+    return Color{
+            ClampColorByte(static_cast<float>(sector.ambientColor.r) * intensity),
+            ClampColorByte(static_cast<float>(sector.ambientColor.g) * intensity),
+            ClampColorByte(static_cast<float>(sector.ambientColor.b) * intensity),
+            255
+    };
+}
+
 void EmitFlatSectorSurface(
         BatchBuilder& batch,
         const SectorDefinition& sector,
@@ -178,6 +196,7 @@ void EmitFlatSectorSurface(
         Vector2 uvScale,
         Vector2 uvOffset)
 {
+    const Color color = MakeSectorVertexColor(sector);
     const EarcutPolygon polygon = BuildEarcutPolygon(sector);
     const std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
     if (indices.size() % 3 != 0) {
@@ -220,9 +239,9 @@ void EmitFlatSectorSurface(
 
         AddTriangle(
                 batch,
-                SurfaceVertex{ToWorld(pa, height), normal, ApplyUvSettings(Vector2{pa.x / TextureWorldSize, pa.y / TextureWorldSize}, uvScale, uvOffset)},
-                SurfaceVertex{ToWorld(pb, height), normal, ApplyUvSettings(Vector2{pb.x / TextureWorldSize, pb.y / TextureWorldSize}, uvScale, uvOffset)},
-                SurfaceVertex{ToWorld(pc, height), normal, ApplyUvSettings(Vector2{pc.x / TextureWorldSize, pc.y / TextureWorldSize}, uvScale, uvOffset)}
+                SurfaceVertex{ToWorld(pa, height), normal, ApplyUvSettings(Vector2{pa.x / TextureWorldSize, pa.y / TextureWorldSize}, uvScale, uvOffset), color},
+                SurfaceVertex{ToWorld(pb, height), normal, ApplyUvSettings(Vector2{pb.x / TextureWorldSize, pb.y / TextureWorldSize}, uvScale, uvOffset), color},
+                SurfaceVertex{ToWorld(pc, height), normal, ApplyUvSettings(Vector2{pc.x / TextureWorldSize, pc.y / TextureWorldSize}, uvScale, uvOffset), color}
         );
     }
 }
@@ -278,7 +297,8 @@ void AddWallQuad(
         float bottom,
         float top,
         Vector2 uvScale,
-        Vector2 uvOffset)
+        Vector2 uvOffset,
+        Color color)
 {
     if (top <= bottom + EdgeEpsilon) {
         return;
@@ -290,10 +310,10 @@ void AddWallQuad(
     const float v0 = (top - bottom) / TextureWorldSize;
     const float v1 = 0.0f;
 
-    SurfaceVertex af{ToWorld(a, bottom), normal, ApplyUvSettings(Vector2{0.0f, v0}, uvScale, uvOffset)};
-    SurfaceVertex ac{ToWorld(a, top), normal, ApplyUvSettings(Vector2{0.0f, v1}, uvScale, uvOffset)};
-    SurfaceVertex bc{ToWorld(b, top), normal, ApplyUvSettings(Vector2{u1, v1}, uvScale, uvOffset)};
-    SurfaceVertex bf{ToWorld(b, bottom), normal, ApplyUvSettings(Vector2{u1, v0}, uvScale, uvOffset)};
+    SurfaceVertex af{ToWorld(a, bottom), normal, ApplyUvSettings(Vector2{0.0f, v0}, uvScale, uvOffset), color};
+    SurfaceVertex ac{ToWorld(a, top), normal, ApplyUvSettings(Vector2{0.0f, v1}, uvScale, uvOffset), color};
+    SurfaceVertex bc{ToWorld(b, top), normal, ApplyUvSettings(Vector2{u1, v1}, uvScale, uvOffset), color};
+    SurfaceVertex bf{ToWorld(b, bottom), normal, ApplyUvSettings(Vector2{u1, v0}, uvScale, uvOffset), color};
 
     AddTriangle(batch, af, bc, ac);
     AddTriangle(batch, af, bf, bc);
@@ -311,8 +331,9 @@ Mesh CreateMeshFromBatch(const BatchBuilder& batch)
     mesh.vertices = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 3 * sizeof(float))));
     mesh.normals = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 3 * sizeof(float))));
     mesh.texcoords = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 2 * sizeof(float))));
+    mesh.colors = static_cast<unsigned char*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 4 * sizeof(unsigned char))));
 
-    if (mesh.vertices == nullptr || mesh.normals == nullptr || mesh.texcoords == nullptr) {
+    if (mesh.vertices == nullptr || mesh.normals == nullptr || mesh.texcoords == nullptr || mesh.colors == nullptr) {
         std::fprintf(stderr, "[SectorDemo ERROR] Failed to allocate mesh data for texture '%s'\n", batch.textureId.c_str());
         UnloadMesh(mesh);
         return Mesh{};
@@ -328,6 +349,10 @@ Mesh CreateMeshFromBatch(const BatchBuilder& batch)
         mesh.normals[i * 3 + 2] = vertex.normal.z;
         mesh.texcoords[i * 2 + 0] = vertex.uv.x;
         mesh.texcoords[i * 2 + 1] = vertex.uv.y;
+        mesh.colors[i * 4 + 0] = vertex.color.r;
+        mesh.colors[i * 4 + 1] = vertex.color.g;
+        mesh.colors[i * 4 + 2] = vertex.color.b;
+        mesh.colors[i * 4 + 3] = vertex.color.a;
     }
 
     UploadMesh(&mesh, false);
@@ -391,6 +416,7 @@ SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map)
 
     for (size_t sectorIndex = 0; sectorIndex < map.sectors.size(); ++sectorIndex) {
         const SectorDefinition& sector = map.sectors[sectorIndex];
+        const Color sectorColor = MakeSectorVertexColor(sector);
         AddFloor(BatchForTexture(batchIndexByTexture, batchBuilders, sector.floorTextureId), sector);
         AddCeiling(BatchForTexture(batchIndexByTexture, batchBuilders, sector.ceilingTextureId), sector);
 
@@ -407,7 +433,8 @@ SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map)
                         sector.floorZ,
                         sector.ceilingZ,
                         edgeSettings.wall.uvScale,
-                        edgeSettings.wall.uvOffset
+                        edgeSettings.wall.uvOffset,
+                        sectorColor
                 );
                 continue;
             }
@@ -421,7 +448,8 @@ SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map)
                         sector.floorZ,
                         neighbor.floorZ,
                         edgeSettings.lower.uvScale,
-                        edgeSettings.lower.uvOffset
+                        edgeSettings.lower.uvOffset,
+                        sectorColor
                 );
             }
 
@@ -433,7 +461,8 @@ SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map)
                         neighbor.ceilingZ,
                         sector.ceilingZ,
                         edgeSettings.upper.uvScale,
-                        edgeSettings.upper.uvOffset
+                        edgeSettings.upper.uvOffset,
+                        sectorColor
                 );
             }
         }

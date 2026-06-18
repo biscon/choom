@@ -175,6 +175,10 @@ struct SectorEditorUiState {
     engine::UIIntInputState gridSizeInput;
     engine::UIFloatInputState floorInput;
     engine::UIFloatInputState ceilingInput;
+    engine::UIFloatInputState ambientIntensityInput;
+    engine::UIIntInputState ambientRedInput;
+    engine::UIIntInputState ambientGreenInput;
+    engine::UIIntInputState ambientBlueInput;
     engine::UIFloatInputState edgeUvScaleUInput;
     engine::UIFloatInputState edgeUvScaleVInput;
     engine::UIFloatInputState edgeUvOffsetUInput;

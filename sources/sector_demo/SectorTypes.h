@@ -55,6 +55,8 @@ struct SectorDefinition {
     std::string wallTextureId;
     std::string lowerWallTextureId;
     std::string upperWallTextureId;
+    Color ambientColor = WHITE;
+    float ambientIntensity = 1.0f;
     SectorSurfaceUvOverride floorUv;
     SectorSurfaceUvOverride ceilingUv;
     std::vector<SectorEdgeOverride> edgeOverrides;
