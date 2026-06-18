@@ -2,6 +2,7 @@
 
 #include "engine/assets/TextureLoadFlags.h"
 #include "sector_demo/SectorMeshBuilder.h"
+#include "sector_demo/SectorMap.h"
 
 #include <raylib.h>
 #include <raymath.h>
@@ -40,7 +41,7 @@ bool SectorMeshPreview::Rebuild(
         return false;
     }
 
-    if (map.texturePathsById.empty()) {
+    if (map.texturesById.empty()) {
         error = "Preview failed: missing texture table";
         return false;
     }
@@ -51,15 +52,20 @@ bool SectorMeshPreview::Rebuild(
         return false;
     }
 
-    for (const auto& entry : map.texturePathsById) {
-        const std::string resolvedPath = ResolveAssetPath(entry.second);
+    for (const std::string& textureId : SortedSectorTextureIds(map)) {
+        const SectorTextureDefinition* texture = FindSectorTexture(map, textureId);
+        if (texture == nullptr) {
+            continue;
+        }
+
+        const std::string resolvedPath = ResolveAssetPath(texture->path);
         engine::TextureHandle handle = assets.RequestTexture(
                 assetScope,
-                entry.first.c_str(),
+                texture->id.c_str(),
                 resolvedPath.c_str(),
-                engine::TextureLoad_BilinearFilter
+                SectorTextureLoadFlags(texture->filter)
         );
-        textureHandlesById.emplace(entry.first, handle);
+        textureHandlesById.emplace(texture->id, handle);
     }
 
     meshes = BuildSectorMeshes(map);

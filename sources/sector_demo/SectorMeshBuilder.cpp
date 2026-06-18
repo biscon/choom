@@ -287,8 +287,8 @@ void AddWallQuad(
     const Vector3 normal = WallNormal(a, b);
     const float length = EdgeLength(a, b);
     const float u1 = length / TextureWorldSize;
-    const float v0 = bottom / TextureWorldSize;
-    const float v1 = top / TextureWorldSize;
+    const float v0 = (top - bottom) / TextureWorldSize;
+    const float v1 = 0.0f;
 
     SurfaceVertex af{ToWorld(a, bottom), normal, ApplyUvSettings(Vector2{0.0f, v0}, uvScale, uvOffset)};
     SurfaceVertex ac{ToWorld(a, top), normal, ApplyUvSettings(Vector2{0.0f, v1}, uvScale, uvOffset)};
