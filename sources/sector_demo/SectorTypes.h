@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/assets/AssetHandles.h"
+#include "sector_demo/SectorUnits.h"
 
 #include <raylib.h>
 
@@ -75,17 +76,17 @@ struct SectorTextureDefinition {
 
 struct SectorStaticPointLight {
     std::string id;
-    Vector3 position = {0.0f, 1.8f, 0.0f};
+    Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
     Color color = WHITE;
     float intensity = 1.0f;
-    float radius = 8.0f;
+    float radius = SectorWorldToAuthoringDistance(8.0f);
     float sourceRadius = 0.0f;
 };
 
 struct SectorLightmapBakeSettings {
-    float ambientOcclusionRadius = 1.25f;
+    float ambientOcclusionRadius = SectorWorldToAuthoringDistance(1.25f);
     float ambientOcclusionStrength = 0.55f;
-    float indirectBounceRadius = 4.0f;
+    float indirectBounceRadius = SectorWorldToAuthoringDistance(4.0f);
     float indirectBounceStrength = 0.20f;
 };
 
@@ -102,7 +103,7 @@ struct SectorMap {
     std::vector<SectorStaticPointLight> staticLights;
     SectorLightmapBakeSettings lightmapSettings;
     SectorLightmapMetadata bakedLightmap;
-    Vector3 playerStartPosition = {0.0f, 1.6f, 0.0f};
+    Vector3 playerStartPosition = {0.0f, SectorWorldToAuthoringDistance(1.6f), 0.0f};
     float playerStartYawRadians = 0.0f;
 };
 

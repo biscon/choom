@@ -6,11 +6,22 @@ The sector editor is a 2D editor for `SectorMap` JSON data with an integrated
 
 ## Coordinates
 
+- Sector map JSON uses authoring units. `1` authoring unit is `0.125` world
+  units.
+- Grid `8` corresponds to the previous 1-world-unit snap spacing. Grid `1`
+  enables fine 1/8-scale detail.
+- The default grid size is `8`.
 - Map `x` is horizontal.
 - Map `y` is top-down vertical and is drawn downward on screen to match the JSON
   point layout directly.
-- The view center is the map coordinate at the center of the canvas.
-- Zoom is measured in pixels per map unit.
+- The view center and zoom are calibrated to world/editor scale, while status
+  text and saved values remain authoring units.
+
+Maps authored before this calibration must multiply authored spatial values by
+eight to preserve their physical size. This includes sector points,
+floor/ceiling heights, player and light positions, light radius/source radius,
+ambient occlusion radius, and indirect bounce radius. Colors, intensities,
+texture paths/IDs/filtering, and UV scale/offset values are unchanged.
 
 ## 2D Editor Controls
 
@@ -23,10 +34,12 @@ The sector editor is a 2D editor for `SectorMap` JSON data with an integrated
 - Left click with Sector tool: add a sector point.
 - Left click with Light tool: add a baked static point light inside the clicked
   sector.
-- Left drag with Move tool: move an existing sector vertex on the snapped grid.
+- Left drag with Move tool: move a static light icon or an existing sector
+  vertex on the snapped grid.
 - Left click with Erase tool: delete the clicked light or sector.
 - Click the first point, or press `Enter`: close the pending sector.
-- Right click or `Escape`: cancel a pending sector or active vertex move.
+- Right click or `Escape`: cancel a pending sector, active light move, or active
+  vertex move.
 - `Backspace`: remove the last pending sector point.
 - `Delete`: delete the selected light or sector.
 - `Escape`: clear selection, then return to Select tool.
@@ -97,9 +110,9 @@ Static light defaults:
 
 - Color: white.
 - Intensity: `1.0`, clamped to `0.0..8.0`.
-- Radius: `8.0`, clamped to `0.1..64.0`.
-- Source radius: new lights default to `0.25`, clamped to `0.0..8.0` and capped
-  to half the light radius.
+- Radius: `64.0` authoring units, equivalent to `8.0` world units.
+- Source radius: new lights default to `2.0` authoring units, equivalent to
+  `0.25` world units, and is capped to half the light radius.
 - Generated IDs use `light_001`, `light_002`, and so on.
 
 In Select mode, clicking near a light icon selects it before sector or edge
@@ -383,10 +396,14 @@ new object format.
 
 ## Move Tool
 
-The Move tool reshapes existing sectors by dragging vertices. Hover a vertex in
-the canvas, then drag with the left mouse button. The target position always
-snaps to the grid, with nearby existing vertices used as snap targets when
-available.
+The Move tool moves static lights and reshapes existing sectors. Hover a light
+icon or vertex in the canvas, then drag with the left mouse button. The target
+position always snaps to the grid, with nearby existing vertices used as snap
+targets when moving vertices.
+
+Static lights take priority over vertices when both are under the pointer.
+Dragging a static light changes only authored X/Z. Height/Y, radius, source
+radius, intensity, and color remain edited numerically in the inspector.
 
 If multiple sector point entries share the same coordinate, they move together.
 For example, dragging a corner shared by two adjacent sectors updates both
@@ -397,9 +414,9 @@ the current map remains unchanged. Rejected cases include duplicate adjacent
 points, collapsed or zero-area sectors, self-intersections, edge crossings,
 partial shared-edge overlaps, T-junctions, and sector interior overlaps.
 
-The Move tool only moves existing vertices. It does not split edges, insert
-vertices, delete vertices, move whole sectors, create holes/islands, or provide
-undo/redo yet.
+The Move tool does not split edges, insert vertices, delete vertices, move
+whole sectors, move lights in 3D Mode, edit light height/radius handles, create
+holes/islands, or provide undo/redo yet.
 
 ## 3D Mode
 

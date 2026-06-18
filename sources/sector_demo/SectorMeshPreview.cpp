@@ -4,6 +4,7 @@
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshBuilder.h"
 #include "sector_demo/SectorMap.h"
+#include "sector_demo/SectorUnits.h"
 
 #include <raylib.h>
 #include <raymath.h>
@@ -160,7 +161,7 @@ bool SectorMeshPreview::Rebuild(
     materialLoaded = true;
 
     sectorCount = map.sectors.size();
-    position = map.playerStartPosition;
+    position = SectorAuthoringToWorldPosition(map.playerStartPosition);
     yawRadians = map.playerStartYawRadians;
     pitchRadians = 0.0f;
     mouseLookEnabled = true;

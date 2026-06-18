@@ -31,6 +31,8 @@ public:
     Vector2 SnapMapPoint(Vector2 map) const;
 
 private:
+    Vector2 CanvasWorldToScreen(Vector2 canvasWorld) const;
+    Vector2 ScreenToCanvasWorld(Vector2 screen) const;
     Rectangle BuildLeftPanelRect() const;
     Rectangle BuildRightPanelRect() const;
     Rectangle BuildBottomPanelRect() const;
@@ -43,6 +45,10 @@ private:
     void UpdateVertexDrag(engine::Input& input);
     void FinishVertexDrag();
     void CancelVertexDrag(const char* message);
+    void StartLightDrag(int lightIndex);
+    void UpdateLightDrag(engine::Input& input);
+    void FinishLightDrag();
+    void CancelLightDrag(const char* message);
     void UpdatePreview3D(engine::Input& input, float dt);
     void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingSector(const char* message);
@@ -59,6 +65,7 @@ private:
     Vector2 SelectedEdgeInwardNormal(const SectorDefinition& sector, int edgeIndex) const;
     void DrawPendingSector() const;
     void DrawVertexMoveOverlay() const;
+    void DrawLightMoveOverlay() const;
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
     void RenderPreview3D(engine::AssetManager& assets);
     void DrawPreviewSurfaceHighlights() const;

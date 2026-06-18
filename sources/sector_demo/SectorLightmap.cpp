@@ -1,6 +1,7 @@
 #include "sector_demo/SectorLightmap.h"
 
 #include "sector_demo/SectorGeneratedGeometry.h"
+#include "sector_demo/SectorUnits.h"
 
 #include <raylib.h>
 #include <raymath.h>
@@ -831,6 +832,15 @@ Vector3 EvaluateDirectLight(
     return Vector3Scale(direct, 1.0f / static_cast<float>(kDirectSoftShadowSampleCount));
 }
 
+SectorStaticPointLight MakeWorldSpaceLight(const SectorStaticPointLight& authoringLight)
+{
+    SectorStaticPointLight worldLight = authoringLight;
+    worldLight.position = SectorAuthoringToWorldPosition(authoringLight.position);
+    worldLight.radius = SectorAuthoringToWorldDistance(authoringLight.radius);
+    worldLight.sourceRadius = SectorAuthoringToWorldDistance(authoringLight.sourceRadius);
+    return worldLight;
+}
+
 float BakeAmbientOcclusion(
         const RasterHit& hit,
         int surfaceIndex,
@@ -1244,10 +1254,23 @@ bool BakeSectorLightmap(
     if (CheckBakeCancelled(callbacks, outError)) {
         return false;
     }
-    const float aoRadius = std::clamp(map.lightmapSettings.ambientOcclusionRadius, 0.05f, 16.0f);
+    const float aoRadius = std::clamp(
+            SectorAuthoringToWorldDistance(map.lightmapSettings.ambientOcclusionRadius),
+            0.05f,
+            16.0f
+    );
     const float aoStrength = std::clamp(map.lightmapSettings.ambientOcclusionStrength, 0.0f, 1.0f);
-    const float indirectBounceRadius = std::clamp(map.lightmapSettings.indirectBounceRadius, 0.05f, 16.0f);
+    const float indirectBounceRadius = std::clamp(
+            SectorAuthoringToWorldDistance(map.lightmapSettings.indirectBounceRadius),
+            0.05f,
+            16.0f
+    );
     const float indirectBounceStrength = std::clamp(map.lightmapSettings.indirectBounceStrength, 0.0f, 1.0f);
+    std::vector<SectorStaticPointLight> worldLights;
+    worldLights.reserve(map.staticLights.size());
+    for (const SectorStaticPointLight& light : map.staticLights) {
+        worldLights.push_back(MakeWorldSpaceLight(light));
+    }
     BakeRayStats stats;
     int allocatedChartRectanglePixels = 0;
 
@@ -1291,7 +1314,7 @@ bool BakeSectorLightmap(
     const auto directStart = Clock::now();
     ReportProgress(callbacks, SectorLightmapBakePhase::DirectLighting, 0, static_cast<uint32_t>(bakeTexels.size()));
     uint32_t completedTexels = 0;
-    if (!map.staticLights.empty()) {
+    if (!worldLights.empty()) {
         for (const BakeTexel& texel : bakeTexels) {
             RasterHit hit;
             hit.hit = true;
@@ -1300,7 +1323,7 @@ bool BakeSectorLightmap(
             hit.triangleIndex = texel.triangleIndex;
 
             Vector3 direct{};
-            for (const SectorStaticPointLight& light : map.staticLights) {
+            for (const SectorStaticPointLight& light : worldLights) {
                 direct = Vector3Add(direct, EvaluateDirectLight(light, hit, texel.surfaceIndex, bvh, triangles, stats));
             }
             directLightingFloat[texel.pixelIndex] = direct;
@@ -1609,37 +1632,39 @@ std::string ComputeSectorLightmapSourceHash(const SectorMap& map)
     FnvAppendInt(hash, SectorLightmapAtlasHeight);
     FnvAppendInt(hash, SectorLightmapGutterTexels);
     FnvAppendFloat(hash, SectorLightmapTexelsPerWorldUnit);
+    FnvAppendFloat(hash, kSectorWorldUnitsPerAuthoringUnit);
     FnvAppendInt(hash, kDirectSoftShadowSampleCount);
     FnvAppendInt(hash, kAmbientOcclusionSampleCount);
     FnvAppendInt(hash, kIndirectBounceSampleCount);
     FnvAppendFloat(hash, kNeutralBounceAlbedo);
-    FnvAppendFloat(hash, std::clamp(map.lightmapSettings.ambientOcclusionRadius, 0.05f, 16.0f));
+    FnvAppendFloat(hash, std::clamp(SectorAuthoringToWorldDistance(map.lightmapSettings.ambientOcclusionRadius), 0.05f, 16.0f));
     FnvAppendFloat(hash, std::clamp(map.lightmapSettings.ambientOcclusionStrength, 0.0f, 1.0f));
-    FnvAppendFloat(hash, std::clamp(map.lightmapSettings.indirectBounceRadius, 0.05f, 16.0f));
+    FnvAppendFloat(hash, std::clamp(SectorAuthoringToWorldDistance(map.lightmapSettings.indirectBounceRadius), 0.05f, 16.0f));
     FnvAppendFloat(hash, std::clamp(map.lightmapSettings.indirectBounceStrength, 0.0f, 1.0f));
 
     FnvAppendInt(hash, static_cast<int>(map.sectors.size()));
     for (const SectorDefinition& sector : map.sectors) {
         FnvAppendInt(hash, static_cast<int>(sector.points.size()));
         for (SectorPoint point : sector.points) {
-            FnvAppendFloat(hash, point.x);
-            FnvAppendFloat(hash, point.y);
+            FnvAppendFloat(hash, SectorAuthoringToWorldDistance(point.x));
+            FnvAppendFloat(hash, SectorAuthoringToWorldDistance(point.y));
         }
-        FnvAppendFloat(hash, sector.floorZ);
-        FnvAppendFloat(hash, sector.ceilingZ);
+        FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector.floorZ));
+        FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector.ceilingZ));
     }
 
     FnvAppendInt(hash, static_cast<int>(map.staticLights.size()));
     for (const SectorStaticPointLight& light : map.staticLights) {
-        FnvAppendFloat(hash, light.position.x);
-        FnvAppendFloat(hash, light.position.y);
-        FnvAppendFloat(hash, light.position.z);
+        const SectorStaticPointLight worldLight = MakeWorldSpaceLight(light);
+        FnvAppendFloat(hash, worldLight.position.x);
+        FnvAppendFloat(hash, worldLight.position.y);
+        FnvAppendFloat(hash, worldLight.position.z);
         FnvAppendInt(hash, static_cast<int>(light.color.r));
         FnvAppendInt(hash, static_cast<int>(light.color.g));
         FnvAppendInt(hash, static_cast<int>(light.color.b));
         FnvAppendFloat(hash, light.intensity);
-        FnvAppendFloat(hash, light.radius);
-        FnvAppendFloat(hash, std::min(std::clamp(light.sourceRadius, 0.0f, 8.0f), light.radius * 0.5f));
+        FnvAppendFloat(hash, worldLight.radius);
+        FnvAppendFloat(hash, std::min(std::clamp(worldLight.sourceRadius, 0.0f, 8.0f), worldLight.radius * 0.5f));
     }
 
     return HashToString(hash);

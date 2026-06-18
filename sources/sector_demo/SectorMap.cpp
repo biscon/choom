@@ -1,5 +1,6 @@
 #include "sector_demo/SectorMap.h"
 
+#include "sector_demo/SectorUnits.h"
 #include "util/json.hpp"
 
 #include <raylib.h>
@@ -129,18 +130,18 @@ float ClampLightIntensity(float value)
 
 float ClampLightRadius(float value)
 {
-    return std::clamp(value, 0.1f, 64.0f);
+    return std::clamp(value, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f));
 }
 
 float ClampLightSourceRadius(float value, float lightRadius)
 {
-    const float clamped = std::clamp(value, 0.0f, 8.0f);
+    const float clamped = std::clamp(value, 0.0f, SectorWorldToAuthoringDistance(8.0f));
     return std::min(clamped, std::max(0.0f, lightRadius * 0.5f));
 }
 
 float ClampAmbientOcclusionRadius(float value)
 {
-    return std::clamp(value, 0.05f, 16.0f);
+    return std::clamp(value, SectorWorldToAuthoringDistance(0.05f), SectorWorldToAuthoringDistance(16.0f));
 }
 
 float ClampAmbientOcclusionStrength(float value)
@@ -150,7 +151,7 @@ float ClampAmbientOcclusionStrength(float value)
 
 float ClampIndirectBounceRadius(float value)
 {
-    return std::clamp(value, 0.05f, 16.0f);
+    return std::clamp(value, SectorWorldToAuthoringDistance(0.05f), SectorWorldToAuthoringDistance(16.0f));
 }
 
 float ClampIndirectBounceStrength(float value)
@@ -1036,7 +1037,7 @@ bool LoadSectorMap(const char* path, SectorMap& outMap)
             outMap.playerStartPosition.z = (*posIt)[1].get<float>();
         }
 
-        outMap.playerStartPosition.y = player.value("z", 1.6f);
+        outMap.playerStartPosition.y = player.value("z", SectorWorldToAuthoringDistance(1.6f));
         outMap.playerStartYawRadians = player.value("yawDegrees", 0.0f) * DegreesToRadians;
     }
 
