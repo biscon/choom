@@ -2,6 +2,8 @@
 
 #include "engine/assets/TextureLoadFlags.h"
 #include "engine/input/InputEvents.h"
+#include "sector_demo/SectorGeneratedGeometry.h"
+#include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMap.h"
 
 #include <raylib.h>
@@ -34,6 +36,7 @@ constexpr float PanPixelsPerSecond = 720.0f;
 constexpr float GeometryEpsilon = 0.001f;
 constexpr float ScreenVertexSnapPixels = 10.0f;
 constexpr float ScreenEdgePickPixels = 10.0f;
+constexpr float ScreenLightPickPixels = 12.0f;
 constexpr float PreviewHighlightLift = 0.006f;
 
 Vector2 SectorPointToVector2(SectorPoint point)
@@ -145,6 +148,16 @@ float ClampAmbientIntensity(float value)
     return std::clamp(value, 0.0f, 1.0f);
 }
 
+float ClampLightIntensity(float value)
+{
+    return std::clamp(value, 0.0f, 8.0f);
+}
+
+float ClampLightRadius(float value)
+{
+    return std::clamp(value, 0.1f, 64.0f);
+}
+
 int ClampAmbientChannel(int value)
 {
     return std::clamp(value, 0, 255);
@@ -191,6 +204,7 @@ const char* ToolName(SectorEditorTool tool)
     switch (tool) {
         case SectorEditorTool::Select: return "Select";
         case SectorEditorTool::Sector: return "Sector";
+        case SectorEditorTool::Light: return "Light";
         case SectorEditorTool::Move: return "Move";
         case SectorEditorTool::Erase: return "Erase";
     }
@@ -237,6 +251,18 @@ bool IsWallSurface(SectorSurfaceKind kind)
             || kind == SectorSurfaceKind::UpperWall;
 }
 
+SectorSurfaceKind ToEditorSurfaceKind(SectorGeneratedSurfaceKind kind)
+{
+    switch (kind) {
+        case SectorGeneratedSurfaceKind::Floor: return SectorSurfaceKind::Floor;
+        case SectorGeneratedSurfaceKind::Ceiling: return SectorSurfaceKind::Ceiling;
+        case SectorGeneratedSurfaceKind::Wall: return SectorSurfaceKind::Wall;
+        case SectorGeneratedSurfaceKind::LowerWall: return SectorSurfaceKind::LowerWall;
+        case SectorGeneratedSurfaceKind::UpperWall: return SectorSurfaceKind::UpperWall;
+    }
+    return SectorSurfaceKind::None;
+}
+
 EdgeUvPart SurfaceKindToEdgeUvPart(SectorSurfaceKind kind)
 {
     switch (kind) {
@@ -261,6 +287,7 @@ const char* ToolHelpText(SectorEditorTool tool)
     switch (tool) {
         case SectorEditorTool::Select: return "Select: click edges or sectors in canvas";
         case SectorEditorTool::Sector: return "Sector: left click add, click first closes, right click/Esc cancels, Backspace removes";
+        case SectorEditorTool::Light: return "Light: click inside a sector to place a baked static point light";
         case SectorEditorTool::Move: return "Move: drag vertex";
         case SectorEditorTool::Erase: return "Erase: click sector to delete";
     }
@@ -659,9 +686,11 @@ bool SectorEditor::Init(engine::AssetManager& assets, const char* path)
     state.gridSize = 1;
     state.selectedSectorIndex = -1;
     state.selectedEdgeIndex = -1;
+    state.selectedLightIndex = -1;
     state.hoveredSectorIndex = -1;
     state.hoveredEdgeSectorIndex = -1;
     state.hoveredEdgeIndex = -1;
+    state.hoveredLightIndex = -1;
     RefreshEditorTextureAssets(assets);
     return true;
 }
@@ -720,6 +749,7 @@ void SectorEditor::Render(engine::AssetManager& assets)
         DrawGrid();
     }
     DrawSectors();
+    DrawStaticLights();
     DrawPendingSector();
     DrawVertexMoveOverlay();
     EndScissorMode();
@@ -867,15 +897,18 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
     state.hoveredVertexRefs.clear();
     state.hoveredEdgeSectorIndex = -1;
     state.hoveredEdgeIndex = -1;
+    state.hoveredLightIndex = -1;
 
     if (!initialized || !IsMouseOverCanvas(input)) {
         state.hoveredSectorIndex = -1;
         return;
     }
 
+    state.hoveredLightIndex = FindLightNearScreenPoint(input.MousePosition());
+
     if (state.currentTool == SectorEditorTool::Select) {
         SectorEdgeRef edge{};
-        if (ResolveEdgeHit(input.MousePosition(), state.rawMouseMap, edge)) {
+        if (state.hoveredLightIndex < 0 && ResolveEdgeHit(input.MousePosition(), state.rawMouseMap, edge)) {
             state.hoveredEdgeSectorIndex = edge.sectorIndex;
             state.hoveredEdgeIndex = edge.edgeIndex;
         }
@@ -910,6 +943,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         CancelVertexDrag("Cancelled vertex move");
                     } else if (state.pendingSector.active) {
                         CancelPendingSector("Cancelled sector");
+                    } else if (state.selectedLightIndex >= 0 || state.selectedSectorIndex >= 0) {
+                        ClearSelection();
                     } else if (state.selectedSectorIndex >= 0) {
                         ClearSelection();
                     } else {
@@ -932,7 +967,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (event.key.key == KEY_DELETE) {
-                    if (DeleteSelectedSector()) {
+                    if (DeleteSelectedLight() || DeleteSelectedSector()) {
                         engine::ConsumeEvent(event);
                     }
                     return;
@@ -1058,7 +1093,10 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 if (state.currentTool == SectorEditorTool::Select) {
                     SectorEdgeRef edge{};
                     const Vector2 rawMap = ScreenToMap(event.mouseClick.releasePosition);
-                    if (ResolveEdgeHit(event.mouseClick.releasePosition, rawMap, edge)) {
+                    const int lightIndex = FindLightNearScreenPoint(event.mouseClick.releasePosition);
+                    if (lightIndex >= 0) {
+                        SelectLight(lightIndex);
+                    } else if (ResolveEdgeHit(event.mouseClick.releasePosition, rawMap, edge)) {
                         SelectEdge(edge.sectorIndex, edge.edgeIndex);
                     } else {
                         SelectSector(FindSectorAt(rawMap));
@@ -1078,9 +1116,17 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
+                if (state.currentTool == SectorEditorTool::Light) {
+                    AddStaticLightAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (state.currentTool == SectorEditorTool::Erase) {
-                    const int sectorIndex = FindSectorAt(ScreenToMap(event.mouseClick.releasePosition));
-                    if (sectorIndex >= 0) {
+                    const int lightIndex = FindLightNearScreenPoint(event.mouseClick.releasePosition);
+                    if (lightIndex >= 0) {
+                        DeleteLightAt(lightIndex);
+                    } else if (const int sectorIndex = FindSectorAt(ScreenToMap(event.mouseClick.releasePosition)); sectorIndex >= 0) {
                         DeleteSectorAt(sectorIndex);
                     }
                     engine::ConsumeEvent(event);
@@ -1365,6 +1411,28 @@ void SectorEditor::SyncSelectedSectorIdBuffer()
     uiState.idEditError.clear();
 }
 
+void SectorEditor::SyncSelectedLightIdBuffer()
+{
+    if (state.selectedLightIndex < 0
+            || state.selectedLightIndex >= static_cast<int>(state.map.staticLights.size())) {
+        uiState.selectedLightIdBuffer[0] = '\0';
+        uiState.idBufferLightIndex = -1;
+        if (state.selectedSectorIndex < 0) {
+            uiState.idEditError.clear();
+        }
+        return;
+    }
+
+    if (uiState.idBufferLightIndex == state.selectedLightIndex) {
+        return;
+    }
+
+    const std::string& id = state.map.staticLights[static_cast<size_t>(state.selectedLightIndex)].id;
+    std::snprintf(uiState.selectedLightIdBuffer, sizeof(uiState.selectedLightIdBuffer), "%s", id.c_str());
+    uiState.idBufferLightIndex = state.selectedLightIndex;
+    uiState.idEditError.clear();
+}
+
 bool SectorEditor::TryRenameSelectedSector()
 {
     if (state.selectedSectorIndex < 0
@@ -1419,6 +1487,53 @@ bool SectorEditor::TryRenameSelectedSector()
     return true;
 }
 
+bool SectorEditor::TryRenameSelectedLight()
+{
+    if (state.selectedLightIndex < 0
+            || state.selectedLightIndex >= static_cast<int>(state.map.staticLights.size())) {
+        uiState.idEditError = "No light selected";
+        statusText = uiState.idEditError;
+        return false;
+    }
+
+    SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.selectedLightIndex)];
+    const std::string newId = uiState.selectedLightIdBuffer;
+    if (newId == light.id) {
+        uiState.idEditError.clear();
+        return true;
+    }
+
+    if (newId.empty()) {
+        uiState.idEditError = "Light id cannot be empty";
+        statusText = uiState.idEditError;
+        return false;
+    }
+
+    for (char ch : newId) {
+        const unsigned char value = static_cast<unsigned char>(ch);
+        if (!(std::isalnum(value) || ch == '_' || ch == '-')) {
+            uiState.idEditError = "Use letters, digits, underscore, or dash";
+            statusText = uiState.idEditError;
+            return false;
+        }
+    }
+
+    for (size_t i = 0; i < state.map.staticLights.size(); ++i) {
+        if (static_cast<int>(i) != state.selectedLightIndex
+                && state.map.staticLights[i].id == newId) {
+            uiState.idEditError = "Light id already exists";
+            statusText = uiState.idEditError;
+            return false;
+        }
+    }
+
+    light.id = newId;
+    state.dirty = true;
+    uiState.idEditError.clear();
+    statusText = TextFormat("Renamed light to %s", light.id.c_str());
+    return true;
+}
+
 bool SectorEditor::DeleteSelectedSector()
 {
     return DeleteSectorAt(state.selectedSectorIndex);
@@ -1449,6 +1564,101 @@ bool SectorEditor::DeleteSectorAt(int sectorIndex)
     SyncSelectedSectorIdBuffer();
     state.dirty = true;
     statusText = TextFormat("Deleted sector %s", deletedId.c_str());
+    return true;
+}
+
+bool SectorEditor::DeleteSelectedLight()
+{
+    return DeleteLightAt(state.selectedLightIndex);
+}
+
+bool SectorEditor::DeleteLightAt(int lightIndex)
+{
+    if (lightIndex < 0 || lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+        return false;
+    }
+
+    const std::string deletedId = state.map.staticLights[static_cast<size_t>(lightIndex)].id;
+    state.map.staticLights.erase(state.map.staticLights.begin() + lightIndex);
+    if (state.selectedLightIndex == lightIndex) {
+        ClearSelection();
+    } else if (state.selectedLightIndex > lightIndex) {
+        --state.selectedLightIndex;
+    }
+    state.hoveredLightIndex = -1;
+    state.dirty = true;
+    statusText = TextFormat("Deleted light %s", deletedId.c_str());
+    return true;
+}
+
+std::string SectorEditor::GenerateUniqueLightId() const
+{
+    for (int id = 1; id < 10000; ++id) {
+        char candidate[32];
+        std::snprintf(candidate, sizeof(candidate), "light_%03d", id);
+        const bool used = std::any_of(
+                state.map.staticLights.begin(),
+                state.map.staticLights.end(),
+                [candidate](const SectorStaticPointLight& light) { return light.id == candidate; }
+        );
+        if (!used) {
+            return candidate;
+        }
+    }
+
+    return TextFormat("light_%zu", state.map.staticLights.size() + 1);
+}
+
+void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
+{
+    const int sectorIndex = FindSectorAt(mapPoint);
+    if (sectorIndex < 0 || sectorIndex >= static_cast<int>(state.map.sectors.size())) {
+        statusText = "Light placement failed: click inside a sector";
+        return;
+    }
+
+    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(sectorIndex)];
+    SectorStaticPointLight light;
+    light.id = GenerateUniqueLightId();
+    light.position = Vector3{mapPoint.x, sector.floorZ + 1.8f, mapPoint.y};
+    light.color = WHITE;
+    light.intensity = 1.0f;
+    light.radius = 8.0f;
+
+    state.map.staticLights.push_back(std::move(light));
+    SelectLight(static_cast<int>(state.map.staticLights.size()) - 1);
+    state.dirty = true;
+    statusText = TextFormat("Added static light %s", state.map.staticLights.back().id.c_str());
+}
+
+bool SectorEditor::BakeLightmaps()
+{
+    if (state.map.sectors.empty()) {
+        statusText = "Bake failed: no sectors";
+        return false;
+    }
+
+    SectorLightmapLayout layout;
+    std::string error;
+    if (!BuildSectorLightmapLayout(state.map, layout, error)) {
+        statusText = error.empty() ? "Bake failed" : error;
+        return false;
+    }
+
+    const std::string assetRelativePath = MakeSectorLightmapPathForMapPath(mapPath);
+    const std::string outputPath = ResolveSectorAssetPath(assetRelativePath);
+    SectorLightmapBakeResult result;
+    if (!BakeSectorLightmap(state.map, layout, outputPath.c_str(), result, error)) {
+        statusText = error.empty() ? "Bake failed" : error;
+        return false;
+    }
+
+    state.map.bakedLightmap.path = assetRelativePath;
+    state.map.bakedLightmap.width = result.width;
+    state.map.bakedLightmap.height = result.height;
+    state.map.bakedLightmap.sourceHash = result.sourceHash;
+    state.dirty = true;
+    statusText = TextFormat("Baked lightmap: %dx%d", result.width, result.height);
     return true;
 }
 
@@ -1677,93 +1887,39 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
             static_cast<int>(std::round(viewportRect.height))
     );
 
-    auto acceptHit = [&](SectorSurfaceRef surface, Vector3 point, float distance) {
-        if (distance <= GeometryEpsilon) {
-            return;
-        }
-        if (!best.hit || distance < best.distance) {
-            best.hit = true;
-            best.surface = surface;
-            best.worldPosition = point;
-            best.distance = distance;
-        }
-    };
+    SectorGeneratedGeometry geometry;
+    if (!BuildSectorGeneratedGeometry(state.map, geometry)) {
+        return best;
+    }
 
-    auto pickFlat = [&](int sectorIndex, const SectorDefinition& sector, SectorSurfaceKind kind, float height, Vector3 normal) {
-        const float denom = Vector3DotProduct(ray.direction, normal);
-        if (denom >= -GeometryEpsilon || std::fabs(ray.direction.y) <= GeometryEpsilon) {
-            return;
-        }
-
-        const float distance = (height - ray.position.y) / ray.direction.y;
-        if (distance <= GeometryEpsilon) {
-            return;
-        }
-
-        const Vector3 point = Vector3Add(ray.position, Vector3Scale(ray.direction, distance));
-        if (PointInSectorPolygon(Vector2{point.x, point.z}, sector)) {
-            acceptHit(SectorSurfaceRef{kind, sectorIndex, -1}, point, distance);
-        }
-    };
-
-    auto pickWallSpan = [&](int sectorIndex, int edgeIndex, SectorSurfaceKind kind, SectorPoint a, SectorPoint b, float bottom, float top) {
-        if (top <= bottom + GeometryEpsilon) {
-            return;
-        }
-
-        const float dx = b.x - a.x;
-        const float dz = b.y - a.y;
-        const float len2 = dx * dx + dz * dz;
-        if (len2 <= GeometryEpsilon * GeometryEpsilon) {
-            return;
-        }
-
-        const float len = std::sqrt(len2);
-        const Vector3 normal{-dz / len, 0.0f, dx / len};
-        const float denom = Vector3DotProduct(ray.direction, normal);
-        if (denom >= -GeometryEpsilon) {
-            return;
-        }
-
-        const Vector3 planePoint = SectorPointToWorld(a, bottom);
-        const float distance = Vector3DotProduct(Vector3Subtract(planePoint, ray.position), normal) / denom;
-        if (distance <= GeometryEpsilon) {
-            return;
-        }
-
-        const Vector3 point = Vector3Add(ray.position, Vector3Scale(ray.direction, distance));
-        const float along = ((point.x - a.x) * dx + (point.z - a.y) * dz) / len2;
-        if (along < -GeometryEpsilon || along > 1.0f + GeometryEpsilon) {
-            return;
-        }
-        if (point.y < bottom - GeometryEpsilon || point.y > top + GeometryEpsilon) {
-            return;
-        }
-
-        acceptHit(SectorSurfaceRef{kind, sectorIndex, edgeIndex}, point, distance);
-    };
-
-    for (size_t sectorIndex = 0; sectorIndex < state.map.sectors.size(); ++sectorIndex) {
-        const SectorDefinition& sector = state.map.sectors[sectorIndex];
-        const int sectorInt = static_cast<int>(sectorIndex);
-        pickFlat(sectorInt, sector, SectorSurfaceKind::Floor, sector.floorZ, Vector3{0.0f, 1.0f, 0.0f});
-        pickFlat(sectorInt, sector, SectorSurfaceKind::Ceiling, sector.ceilingZ, Vector3{0.0f, -1.0f, 0.0f});
-
-        for (size_t edgeIndex = 0; edgeIndex < sector.points.size(); ++edgeIndex) {
-            const SectorPoint a = sector.points[edgeIndex];
-            const SectorPoint b = sector.points[(edgeIndex + 1) % sector.points.size()];
-            const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(state.map, sectorInt, static_cast<int>(edgeIndex));
-            if (!neighbor.hasNeighbor) {
-                pickWallSpan(sectorInt, static_cast<int>(edgeIndex), SectorSurfaceKind::Wall, a, b, sector.floorZ, sector.ceilingZ);
+    for (const SectorGeneratedSurface& surface : geometry.surfaces) {
+        for (size_t i = 0; i + 2 < surface.vertices.size(); i += 3) {
+            RayCollision collision = GetRayCollisionTriangle(
+                    ray,
+                    surface.vertices[i + 0].position,
+                    surface.vertices[i + 1].position,
+                    surface.vertices[i + 2].position
+            );
+            if (!collision.hit) {
+                collision = GetRayCollisionTriangle(
+                        ray,
+                        surface.vertices[i + 2].position,
+                        surface.vertices[i + 1].position,
+                        surface.vertices[i + 0].position
+                );
+            }
+            if (!collision.hit || collision.distance <= GeometryEpsilon) {
                 continue;
             }
-
-            const SectorDefinition& neighborSector = state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)];
-            if (neighborSector.floorZ > sector.floorZ) {
-                pickWallSpan(sectorInt, static_cast<int>(edgeIndex), SectorSurfaceKind::LowerWall, a, b, sector.floorZ, neighborSector.floorZ);
-            }
-            if (neighborSector.ceilingZ < sector.ceilingZ) {
-                pickWallSpan(sectorInt, static_cast<int>(edgeIndex), SectorSurfaceKind::UpperWall, a, b, neighborSector.ceilingZ, sector.ceilingZ);
+            if (!best.hit || collision.distance < best.distance) {
+                best.hit = true;
+                best.surface = SectorSurfaceRef{
+                        ToEditorSurfaceKind(surface.ref.kind),
+                        surface.ref.sectorIndex,
+                        surface.ref.edgeIndex
+                };
+                best.worldPosition = collision.point;
+                best.distance = collision.distance;
             }
         }
     }
@@ -1892,8 +2048,9 @@ void SectorEditor::DrawPreviewOverlay(
             Rectangle{panel.x + 18.0f, panel.y + 130.0f, panel.width - 36.0f, 30.0f},
             font,
             TextFormat(
-                    "assets %.0f%% | %s%s",
+                    "assets %.0f%% | Lightmap: %s | %s%s",
                     preview.AssetProgress(assets) * 100.0f,
+                    preview.LightmapStatusText(),
                     statusText.empty() ? "Ready" : statusText.c_str(),
                     state.dirty ? " | unsaved changes" : ""
             ),
@@ -2328,6 +2485,33 @@ void SectorEditor::DrawSector(const SectorDefinition& sector, int sectorIndex) c
     }
 }
 
+void SectorEditor::DrawStaticLights() const
+{
+    for (size_t i = 0; i < state.map.staticLights.size(); ++i) {
+        const SectorStaticPointLight& light = state.map.staticLights[i];
+        const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
+        const bool selected = static_cast<int>(i) == state.selectedLightIndex;
+        const bool hovered = static_cast<int>(i) == state.hoveredLightIndex;
+        Color color = light.color;
+        color.a = selected ? 255 : hovered ? 235 : 205;
+        const float radiusPixels = light.radius * state.viewZoom;
+
+        if (selected || hovered || state.currentTool == SectorEditorTool::Light) {
+            DrawCircleLines(
+                    static_cast<int>(std::round(center.x)),
+                    static_cast<int>(std::round(center.y)),
+                    radiusPixels,
+                    WithAlpha(color, selected ? 150 : 90)
+            );
+        }
+
+        DrawCircleV(center, selected ? 7.0f : 5.5f, color);
+        DrawCircleLines(static_cast<int>(std::round(center.x)), static_cast<int>(std::round(center.y)), selected ? 11.0f : 9.0f, Color{20, 24, 32, 255});
+        DrawLineEx(Vector2{center.x - 10.0f, center.y}, Vector2{center.x + 10.0f, center.y}, 2.0f, color);
+        DrawLineEx(Vector2{center.x, center.y - 10.0f}, Vector2{center.x, center.y + 10.0f}, 2.0f, color);
+    }
+}
+
 Vector2 SectorEditor::SelectedEdgeInwardNormal(const SectorDefinition& sector, int edgeIndex) const
 {
     if (edgeIndex < 0 || edgeIndex >= static_cast<int>(sector.points.size())) {
@@ -2392,6 +2576,7 @@ void SectorEditor::DrawToolsPanel(
     const SectorEditorTool tools[] = {
             SectorEditorTool::Select,
             SectorEditorTool::Sector,
+            SectorEditorTool::Light,
             SectorEditorTool::Move,
             SectorEditorTool::Erase
     };
@@ -2432,6 +2617,11 @@ void SectorEditor::DrawToolsPanel(
 
     if (engine::Button(ui, config, input, assets, "sector_editor_add_map_texture", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Add Map Texture")) {
         OpenAddMapTextureModal(assets);
+    }
+    y += rowH + gap;
+
+    if (engine::Button(ui, config, input, assets, "sector_editor_bake_lightmaps", Rectangle{panel.contentRect.x, y, panel.contentRect.width, rowH}, font, "Bake Lightmaps")) {
+        BakeLightmaps();
     }
     y += rowH + gap;
 
@@ -2497,9 +2687,12 @@ void SectorEditor::DrawSectorsPanel(
     );
 
     SyncSelectedSectorIdBuffer();
+    SyncSelectedLightIdBuffer();
 
     const bool hasSelectedSector = state.selectedSectorIndex >= 0
             && state.selectedSectorIndex < static_cast<int>(state.map.sectors.size());
+    const bool hasSelectedLight = state.selectedLightIndex >= 0
+            && state.selectedLightIndex < static_cast<int>(state.map.staticLights.size());
     if (hasSelectedSector) {
         const SectorDefinition& selectedSector = state.map.sectors[static_cast<size_t>(state.selectedSectorIndex)];
         if (state.selectedEdgeIndex >= 0 && state.selectedEdgeIndex >= static_cast<int>(selectedSector.points.size())) {
@@ -2511,6 +2704,19 @@ void SectorEditor::DrawSectorsPanel(
     const float gap = 8.0f;
     const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
     const auto inspectorContentHeight = [&]() {
+        if (hasSelectedLight) {
+            float height = 38.0f; // Light title.
+            height += rowH + gap; // Id.
+            if (!uiState.idEditError.empty()) {
+                height += 36.0f;
+            }
+            height += rowH + gap; // Delete.
+            height += 5.0f * (rowH + gap); // Position/intensity/radius.
+            height += 3.0f * (rowH + gap); // RGB.
+            height += 36.0f + gap; // Swatch.
+            height += rowH + gap; // Bake.
+            return height;
+        }
         if (!hasSelectedSector) {
             return 42.0f;
         }
@@ -2572,6 +2778,115 @@ void SectorEditor::DrawSectorsPanel(
 
     const float contentW = scroll.viewport.width;
     float y = 0.0f;
+
+    if (hasSelectedLight) {
+        SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.selectedLightIndex)];
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Static Light: %s", light.id.c_str()), engine::UITextJustify::Left, config.textColor);
+        y += 38.0f;
+
+        const float labelW = 88.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, "Id", engine::UITextJustify::Left, config.mutedTextColor);
+        const engine::UITextInputResult idResult = engine::TextInput(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_selected_light_id",
+                Rectangle{labelW, y, contentW - labelW, rowH},
+                font,
+                uiState.selectedLightIdBuffer,
+                sizeof(uiState.selectedLightIdBuffer),
+                0,
+                sizeof(uiState.selectedLightIdBuffer) - 1,
+                engine::UITextJustify::Left
+        );
+        if (idResult.submitted) {
+            TryRenameSelectedLight();
+        }
+        y += rowH + gap;
+
+        if (!uiState.idEditError.empty()) {
+            engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, uiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
+            y += 36.0f;
+        }
+
+        if (engine::Button(ui, config, input, assets, "sector_editor_delete_light", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Light")) {
+            DeleteSelectedLight();
+            engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+            engine::EndPanel(ui, config, panel);
+            return;
+        }
+        y += rowH + gap;
+
+        const float numberLabelW = 92.0f;
+        const float numberFieldW = 112.0f;
+        auto drawLightFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
+            engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
+            float edited = value;
+            const engine::UINumericInputResult result = engine::FloatInput(ui, config, input, assets, id, Rectangle{numberLabelW, y, numberFieldW, rowH}, font, edited, inputState, minValue, maxValue, decimals);
+            if (result.changed && edited != value) {
+                value = edited;
+                state.dirty = true;
+                statusText = TextFormat("Updated light %s", light.id.c_str());
+            }
+            y += rowH + gap;
+        };
+
+        drawLightFloat("sector_editor_light_x", "X:", light.position.x, uiState.lightXInput, -1024.0f, 1024.0f, 2);
+        drawLightFloat("sector_editor_light_y", "Y:", light.position.y, uiState.lightYInput, -64.0f, 64.0f, 2);
+        drawLightFloat("sector_editor_light_z", "Z:", light.position.z, uiState.lightZInput, -1024.0f, 1024.0f, 2);
+        drawLightFloat("sector_editor_light_intensity", "Intensity:", light.intensity, uiState.lightIntensityInput, 0.0f, 8.0f, 3);
+        light.intensity = ClampLightIntensity(light.intensity);
+        drawLightFloat("sector_editor_light_radius", "Radius:", light.radius, uiState.lightRadiusInput, 0.1f, 64.0f, 2);
+        light.radius = ClampLightRadius(light.radius);
+
+        auto drawLightChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
+            engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
+            int value = static_cast<int>(channel);
+            const engine::UINumericInputResult result = engine::IntInput(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    id,
+                    Rectangle{numberLabelW, y, contentW - numberLabelW, rowH},
+                    font,
+                    value,
+                    inputState,
+                    0,
+                    255,
+                    1
+            );
+            if (result.changed && value != static_cast<int>(channel)) {
+                channel = static_cast<unsigned char>(ClampAmbientChannel(value));
+                light.color.a = 255;
+                state.dirty = true;
+                statusText = TextFormat("Updated light %s color", light.id.c_str());
+            }
+            y += rowH + gap;
+        };
+        drawLightChannel("sector_editor_light_r", "R:", light.color.r, uiState.lightRedInput);
+        drawLightChannel("sector_editor_light_g", "G:", light.color.g, uiState.lightGreenInput);
+        drawLightChannel("sector_editor_light_b", "B:", light.color.b, uiState.lightBlueInput);
+
+        const Rectangle swatch{
+                scroll.viewport.x + numberLabelW,
+                scroll.viewport.y - uiState.inspectorScroll.offset.y + y + 2.0f,
+                std::min(120.0f, contentW - numberLabelW),
+                28.0f
+        };
+        DrawRectangleRec(swatch, light.color);
+        DrawRectangleLinesEx(swatch, 1.0f, config.borderColor);
+        y += 36.0f + gap;
+
+        if (engine::Button(ui, config, input, assets, "sector_editor_light_bake", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
+            BakeLightmaps();
+        }
+
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return;
+    }
 
     if (!hasSelectedSector) {
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 42.0f}, font, "Selected: none", engine::UITextJustify::Left, config.mutedTextColor);
@@ -3213,7 +3528,10 @@ void SectorEditor::DrawStatusPanel(
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
     std::string selectedLabel = "none";
-    if (state.selectedSectorIndex >= 0
+    if (state.selectedLightIndex >= 0
+            && state.selectedLightIndex < static_cast<int>(state.map.staticLights.size())) {
+        selectedLabel = state.map.staticLights[static_cast<size_t>(state.selectedLightIndex)].id;
+    } else if (state.selectedSectorIndex >= 0
             && state.selectedSectorIndex < static_cast<int>(state.map.sectors.size())) {
         const SectorDefinition& selectedSector = state.map.sectors[static_cast<size_t>(state.selectedSectorIndex)];
         if (state.selectedEdgeIndex >= 0 && state.selectedEdgeIndex < static_cast<int>(selectedSector.points.size())) {
@@ -3237,8 +3555,9 @@ void SectorEditor::DrawStatusPanel(
         pendingText = TextFormat(" | pending %zu pts", state.pendingSector.points.size());
     }
     const std::string shortMapPath = ShortPath(mapPath);
+    const char* lightmapText = SectorLightmapStatusText(GetSectorLightmapStatus(state.map));
     const char* text = TextFormat(
-            "%s%s | %s%s | map %s%s | grid %d | selected %s",
+            "%s%s | %s%s | map %s%s | grid %d | %s | selected %s",
             statusText.empty() ? "Map not loaded" : statusText.c_str(),
             state.dirty ? " *modified" : "",
             ToolHelpText(state.currentTool),
@@ -3246,6 +3565,7 @@ void SectorEditor::DrawStatusPanel(
             shortMapPath.c_str(),
             state.dirty ? "*" : "",
             state.gridSize,
+            lightmapText,
             selectedLabel.c_str()
     );
 
@@ -3628,6 +3948,24 @@ int SectorEditor::FindSectorAt(Vector2 mapPoint) const
     return -1;
 }
 
+int SectorEditor::FindLightNearScreenPoint(Vector2 screenPoint) const
+{
+    float bestDistance2 = ScreenLightPickPixels * ScreenLightPickPixels;
+    int bestIndex = -1;
+    for (size_t i = 0; i < state.map.staticLights.size(); ++i) {
+        const SectorStaticPointLight& light = state.map.staticLights[i];
+        const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
+        const float dx = center.x - screenPoint.x;
+        const float dy = center.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 <= bestDistance2) {
+            bestDistance2 = distance2;
+            bestIndex = static_cast<int>(i);
+        }
+    }
+    return bestIndex;
+}
+
 bool SectorEditor::FindEdgeNearScreenPoint(Vector2 screenPoint, SectorEdgeRef& outEdge) const
 {
     return ResolveEdgeHit(screenPoint, ScreenToMap(screenPoint), outEdge);
@@ -3707,6 +4045,8 @@ void SectorEditor::SelectSector(int sectorIndex)
 {
     state.selectedSectorIndex = sectorIndex;
     state.selectedEdgeIndex = -1;
+    state.selectedLightIndex = -1;
+    uiState.idBufferLightIndex = -1;
     uiState.inspectorScroll.offset = Vector2{};
     uiState.ambientIntensityInput = engine::UIFloatInputState{};
     uiState.ambientRedInput = engine::UIIntInputState{};
@@ -3719,11 +4059,33 @@ void SectorEditor::SelectEdge(int sectorIndex, int edgeIndex)
 {
     state.selectedSectorIndex = sectorIndex;
     state.selectedEdgeIndex = edgeIndex;
+    state.selectedLightIndex = -1;
+    uiState.idBufferLightIndex = -1;
     uiState.inspectorScroll.offset = Vector2{};
     uiState.ambientIntensityInput = engine::UIFloatInputState{};
     uiState.ambientRedInput = engine::UIIntInputState{};
     uiState.ambientGreenInput = engine::UIIntInputState{};
     uiState.ambientBlueInput = engine::UIIntInputState{};
+    SyncSelectedSectorIdBuffer();
+}
+
+void SectorEditor::SelectLight(int lightIndex)
+{
+    state.selectedLightIndex = lightIndex;
+    state.selectedSectorIndex = -1;
+    state.selectedEdgeIndex = -1;
+    state.selectedSurface3D = SectorSurfaceRef{};
+    ResetSurface3DUiState();
+    uiState.inspectorScroll.offset = Vector2{};
+    uiState.lightXInput = engine::UIFloatInputState{};
+    uiState.lightYInput = engine::UIFloatInputState{};
+    uiState.lightZInput = engine::UIFloatInputState{};
+    uiState.lightIntensityInput = engine::UIFloatInputState{};
+    uiState.lightRadiusInput = engine::UIFloatInputState{};
+    uiState.lightRedInput = engine::UIIntInputState{};
+    uiState.lightGreenInput = engine::UIIntInputState{};
+    uiState.lightBlueInput = engine::UIIntInputState{};
+    SyncSelectedLightIdBuffer();
     SyncSelectedSectorIdBuffer();
 }
 
@@ -3782,6 +4144,7 @@ void SectorEditor::ClearSelection()
 {
     state.selectedSectorIndex = -1;
     state.selectedEdgeIndex = -1;
+    state.selectedLightIndex = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     ResetSurface3DUiState();
     uiState.ambientIntensityInput = engine::UIFloatInputState{};
@@ -3790,6 +4153,7 @@ void SectorEditor::ClearSelection()
     uiState.ambientBlueInput = engine::UIIntInputState{};
     uiState.inspectorScroll.offset = Vector2{};
     SyncSelectedSectorIdBuffer();
+    SyncSelectedLightIdBuffer();
 }
 
 SectorEdgeOverride* SectorEditor::FindMutableEdgeOverride(int sectorIndex, int edgeIndex)

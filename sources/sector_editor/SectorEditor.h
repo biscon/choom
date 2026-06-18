@@ -55,6 +55,7 @@ private:
     void DrawGrid() const;
     void DrawSectors() const;
     void DrawSector(const SectorDefinition& sector, int sectorIndex) const;
+    void DrawStaticLights() const;
     Vector2 SelectedEdgeInwardNormal(const SectorDefinition& sector, int edgeIndex) const;
     void DrawPendingSector() const;
     void DrawVertexMoveOverlay() const;
@@ -105,6 +106,7 @@ private:
     bool PointInSectorPolygon(Vector2 mapPoint, const SectorDefinition& sector) const;
     SectorSurfaceHit PickSectorSurface3D(Vector2 mousePosition, Rectangle viewportRect) const;
     int FindSectorAt(Vector2 mapPoint) const;
+    int FindLightNearScreenPoint(Vector2 screenPoint) const;
     bool FindEdgeNearScreenPoint(Vector2 screenPoint, SectorEdgeRef& outEdge) const;
     std::vector<SectorEdgeHitCandidate> FindEdgeHitCandidates(Vector2 screenPoint) const;
     bool ResolveEdgeHit(Vector2 screenPoint, Vector2 rawMapPoint, SectorEdgeRef& outEdge) const;
@@ -134,8 +136,10 @@ private:
     bool AddSelectedMapTexture(engine::AssetManager& assets);
     std::string GenerateUniqueSectorId() const;
     void SyncSelectedSectorIdBuffer();
+    void SyncSelectedLightIdBuffer();
     void SelectSector(int sectorIndex);
     void SelectEdge(int sectorIndex, int edgeIndex);
+    void SelectLight(int lightIndex);
     void SelectSurface3D(SectorSurfaceRef surface);
     bool IsValidSurfaceRef(SectorSurfaceRef surface) const;
     bool SameSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b) const;
@@ -156,8 +160,14 @@ private:
     std::string CurrentTextureForTarget(TexturePickerTargetKind target, int sectorIndex, int edgeIndex) const;
     bool TargetAllowsSectorDefault(TexturePickerTargetKind target) const;
     bool TryRenameSelectedSector();
+    bool TryRenameSelectedLight();
     bool DeleteSelectedSector();
     bool DeleteSectorAt(int sectorIndex);
+    bool DeleteSelectedLight();
+    bool DeleteLightAt(int lightIndex);
+    void AddStaticLightAt(Vector2 mapPoint);
+    std::string GenerateUniqueLightId() const;
+    bool BakeLightmaps();
     bool ValidatePendingPoint(SectorPoint point, std::string& error) const;
     bool ValidateSectorPolygon(const std::vector<SectorPoint>& points, std::string& error) const;
 

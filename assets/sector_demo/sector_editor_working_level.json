@@ -1,4 +1,10 @@
 {
+  "bakedLightmap": {
+    "height": 1024,
+    "path": "assets/sector_demo/sector_editor_working_level.lightmap.png",
+    "sourceHash": "cad28697defece50",
+    "width": 1024
+  },
   "playerStart": {
     "pos": [
       2.0,
@@ -9,6 +15,12 @@
   },
   "sectors": [
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 0.125,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "edges": [
@@ -46,10 +58,16 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 0.125,
       "ceiling": 3.0,
-      "ceilingTex": "metal",
+      "ceilingTex": "ceiling",
       "floor": 0.5,
-      "floorTex": "cobblestone",
+      "floorTex": "floor",
       "id": "raised_corridor",
       "lowerWallTex": "step_wall",
       "points": [
@@ -74,6 +92,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.5,
@@ -110,6 +134,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 0.125,
       "ceiling": 2.5,
       "ceilingTex": "ceiling",
       "edges": [
@@ -154,6 +184,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 0.125,
       "ceiling": 4.0,
       "ceilingTex": "ceiling",
       "edges": [
@@ -191,6 +227,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 2.5,
       "ceilingTex": "ceiling",
       "floor": -0.5,
@@ -219,6 +261,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.0,
@@ -255,6 +303,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.0,
@@ -299,6 +353,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.25,
@@ -327,6 +387,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.5,
@@ -359,6 +425,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.5,
@@ -383,6 +455,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 4.0,
       "ceilingTex": "ceiling",
       "floor": 0.75,
@@ -411,6 +489,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.0,
@@ -439,6 +523,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.25,
@@ -467,6 +557,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "edges": [
@@ -502,6 +598,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 2.0,
       "ceilingTex": "ceiling",
       "floor": 1.0,
@@ -530,6 +632,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "edges": [
@@ -565,6 +673,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.0,
@@ -593,6 +707,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": -2.0,
@@ -621,6 +741,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": -2.0,
@@ -649,6 +775,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": -2.0,
@@ -677,6 +809,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": -2.0,
@@ -705,6 +843,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": -2.0,
@@ -733,6 +877,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": -2.0,
@@ -761,6 +911,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": -2.0,
@@ -789,6 +945,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": -2.0,
@@ -817,6 +979,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": -2.0,
@@ -849,6 +1017,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": -2.0,
@@ -881,6 +1055,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 3.0,
       "ceilingTex": "ceiling",
       "floor": 0.0,
@@ -909,6 +1089,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 4.0,
       "ceilingTex": "ceiling",
       "floor": -0.5,
@@ -941,6 +1127,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 4.0,
       "ceilingTex": "ceiling",
       "floor": 0.0,
@@ -973,6 +1165,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 5.0,
       "ceilingTex": "ceiling",
       "edges": [
@@ -1017,6 +1215,12 @@
       "wallTex": "wall"
     },
     {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 1.0,
       "ceiling": 10.0,
       "ceilingTex": "ceiling",
       "edges": [
@@ -1081,6 +1285,38 @@
       ],
       "upperWallTex": "upper_wall",
       "wallTex": "wall"
+    }
+  ],
+  "staticLights": [
+    {
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "id": "light_001",
+      "intensity": 1.0,
+      "position": [
+        8.0,
+        1.7999999523162842,
+        8.0
+      ],
+      "radius": 8.0
+    },
+    {
+      "color": [
+        0,
+        0,
+        255
+      ],
+      "id": "light_002",
+      "intensity": 2.0,
+      "position": [
+        1.0,
+        1.7999999523162842,
+        1.0
+      ],
+      "radius": 5.0
     }
   ],
   "textures": {

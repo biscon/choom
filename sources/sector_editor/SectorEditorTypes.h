@@ -15,6 +15,7 @@ namespace game {
 enum class SectorEditorTool {
     Select,
     Sector,
+    Light,
     Move,
     Erase
 };
@@ -134,10 +135,12 @@ struct SectorEditorState {
 
     int selectedSectorIndex = -1;
     int selectedEdgeIndex = -1;
+    int selectedLightIndex = -1;
     EdgeUvPart selectedEdgeUvPart = EdgeUvPart::Wall;
     int hoveredSectorIndex = -1;
     int hoveredEdgeSectorIndex = -1;
     int hoveredEdgeIndex = -1;
+    int hoveredLightIndex = -1;
     bool hasHoveredVertex = false;
     SectorPoint hoveredVertexPoint = {};
     std::vector<SectorVertexRef> hoveredVertexRefs;
@@ -179,6 +182,14 @@ struct SectorEditorUiState {
     engine::UIIntInputState ambientRedInput;
     engine::UIIntInputState ambientGreenInput;
     engine::UIIntInputState ambientBlueInput;
+    engine::UIFloatInputState lightXInput;
+    engine::UIFloatInputState lightYInput;
+    engine::UIFloatInputState lightZInput;
+    engine::UIFloatInputState lightIntensityInput;
+    engine::UIFloatInputState lightRadiusInput;
+    engine::UIIntInputState lightRedInput;
+    engine::UIIntInputState lightGreenInput;
+    engine::UIIntInputState lightBlueInput;
     engine::UIFloatInputState edgeUvScaleUInput;
     engine::UIFloatInputState edgeUvScaleVInput;
     engine::UIFloatInputState edgeUvOffsetUInput;
@@ -190,6 +201,8 @@ struct SectorEditorUiState {
     engine::UIScrollState inspectorScroll;
     char selectedSectorIdBuffer[64] = {};
     int idBufferSectorIndex = -1;
+    char selectedLightIdBuffer[64] = {};
+    int idBufferLightIndex = -1;
     std::string idEditError;
     bool keyboardCaptured = false;
 };

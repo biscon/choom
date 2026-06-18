@@ -17,18 +17,23 @@ The sector editor is a 2D editor for `SectorMap` JSON data with an integrated
 - `WASD`: pan the 2D view.
 - Mouse wheel over the canvas: zoom.
 - Left click with Select tool: select an edge, select a sector, or clear
-  selection. Edges take priority over sectors when the cursor is near both.
+  selection. Static lights take priority when the cursor is directly over a
+  light icon; otherwise edges take priority over sectors when the cursor is
+  near both.
 - Left click with Sector tool: add a sector point.
+- Left click with Light tool: add a baked static point light inside the clicked
+  sector.
 - Left drag with Move tool: move an existing sector vertex on the snapped grid.
-- Left click with Erase tool: delete the clicked sector.
+- Left click with Erase tool: delete the clicked light or sector.
 - Click the first point, or press `Enter`: close the pending sector.
 - Right click or `Escape`: cancel a pending sector or active vertex move.
 - `Backspace`: remove the last pending sector point.
-- `Delete`: delete the selected sector.
+- `Delete`: delete the selected light or sector.
 - `Escape`: clear selection, then return to Select tool.
 - `Save` and `Reload`: write/read the current map JSON path.
 - `Add Map Texture`: add an existing project PNG from `assets/images` to the
   current map texture table.
+- `Bake Lightmaps`: bake static point-light direct lighting to a shared atlas.
 
 ## Sector Inspector
 
@@ -79,6 +84,75 @@ Sector JSON saves lighting fields on each sector:
 
 Older maps without these fields still load with the default white/full-bright
 ambient lighting.
+
+## Static Baked Lights
+
+The Light tool places static point lights used only by the lightmap baker. They
+are not dynamic runtime lights and do not cast dynamic shadows. Click inside a
+sector to add a light at the snapped map X/Z position and at the sector floor
+height plus `1.8`.
+
+Static light defaults:
+
+- Color: white.
+- Intensity: `1.0`, clamped to `0.0..8.0`.
+- Radius: `8.0`, clamped to `0.1..64.0`.
+- Generated IDs use `light_001`, `light_002`, and so on.
+
+In Select mode, clicking near a light icon selects it before sector or edge
+selection. The inspector shows ID, X/Y/Z position, intensity, radius, RGB
+channels, and a color swatch. The Erase tool or `Delete` removes the selected
+or clicked light without confirmation. There is still no undo/redo.
+
+Static lights are saved in map JSON as `staticLights`. Older maps without the
+field still load normally.
+
+## Baked Lightmaps
+
+`Bake Lightmaps` bakes direct colored lighting from static point lights into a
+single shared lightmap atlas. The output path is derived from the current map
+path. For example:
+
+```text
+assets/sector_demo/sector_editor_working_level.json
+assets/sector_demo/sector_editor_working_level.lightmap.png
+```
+
+The map stores `bakedLightmap` metadata with the asset-relative atlas path,
+dimensions, and a deterministic source hash. The hash includes sector geometry,
+floor and ceiling heights, static light values, and the fixed bake settings. It
+does not include the baked metadata itself.
+
+3D Mode uses the baked atlas only when the metadata exists, the atlas file can
+be found, and the stored source hash matches the current in-memory map. If a
+geometry or static-light edit changes the hash, the bake is reported as stale
+and rendering falls back to sector ambient lighting only.
+
+Lighting combines as:
+
+```text
+finalColor = baseTexture * clamp(sectorAmbientVertexColor + bakedLightmapDirectLighting, 0..1)
+```
+
+Sector ambient remains the baseline mood/darkness layer. A sector with ambient
+intensity `0.0` can still be lit by baked direct light. Maps without valid
+baked data continue to render with ambient vertex lighting only.
+
+Current bake characteristics:
+
+- Fixed `1024 x 1024` atlas.
+- About `8` texels per world unit.
+- At least `2` texels of chart gutter.
+- Wall charts are rectangular; floor and ceiling charts are one chart per
+  generated triangle.
+- Colored direct point-light contribution only.
+- Hard static shadows from sector geometry using CPU ray tests.
+- No bounce lighting, GI, AO, dynamic light contribution, soft shadows,
+  shadow maps, probes, normal maps, or PBR.
+
+The 2D status bar and 3D overlay show `Lightmap valid`, `Lightmap stale -
+rebake required`, or `No baked lightmap`. Re-bake after geometry or static-light
+changes.
 
 ## Edge Inspector
 
@@ -256,7 +330,10 @@ unloaded on editor shutdown, and rebuilt every time `3D Mode` is clicked or a
 - No full Doom-style linedef/sidedef system.
 - No vertex insertion/deletion, edge splitting, whole-sector movement, or
   undo/redo.
+- Lightmaps are single-atlas, synchronous, fixed-resolution, direct-light only,
+  and brute-force raycasted; there is no bake progress UI or acceleration
+  structure yet.
 - No external texture importing, texture copying, texture removal, unused
   texture cleanup, normal/material maps, thumbnail grid browser, texture search,
   3D texture painting, 3D geometry editing, doors, lifts, dynamic lights,
-  shadowing, mesh culling, or file dialog.
+  dynamic shadowing, mesh culling, or file dialog.

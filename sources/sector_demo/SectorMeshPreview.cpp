@@ -1,6 +1,7 @@
 #include "sector_demo/SectorMeshPreview.h"
 
 #include "engine/assets/TextureLoadFlags.h"
+#include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshBuilder.h"
 #include "sector_demo/SectorMap.h"
 
@@ -18,6 +19,50 @@ constexpr float MouseSensitivity = 0.0030f;
 constexpr float MoveSpeed = 5.0f;
 constexpr float PitchLimit = 1.45f;
 constexpr int MouseLookWarmupFrames = 2;
+
+const char* SectorLightmapVs = R"(
+#version 330
+in vec3 vertexPosition;
+in vec2 vertexTexCoord;
+in vec2 vertexTexCoord2;
+in vec4 vertexColor;
+
+uniform mat4 mvp;
+
+out vec2 fragTexCoord;
+out vec2 fragTexCoord2;
+out vec4 fragColor;
+
+void main()
+{
+    fragTexCoord = vertexTexCoord;
+    fragTexCoord2 = vertexTexCoord2;
+    fragColor = vertexColor;
+    gl_Position = mvp * vec4(vertexPosition, 1.0);
+}
+)";
+
+const char* SectorLightmapFs = R"(
+#version 330
+in vec2 fragTexCoord;
+in vec2 fragTexCoord2;
+in vec4 fragColor;
+
+uniform sampler2D texture0;
+uniform sampler2D texture1;
+uniform float useLightmap;
+
+out vec4 finalColor;
+
+void main()
+{
+    vec4 baseColor = texture(texture0, fragTexCoord);
+    vec3 ambient = fragColor.rgb;
+    vec3 bakedDirect = (useLightmap > 0.5) ? texture(texture1, fragTexCoord2).rgb : vec3(0.0);
+    vec3 lighting = clamp(ambient + bakedDirect, 0.0, 1.0);
+    finalColor = vec4(baseColor.rgb * lighting, baseColor.a * fragColor.a);
+}
+)";
 
 bool StartsWith(const std::string& value, const char* prefix)
 {
@@ -68,7 +113,27 @@ bool SectorMeshPreview::Rebuild(
         textureHandlesById.emplace(texture->id, handle);
     }
 
-    meshes = BuildSectorMeshes(map);
+    SectorLightmapLayout lightmapLayout;
+    const SectorLightmapStatus status = GetSectorLightmapStatus(map);
+    lightmapStatus = static_cast<int>(status);
+    const bool useLightmapLayout = status == SectorLightmapStatus::Valid
+            && BuildSectorLightmapLayout(map, lightmapLayout, error);
+    if (status == SectorLightmapStatus::Valid && !useLightmapLayout) {
+        std::fprintf(stderr, "[SectorDemo WARNING] %s\n", error.c_str());
+        error.clear();
+    }
+
+    if (useLightmapLayout) {
+        const std::string resolvedPath = ResolveAssetPath(map.bakedLightmap.path);
+        lightmapTexture = assets.RequestTexture(
+                assetScope,
+                "sector_lightmap_atlas",
+                resolvedPath.c_str(),
+                engine::TextureLoad_BilinearFilter
+        );
+    }
+
+    meshes = BuildSectorMeshes(map, useLightmapLayout ? &lightmapLayout : nullptr);
     if (meshes.batches.empty()) {
         Shutdown(assets);
         error = "Preview failed: mesh builder produced no batches";
@@ -76,6 +141,17 @@ bool SectorMeshPreview::Rebuild(
     }
 
     material = LoadMaterialDefault();
+    Shader shader = LoadShaderFromMemory(SectorLightmapVs, SectorLightmapFs);
+    if (shader.id == 0) {
+        UnloadMaterial(material);
+        material = Material{};
+        error = "Preview failed: could not load sector lightmap shader";
+        return false;
+    }
+    material.shader = shader;
+    material.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(material.shader, "texture0");
+    material.shader.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(material.shader, "texture1");
+    useLightmapLoc = GetShaderLocation(material.shader, "useLightmap");
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
 
@@ -105,10 +181,12 @@ void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
     Leave();
     UnloadSectorMeshes(meshes);
     textureHandlesById.clear();
+    lightmapTexture = engine::NullTextureHandle();
     sectorCount = 0;
 
     if (materialLoaded) {
         material.maps[MATERIAL_MAP_DIFFUSE].texture = defaultMaterialTexture;
+        material.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
         UnloadMaterial(material);
         material = Material{};
         defaultMaterialTexture = Texture2D{};
@@ -215,6 +293,14 @@ void SectorMeshPreview::Render(engine::AssetManager& assets)
     }
 
     BeginMode3D(camera);
+    const Texture2D* lightmap = assets.GetTexture(lightmapTexture);
+    float useLightmap = lightmap != nullptr ? 1.0f : 0.0f;
+    material.maps[MATERIAL_MAP_SPECULAR].texture = (lightmap != nullptr)
+            ? *lightmap
+            : Texture2D{};
+    if (useLightmapLoc >= 0) {
+        SetShaderValue(material.shader, useLightmapLoc, &useLightmap, SHADER_UNIFORM_FLOAT);
+    }
     for (const SectorMeshBatch& batch : meshes.batches) {
         const engine::TextureHandle textureHandle = TextureForId(batch.textureId);
         const Texture2D* texture = assets.GetTexture(textureHandle);
@@ -258,6 +344,11 @@ void SectorMeshPreview::SetMouseLookEnabled(bool enabled)
 float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const
 {
     return engine::IsNull(assetScope) ? 1.0f : assets.GetScopeProgress(assetScope);
+}
+
+const char* SectorMeshPreview::LightmapStatusText() const
+{
+    return SectorLightmapStatusText(static_cast<SectorLightmapStatus>(lightmapStatus));
 }
 
 std::string SectorMeshPreview::ResolveAssetPath(const std::string& path)

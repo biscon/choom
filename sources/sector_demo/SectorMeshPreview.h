@@ -43,6 +43,7 @@ public:
     size_t BatchCount() const { return meshes.batches.size(); }
     int TriangleCount() const { return meshes.triangleCount; }
     float AssetProgress(engine::AssetManager& assets) const;
+    const char* LightmapStatusText() const;
 
 private:
     static std::string ResolveAssetPath(const std::string& path);
@@ -51,10 +52,13 @@ private:
 
     SectorMeshBuildResult meshes;
     std::unordered_map<std::string, engine::TextureHandle> textureHandlesById;
+    engine::TextureHandle lightmapTexture = engine::NullTextureHandle();
     engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();
     Material material = {};
     Texture2D defaultMaterialTexture = {};
     bool materialLoaded = false;
+    int useLightmapLoc = -1;
+    int lightmapStatus = 0;
     bool initialized = false;
     bool mouseLookEnabled = true;
     int mouseLookWarmupFrames = 0;

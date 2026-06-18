@@ -122,6 +122,16 @@ float ClampAmbientIntensity(float value)
     return std::clamp(value, 0.0f, 1.0f);
 }
 
+float ClampLightIntensity(float value)
+{
+    return std::clamp(value, 0.0f, 8.0f);
+}
+
+float ClampLightRadius(float value)
+{
+    return std::clamp(value, 0.1f, 64.0f);
+}
+
 void ReadAmbientColorField(const Json& sectorJson, SectorDefinition& sector)
 {
     const auto it = sectorJson.find("ambientColor");
@@ -163,6 +173,131 @@ void ReadAmbientIntensityField(const Json& sectorJson, SectorDefinition& sector)
     }
 
     sector.ambientIntensity = ClampAmbientIntensity(it->get<float>());
+}
+
+bool ReadVector3Array(const Json& value, Vector3& out)
+{
+    if (!value.is_array()
+            || value.size() != 3
+            || !value[0].is_number()
+            || !value[1].is_number()
+            || !value[2].is_number()) {
+        return false;
+    }
+
+    out = Vector3{value[0].get<float>(), value[1].get<float>(), value[2].get<float>()};
+    return true;
+}
+
+bool ReadColorRgbArray(const Json& value, Color& out)
+{
+    if (!value.is_array()
+            || value.size() != 3
+            || !value[0].is_number()
+            || !value[1].is_number()
+            || !value[2].is_number()) {
+        return false;
+    }
+
+    out = Color{
+            static_cast<unsigned char>(ClampColorChannel(static_cast<int>(std::lround(value[0].get<float>())))),
+            static_cast<unsigned char>(ClampColorChannel(static_cast<int>(std::lround(value[1].get<float>())))),
+            static_cast<unsigned char>(ClampColorChannel(static_cast<int>(std::lround(value[2].get<float>())))),
+            255
+    };
+    return true;
+}
+
+void ReadStaticLights(const Json& root, SectorMap& outMap)
+{
+    const auto lightsIt = root.find("staticLights");
+    if (lightsIt == root.end()) {
+        return;
+    }
+    if (!lightsIt->is_array()) {
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed staticLights field\n");
+        return;
+    }
+
+    for (const Json& lightJson : *lightsIt) {
+        if (!lightJson.is_object()) {
+            std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed static light entry\n");
+            continue;
+        }
+
+        SectorStaticPointLight light;
+        if (!ReadStringField(lightJson, "id", light.id) || light.id.empty()) {
+            std::fprintf(stderr, "[SectorDemo WARNING] Ignoring static light without string id\n");
+            continue;
+        }
+
+        const auto positionIt = lightJson.find("position");
+        if (positionIt == lightJson.end() || !ReadVector3Array(*positionIt, light.position)) {
+            std::fprintf(stderr, "[SectorDemo WARNING] Ignoring static light '%s' with malformed position\n", light.id.c_str());
+            continue;
+        }
+
+        const auto colorIt = lightJson.find("color");
+        if (colorIt == lightJson.end() || !ReadColorRgbArray(*colorIt, light.color)) {
+            std::fprintf(stderr, "[SectorDemo WARNING] Ignoring static light '%s' with malformed color\n", light.id.c_str());
+            continue;
+        }
+
+        const auto intensityIt = lightJson.find("intensity");
+        const auto radiusIt = lightJson.find("radius");
+        if (intensityIt == lightJson.end()
+                || radiusIt == lightJson.end()
+                || !intensityIt->is_number()
+                || !radiusIt->is_number()) {
+            std::fprintf(stderr, "[SectorDemo WARNING] Ignoring static light '%s' with malformed intensity/radius\n", light.id.c_str());
+            continue;
+        }
+
+        light.intensity = ClampLightIntensity(intensityIt->get<float>());
+        light.radius = ClampLightRadius(radiusIt->get<float>());
+        outMap.staticLights.push_back(std::move(light));
+    }
+}
+
+void ReadBakedLightmapMetadata(const Json& root, SectorMap& outMap)
+{
+    const auto metadataIt = root.find("bakedLightmap");
+    if (metadataIt == root.end()) {
+        return;
+    }
+    if (!metadataIt->is_object()) {
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring malformed bakedLightmap field\n");
+        return;
+    }
+
+    SectorLightmapMetadata metadata;
+    if (!ReadStringField(*metadataIt, "path", metadata.path) || metadata.path.empty()) {
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring bakedLightmap without path\n");
+        return;
+    }
+    if (!ReadStringField(*metadataIt, "sourceHash", metadata.sourceHash) || metadata.sourceHash.empty()) {
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring bakedLightmap without sourceHash\n");
+        return;
+    }
+
+    const auto widthIt = metadataIt->find("width");
+    const auto heightIt = metadataIt->find("height");
+    if (widthIt == metadataIt->end()
+            || heightIt == metadataIt->end()
+            || !widthIt->is_number_integer()
+            || !heightIt->is_number_integer()) {
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring bakedLightmap with malformed dimensions\n");
+        return;
+    }
+
+    metadata.width = widthIt->get<int>();
+    metadata.height = heightIt->get<int>();
+    if (metadata.width <= 0 || metadata.height <= 0) {
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring bakedLightmap with invalid dimensions\n");
+        return;
+    }
+
+    outMap.bakedLightmap = std::move(metadata);
 }
 
 bool HasTexture(const SectorMap& map, const std::string& id)
@@ -805,6 +940,9 @@ bool LoadSectorMap(const char* path, SectorMap& outMap)
         outMap.sectors.push_back(std::move(sector));
     }
 
+    ReadStaticLights(root, outMap);
+    ReadBakedLightmapMetadata(root, outMap);
+
     const auto playerIt = root.find("playerStart");
     if (playerIt != root.end() && playerIt->is_object()) {
         const Json& player = *playerIt;
@@ -907,6 +1045,35 @@ bool SaveSectorMap(const char* path, const SectorMap& map)
     player["z"] = map.playerStartPosition.y;
     player["yawDegrees"] = map.playerStartYawRadians * RadiansToDegrees;
     root["playerStart"] = std::move(player);
+
+    if (!map.staticLights.empty()) {
+        root["staticLights"] = Json::array();
+        for (const SectorStaticPointLight& light : map.staticLights) {
+            Json lightJson;
+            lightJson["id"] = light.id;
+            lightJson["position"] = Json::array({light.position.x, light.position.y, light.position.z});
+            lightJson["color"] = Json::array({
+                    static_cast<int>(light.color.r),
+                    static_cast<int>(light.color.g),
+                    static_cast<int>(light.color.b)
+            });
+            lightJson["intensity"] = ClampLightIntensity(light.intensity);
+            lightJson["radius"] = ClampLightRadius(light.radius);
+            root["staticLights"].push_back(std::move(lightJson));
+        }
+    }
+
+    if (!map.bakedLightmap.path.empty()
+            && map.bakedLightmap.width > 0
+            && map.bakedLightmap.height > 0
+            && !map.bakedLightmap.sourceHash.empty()) {
+        Json baked;
+        baked["path"] = map.bakedLightmap.path;
+        baked["width"] = map.bakedLightmap.width;
+        baked["height"] = map.bakedLightmap.height;
+        baked["sourceHash"] = map.bakedLightmap.sourceHash;
+        root["bakedLightmap"] = std::move(baked);
+    }
 
     std::ofstream file(path);
     if (!file) {
