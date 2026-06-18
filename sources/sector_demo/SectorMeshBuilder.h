@@ -4,7 +4,9 @@
 
 namespace game {
 
-SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map);
+struct SectorLightmapLayout;
+
+SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map, const SectorLightmapLayout* lightmapLayout = nullptr);
 void UnloadSectorMeshes(SectorMeshBuildResult& buildResult);
 
 } // namespace game

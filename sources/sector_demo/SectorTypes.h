@@ -55,6 +55,8 @@ struct SectorDefinition {
     std::string wallTextureId;
     std::string lowerWallTextureId;
     std::string upperWallTextureId;
+    Color ambientColor = WHITE;
+    float ambientIntensity = 1.0f;
     SectorSurfaceUvOverride floorUv;
     SectorSurfaceUvOverride ceilingUv;
     std::vector<SectorEdgeOverride> edgeOverrides;
@@ -71,9 +73,26 @@ struct SectorTextureDefinition {
     SectorTextureFilter filter = SectorTextureFilter::Bilinear;
 };
 
+struct SectorStaticPointLight {
+    std::string id;
+    Vector3 position = {0.0f, 1.8f, 0.0f};
+    Color color = WHITE;
+    float intensity = 1.0f;
+    float radius = 8.0f;
+};
+
+struct SectorLightmapMetadata {
+    std::string path;
+    int width = 0;
+    int height = 0;
+    std::string sourceHash;
+};
+
 struct SectorMap {
     std::unordered_map<std::string, SectorTextureDefinition> texturesById;
     std::vector<SectorDefinition> sectors;
+    std::vector<SectorStaticPointLight> staticLights;
+    SectorLightmapMetadata bakedLightmap;
     Vector3 playerStartPosition = {0.0f, 1.6f, 0.0f};
     float playerStartYawRadians = 0.0f;
 };
