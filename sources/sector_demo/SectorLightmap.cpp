@@ -15,6 +15,7 @@
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <string>
 
 namespace game {
 
@@ -103,6 +104,7 @@ constexpr float RayHitEpsilon = 0.001f;
 constexpr float BvhAabbEpsilon = 0.00001f;
 constexpr int kSectorLightmapBvhLeafTriangleCount = 4;
 constexpr int kSectorLightmapBvhTraversalStackSize = 128;
+constexpr uint32_t kSectorLightmapProgressChunk = 512;
 constexpr float Pi = 3.14159265358979323846f;
 
 bool RayIntersectsTriangle(
@@ -1058,6 +1060,31 @@ bool FileExistsResolved(const std::string& path)
     return static_cast<bool>(file);
 }
 
+void ReportProgress(
+        const SectorLightmapBakeCallbacks& callbacks,
+        SectorLightmapBakePhase phase,
+        uint32_t completedWork,
+        uint32_t totalWork)
+{
+    if (callbacks.onProgress) {
+        callbacks.onProgress(phase, completedWork, totalWork);
+    }
+}
+
+bool IsBakeCancellationRequested(const SectorLightmapBakeCallbacks& callbacks)
+{
+    return callbacks.isCancellationRequested && callbacks.isCancellationRequested();
+}
+
+bool CheckBakeCancelled(const SectorLightmapBakeCallbacks& callbacks, std::string& outError)
+{
+    if (!IsBakeCancellationRequested(callbacks)) {
+        return false;
+    }
+    outError = "Bake cancelled";
+    return true;
+}
+
 } // namespace
 
 std::string ResolveSectorAssetPath(const std::string& path)
@@ -1160,6 +1187,18 @@ bool BakeSectorLightmap(
         SectorLightmapBakeResult& outResult,
         std::string& outError)
 {
+    SectorLightmapBakeCallbacks callbacks;
+    return BakeSectorLightmap(map, layout, outputPath, callbacks, outResult, outError);
+}
+
+bool BakeSectorLightmap(
+        const SectorMap& map,
+        const SectorLightmapLayout& layout,
+        const char* outputPath,
+        const SectorLightmapBakeCallbacks& callbacks,
+        SectorLightmapBakeResult& outResult,
+        std::string& outError)
+{
     outResult = SectorLightmapBakeResult{};
     outError.clear();
     if (outputPath == nullptr || outputPath[0] == '\0') {
@@ -1182,6 +1221,7 @@ bool BakeSectorLightmap(
     const int width = layout.atlasWidth;
     const int height = layout.atlasHeight;
     const size_t atlasPixelCount = static_cast<size_t>(width * height);
+    ReportProgress(callbacks, SectorLightmapBakePhase::Preparing, 0, 1);
     std::vector<Color> pixels(static_cast<size_t>(width * height), Color{0, 0, 0, 255});
     std::vector<Vector3> directLightingFloat(atlasPixelCount, Vector3{});
     std::vector<Vector3> indirectLightingFloat(atlasPixelCount, Vector3{});
@@ -1189,6 +1229,7 @@ bool BakeSectorLightmap(
     std::vector<unsigned char> validChartTexel(atlasPixelCount, 0);
     std::vector<BakeTexel> bakeTexels;
     const std::vector<BakeTriangle> triangles = BuildBakeTriangles(geometry, layout);
+    ReportProgress(callbacks, SectorLightmapBakePhase::BuildingBvh, 0, 1);
     const auto bvhBuildStart = Clock::now();
     SectorLightmapBvh bvh;
     BakeBvhBuildStats bvhStats;
@@ -1199,6 +1240,10 @@ bool BakeSectorLightmap(
         return false;
     }
     const auto bvhBuildEnd = Clock::now();
+    ReportProgress(callbacks, SectorLightmapBakePhase::BuildingBvh, 1, 1);
+    if (CheckBakeCancelled(callbacks, outError)) {
+        return false;
+    }
     const float aoRadius = std::clamp(map.lightmapSettings.ambientOcclusionRadius, 0.05f, 16.0f);
     const float aoStrength = std::clamp(map.lightmapSettings.ambientOcclusionStrength, 0.0f, 1.0f);
     const float indirectBounceRadius = std::clamp(map.lightmapSettings.indirectBounceRadius, 0.05f, 16.0f);
@@ -1238,35 +1283,64 @@ bool BakeSectorLightmap(
             }
         }
     }
+    ReportProgress(callbacks, SectorLightmapBakePhase::Preparing, 1, 1);
+    if (CheckBakeCancelled(callbacks, outError)) {
+        return false;
+    }
 
     const auto directStart = Clock::now();
-    for (const BakeTexel& texel : bakeTexels) {
-        RasterHit hit;
-        hit.hit = true;
-        hit.position = texel.position;
-        hit.normal = texel.normal;
-        hit.triangleIndex = texel.triangleIndex;
+    ReportProgress(callbacks, SectorLightmapBakePhase::DirectLighting, 0, static_cast<uint32_t>(bakeTexels.size()));
+    uint32_t completedTexels = 0;
+    if (!map.staticLights.empty()) {
+        for (const BakeTexel& texel : bakeTexels) {
+            RasterHit hit;
+            hit.hit = true;
+            hit.position = texel.position;
+            hit.normal = texel.normal;
+            hit.triangleIndex = texel.triangleIndex;
 
-        Vector3 direct{};
-        for (const SectorStaticPointLight& light : map.staticLights) {
-            direct = Vector3Add(direct, EvaluateDirectLight(light, hit, texel.surfaceIndex, bvh, triangles, stats));
+            Vector3 direct{};
+            for (const SectorStaticPointLight& light : map.staticLights) {
+                direct = Vector3Add(direct, EvaluateDirectLight(light, hit, texel.surfaceIndex, bvh, triangles, stats));
+            }
+            directLightingFloat[texel.pixelIndex] = direct;
+            ++completedTexels;
+            if ((completedTexels % kSectorLightmapProgressChunk) == 0) {
+                ReportProgress(callbacks, SectorLightmapBakePhase::DirectLighting, completedTexels, static_cast<uint32_t>(bakeTexels.size()));
+                if (CheckBakeCancelled(callbacks, outError)) {
+                    return false;
+                }
+            }
         }
-        directLightingFloat[texel.pixelIndex] = direct;
     }
+    ReportProgress(callbacks, SectorLightmapBakePhase::DirectLighting, static_cast<uint32_t>(bakeTexels.size()), static_cast<uint32_t>(bakeTexels.size()));
     const auto directEnd = Clock::now();
 
     const auto aoStart = Clock::now();
-    for (const BakeTexel& texel : bakeTexels) {
-        RasterHit hit;
-        hit.hit = true;
-        hit.position = texel.position;
-        hit.normal = texel.normal;
-        hit.triangleIndex = texel.triangleIndex;
-        ambientOcclusionFloat[texel.pixelIndex] = BakeAmbientOcclusion(hit, texel.surfaceIndex, aoRadius, aoStrength, bvh, triangles, stats);
+    ReportProgress(callbacks, SectorLightmapBakePhase::AmbientOcclusion, 0, static_cast<uint32_t>(bakeTexels.size()));
+    completedTexels = 0;
+    if (aoStrength > 0.0f) {
+        for (const BakeTexel& texel : bakeTexels) {
+            RasterHit hit;
+            hit.hit = true;
+            hit.position = texel.position;
+            hit.normal = texel.normal;
+            hit.triangleIndex = texel.triangleIndex;
+            ambientOcclusionFloat[texel.pixelIndex] = BakeAmbientOcclusion(hit, texel.surfaceIndex, aoRadius, aoStrength, bvh, triangles, stats);
+            ++completedTexels;
+            if ((completedTexels % kSectorLightmapProgressChunk) == 0) {
+                ReportProgress(callbacks, SectorLightmapBakePhase::AmbientOcclusion, completedTexels, static_cast<uint32_t>(bakeTexels.size()));
+                if (CheckBakeCancelled(callbacks, outError)) {
+                    return false;
+                }
+            }
+        }
     }
+    ReportProgress(callbacks, SectorLightmapBakePhase::AmbientOcclusion, static_cast<uint32_t>(bakeTexels.size()), static_cast<uint32_t>(bakeTexels.size()));
     const auto aoEnd = Clock::now();
 
     const auto indirectStart = Clock::now();
+    ReportProgress(callbacks, SectorLightmapBakePhase::IndirectBounce, 0, static_cast<uint32_t>(bakeTexels.size()));
     if (indirectBounceStrength > 0.0f) {
         std::vector<Vector3> directSampleFloat = directLightingFloat;
         std::vector<unsigned char> directSampleValid = validChartTexel;
@@ -1274,6 +1348,7 @@ bool BakeSectorLightmap(
             DilateChartFloat(chart, directSampleFloat, directSampleValid, width);
         }
 
+        completedTexels = 0;
         for (const BakeTexel& texel : bakeTexels) {
             const Vector3 origin = Vector3Add(texel.position, Vector3Scale(texel.normal, RayOriginEpsilon));
             Vector3 gathered{};
@@ -1309,12 +1384,22 @@ bool BakeSectorLightmap(
 
             const float averageScale = indirectBounceStrength / static_cast<float>(kIndirectBounceSampleCount);
             indirectLightingFloat[texel.pixelIndex] = Vector3Scale(gathered, averageScale);
+            ++completedTexels;
+            if ((completedTexels % kSectorLightmapProgressChunk) == 0) {
+                ReportProgress(callbacks, SectorLightmapBakePhase::IndirectBounce, completedTexels, static_cast<uint32_t>(bakeTexels.size()));
+                if (CheckBakeCancelled(callbacks, outError)) {
+                    return false;
+                }
+            }
         }
     }
+    ReportProgress(callbacks, SectorLightmapBakePhase::IndirectBounce, static_cast<uint32_t>(bakeTexels.size()), static_cast<uint32_t>(bakeTexels.size()));
     const auto indirectEnd = Clock::now();
 
     const auto exportStart = Clock::now();
+    ReportProgress(callbacks, SectorLightmapBakePhase::DilatingAndEncoding, 0, static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()));
     std::vector<unsigned char> exportValid = validChartTexel;
+    completedTexels = 0;
     for (const BakeTexel& texel : bakeTexels) {
         Vector3 finalRgb = Vector3Add(directLightingFloat[texel.pixelIndex], indirectLightingFloat[texel.pixelIndex]);
         finalRgb.x = std::clamp(finalRgb.x, 0.0f, 1.0f);
@@ -1326,9 +1411,22 @@ bool BakeSectorLightmap(
                 FloatToByte(finalRgb.z),
                 FloatToByte(ambientOcclusionFloat[texel.pixelIndex])
         };
+        ++completedTexels;
+        if ((completedTexels % kSectorLightmapProgressChunk) == 0) {
+            ReportProgress(callbacks, SectorLightmapBakePhase::DilatingAndEncoding, completedTexels, static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()));
+            if (CheckBakeCancelled(callbacks, outError)) {
+                return false;
+            }
+        }
     }
+    uint32_t completedExportWork = static_cast<uint32_t>(bakeTexels.size());
     for (const SectorLightmapChart& chart : layout.charts) {
         DilateChart(chart, pixels, exportValid, width);
+        ++completedExportWork;
+        ReportProgress(callbacks, SectorLightmapBakePhase::DilatingAndEncoding, completedExportWork, static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()));
+        if (CheckBakeCancelled(callbacks, outError)) {
+            return false;
+        }
     }
 
     Image image = {};
@@ -1352,6 +1450,7 @@ bool BakeSectorLightmap(
         outError = TextFormat("Bake failed: could not export %s", outputPath);
         return false;
     }
+    ReportProgress(callbacks, SectorLightmapBakePhase::DilatingAndEncoding, static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()), static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()));
     const auto exportEnd = Clock::now();
 
     outResult.width = width;
@@ -1385,7 +1484,39 @@ bool BakeSectorLightmap(
     return true;
 }
 
-void PrintSectorLightmapBakeReport(const SectorLightmapBakeResult& result)
+bool BakeSectorLightmap(
+        const SectorLightmapBakeInput& input,
+        const SectorLightmapBakeCallbacks& callbacks,
+        SectorLightmapBakeResult& outResult,
+        std::string& outError)
+{
+    using Clock = std::chrono::steady_clock;
+    const auto layoutStart = Clock::now();
+    ReportProgress(callbacks, SectorLightmapBakePhase::BuildingLayout, 0, 1);
+
+    SectorLightmapLayout layout;
+    if (!BuildSectorLightmapLayout(input.mapSnapshot, layout, outError)) {
+        return false;
+    }
+    ReportProgress(callbacks, SectorLightmapBakePhase::BuildingLayout, 1, 1);
+    if (CheckBakeCancelled(callbacks, outError)) {
+        return false;
+    }
+
+    const auto layoutEnd = Clock::now();
+    if (!BakeSectorLightmap(input.mapSnapshot, layout, input.temporaryOutputPath.c_str(), callbacks, outResult, outError)) {
+        return false;
+    }
+
+    outResult.layoutSeconds = std::chrono::duration<double>(layoutEnd - layoutStart).count();
+    outResult.totalBakeSeconds += outResult.layoutSeconds;
+    if (!input.expectedSourceHash.empty()) {
+        outResult.sourceHash = input.expectedSourceHash;
+    }
+    return true;
+}
+
+std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& result)
 {
     const double atlasPixels = static_cast<double>(result.width) * static_cast<double>(result.height);
     const double validAtlasOccupancy = atlasPixels > 0.0
@@ -1402,14 +1533,6 @@ void PrintSectorLightmapBakeReport(const SectorLightmapBakeResult& result)
                 ? static_cast<double>(stats.triangleTests) / static_cast<double>(stats.raysCast)
                 : 0.0;
     };
-    const auto printRayStats = [&](const char* label, const SectorLightmapRaycastStats& stats) {
-        TraceLog(LOG_INFO, "  %s: %llu", label, static_cast<unsigned long long>(stats.raysCast));
-        TraceLog(LOG_INFO, "    AABB tests: %llu", static_cast<unsigned long long>(stats.aabbTests));
-        TraceLog(LOG_INFO, "    AABB hits: %llu", static_cast<unsigned long long>(stats.aabbHits));
-        TraceLog(LOG_INFO, "    Triangle tests: %llu", static_cast<unsigned long long>(stats.triangleTests));
-        TraceLog(LOG_INFO, "    Triangle hits: %llu", static_cast<unsigned long long>(stats.triangleHits));
-        TraceLog(LOG_INFO, "    Average triangle tests/ray: %.2f", averageTriangleTestsPerRay(stats));
-    };
     const uint64_t totalRays = result.directHardShadowStats.raysCast
             + result.softShadowSourceStats.raysCast
             + result.ambientOcclusionStats.raysCast
@@ -1422,41 +1545,59 @@ void PrintSectorLightmapBakeReport(const SectorLightmapBakeResult& result)
             ? static_cast<double>(totalTriangleTests) / static_cast<double>(totalRays)
             : 0.0;
 
-    TraceLog(LOG_INFO, "Lightmap bake report");
-    TraceLog(LOG_INFO, "  Atlas: %d x %d", result.width, result.height);
-    TraceLog(LOG_INFO, "  Atlas pixels: %llu", static_cast<unsigned long long>(static_cast<uint64_t>(result.width) * static_cast<uint64_t>(result.height)));
-    TraceLog(LOG_INFO, "  Valid chart texels: %d", result.validChartTexels);
-    TraceLog(LOG_INFO, "  Valid atlas occupancy: %.2f%%", validAtlasOccupancy);
-    TraceLog(LOG_INFO, "  Allocated chart rectangle pixels: %d", result.allocatedChartRectanglePixels);
-    TraceLog(LOG_INFO, "  Chart rectangle occupancy: %.2f%%", chartRectangleOccupancy);
-    TraceLog(LOG_INFO, "  Chart payload efficiency: %.2f%%", chartPayloadEfficiency);
-    TraceLog(LOG_INFO, "  Static geometry triangles: %d", result.staticGeometryTriangles);
-    TraceLog(LOG_INFO, "  BVH nodes: %d", result.bvhNodes);
-    TraceLog(LOG_INFO, "  BVH leaves: %d", result.bvhLeaves);
-    TraceLog(LOG_INFO, "  BVH leaf triangle limit: %d", result.bvhLeafTriangleLimit);
-    TraceLog(LOG_INFO, "  Average triangles per leaf: %.2f", result.bvhAverageTrianglesPerLeaf);
-    TraceLog(LOG_INFO, "  Max triangles in leaf: %d", result.bvhMaxTrianglesInLeaf);
-    TraceLog(LOG_INFO, "  Static lights: %d", result.staticLightCount);
-    TraceLog(LOG_INFO, "");
-    printRayStats("Direct hard-shadow rays", result.directHardShadowStats);
-    TraceLog(LOG_INFO, "");
-    printRayStats("Soft-shadow source rays", result.softShadowSourceStats);
-    TraceLog(LOG_INFO, "");
-    printRayStats("AO rays", result.ambientOcclusionStats);
-    TraceLog(LOG_INFO, "");
-    printRayStats("Indirect bounce rays", result.indirectBounceStats);
-    TraceLog(LOG_INFO, "");
-    TraceLog(LOG_INFO, "  Total rays: %llu", static_cast<unsigned long long>(totalRays));
-    TraceLog(LOG_INFO, "  Total triangle tests: %llu", static_cast<unsigned long long>(totalTriangleTests));
-    TraceLog(LOG_INFO, "  Average triangle tests/ray: %.2f", totalAverageTriangleTestsPerRay);
-    TraceLog(LOG_INFO, "");
-    TraceLog(LOG_INFO, "  Layout: %.2fs", result.layoutSeconds);
-    TraceLog(LOG_INFO, "  BVH build: %.2fs", result.bvhBuildSeconds);
-    TraceLog(LOG_INFO, "  Direct lighting: %.2fs", result.directLightingSeconds);
-    TraceLog(LOG_INFO, "  AO: %.2fs", result.ambientOcclusionSeconds);
-    TraceLog(LOG_INFO, "  Indirect bounce: %.2fs", result.indirectBounceSeconds);
-    TraceLog(LOG_INFO, "  Gutter dilation/export: %.2fs", result.gutterExportSeconds);
-    TraceLog(LOG_INFO, "  Total bake: %.2fs", result.totalBakeSeconds);
+    std::ostringstream report;
+    report << "Lightmap bake report\n";
+    report << TextFormat("  Atlas: %d x %d\n", result.width, result.height);
+    report << TextFormat("  Atlas pixels: %llu\n", static_cast<unsigned long long>(static_cast<uint64_t>(result.width) * static_cast<uint64_t>(result.height)));
+    report << TextFormat("  Valid chart texels: %d\n", result.validChartTexels);
+    report << TextFormat("  Valid atlas occupancy: %.2f%%\n", validAtlasOccupancy);
+    report << TextFormat("  Allocated chart rectangle pixels: %d\n", result.allocatedChartRectanglePixels);
+    report << TextFormat("  Chart rectangle occupancy: %.2f%%\n", chartRectangleOccupancy);
+    report << TextFormat("  Chart payload efficiency: %.2f%%\n", chartPayloadEfficiency);
+    report << TextFormat("  Static geometry triangles: %d\n", result.staticGeometryTriangles);
+    report << TextFormat("  BVH nodes: %d\n", result.bvhNodes);
+    report << TextFormat("  BVH leaves: %d\n", result.bvhLeaves);
+    report << TextFormat("  BVH leaf triangle limit: %d\n", result.bvhLeafTriangleLimit);
+    report << TextFormat("  Average triangles per leaf: %.2f\n", result.bvhAverageTrianglesPerLeaf);
+    report << TextFormat("  Max triangles in leaf: %d\n", result.bvhMaxTrianglesInLeaf);
+    report << TextFormat("  Static lights: %d\n\n", result.staticLightCount);
+    auto appendRayStats = [&](const char* label, const SectorLightmapRaycastStats& stats) {
+        report << TextFormat("  %s: %llu\n", label, static_cast<unsigned long long>(stats.raysCast));
+        report << TextFormat("    AABB tests: %llu\n", static_cast<unsigned long long>(stats.aabbTests));
+        report << TextFormat("    AABB hits: %llu\n", static_cast<unsigned long long>(stats.aabbHits));
+        report << TextFormat("    Triangle tests: %llu\n", static_cast<unsigned long long>(stats.triangleTests));
+        report << TextFormat("    Triangle hits: %llu\n", static_cast<unsigned long long>(stats.triangleHits));
+        report << TextFormat("    Average triangle tests/ray: %.2f\n", averageTriangleTestsPerRay(stats));
+    };
+    appendRayStats("Direct hard-shadow rays", result.directHardShadowStats);
+    report << "\n";
+    appendRayStats("Soft-shadow source rays", result.softShadowSourceStats);
+    report << "\n";
+    appendRayStats("AO rays", result.ambientOcclusionStats);
+    report << "\n";
+    appendRayStats("Indirect bounce rays", result.indirectBounceStats);
+    report << "\n";
+    report << TextFormat("  Total rays: %llu\n", static_cast<unsigned long long>(totalRays));
+    report << TextFormat("  Total triangle tests: %llu\n", static_cast<unsigned long long>(totalTriangleTests));
+    report << TextFormat("  Average triangle tests/ray: %.2f\n\n", totalAverageTriangleTestsPerRay);
+    report << TextFormat("  Layout: %.2fs\n", result.layoutSeconds);
+    report << TextFormat("  BVH build: %.2fs\n", result.bvhBuildSeconds);
+    report << TextFormat("  Direct lighting: %.2fs\n", result.directLightingSeconds);
+    report << TextFormat("  AO: %.2fs\n", result.ambientOcclusionSeconds);
+    report << TextFormat("  Indirect bounce: %.2fs\n", result.indirectBounceSeconds);
+    report << TextFormat("  Gutter dilation/export: %.2fs\n", result.gutterExportSeconds);
+    report << TextFormat("  Total bake: %.2fs", result.totalBakeSeconds);
+    return report.str();
+}
+
+void PrintSectorLightmapBakeReport(const SectorLightmapBakeResult& result)
+{
+    const std::string report = FormatSectorLightmapBakeReport(result);
+    std::istringstream stream(report);
+    std::string line;
+    while (std::getline(stream, line)) {
+        TraceLog(LOG_INFO, "%s", line.c_str());
+    }
 }
 
 std::string ComputeSectorLightmapSourceHash(const SectorMap& map)

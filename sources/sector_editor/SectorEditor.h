@@ -91,6 +91,12 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawLightmapBakeModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
     void DrawAddMapTextureModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -168,11 +174,20 @@ private:
     void AddStaticLightAt(Vector2 mapPoint);
     std::string GenerateUniqueLightId() const;
     bool BakeLightmaps();
+    bool StartLightmapBake();
+    void PollLightmapBakeResult(engine::AssetManager& assets);
+    void RequestLightmapBakeCancel();
+    void JoinLightmapBakeWorker();
+    void ShutdownLightmapBake();
+    bool IsLightmapBakeBlocking() const;
+    bool ConsumeLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
+    bool InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
     bool ValidatePendingPoint(SectorPoint point, std::string& error) const;
     bool ValidateSectorPolygon(const std::vector<SectorPoint>& points, std::string& error) const;
 
     SectorEditorState state;
     SectorEditorUiState uiState;
+    LightmapBakeAsyncState lightmapBake;
     Rectangle canvasRect = {};
     std::string mapPath;
     std::string fallbackMapPath;

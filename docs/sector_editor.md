@@ -127,9 +127,11 @@ field still load normally. Older static lights without `sourceRadius` load as
 
 ## Baked Lightmaps
 
-`Bake Lightmaps` bakes direct colored lighting from static point lights,
-one-bounce indirect fill, and ambient occlusion into a single shared lightmap
-atlas. The output path is derived from the current map path. For example:
+`Bake Lightmaps` starts an asynchronous worker-thread bake of direct colored
+lighting from static point lights, one-bounce indirect fill, and ambient
+occlusion into a single shared lightmap atlas. The editor window keeps
+rendering while the bake runs. The output path is derived from the current map
+path. For example:
 
 ```text
 assets/sector_demo/sector_editor_working_level.json
@@ -175,7 +177,10 @@ metadata itself.
 3D Mode uses the baked atlas only when the metadata exists, the atlas file can
 be found, and the stored source hash matches the current in-memory map. If a
 geometry or static-light edit changes the hash, the bake is reported as stale
-and rendering falls back to sector ambient lighting only.
+and rendering falls back to sector ambient lighting only. When an asynchronous
+bake finishes, the main thread validates this same source hash before
+installing the generated PNG. If the map changed during the bake, the temporary
+output is discarded and the previous lightmap remains intact.
 
 Lighting combines as:
 
@@ -228,16 +233,38 @@ Current bake characteristics:
 - Baked indirect fill from 8 deterministic cosine-weighted hemisphere samples.
 - Bake-local static BVH acceleration for direct shadow rays, soft-shadow source
   samples, AO rays, and one-bounce indirect gather rays.
+- Worker-thread execution for the CPU bake, with one bake worker at a time.
 - No recursive bounces, path tracing, texture/material-colored bounce, dynamic
   light contribution, dynamic shadows, shadow maps, SSAO, probes, normal maps,
-  PBR, GI denoising, bake threading, runtime BVH usage, or multi-atlas support.
+  PBR, GI denoising, parallel ray batches, runtime BVH usage, or multi-atlas
+  support.
 
 Every bake builds a static BVH from that bake's generated triangle list after
 lightmap layout exists and before lighting rays are cast. The BVH stores only
-triangle indices; the generated bake triangles remain the source of world-space
-positions, normals, and lightmap UVs. This is a synchronous CPU bake
+triangle indices; the generated bake triangles remain the source of
+world-space positions, normals, and lightmap UVs. This is a CPU bake
 optimization only. It is not reused between bakes, and it is not used by
 runtime rendering, gameplay collision, or editor picking.
+
+While baking, a centered modal shows the current phase, approximate progress,
+and elapsed time. Phases include layout, BVH build, direct lighting, ambient
+occlusion, indirect bounce, and dilation/output. Progress is coarse and
+weighted by phase, so it is intended to show forward movement rather than exact
+timing. The modal blocks normal editor interaction: map edits, texture pickers,
+save/reload, and 3D Mode entry are unavailable until the bake completes,
+fails, or is cancelled.
+
+`Cancel` requests cancellation and waits for the worker to exit at the next
+coarse chunk boundary. Cancellation does not replace the current lightmap PNG
+or baked metadata, and temporary bake output is removed. If the bake fails, the
+previous valid lightmap remains intact.
+
+The worker performs CPU-only work and writes a temporary PNG. GPU upload and
+texture refresh happen later on the main thread through the existing asset
+manager. Newly baked lightmaps keep bilinear filtering. If 3D Mode is entered
+after a bake, its preview scope requests the freshly installed atlas; if a
+future bake completes while 3D Mode is active, the preview is rebuilt on the
+main thread.
 
 The 2D status bar and 3D overlay show `Lightmap valid`, `Lightmap stale -
 rebake required`, or `No baked lightmap`. Re-bake after geometry, static-light,

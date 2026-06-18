@@ -1,12 +1,17 @@
 #pragma once
 
 #include "engine/ui/UI.h"
+#include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshPreview.h"
 #include "sector_demo/SectorTypes.h"
 
 #include <raylib.h>
 
+#include <atomic>
+#include <mutex>
+#include <optional>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -212,6 +217,42 @@ struct SectorEditorUiState {
     int idBufferLightIndex = -1;
     std::string idEditError;
     bool keyboardCaptured = false;
+};
+
+struct SectorLightmapBakeAsyncResult {
+    bool succeeded = false;
+    bool cancelled = false;
+    std::string errorMessage;
+    std::string bakeReportText;
+    SectorLightmapBakeResult bakeResult;
+    std::string expectedSourceHash;
+    uint64_t sourceMapRevision = 0;
+    std::string finalOutputPath;
+    std::string temporaryOutputPath;
+};
+
+struct LightmapBakeProgress {
+    std::atomic<SectorLightmapBakePhase> phase{SectorLightmapBakePhase::Idle};
+    std::atomic<uint32_t> completedWork{0};
+    std::atomic<uint32_t> totalWork{0};
+    std::atomic<bool> cancelRequested{false};
+    std::atomic<bool> running{false};
+};
+
+struct LightmapBakeAsyncState {
+    std::thread worker;
+    LightmapBakeProgress progress;
+    bool modalOpen = false;
+    bool awaitingAcknowledgement = false;
+    bool cancelButtonPressed = false;
+    double startTimeSeconds = 0.0;
+    double completedTimeSeconds = 0.0;
+    std::string terminalMessage;
+    bool terminalSuccess = false;
+    bool terminalCancelled = false;
+    std::string temporaryOutputPath;
+    std::mutex resultMutex;
+    std::optional<SectorLightmapBakeAsyncResult> pendingResult;
 };
 
 } // namespace game

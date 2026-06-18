@@ -5,6 +5,7 @@
 #include <raylib.h>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -69,6 +70,34 @@ struct SectorLightmapBakeResult {
     double totalBakeSeconds = 0.0;
 };
 
+enum class SectorLightmapBakePhase {
+    Idle,
+    Preparing,
+    BuildingLayout,
+    BuildingBvh,
+    DirectLighting,
+    AmbientOcclusion,
+    IndirectBounce,
+    DilatingAndEncoding,
+    InstallingResult,
+    Completed,
+    Cancelled,
+    Failed
+};
+
+struct SectorLightmapBakeCallbacks {
+    std::function<void(SectorLightmapBakePhase phase, uint32_t completedWork, uint32_t totalWork)> onProgress;
+    std::function<bool()> isCancellationRequested;
+};
+
+struct SectorLightmapBakeInput {
+    SectorMap mapSnapshot;
+    std::string expectedSourceHash;
+    std::string finalOutputPath;
+    std::string temporaryOutputPath;
+    uint64_t editorMapRevision = 0;
+};
+
 enum class SectorLightmapStatus {
     None,
     Valid,
@@ -97,6 +126,21 @@ bool BakeSectorLightmap(
         SectorLightmapBakeResult& outResult,
         std::string& outError);
 
+bool BakeSectorLightmap(
+        const SectorMap& map,
+        const SectorLightmapLayout& layout,
+        const char* outputPath,
+        const SectorLightmapBakeCallbacks& callbacks,
+        SectorLightmapBakeResult& outResult,
+        std::string& outError);
+
+bool BakeSectorLightmap(
+        const SectorLightmapBakeInput& input,
+        const SectorLightmapBakeCallbacks& callbacks,
+        SectorLightmapBakeResult& outResult,
+        std::string& outError);
+
+std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& result);
 void PrintSectorLightmapBakeReport(const SectorLightmapBakeResult& result);
 std::string ComputeSectorLightmapSourceHash(const SectorMap& map);
 SectorLightmapStatus GetSectorLightmapStatus(const SectorMap& map);
