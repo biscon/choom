@@ -6,13 +6,29 @@
     "step_wall": "assets/images/wall.png",
     "upper_wall": "assets/images/wall.png"
   },
-
   "sectors": [
     {
       "id": "room_a",
-      "points": [[0, 0], [6, 0], [6, 6], [0, 6]],
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          48,
+          0
+        ],
+        [
+          48,
+          48
+        ],
+        [
+          0,
+          48
+        ]
+      ],
       "floor": 0.0,
-      "ceiling": 3.0,
+      "ceiling": 24.0,
       "floorTex": "floor",
       "ceilingTex": "ceiling",
       "wallTex": "wall",
@@ -21,9 +37,26 @@
     },
     {
       "id": "raised_corridor",
-      "points": [[6, 0], [12, 0], [12, 6], [6, 6]],
-      "floor": 0.5,
-      "ceiling": 3.0,
+      "points": [
+        [
+          48,
+          0
+        ],
+        [
+          96,
+          0
+        ],
+        [
+          96,
+          48
+        ],
+        [
+          48,
+          48
+        ]
+      ],
+      "floor": 4.0,
+      "ceiling": 24.0,
       "floorTex": "floor",
       "ceilingTex": "ceiling",
       "wallTex": "wall",
@@ -32,9 +65,34 @@
     },
     {
       "id": "l_room",
-      "points": [[12, 0], [18, 0], [18, 2], [14, 2], [14, 6], [12, 6]],
-      "floor": 0.5,
-      "ceiling": 3.0,
+      "points": [
+        [
+          96,
+          0
+        ],
+        [
+          144,
+          0
+        ],
+        [
+          144,
+          16
+        ],
+        [
+          112,
+          16
+        ],
+        [
+          112,
+          48
+        ],
+        [
+          96,
+          48
+        ]
+      ],
+      "floor": 4.0,
+      "ceiling": 24.0,
       "floorTex": "floor",
       "ceilingTex": "ceiling",
       "wallTex": "wall",
@@ -43,9 +101,26 @@
     },
     {
       "id": "lower_room",
-      "points": [[0, 6], [6, 6], [6, 12], [0, 12]],
-      "floor": -0.5,
-      "ceiling": 2.5,
+      "points": [
+        [
+          0,
+          48
+        ],
+        [
+          48,
+          48
+        ],
+        [
+          48,
+          96
+        ],
+        [
+          0,
+          96
+        ]
+      ],
+      "floor": -4.0,
+      "ceiling": 20.0,
       "floorTex": "floor",
       "ceilingTex": "ceiling",
       "wallTex": "wall",
@@ -54,9 +129,26 @@
     },
     {
       "id": "tall_room",
-      "points": [[6, 6], [12, 6], [12, 12], [6, 12]],
+      "points": [
+        [
+          48,
+          48
+        ],
+        [
+          96,
+          48
+        ],
+        [
+          96,
+          96
+        ],
+        [
+          48,
+          96
+        ]
+      ],
       "floor": 0.0,
-      "ceiling": 4.0,
+      "ceiling": 32.0,
       "floorTex": "floor",
       "ceilingTex": "ceiling",
       "wallTex": "wall",
@@ -64,10 +156,12 @@
       "upperWallTex": "upper_wall"
     }
   ],
-
   "playerStart": {
-    "pos": [2.0, 3.0],
-    "z": 1.6,
+    "pos": [
+      16.0,
+      24.0
+    ],
+    "z": 12.8,
     "yawDegrees": 0.0
   }
 }

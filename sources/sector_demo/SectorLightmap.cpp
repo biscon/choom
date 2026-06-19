@@ -1,6 +1,7 @@
 #include "sector_demo/SectorLightmap.h"
 
 #include "sector_demo/SectorGeneratedGeometry.h"
+#include "sector_demo/SectorUnits.h"
 
 #include <raylib.h>
 #include <raymath.h>
@@ -29,7 +30,8 @@ struct BakeTriangle {
     Vector2 lightmapUv0 = {};
     Vector2 lightmapUv1 = {};
     Vector2 lightmapUv2 = {};
-    int surfaceIndex = -1;
+    SectorGeneratedSurfaceRef surfaceRef;
+    int sourceSurfaceIndex = -1;
     int triangleIndex = -1;
 };
 
@@ -45,7 +47,7 @@ struct RayHit {
     float distance = 0.0f;
     Vector3 normal = {};
     Vector2 lightmapUv = {};
-    int surfaceIndex = -1;
+    int sourceSurfaceIndex = -1;
     int triangleIndex = -1;
     float barycentric0 = 0.0f;
     float barycentric1 = 0.0f;
@@ -56,7 +58,8 @@ struct BakeTexel {
     int x = 0;
     int y = 0;
     size_t pixelIndex = 0;
-    int surfaceIndex = -1;
+    SectorGeneratedSurfaceRef surfaceRef;
+    int sourceSurfaceIndex = -1;
     int triangleIndex = -1;
     Vector3 position = {};
     Vector3 normal = {};
@@ -478,9 +481,38 @@ bool IntersectRayAabb(const Ray& ray, const BakeAabb& bounds, float maxDistance,
     return outEntryDistance < maxDistance;
 }
 
-bool IsIgnoredTriangle(const BakeTriangle& tri, int sourceSurfaceIndex, int sourceTriangleIndex)
+bool IsSameLogicalBakeSurface(const SectorGeneratedSurfaceRef& a, const SectorGeneratedSurfaceRef& b)
 {
-    return tri.surfaceIndex == sourceSurfaceIndex && tri.triangleIndex == sourceTriangleIndex;
+    if (a.kind != b.kind || a.sectorIndex != b.sectorIndex) {
+        return false;
+    }
+
+    switch (a.kind) {
+        case SectorGeneratedSurfaceKind::Floor:
+        case SectorGeneratedSurfaceKind::Ceiling:
+            return true;
+        case SectorGeneratedSurfaceKind::Wall:
+        case SectorGeneratedSurfaceKind::LowerWall:
+        case SectorGeneratedSurfaceKind::UpperWall:
+            return a.edgeIndex == b.edgeIndex;
+    }
+
+    return false;
+}
+
+bool IsExactSourceTriangle(const BakeTriangle& tri, int sourceSurfaceIndex, int sourceTriangleIndex)
+{
+    return tri.sourceSurfaceIndex == sourceSurfaceIndex && tri.triangleIndex == sourceTriangleIndex;
+}
+
+bool ShouldIgnoreBakeTriangle(
+        const BakeTriangle& tri,
+        const SectorGeneratedSurfaceRef& sourceSurfaceRef,
+        int sourceSurfaceIndex,
+        int sourceTriangleIndex)
+{
+    return IsExactSourceTriangle(tri, sourceSurfaceIndex, sourceTriangleIndex)
+            || IsSameLogicalBakeSurface(tri.surfaceRef, sourceSurfaceRef);
 }
 
 bool RaycastBakeTrianglesAnyHit(
@@ -488,6 +520,7 @@ bool RaycastBakeTrianglesAnyHit(
         const std::vector<BakeTriangle>& triangles,
         const Ray& ray,
         float maxDistance,
+        const SectorGeneratedSurfaceRef& sourceSurfaceRef,
         int sourceSurfaceIndex,
         int sourceTriangleIndex,
         SectorLightmapRaycastStats* stats)
@@ -509,13 +542,19 @@ bool RaycastBakeTrianglesAnyHit(
             for (int i = 0; i < node.triangleCount; ++i) {
                 const int triangleIndex = bvh.orderedTriangleIndices[static_cast<size_t>(node.firstTriangle + i)];
                 const BakeTriangle& tri = triangles[static_cast<size_t>(triangleIndex)];
-                if (IsIgnoredTriangle(tri, sourceSurfaceIndex, sourceTriangleIndex)) {
+                if (IsExactSourceTriangle(tri, sourceSurfaceIndex, sourceTriangleIndex)) {
                     continue;
                 }
                 if (stats != nullptr) {
                     ++stats->triangleTests;
                 }
                 if (RayIntersectsTriangle(ray.position, ray.direction, tri, maxDistance)) {
+                    if (ShouldIgnoreBakeTriangle(tri, sourceSurfaceRef, sourceSurfaceIndex, sourceTriangleIndex)) {
+                        if (stats != nullptr) {
+                            ++stats->logicalSelfHitsIgnored;
+                        }
+                        continue;
+                    }
                     if (stats != nullptr) {
                         ++stats->triangleHits;
                     }
@@ -568,6 +607,7 @@ RayHit RaycastBakeTrianglesClosest(
         const std::vector<BakeTriangle>& triangles,
         const Ray& ray,
         float maxDistance,
+        const SectorGeneratedSurfaceRef& sourceSurfaceRef,
         int sourceSurfaceIndex,
         int sourceTriangleIndex,
         SectorLightmapRaycastStats* stats)
@@ -592,7 +632,7 @@ RayHit RaycastBakeTrianglesClosest(
             for (int i = 0; i < node.triangleCount; ++i) {
                 const int triangleIndex = bvh.orderedTriangleIndices[static_cast<size_t>(node.firstTriangle + i)];
                 const BakeTriangle& tri = triangles[static_cast<size_t>(triangleIndex)];
-                if (IsIgnoredTriangle(tri, sourceSurfaceIndex, sourceTriangleIndex)) {
+                if (IsExactSourceTriangle(tri, sourceSurfaceIndex, sourceTriangleIndex)) {
                     continue;
                 }
 
@@ -604,13 +644,19 @@ RayHit RaycastBakeTrianglesClosest(
                     ++stats->triangleTests;
                 }
                 if (RayIntersectsTriangle(ray.position, ray.direction, tri, closest.distance, distance, barycentric0, barycentric1, barycentric2)) {
+                    if (ShouldIgnoreBakeTriangle(tri, sourceSurfaceRef, sourceSurfaceIndex, sourceTriangleIndex)) {
+                        if (stats != nullptr) {
+                            ++stats->logicalSelfHitsIgnored;
+                        }
+                        continue;
+                    }
                     if (stats != nullptr) {
                         ++stats->triangleHits;
                     }
                     closest.hit = true;
                     closest.distance = distance;
                     closest.normal = tri.normal;
-                    closest.surfaceIndex = tri.surfaceIndex;
+                    closest.sourceSurfaceIndex = tri.sourceSurfaceIndex;
                     closest.triangleIndex = tri.triangleIndex;
                     closest.barycentric0 = barycentric0;
                     closest.barycentric1 = barycentric1;
@@ -673,6 +719,7 @@ bool IsOccluded(
         Vector3 position,
         Vector3 normal,
         Vector3 lightPosition,
+        const SectorGeneratedSurfaceRef& sourceSurfaceRef,
         int sourceSurfaceIndex,
         int sourceTriangleIndex,
         const SectorLightmapBvh& bvh,
@@ -696,6 +743,7 @@ bool IsOccluded(
             triangles,
             ray,
             maxDistance,
+            sourceSurfaceRef,
             sourceSurfaceIndex,
             sourceTriangleIndex,
             softShadowSample ? &stats.softShadowSource : &stats.directHardShadow
@@ -706,6 +754,7 @@ RayHit TraceRay(
         Vector3 origin,
         Vector3 direction,
         float maxDistance,
+        const SectorGeneratedSurfaceRef& sourceSurfaceRef,
         int sourceSurfaceIndex,
         int sourceTriangleIndex,
         SectorLightmapRaycastStats* stats,
@@ -717,6 +766,7 @@ RayHit TraceRay(
             triangles,
             Ray{origin, direction},
             maxDistance,
+            sourceSurfaceRef,
             sourceSurfaceIndex,
             sourceTriangleIndex,
             stats
@@ -773,6 +823,7 @@ Vector3 EvaluateDirectLightSample(
         const SectorStaticPointLight& light,
         Vector3 lightPosition,
         const RasterHit& hit,
+        const SectorGeneratedSurfaceRef& surfaceRef,
         int surfaceIndex,
         const SectorLightmapBvh& bvh,
         const std::vector<BakeTriangle>& triangles,
@@ -791,7 +842,7 @@ Vector3 EvaluateDirectLightSample(
         return Vector3{};
     }
 
-    if (IsOccluded(hit.position, hit.normal, lightPosition, surfaceIndex, hit.triangleIndex, bvh, triangles, softShadowSample, stats)) {
+    if (IsOccluded(hit.position, hit.normal, lightPosition, surfaceRef, surfaceIndex, hit.triangleIndex, bvh, triangles, softShadowSample, stats)) {
         return Vector3{};
     }
 
@@ -808,6 +859,7 @@ Vector3 EvaluateDirectLightSample(
 Vector3 EvaluateDirectLight(
         const SectorStaticPointLight& light,
         const RasterHit& hit,
+        const SectorGeneratedSurfaceRef& surfaceRef,
         int surfaceIndex,
         const SectorLightmapBvh& bvh,
         const std::vector<BakeTriangle>& triangles,
@@ -819,20 +871,30 @@ Vector3 EvaluateDirectLight(
 
     const float sourceRadius = std::min(std::clamp(light.sourceRadius, 0.0f, 8.0f), light.radius * 0.5f);
     if (sourceRadius <= BakeEpsilon) {
-        return EvaluateDirectLightSample(light, light.position, hit, surfaceIndex, bvh, triangles, false, stats);
+        return EvaluateDirectLightSample(light, light.position, hit, surfaceRef, surfaceIndex, bvh, triangles, false, stats);
     }
 
     Vector3 direct{};
     for (int i = 0; i < kDirectSoftShadowSampleCount; ++i) {
         const Vector3 sampleOffset = Vector3Scale(FibonacciSphereSample(i, kDirectSoftShadowSampleCount), sourceRadius);
         const Vector3 samplePosition = Vector3Add(light.position, sampleOffset);
-        direct = Vector3Add(direct, EvaluateDirectLightSample(light, samplePosition, hit, surfaceIndex, bvh, triangles, true, stats));
+        direct = Vector3Add(direct, EvaluateDirectLightSample(light, samplePosition, hit, surfaceRef, surfaceIndex, bvh, triangles, true, stats));
     }
     return Vector3Scale(direct, 1.0f / static_cast<float>(kDirectSoftShadowSampleCount));
 }
 
+SectorStaticPointLight MakeWorldSpaceLight(const SectorStaticPointLight& authoringLight)
+{
+    SectorStaticPointLight worldLight = authoringLight;
+    worldLight.position = SectorAuthoringToWorldPosition(authoringLight.position);
+    worldLight.radius = SectorAuthoringToWorldDistance(authoringLight.radius);
+    worldLight.sourceRadius = SectorAuthoringToWorldDistance(authoringLight.sourceRadius);
+    return worldLight;
+}
+
 float BakeAmbientOcclusion(
         const RasterHit& hit,
+        const SectorGeneratedSurfaceRef& surfaceRef,
         int surfaceIndex,
         float radius,
         float strength,
@@ -848,7 +910,7 @@ float BakeAmbientOcclusion(
     float occlusion = 0.0f;
     for (int i = 0; i < kAmbientOcclusionSampleCount; ++i) {
         const Vector3 direction = CosineHemisphereSample(hit.normal, i, kAmbientOcclusionSampleCount);
-        const RayHit rayHit = TraceRay(origin, direction, radius, surfaceIndex, hit.triangleIndex, &stats.ambientOcclusion, bvh, triangles);
+        const RayHit rayHit = TraceRay(origin, direction, radius, surfaceRef, surfaceIndex, hit.triangleIndex, &stats.ambientOcclusion, bvh, triangles);
         if (!rayHit.hit) {
             continue;
         }
@@ -887,6 +949,7 @@ std::vector<BakeTriangle> BuildBakeTriangles(const SectorGeneratedGeometry& geom
                     uv0,
                     uv1,
                     uv2,
+                    surface.ref,
                     static_cast<int>(surfaceIndex),
                     static_cast<int>(i / 3)
             });
@@ -1244,10 +1307,23 @@ bool BakeSectorLightmap(
     if (CheckBakeCancelled(callbacks, outError)) {
         return false;
     }
-    const float aoRadius = std::clamp(map.lightmapSettings.ambientOcclusionRadius, 0.05f, 16.0f);
+    const float aoRadius = std::clamp(
+            SectorAuthoringToWorldDistance(map.lightmapSettings.ambientOcclusionRadius),
+            0.05f,
+            16.0f
+    );
     const float aoStrength = std::clamp(map.lightmapSettings.ambientOcclusionStrength, 0.0f, 1.0f);
-    const float indirectBounceRadius = std::clamp(map.lightmapSettings.indirectBounceRadius, 0.05f, 16.0f);
+    const float indirectBounceRadius = std::clamp(
+            SectorAuthoringToWorldDistance(map.lightmapSettings.indirectBounceRadius),
+            0.05f,
+            16.0f
+    );
     const float indirectBounceStrength = std::clamp(map.lightmapSettings.indirectBounceStrength, 0.0f, 1.0f);
+    std::vector<SectorStaticPointLight> worldLights;
+    worldLights.reserve(map.staticLights.size());
+    for (const SectorStaticPointLight& light : map.staticLights) {
+        worldLights.push_back(MakeWorldSpaceLight(light));
+    }
     BakeRayStats stats;
     int allocatedChartRectanglePixels = 0;
 
@@ -1274,6 +1350,7 @@ bool BakeSectorLightmap(
                         x,
                         y,
                         pixelIndex,
+                        surface.ref,
                         chart.surfaceIndex,
                         hit.triangleIndex,
                         hit.position,
@@ -1291,7 +1368,7 @@ bool BakeSectorLightmap(
     const auto directStart = Clock::now();
     ReportProgress(callbacks, SectorLightmapBakePhase::DirectLighting, 0, static_cast<uint32_t>(bakeTexels.size()));
     uint32_t completedTexels = 0;
-    if (!map.staticLights.empty()) {
+    if (!worldLights.empty()) {
         for (const BakeTexel& texel : bakeTexels) {
             RasterHit hit;
             hit.hit = true;
@@ -1300,8 +1377,8 @@ bool BakeSectorLightmap(
             hit.triangleIndex = texel.triangleIndex;
 
             Vector3 direct{};
-            for (const SectorStaticPointLight& light : map.staticLights) {
-                direct = Vector3Add(direct, EvaluateDirectLight(light, hit, texel.surfaceIndex, bvh, triangles, stats));
+            for (const SectorStaticPointLight& light : worldLights) {
+                direct = Vector3Add(direct, EvaluateDirectLight(light, hit, texel.surfaceRef, texel.sourceSurfaceIndex, bvh, triangles, stats));
             }
             directLightingFloat[texel.pixelIndex] = direct;
             ++completedTexels;
@@ -1326,7 +1403,7 @@ bool BakeSectorLightmap(
             hit.position = texel.position;
             hit.normal = texel.normal;
             hit.triangleIndex = texel.triangleIndex;
-            ambientOcclusionFloat[texel.pixelIndex] = BakeAmbientOcclusion(hit, texel.surfaceIndex, aoRadius, aoStrength, bvh, triangles, stats);
+            ambientOcclusionFloat[texel.pixelIndex] = BakeAmbientOcclusion(hit, texel.surfaceRef, texel.sourceSurfaceIndex, aoRadius, aoStrength, bvh, triangles, stats);
             ++completedTexels;
             if ((completedTexels % kSectorLightmapProgressChunk) == 0) {
                 ReportProgress(callbacks, SectorLightmapBakePhase::AmbientOcclusion, completedTexels, static_cast<uint32_t>(bakeTexels.size()));
@@ -1358,7 +1435,8 @@ bool BakeSectorLightmap(
                         origin,
                         direction,
                         indirectBounceRadius,
-                        texel.surfaceIndex,
+                        texel.surfaceRef,
+                        texel.sourceSurfaceIndex,
                         texel.triangleIndex,
                         &stats.indirectBounce,
                         bvh,
@@ -1541,6 +1619,10 @@ std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& resul
             + result.softShadowSourceStats.triangleTests
             + result.ambientOcclusionStats.triangleTests
             + result.indirectBounceStats.triangleTests;
+    const uint64_t totalLogicalSelfHitsIgnored = result.directHardShadowStats.logicalSelfHitsIgnored
+            + result.softShadowSourceStats.logicalSelfHitsIgnored
+            + result.ambientOcclusionStats.logicalSelfHitsIgnored
+            + result.indirectBounceStats.logicalSelfHitsIgnored;
     const double totalAverageTriangleTestsPerRay = totalRays > 0
             ? static_cast<double>(totalTriangleTests) / static_cast<double>(totalRays)
             : 0.0;
@@ -1567,6 +1649,7 @@ std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& resul
         report << TextFormat("    AABB hits: %llu\n", static_cast<unsigned long long>(stats.aabbHits));
         report << TextFormat("    Triangle tests: %llu\n", static_cast<unsigned long long>(stats.triangleTests));
         report << TextFormat("    Triangle hits: %llu\n", static_cast<unsigned long long>(stats.triangleHits));
+        report << TextFormat("    Logical source-surface self hits ignored: %llu\n", static_cast<unsigned long long>(stats.logicalSelfHitsIgnored));
         report << TextFormat("    Average triangle tests/ray: %.2f\n", averageTriangleTestsPerRay(stats));
     };
     appendRayStats("Direct hard-shadow rays", result.directHardShadowStats);
@@ -1579,6 +1662,7 @@ std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& resul
     report << "\n";
     report << TextFormat("  Total rays: %llu\n", static_cast<unsigned long long>(totalRays));
     report << TextFormat("  Total triangle tests: %llu\n", static_cast<unsigned long long>(totalTriangleTests));
+    report << TextFormat("  Total logical source-surface self hits ignored: %llu\n", static_cast<unsigned long long>(totalLogicalSelfHitsIgnored));
     report << TextFormat("  Average triangle tests/ray: %.2f\n\n", totalAverageTriangleTestsPerRay);
     report << TextFormat("  Layout: %.2fs\n", result.layoutSeconds);
     report << TextFormat("  BVH build: %.2fs\n", result.bvhBuildSeconds);
@@ -1609,37 +1693,39 @@ std::string ComputeSectorLightmapSourceHash(const SectorMap& map)
     FnvAppendInt(hash, SectorLightmapAtlasHeight);
     FnvAppendInt(hash, SectorLightmapGutterTexels);
     FnvAppendFloat(hash, SectorLightmapTexelsPerWorldUnit);
+    FnvAppendFloat(hash, kSectorWorldUnitsPerAuthoringUnit);
     FnvAppendInt(hash, kDirectSoftShadowSampleCount);
     FnvAppendInt(hash, kAmbientOcclusionSampleCount);
     FnvAppendInt(hash, kIndirectBounceSampleCount);
     FnvAppendFloat(hash, kNeutralBounceAlbedo);
-    FnvAppendFloat(hash, std::clamp(map.lightmapSettings.ambientOcclusionRadius, 0.05f, 16.0f));
+    FnvAppendFloat(hash, std::clamp(SectorAuthoringToWorldDistance(map.lightmapSettings.ambientOcclusionRadius), 0.05f, 16.0f));
     FnvAppendFloat(hash, std::clamp(map.lightmapSettings.ambientOcclusionStrength, 0.0f, 1.0f));
-    FnvAppendFloat(hash, std::clamp(map.lightmapSettings.indirectBounceRadius, 0.05f, 16.0f));
+    FnvAppendFloat(hash, std::clamp(SectorAuthoringToWorldDistance(map.lightmapSettings.indirectBounceRadius), 0.05f, 16.0f));
     FnvAppendFloat(hash, std::clamp(map.lightmapSettings.indirectBounceStrength, 0.0f, 1.0f));
 
     FnvAppendInt(hash, static_cast<int>(map.sectors.size()));
     for (const SectorDefinition& sector : map.sectors) {
         FnvAppendInt(hash, static_cast<int>(sector.points.size()));
         for (SectorPoint point : sector.points) {
-            FnvAppendFloat(hash, point.x);
-            FnvAppendFloat(hash, point.y);
+            FnvAppendFloat(hash, SectorAuthoringToWorldDistance(point.x));
+            FnvAppendFloat(hash, SectorAuthoringToWorldDistance(point.y));
         }
-        FnvAppendFloat(hash, sector.floorZ);
-        FnvAppendFloat(hash, sector.ceilingZ);
+        FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector.floorZ));
+        FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector.ceilingZ));
     }
 
     FnvAppendInt(hash, static_cast<int>(map.staticLights.size()));
     for (const SectorStaticPointLight& light : map.staticLights) {
-        FnvAppendFloat(hash, light.position.x);
-        FnvAppendFloat(hash, light.position.y);
-        FnvAppendFloat(hash, light.position.z);
+        const SectorStaticPointLight worldLight = MakeWorldSpaceLight(light);
+        FnvAppendFloat(hash, worldLight.position.x);
+        FnvAppendFloat(hash, worldLight.position.y);
+        FnvAppendFloat(hash, worldLight.position.z);
         FnvAppendInt(hash, static_cast<int>(light.color.r));
         FnvAppendInt(hash, static_cast<int>(light.color.g));
         FnvAppendInt(hash, static_cast<int>(light.color.b));
         FnvAppendFloat(hash, light.intensity);
-        FnvAppendFloat(hash, light.radius);
-        FnvAppendFloat(hash, std::min(std::clamp(light.sourceRadius, 0.0f, 8.0f), light.radius * 0.5f));
+        FnvAppendFloat(hash, worldLight.radius);
+        FnvAppendFloat(hash, std::min(std::clamp(worldLight.sourceRadius, 0.0f, 8.0f), worldLight.radius * 0.5f));
     }
 
     return HashToString(hash);

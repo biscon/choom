@@ -128,6 +128,13 @@ struct VertexDragState {
     std::string errorMessage;
 };
 
+struct LightDragState {
+    bool active = false;
+    int lightIndex = -1;
+    Vector3 originalPosition = {};
+    Vector3 snappedPosition = {};
+};
+
 struct SectorEditorState {
     SectorMap map;
 
@@ -136,7 +143,7 @@ struct SectorEditorState {
 
     Vector2 viewCenter = {0.0f, 0.0f};
     float viewZoom = 48.0f;
-    int gridSize = 1;
+    int gridSize = 8;
 
     int selectedSectorIndex = -1;
     int selectedEdgeIndex = -1;
@@ -155,8 +162,9 @@ struct SectorEditorState {
 
     PendingSectorDraw pendingSector;
     VertexDragState vertexDrag;
+    LightDragState lightDrag;
     float defaultSectorFloorZ = 0.0f;
-    float defaultSectorCeilingZ = 3.0f;
+    float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);
     std::string defaultFloorTextureId;
     std::string defaultCeilingTextureId;
     std::string defaultWallTextureId;

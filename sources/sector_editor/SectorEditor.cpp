@@ -5,6 +5,7 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMap.h"
+#include "sector_demo/SectorUnits.h"
 
 #include <raylib.h>
 #include <raymath.h>
@@ -157,18 +158,18 @@ float ClampLightIntensity(float value)
 
 float ClampLightRadius(float value)
 {
-    return std::clamp(value, 0.1f, 64.0f);
+    return std::clamp(value, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f));
 }
 
 float ClampLightSourceRadius(float value, float lightRadius)
 {
-    const float clamped = std::clamp(value, 0.0f, 8.0f);
+    const float clamped = std::clamp(value, 0.0f, SectorWorldToAuthoringDistance(8.0f));
     return std::min(clamped, std::max(0.0f, lightRadius * 0.5f));
 }
 
 float ClampAmbientOcclusionRadius(float value)
 {
-    return std::clamp(value, 0.05f, 16.0f);
+    return std::clamp(value, SectorWorldToAuthoringDistance(0.05f), SectorWorldToAuthoringDistance(16.0f));
 }
 
 float ClampAmbientOcclusionStrength(float value)
@@ -178,7 +179,7 @@ float ClampAmbientOcclusionStrength(float value)
 
 float ClampIndirectBounceRadius(float value)
 {
-    return std::clamp(value, 0.05f, 16.0f);
+    return std::clamp(value, SectorWorldToAuthoringDistance(0.05f), SectorWorldToAuthoringDistance(16.0f));
 }
 
 float ClampIndirectBounceStrength(float value)
@@ -393,7 +394,7 @@ EdgeUvPart SurfaceKindToEdgeUvPart(SectorSurfaceKind kind)
 
 Vector3 SectorPointToWorld(SectorPoint point, float height)
 {
-    return Vector3{point.x, height, point.y};
+    return SectorAuthoringToWorldPosition(point.x, height, point.y);
 }
 
 const char* ToolHelpText(SectorEditorTool tool)
@@ -402,7 +403,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::Select: return "Select: click edges or sectors in canvas";
         case SectorEditorTool::Sector: return "Sector: left click add, click first closes, right click/Esc cancels, Backspace removes";
         case SectorEditorTool::Light: return "Light: click inside a sector to place a baked static point light";
-        case SectorEditorTool::Move: return "Move: drag vertex";
+        case SectorEditorTool::Move: return "Move: drag light or vertex";
         case SectorEditorTool::Erase: return "Erase: click sector to delete";
     }
     return "";
@@ -797,7 +798,7 @@ bool SectorEditor::Init(engine::AssetManager& assets, const char* path)
 
     state.viewCenter = Vector2{9.0f, 6.0f};
     state.viewZoom = 48.0f;
-    state.gridSize = 1;
+    state.gridSize = 8;
     state.selectedSectorIndex = -1;
     state.selectedEdgeIndex = -1;
     state.selectedLightIndex = -1;
@@ -832,6 +833,7 @@ void SectorEditor::Update(engine::Input& input, float dt)
 {
     if (IsLightmapBakeBlocking()) {
         CancelVertexDrag(nullptr);
+        CancelLightDrag(nullptr);
         CancelPendingSector(nullptr);
         return;
     }
@@ -873,6 +875,7 @@ void SectorEditor::Render(engine::AssetManager& assets)
     DrawStaticLights();
     DrawPendingSector();
     DrawVertexMoveOverlay();
+    DrawLightMoveOverlay();
     EndScissorMode();
 
     DrawRectangleLinesEx(canvasRect, 2.0f, Color{67, 76, 93, 255});
@@ -947,13 +950,23 @@ void SectorEditor::RenderUI(
 
 Vector2 SectorEditor::MapToScreen(Vector2 map) const
 {
-    return Vector2{
-            canvasRect.x + canvasRect.width * 0.5f + (map.x - state.viewCenter.x) * state.viewZoom,
-            canvasRect.y + canvasRect.height * 0.5f + (map.y - state.viewCenter.y) * state.viewZoom
-    };
+    return CanvasWorldToScreen(SectorAuthoringToWorldPosition(map));
 }
 
 Vector2 SectorEditor::ScreenToMap(Vector2 screen) const
+{
+    return SectorWorldToAuthoringPosition(ScreenToCanvasWorld(screen));
+}
+
+Vector2 SectorEditor::CanvasWorldToScreen(Vector2 canvasWorld) const
+{
+    return Vector2{
+            canvasRect.x + canvasRect.width * 0.5f + (canvasWorld.x - state.viewCenter.x) * state.viewZoom,
+            canvasRect.y + canvasRect.height * 0.5f + (canvasWorld.y - state.viewCenter.y) * state.viewZoom
+    };
+}
+
+Vector2 SectorEditor::ScreenToCanvasWorld(Vector2 screen) const
 {
     return Vector2{
             state.viewCenter.x + (screen.x - (canvasRect.x + canvasRect.width * 0.5f)) / state.viewZoom,
@@ -973,7 +986,10 @@ Vector2 SectorEditor::SnapMapPoint(Vector2 map) const
         return snapped;
     }
 
-    const float threshold = std::max(ScreenVertexSnapPixels / std::max(1.0f, state.viewZoom), grid * 0.20f);
+    const float threshold = std::max(
+            SectorWorldToAuthoringDistance(ScreenVertexSnapPixels / std::max(1.0f, state.viewZoom)),
+            grid * 0.20f
+    );
     float bestDistance2 = threshold * threshold;
     bool found = false;
     Vector2 best = snapped;
@@ -1049,7 +1065,12 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
         }
     }
     state.hoveredSectorIndex = FindSectorAt(state.rawMouseMap);
-    if (state.currentTool == SectorEditorTool::Move && !state.vertexDrag.active) {
+    if (state.currentTool == SectorEditorTool::Move && !state.vertexDrag.active && !state.lightDrag.active) {
+        if (state.hoveredLightIndex >= 0) {
+            const SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.hoveredLightIndex)];
+            statusText = TextFormat("Move: drag %s", light.id.c_str());
+            return;
+        }
         state.hasHoveredVertex = FindVertexNearScreenPoint(
                 input.MousePosition(),
                 state.hoveredVertexPoint,
@@ -1076,6 +1097,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 if (event.key.key == KEY_ESCAPE) {
                     if (state.vertexDrag.active) {
                         CancelVertexDrag("Cancelled vertex move");
+                    } else if (state.lightDrag.active) {
+                        CancelLightDrag("Cancelled light move");
                     } else if (state.pendingSector.active) {
                         CancelPendingSector("Cancelled sector");
                     } else if (state.selectedLightIndex >= 0 || state.selectedSectorIndex >= 0) {
@@ -1110,15 +1133,25 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
             }
     );
 
-    if (state.vertexDrag.active) {
-        UpdateVertexDrag(input);
+    if (state.vertexDrag.active || state.lightDrag.active) {
+        if (state.vertexDrag.active) {
+            UpdateVertexDrag(input);
+        }
+        if (state.lightDrag.active) {
+            UpdateLightDrag(input);
+        }
 
         input.ForEachEvent(
                 engine::InputEventType::MouseButtonPressed,
                 true,
                 [this](engine::InputEvent& event) {
                     if (event.mouseButton.button == MOUSE_RIGHT_BUTTON) {
-                        CancelVertexDrag("Cancelled vertex move");
+                        if (state.vertexDrag.active) {
+                            CancelVertexDrag("Cancelled vertex move");
+                        }
+                        if (state.lightDrag.active) {
+                            CancelLightDrag("Cancelled light move");
+                        }
                         engine::ConsumeEvent(event);
                     }
                 }
@@ -1129,7 +1162,12 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 true,
                 [this](engine::InputEvent& event) {
                     if (event.mouseButton.button == MOUSE_LEFT_BUTTON) {
-                        FinishVertexDrag();
+                        if (state.vertexDrag.active) {
+                            FinishVertexDrag();
+                        }
+                        if (state.lightDrag.active) {
+                            FinishLightDrag();
+                        }
                         engine::ConsumeEvent(event);
                     }
                 }
@@ -1184,6 +1222,13 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
+                const int lightIndex = FindLightNearScreenPoint(event.mouseButton.position);
+                if (lightIndex >= 0) {
+                    StartLightDrag(lightIndex);
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 SectorPoint point{};
                 std::vector<SectorVertexRef> refs;
                 if (FindVertexNearScreenPoint(event.mouseButton.position, point, refs)) {
@@ -1197,10 +1242,10 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
             engine::InputEventType::MouseWheel,
             true,
             [this, &input](engine::InputEvent& event) {
-                const Vector2 mouseBefore = ScreenToMap(input.MousePosition());
+                const Vector2 mouseBefore = ScreenToCanvasWorld(input.MousePosition());
                 const float zoomFactor = event.wheel.value > 0.0f ? 1.12f : 1.0f / 1.12f;
                 state.viewZoom = std::clamp(state.viewZoom * zoomFactor, MinZoom, MaxZoom);
-                const Vector2 mouseAfter = ScreenToMap(input.MousePosition());
+                const Vector2 mouseAfter = ScreenToCanvasWorld(input.MousePosition());
                 state.viewCenter.x += mouseBefore.x - mouseAfter.x;
                 state.viewCenter.y += mouseBefore.y - mouseAfter.y;
                 engine::ConsumeEvent(event);
@@ -1357,6 +1402,84 @@ void SectorEditor::FinishVertexDrag()
 void SectorEditor::CancelVertexDrag(const char* message)
 {
     state.vertexDrag = VertexDragState{};
+    if (message != nullptr && message[0] != '\0') {
+        statusText = message;
+    }
+}
+
+void SectorEditor::StartLightDrag(int lightIndex)
+{
+    if (lightIndex < 0 || lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+        return;
+    }
+
+    SelectLight(lightIndex);
+    const SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(lightIndex)];
+    state.lightDrag.active = true;
+    state.lightDrag.lightIndex = lightIndex;
+    state.lightDrag.originalPosition = light.position;
+    state.lightDrag.snappedPosition = light.position;
+    statusText = TextFormat("Moving %s", light.id.c_str());
+}
+
+void SectorEditor::UpdateLightDrag(engine::Input& input)
+{
+    if (!state.lightDrag.active
+            || state.lightDrag.lightIndex < 0
+            || state.lightDrag.lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+        return;
+    }
+
+    SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.lightDrag.lightIndex)];
+    const Vector2 snapped = SnapMapPoint(ScreenToMap(input.MousePosition()));
+    state.lightDrag.snappedPosition = Vector3{snapped.x, state.lightDrag.originalPosition.y, snapped.y};
+    light.position.x = state.lightDrag.snappedPosition.x;
+    light.position.y = state.lightDrag.snappedPosition.y;
+    light.position.z = state.lightDrag.snappedPosition.z;
+    statusText = TextFormat("Moving %s", light.id.c_str());
+}
+
+void SectorEditor::FinishLightDrag()
+{
+    if (!state.lightDrag.active) {
+        return;
+    }
+
+    const int lightIndex = state.lightDrag.lightIndex;
+    const Vector3 original = state.lightDrag.originalPosition;
+    state.lightDrag = LightDragState{};
+    if (lightIndex < 0 || lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+        return;
+    }
+
+    SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(lightIndex)];
+    SelectLight(lightIndex);
+    if (std::fabs(light.position.x - original.x) <= GeometryEpsilon
+            && std::fabs(light.position.z - original.z) <= GeometryEpsilon) {
+        light.position = original;
+        statusText = "Light unchanged";
+        return;
+    }
+
+    state.dirty = true;
+    statusText = TextFormat(
+            "Moved %s to X %.2f, Z %.2f",
+            light.id.c_str(),
+            light.position.x,
+            light.position.z
+    );
+}
+
+void SectorEditor::CancelLightDrag(const char* message)
+{
+    if (state.lightDrag.active
+            && state.lightDrag.lightIndex >= 0
+            && state.lightDrag.lightIndex < static_cast<int>(state.map.staticLights.size())) {
+        state.map.staticLights[static_cast<size_t>(state.lightDrag.lightIndex)].position = state.lightDrag.originalPosition;
+        SelectLight(state.lightDrag.lightIndex);
+    }
+
+    state.lightDrag = LightDragState{};
     if (message != nullptr && message[0] != '\0') {
         statusText = message;
     }
@@ -1764,11 +1887,11 @@ void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
     const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(sectorIndex)];
     SectorStaticPointLight light;
     light.id = GenerateUniqueLightId();
-    light.position = Vector3{mapPoint.x, sector.floorZ + 1.8f, mapPoint.y};
+    light.position = Vector3{mapPoint.x, sector.floorZ + SectorWorldToAuthoringDistance(1.8f), mapPoint.y};
     light.color = WHITE;
     light.intensity = 1.0f;
-    light.radius = 8.0f;
-    light.sourceRadius = 0.25f;
+    light.radius = SectorWorldToAuthoringDistance(8.0f);
+    light.sourceRadius = SectorWorldToAuthoringDistance(0.25f);
 
     state.map.staticLights.push_back(std::move(light));
     SelectLight(static_cast<int>(state.map.staticLights.size()) - 1);
@@ -2095,7 +2218,10 @@ SectorPoint SectorEditor::SnapVertexMoveTarget(Vector2 mapPoint) const
             std::round(mapPoint.y / grid) * grid
     };
 
-    const float threshold = std::max(ScreenVertexSnapPixels / std::max(1.0f, state.viewZoom), grid * 0.20f);
+    const float threshold = std::max(
+            SectorWorldToAuthoringDistance(ScreenVertexSnapPixels / std::max(1.0f, state.viewZoom)),
+            grid * 0.20f
+    );
     float bestDistance2 = threshold * threshold;
     bool found = false;
     SectorPoint best = snapped;
@@ -2316,11 +2442,16 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
         const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
         if (surface.kind == SectorSurfaceKind::Floor || surface.kind == SectorSurfaceKind::Ceiling) {
             const float lift = surface.kind == SectorSurfaceKind::Floor ? PreviewHighlightLift : -PreviewHighlightLift;
-            const float height = (surface.kind == SectorSurfaceKind::Floor ? sector.floorZ : sector.ceilingZ) + lift;
+            const float height = surface.kind == SectorSurfaceKind::Floor ? sector.floorZ : sector.ceilingZ;
+            const Vector3 liftOffset{0.0f, lift, 0.0f};
             for (size_t i = 0; i < sector.points.size(); ++i) {
                 const SectorPoint a = sector.points[i];
                 const SectorPoint b = sector.points[(i + 1) % sector.points.size()];
-                DrawLine3D(SectorPointToWorld(a, height), SectorPointToWorld(b, height), color);
+                DrawLine3D(
+                        Vector3Add(SectorPointToWorld(a, height), liftOffset),
+                        Vector3Add(SectorPointToWorld(b, height), liftOffset),
+                        color
+                );
             }
             (void)thickness;
             return;
@@ -2778,6 +2909,43 @@ void SectorEditor::DrawVertexMoveOverlay() const
     DrawCircleV(target, 5.0f, targetColor);
 }
 
+void SectorEditor::DrawLightMoveOverlay() const
+{
+    if (state.currentTool != SectorEditorTool::Move) {
+        return;
+    }
+
+    if (state.lightDrag.active) {
+        if (state.lightDrag.lightIndex < 0
+                || state.lightDrag.lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+            return;
+        }
+
+        const SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.lightDrag.lightIndex)];
+        const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
+        const float radiusPixels = SectorAuthoringToWorldDistance(light.radius) * state.viewZoom;
+        Color color = light.color;
+        color.a = 245;
+        DrawCircleLines(
+                static_cast<int>(std::round(center.x)),
+                static_cast<int>(std::round(center.y)),
+                radiusPixels,
+                WithAlpha(color, 165)
+        );
+        DrawCircleLines(static_cast<int>(std::round(center.x)), static_cast<int>(std::round(center.y)), 15.0f, Color{120, 230, 154, 255});
+        DrawCircleV(center, 6.5f, Color{120, 230, 154, 255});
+        return;
+    }
+
+    if (state.hoveredLightIndex < 0 || state.hoveredLightIndex >= static_cast<int>(state.map.staticLights.size())) {
+        return;
+    }
+
+    const SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.hoveredLightIndex)];
+    const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
+    DrawCircleLines(static_cast<int>(std::round(center.x)), static_cast<int>(std::round(center.y)), 13.0f, Color{245, 226, 154, 255});
+}
+
 void SectorEditor::DrawSector(const SectorDefinition& sector, int sectorIndex) const
 {
     if (sector.points.size() < 3) {
@@ -2870,7 +3038,7 @@ void SectorEditor::DrawStaticLights() const
         const bool hovered = static_cast<int>(i) == state.hoveredLightIndex;
         Color color = light.color;
         color.a = selected ? 255 : hovered ? 235 : 205;
-        const float radiusPixels = light.radius * state.viewZoom;
+        const float radiusPixels = SectorAuthoringToWorldDistance(light.radius) * state.viewZoom;
 
         if (selected || hovered || state.currentTool == SectorEditorTool::Light) {
             DrawCircleLines(
@@ -2881,7 +3049,7 @@ void SectorEditor::DrawStaticLights() const
             );
         }
         if (selected && light.sourceRadius > 0.0f) {
-            const float sourceRadiusPixels = light.sourceRadius * state.viewZoom;
+            const float sourceRadiusPixels = SectorAuthoringToWorldDistance(light.sourceRadius) * state.viewZoom;
             if (sourceRadiusPixels >= 3.0f) {
                 DrawCircleLines(
                         static_cast<int>(std::round(center.x)),
@@ -2917,7 +3085,10 @@ Vector2 SectorEditor::SelectedEdgeInwardNormal(const SectorDefinition& sector, i
     const Vector2 normalA{-dy / length, dx / length};
     const Vector2 normalB{dy / length, -dx / length};
     const Vector2 mid{(from.x + to.x) * 0.5f, (from.y + to.y) * 0.5f};
-    const float probeDistance = std::max(0.05f, 3.0f / std::max(1.0f, state.viewZoom));
+    const float probeDistance = std::max(
+            SectorWorldToAuthoringDistance(0.05f),
+            SectorWorldToAuthoringDistance(3.0f / std::max(1.0f, state.viewZoom))
+    );
     const Vector2 probeA{mid.x + normalA.x * probeDistance, mid.y + normalA.y * probeDistance};
     if (PointInSectorPolygon(probeA, sector)) {
         return normalA;
@@ -3012,6 +3183,9 @@ void SectorEditor::DrawToolsPanel(
             if (state.vertexDrag.active && tool != SectorEditorTool::Move) {
                 CancelVertexDrag("Cancelled vertex move");
             }
+            if (state.lightDrag.active && tool != SectorEditorTool::Move) {
+                CancelLightDrag("Cancelled light move");
+            }
             state.currentTool = tool;
         }
         y += rowH + gap;
@@ -3071,8 +3245,8 @@ void SectorEditor::DrawToolsPanel(
             "AO radius",
             state.map.lightmapSettings.ambientOcclusionRadius,
             uiState.ambientOcclusionRadiusInput,
-            0.05f,
-            16.0f,
+            SectorWorldToAuthoringDistance(0.05f),
+            SectorWorldToAuthoringDistance(16.0f),
             2,
             "Updated AO radius"
     );
@@ -3091,8 +3265,8 @@ void SectorEditor::DrawToolsPanel(
             "Bounce radius",
             state.map.lightmapSettings.indirectBounceRadius,
             uiState.indirectBounceRadiusInput,
-            0.05f,
-            16.0f,
+            SectorWorldToAuthoringDistance(0.05f),
+            SectorWorldToAuthoringDistance(16.0f),
             2,
             "Updated bounce radius"
     );
@@ -3312,12 +3486,12 @@ void SectorEditor::DrawSectorsPanel(
             y += rowH + gap;
         };
 
-        drawLightFloat("sector_editor_light_x", "X:", light.position.x, uiState.lightXInput, -1024.0f, 1024.0f, 2);
-        drawLightFloat("sector_editor_light_y", "Y:", light.position.y, uiState.lightYInput, -64.0f, 64.0f, 2);
-        drawLightFloat("sector_editor_light_z", "Z:", light.position.z, uiState.lightZInput, -1024.0f, 1024.0f, 2);
+        drawLightFloat("sector_editor_light_x", "X:", light.position.x, uiState.lightXInput, -8192.0f, 8192.0f, 2);
+        drawLightFloat("sector_editor_light_y", "Y:", light.position.y, uiState.lightYInput, -512.0f, 512.0f, 2);
+        drawLightFloat("sector_editor_light_z", "Z:", light.position.z, uiState.lightZInput, -8192.0f, 8192.0f, 2);
         drawLightFloat("sector_editor_light_intensity", "Intensity:", light.intensity, uiState.lightIntensityInput, 0.0f, 8.0f, 3);
         light.intensity = ClampLightIntensity(light.intensity);
-        drawLightFloat("sector_editor_light_radius", "Radius:", light.radius, uiState.lightRadiusInput, 0.1f, 64.0f, 2);
+        drawLightFloat("sector_editor_light_radius", "Radius:", light.radius, uiState.lightRadiusInput, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), 2);
         light.radius = ClampLightRadius(light.radius);
         light.sourceRadius = ClampLightSourceRadius(light.sourceRadius, light.radius);
         {
@@ -3334,7 +3508,7 @@ void SectorEditor::DrawSectorsPanel(
                     edited,
                     uiState.lightSourceRadiusInput,
                     0.0f,
-                    8.0f,
+                    SectorWorldToAuthoringDistance(8.0f),
                     3
             );
             edited = ClampLightSourceRadius(edited, light.radius);
@@ -3442,7 +3616,7 @@ void SectorEditor::DrawSectorsPanel(
     const float numberLabelW = 92.0f;
     const float numberFieldW = 102.0f;
     engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, "Floor:", engine::UITextJustify::Right, config.mutedTextColor);
-    const engine::UINumericInputResult floorResult = engine::FloatInput(ui, config, input, assets, "sector_editor_floor", Rectangle{numberLabelW, y, numberFieldW, rowH}, font, sector.floorZ, uiState.floorInput, -64.0f, 64.0f, 2);
+    const engine::UINumericInputResult floorResult = engine::FloatInput(ui, config, input, assets, "sector_editor_floor", Rectangle{numberLabelW, y, numberFieldW, rowH}, font, sector.floorZ, uiState.floorInput, -512.0f, 512.0f, 2);
     if (floorResult.changed) {
         state.dirty = true;
         statusText = TextFormat("Edited sector %s", sector.id.c_str());
@@ -3450,7 +3624,7 @@ void SectorEditor::DrawSectorsPanel(
     y += rowH + gap;
 
     engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, "Ceiling:", engine::UITextJustify::Right, config.mutedTextColor);
-    const engine::UINumericInputResult ceilingResult = engine::FloatInput(ui, config, input, assets, "sector_editor_ceiling", Rectangle{numberLabelW, y, numberFieldW, rowH}, font, sector.ceilingZ, uiState.ceilingInput, -64.0f, 64.0f, 2);
+    const engine::UINumericInputResult ceilingResult = engine::FloatInput(ui, config, input, assets, "sector_editor_ceiling", Rectangle{numberLabelW, y, numberFieldW, rowH}, font, sector.ceilingZ, uiState.ceilingInput, -512.0f, 512.0f, 2);
     if (ceilingResult.changed) {
         state.dirty = true;
         statusText = TextFormat("Edited sector %s", sector.id.c_str());
@@ -4200,6 +4374,7 @@ void SectorEditor::LoadInitialMap(const char* requestedPath)
     RefreshDefaultTextures();
     state.pendingSector = PendingSectorDraw{};
     state.vertexDrag = VertexDragState{};
+    state.lightDrag = LightDragState{};
     state.selectedSectorIndex = -1;
     state.selectedEdgeIndex = -1;
     state.hoveredSectorIndex = -1;
@@ -4220,6 +4395,7 @@ void SectorEditor::ReloadMap(engine::AssetManager& assets)
 
     CancelPendingSector(nullptr);
     CancelVertexDrag(nullptr);
+    CancelLightDrag(nullptr);
     SectorMap loaded;
     const std::string loadPath = FileExists(mapPath) ? mapPath : fallbackMapPath;
     if (!LoadSectorMap(loadPath.c_str(), loaded)) {
@@ -4269,6 +4445,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
 
     CancelPendingSector(nullptr);
     CancelVertexDrag(nullptr);
+    CancelLightDrag(nullptr);
     ui.hotId = 0;
     ui.activeId = 0;
     ui.openOptionId = 0;

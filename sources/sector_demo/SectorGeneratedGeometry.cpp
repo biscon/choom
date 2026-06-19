@@ -1,6 +1,7 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 
 #include "sector_demo/SectorMap.h"
+#include "sector_demo/SectorUnits.h"
 #include "util/earcut.h"
 
 #include <raylib.h>
@@ -54,14 +55,14 @@ std::string MakeEdgeKey(SectorPoint a, SectorPoint b)
 
 Vector3 ToWorld(SectorPoint point, float height)
 {
-    return Vector3{point.x, height, point.y};
+    return SectorAuthoringToWorldPosition(point.x, height, point.y);
 }
 
 float EdgeLength(SectorPoint a, SectorPoint b)
 {
     const float dx = b.x - a.x;
     const float dy = b.y - a.y;
-    return std::sqrt(dx * dx + dy * dy);
+    return SectorAuthoringToWorldDistance(std::sqrt(dx * dx + dy * dy));
 }
 
 Vector3 WallNormal(SectorPoint a, SectorPoint b)
@@ -217,10 +218,13 @@ void AddFlatSectorSurfaces(
             pc = swap;
         }
 
-        const float minX = std::fmin(pa.x, std::fmin(pb.x, pc.x));
-        const float minY = std::fmin(pa.y, std::fmin(pb.y, pc.y));
-        const float maxX = std::fmax(pa.x, std::fmax(pb.x, pc.x));
-        const float maxY = std::fmax(pa.y, std::fmax(pb.y, pc.y));
+        const Vector2 worldPa = SectorAuthoringToWorldPosition(Vector2{pa.x, pa.y});
+        const Vector2 worldPb = SectorAuthoringToWorldPosition(Vector2{pb.x, pb.y});
+        const Vector2 worldPc = SectorAuthoringToWorldPosition(Vector2{pc.x, pc.y});
+        const float minX = std::fmin(worldPa.x, std::fmin(worldPb.x, worldPc.x));
+        const float minY = std::fmin(worldPa.y, std::fmin(worldPb.y, worldPc.y));
+        const float maxX = std::fmax(worldPa.x, std::fmax(worldPb.x, worldPc.x));
+        const float maxY = std::fmax(worldPa.y, std::fmax(worldPb.y, worldPc.y));
 
         SectorGeneratedSurface surface;
         surface.ref = SectorGeneratedSurfaceRef{kind, sectorIndex, -1};
@@ -231,22 +235,22 @@ void AddFlatSectorSurfaces(
         surface.vertices.push_back(SectorGeneratedVertex{
                 ToWorld(pa, height),
                 normal,
-                ApplyUvSettings(Vector2{pa.x / TextureWorldSize, pa.y / TextureWorldSize}, uvScale, uvOffset),
-                Vector2{pa.x - minX, pa.y - minY},
+                ApplyUvSettings(Vector2{worldPa.x / TextureWorldSize, worldPa.y / TextureWorldSize}, uvScale, uvOffset),
+                Vector2{worldPa.x - minX, worldPa.y - minY},
                 color
         });
         surface.vertices.push_back(SectorGeneratedVertex{
                 ToWorld(pb, height),
                 normal,
-                ApplyUvSettings(Vector2{pb.x / TextureWorldSize, pb.y / TextureWorldSize}, uvScale, uvOffset),
-                Vector2{pb.x - minX, pb.y - minY},
+                ApplyUvSettings(Vector2{worldPb.x / TextureWorldSize, worldPb.y / TextureWorldSize}, uvScale, uvOffset),
+                Vector2{worldPb.x - minX, worldPb.y - minY},
                 color
         });
         surface.vertices.push_back(SectorGeneratedVertex{
                 ToWorld(pc, height),
                 normal,
-                ApplyUvSettings(Vector2{pc.x / TextureWorldSize, pc.y / TextureWorldSize}, uvScale, uvOffset),
-                Vector2{pc.x - minX, pc.y - minY},
+                ApplyUvSettings(Vector2{worldPc.x / TextureWorldSize, worldPc.y / TextureWorldSize}, uvScale, uvOffset),
+                Vector2{worldPc.x - minX, worldPc.y - minY},
                 color
         });
         geometry.surfaces.push_back(std::move(surface));
@@ -273,7 +277,7 @@ void AddWallSurface(
 
     const Vector3 normal = WallNormal(a, b);
     const float length = EdgeLength(a, b);
-    const float height = top - bottom;
+    const float height = SectorAuthoringToWorldDistance(top - bottom);
     const float u1 = length / TextureWorldSize;
     const float v0 = height / TextureWorldSize;
     const float v1 = 0.0f;
