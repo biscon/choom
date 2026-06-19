@@ -188,6 +188,7 @@ private:
     bool ApplySurface3DUvValue(SectorSurfaceRef surface, int component, float value, engine::AssetManager& assets);
     bool ResetSurface3DUv(SectorSurfaceRef surface, engine::AssetManager& assets);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
+    bool SplitSelectedEdge(engine::AssetManager& assets);
     void ClearSelection();
     SectorEdgeOverride* FindMutableEdgeOverride(int sectorIndex, int edgeIndex);
     const SectorEdgeOverride* FindEdgeOverride(int sectorIndex, int edgeIndex) const;

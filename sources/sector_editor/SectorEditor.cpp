@@ -2700,7 +2700,7 @@ void SectorEditor::DrawPreviewOverlay(
 
 Rectangle SectorEditor::BuildPreviewUvPanelRect() const
 {
-    return Rectangle{330.0f, EditorHeight - 178.0f, 1260.0f, 146.0f};
+    return Rectangle{330.0f, EditorHeight - 252.0f, 1260.0f, 220.0f};
 }
 
 void SectorEditor::DrawPreviewUvPanel(
@@ -2827,7 +2827,7 @@ void SectorEditor::DrawPreviewUvPanel(
             input,
             assets,
             "sector_editor_3d_texture",
-            Rectangle{panel.x + panel.width - 172.0f, panel.y + panel.height - 112.0f, 146.0f, 38.0f},
+            Rectangle{panel.x + panel.width - 172.0f, panel.y + 38.0f, 146.0f, 38.0f},
             font,
             "Texture")) {
         const TexturePickerTargetKind target = TexturePickerTargetForSurface(state.selectedSurface3D);
@@ -2842,10 +2842,25 @@ void SectorEditor::DrawPreviewUvPanel(
             input,
             assets,
             "sector_editor_3d_reset_uv",
-            Rectangle{panel.x + panel.width - 172.0f, panel.y + panel.height - 56.0f, 146.0f, 38.0f},
+            Rectangle{panel.x + panel.width - 172.0f, panel.y + 86.0f, 146.0f, 38.0f},
             font,
             "Reset UV")) {
         ResetSurface3DUv(state.selectedSurface3D, assets);
+    }
+
+    if (IsWallSurface(state.selectedSurface3D.kind)) {
+        engine::Separator(config, Rectangle{panel.x + margin, panel.y + 134.0f, panel.width - margin * 2.0f, 12.0f});
+        if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_3d_split_edge",
+                Rectangle{panel.x + margin, panel.y + 154.0f, panel.width - margin * 2.0f, 38.0f},
+                font,
+                "Split Edge")) {
+            SplitSelectedEdge(assets);
+        }
     }
 
     input.ForEachEvent(
@@ -3555,6 +3570,8 @@ void SectorEditor::DrawSectorsPanel(
         height += 62.0f + gap; // Scale inputs.
         height += 62.0f + gap; // Offset inputs.
         height += 38.0f; // Reset button.
+        height += gap + 18.0f; // Split separator.
+        height += 38.0f; // Split button.
         return height;
     };
     const float contentH = inspectorContentHeight();
@@ -4060,6 +4077,21 @@ void SectorEditor::DrawSectorsPanel(
                     statusText = TextFormat("Reset %s UV", EdgeUvPartStatusName(state.selectedEdgeUvPart));
                 }
             }
+        }
+        y += 38.0f + gap;
+
+        engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
+        y += 18.0f;
+        if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_split_edge",
+                Rectangle{0.0f, y, contentW, 38.0f},
+                font,
+                "Split Edge")) {
+            SplitSelectedEdge(assets);
         }
     }
 
@@ -5682,6 +5714,52 @@ bool SectorEditor::ResetSurface3DUv(SectorSurfaceRef surface, engine::AssetManag
     state.hasUnsavedChanges = true;
     statusText = TextFormat("Reset 3D %s UV", SurfaceKindName(surface.kind));
     return RebuildPreviewMeshesPreservingView(assets);
+}
+
+bool SectorEditor::SplitSelectedEdge(engine::AssetManager& assets)
+{
+    const int sectorIndex = state.selectedSectorIndex;
+    const int edgeIndex = state.selectedEdgeIndex;
+    const SectorSurfaceRef previousSurface = state.selectedSurface3D;
+    const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(state.map, sectorIndex, edgeIndex);
+
+    int newEdgeIndex = -1;
+    std::string error;
+    if (!SplitSectorEdge(state.map, sectorIndex, edgeIndex, newEdgeIndex, error)) {
+        statusText = error.empty() ? "Cannot split edge" : error;
+        return false;
+    }
+
+    state.hoveredSectorIndex = -1;
+    state.hoveredEdgeSectorIndex = -1;
+    state.hoveredEdgeIndex = -1;
+    state.hasHoveredVertex = false;
+    state.hoveredVertexPoint = SectorPoint{};
+    state.hoveredVertexRefs.clear();
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    uiState.edgeUvScaleUInput = engine::UIFloatInputState{};
+    uiState.edgeUvScaleVInput = engine::UIFloatInputState{};
+    uiState.edgeUvOffsetUInput = engine::UIFloatInputState{};
+    uiState.edgeUvOffsetVInput = engine::UIFloatInputState{};
+    ResetSurface3DUiState();
+
+    SelectEdge(sectorIndex, newEdgeIndex);
+    if (state.mode == SectorEditorMode::Preview3D
+            && IsWallSurface(previousSurface.kind)
+            && previousSurface.sectorIndex == sectorIndex
+            && previousSurface.edgeIndex == edgeIndex) {
+        state.selectedSurface3D = SectorSurfaceRef{previousSurface.kind, sectorIndex, newEdgeIndex};
+    }
+
+    state.hasUnsavedChanges = true;
+    statusText = neighbor.hasNeighbor
+            ? TextFormat("Split shared edge %d; selected edge %d", edgeIndex, newEdgeIndex)
+            : TextFormat("Split edge %d; selected edge %d", edgeIndex, newEdgeIndex);
+
+    if (state.mode == SectorEditorMode::Preview3D) {
+        return RebuildPreviewMeshesPreservingView(assets);
+    }
+    return true;
 }
 
 bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& assets)

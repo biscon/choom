@@ -13,5 +13,11 @@ bool LoadSectorMap(const char* path, SectorMap& outMap, std::string* outError = 
 bool SaveSectorMap(const char* path, const SectorMap& map);
 EffectiveEdgeSettings GetEffectiveEdgeSettings(const SectorDefinition& sector, int edgeIndex);
 EdgeNeighborInfo FindReverseEdgeNeighbor(const SectorMap& map, int sectorIndex, int edgeIndex);
+bool SplitSectorEdge(
+        SectorMap& map,
+        int sectorIndex,
+        int edgeIndex,
+        int& outNewEdgeIndex,
+        std::string& outError);
 
 } // namespace game

@@ -2,7 +2,7 @@
   "bakedLightmap": {
     "height": 2048,
     "path": "assets/levels/test01/test01.lightmap.png",
-    "sourceHash": "5925dd8b63967b43",
+    "sourceHash": "3debaa915d29be98",
     "width": 2048
   },
   "lightmapSettings": {
@@ -29,6 +29,15 @@
       "ambientIntensity": 0.20000000298023224,
       "ceiling": 24.0,
       "ceilingTex": "ceiling",
+      "edges": [
+        {
+          "edge": 1,
+          "lowerUvOffset": [
+            0.10000000149011612,
+            -0.07999999821186066
+          ]
+        }
+      ],
       "floor": 0.0,
       "floorTex": "floor",
       "id": "sector_001",
@@ -52,6 +61,14 @@
         ],
         [
           40.0,
+          32.0
+        ],
+        [
+          16.0,
+          32.0
+        ],
+        [
+          -16.0,
           32.0
         ],
         [
@@ -145,19 +162,365 @@
       ],
       "upperWallTex": "upper_wall",
       "wallTex": "wall"
+    },
+    {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 0.20000000298023224,
+      "ceiling": 24.0,
+      "ceilingTex": "ceiling",
+      "floor": 0.0,
+      "floorTex": "floor",
+      "id": "sector_004",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          -16.0,
+          32.0
+        ],
+        [
+          16.0,
+          32.0
+        ],
+        [
+          16.0,
+          144.0
+        ],
+        [
+          -16.0,
+          144.0
+        ],
+        [
+          -16.0,
+          88.0
+        ],
+        [
+          -16.0,
+          64.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 0.20000000298023224,
+      "ceiling": 23.0,
+      "ceilingTex": "ceiling",
+      "floor": 1.0,
+      "floorTex": "floor",
+      "id": "sector_005",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          -16.0,
+          88.0
+        ],
+        [
+          -18.0,
+          88.0
+        ],
+        [
+          -18.0,
+          64.0
+        ],
+        [
+          -16.0,
+          64.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 0.20000000298023224,
+      "ceiling": 24.0,
+      "ceilingTex": "ceiling",
+      "floor": 0.0,
+      "floorTex": "floor",
+      "id": "sector_006",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          -72.0,
+          88.0
+        ],
+        [
+          -72.0,
+          64.0
+        ],
+        [
+          -18.0,
+          64.0
+        ],
+        [
+          -18.0,
+          88.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 0.20000000298023224,
+      "ceiling": 24.0,
+      "ceilingTex": "ceiling",
+      "floor": 0.0,
+      "floorTex": "floor",
+      "id": "sector_007",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          -72.0,
+          88.0
+        ],
+        [
+          -104.0,
+          88.0
+        ],
+        [
+          -120.0,
+          72.0
+        ],
+        [
+          -120.0,
+          48.0
+        ],
+        [
+          -96.0,
+          48.0
+        ],
+        [
+          -96.0,
+          64.0
+        ],
+        [
+          -72.0,
+          64.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 0.20000000298023224,
+      "ceiling": 24.0,
+      "ceilingTex": "ceiling",
+      "floor": 0.0,
+      "floorTex": "floor",
+      "id": "sector_008",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          -120.0,
+          48.0
+        ],
+        [
+          -120.0,
+          -88.0
+        ],
+        [
+          -96.0,
+          -88.0
+        ],
+        [
+          -96.0,
+          -72.0
+        ],
+        [
+          -96.0,
+          -56.0
+        ],
+        [
+          -96.0,
+          48.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 0.20000000298023224,
+      "ceiling": 23.0,
+      "ceilingTex": "ceiling",
+      "floor": 1.0,
+      "floorTex": "floor",
+      "id": "sector_009",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          -34.0,
+          -72.0
+        ],
+        [
+          -32.0,
+          -72.0
+        ],
+        [
+          -32.0,
+          -56.0
+        ],
+        [
+          -34.0,
+          -56.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
+    },
+    {
+      "ambientColor": [
+        255,
+        255,
+        255
+      ],
+      "ambientIntensity": 0.20000000298023224,
+      "ceiling": 24.0,
+      "ceilingTex": "ceiling",
+      "floor": 0.0,
+      "floorTex": "floor",
+      "id": "sector_010",
+      "lowerWallTex": "step_wall",
+      "points": [
+        [
+          -96.0,
+          -72.0
+        ],
+        [
+          -34.0,
+          -72.0
+        ],
+        [
+          -34.0,
+          -56.0
+        ],
+        [
+          -96.0,
+          -56.0
+        ]
+      ],
+      "upperWallTex": "upper_wall",
+      "wallTex": "wall"
     }
   ],
   "staticLights": [
     {
       "color": [
-        255,
         55,
-        35
+        235,
+        145
       ],
       "id": "light_001",
       "intensity": 1.0,
       "position": [
         -0.0,
+        20.0,
+        -64.0
+      ],
+      "radius": 164.0,
+      "sourceRadius": 4.0
+    },
+    {
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "id": "light_002",
+      "intensity": 1.0,
+      "position": [
+        -44.0,
+        14.399999618530273,
+        76.0
+      ],
+      "radius": 64.0,
+      "sourceRadius": 2.0
+    },
+    {
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "id": "light_003",
+      "intensity": 1.0,
+      "position": [
+        -106.0,
+        14.399999618530273,
+        72.0
+      ],
+      "radius": 64.0,
+      "sourceRadius": 2.0
+    },
+    {
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "id": "light_004",
+      "intensity": 1.0,
+      "position": [
+        -108.0,
+        14.399999618530273,
+        16.0
+      ],
+      "radius": 64.0,
+      "sourceRadius": 2.0
+    },
+    {
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "id": "light_005",
+      "intensity": 1.0,
+      "position": [
+        -108.0,
+        14.399999618530273,
+        -24.0
+      ],
+      "radius": 64.0,
+      "sourceRadius": 2.0
+    },
+    {
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "id": "light_006",
+      "intensity": 1.0,
+      "position": [
+        -108.0,
         14.399999618530273,
         -64.0
       ],

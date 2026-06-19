@@ -803,6 +803,28 @@ void RemapEdgeOverridesAfterReverse(SectorDefinition& sector, const std::vector<
     }
 }
 
+void InsertSectorEdgeMidpoint(SectorDefinition& sector, int edgeIndex, SectorPoint midpoint)
+{
+    std::vector<SectorEdgeOverride> remappedOverrides;
+    remappedOverrides.reserve(sector.edgeOverrides.size() + 1);
+    for (const SectorEdgeOverride& oldOverride : sector.edgeOverrides) {
+        SectorEdgeOverride remapped = oldOverride;
+        if (oldOverride.edgeIndex > edgeIndex) {
+            ++remapped.edgeIndex;
+        }
+        remappedOverrides.push_back(std::move(remapped));
+
+        if (oldOverride.edgeIndex == edgeIndex) {
+            SectorEdgeOverride secondHalf = oldOverride;
+            secondHalf.edgeIndex = edgeIndex + 1;
+            remappedOverrides.push_back(std::move(secondHalf));
+        }
+    }
+
+    sector.points.insert(sector.points.begin() + edgeIndex + 1, midpoint);
+    sector.edgeOverrides = std::move(remappedOverrides);
+}
+
 } // namespace
 
 const SectorTextureDefinition* FindSectorTexture(const SectorMap& map, const std::string& id)
@@ -904,6 +926,59 @@ EdgeNeighborInfo FindReverseEdgeNeighbor(const SectorMap& map, int sectorIndex, 
     }
 
     return EdgeNeighborInfo{};
+}
+
+bool SplitSectorEdge(
+        SectorMap& map,
+        int sectorIndex,
+        int edgeIndex,
+        int& outNewEdgeIndex,
+        std::string& outError)
+{
+    outNewEdgeIndex = -1;
+    outError.clear();
+    if (sectorIndex < 0 || sectorIndex >= static_cast<int>(map.sectors.size())) {
+        outError = "Cannot split edge: invalid sector index";
+        return false;
+    }
+
+    const SectorDefinition& selected = map.sectors[static_cast<size_t>(sectorIndex)];
+    if (selected.points.size() < 3) {
+        outError = "Cannot split edge: sector has fewer than 3 points";
+        return false;
+    }
+    if (edgeIndex < 0 || edgeIndex >= static_cast<int>(selected.points.size())) {
+        outError = "Cannot split edge: invalid edge index";
+        return false;
+    }
+
+    const SectorPoint a = selected.points[static_cast<size_t>(edgeIndex)];
+    const SectorPoint b = selected.points[(static_cast<size_t>(edgeIndex) + 1) % selected.points.size()];
+    const float dx = b.x - a.x;
+    const float dy = b.y - a.y;
+    if (dx * dx + dy * dy <= GeometryEpsilon * GeometryEpsilon) {
+        outError = "Cannot split edge: edge length is effectively zero";
+        return false;
+    }
+
+    const SectorPoint midpoint{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
+    if (SamePoint(midpoint, a) || SamePoint(midpoint, b)) {
+        outError = "Cannot split edge: midpoint is too close to an endpoint";
+        return false;
+    }
+
+    const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(map, sectorIndex, edgeIndex);
+    InsertSectorEdgeMidpoint(map.sectors[static_cast<size_t>(sectorIndex)], edgeIndex, midpoint);
+    if (neighbor.hasNeighbor) {
+        InsertSectorEdgeMidpoint(
+                map.sectors[static_cast<size_t>(neighbor.sectorIndex)],
+                neighbor.edgeIndex,
+                midpoint
+        );
+    }
+
+    outNewEdgeIndex = edgeIndex + 1;
+    return true;
 }
 
 bool LoadSectorMap(const char* path, SectorMap& outMap, std::string* outError)
