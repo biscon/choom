@@ -16,6 +16,18 @@ struct SectorPoint {
     float y = 0.0f;
 };
 
+enum class SectorBoundaryRingKind {
+    Outer,
+    Hole
+};
+
+struct SectorBoundaryEdgeRef {
+    int sectorIndex = -1;
+    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
+    int holeIndex = -1;
+    int edgeIndex = -1;
+};
+
 struct SectorEdgePartUvOverride {
     Vector2 uvScale = {1.0f, 1.0f};
     Vector2 uvOffset = {0.0f, 0.0f};
@@ -49,6 +61,7 @@ struct SectorEdgeOverride {
 struct SectorDefinition {
     std::string id;
     std::vector<SectorPoint> points;
+    std::vector<std::vector<SectorPoint>> holes;
     float floorZ = 0.0f;
     float ceilingZ = 0.0f;
     std::string floorTextureId;
@@ -141,6 +154,8 @@ struct EdgeNeighborInfo {
     bool hasNeighbor = false;
     int sectorIndex = -1;
     int edgeIndex = -1;
+    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
+    int holeIndex = -1;
 };
 
 } // namespace game

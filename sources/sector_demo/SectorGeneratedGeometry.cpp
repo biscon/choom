@@ -24,8 +24,7 @@ struct PointKey {
 };
 
 struct EdgeRef {
-    int sectorIndex = -1;
-    int edgeIndex = -1;
+    SectorBoundaryEdgeRef boundary;
 };
 
 constexpr float TextureWorldSize = 2.0f;
@@ -129,17 +128,37 @@ float TriangleArea2(SectorPoint a, SectorPoint b, SectorPoint c)
 EarcutPolygon BuildEarcutPolygon(const SectorDefinition& sector)
 {
     EarcutPolygon polygon;
-    polygon.emplace_back();
-    polygon.back().reserve(sector.points.size());
-
-    for (const SectorPoint point : sector.points) {
-        polygon.back().push_back(EarcutPoint{
-                static_cast<double>(point.x),
-                static_cast<double>(point.y)
-        });
+    const auto appendRing = [&polygon](const std::vector<SectorPoint>& ring) {
+        polygon.emplace_back();
+        polygon.back().reserve(ring.size());
+        for (const SectorPoint point : ring) {
+            polygon.back().push_back(EarcutPoint{
+                    static_cast<double>(point.x),
+                    static_cast<double>(point.y)
+            });
+        }
+    };
+    appendRing(sector.points);
+    for (const std::vector<SectorPoint>& hole : sector.holes) {
+        appendRing(hole);
     }
 
     return polygon;
+}
+
+std::vector<SectorPoint> FlattenSectorPoints(const SectorDefinition& sector)
+{
+    size_t count = sector.points.size();
+    for (const std::vector<SectorPoint>& hole : sector.holes) {
+        count += hole.size();
+    }
+    std::vector<SectorPoint> points;
+    points.reserve(count);
+    points.insert(points.end(), sector.points.begin(), sector.points.end());
+    for (const std::vector<SectorPoint>& hole : sector.holes) {
+        points.insert(points.end(), hole.begin(), hole.end());
+    }
+    return points;
 }
 
 Vector2 ApplyUvSettings(Vector2 baseUv, Vector2 uvScale, Vector2 uvOffset)
@@ -190,7 +209,8 @@ void AddFlatSectorSurfaces(
         return;
     }
 
-    const size_t pointCount = sector.points.size();
+    const std::vector<SectorPoint> flattenedPoints = FlattenSectorPoints(sector);
+    const size_t pointCount = flattenedPoints.size();
     for (size_t i = 0; i < indices.size(); i += 3) {
         const uint32_t ia = indices[i + 0];
         const uint32_t ib = indices[i + 1];
@@ -204,9 +224,9 @@ void AddFlatSectorSurfaces(
             return;
         }
 
-        const SectorPoint pa = sector.points[ia];
-        SectorPoint pb = sector.points[ib];
-        SectorPoint pc = sector.points[ic];
+        const SectorPoint pa = flattenedPoints[ia];
+        SectorPoint pb = flattenedPoints[ib];
+        SectorPoint pc = flattenedPoints[ic];
         const float area2 = TriangleArea2(pa, pb, pc);
         if (std::fabs(area2) <= EdgeEpsilon) {
             continue;
@@ -227,7 +247,7 @@ void AddFlatSectorSurfaces(
         const float maxY = std::fmax(worldPa.y, std::fmax(worldPb.y, worldPc.y));
 
         SectorGeneratedSurface surface;
-        surface.ref = SectorGeneratedSurfaceRef{kind, sectorIndex, -1};
+        surface.ref = SectorGeneratedSurfaceRef{kind, sectorIndex, SectorBoundaryRingKind::Outer, -1, -1};
         surface.textureId = textureId;
         surface.normal = normal;
         surface.chartWidth = std::max(maxX - minX, EdgeEpsilon);
@@ -261,6 +281,8 @@ void AddWallSurface(
         SectorGeneratedGeometry& geometry,
         SectorGeneratedSurfaceKind kind,
         int sectorIndex,
+        SectorBoundaryRingKind ringKind,
+        int holeIndex,
         int edgeIndex,
         const std::string& textureId,
         SectorPoint a,
@@ -288,7 +310,7 @@ void AddWallSurface(
     const SectorGeneratedVertex bf{ToWorld(b, bottom), normal, ApplyUvSettings(Vector2{u1, v0}, uvScale, uvOffset), Vector2{length, height}, color};
 
     SectorGeneratedSurface surface;
-    surface.ref = SectorGeneratedSurfaceRef{kind, sectorIndex, edgeIndex};
+    surface.ref = SectorGeneratedSurfaceRef{kind, sectorIndex, ringKind, holeIndex, edgeIndex};
     surface.textureId = textureId;
     surface.normal = normal;
     surface.chartWidth = std::max(length, EdgeEpsilon);
@@ -307,22 +329,30 @@ void WarnAboutPartialEdges(const SectorMap& map)
 {
     for (size_t sectorA = 0; sectorA < map.sectors.size(); ++sectorA) {
         const SectorDefinition& a = map.sectors[sectorA];
-        for (size_t edgeA = 0; edgeA < a.points.size(); ++edgeA) {
-            const SectorPoint a0 = a.points[edgeA];
-            const SectorPoint a1 = a.points[(edgeA + 1) % a.points.size()];
+        const size_t ringCountA = 1 + a.holes.size();
+        for (size_t ringA = 0; ringA < ringCountA; ++ringA) {
+            const std::vector<SectorPoint>& pointsA = ringA == 0 ? a.points : a.holes[ringA - 1];
+            for (size_t edgeA = 0; edgeA < pointsA.size(); ++edgeA) {
+                const SectorPoint a0 = pointsA[edgeA];
+                const SectorPoint a1 = pointsA[(edgeA + 1) % pointsA.size()];
 
-            for (size_t sectorB = sectorA + 1; sectorB < map.sectors.size(); ++sectorB) {
-                const SectorDefinition& b = map.sectors[sectorB];
-                for (size_t edgeB = 0; edgeB < b.points.size(); ++edgeB) {
-                    const SectorPoint b0 = b.points[edgeB];
-                    const SectorPoint b1 = b.points[(edgeB + 1) % b.points.size()];
-                    if (EdgesPartiallyOverlap(a0, a1, b0, b1)) {
-                        std::fprintf(
-                                stderr,
-                                "[SectorDemo WARNING] Sectors '%s' and '%s' have partially matching edges; MVP requires exact reverse endpoints\n",
-                                a.id.c_str(),
-                                b.id.c_str()
-                        );
+                for (size_t sectorB = sectorA + 1; sectorB < map.sectors.size(); ++sectorB) {
+                    const SectorDefinition& b = map.sectors[sectorB];
+                    const size_t ringCountB = 1 + b.holes.size();
+                    for (size_t ringB = 0; ringB < ringCountB; ++ringB) {
+                        const std::vector<SectorPoint>& pointsB = ringB == 0 ? b.points : b.holes[ringB - 1];
+                        for (size_t edgeB = 0; edgeB < pointsB.size(); ++edgeB) {
+                            const SectorPoint b0 = pointsB[edgeB];
+                            const SectorPoint b1 = pointsB[(edgeB + 1) % pointsB.size()];
+                            if (EdgesPartiallyOverlap(a0, a1, b0, b1)) {
+                                std::fprintf(
+                                        stderr,
+                                        "[SectorDemo WARNING] Sectors '%s' and '%s' have partially matching edges; MVP requires exact reverse endpoints\n",
+                                        a.id.c_str(),
+                                        b.id.c_str()
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -353,18 +383,27 @@ bool BuildSectorGeneratedGeometry(const SectorMap& map, SectorGeneratedGeometry&
 
     for (size_t sectorIndex = 0; sectorIndex < map.sectors.size(); ++sectorIndex) {
         const SectorDefinition& sector = map.sectors[sectorIndex];
-        for (size_t edgeIndex = 0; edgeIndex < sector.points.size(); ++edgeIndex) {
-            const SectorPoint a = sector.points[edgeIndex];
-            const SectorPoint b = sector.points[(edgeIndex + 1) % sector.points.size()];
-            const std::string edgeKey = MakeEdgeKey(a, b);
-            if (edgeRefs.find(edgeKey) != edgeRefs.end()) {
-                std::fprintf(
-                        stderr,
-                        "[SectorDemo WARNING] Duplicate same-direction edge found in sector '%s'\n",
-                        sector.id.c_str()
-                );
+        const size_t ringCount = 1 + sector.holes.size();
+        for (size_t ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
+            const std::vector<SectorPoint>& ring = ringIndex == 0 ? sector.points : sector.holes[ringIndex - 1];
+            for (size_t edgeIndex = 0; edgeIndex < ring.size(); ++edgeIndex) {
+                const SectorPoint a = ring[edgeIndex];
+                const SectorPoint b = ring[(edgeIndex + 1) % ring.size()];
+                const std::string edgeKey = MakeEdgeKey(a, b);
+                if (edgeRefs.find(edgeKey) != edgeRefs.end()) {
+                    std::fprintf(
+                            stderr,
+                            "[SectorDemo WARNING] Duplicate same-direction edge found in sector '%s'\n",
+                            sector.id.c_str()
+                    );
+                }
+                edgeRefs[edgeKey] = EdgeRef{SectorBoundaryEdgeRef{
+                        static_cast<int>(sectorIndex),
+                        ringIndex == 0 ? SectorBoundaryRingKind::Outer : SectorBoundaryRingKind::Hole,
+                        ringIndex == 0 ? -1 : static_cast<int>(ringIndex - 1),
+                        static_cast<int>(edgeIndex)
+                }};
             }
-            edgeRefs[edgeKey] = EdgeRef{static_cast<int>(sectorIndex), static_cast<int>(edgeIndex)};
         }
     }
 
@@ -397,63 +436,77 @@ bool BuildSectorGeneratedGeometry(const SectorMap& map, SectorGeneratedGeometry&
                 sector.ceilingUv.hasUvOffset ? sector.ceilingUv.uvOffset : Vector2{0.0f, 0.0f}
         );
 
-        for (size_t edgeIndex = 0; edgeIndex < sector.points.size(); ++edgeIndex) {
-            const SectorPoint a = sector.points[edgeIndex];
-            const SectorPoint b = sector.points[(edgeIndex + 1) % sector.points.size()];
-            const int edgeInt = static_cast<int>(edgeIndex);
-            const EffectiveEdgeSettings edgeSettings = GetEffectiveEdgeSettings(sector, edgeInt);
-            const auto reverse = edgeRefs.find(MakeEdgeKey(b, a));
-            if (reverse == edgeRefs.end() || reverse->second.sectorIndex == sectorInt) {
-                AddWallSurface(
-                        outGeometry,
-                        SectorGeneratedSurfaceKind::Wall,
-                        sectorInt,
-                        edgeInt,
-                        edgeSettings.wall.textureId,
-                        a,
-                        b,
-                        sector.floorZ,
-                        sector.ceilingZ,
-                        edgeSettings.wall.uvScale,
-                        edgeSettings.wall.uvOffset,
-                        sectorColor
-                );
-                continue;
-            }
+        const size_t ringCount = 1 + sector.holes.size();
+        for (size_t ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
+            const std::vector<SectorPoint>& ring = ringIndex == 0 ? sector.points : sector.holes[ringIndex - 1];
+            const SectorBoundaryRingKind ringKind = ringIndex == 0
+                    ? SectorBoundaryRingKind::Outer : SectorBoundaryRingKind::Hole;
+            const int holeIndex = ringIndex == 0 ? -1 : static_cast<int>(ringIndex - 1);
+            for (size_t edgeIndex = 0; edgeIndex < ring.size(); ++edgeIndex) {
+                const SectorPoint a = ring[edgeIndex];
+                const SectorPoint b = ring[(edgeIndex + 1) % ring.size()];
+                const int edgeInt = static_cast<int>(edgeIndex);
+                const EffectiveEdgeSettings edgeSettings = GetEffectiveEdgeSettings(
+                        sector, ringKind == SectorBoundaryRingKind::Outer ? edgeInt : -1);
+                const auto reverse = edgeRefs.find(MakeEdgeKey(b, a));
+                if (reverse == edgeRefs.end() || reverse->second.boundary.sectorIndex == sectorInt) {
+                    AddWallSurface(
+                            outGeometry,
+                            SectorGeneratedSurfaceKind::Wall,
+                            sectorInt,
+                            ringKind,
+                            holeIndex,
+                            edgeInt,
+                            edgeSettings.wall.textureId,
+                            a,
+                            b,
+                            sector.floorZ,
+                            sector.ceilingZ,
+                            edgeSettings.wall.uvScale,
+                            edgeSettings.wall.uvOffset,
+                            sectorColor
+                    );
+                    continue;
+                }
 
-            const SectorDefinition& neighbor = map.sectors[static_cast<size_t>(reverse->second.sectorIndex)];
-            if (neighbor.floorZ > sector.floorZ) {
-                AddWallSurface(
-                        outGeometry,
-                        SectorGeneratedSurfaceKind::LowerWall,
-                        sectorInt,
-                        edgeInt,
-                        edgeSettings.lower.textureId,
-                        a,
-                        b,
-                        sector.floorZ,
-                        neighbor.floorZ,
-                        edgeSettings.lower.uvScale,
-                        edgeSettings.lower.uvOffset,
-                        sectorColor
-                );
-            }
+                const SectorDefinition& neighbor = map.sectors[static_cast<size_t>(reverse->second.boundary.sectorIndex)];
+                if (neighbor.floorZ > sector.floorZ) {
+                    AddWallSurface(
+                            outGeometry,
+                            SectorGeneratedSurfaceKind::LowerWall,
+                            sectorInt,
+                            ringKind,
+                            holeIndex,
+                            edgeInt,
+                            edgeSettings.lower.textureId,
+                            a,
+                            b,
+                            sector.floorZ,
+                            neighbor.floorZ,
+                            edgeSettings.lower.uvScale,
+                            edgeSettings.lower.uvOffset,
+                            sectorColor
+                    );
+                }
 
-            if (neighbor.ceilingZ < sector.ceilingZ) {
-                AddWallSurface(
-                        outGeometry,
-                        SectorGeneratedSurfaceKind::UpperWall,
-                        sectorInt,
-                        edgeInt,
-                        edgeSettings.upper.textureId,
-                        a,
-                        b,
-                        neighbor.ceilingZ,
-                        sector.ceilingZ,
-                        edgeSettings.upper.uvScale,
-                        edgeSettings.upper.uvOffset,
-                        sectorColor
-                );
+                if (neighbor.ceilingZ < sector.ceilingZ) {
+                    AddWallSurface(
+                            outGeometry,
+                            SectorGeneratedSurfaceKind::UpperWall,
+                            sectorInt,
+                            ringKind,
+                            holeIndex,
+                            edgeInt,
+                            edgeSettings.upper.textureId,
+                            a,
+                            b,
+                            neighbor.ceilingZ,
+                            sector.ceilingZ,
+                            edgeSettings.upper.uvScale,
+                            edgeSettings.upper.uvOffset,
+                            sectorColor
+                    );
+                }
             }
         }
     }

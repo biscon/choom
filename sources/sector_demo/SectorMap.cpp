@@ -482,33 +482,119 @@ bool HasSelfIntersection(const std::vector<SectorPoint>& points)
     return false;
 }
 
-bool NormalizeSectorWinding(SectorDefinition& sector)
+bool PointOnPolygonBoundary(SectorPoint point, const std::vector<SectorPoint>& polygon)
 {
-    for (size_t i = 0; i < sector.points.size(); ++i) {
-        const SectorPoint a = sector.points[i];
-        const SectorPoint b = sector.points[(i + 1) % sector.points.size()];
+    for (size_t i = 0; i < polygon.size(); ++i) {
+        if (PointOnSegment(point, polygon[i], polygon[(i + 1) % polygon.size()])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool StrictPointInPolygon(SectorPoint point, const std::vector<SectorPoint>& polygon)
+{
+    if (polygon.size() < 3 || PointOnPolygonBoundary(point, polygon)) {
+        return false;
+    }
+    bool inside = false;
+    for (size_t i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++) {
+        const SectorPoint a = polygon[i];
+        const SectorPoint b = polygon[j];
+        const bool intersects = ((a.y > point.y) != (b.y > point.y))
+                && point.x < (b.x - a.x) * (point.y - a.y)
+                        / ((b.y - a.y) == 0.0f ? 0.00001f : (b.y - a.y)) + a.x;
+        if (intersects) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
+bool RingsIntersect(const std::vector<SectorPoint>& a, const std::vector<SectorPoint>& b)
+{
+    for (size_t edgeA = 0; edgeA < a.size(); ++edgeA) {
+        for (size_t edgeB = 0; edgeB < b.size(); ++edgeB) {
+            if (SegmentsIntersect(
+                        a[edgeA],
+                        a[(edgeA + 1) % a.size()],
+                        b[edgeB],
+                        b[(edgeB + 1) % b.size()])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool NormalizeRingWinding(
+        std::vector<SectorPoint>& points,
+        bool clockwise,
+        const char* sectorId,
+        const char* ringLabel)
+{
+    if (points.size() < 3) {
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring sector '%s': %s needs at least 3 points\n", sectorId, ringLabel);
+        return false;
+    }
+    for (size_t i = 0; i < points.size(); ++i) {
+        const SectorPoint a = points[i];
+        const SectorPoint b = points[(i + 1) % points.size()];
         if (SamePoint(a, b)) {
-            std::fprintf(stderr, "[SectorDemo WARNING] Ignoring sector '%s': duplicate adjacent points\n", sector.id.c_str());
+            std::fprintf(stderr, "[SectorDemo WARNING] Ignoring sector '%s': duplicate adjacent points in %s\n", sectorId, ringLabel);
             return false;
         }
     }
 
-    // TODO: Replace this simple O(n^2) check if sector authoring needs richer polygon diagnostics.
-    if (HasSelfIntersection(sector.points)) {
-        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring sector '%s': self-intersecting polygon\n", sector.id.c_str());
+    if (HasSelfIntersection(points)) {
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring sector '%s': self-intersecting %s\n", sectorId, ringLabel);
         return false;
     }
 
-    const float area2 = PolygonArea2(sector.points);
+    const float area2 = PolygonArea2(points);
     if (std::fabs(area2) <= GeometryEpsilon) {
-        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring sector '%s': polygon area is too small\n", sector.id.c_str());
+        std::fprintf(stderr, "[SectorDemo WARNING] Ignoring sector '%s': %s area is too small\n", sectorId, ringLabel);
         return false;
     }
 
-    if (area2 < 0.0f) {
-        std::reverse(sector.points.begin(), sector.points.end());
+    if ((clockwise && area2 > 0.0f) || (!clockwise && area2 < 0.0f)) {
+        std::reverse(points.begin(), points.end());
     }
 
+    return true;
+}
+
+bool NormalizeSectorWinding(SectorDefinition& sector)
+{
+    if (!NormalizeRingWinding(sector.points, false, sector.id.c_str(), "outer ring")) {
+        return false;
+    }
+    for (size_t holeIndex = 0; holeIndex < sector.holes.size(); ++holeIndex) {
+        const std::string label = "hole " + std::to_string(holeIndex);
+        if (!NormalizeRingWinding(sector.holes[holeIndex], true, sector.id.c_str(), label.c_str())) {
+            return false;
+        }
+        const std::vector<SectorPoint>& hole = sector.holes[holeIndex];
+        if (RingsIntersect(hole, sector.points)) {
+            std::fprintf(stderr, "[SectorDemo WARNING] Ignoring sector '%s': hole touches or crosses outer ring\n", sector.id.c_str());
+            return false;
+        }
+        for (SectorPoint point : hole) {
+            if (!StrictPointInPolygon(point, sector.points)) {
+                std::fprintf(stderr, "[SectorDemo WARNING] Ignoring sector '%s': hole lies outside outer ring\n", sector.id.c_str());
+                return false;
+            }
+        }
+        for (size_t otherHoleIndex = 0; otherHoleIndex < holeIndex; ++otherHoleIndex) {
+            const std::vector<SectorPoint>& otherHole = sector.holes[otherHoleIndex];
+            if (RingsIntersect(hole, otherHole)
+                    || StrictPointInPolygon(hole.front(), otherHole)
+                    || StrictPointInPolygon(otherHole.front(), hole)) {
+                std::fprintf(stderr, "[SectorDemo WARNING] Ignoring sector '%s': holes overlap or touch\n", sector.id.c_str());
+                return false;
+            }
+        }
+    }
     return true;
 }
 
@@ -803,6 +889,28 @@ void RemapEdgeOverridesAfterReverse(SectorDefinition& sector, const std::vector<
     }
 }
 
+void InsertSectorEdgeMidpoint(SectorDefinition& sector, int edgeIndex, SectorPoint midpoint)
+{
+    std::vector<SectorEdgeOverride> remappedOverrides;
+    remappedOverrides.reserve(sector.edgeOverrides.size() + 1);
+    for (const SectorEdgeOverride& oldOverride : sector.edgeOverrides) {
+        SectorEdgeOverride remapped = oldOverride;
+        if (oldOverride.edgeIndex > edgeIndex) {
+            ++remapped.edgeIndex;
+        }
+        remappedOverrides.push_back(std::move(remapped));
+
+        if (oldOverride.edgeIndex == edgeIndex) {
+            SectorEdgeOverride secondHalf = oldOverride;
+            secondHalf.edgeIndex = edgeIndex + 1;
+            remappedOverrides.push_back(std::move(secondHalf));
+        }
+    }
+
+    sector.points.insert(sector.points.begin() + edgeIndex + 1, midpoint);
+    sector.edgeOverrides = std::move(remappedOverrides);
+}
+
 } // namespace
 
 const SectorTextureDefinition* FindSectorTexture(const SectorMap& map, const std::string& id)
@@ -878,32 +986,150 @@ EffectiveEdgeSettings GetEffectiveEdgeSettings(const SectorDefinition& sector, i
 
 EdgeNeighborInfo FindReverseEdgeNeighbor(const SectorMap& map, int sectorIndex, int edgeIndex)
 {
-    if (sectorIndex < 0 || sectorIndex >= static_cast<int>(map.sectors.size())) {
+    return FindReverseEdgeNeighbor(
+            map,
+            SectorBoundaryEdgeRef{sectorIndex, SectorBoundaryRingKind::Outer, -1, edgeIndex}
+    );
+}
+
+const std::vector<SectorPoint>* GetSectorBoundaryRing(
+        const SectorMap& map,
+        const SectorBoundaryEdgeRef& edge)
+{
+    if (edge.sectorIndex < 0 || edge.sectorIndex >= static_cast<int>(map.sectors.size())) {
+        return nullptr;
+    }
+    const SectorDefinition& sector = map.sectors[static_cast<size_t>(edge.sectorIndex)];
+    if (edge.ringKind == SectorBoundaryRingKind::Outer) {
+        return &sector.points;
+    }
+    if (edge.holeIndex < 0 || edge.holeIndex >= static_cast<int>(sector.holes.size())) {
+        return nullptr;
+    }
+    return &sector.holes[static_cast<size_t>(edge.holeIndex)];
+}
+
+std::vector<SectorPoint>* GetSectorBoundaryRing(
+        SectorMap& map,
+        const SectorBoundaryEdgeRef& edge)
+{
+    return const_cast<std::vector<SectorPoint>*>(GetSectorBoundaryRing(
+            static_cast<const SectorMap&>(map), edge));
+}
+
+bool GetSectorBoundaryEdge(
+        const SectorMap& map,
+        const SectorBoundaryEdgeRef& edge,
+        SectorPoint& outA,
+        SectorPoint& outB)
+{
+    const std::vector<SectorPoint>* ring = GetSectorBoundaryRing(map, edge);
+    if (ring == nullptr || ring->size() < 2
+            || edge.edgeIndex < 0 || edge.edgeIndex >= static_cast<int>(ring->size())) {
+        return false;
+    }
+    outA = (*ring)[static_cast<size_t>(edge.edgeIndex)];
+    outB = (*ring)[(static_cast<size_t>(edge.edgeIndex) + 1) % ring->size()];
+    return true;
+}
+
+EdgeNeighborInfo FindReverseEdgeNeighbor(const SectorMap& map, const SectorBoundaryEdgeRef& edge)
+{
+    SectorPoint a{};
+    SectorPoint b{};
+    if (!GetSectorBoundaryEdge(map, edge, a, b)) {
         return EdgeNeighborInfo{};
     }
-
-    const SectorDefinition& sector = map.sectors[static_cast<size_t>(sectorIndex)];
-    if (edgeIndex < 0 || edgeIndex >= static_cast<int>(sector.points.size())) {
-        return EdgeNeighborInfo{};
-    }
-
-    const SectorPoint a = sector.points[static_cast<size_t>(edgeIndex)];
-    const SectorPoint b = sector.points[(static_cast<size_t>(edgeIndex) + 1) % sector.points.size()];
     for (size_t otherSectorIndex = 0; otherSectorIndex < map.sectors.size(); ++otherSectorIndex) {
-        if (static_cast<int>(otherSectorIndex) == sectorIndex) {
+        if (static_cast<int>(otherSectorIndex) == edge.sectorIndex) {
             continue;
         }
         const SectorDefinition& other = map.sectors[otherSectorIndex];
-        for (size_t otherEdgeIndex = 0; otherEdgeIndex < other.points.size(); ++otherEdgeIndex) {
-            const SectorPoint otherA = other.points[otherEdgeIndex];
-            const SectorPoint otherB = other.points[(otherEdgeIndex + 1) % other.points.size()];
-            if (SamePoint(a, otherB) && SamePoint(b, otherA)) {
-                return EdgeNeighborInfo{true, static_cast<int>(otherSectorIndex), static_cast<int>(otherEdgeIndex)};
+        const size_t ringCount = 1 + other.holes.size();
+        for (size_t ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
+            const std::vector<SectorPoint>& ring = ringIndex == 0
+                    ? other.points : other.holes[ringIndex - 1];
+            for (size_t otherEdgeIndex = 0; otherEdgeIndex < ring.size(); ++otherEdgeIndex) {
+                const SectorPoint otherA = ring[otherEdgeIndex];
+                const SectorPoint otherB = ring[(otherEdgeIndex + 1) % ring.size()];
+                if (SamePoint(a, otherB) && SamePoint(b, otherA)) {
+                    return EdgeNeighborInfo{
+                            true,
+                            static_cast<int>(otherSectorIndex),
+                            static_cast<int>(otherEdgeIndex),
+                            ringIndex == 0 ? SectorBoundaryRingKind::Outer : SectorBoundaryRingKind::Hole,
+                            ringIndex == 0 ? -1 : static_cast<int>(ringIndex - 1)
+                    };
+                }
             }
         }
     }
 
     return EdgeNeighborInfo{};
+}
+
+bool SplitSectorEdge(
+        SectorMap& map,
+        int sectorIndex,
+        int edgeIndex,
+        int& outNewEdgeIndex,
+        std::string& outError)
+{
+    outNewEdgeIndex = -1;
+    outError.clear();
+    if (sectorIndex < 0 || sectorIndex >= static_cast<int>(map.sectors.size())) {
+        outError = "Cannot split edge: invalid sector index";
+        return false;
+    }
+
+    const SectorDefinition& selected = map.sectors[static_cast<size_t>(sectorIndex)];
+    if (selected.points.size() < 3) {
+        outError = "Cannot split edge: sector has fewer than 3 points";
+        return false;
+    }
+    if (edgeIndex < 0 || edgeIndex >= static_cast<int>(selected.points.size())) {
+        outError = "Cannot split edge: invalid edge index";
+        return false;
+    }
+
+    const SectorPoint a = selected.points[static_cast<size_t>(edgeIndex)];
+    const SectorPoint b = selected.points[(static_cast<size_t>(edgeIndex) + 1) % selected.points.size()];
+    const float dx = b.x - a.x;
+    const float dy = b.y - a.y;
+    if (dx * dx + dy * dy <= GeometryEpsilon * GeometryEpsilon) {
+        outError = "Cannot split edge: edge length is effectively zero";
+        return false;
+    }
+
+    const SectorPoint midpoint{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
+    if (SamePoint(midpoint, a) || SamePoint(midpoint, b)) {
+        outError = "Cannot split edge: midpoint is too close to an endpoint";
+        return false;
+    }
+
+    const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(map, sectorIndex, edgeIndex);
+    InsertSectorEdgeMidpoint(map.sectors[static_cast<size_t>(sectorIndex)], edgeIndex, midpoint);
+    if (neighbor.hasNeighbor) {
+        if (neighbor.ringKind == SectorBoundaryRingKind::Outer) {
+            InsertSectorEdgeMidpoint(
+                    map.sectors[static_cast<size_t>(neighbor.sectorIndex)],
+                    neighbor.edgeIndex,
+                    midpoint
+            );
+        } else {
+            SectorDefinition& neighborSector = map.sectors[static_cast<size_t>(neighbor.sectorIndex)];
+            if (neighbor.holeIndex < 0
+                    || neighbor.holeIndex >= static_cast<int>(neighborSector.holes.size())) {
+                outError = "Cannot split edge: invalid neighbor hole";
+                return false;
+            }
+            std::vector<SectorPoint>& hole = neighborSector.holes[static_cast<size_t>(neighbor.holeIndex)];
+            hole.insert(hole.begin() + neighbor.edgeIndex + 1, midpoint);
+        }
+    }
+
+    outNewEdgeIndex = edgeIndex + 1;
+    return true;
 }
 
 bool LoadSectorMap(const char* path, SectorMap& outMap, std::string* outError)
@@ -989,6 +1215,38 @@ bool LoadSectorMap(const char* path, SectorMap& outMap, std::string* outError)
                 continue;
             }
             sector.points.push_back(point);
+        }
+
+        const auto holesIt = sectorJson.find("holes");
+        if (holesIt != sectorJson.end()) {
+            if (!holesIt->is_array()) {
+                std::fprintf(stderr, "[SectorDemo WARNING] Ignoring sector '%s': holes must be an array\n", sector.id.c_str());
+                continue;
+            }
+            bool malformedHole = false;
+            for (const Json& holeJson : *holesIt) {
+                if (!holeJson.is_array()) {
+                    malformedHole = true;
+                    break;
+                }
+                std::vector<SectorPoint> hole;
+                for (const Json& pointJson : holeJson) {
+                    SectorPoint point;
+                    if (!ReadPoint(pointJson, point)) {
+                        malformedHole = true;
+                        break;
+                    }
+                    hole.push_back(point);
+                }
+                if (malformedHole) {
+                    break;
+                }
+                sector.holes.push_back(std::move(hole));
+            }
+            if (malformedHole) {
+                std::fprintf(stderr, "[SectorDemo WARNING] Ignoring sector '%s': malformed hole ring\n", sector.id.c_str());
+                continue;
+            }
         }
 
         sector.floorZ = sectorJson.value("floor", 0.0f);
@@ -1101,6 +1359,16 @@ bool SaveSectorMap(const char* path, const SectorMap& map)
         sectorJson["points"] = Json::array();
         for (SectorPoint point : sector.points) {
             sectorJson["points"].push_back(Json::array({point.x, point.y}));
+        }
+        if (!sector.holes.empty()) {
+            sectorJson["holes"] = Json::array();
+            for (const std::vector<SectorPoint>& hole : sector.holes) {
+                Json holeJson = Json::array();
+                for (SectorPoint point : hole) {
+                    holeJson.push_back(Json::array({point.x, point.y}));
+                }
+                sectorJson["holes"].push_back(std::move(holeJson));
+            }
         }
         sectorJson["floor"] = sector.floorZ;
         sectorJson["ceiling"] = sector.ceilingZ;

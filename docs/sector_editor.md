@@ -86,6 +86,37 @@ texture paths/IDs/filtering, and UV scale/offset values are unchanged.
 - Deletion has no undo/redo yet. Reloading before saving can recover unsaved
   deletes; saving persists the current sector list.
 
+### Insert Sector Inside
+
+With a sector selected, `Insert Sector Inside` starts a contained-sector draw.
+Left click adds snapped points, clicking the first point or pressing `Enter`
+finalizes, `Backspace` removes the last point, and right click or `Escape`
+cancels. The polygon must be strictly inside the selected sector's usable area;
+it may not touch the outer boundary, an existing hole, or another sector.
+
+Finalizing adds the reversed polygon as a hole in the parent and creates a new
+selected child sector from the forward polygon. The child inherits the parent's
+heights, surface and wall texture defaults, ambient lighting, and floor/ceiling
+UV defaults. It does not inherit holes or edge overrides. Repeating the workflow
+on the child creates nested platforms, pits, or pedestals.
+
+Outer rings are stored counter-clockwise and hole rings clockwise. This makes a
+parent hole edge the exact directed reverse of its child outer edge, allowing
+the existing portal lower/upper wall generation to handle height differences.
+Parent hole edges use parent default edge settings and are read-only in this
+version; the matching child outer edges remain editable.
+
+Sector JSON stores holes only when present:
+
+```json
+"holes": [
+  [[24, 24], [24, 40], [40, 40], [40, 24]]
+]
+```
+
+Older maps without `holes` continue to load with no holes. Deleting a child
+does not automatically remove or heal its parent hole.
+
 ## Sector Ambient Lighting
 
 Sector ambient lighting is the first simple lighting layer for mood, darkness,
