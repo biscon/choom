@@ -9,7 +9,7 @@ const SectorTextureDefinition* FindSectorTexture(const SectorMap& map, const std
 std::vector<std::string> SortedSectorTextureIds(const SectorMap& map);
 engine::TextureLoadFlags SectorTextureLoadFlags(SectorTextureFilter filter);
 const char* SectorTextureFilterName(SectorTextureFilter filter);
-bool LoadSectorMap(const char* path, SectorMap& outMap);
+bool LoadSectorMap(const char* path, SectorMap& outMap, std::string* outError = nullptr);
 bool SaveSectorMap(const char* path, const SectorMap& map);
 EffectiveEdgeSettings GetEffectiveEdgeSettings(const SectorDefinition& sector, int edgeIndex);
 EdgeNeighborInfo FindReverseEdgeNeighbor(const SectorMap& map, int sectorIndex, int edgeIndex);

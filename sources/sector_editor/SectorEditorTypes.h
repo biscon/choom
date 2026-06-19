@@ -8,6 +8,7 @@
 #include <raylib.h>
 
 #include <atomic>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -119,6 +120,33 @@ struct AddMapTextureState {
     SectorTextureFilter previewFilter = SectorTextureFilter::Bilinear;
 };
 
+struct SaveLevelModalState {
+    bool open = false;
+    char nameBuffer[96] = {};
+    std::string errorMessage;
+};
+
+struct LevelListEntry {
+    std::string name;
+    std::string jsonAssetPath;
+};
+
+struct LoadLevelModalState {
+    bool open = false;
+    std::vector<LevelListEntry> levels;
+    std::vector<const char*> optionLabels;
+    int selectedIndex = -1;
+    engine::UIScrollState scroll;
+    std::string errorMessage;
+};
+
+struct ConfirmationModalState {
+    bool open = false;
+    std::string title;
+    std::string message;
+    std::function<void()> onOkay;
+};
+
 struct VertexDragState {
     bool active = false;
     SectorPoint originalPoint = {};
@@ -174,7 +202,10 @@ struct SectorEditorState {
     bool showGrid = true;
     bool showAxes = true;
     bool showSectorIds = true;
-    bool dirty = false;
+    std::string currentLevelName;
+    std::string currentLevelPath;
+    bool hasCurrentLevelPath = false;
+    bool hasUnsavedChanges = false;
     bool useBakedAmbientOcclusion = true;
     bool hasPreviewPose = false;
     SectorMeshPreviewPose lastPreviewPose = {};
@@ -185,6 +216,9 @@ struct SectorEditorState {
     std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;
     TexturePickerState texturePicker;
     AddMapTextureState addMapTexture;
+    SaveLevelModalState saveLevelModal;
+    LoadLevelModalState loadLevelModal;
+    ConfirmationModalState confirmationModal;
 };
 
 struct SectorEditorUiState {

@@ -109,7 +109,7 @@ int main()
     engine::UIContext ui;
     engine::UIConfig uiConfig;
     game::SectorEditor sectorEditor;
-    sectorEditor.Init(assets, ASSETS_PATH "sector_demo/sector_editor_working_level.json");
+    sectorEditor.Init(assets);
 
     while (!WindowShouldClose())
     {
