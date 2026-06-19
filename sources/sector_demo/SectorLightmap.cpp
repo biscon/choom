@@ -494,7 +494,9 @@ bool IsSameLogicalBakeSurface(const SectorGeneratedSurfaceRef& a, const SectorGe
         case SectorGeneratedSurfaceKind::Wall:
         case SectorGeneratedSurfaceKind::LowerWall:
         case SectorGeneratedSurfaceKind::UpperWall:
-            return a.edgeIndex == b.edgeIndex;
+            return a.ringKind == b.ringKind
+                    && a.holeIndex == b.holeIndex
+                    && a.edgeIndex == b.edgeIndex;
     }
 
     return false;
@@ -1709,6 +1711,14 @@ std::string ComputeSectorLightmapSourceHash(const SectorMap& map)
         for (SectorPoint point : sector.points) {
             FnvAppendFloat(hash, SectorAuthoringToWorldDistance(point.x));
             FnvAppendFloat(hash, SectorAuthoringToWorldDistance(point.y));
+        }
+        FnvAppendInt(hash, static_cast<int>(sector.holes.size()));
+        for (const std::vector<SectorPoint>& hole : sector.holes) {
+            FnvAppendInt(hash, static_cast<int>(hole.size()));
+            for (SectorPoint point : hole) {
+                FnvAppendFloat(hash, SectorAuthoringToWorldDistance(point.x));
+                FnvAppendFloat(hash, SectorAuthoringToWorldDistance(point.y));
+            }
         }
         FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector.floorZ));
         FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector.ceilingZ));

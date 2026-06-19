@@ -52,6 +52,8 @@ private:
     void UpdatePreview3D(engine::Input& input, float dt);
     void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingSector(const char* message);
+    void StartInsertSectorInside();
+    bool IsPendingInsertParentValid() const;
     void RemoveLastPendingSectorPoint();
     void AddPendingSectorPoint(SectorPoint point);
     void FinalizePendingSector();
@@ -176,7 +178,11 @@ private:
     void SyncSelectedSectorIdBuffer();
     void SyncSelectedLightIdBuffer();
     void SelectSector(int sectorIndex);
-    void SelectEdge(int sectorIndex, int edgeIndex);
+    void SelectEdge(
+            int sectorIndex,
+            int edgeIndex,
+            SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer,
+            int holeIndex = -1);
     void SelectLight(int lightIndex);
     void SelectSurface3D(SectorSurfaceRef surface);
     bool IsValidSurfaceRef(SectorSurfaceRef surface) const;
@@ -217,6 +223,10 @@ private:
     bool InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
     bool ValidatePendingPoint(SectorPoint point, std::string& error) const;
     bool ValidateSectorPolygon(const std::vector<SectorPoint>& points, std::string& error) const;
+    bool ValidateInsertSectorPolygon(
+            int parentSectorIndex,
+            const std::vector<SectorPoint>& points,
+            std::string& error) const;
 
     SectorEditorState state;
     SectorEditorUiState uiState;

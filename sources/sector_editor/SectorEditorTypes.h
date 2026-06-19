@@ -21,9 +21,15 @@ namespace game {
 enum class SectorEditorTool {
     Select,
     Sector,
+    InsertSectorInside,
     Light,
     Move,
     Erase
+};
+
+enum class PendingSectorDrawKind {
+    NewSector,
+    InsertInside
 };
 
 enum class SectorEditorMode {
@@ -34,16 +40,25 @@ enum class SectorEditorMode {
 struct PendingSectorDraw {
     std::vector<SectorPoint> points;
     bool active = false;
+    PendingSectorDrawKind kind = PendingSectorDrawKind::NewSector;
+    int parentSectorIndex = -1;
+    std::string parentSectorId;
+    std::vector<SectorPoint> parentOuterSnapshot;
+    std::vector<std::vector<SectorPoint>> parentHolesSnapshot;
     std::string errorMessage;
 };
 
 struct SectorVertexRef {
     int sectorIndex = -1;
+    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
+    int holeIndex = -1;
     int pointIndex = -1;
 };
 
 struct SectorEdgeRef {
     int sectorIndex = -1;
+    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
+    int holeIndex = -1;
     int edgeIndex = -1;
 };
 
@@ -82,6 +97,8 @@ enum class SectorSurfaceKind {
 struct SectorSurfaceRef {
     SectorSurfaceKind kind = SectorSurfaceKind::None;
     int sectorIndex = -1;
+    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
+    int holeIndex = -1;
     int edgeIndex = -1;
 };
 
@@ -174,11 +191,15 @@ struct SectorEditorState {
     int gridSize = 8;
 
     int selectedSectorIndex = -1;
+    SectorBoundaryRingKind selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
+    int selectedEdgeHoleIndex = -1;
     int selectedEdgeIndex = -1;
     int selectedLightIndex = -1;
     EdgeUvPart selectedEdgeUvPart = EdgeUvPart::Wall;
     int hoveredSectorIndex = -1;
     int hoveredEdgeSectorIndex = -1;
+    SectorBoundaryRingKind hoveredEdgeRingKind = SectorBoundaryRingKind::Outer;
+    int hoveredEdgeHoleIndex = -1;
     int hoveredEdgeIndex = -1;
     int hoveredLightIndex = -1;
     bool hasHoveredVertex = false;

@@ -11,8 +11,20 @@ engine::TextureLoadFlags SectorTextureLoadFlags(SectorTextureFilter filter);
 const char* SectorTextureFilterName(SectorTextureFilter filter);
 bool LoadSectorMap(const char* path, SectorMap& outMap, std::string* outError = nullptr);
 bool SaveSectorMap(const char* path, const SectorMap& map);
+const std::vector<SectorPoint>* GetSectorBoundaryRing(
+        const SectorMap& map,
+        const SectorBoundaryEdgeRef& edge);
+std::vector<SectorPoint>* GetSectorBoundaryRing(
+        SectorMap& map,
+        const SectorBoundaryEdgeRef& edge);
+bool GetSectorBoundaryEdge(
+        const SectorMap& map,
+        const SectorBoundaryEdgeRef& edge,
+        SectorPoint& outA,
+        SectorPoint& outB);
 EffectiveEdgeSettings GetEffectiveEdgeSettings(const SectorDefinition& sector, int edgeIndex);
 EdgeNeighborInfo FindReverseEdgeNeighbor(const SectorMap& map, int sectorIndex, int edgeIndex);
+EdgeNeighborInfo FindReverseEdgeNeighbor(const SectorMap& map, const SectorBoundaryEdgeRef& edge);
 bool SplitSectorEdge(
         SectorMap& map,
         int sectorIndex,

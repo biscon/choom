@@ -20,6 +20,8 @@ enum class SectorGeneratedSurfaceKind {
 struct SectorGeneratedSurfaceRef {
     SectorGeneratedSurfaceKind kind = SectorGeneratedSurfaceKind::Floor;
     int sectorIndex = -1;
+    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
+    int holeIndex = -1;
     int edgeIndex = -1;
 };
 
