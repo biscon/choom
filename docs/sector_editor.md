@@ -1,8 +1,17 @@
 # Sector Editor
 
 The sector editor is a 2D editor for `SectorMap` JSON data with an integrated
-3D Mode. The app starts in the editor and loads
-`assets/sector_demo/sector_editor_working_level.json`.
+3D Mode. The app starts with a blank, unmodified level containing the default
+texture table required by newly created sectors.
+
+Levels use one directory per level:
+
+```text
+assets/levels/<level_name>/<level_name>.json
+assets/levels/<level_name>/<level_name>.lightmap.png
+```
+
+Level names may contain only letters, digits, underscores, and dashes.
 
 ## Coordinates
 
@@ -43,7 +52,13 @@ texture paths/IDs/filtering, and UV scale/offset values are unchanged.
 - `Backspace`: remove the last pending sector point.
 - `Delete`: delete the selected light or sector.
 - `Escape`: clear selection, then return to Select tool.
-- `Save` and `Reload`: write/read the current map JSON path.
+- `New`: confirm and reset to a blank level without deleting files.
+- `Load`: select a canonical level under `assets/levels`; unsaved edits require
+  confirmation before loading.
+- `Save`: open the level-name dialog. Changing the current name performs Save
+  As, with confirmation before overwriting another level.
+- `Reload`: confirm and reload the current saved level. It is unavailable for
+  an unsaved blank level.
 - `Add Map Texture`: add an existing project PNG from `assets/images` to the
   current map texture table.
 - `Bake Lightmaps`: bake static point-light direct lighting and ambient
@@ -144,11 +159,12 @@ field still load normally. Older static lights without `sourceRadius` load as
 lighting from static point lights, one-bounce indirect fill, and ambient
 occlusion into a single shared lightmap atlas. The editor window keeps
 rendering while the bake runs. The output path is derived from the current map
-path. For example:
+identity. Save the level before baking; unsaved levels do not use a temporary
+lightmap path. For example:
 
 ```text
-assets/sector_demo/sector_editor_working_level.json
-assets/sector_demo/sector_editor_working_level.lightmap.png
+assets/levels/awesome_level/awesome_level.json
+assets/levels/awesome_level/awesome_level.lightmap.png
 ```
 
 The left tools panel includes compact lightmap settings:

@@ -14,7 +14,7 @@ namespace game {
 
 class SectorEditor {
 public:
-    bool Init(engine::AssetManager& assets, const char* mapPath);
+    bool Init(engine::AssetManager& assets);
     void Shutdown(engine::AssetManager& assets);
 
     void Update(engine::Input& input, float dt);
@@ -110,6 +110,24 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawSaveLevelModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
+    void DrawLoadLevelModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
+    void DrawConfirmationModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
     void DrawStatusPanel(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -132,9 +150,16 @@ private:
     bool ValidateExistingSectorMap(const SectorMap& map, std::string& error) const;
     bool ValidateMovedVertexGroup(SectorPoint targetPoint, std::string& error) const;
     SectorMap BuildMapWithMovedVertexGroup(SectorPoint targetPoint) const;
-    void LoadInitialMap(const char* requestedPath);
-    void ReloadMap(engine::AssetManager& assets);
-    void SaveMap();
+    void ResetToBlankMap(engine::AssetManager& assets);
+    bool LoadLevel(engine::AssetManager& assets, const std::string& levelName, const std::string& jsonAssetPath);
+    void OpenNewConfirmation(engine::AssetManager& assets);
+    void OpenReloadConfirmation(engine::AssetManager& assets);
+    void OpenSaveLevelModal();
+    void OpenLoadLevelModal();
+    void OpenConfirmation(const char* title, const char* message, std::function<void()> onOkay);
+    bool SaveLevelFromModal(bool overwriteConfirmed = false);
+    void RefreshLevelList();
+    bool HasDocumentModalOpen() const;
     bool TryEnterPreview3D(engine::AssetManager& assets, engine::UIContext& ui);
     void LeavePreview3D();
     void RefreshDefaultTextures();
@@ -196,8 +221,6 @@ private:
     SectorEditorUiState uiState;
     LightmapBakeAsyncState lightmapBake;
     Rectangle canvasRect = {};
-    std::string mapPath;
-    std::string fallbackMapPath;
     std::string statusText;
     SectorMeshPreview preview;
     bool initialized = false;

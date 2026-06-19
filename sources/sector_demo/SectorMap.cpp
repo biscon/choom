@@ -906,13 +906,22 @@ EdgeNeighborInfo FindReverseEdgeNeighbor(const SectorMap& map, int sectorIndex, 
     return EdgeNeighborInfo{};
 }
 
-bool LoadSectorMap(const char* path, SectorMap& outMap)
+bool LoadSectorMap(const char* path, SectorMap& outMap, std::string* outError)
 {
     outMap = SectorMap{};
+    if (outError != nullptr) {
+        outError->clear();
+    }
+    const auto setError = [outError](const std::string& message) {
+        if (outError != nullptr) {
+            *outError = message;
+        }
+    };
 
     std::ifstream file(path);
     if (!file) {
         std::fprintf(stderr, "[SectorDemo ERROR] Failed to open sector map: %s\n", path);
+        setError(TextFormat("Failed to open level: %s", path));
         return false;
     }
 
@@ -921,12 +930,16 @@ bool LoadSectorMap(const char* path, SectorMap& outMap)
         file >> root;
     } catch (const std::exception& ex) {
         std::fprintf(stderr, "[SectorDemo ERROR] Failed to parse sector map '%s': %s\n", path, ex.what());
+        setError(TextFormat("Failed to parse level JSON: %s", ex.what()));
         return false;
     }
+
+    try {
 
     const auto texturesIt = root.find("textures");
     if (texturesIt == root.end() || !texturesIt->is_object()) {
         std::fprintf(stderr, "[SectorDemo ERROR] Sector map is missing object field 'textures'\n");
+        setError("Level JSON is missing the textures object");
         return false;
     }
 
@@ -939,6 +952,7 @@ bool LoadSectorMap(const char* path, SectorMap& outMap)
 
     if (outMap.texturesById.empty()) {
         std::fprintf(stderr, "[SectorDemo ERROR] Sector map has no valid textures\n");
+        setError("Level JSON has no valid textures");
         return false;
     }
 
@@ -946,6 +960,7 @@ bool LoadSectorMap(const char* path, SectorMap& outMap)
     const auto sectorsIt = root.find("sectors");
     if (sectorsIt == root.end() || !sectorsIt->is_array()) {
         std::fprintf(stderr, "[SectorDemo ERROR] Sector map is missing array field 'sectors'\n");
+        setError("Level JSON is missing the sectors array");
         return false;
     }
 
@@ -1049,7 +1064,13 @@ bool LoadSectorMap(const char* path, SectorMap& outMap)
             outMap.texturesById.size()
     );
 
-    return !outMap.sectors.empty();
+    return true;
+    } catch (const std::exception& ex) {
+        std::fprintf(stderr, "[SectorDemo ERROR] Failed to read sector map '%s': %s\n", path, ex.what());
+        setError(TextFormat("Failed to read level JSON: %s", ex.what()));
+        outMap = SectorMap{};
+        return false;
+    }
 }
 
 bool SaveSectorMap(const char* path, const SectorMap& map)

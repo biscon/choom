@@ -42,6 +42,121 @@ constexpr float ScreenEdgePickPixels = 10.0f;
 constexpr float ScreenLightPickPixels = 12.0f;
 constexpr float PreviewHighlightLift = 0.006f;
 
+struct LevelPaths {
+    std::string jsonAssetPath;
+    std::string lightmapAssetPath;
+    std::filesystem::path jsonFilePath;
+    std::filesystem::path lightmapFilePath;
+    std::filesystem::path directoryPath;
+};
+
+bool IsValidLevelName(const std::string& name, std::string& error)
+{
+    if (name.empty()) {
+        error = "Level name cannot be empty";
+        return false;
+    }
+    for (char ch : name) {
+        const bool asciiLetter = (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z');
+        const bool asciiDigit = ch >= '0' && ch <= '9';
+        if (!(asciiLetter || asciiDigit || ch == '_' || ch == '-')) {
+            error = "Use only letters, digits, underscore, or dash";
+            return false;
+        }
+    }
+    error.clear();
+    return true;
+}
+
+bool BuildLevelPaths(const std::string& name, LevelPaths& paths, std::string& error)
+{
+    if (!IsValidLevelName(name, error)) {
+        return false;
+    }
+
+    const std::filesystem::path relativeDirectory = std::filesystem::path("levels") / name;
+    paths.directoryPath = std::filesystem::path(ASSETS_PATH) / relativeDirectory;
+    paths.jsonFilePath = paths.directoryPath / (name + ".json");
+    paths.lightmapFilePath = paths.directoryPath / (name + ".lightmap.png");
+    paths.jsonAssetPath = (std::filesystem::path("assets") / relativeDirectory / (name + ".json")).generic_string();
+    paths.lightmapAssetPath = (std::filesystem::path("assets") / relativeDirectory / (name + ".lightmap.png")).generic_string();
+    error.clear();
+    return true;
+}
+
+SectorMap MakeBlankSectorMap()
+{
+    SectorMap map;
+    const auto addTexture = [&map](const char* id, const char* path) {
+        SectorTextureDefinition definition;
+        definition.id = id;
+        definition.path = path;
+        definition.filter = SectorTextureFilter::Bilinear;
+        map.texturesById.emplace(id, std::move(definition));
+    };
+    addTexture("wall", "assets/images/wall.png");
+    addTexture("floor", "assets/images/floor.png");
+    addTexture("ceiling", "assets/images/ceiling.png");
+    addTexture("step_wall", "assets/images/wall.png");
+    addTexture("upper_wall", "assets/images/wall.png");
+    return map;
+}
+
+std::vector<LevelListEntry> ScanLevels(std::string& error)
+{
+    std::vector<LevelListEntry> levels;
+    error.clear();
+    const std::filesystem::path levelsRoot = std::filesystem::path(ASSETS_PATH) / "levels";
+    std::error_code ec;
+    std::filesystem::create_directories(levelsRoot, ec);
+    if (ec) {
+        error = TextFormat("Could not create assets/levels: %s", ec.message().c_str());
+        return levels;
+    }
+
+    std::filesystem::directory_iterator iterator(
+            levelsRoot,
+            std::filesystem::directory_options::skip_permission_denied,
+            ec
+    );
+    const std::filesystem::directory_iterator end;
+    if (ec) {
+        error = TextFormat("Could not scan assets/levels: %s", ec.message().c_str());
+        return levels;
+    }
+
+    for (; iterator != end; iterator.increment(ec)) {
+        if (ec) {
+            error = TextFormat("Stopped level scan early: %s", ec.message().c_str());
+            break;
+        }
+        const std::filesystem::directory_entry& entry = *iterator;
+        const std::filesystem::file_status status = entry.symlink_status(ec);
+        if (ec || !std::filesystem::is_directory(status) || std::filesystem::is_symlink(status)) {
+            ec.clear();
+            continue;
+        }
+
+        const std::string name = entry.path().filename().string();
+        std::string validationError;
+        LevelPaths paths;
+        if (!BuildLevelPaths(name, paths, validationError)) {
+            continue;
+        }
+        const std::filesystem::file_status jsonStatus = std::filesystem::symlink_status(paths.jsonFilePath, ec);
+        if (ec || !std::filesystem::is_regular_file(jsonStatus) || std::filesystem::is_symlink(jsonStatus)) {
+            ec.clear();
+            continue;
+        }
+        levels.push_back(LevelListEntry{name, paths.jsonAssetPath});
+    }
+
+    std::sort(levels.begin(), levels.end(), [](const LevelListEntry& a, const LevelListEntry& b) {
+        return a.name < b.name;
+    });
+    return levels;
+}
+
 Vector2 SectorPointToVector2(SectorPoint point)
 {
     return Vector2{point.x, point.y};
@@ -788,25 +903,10 @@ bool ValidateSectorAgainstSector(
 
 } // namespace
 
-bool SectorEditor::Init(engine::AssetManager& assets, const char* path)
+bool SectorEditor::Init(engine::AssetManager& assets)
 {
     Shutdown(assets);
-    LoadInitialMap(path);
-    if (!initialized) {
-        return false;
-    }
-
-    state.viewCenter = Vector2{9.0f, 6.0f};
-    state.viewZoom = 48.0f;
-    state.gridSize = 8;
-    state.selectedSectorIndex = -1;
-    state.selectedEdgeIndex = -1;
-    state.selectedLightIndex = -1;
-    state.hoveredSectorIndex = -1;
-    state.hoveredEdgeSectorIndex = -1;
-    state.hoveredEdgeIndex = -1;
-    state.hoveredLightIndex = -1;
-    RefreshEditorTextureAssets(assets);
+    ResetToBlankMap(assets);
     return true;
 }
 
@@ -824,8 +924,6 @@ void SectorEditor::Shutdown(engine::AssetManager& assets)
     uiState = SectorEditorUiState{};
     canvasRect = {};
     statusText.clear();
-    mapPath.clear();
-    fallbackMapPath.clear();
     initialized = false;
 }
 
@@ -844,7 +942,7 @@ void SectorEditor::Update(engine::Input& input, float dt)
     }
 
     canvasRect = BuildCanvasRect();
-    if (state.texturePicker.open || state.addMapTexture.open) {
+    if (state.texturePicker.open || state.addMapTexture.open || HasDocumentModalOpen()) {
         return;
     }
     UpdateHoverAndMouse(input);
@@ -923,6 +1021,24 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
+    if (state.confirmationModal.open) {
+        DrawConfirmationModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (state.saveLevelModal.open) {
+        DrawSaveLevelModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (state.loadLevelModal.open) {
+        DrawLoadLevelModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
     if (state.addMapTexture.open) {
         DrawAddMapTextureModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
@@ -942,7 +1058,7 @@ void SectorEditor::RenderUI(
     DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawTexturePickerModal(ui, config, input, assets, font);
     uiState.keyboardCaptured = ui.focusedId != 0;
-    if (state.texturePicker.open || state.addMapTexture.open) {
+    if (state.texturePicker.open || state.addMapTexture.open || HasDocumentModalOpen()) {
         uiState.keyboardCaptured = true;
     }
     engine::EndUI(ui, config, input, assets);
@@ -1388,7 +1504,7 @@ void SectorEditor::FinishVertexDrag()
     if (state.selectedSectorIndex < 0 && !affected.empty()) {
         SelectSector(affected.front().sectorIndex);
     }
-    state.dirty = true;
+    state.hasUnsavedChanges = true;
     state.vertexDrag = VertexDragState{};
     statusText = TextFormat(
             "Moved vertex %.2f,%.2f -> %.2f,%.2f",
@@ -1461,7 +1577,7 @@ void SectorEditor::FinishLightDrag()
         return;
     }
 
-    state.dirty = true;
+    state.hasUnsavedChanges = true;
     statusText = TextFormat(
             "Moved %s to X %.2f, Z %.2f",
             light.id.c_str(),
@@ -1624,7 +1740,7 @@ void SectorEditor::FinalizePendingSector()
     state.pendingSector.points.clear();
     state.pendingSector.active = false;
     state.pendingSector.errorMessage.clear();
-    state.dirty = true;
+    state.hasUnsavedChanges = true;
     statusText = TextFormat("Created sector %s", createdId.c_str());
 }
 
@@ -1748,7 +1864,7 @@ bool SectorEditor::TryRenameSelectedSector()
     }
 
     sector.id = newId;
-    state.dirty = true;
+    state.hasUnsavedChanges = true;
     uiState.idEditError.clear();
     statusText = TextFormat("Renamed sector to %s", sector.id.c_str());
     return true;
@@ -1795,7 +1911,7 @@ bool SectorEditor::TryRenameSelectedLight()
     }
 
     light.id = newId;
-    state.dirty = true;
+    state.hasUnsavedChanges = true;
     uiState.idEditError.clear();
     statusText = TextFormat("Renamed light to %s", light.id.c_str());
     return true;
@@ -1829,7 +1945,7 @@ bool SectorEditor::DeleteSectorAt(int sectorIndex)
     }
 
     SyncSelectedSectorIdBuffer();
-    state.dirty = true;
+    state.hasUnsavedChanges = true;
     statusText = TextFormat("Deleted sector %s", deletedId.c_str());
     return true;
 }
@@ -1853,7 +1969,7 @@ bool SectorEditor::DeleteLightAt(int lightIndex)
         --state.selectedLightIndex;
     }
     state.hoveredLightIndex = -1;
-    state.dirty = true;
+    state.hasUnsavedChanges = true;
     statusText = TextFormat("Deleted light %s", deletedId.c_str());
     return true;
 }
@@ -1895,7 +2011,7 @@ void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
 
     state.map.staticLights.push_back(std::move(light));
     SelectLight(static_cast<int>(state.map.staticLights.size()) - 1);
-    state.dirty = true;
+    state.hasUnsavedChanges = true;
     statusText = TextFormat("Added static light %s", state.map.staticLights.back().id.c_str());
 }
 
@@ -1911,13 +2027,23 @@ bool SectorEditor::StartLightmapBake()
         return false;
     }
 
+    if (!state.hasCurrentLevelPath) {
+        statusText = "Save the level before baking lightmaps";
+        return false;
+    }
+
     if (state.map.sectors.empty()) {
         statusText = "Bake failed: no sectors";
         return false;
     }
 
-    const std::string assetRelativePath = MakeSectorLightmapPathForMapPath(mapPath);
-    const std::string finalOutputPath = ResolveSectorAssetPath(assetRelativePath);
+    LevelPaths levelPaths;
+    std::string pathError;
+    if (!BuildLevelPaths(state.currentLevelName, levelPaths, pathError)) {
+        statusText = TextFormat("Bake failed: %s", pathError.c_str());
+        return false;
+    }
+    const std::string finalOutputPath = levelPaths.lightmapFilePath.string();
     const std::string temporaryOutputPath = MakeTemporaryLightmapPath(finalOutputPath);
 
     SectorLightmapBakeInput input;
@@ -2138,12 +2264,18 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
     }
     DeleteFileIfExists(result.temporaryOutputPath);
 
-    const std::string assetRelativePath = MakeSectorLightmapPathForMapPath(mapPath);
-    state.map.bakedLightmap.path = assetRelativePath;
+    LevelPaths levelPaths;
+    std::string pathError;
+    if (!BuildLevelPaths(state.currentLevelName, levelPaths, pathError)) {
+        DeleteFileIfExists(result.temporaryOutputPath);
+        statusText = TextFormat("Bake failed: %s", pathError.c_str());
+        return false;
+    }
+    state.map.bakedLightmap.path = levelPaths.lightmapAssetPath;
     state.map.bakedLightmap.width = result.bakeResult.width;
     state.map.bakedLightmap.height = result.bakeResult.height;
     state.map.bakedLightmap.sourceHash = result.bakeResult.sourceHash;
-    state.dirty = true;
+    state.hasUnsavedChanges = true;
 
     std::istringstream report(result.bakeReportText);
     std::string line;
@@ -2559,10 +2691,10 @@ void SectorEditor::DrawPreviewOverlay(
                     preview.LightmapStatusText(),
                     state.useBakedAmbientOcclusion ? "on" : "off",
                     statusText.empty() ? "Ready" : statusText.c_str(),
-                    state.dirty ? " | unsaved changes" : ""
+                    state.hasUnsavedChanges ? " | unsaved changes" : ""
             ),
             engine::UITextJustify::Left,
-            state.dirty ? Color{236, 196, 92, 255} : config.mutedTextColor
+            state.hasUnsavedChanges ? Color{236, 196, 92, 255} : config.mutedTextColor
     );
 }
 
@@ -3130,7 +3262,7 @@ void SectorEditor::DrawToolsPanel(
 
     const float rowH = 46.0f;
     const float gap = config.rowSpacing;
-    const float toolsContentH = 1050.0f;
+    const float toolsContentH = 1110.0f;
     const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
             ui,
@@ -3193,12 +3325,19 @@ void SectorEditor::DrawToolsPanel(
 
     separator();
 
-    const float halfButtonW = (contentW - gap) * 0.5f;
-    if (engine::Button(ui, config, input, assets, "sector_editor_save", Rectangle{0.0f, y, halfButtonW, rowH}, font, "Save")) {
-        SaveMap();
+    const float documentButtonW = (contentW - gap) * 0.5f;
+    if (engine::Button(ui, config, input, assets, "sector_editor_new", Rectangle{0.0f, y, documentButtonW, rowH}, font, "New")) {
+        OpenNewConfirmation(assets);
     }
-    if (engine::Button(ui, config, input, assets, "sector_editor_reload", Rectangle{halfButtonW + gap, y, halfButtonW, rowH}, font, "Reload")) {
-        ReloadMap(assets);
+    if (engine::Button(ui, config, input, assets, "sector_editor_load", Rectangle{documentButtonW + gap, y, documentButtonW, rowH}, font, "Load")) {
+        OpenLoadLevelModal();
+    }
+    y += rowH + gap;
+    if (engine::Button(ui, config, input, assets, "sector_editor_save", Rectangle{0.0f, y, documentButtonW, rowH}, font, "Save")) {
+        OpenSaveLevelModal();
+    }
+    if (engine::Button(ui, config, input, assets, "sector_editor_reload", Rectangle{documentButtonW + gap, y, documentButtonW, rowH}, font, "Reload")) {
+        OpenReloadConfirmation(assets);
     }
     y += rowH + gap;
 
@@ -3230,7 +3369,7 @@ void SectorEditor::DrawToolsPanel(
         );
         if (result.changed && edited != value) {
             value = edited;
-            state.dirty = true;
+            state.hasUnsavedChanges = true;
             statusText = status;
         }
         y += rowH + gap;
@@ -3480,7 +3619,7 @@ void SectorEditor::DrawSectorsPanel(
             const engine::UINumericInputResult result = engine::FloatInput(ui, config, input, assets, id, Rectangle{numberLabelW, y, numberFieldW, rowH}, font, edited, inputState, minValue, maxValue, decimals);
             if (result.changed && edited != value) {
                 value = edited;
-                state.dirty = true;
+                state.hasUnsavedChanges = true;
                 statusText = TextFormat("Updated light %s", light.id.c_str());
             }
             y += rowH + gap;
@@ -3514,7 +3653,7 @@ void SectorEditor::DrawSectorsPanel(
             edited = ClampLightSourceRadius(edited, light.radius);
             if (result.changed && edited != light.sourceRadius) {
                 light.sourceRadius = edited;
-                state.dirty = true;
+                state.hasUnsavedChanges = true;
                 statusText = "Updated light source radius";
             }
             y += rowH + gap;
@@ -3540,7 +3679,7 @@ void SectorEditor::DrawSectorsPanel(
             if (result.changed && value != static_cast<int>(channel)) {
                 channel = static_cast<unsigned char>(ClampAmbientChannel(value));
                 light.color.a = 255;
-                state.dirty = true;
+                state.hasUnsavedChanges = true;
                 statusText = TextFormat("Updated light %s color", light.id.c_str());
             }
             y += rowH + gap;
@@ -3618,7 +3757,7 @@ void SectorEditor::DrawSectorsPanel(
     engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, "Floor:", engine::UITextJustify::Right, config.mutedTextColor);
     const engine::UINumericInputResult floorResult = engine::FloatInput(ui, config, input, assets, "sector_editor_floor", Rectangle{numberLabelW, y, numberFieldW, rowH}, font, sector.floorZ, uiState.floorInput, -512.0f, 512.0f, 2);
     if (floorResult.changed) {
-        state.dirty = true;
+        state.hasUnsavedChanges = true;
         statusText = TextFormat("Edited sector %s", sector.id.c_str());
     }
     y += rowH + gap;
@@ -3626,7 +3765,7 @@ void SectorEditor::DrawSectorsPanel(
     engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, "Ceiling:", engine::UITextJustify::Right, config.mutedTextColor);
     const engine::UINumericInputResult ceilingResult = engine::FloatInput(ui, config, input, assets, "sector_editor_ceiling", Rectangle{numberLabelW, y, numberFieldW, rowH}, font, sector.ceilingZ, uiState.ceilingInput, -512.0f, 512.0f, 2);
     if (ceilingResult.changed) {
-        state.dirty = true;
+        state.hasUnsavedChanges = true;
         statusText = TextFormat("Edited sector %s", sector.id.c_str());
     }
     y += rowH + gap;
@@ -3654,7 +3793,7 @@ void SectorEditor::DrawSectorsPanel(
     );
     if (ambientIntensityResult.changed && ambientIntensity != sector.ambientIntensity) {
         sector.ambientIntensity = ambientIntensity;
-        state.dirty = true;
+        state.hasUnsavedChanges = true;
         statusText = "Updated sector ambient intensity";
     }
     y += rowH + gap;
@@ -3682,7 +3821,7 @@ void SectorEditor::DrawSectorsPanel(
         if (result.changed && value != static_cast<int>(channel)) {
             channel = static_cast<unsigned char>(ClampAmbientChannel(value));
             sector.ambientColor.a = 255;
-            state.dirty = true;
+            state.hasUnsavedChanges = true;
             statusText = "Updated sector ambient color";
         }
         y += rowH + gap;
@@ -3845,7 +3984,7 @@ void SectorEditor::DrawSectorsPanel(
                 SectorEdgeOverride& mutableOverride = EnsureEdgeOverride(state.selectedSectorIndex, edgeIndex);
                 SectorEdgePartUvOverride& uv = selectedMutableUv(mutableOverride, state.selectedEdgeUvPart);
                 applyValue(uv, editedValue);
-                state.dirty = true;
+                state.hasUnsavedChanges = true;
                 statusText = TextFormat("Updated %s UV %s", EdgeUvPartStatusName(state.selectedEdgeUvPart), label);
             }
         };
@@ -3917,14 +4056,14 @@ void SectorEditor::DrawSectorsPanel(
                     uv.hasUvScale = false;
                     uv.hasUvOffset = false;
                     RemoveEdgeOverrideIfEmpty(state.selectedSectorIndex, edgeIndex);
-                    state.dirty = true;
+                    state.hasUnsavedChanges = true;
                     statusText = TextFormat("Reset %s UV", EdgeUvPartStatusName(state.selectedEdgeUvPart));
                 }
             }
         }
     }
 
-    // TODO: Add undo/redo and save/load.
+    // TODO: Add undo/redo.
     // TODO: Add validation issue highlighting.
 
     engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
@@ -4196,6 +4335,270 @@ void SectorEditor::DrawTexturePickerModal(
     );
 }
 
+void SectorEditor::DrawSaveLevelModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    SaveLevelModalState& modalState = state.saveLevelModal;
+    if (!modalState.open) {
+        return;
+    }
+
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [this](engine::InputEvent& event) {
+                if (event.key.key == KEY_ESCAPE) {
+                    state.saveLevelModal = SaveLevelModalState{};
+                    engine::ConsumeEvent(event);
+                } else if (event.key.key == KEY_ENTER || event.key.key == KEY_KP_ENTER) {
+                    SaveLevelFromModal();
+                    engine::ConsumeEvent(event);
+                }
+            }
+    );
+    if (!modalState.open) {
+        return;
+    }
+
+    DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 135});
+    const Rectangle modal{
+            (EditorWidth - 660.0f) * 0.5f,
+            (EditorHeight - 300.0f) * 0.5f,
+            660.0f,
+            300.0f
+    };
+    DrawRectangleRec(modal, Color{20, 24, 32, 245});
+    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
+
+    engine::Text(config, assets, Rectangle{modal.x + 24.0f, modal.y + 20.0f, modal.width - 48.0f, 40.0f}, font, "Save Level");
+    engine::Text(config, assets, Rectangle{modal.x + 24.0f, modal.y + 82.0f, 100.0f, 42.0f}, font, "Name:", engine::UITextJustify::Left, config.mutedTextColor);
+    const engine::UITextInputResult inputResult = engine::TextInput(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_save_level_name",
+            Rectangle{modal.x + 126.0f, modal.y + 80.0f, modal.width - 150.0f, 42.0f},
+            font,
+            modalState.nameBuffer,
+            sizeof(modalState.nameBuffer),
+            0,
+            sizeof(modalState.nameBuffer) - 1
+    );
+    if (inputResult.changed) {
+        modalState.errorMessage.clear();
+    }
+
+    if (!modalState.errorMessage.empty()) {
+        engine::Text(
+                config,
+                assets,
+                Rectangle{modal.x + 24.0f, modal.y + 140.0f, modal.width - 48.0f, 48.0f},
+                font,
+                modalState.errorMessage.c_str(),
+                engine::UITextJustify::Left,
+                config.invalidColor
+        );
+    }
+
+    const float buttonY = modal.y + modal.height - 66.0f;
+    const float buttonW = 150.0f;
+    if (engine::Button(ui, config, input, assets, "sector_editor_save_level_confirm", Rectangle{modal.x + modal.width - buttonW * 2.0f - 36.0f, buttonY, buttonW, 44.0f}, font, "Save")) {
+        SaveLevelFromModal();
+    }
+    if (engine::Button(ui, config, input, assets, "sector_editor_save_level_cancel", Rectangle{modal.x + modal.width - buttonW - 24.0f, buttonY, buttonW, 44.0f}, font, "Cancel")) {
+        state.saveLevelModal = SaveLevelModalState{};
+    }
+
+    input.ForEachEvent(engine::InputEventType::Any, true, [](engine::InputEvent& event) {
+        engine::ConsumeEvent(event);
+    });
+}
+
+void SectorEditor::DrawLoadLevelModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    LoadLevelModalState& modalState = state.loadLevelModal;
+    if (!modalState.open) {
+        return;
+    }
+
+    const auto requestLoad = [this, &assets]() {
+        LoadLevelModalState& loadState = state.loadLevelModal;
+        if (loadState.selectedIndex < 0
+                || loadState.selectedIndex >= static_cast<int>(loadState.levels.size())) {
+            loadState.errorMessage = "Select a level to load";
+            return;
+        }
+        const LevelListEntry selected = loadState.levels[static_cast<size_t>(loadState.selectedIndex)];
+        if (state.hasUnsavedChanges) {
+            OpenConfirmation(
+                    "Load Level",
+                    "Discard unsaved changes and load selected level?",
+                    [this, &assets, selected]() { LoadLevel(assets, selected.name, selected.jsonAssetPath); }
+            );
+        } else {
+            LoadLevel(assets, selected.name, selected.jsonAssetPath);
+        }
+    };
+
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [this, &requestLoad](engine::InputEvent& event) {
+                if (event.key.key == KEY_ESCAPE) {
+                    state.loadLevelModal = LoadLevelModalState{};
+                    engine::ConsumeEvent(event);
+                } else if (event.key.key == KEY_ENTER || event.key.key == KEY_KP_ENTER) {
+                    requestLoad();
+                    engine::ConsumeEvent(event);
+                }
+            }
+    );
+    if (!modalState.open) {
+        return;
+    }
+
+    DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 135});
+    const Rectangle modal{
+            (EditorWidth - 760.0f) * 0.5f,
+            (EditorHeight - 660.0f) * 0.5f,
+            760.0f,
+            660.0f
+    };
+    DrawRectangleRec(modal, Color{20, 24, 32, 245});
+    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
+    engine::Text(config, assets, Rectangle{modal.x + 24.0f, modal.y + 20.0f, modal.width - 48.0f, 40.0f}, font, "Load Level");
+
+    const Rectangle listBounds{modal.x + 24.0f, modal.y + 74.0f, modal.width - 48.0f, 450.0f};
+    const Vector2 contentSize{
+            listBounds.width,
+            std::max(listBounds.height, config.listItemHeight * static_cast<float>(modalState.optionLabels.size()))
+    };
+    engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
+            ui,
+            config,
+            input,
+            "sector_editor_load_level_scroll",
+            listBounds,
+            contentSize,
+            modalState.scroll
+    );
+    if (!modalState.optionLabels.empty()) {
+        engine::List(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_load_level_list",
+                Rectangle{0.0f, 0.0f, listBounds.width - (scroll.scrollY ? config.scrollbarSize : 0.0f), contentSize.y},
+                font,
+                modalState.optionLabels.data(),
+                modalState.optionLabels.size(),
+                modalState.selectedIndex
+        );
+    }
+    engine::EndScrollArea(ui, config, input, scroll, modalState.scroll);
+
+    const char* message = modalState.errorMessage.empty()
+            ? (modalState.levels.empty() ? "No levels found." : "")
+            : modalState.errorMessage.c_str();
+    if (message[0] != '\0') {
+        engine::Text(
+                config,
+                assets,
+                Rectangle{modal.x + 24.0f, modal.y + 536.0f, modal.width - 48.0f, 40.0f},
+                font,
+                message,
+                engine::UITextJustify::Left,
+                modalState.errorMessage.empty() ? config.mutedTextColor : config.invalidColor
+        );
+    }
+
+    const float buttonY = modal.y + modal.height - 66.0f;
+    const float buttonW = 150.0f;
+    if (engine::Button(ui, config, input, assets, "sector_editor_load_level_confirm", Rectangle{modal.x + modal.width - buttonW * 2.0f - 36.0f, buttonY, buttonW, 44.0f}, font, "Load")) {
+        requestLoad();
+    }
+    if (engine::Button(ui, config, input, assets, "sector_editor_load_level_cancel", Rectangle{modal.x + modal.width - buttonW - 24.0f, buttonY, buttonW, 44.0f}, font, "Cancel")) {
+        state.loadLevelModal = LoadLevelModalState{};
+    }
+
+    input.ForEachEvent(engine::InputEventType::Any, true, [](engine::InputEvent& event) {
+        engine::ConsumeEvent(event);
+    });
+}
+
+void SectorEditor::DrawConfirmationModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    ConfirmationModalState& modalState = state.confirmationModal;
+    if (!modalState.open) {
+        return;
+    }
+
+    bool okayRequested = false;
+    bool cancelRequested = false;
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [&okayRequested, &cancelRequested](engine::InputEvent& event) {
+                if (event.key.key == KEY_ESCAPE) {
+                    cancelRequested = true;
+                    engine::ConsumeEvent(event);
+                } else if (event.key.key == KEY_ENTER || event.key.key == KEY_KP_ENTER) {
+                    okayRequested = true;
+                    engine::ConsumeEvent(event);
+                }
+            }
+    );
+
+    DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
+    const Rectangle modal{
+            (EditorWidth - 680.0f) * 0.5f,
+            (EditorHeight - 300.0f) * 0.5f,
+            680.0f,
+            300.0f
+    };
+    DrawRectangleRec(modal, Color{20, 24, 32, 248});
+    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
+    engine::Text(config, assets, Rectangle{modal.x + 26.0f, modal.y + 22.0f, modal.width - 52.0f, 42.0f}, font, modalState.title.c_str());
+    engine::Text(config, assets, Rectangle{modal.x + 26.0f, modal.y + 86.0f, modal.width - 52.0f, 88.0f}, font, modalState.message.c_str(), engine::UITextJustify::Left, config.mutedTextColor);
+
+    const float buttonY = modal.y + modal.height - 68.0f;
+    const float buttonW = 150.0f;
+    okayRequested = okayRequested || engine::Button(ui, config, input, assets, "sector_editor_confirmation_okay", Rectangle{modal.x + modal.width - buttonW * 2.0f - 38.0f, buttonY, buttonW, 44.0f}, font, "Okay");
+    cancelRequested = cancelRequested || engine::Button(ui, config, input, assets, "sector_editor_confirmation_cancel", Rectangle{modal.x + modal.width - buttonW - 26.0f, buttonY, buttonW, 44.0f}, font, "Cancel");
+
+    input.ForEachEvent(engine::InputEventType::Any, true, [](engine::InputEvent& event) {
+        engine::ConsumeEvent(event);
+    });
+
+    if (cancelRequested) {
+        state.confirmationModal = ConfirmationModalState{};
+        return;
+    }
+    if (okayRequested) {
+        std::function<void()> action = std::move(state.confirmationModal.onOkay);
+        state.confirmationModal = ConfirmationModalState{};
+        if (action) {
+            action();
+        }
+    }
+}
+
 void SectorEditor::DrawLightmapBakeModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -4334,16 +4737,18 @@ void SectorEditor::DrawStatusPanel(
     if (state.pendingSector.active) {
         pendingText = TextFormat(" | pending %zu pts", state.pendingSector.points.size());
     }
-    const std::string shortMapPath = ShortPath(mapPath);
+    const std::string shortMapPath = state.hasCurrentLevelPath
+            ? state.currentLevelPath
+            : std::string{"<untitled>"};
     const char* lightmapText = SectorLightmapStatusText(GetSectorLightmapStatus(state.map));
     const char* text = TextFormat(
             "%s%s | %s%s | map %s%s | grid %d | %s | selected %s",
             statusText.empty() ? "Map not loaded" : statusText.c_str(),
-            state.dirty ? " *modified" : "",
+            state.hasUnsavedChanges ? " *modified" : "",
             ToolHelpText(state.currentTool),
             pendingText.c_str(),
             shortMapPath.c_str(),
-            state.dirty ? "*" : "",
+            state.hasUnsavedChanges ? "*" : "",
             state.gridSize,
             lightmapText,
             selectedLabel.c_str()
@@ -4359,81 +4764,191 @@ void SectorEditor::DrawStatusPanel(
     );
 }
 
-void SectorEditor::LoadInitialMap(const char* requestedPath)
+void SectorEditor::ResetToBlankMap(engine::AssetManager& assets)
 {
-    mapPath = requestedPath == nullptr ? "" : requestedPath;
-    fallbackMapPath = std::string(ASSETS_PATH) + "sector_demo/sector_demo_level.json";
-    const std::string loadPath = FileExists(mapPath) ? mapPath : fallbackMapPath;
-
-    if (!LoadSectorMap(loadPath.c_str(), state.map)) {
-        statusText = "Failed to load map";
-        initialized = false;
-        return;
+    ShutdownLightmapBake();
+    preview.Shutdown(assets);
+    if (!engine::IsNull(state.editorTextureScope)) {
+        assets.UnloadScope(state.editorTextureScope);
+    }
+    if (!engine::IsNull(state.addMapTexture.previewScope)) {
+        assets.UnloadScope(state.addMapTexture.previewScope);
     }
 
+    state = SectorEditorState{};
+    uiState = SectorEditorUiState{};
+    state.map = MakeBlankSectorMap();
+    state.viewCenter = Vector2{9.0f, 6.0f};
+    state.viewZoom = 48.0f;
+    state.gridSize = 8;
     RefreshDefaultTextures();
-    state.pendingSector = PendingSectorDraw{};
-    state.vertexDrag = VertexDragState{};
-    state.lightDrag = LightDragState{};
-    state.selectedSectorIndex = -1;
-    state.selectedEdgeIndex = -1;
-    state.hoveredSectorIndex = -1;
-    state.hasPreviewPose = false;
-    state.dirty = false;
+    RefreshEditorTextureAssets(assets);
     initialized = true;
-    statusText = loadPath == mapPath
-            ? TextFormat("Map loaded: %zu sectors", state.map.sectors.size())
-            : TextFormat("Loaded sample map: %zu sectors", state.map.sectors.size());
+    statusText = "New blank level";
 }
 
-void SectorEditor::ReloadMap(engine::AssetManager& assets)
+bool SectorEditor::LoadLevel(
+        engine::AssetManager& assets,
+        const std::string& levelName,
+        const std::string& jsonAssetPath)
 {
-    const std::string selectedId = state.selectedSectorIndex >= 0
-            && state.selectedSectorIndex < static_cast<int>(state.map.sectors.size())
-            ? state.map.sectors[static_cast<size_t>(state.selectedSectorIndex)].id
-            : std::string{};
+    SectorMap loaded;
+    std::string error;
+    const std::string filePath = ResolveEditorAssetPath(jsonAssetPath);
+    if (!LoadSectorMap(filePath.c_str(), loaded, &error)) {
+        state.loadLevelModal.errorMessage = error.empty() ? "Failed to load level" : error;
+        statusText = state.loadLevelModal.errorMessage;
+        return false;
+    }
 
+    preview.Shutdown(assets);
     CancelPendingSector(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
-    SectorMap loaded;
-    const std::string loadPath = FileExists(mapPath) ? mapPath : fallbackMapPath;
-    if (!LoadSectorMap(loadPath.c_str(), loaded)) {
-        statusText = TextFormat("Reload failed: %s", ShortPath(loadPath).c_str());
-        return;
-    }
-
     state.map = std::move(loaded);
-    RefreshDefaultTextures();
-    ClearSelection();
-    if (!selectedId.empty()) {
-        for (size_t i = 0; i < state.map.sectors.size(); ++i) {
-            if (state.map.sectors[i].id == selectedId) {
-                SelectSector(static_cast<int>(i));
-                break;
-            }
-        }
-    }
-    RefreshEditorTextureAssets(assets);
-    state.dirty = false;
+    state.currentLevelName = levelName;
+    state.currentLevelPath = jsonAssetPath;
+    state.hasCurrentLevelPath = true;
+    state.hasUnsavedChanges = false;
+    state.mode = SectorEditorMode::Edit2D;
     state.hasPreviewPose = false;
-    initialized = true;
-    statusText = TextFormat("Reloaded %s", ShortPath(loadPath).c_str());
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.texturePicker = TexturePickerState{};
+    state.loadLevelModal = LoadLevelModalState{};
+    state.saveLevelModal = SaveLevelModalState{};
+    state.confirmationModal = ConfirmationModalState{};
+    ClearSelection();
+    RefreshDefaultTextures();
+    RefreshEditorTextureAssets(assets);
+    statusText = TextFormat("Loaded %s", jsonAssetPath.c_str());
+    return true;
 }
 
-void SectorEditor::SaveMap()
+void SectorEditor::OpenConfirmation(const char* title, const char* message, std::function<void()> onOkay)
 {
-    if (!initialized) {
-        statusText = "No map loaded";
+    state.confirmationModal.open = true;
+    state.confirmationModal.title = title == nullptr ? "Confirm" : title;
+    state.confirmationModal.message = message == nullptr ? "" : message;
+    state.confirmationModal.onOkay = std::move(onOkay);
+}
+
+void SectorEditor::OpenNewConfirmation(engine::AssetManager& assets)
+{
+    OpenConfirmation(
+            "New Level",
+            "Discard current level and create a new blank map?",
+            [this, &assets]() { ResetToBlankMap(assets); }
+    );
+}
+
+void SectorEditor::OpenReloadConfirmation(engine::AssetManager& assets)
+{
+    if (!state.hasCurrentLevelPath) {
+        statusText = "No saved level to reload.";
         return;
     }
+    const std::string name = state.currentLevelName;
+    const std::string path = state.currentLevelPath;
+    OpenConfirmation(
+            "Reload Level",
+            "Reload current level from disk and discard unsaved changes?",
+            [this, &assets, name, path]() { LoadLevel(assets, name, path); }
+    );
+}
 
-    if (SaveSectorMap(mapPath.c_str(), state.map)) {
-        state.dirty = false;
-        statusText = TextFormat("Saved %s", ShortPath(mapPath).c_str());
-    } else {
-        statusText = TextFormat("Save failed: %s", ShortPath(mapPath).c_str());
+void SectorEditor::OpenSaveLevelModal()
+{
+    state.saveLevelModal = SaveLevelModalState{};
+    state.saveLevelModal.open = true;
+    if (state.hasCurrentLevelPath) {
+        std::snprintf(
+                state.saveLevelModal.nameBuffer,
+                sizeof(state.saveLevelModal.nameBuffer),
+                "%s",
+                state.currentLevelName.c_str()
+        );
     }
+}
+
+void SectorEditor::RefreshLevelList()
+{
+    LoadLevelModalState& modal = state.loadLevelModal;
+    modal.levels = ScanLevels(modal.errorMessage);
+    modal.optionLabels.clear();
+    modal.optionLabels.reserve(modal.levels.size());
+    for (const LevelListEntry& level : modal.levels) {
+        modal.optionLabels.push_back(level.name.c_str());
+    }
+    modal.selectedIndex = modal.levels.empty() ? -1 : 0;
+    modal.scroll = engine::UIScrollState{};
+}
+
+void SectorEditor::OpenLoadLevelModal()
+{
+    state.loadLevelModal = LoadLevelModalState{};
+    state.loadLevelModal.open = true;
+    RefreshLevelList();
+}
+
+bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
+{
+    SaveLevelModalState& modal = state.saveLevelModal;
+    const std::string name = modal.nameBuffer;
+    LevelPaths paths;
+    if (!BuildLevelPaths(name, paths, modal.errorMessage)) {
+        return false;
+    }
+
+    const bool savingToCurrentPath = state.hasCurrentLevelPath
+            && state.currentLevelPath == paths.jsonAssetPath;
+    std::error_code ec;
+    const bool targetExists = std::filesystem::exists(paths.jsonFilePath, ec);
+    if (ec) {
+        modal.errorMessage = TextFormat("Could not check target level: %s", ec.message().c_str());
+        return false;
+    }
+    if (targetExists && !savingToCurrentPath && !overwriteConfirmed) {
+        OpenConfirmation(
+                "Overwrite Level",
+                "Level already exists. Overwrite it?",
+                [this]() { SaveLevelFromModal(true); }
+        );
+        return false;
+    }
+
+    std::filesystem::create_directories(paths.directoryPath, ec);
+    if (ec) {
+        modal.errorMessage = TextFormat("Could not create level directory: %s", ec.message().c_str());
+        return false;
+    }
+
+    SectorMap mapToSave = state.map;
+    if (!savingToCurrentPath) {
+        mapToSave.bakedLightmap = SectorLightmapMetadata{};
+        mapToSave.bakedLightmap.path = paths.lightmapAssetPath;
+    }
+    if (!SaveSectorMap(paths.jsonFilePath.string().c_str(), mapToSave)) {
+        modal.errorMessage = "Could not write level JSON";
+        statusText = TextFormat("Save failed: %s", paths.jsonAssetPath.c_str());
+        return false;
+    }
+
+    state.map = std::move(mapToSave);
+    state.currentLevelName = name;
+    state.currentLevelPath = paths.jsonAssetPath;
+    state.hasCurrentLevelPath = true;
+    state.hasUnsavedChanges = false;
+    state.saveLevelModal = SaveLevelModalState{};
+    state.confirmationModal = ConfirmationModalState{};
+    statusText = TextFormat("Saved %s", paths.jsonAssetPath.c_str());
+    return true;
+}
+
+bool SectorEditor::HasDocumentModalOpen() const
+{
+    return state.saveLevelModal.open
+            || state.loadLevelModal.open
+            || state.confirmationModal.open;
 }
 
 bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UIContext& ui)
@@ -4692,7 +5207,7 @@ bool SectorEditor::AddSelectedMapTexture(engine::AssetManager& assets)
     state.map.texturesById.emplace(id, std::move(definition));
 
     RefreshEditorTextureAssets(assets);
-    state.dirty = true;
+    state.hasUnsavedChanges = true;
     statusText = TextFormat("Added texture %s", id.c_str());
     CloseAddMapTextureModal(assets);
     return true;
@@ -5125,7 +5640,7 @@ bool SectorEditor::ApplySurface3DUvValue(SectorSurfaceRef surface, int component
         return false;
     }
 
-    state.dirty = true;
+    state.hasUnsavedChanges = true;
     statusText = TextFormat("Updated 3D %s UV", SurfaceKindName(surface.kind));
     return RebuildPreviewMeshesPreservingView(assets);
 }
@@ -5164,7 +5679,7 @@ bool SectorEditor::ResetSurface3DUv(SectorSurfaceRef surface, engine::AssetManag
     }
 
     ResetSurface3DUiState();
-    state.dirty = true;
+    state.hasUnsavedChanges = true;
     statusText = TextFormat("Reset 3D %s UV", SurfaceKindName(surface.kind));
     return RebuildPreviewMeshesPreservingView(assets);
 }
@@ -5318,7 +5833,7 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
     }
 
     if (changed) {
-        state.dirty = true;
+        state.hasUnsavedChanges = true;
         statusText = TextFormat("Changed %s", TextureTargetLabel(picker.target));
         if (state.mode == SectorEditorMode::Preview3D) {
             RebuildPreviewMeshesPreservingView(assets);
