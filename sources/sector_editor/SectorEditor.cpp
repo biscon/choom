@@ -1859,7 +1859,7 @@ void SectorEditor::FinalizePendingSector()
     state.hoveredVertexRefs.clear();
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
-    ClearSelection();
+    SelectTopologySector(createdSectorId);
     state.topologyDocumentDirty = true;
     state.topologyRenderWarning.clear();
     state.hasUnsavedChanges = true;
