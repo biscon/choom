@@ -103,8 +103,9 @@ on the child creates nested platforms, pits, or pedestals.
 Outer rings are stored counter-clockwise and hole rings clockwise. This makes a
 parent hole edge the exact directed reverse of its child outer edge, allowing
 the existing portal lower/upper wall generation to handle height differences.
-Parent hole edges use parent default edge settings and are read-only in this
-version; the matching child outer edges remain editable.
+Parent hole edges and child outer edges are independently editable directed
+sides. Both initially use their owning sector defaults, and selecting either
+side exposes the normal wall/lower/upper texture, UV, reset, and split controls.
 
 Sector JSON stores holes only when present:
 
@@ -382,6 +383,11 @@ Current JSON writes per-part UV fields only when that part has an override:
 `upperUvScale`, and `upperUvOffset`. Older maps with edge-level `uvScale` or
 `uvOffset` still load; those legacy values are applied to Wall, Lower, and
 Upper to preserve the previous shared-UV behavior.
+
+Edge overrides identify their boundary ring explicitly. Outer overrides use
+`"ring": "outer"`; hole overrides use `"ring": "hole"` plus a zero-based
+`"hole"` index. Both use `"edge"` for the edge index within that ring. Legacy
+entries without `ring` continue to load as outer-ring overrides.
 
 Floor and ceiling UV overrides are sector-level fields. JSON writes
 `floorUvScale`, `floorUvOffset`, `ceilingUvScale`, and `ceilingUvOffset` only

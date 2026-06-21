@@ -3094,19 +3094,6 @@ void SectorEditor::DrawPreviewUvPanel(
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
     const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(state.selectedSurface3D.sectorIndex)];
-    if (IsWallSurface(state.selectedSurface3D.kind)
-            && state.selectedSurface3D.ringKind == SectorBoundaryRingKind::Hole) {
-        engine::Text(
-                ui,
-                config,
-                assets,
-                Rectangle{panel.x + 18.0f, panel.y + 18.0f, panel.width - 36.0f, 40.0f},
-                font,
-                "Parent hole boundary uses inherited sector edge settings (read-only)",
-                engine::UITextJustify::Left,
-                config.mutedTextColor);
-        return;
-    }
     Vector2 uvScale{1.0f, 1.0f};
     Vector2 uvOffset{0.0f, 0.0f};
 
@@ -3125,7 +3112,13 @@ void SectorEditor::DrawPreviewUvPanel(
             uvOffset = sector.ceilingUv.uvOffset;
         }
     } else {
-        const EffectiveEdgeSettings effective = GetEffectiveEdgeSettings(sector, state.selectedSurface3D.edgeIndex);
+        const EffectiveEdgeSettings effective = GetEffectiveEdgeSettings(
+                state.map,
+                SectorBoundaryEdgeRef{
+                        state.selectedSurface3D.sectorIndex,
+                        state.selectedSurface3D.ringKind,
+                        state.selectedSurface3D.holeIndex,
+                        state.selectedSurface3D.edgeIndex});
         const EffectiveEdgePartSettings* part = &effective.wall;
         if (state.selectedSurface3D.kind == SectorSurfaceKind::LowerWall) {
             part = &effective.lower;
@@ -3143,9 +3136,11 @@ void SectorEditor::DrawPreviewUvPanel(
     const float gap = 14.0f;
     const float startX = panel.x + 390.0f;
 
-    const std::string edgeLabel = IsWallSurface(state.selectedSurface3D.kind)
-            ? TextFormat(" edge %d", state.selectedSurface3D.edgeIndex)
-            : "";
+    const std::string edgeLabel = !IsWallSurface(state.selectedSurface3D.kind)
+            ? std::string{}
+            : state.selectedSurface3D.ringKind == SectorBoundaryRingKind::Hole
+                    ? TextFormat(" | hole %d edge %d", state.selectedSurface3D.holeIndex, state.selectedSurface3D.edgeIndex)
+                    : TextFormat(" | outer edge %d", state.selectedSurface3D.edgeIndex);
     engine::Text(
             ui,
             config,
@@ -3219,7 +3214,11 @@ void SectorEditor::DrawPreviewUvPanel(
             "Texture")) {
         const TexturePickerTargetKind target = TexturePickerTargetForSurface(state.selectedSurface3D);
         if (target != TexturePickerTargetKind::None) {
-            OpenTexturePicker(target, state.selectedSurface3D.sectorIndex, state.selectedSurface3D.edgeIndex);
+            OpenTexturePicker(target, SectorBoundaryEdgeRef{
+                    state.selectedSurface3D.sectorIndex,
+                    state.selectedSurface3D.ringKind,
+                    state.selectedSurface3D.holeIndex,
+                    state.selectedSurface3D.edgeIndex});
         }
     }
 
@@ -3986,13 +3985,9 @@ void SectorEditor::DrawSectorsPanel(
         height += 3.0f * (rowH + gap); // Ambient RGB.
         height += 36.0f + gap; // Ambient swatch.
 
-        if (state.selectedEdgeIndex < 0
-                || state.selectedEdgeRingKind == SectorBoundaryRingKind::Hole) {
+        if (state.selectedEdgeIndex < 0) {
             height += 4.0f;
             height += 5.0f * (36.0f + gap);
-            if (state.selectedEdgeRingKind == SectorBoundaryRingKind::Hole) {
-                height += 34.0f;
-            }
             return height;
         }
 
@@ -4004,8 +3999,11 @@ void SectorEditor::DrawSectorsPanel(
 
         const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(
                 state.map,
-                state.selectedSectorIndex,
-                state.selectedEdgeIndex
+                SectorBoundaryEdgeRef{
+                        state.selectedSectorIndex,
+                        state.selectedEdgeRingKind,
+                        state.selectedEdgeHoleIndex,
+                        state.selectedEdgeIndex}
         );
         if (neighbor.hasNeighbor) {
             height += 38.0f + gap;
@@ -4333,26 +4331,17 @@ void SectorEditor::DrawSectorsPanel(
                 overridden ? config.accentColor : config.mutedTextColor
         );
         if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
-            OpenTexturePicker(target, state.selectedSectorIndex, edgeIndex);
+            OpenTexturePicker(target, SectorBoundaryEdgeRef{
+                    state.selectedSectorIndex,
+                    state.selectedEdgeRingKind,
+                    state.selectedEdgeHoleIndex,
+                    edgeIndex});
         }
         y += row.height + gap;
     };
 
-    if (state.selectedEdgeIndex < 0
-            || state.selectedEdgeRingKind == SectorBoundaryRingKind::Hole) {
+    if (state.selectedEdgeIndex < 0) {
         y += 4.0f;
-        if (state.selectedEdgeRingKind == SectorBoundaryRingKind::Hole) {
-            engine::Text(
-                    ui,
-                    config,
-                    assets,
-                    Rectangle{0.0f, y, contentW, 30.0f},
-                    font,
-                    "Hole boundary uses sector defaults",
-                    engine::UITextJustify::Left,
-                    config.mutedTextColor);
-            y += 34.0f;
-        }
         drawTextureRow("sector_editor_pick_floor", "Floor:", sector.floorTextureId, TexturePickerTargetKind::SectorFloor, -1, false);
         drawTextureRow("sector_editor_pick_ceiling", "Ceil:", sector.ceilingTextureId, TexturePickerTargetKind::SectorCeiling, -1, false);
         drawTextureRow("sector_editor_pick_wall", "Wall:", sector.wallTextureId, TexturePickerTargetKind::SectorWall, -1, false);
@@ -4364,11 +4353,17 @@ void SectorEditor::DrawSectorsPanel(
         y += 18.0f;
 
         const int edgeIndex = state.selectedEdgeIndex;
-        const SectorPoint from = sector.points[static_cast<size_t>(edgeIndex)];
-        const SectorPoint to = sector.points[(static_cast<size_t>(edgeIndex) + 1) % sector.points.size()];
-        const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(state.map, state.selectedSectorIndex, edgeIndex);
-        const EffectiveEdgeSettings effective = GetEffectiveEdgeSettings(sector, edgeIndex);
-        const SectorEdgeOverride* edgeOverride = FindEdgeOverride(state.selectedSectorIndex, edgeIndex);
+        const SectorBoundaryEdgeRef selectedEdge{
+                state.selectedSectorIndex,
+                state.selectedEdgeRingKind,
+                state.selectedEdgeHoleIndex,
+                edgeIndex};
+        const std::vector<SectorPoint>* selectedRing = GetSectorBoundaryRing(state.map, selectedEdge);
+        const SectorPoint from = (*selectedRing)[static_cast<size_t>(edgeIndex)];
+        const SectorPoint to = (*selectedRing)[(static_cast<size_t>(edgeIndex) + 1) % selectedRing->size()];
+        const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(state.map, selectedEdge);
+        const EffectiveEdgeSettings effective = GetEffectiveEdgeSettings(state.map, selectedEdge);
+        const SectorEdgeOverride* edgeOverride = FindEdgeOverride(selectedEdge);
         const bool wallOverridden = edgeOverride != nullptr && edgeOverride->hasWallTexture;
         const bool lowerOverridden = edgeOverride != nullptr && edgeOverride->hasLowerWallTexture;
         const bool upperOverridden = edgeOverride != nullptr && edgeOverride->hasUpperWallTexture;
@@ -4379,20 +4374,27 @@ void SectorEditor::DrawSectorsPanel(
                 assets,
                 Rectangle{0.0f, y, contentW, 34.0f},
                 font,
-                TextFormat("Selected side: %s edge %d", sector.id.c_str(), edgeIndex),
+                state.selectedEdgeRingKind == SectorBoundaryRingKind::Hole
+                        ? TextFormat("Selected side: %s hole %d edge %d", sector.id.c_str(), state.selectedEdgeHoleIndex, edgeIndex)
+                        : TextFormat("Selected side: %s outer edge %d", sector.id.c_str(), edgeIndex),
                 engine::UITextJustify::Left,
                 config.textColor
         );
         y += 34.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, TextFormat("From %.2f, %.2f  To %.2f, %.2f", from.x, from.y, to.x, to.y), engine::UITextJustify::Left, config.mutedTextColor);
         y += 30.0f;
-        const char* neighborText = "Opposite side: none (outer edge)";
+        const char* neighborText = "Opposite side: none";
         if (neighbor.hasNeighbor) {
-            neighborText = TextFormat(
-                    "Opposite side: %s edge %d",
-                    state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)].id.c_str(),
-                    neighbor.edgeIndex
-            );
+            neighborText = neighbor.ringKind == SectorBoundaryRingKind::Hole
+                    ? TextFormat(
+                            "Opposite side: %s hole %d edge %d",
+                            state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)].id.c_str(),
+                            neighbor.holeIndex,
+                            neighbor.edgeIndex)
+                    : TextFormat(
+                            "Opposite side: %s outer edge %d",
+                            state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)].id.c_str(),
+                            neighbor.edgeIndex);
         }
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, neighborText, engine::UITextJustify::Left, config.mutedTextColor);
         y += 34.0f;
@@ -4475,7 +4477,7 @@ void SectorEditor::DrawSectorsPanel(
             float editedValue = value;
             const engine::UINumericInputResult result = engine::FloatInput(ui, config, input, assets, id, Rectangle{bounds.x, bounds.y + 26.0f, bounds.width, 36.0f}, font, editedValue, inputState, minValue, maxValue, 3);
             if (result.changed && editedValue != value) {
-                SectorEdgeOverride& mutableOverride = EnsureEdgeOverride(state.selectedSectorIndex, edgeIndex);
+                SectorEdgeOverride& mutableOverride = EnsureEdgeOverride(selectedEdge);
                 SectorEdgePartUvOverride& uv = selectedMutableUv(mutableOverride, state.selectedEdgeUvPart);
                 applyValue(uv, editedValue);
                 state.hasUnsavedChanges = true;
@@ -4541,7 +4543,7 @@ void SectorEditor::DrawSectorsPanel(
         y += uvBlockH + gap;
 
         if (engine::Button(ui, config, input, assets, "sector_editor_edge_reset_uv", Rectangle{0.0f, y, contentW, 38.0f}, font, TextFormat("Reset %s UV", EdgeUvPartName(state.selectedEdgeUvPart)))) {
-            SectorEdgeOverride* mutableOverride = FindMutableEdgeOverride(state.selectedSectorIndex, edgeIndex);
+            SectorEdgeOverride* mutableOverride = FindMutableEdgeOverride(selectedEdge);
             if (mutableOverride != nullptr) {
                 SectorEdgePartUvOverride& uv = selectedMutableUv(*mutableOverride, state.selectedEdgeUvPart);
                 if (uv.hasUvScale || uv.hasUvOffset) {
@@ -4549,7 +4551,7 @@ void SectorEditor::DrawSectorsPanel(
                     uv.uvOffset = Vector2{0.0f, 0.0f};
                     uv.hasUvScale = false;
                     uv.hasUvOffset = false;
-                    RemoveEdgeOverrideIfEmpty(state.selectedSectorIndex, edgeIndex);
+                    RemoveEdgeOverrideIfEmpty(selectedEdge);
                     state.hasUnsavedChanges = true;
                     statusText = TextFormat("Reset %s UV", EdgeUvPartStatusName(state.selectedEdgeUvPart));
                 }
@@ -4813,7 +4815,10 @@ void SectorEditor::DrawTexturePickerModal(
         previewTextureId = picker.textureIds[static_cast<size_t>(picker.selectedTextureIndex)];
     }
     if (previewTextureId.empty()) {
-        previewTextureId = CurrentTextureForTarget(picker.target, picker.sectorIndex, picker.edgeIndex);
+        previewTextureId = CurrentTextureForTarget(
+                picker.target,
+                SectorBoundaryEdgeRef{
+                        picker.sectorIndex, picker.ringKind, picker.holeIndex, picker.edgeIndex});
     }
 
     const Rectangle previewBounds{modal.x + 402.0f, y, 376.0f, 300.0f};
@@ -5228,13 +5233,27 @@ void SectorEditor::DrawStatusPanel(
         const SectorDefinition& selectedSector = state.map.sectors[static_cast<size_t>(state.selectedSectorIndex)];
         if (state.selectedEdgeIndex >= 0
                 && state.selectedEdgeRingKind == SectorBoundaryRingKind::Hole) {
+            const SectorBoundaryEdgeRef edge{
+                    state.selectedSectorIndex,
+                    state.selectedEdgeRingKind,
+                    state.selectedEdgeHoleIndex,
+                    state.selectedEdgeIndex};
+            const SectorEdgeOverride* edgeOverride = FindEdgeOverride(edge);
+            const bool hasTextureOverride = edgeOverride != nullptr
+                    && (edgeOverride->hasWallTexture || edgeOverride->hasLowerWallTexture || edgeOverride->hasUpperWallTexture);
             selectedLabel = TextFormat(
-                    "%s hole %d edge %d (defaults)",
+                    "%s hole %d edge %d %s UV %s",
                     selectedSector.id.c_str(),
                     state.selectedEdgeHoleIndex,
-                    state.selectedEdgeIndex);
+                    state.selectedEdgeIndex,
+                    hasTextureOverride ? "override" : "inherited",
+                    EdgeUvPartName(state.selectedEdgeUvPart));
         } else if (state.selectedEdgeIndex >= 0 && state.selectedEdgeIndex < static_cast<int>(selectedSector.points.size())) {
-            const SectorEdgeOverride* edgeOverride = FindEdgeOverride(state.selectedSectorIndex, state.selectedEdgeIndex);
+            const SectorEdgeOverride* edgeOverride = FindEdgeOverride(SectorBoundaryEdgeRef{
+                    state.selectedSectorIndex,
+                    SectorBoundaryRingKind::Outer,
+                    -1,
+                    state.selectedEdgeIndex});
             const bool hasTextureOverride = edgeOverride != nullptr
                     && (edgeOverride->hasWallTexture || edgeOverride->hasLowerWallTexture || edgeOverride->hasUpperWallTexture);
             selectedLabel = TextFormat(
@@ -6004,59 +6023,68 @@ void SectorEditor::ClearSelection()
     SyncSelectedLightIdBuffer();
 }
 
-SectorEdgeOverride* SectorEditor::FindMutableEdgeOverride(int sectorIndex, int edgeIndex)
+SectorEdgeOverride* SectorEditor::FindMutableEdgeOverride(SectorBoundaryEdgeRef edge)
 {
-    if (sectorIndex < 0 || sectorIndex >= static_cast<int>(state.map.sectors.size())) {
+    if (edge.sectorIndex < 0 || edge.sectorIndex >= static_cast<int>(state.map.sectors.size())) {
         return nullptr;
     }
-    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(sectorIndex)];
+    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(edge.sectorIndex)];
     for (SectorEdgeOverride& edgeOverride : sector.edgeOverrides) {
-        if (edgeOverride.edgeIndex == edgeIndex) {
+        if (edgeOverride.ringKind == edge.ringKind
+                && edgeOverride.holeIndex == (edge.ringKind == SectorBoundaryRingKind::Hole ? edge.holeIndex : -1)
+                && edgeOverride.edgeIndex == edge.edgeIndex) {
             return &edgeOverride;
         }
     }
     return nullptr;
 }
 
-const SectorEdgeOverride* SectorEditor::FindEdgeOverride(int sectorIndex, int edgeIndex) const
+const SectorEdgeOverride* SectorEditor::FindEdgeOverride(SectorBoundaryEdgeRef edge) const
 {
-    if (sectorIndex < 0 || sectorIndex >= static_cast<int>(state.map.sectors.size())) {
+    if (edge.sectorIndex < 0 || edge.sectorIndex >= static_cast<int>(state.map.sectors.size())) {
         return nullptr;
     }
-    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(sectorIndex)];
+    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(edge.sectorIndex)];
     for (const SectorEdgeOverride& edgeOverride : sector.edgeOverrides) {
-        if (edgeOverride.edgeIndex == edgeIndex) {
+        if (edgeOverride.ringKind == edge.ringKind
+                && edgeOverride.holeIndex == (edge.ringKind == SectorBoundaryRingKind::Hole ? edge.holeIndex : -1)
+                && edgeOverride.edgeIndex == edge.edgeIndex) {
             return &edgeOverride;
         }
     }
     return nullptr;
 }
 
-SectorEdgeOverride& SectorEditor::EnsureEdgeOverride(int sectorIndex, int edgeIndex)
+SectorEdgeOverride& SectorEditor::EnsureEdgeOverride(SectorBoundaryEdgeRef edge)
 {
-    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(sectorIndex)];
-    if (SectorEdgeOverride* existing = FindMutableEdgeOverride(sectorIndex, edgeIndex)) {
+    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(edge.sectorIndex)];
+    if (SectorEdgeOverride* existing = FindMutableEdgeOverride(edge)) {
         return *existing;
     }
 
     SectorEdgeOverride edgeOverride;
-    edgeOverride.edgeIndex = edgeIndex;
+    edgeOverride.ringKind = edge.ringKind;
+    edgeOverride.holeIndex = edge.ringKind == SectorBoundaryRingKind::Hole ? edge.holeIndex : -1;
+    edgeOverride.edgeIndex = edge.edgeIndex;
     sector.edgeOverrides.push_back(std::move(edgeOverride));
     return sector.edgeOverrides.back();
 }
 
-void SectorEditor::RemoveEdgeOverrideIfEmpty(int sectorIndex, int edgeIndex)
+void SectorEditor::RemoveEdgeOverrideIfEmpty(SectorBoundaryEdgeRef edge)
 {
-    if (sectorIndex < 0 || sectorIndex >= static_cast<int>(state.map.sectors.size())) {
+    if (edge.sectorIndex < 0 || edge.sectorIndex >= static_cast<int>(state.map.sectors.size())) {
         return;
     }
-    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(sectorIndex)];
+    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(edge.sectorIndex)];
     sector.edgeOverrides.erase(
             std::remove_if(
                     sector.edgeOverrides.begin(),
                     sector.edgeOverrides.end(),
-                    [edgeIndex](const SectorEdgeOverride& edgeOverride) {
-                        return edgeOverride.edgeIndex == edgeIndex && IsEmptyEdgeOverride(edgeOverride);
+                    [edge](const SectorEdgeOverride& edgeOverride) {
+                        return edgeOverride.ringKind == edge.ringKind
+                                && edgeOverride.holeIndex == (edge.ringKind == SectorBoundaryRingKind::Hole ? edge.holeIndex : -1)
+                                && edgeOverride.edgeIndex == edge.edgeIndex
+                                && IsEmptyEdgeOverride(edgeOverride);
                     }
             ),
             sector.edgeOverrides.end()
@@ -6070,14 +6098,14 @@ bool SectorEditor::TargetAllowsSectorDefault(TexturePickerTargetKind target) con
             || target == TexturePickerTargetKind::EdgeUpperWall;
 }
 
-std::string SectorEditor::CurrentTextureForTarget(TexturePickerTargetKind target, int sectorIndex, int edgeIndex) const
+std::string SectorEditor::CurrentTextureForTarget(TexturePickerTargetKind target, SectorBoundaryEdgeRef edge) const
 {
-    if (sectorIndex < 0 || sectorIndex >= static_cast<int>(state.map.sectors.size())) {
+    if (edge.sectorIndex < 0 || edge.sectorIndex >= static_cast<int>(state.map.sectors.size())) {
         return std::string{};
     }
 
-    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(sectorIndex)];
-    const SectorEdgeOverride* edgeOverride = FindEdgeOverride(sectorIndex, edgeIndex);
+    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(edge.sectorIndex)];
+    const SectorEdgeOverride* edgeOverride = FindEdgeOverride(edge);
     switch (target) {
         case TexturePickerTargetKind::SectorFloor: return sector.floorTextureId;
         case TexturePickerTargetKind::SectorCeiling: return sector.ceilingTextureId;
@@ -6109,11 +6137,14 @@ std::string SectorEditor::CurrentTextureForSurface(SectorSurfaceRef surface) con
         case SectorSurfaceKind::Ceiling:
             return sector.ceilingTextureId;
         case SectorSurfaceKind::Wall:
-            return GetEffectiveEdgeSettings(sector, surface.ringKind == SectorBoundaryRingKind::Outer ? surface.edgeIndex : -1).wall.textureId;
+            return GetEffectiveEdgeSettings(state.map, SectorBoundaryEdgeRef{
+                    surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex}).wall.textureId;
         case SectorSurfaceKind::LowerWall:
-            return GetEffectiveEdgeSettings(sector, surface.ringKind == SectorBoundaryRingKind::Outer ? surface.edgeIndex : -1).lower.textureId;
+            return GetEffectiveEdgeSettings(state.map, SectorBoundaryEdgeRef{
+                    surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex}).lower.textureId;
         case SectorSurfaceKind::UpperWall:
-            return GetEffectiveEdgeSettings(sector, surface.ringKind == SectorBoundaryRingKind::Outer ? surface.edgeIndex : -1).upper.textureId;
+            return GetEffectiveEdgeSettings(state.map, SectorBoundaryEdgeRef{
+                    surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex}).upper.textureId;
         case SectorSurfaceKind::None:
             break;
     }
@@ -6141,8 +6172,7 @@ TexturePickerTargetKind SectorEditor::TexturePickerTargetForSurface(SectorSurfac
 
 bool SectorEditor::ApplySurface3DUvValue(SectorSurfaceRef surface, int component, float value, engine::AssetManager& assets)
 {
-    if (!IsValidSurfaceRef(surface)
-            || (IsWallSurface(surface.kind) && surface.ringKind == SectorBoundaryRingKind::Hole)) {
+    if (!IsValidSurfaceRef(surface)) {
         return false;
     }
 
@@ -6176,7 +6206,8 @@ bool SectorEditor::ApplySurface3DUvValue(SectorSurfaceRef surface, int component
     } else if (surface.kind == SectorSurfaceKind::Ceiling) {
         changed = applyComponent(sector.ceilingUv);
     } else {
-        SectorEdgeOverride& edgeOverride = EnsureEdgeOverride(surface.sectorIndex, surface.edgeIndex);
+        SectorEdgeOverride& edgeOverride = EnsureEdgeOverride(SectorBoundaryEdgeRef{
+                surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex});
         SectorEdgePartUvOverride* uv = &edgeOverride.wallUv;
         if (surface.kind == SectorSurfaceKind::LowerWall) {
             uv = &edgeOverride.lowerUv;
@@ -6197,8 +6228,7 @@ bool SectorEditor::ApplySurface3DUvValue(SectorSurfaceRef surface, int component
 
 bool SectorEditor::ResetSurface3DUv(SectorSurfaceRef surface, engine::AssetManager& assets)
 {
-    if (!IsValidSurfaceRef(surface)
-            || (IsWallSurface(surface.kind) && surface.ringKind == SectorBoundaryRingKind::Hole)) {
+    if (!IsValidSurfaceRef(surface)) {
         return false;
     }
 
@@ -6211,7 +6241,9 @@ bool SectorEditor::ResetSurface3DUv(SectorSurfaceRef surface, engine::AssetManag
         changed = sector.ceilingUv.hasUvScale || sector.ceilingUv.hasUvOffset;
         sector.ceilingUv = SectorSurfaceUvOverride{};
     } else {
-        SectorEdgeOverride* edgeOverride = FindMutableEdgeOverride(surface.sectorIndex, surface.edgeIndex);
+        const SectorBoundaryEdgeRef edge{
+                surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex};
+        SectorEdgeOverride* edgeOverride = FindMutableEdgeOverride(edge);
         if (edgeOverride != nullptr) {
             SectorEdgePartUvOverride* uv = &edgeOverride->wallUv;
             if (surface.kind == SectorSurfaceKind::LowerWall) {
@@ -6221,7 +6253,7 @@ bool SectorEditor::ResetSurface3DUv(SectorSurfaceRef surface, engine::AssetManag
             }
             changed = uv->hasUvScale || uv->hasUvOffset;
             *uv = SectorEdgePartUvOverride{};
-            RemoveEdgeOverrideIfEmpty(surface.sectorIndex, surface.edgeIndex);
+            RemoveEdgeOverrideIfEmpty(edge);
         }
     }
 
@@ -6239,16 +6271,17 @@ bool SectorEditor::SplitSelectedEdge(engine::AssetManager& assets)
 {
     const int sectorIndex = state.selectedSectorIndex;
     const int edgeIndex = state.selectedEdgeIndex;
+    const SectorBoundaryEdgeRef selectedEdge{
+            sectorIndex,
+            state.selectedEdgeRingKind,
+            state.selectedEdgeHoleIndex,
+            edgeIndex};
     const SectorSurfaceRef previousSurface = state.selectedSurface3D;
-    if (state.selectedEdgeRingKind == SectorBoundaryRingKind::Hole) {
-        statusText = "Cannot split parent hole edges";
-        return false;
-    }
-    const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(state.map, sectorIndex, edgeIndex);
+    const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(state.map, selectedEdge);
 
     int newEdgeIndex = -1;
     std::string error;
-    if (!SplitSectorEdge(state.map, sectorIndex, edgeIndex, newEdgeIndex, error)) {
+    if (!SplitSectorEdge(state.map, selectedEdge, newEdgeIndex, error)) {
         statusText = error.empty() ? "Cannot split edge" : error;
         return false;
     }
@@ -6268,16 +6301,18 @@ bool SectorEditor::SplitSelectedEdge(engine::AssetManager& assets)
     uiState.edgeUvOffsetVInput = engine::UIFloatInputState{};
     ResetSurface3DUiState();
 
-    SelectEdge(sectorIndex, newEdgeIndex);
+    SelectEdge(sectorIndex, newEdgeIndex, selectedEdge.ringKind, selectedEdge.holeIndex);
     if (state.mode == SectorEditorMode::Preview3D
             && IsWallSurface(previousSurface.kind)
             && previousSurface.sectorIndex == sectorIndex
+            && previousSurface.ringKind == selectedEdge.ringKind
+            && previousSurface.holeIndex == selectedEdge.holeIndex
             && previousSurface.edgeIndex == edgeIndex) {
         state.selectedSurface3D = SectorSurfaceRef{
                 previousSurface.kind,
                 sectorIndex,
-                SectorBoundaryRingKind::Outer,
-                -1,
+                selectedEdge.ringKind,
+                selectedEdge.holeIndex,
                 newEdgeIndex};
     }
 
@@ -6319,13 +6354,15 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
     return true;
 }
 
-void SectorEditor::OpenTexturePicker(TexturePickerTargetKind target, int sectorIndex, int edgeIndex)
+void SectorEditor::OpenTexturePicker(TexturePickerTargetKind target, SectorBoundaryEdgeRef edge)
 {
     TexturePickerState& picker = state.texturePicker;
     picker.open = true;
     picker.target = target;
-    picker.sectorIndex = sectorIndex;
-    picker.edgeIndex = edgeIndex;
+    picker.sectorIndex = edge.sectorIndex;
+    picker.ringKind = edge.ringKind;
+    picker.holeIndex = edge.ringKind == SectorBoundaryRingKind::Hole ? edge.holeIndex : -1;
+    picker.edgeIndex = edge.edgeIndex;
     picker.selectedTextureIndex = 0;
     picker.scroll = engine::UIScrollState{};
     picker.textureIds.clear();
@@ -6338,8 +6375,8 @@ void SectorEditor::OpenTexturePicker(TexturePickerTargetKind target, int sectorI
     const std::vector<std::string> textureIds = SortedSectorTextureIds(state.map);
     picker.textureIds.insert(picker.textureIds.end(), textureIds.begin(), textureIds.end());
 
-    const std::string currentTexture = CurrentTextureForTarget(target, sectorIndex, edgeIndex);
-    const SectorEdgeOverride* edgeOverride = FindEdgeOverride(sectorIndex, edgeIndex);
+    const std::string currentTexture = CurrentTextureForTarget(target, edge);
+    const SectorEdgeOverride* edgeOverride = FindEdgeOverride(edge);
     const bool inheritedEdgeTexture =
             (target == TexturePickerTargetKind::EdgeWall && (edgeOverride == nullptr || !edgeOverride->hasWallTexture))
             || (target == TexturePickerTargetKind::EdgeLowerWall && (edgeOverride == nullptr || !edgeOverride->hasLowerWallTexture))
@@ -6374,6 +6411,8 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
     }
 
     SectorDefinition& sector = state.map.sectors[static_cast<size_t>(picker.sectorIndex)];
+    const SectorBoundaryEdgeRef edge{
+            picker.sectorIndex, picker.ringKind, picker.holeIndex, picker.edgeIndex};
     const std::string selectedTexture = picker.textureIds[static_cast<size_t>(picker.selectedTextureIndex)];
     bool changed = false;
 
@@ -6403,11 +6442,13 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
         case TexturePickerTargetKind::EdgeWall:
         case TexturePickerTargetKind::EdgeLowerWall:
         case TexturePickerTargetKind::EdgeUpperWall: {
-            if (picker.edgeIndex < 0 || picker.edgeIndex >= static_cast<int>(sector.points.size())) {
+            const std::vector<SectorPoint>* ring = GetSectorBoundaryRing(state.map, edge);
+            if (ring == nullptr || picker.edgeIndex < 0
+                    || picker.edgeIndex >= static_cast<int>(ring->size())) {
                 break;
             }
 
-            SectorEdgeOverride& edgeOverride = EnsureEdgeOverride(picker.sectorIndex, picker.edgeIndex);
+            SectorEdgeOverride& edgeOverride = EnsureEdgeOverride(edge);
             bool* hasTexture = nullptr;
             std::string* textureId = nullptr;
             if (picker.target == TexturePickerTargetKind::EdgeWall) {
@@ -6433,7 +6474,7 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
                 changed = true;
             }
 
-            RemoveEdgeOverrideIfEmpty(picker.sectorIndex, picker.edgeIndex);
+            RemoveEdgeOverrideIfEmpty(edge);
             break;
         }
         case TexturePickerTargetKind::None:

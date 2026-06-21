@@ -622,33 +622,54 @@ std::string DefaultWallTextureId(const SectorMap& map)
     return textureIds.empty() ? std::string{} : textureIds.front();
 }
 
-SectorEdgeOverride* FindEdgeOverride(SectorDefinition& sector, int edgeIndex)
+bool SameBoundaryEdge(const SectorEdgeOverride& edgeOverride, SectorBoundaryRingKind ringKind, int holeIndex, int edgeIndex)
+{
+    return edgeOverride.ringKind == ringKind
+            && edgeOverride.holeIndex == (ringKind == SectorBoundaryRingKind::Hole ? holeIndex : -1)
+            && edgeOverride.edgeIndex == edgeIndex;
+}
+
+SectorEdgeOverride* FindEdgeOverride(
+        SectorDefinition& sector,
+        SectorBoundaryRingKind ringKind,
+        int holeIndex,
+        int edgeIndex)
 {
     for (SectorEdgeOverride& edgeOverride : sector.edgeOverrides) {
-        if (edgeOverride.edgeIndex == edgeIndex) {
+        if (SameBoundaryEdge(edgeOverride, ringKind, holeIndex, edgeIndex)) {
             return &edgeOverride;
         }
     }
     return nullptr;
 }
 
-const SectorEdgeOverride* FindEdgeOverride(const SectorDefinition& sector, int edgeIndex)
+const SectorEdgeOverride* FindEdgeOverride(
+        const SectorDefinition& sector,
+        SectorBoundaryRingKind ringKind,
+        int holeIndex,
+        int edgeIndex)
 {
     for (const SectorEdgeOverride& edgeOverride : sector.edgeOverrides) {
-        if (edgeOverride.edgeIndex == edgeIndex) {
+        if (SameBoundaryEdge(edgeOverride, ringKind, holeIndex, edgeIndex)) {
             return &edgeOverride;
         }
     }
     return nullptr;
 }
 
-SectorEdgeOverride& EnsureEdgeOverride(SectorDefinition& sector, int edgeIndex)
+SectorEdgeOverride& EnsureEdgeOverride(
+        SectorDefinition& sector,
+        SectorBoundaryRingKind ringKind,
+        int holeIndex,
+        int edgeIndex)
 {
-    if (SectorEdgeOverride* existing = FindEdgeOverride(sector, edgeIndex)) {
+    if (SectorEdgeOverride* existing = FindEdgeOverride(sector, ringKind, holeIndex, edgeIndex)) {
         return *existing;
     }
 
     SectorEdgeOverride edgeOverride;
+    edgeOverride.ringKind = ringKind;
+    edgeOverride.holeIndex = ringKind == SectorBoundaryRingKind::Hole ? holeIndex : -1;
     edgeOverride.edgeIndex = edgeIndex;
     sector.edgeOverrides.push_back(std::move(edgeOverride));
     return sector.edgeOverrides.back();
@@ -812,18 +833,47 @@ void ReadEdgeOverrides(const SectorMap& map, const Json& sectorJson, SectorDefin
             continue;
         }
 
+        SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
+        int holeIndex = -1;
+        const auto ringIt = edgeJson.find("ring");
+        if (ringIt != edgeJson.end()) {
+            if (!ringIt->is_string()) {
+                std::fprintf(stderr, "[SectorDemo WARNING] Ignoring edge override with malformed ring in sector '%s'\n", sector.id.c_str());
+                continue;
+            }
+            const std::string ring = ringIt->get<std::string>();
+            if (ring == "hole") {
+                ringKind = SectorBoundaryRingKind::Hole;
+                const auto holeIt = edgeJson.find("hole");
+                if (holeIt == edgeJson.end() || !holeIt->is_number_integer()) {
+                    std::fprintf(stderr, "[SectorDemo WARNING] Ignoring hole edge override without integer hole in sector '%s'\n", sector.id.c_str());
+                    continue;
+                }
+                holeIndex = holeIt->get<int>();
+            } else if (ring != "outer") {
+                std::fprintf(stderr, "[SectorDemo WARNING] Ignoring edge override with unknown ring '%s' in sector '%s'\n", ring.c_str(), sector.id.c_str());
+                continue;
+            }
+        }
+
         const int edgeIndex = edgeIt->get<int>();
-        if (edgeIndex < 0 || edgeIndex >= static_cast<int>(sector.points.size())) {
+        const std::vector<SectorPoint>* ring = nullptr;
+        if (ringKind == SectorBoundaryRingKind::Outer) {
+            ring = &sector.points;
+        } else if (holeIndex >= 0 && holeIndex < static_cast<int>(sector.holes.size())) {
+            ring = &sector.holes[static_cast<size_t>(holeIndex)];
+        }
+        if (ring == nullptr || edgeIndex < 0 || edgeIndex >= static_cast<int>(ring->size())) {
             std::fprintf(
                     stderr,
-                    "[SectorDemo WARNING] Ignoring out-of-range edge override %d in sector '%s'\n",
+                    "[SectorDemo WARNING] Ignoring out-of-range boundary edge override %d in sector '%s'\n",
                     edgeIndex,
                     sector.id.c_str()
             );
             continue;
         }
 
-        SectorEdgeOverride& edgeOverride = EnsureEdgeOverride(sector, edgeIndex);
+        SectorEdgeOverride& edgeOverride = EnsureEdgeOverride(sector, ringKind, holeIndex, edgeIndex);
         ReadEdgeTextureField(map, sector.id.c_str(), edgeJson, "wallTex", edgeOverride.wallTextureId, edgeOverride.hasWallTexture);
         ReadEdgeTextureField(map, sector.id.c_str(), edgeJson, "lowerWallTex", edgeOverride.lowerWallTextureId, edgeOverride.hasLowerWallTexture);
         ReadEdgeTextureField(map, sector.id.c_str(), edgeJson, "upperWallTex", edgeOverride.upperWallTextureId, edgeOverride.hasUpperWallTexture);
@@ -867,19 +917,28 @@ bool IsEmptyOverride(const SectorEdgeOverride& edgeOverride)
             && !HasAnyUvOverride(edgeOverride.upperUv);
 }
 
-void RemapEdgeOverridesAfterReverse(SectorDefinition& sector, const std::vector<SectorPoint>& originalPoints)
+void RemapEdgeOverrides(
+        SectorDefinition& sector,
+        SectorBoundaryRingKind ringKind,
+        int holeIndex,
+        const std::vector<SectorPoint>& originalRing,
+        const std::vector<SectorPoint>& normalizedRing)
 {
     for (SectorEdgeOverride& edgeOverride : sector.edgeOverrides) {
+        if (edgeOverride.ringKind != ringKind
+                || edgeOverride.holeIndex != (ringKind == SectorBoundaryRingKind::Hole ? holeIndex : -1)) {
+            continue;
+        }
         const int oldIndex = edgeOverride.edgeIndex;
-        if (oldIndex < 0 || oldIndex >= static_cast<int>(originalPoints.size())) {
+        if (oldIndex < 0 || oldIndex >= static_cast<int>(originalRing.size())) {
             continue;
         }
 
-        const SectorPoint oldA = originalPoints[static_cast<size_t>(oldIndex)];
-        const SectorPoint oldB = originalPoints[(static_cast<size_t>(oldIndex) + 1) % originalPoints.size()];
-        for (size_t newIndex = 0; newIndex < sector.points.size(); ++newIndex) {
-            const SectorPoint newA = sector.points[newIndex];
-            const SectorPoint newB = sector.points[(newIndex + 1) % sector.points.size()];
+        const SectorPoint oldA = originalRing[static_cast<size_t>(oldIndex)];
+        const SectorPoint oldB = originalRing[(static_cast<size_t>(oldIndex) + 1) % originalRing.size()];
+        for (size_t newIndex = 0; newIndex < normalizedRing.size(); ++newIndex) {
+            const SectorPoint newA = normalizedRing[newIndex];
+            const SectorPoint newB = normalizedRing[(newIndex + 1) % normalizedRing.size()];
             if ((SamePoint(oldA, newA) && SamePoint(oldB, newB))
                     || (SamePoint(oldA, newB) && SamePoint(oldB, newA))) {
                 edgeOverride.edgeIndex = static_cast<int>(newIndex);
@@ -889,25 +948,34 @@ void RemapEdgeOverridesAfterReverse(SectorDefinition& sector, const std::vector<
     }
 }
 
-void InsertSectorEdgeMidpoint(SectorDefinition& sector, int edgeIndex, SectorPoint midpoint)
+void InsertSectorEdgeMidpoint(
+        SectorDefinition& sector,
+        SectorBoundaryRingKind ringKind,
+        int holeIndex,
+        int edgeIndex,
+        SectorPoint midpoint)
 {
     std::vector<SectorEdgeOverride> remappedOverrides;
     remappedOverrides.reserve(sector.edgeOverrides.size() + 1);
     for (const SectorEdgeOverride& oldOverride : sector.edgeOverrides) {
         SectorEdgeOverride remapped = oldOverride;
-        if (oldOverride.edgeIndex > edgeIndex) {
+        const bool sameRing = oldOverride.ringKind == ringKind
+                && oldOverride.holeIndex == (ringKind == SectorBoundaryRingKind::Hole ? holeIndex : -1);
+        if (sameRing && oldOverride.edgeIndex > edgeIndex) {
             ++remapped.edgeIndex;
         }
         remappedOverrides.push_back(std::move(remapped));
 
-        if (oldOverride.edgeIndex == edgeIndex) {
+        if (sameRing && oldOverride.edgeIndex == edgeIndex) {
             SectorEdgeOverride secondHalf = oldOverride;
             secondHalf.edgeIndex = edgeIndex + 1;
             remappedOverrides.push_back(std::move(secondHalf));
         }
     }
 
-    sector.points.insert(sector.points.begin() + edgeIndex + 1, midpoint);
+    std::vector<SectorPoint>& ring = ringKind == SectorBoundaryRingKind::Outer
+            ? sector.points : sector.holes[static_cast<size_t>(holeIndex)];
+    ring.insert(ring.begin() + edgeIndex + 1, midpoint);
     sector.edgeOverrides = std::move(remappedOverrides);
 }
 
@@ -963,7 +1031,8 @@ EffectiveEdgeSettings GetEffectiveEdgeSettings(const SectorDefinition& sector, i
     settings.lower.textureId = sector.lowerWallTextureId;
     settings.upper.textureId = sector.upperWallTextureId;
 
-    const SectorEdgeOverride* edgeOverride = FindEdgeOverride(sector, edgeIndex);
+    const SectorEdgeOverride* edgeOverride = FindEdgeOverride(
+            sector, SectorBoundaryRingKind::Outer, -1, edgeIndex);
     if (edgeOverride == nullptr) {
         return settings;
     }
@@ -981,6 +1050,36 @@ EffectiveEdgeSettings GetEffectiveEdgeSettings(const SectorDefinition& sector, i
     ApplyPartUvOverride(settings.lower, edgeOverride->lowerUv);
     ApplyPartUvOverride(settings.upper, edgeOverride->upperUv);
 
+    return settings;
+}
+
+EffectiveEdgeSettings GetEffectiveEdgeSettings(const SectorMap& map, const SectorBoundaryEdgeRef& edge)
+{
+    EffectiveEdgeSettings settings;
+    if (edge.sectorIndex < 0 || edge.sectorIndex >= static_cast<int>(map.sectors.size())) {
+        return settings;
+    }
+
+    const SectorDefinition& sector = map.sectors[static_cast<size_t>(edge.sectorIndex)];
+    settings.wall.textureId = sector.wallTextureId;
+    settings.lower.textureId = sector.lowerWallTextureId;
+    settings.upper.textureId = sector.upperWallTextureId;
+
+    const std::vector<SectorPoint>* ring = GetSectorBoundaryRing(map, edge);
+    if (ring == nullptr || edge.edgeIndex < 0 || edge.edgeIndex >= static_cast<int>(ring->size())) {
+        return settings;
+    }
+    const SectorEdgeOverride* edgeOverride = FindEdgeOverride(
+            sector, edge.ringKind, edge.holeIndex, edge.edgeIndex);
+    if (edgeOverride == nullptr) {
+        return settings;
+    }
+    if (edgeOverride->hasWallTexture) settings.wall.textureId = edgeOverride->wallTextureId;
+    if (edgeOverride->hasLowerWallTexture) settings.lower.textureId = edgeOverride->lowerWallTextureId;
+    if (edgeOverride->hasUpperWallTexture) settings.upper.textureId = edgeOverride->upperWallTextureId;
+    ApplyPartUvOverride(settings.wall, edgeOverride->wallUv);
+    ApplyPartUvOverride(settings.lower, edgeOverride->lowerUv);
+    ApplyPartUvOverride(settings.upper, edgeOverride->upperUv);
     return settings;
 }
 
@@ -1070,66 +1169,72 @@ EdgeNeighborInfo FindReverseEdgeNeighbor(const SectorMap& map, const SectorBound
 
 bool SplitSectorEdge(
         SectorMap& map,
-        int sectorIndex,
-        int edgeIndex,
+        const SectorBoundaryEdgeRef& edge,
         int& outNewEdgeIndex,
         std::string& outError)
 {
     outNewEdgeIndex = -1;
     outError.clear();
-    if (sectorIndex < 0 || sectorIndex >= static_cast<int>(map.sectors.size())) {
-        outError = "Cannot split edge: invalid sector index";
+    const std::vector<SectorPoint>* selectedRing = GetSectorBoundaryRing(map, edge);
+    if (selectedRing == nullptr || selectedRing->size() < 3) {
+        outError = "Cannot split edge: invalid boundary ring";
         return false;
     }
-
-    const SectorDefinition& selected = map.sectors[static_cast<size_t>(sectorIndex)];
-    if (selected.points.size() < 3) {
-        outError = "Cannot split edge: sector has fewer than 3 points";
-        return false;
-    }
-    if (edgeIndex < 0 || edgeIndex >= static_cast<int>(selected.points.size())) {
+    if (edge.edgeIndex < 0 || edge.edgeIndex >= static_cast<int>(selectedRing->size())) {
         outError = "Cannot split edge: invalid edge index";
         return false;
     }
 
-    const SectorPoint a = selected.points[static_cast<size_t>(edgeIndex)];
-    const SectorPoint b = selected.points[(static_cast<size_t>(edgeIndex) + 1) % selected.points.size()];
+    const SectorPoint a = (*selectedRing)[static_cast<size_t>(edge.edgeIndex)];
+    const SectorPoint b = (*selectedRing)[(static_cast<size_t>(edge.edgeIndex) + 1) % selectedRing->size()];
     const float dx = b.x - a.x;
     const float dy = b.y - a.y;
     if (dx * dx + dy * dy <= GeometryEpsilon * GeometryEpsilon) {
         outError = "Cannot split edge: edge length is effectively zero";
         return false;
     }
-
     const SectorPoint midpoint{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
     if (SamePoint(midpoint, a) || SamePoint(midpoint, b)) {
         outError = "Cannot split edge: midpoint is too close to an endpoint";
         return false;
     }
 
-    const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(map, sectorIndex, edgeIndex);
-    InsertSectorEdgeMidpoint(map.sectors[static_cast<size_t>(sectorIndex)], edgeIndex, midpoint);
+    const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(map, edge);
     if (neighbor.hasNeighbor) {
-        if (neighbor.ringKind == SectorBoundaryRingKind::Outer) {
-            InsertSectorEdgeMidpoint(
-                    map.sectors[static_cast<size_t>(neighbor.sectorIndex)],
-                    neighbor.edgeIndex,
-                    midpoint
-            );
-        } else {
-            SectorDefinition& neighborSector = map.sectors[static_cast<size_t>(neighbor.sectorIndex)];
-            if (neighbor.holeIndex < 0
-                    || neighbor.holeIndex >= static_cast<int>(neighborSector.holes.size())) {
-                outError = "Cannot split edge: invalid neighbor hole";
-                return false;
-            }
-            std::vector<SectorPoint>& hole = neighborSector.holes[static_cast<size_t>(neighbor.holeIndex)];
-            hole.insert(hole.begin() + neighbor.edgeIndex + 1, midpoint);
+        const SectorBoundaryEdgeRef neighborRef{
+                neighbor.sectorIndex, neighbor.ringKind, neighbor.holeIndex, neighbor.edgeIndex};
+        const std::vector<SectorPoint>* neighborRing = GetSectorBoundaryRing(map, neighborRef);
+        if (neighborRing == nullptr || neighbor.edgeIndex < 0
+                || neighbor.edgeIndex >= static_cast<int>(neighborRing->size())) {
+            outError = "Cannot split edge: invalid reverse boundary edge";
+            return false;
         }
     }
 
-    outNewEdgeIndex = edgeIndex + 1;
+    InsertSectorEdgeMidpoint(
+            map.sectors[static_cast<size_t>(edge.sectorIndex)],
+            edge.ringKind, edge.holeIndex, edge.edgeIndex, midpoint);
+    if (neighbor.hasNeighbor) {
+        InsertSectorEdgeMidpoint(
+                map.sectors[static_cast<size_t>(neighbor.sectorIndex)],
+                neighbor.ringKind, neighbor.holeIndex, neighbor.edgeIndex, midpoint);
+    }
+    outNewEdgeIndex = edge.edgeIndex + 1;
     return true;
+}
+
+bool SplitSectorEdge(
+        SectorMap& map,
+        int sectorIndex,
+        int edgeIndex,
+        int& outNewEdgeIndex,
+        std::string& outError)
+{
+    return SplitSectorEdge(
+            map,
+            SectorBoundaryEdgeRef{sectorIndex, SectorBoundaryRingKind::Outer, -1, edgeIndex},
+            outNewEdgeIndex,
+            outError);
 }
 
 bool LoadSectorMap(const char* path, SectorMap& outMap, std::string* outError)
@@ -1275,13 +1380,24 @@ bool LoadSectorMap(const char* path, SectorMap& outMap, std::string* outError)
             continue;
         }
 
-        const bool windingWillReverse = PolygonArea2(sector.points) < 0.0f;
         const std::vector<SectorPoint> originalPoints = sector.points;
+        const std::vector<std::vector<SectorPoint>> originalHoles = sector.holes;
         if (!NormalizeSectorWinding(sector)) {
             continue;
         }
-        if (windingWillReverse) {
-            RemapEdgeOverridesAfterReverse(sector, originalPoints);
+        RemapEdgeOverrides(
+                sector,
+                SectorBoundaryRingKind::Outer,
+                -1,
+                originalPoints,
+                sector.points);
+        for (size_t holeIndex = 0; holeIndex < sector.holes.size(); ++holeIndex) {
+            RemapEdgeOverrides(
+                    sector,
+                    SectorBoundaryRingKind::Hole,
+                    static_cast<int>(holeIndex),
+                    originalHoles[holeIndex],
+                    sector.holes[holeIndex]);
         }
         sector.edgeOverrides.erase(
                 std::remove_if(sector.edgeOverrides.begin(), sector.edgeOverrides.end(), IsEmptyOverride),
@@ -1392,6 +1508,11 @@ bool SaveSectorMap(const char* path, const SectorMap& map)
                     continue;
                 }
                 Json edgeJson;
+                edgeJson["ring"] = edgeOverride.ringKind == SectorBoundaryRingKind::Hole
+                        ? "hole" : "outer";
+                if (edgeOverride.ringKind == SectorBoundaryRingKind::Hole) {
+                    edgeJson["hole"] = edgeOverride.holeIndex;
+                }
                 edgeJson["edge"] = edgeOverride.edgeIndex;
                 if (edgeOverride.hasWallTexture) {
                     edgeJson["wallTex"] = edgeOverride.wallTextureId;

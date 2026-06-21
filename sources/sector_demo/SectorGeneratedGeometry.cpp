@@ -447,7 +447,8 @@ bool BuildSectorGeneratedGeometry(const SectorMap& map, SectorGeneratedGeometry&
                 const SectorPoint b = ring[(edgeIndex + 1) % ring.size()];
                 const int edgeInt = static_cast<int>(edgeIndex);
                 const EffectiveEdgeSettings edgeSettings = GetEffectiveEdgeSettings(
-                        sector, ringKind == SectorBoundaryRingKind::Outer ? edgeInt : -1);
+                        map,
+                        SectorBoundaryEdgeRef{sectorInt, ringKind, holeIndex, edgeInt});
                 const auto reverse = edgeRefs.find(MakeEdgeKey(b, a));
                 if (reverse == edgeRefs.end() || reverse->second.boundary.sectorIndex == sectorInt) {
                     AddWallSurface(
