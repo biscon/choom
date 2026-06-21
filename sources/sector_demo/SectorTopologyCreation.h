@@ -31,11 +31,23 @@ struct SectorTopologyCreatePolygonOptions {
     SectorTopologyWallPartSettings defaultUpper;
 };
 
+struct SectorTopologyInsertPolygonOptions {
+    std::string sectorName;
+};
+
 bool CreateSectorTopologyPolygon(
         SectorTopologyMap& map,
         const std::vector<SectorTopologyCoordPoint>& points,
         const SectorTopologyCreatePolygonOptions& options,
         int* outSectorId,
+        std::string* outError);
+
+bool InsertSectorTopologyPolygon(
+        SectorTopologyMap& map,
+        int parentSectorId,
+        const std::vector<SectorTopologyCoordPoint>& points,
+        const SectorTopologyInsertPolygonOptions& options,
+        int* outChildSectorId,
         std::string* outError);
 
 } // namespace game

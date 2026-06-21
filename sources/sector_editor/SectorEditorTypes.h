@@ -43,6 +43,7 @@ struct PendingSectorDraw {
     bool active = false;
     PendingSectorDrawKind kind = PendingSectorDrawKind::NewSector;
     int parentSectorIndex = -1;
+    int parentTopologySectorId = -1;
     std::string parentSectorId;
     std::vector<SectorPoint> parentOuterSnapshot;
     std::vector<std::vector<SectorPoint>> parentHolesSnapshot;

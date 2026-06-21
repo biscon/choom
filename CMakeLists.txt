@@ -143,8 +143,11 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_creation_tests
             tests/SectorTopologyCreationTests.cpp
+            sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorMap.cpp
             sources/sector_demo/SectorTopologyCreation.cpp
             sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
     )
     target_include_directories(sector_topology_creation_tests PRIVATE sources)

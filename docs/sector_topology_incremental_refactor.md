@@ -115,3 +115,17 @@ Preview texture requests now come from `state.topologyMap.texturesById`. Topolog
 3D picking maps floor and ceiling surfaces to topology sector selection. Wall, lower-wall, and upper-wall surfaces map to topology sidedef selection with the matching wall part, preserving the generated stable sector, linedef, sidedef, and side IDs. Equal-height portals remain 2D-selectable only because they intentionally generate no 3D wall mesh.
 
 The preview preserves the existing camera controls, entry/exit flow, and F11 cursor/mouselook behavior. Topology preview renders without lightmaps; lightmap baking and topology lightmap layout remain deferred.
+
+## Phase 13: topology Insert Sector Inside
+
+The selected topology sector inspector now exposes Insert Sector Inside near the top of the sector panel. Pressing it starts the existing pending polygon draw workflow for the selected topology parent sector, with the usual left-click, first-point/Enter finalize, Backspace, Escape, and right-click behavior.
+
+Finalizing the insert creates one child topology sector in `state.topologyMap`. The child boundary uses one linedef per inserted edge, with the child owning the front sidedef and the parent owning the back sidedef. Parent holes are implied by those parent back-sidedefs around the child boundary; no `sector.holes` array exists in the topology model.
+
+The child initially copies the parent sector fields, including heights, floor/ceiling textures and UVs, ambient settings, and default wall/lower/upper settings. The child/front and parent/back sidedefs are independent concrete values initialized from their owning sector defaults, so later sidedef edits do not affect the opposite side.
+
+Insert validation is strict and transactional. The inserted polygon must be wholly inside the selected parent sector's usable area, outside existing parent holes, and disjoint from existing topology. Insert boundaries are not auto-split, auto-merged, or reused in this phase; touching, crossing, partial overlap, and exact matches with existing topology are rejected.
+
+Nested inserts work naturally by selecting a child sector and inserting inside it. Generated topology geometry sees parent holes through `ExtractSectorTopologyLoops()`, so raised/lowered inserted children produce platform, pit, and riser behavior through the existing topology preview path.
+
+Move, Erase, Split Linedef, sector deletion, vertex dragging, Light placement, lightmap baking, and topology lightmap layout remain deferred.

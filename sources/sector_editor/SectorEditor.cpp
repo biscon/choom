@@ -1601,9 +1601,9 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 if (state.currentTool == SectorEditorTool::Sector
                         || state.currentTool == SectorEditorTool::InsertSectorInside) {
                     if (state.currentTool == SectorEditorTool::InsertSectorInside
-                            || (state.pendingSector.active
-                                    && state.pendingSector.kind != PendingSectorDrawKind::NewSector)) {
-                        statusText = "Insert Sector Inside is not migrated yet.";
+                            && (!state.pendingSector.active
+                                    || state.pendingSector.kind != PendingSectorDrawKind::InsertInside)) {
+                        statusText = "Select a topology sector before inserting inside it.";
                         engine::ConsumeEvent(event);
                         return;
                     }
@@ -1899,6 +1899,9 @@ void SectorEditor::RemoveLastPendingSectorPoint()
 
 void SectorEditor::AddPendingSectorPoint(SectorPoint point)
 {
+    const PendingSectorDrawKind pendingKind = state.pendingSector.active
+            ? state.pendingSector.kind
+            : PendingSectorDrawKind::NewSector;
     std::string error;
     SectorPoint canonicalPoint;
     if (!ToCanonicalSectorPoint(point, canonicalPoint, error)) {
@@ -1913,22 +1916,23 @@ void SectorEditor::AddPendingSectorPoint(SectorPoint point)
     }
 
     state.pendingSector.active = true;
-    state.pendingSector.kind = PendingSectorDrawKind::NewSector;
+    state.pendingSector.kind = pendingKind;
     state.pendingSector.points.push_back(canonicalPoint);
     state.pendingSector.errorMessage.clear();
-    statusText = TextFormat("Pending sector: %zu points", state.pendingSector.points.size());
+    if (state.pendingSector.kind == PendingSectorDrawKind::InsertInside) {
+        statusText = TextFormat(
+                "Insert sector: %zu points inside %s",
+                state.pendingSector.points.size(),
+                state.pendingSector.parentSectorId.c_str());
+    } else {
+        statusText = TextFormat("Pending sector: %zu points", state.pendingSector.points.size());
+    }
 }
 
 void SectorEditor::FinalizePendingSector()
 {
     if (!state.pendingSector.active || state.pendingSector.points.size() < 3) {
         state.pendingSector.errorMessage = "Need at least 3 points to close sector";
-        statusText = state.pendingSector.errorMessage;
-        return;
-    }
-
-    if (state.pendingSector.kind != PendingSectorDrawKind::NewSector) {
-        state.pendingSector.errorMessage = "Insert Sector Inside is not migrated yet.";
         statusText = state.pendingSector.errorMessage;
         return;
     }
@@ -1942,18 +1946,32 @@ void SectorEditor::FinalizePendingSector()
     }
 
     int createdSectorId = -1;
-    SectorTopologyCreatePolygonOptions options = BuildTopologyCreateOptions();
-    if (!CreateSectorTopologyPolygon(
+    bool created = false;
+    if (state.pendingSector.kind == PendingSectorDrawKind::InsertInside) {
+        SectorTopologyInsertPolygonOptions options;
+        created = InsertSectorTopologyPolygon(
+                state.topologyMap,
+                state.pendingSector.parentTopologySectorId,
+                topologyPoints,
+                options,
+                &createdSectorId,
+                &error);
+    } else {
+        SectorTopologyCreatePolygonOptions options = BuildTopologyCreateOptions();
+        created = CreateSectorTopologyPolygon(
                 state.topologyMap,
                 topologyPoints,
                 options,
                 &createdSectorId,
-                &error)) {
+                &error);
+    }
+    if (!created) {
         state.pendingSector.errorMessage = error.empty() ? "Could not create topology sector" : error;
         statusText = state.pendingSector.errorMessage;
         return;
     }
 
+    const bool insertedInside = state.pendingSector.kind == PendingSectorDrawKind::InsertInside;
     state.pendingSector = PendingSectorDraw{};
     state.hoveredSectorIndex = -1;
     state.hoveredEdgeSectorIndex = -1;
@@ -1968,33 +1986,46 @@ void SectorEditor::FinalizePendingSector()
     state.topologyDocumentDirty = true;
     state.topologyRenderWarning.clear();
     state.hasUnsavedChanges = true;
-    statusText = TextFormat("Created topology sector %d", createdSectorId);
+    statusText = insertedInside
+            ? TextFormat("Inserted topology sector %d", createdSectorId)
+            : TextFormat("Created topology sector %d", createdSectorId);
 }
 
 void SectorEditor::StartInsertSectorInside()
 {
-    statusText = "Insert Sector Inside is not migrated yet.";
+    const SectorTopologySector* parent = SelectedTopologySector();
+    if (parent == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology sector before inserting inside it.";
+        return;
+    }
+
+    PendingSectorDraw pending;
+    pending.active = true;
+    pending.kind = PendingSectorDrawKind::InsertInside;
+    pending.parentTopologySectorId = parent->id;
+    pending.parentSectorId = parent->name.empty()
+            ? TextFormat("sector %d", parent->id)
+            : parent->name;
+    state.pendingSector = std::move(pending);
+    state.currentTool = SectorEditorTool::InsertSectorInside;
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    statusText = TextFormat("Draw a sector inside %s", state.pendingSector.parentSectorId.c_str());
 }
 
 bool SectorEditor::IsPendingInsertParentValid() const
 {
     if (!state.pendingSector.active
             || state.pendingSector.kind != PendingSectorDrawKind::InsertInside
-            || state.pendingSector.parentSectorIndex < 0
-            || state.pendingSector.parentSectorIndex >= static_cast<int>(state.map.sectors.size())
-            || state.selectedSectorIndex != state.pendingSector.parentSectorIndex) {
+            || state.pendingSector.parentTopologySectorId < 0) {
         return false;
     }
-    const SectorDefinition& parent = state.map.sectors[static_cast<size_t>(state.pendingSector.parentSectorIndex)];
-    return parent.id == state.pendingSector.parentSectorId
-            && SameRing(parent.points, state.pendingSector.parentOuterSnapshot)
-            && SameHoles(parent.holes, state.pendingSector.parentHolesSnapshot);
+    return FindSectorTopologySector(state.topologyMap, state.pendingSector.parentTopologySectorId) != nullptr;
 }
 
 bool SectorEditor::CanClosePendingSectorAt(SectorPoint point) const
 {
     if (!state.pendingSector.active
-            || state.pendingSector.kind != PendingSectorDrawKind::NewSector
             || state.pendingSector.points.size() < 3) {
         return false;
     }
@@ -2051,8 +2082,9 @@ bool SectorEditor::BuildPendingTopologyPoints(
         std::string& error) const
 {
     if (!state.pendingSector.active
-            || state.pendingSector.kind != PendingSectorDrawKind::NewSector) {
-        error = "Only new sector drawing creates topology in this phase";
+            || (state.pendingSector.kind != PendingSectorDrawKind::NewSector
+                    && state.pendingSector.kind != PendingSectorDrawKind::InsertInside)) {
+        error = "No topology sector draw is active";
         return false;
     }
 
@@ -2080,11 +2112,6 @@ bool SectorEditor::ValidatePendingTopologyPoint(SectorPoint point, std::string& 
         error.clear();
         return true;
     }
-    if (state.pendingSector.kind != PendingSectorDrawKind::NewSector) {
-        error = "Insert Sector Inside is not migrated yet.";
-        return false;
-    }
-
     std::vector<SectorTopologyCoordPoint> existing;
     if (!BuildPendingTopologyPoints(existing, error)) {
         return false;
@@ -3939,15 +3966,25 @@ void SectorEditor::DrawPendingSector() const
         std::vector<SectorTopologyCoordPoint> topologyPoints;
         SectorTopologyMap previewMap = state.topologyMap;
         int previewSectorId = -1;
-        if (state.pendingSector.kind != PendingSectorDrawKind::NewSector) {
-            previewError = "Insert Sector Inside is not migrated yet.";
-        } else if (!BuildPendingTopologyPoints(topologyPoints, finalError)
-                || !CreateSectorTopologyPolygon(
+        if (!BuildPendingTopologyPoints(topologyPoints, finalError)) {
+            previewError = finalError;
+        } else if (state.pendingSector.kind == PendingSectorDrawKind::InsertInside) {
+            SectorTopologyInsertPolygonOptions options;
+            if (!InsertSectorTopologyPolygon(
                         previewMap,
+                        state.pendingSector.parentTopologySectorId,
                         topologyPoints,
-                        BuildTopologyCreateOptions(),
+                        options,
                         &previewSectorId,
                         &finalError)) {
+                previewError = finalError;
+            }
+        } else if (!CreateSectorTopologyPolygon(
+                    previewMap,
+                    topologyPoints,
+                    BuildTopologyCreateOptions(),
+                    &previewSectorId,
+                    &finalError)) {
             previewError = finalError;
         }
     }
@@ -5270,6 +5307,19 @@ bool SectorEditor::DrawTopologySectorInspector(
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, uiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
         y += 36.0f;
     }
+
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_insert_sector_inside",
+                Rectangle{0.0f, y, contentW, rowH},
+                font,
+                "Insert Sector Inside")) {
+        StartInsertSectorInside();
+    }
+    y += rowH + gap;
 
     auto drawHeight = [&](const char* id, const char* label, float current, engine::UIFloatInputState& inputState, bool floorField) {
         engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
