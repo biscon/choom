@@ -43,6 +43,8 @@ struct SectorSurfaceUvOverride {
 };
 
 struct SectorEdgeOverride {
+    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
+    int holeIndex = -1;
     int edgeIndex = -1;
 
     std::string wallTextureId;

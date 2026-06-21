@@ -113,6 +113,8 @@ struct TexturePickerState {
     bool open = false;
     TexturePickerTargetKind target = TexturePickerTargetKind::None;
     int sectorIndex = -1;
+    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
+    int holeIndex = -1;
     int edgeIndex = -1;
     int selectedTextureIndex = -1;
     engine::UIScrollState scroll;

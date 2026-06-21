@@ -22,9 +22,15 @@ bool GetSectorBoundaryEdge(
         const SectorBoundaryEdgeRef& edge,
         SectorPoint& outA,
         SectorPoint& outB);
+EffectiveEdgeSettings GetEffectiveEdgeSettings(const SectorMap& map, const SectorBoundaryEdgeRef& edge);
 EffectiveEdgeSettings GetEffectiveEdgeSettings(const SectorDefinition& sector, int edgeIndex);
 EdgeNeighborInfo FindReverseEdgeNeighbor(const SectorMap& map, int sectorIndex, int edgeIndex);
 EdgeNeighborInfo FindReverseEdgeNeighbor(const SectorMap& map, const SectorBoundaryEdgeRef& edge);
+bool SplitSectorEdge(
+        SectorMap& map,
+        const SectorBoundaryEdgeRef& edge,
+        int& outNewEdgeIndex,
+        std::string& outError);
 bool SplitSectorEdge(
         SectorMap& map,
         int sectorIndex,
