@@ -105,6 +105,16 @@ if(BUILD_TESTING)
     target_include_directories(sector_topology_tests PRIVATE sources)
     target_link_libraries(sector_topology_tests PRIVATE raylib)
     add_test(NAME sector_topology_validation COMMAND sector_topology_tests)
+
+    add_executable(sector_topology_serialization_tests
+            tests/SectorTopologySerializationTests.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologySerialization.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_topology_serialization_tests PRIVATE sources)
+    target_link_libraries(sector_topology_serialization_tests PRIVATE raylib)
+    add_test(NAME sector_topology_serialization COMMAND sector_topology_serialization_tests)
 endif()
 
 # -------------------------------

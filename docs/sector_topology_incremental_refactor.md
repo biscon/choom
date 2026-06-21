@@ -21,3 +21,11 @@ Sector sidedefs are converted to directed boundary edges using the Phase 1 conve
 Topology coordinates use the mathematical winding convention: positive signed area is counter-clockwise. Each sector must have exactly one counter-clockwise outer loop; clockwise loops are holes. Holes must be strictly contained by the outer loop and may not intersect, touch, or contain other holes.
 
 This phase is backend-only. The existing editor UI and document workflow still use the polygon-sector model, and topology persistence, generated geometry, rendering, selection, editing, and lightmap integration remain for later phases.
+
+## Phase 3: separate v2 topology JSON persistence
+
+The topology layer now has separate JSON string and file load/save functions for an explicit v2 linedef format. Documents must contain `formatVersion: 2`, `topology: "linedef"`, the fixed `coordSubdivisions` value, the texture table, and all four topology arrays. Vertex coordinates are stored and accepted only as JSON integers.
+
+Loading parses into a temporary map and validates it before replacing the caller's map. Saving validates before producing or writing JSON. Invalid shapes, value types, side names, fixed-coordinate markers, texture definitions, and topology references are reported as readable errors. Output is deterministic: topology records are sorted by stable ID and textures by texture ID.
+
+The existing editor document workflow and polygon `SectorMap` load/save path remain unchanged. There is no legacy conversion, generated topology geometry, topology rendering or editing, editor migration, or lightmap integration in this phase.

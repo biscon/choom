@@ -1,0 +1,336 @@
+#include "sector_demo/SectorTopologySerialization.h"
+#include "util/json.hpp"
+
+#include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <string>
+
+namespace {
+
+using game::SectorTextureDefinition;
+using game::SectorTextureFilter;
+using game::SectorTopologyLineDef;
+using game::SectorTopologyLoopSet;
+using game::SectorTopologyMap;
+using game::SectorTopologySector;
+using game::SectorTopologySideDef;
+using game::SectorTopologySideKind;
+using game::SectorTopologyVertex;
+using Json = nlohmann::ordered_json;
+
+int failures = 0;
+
+void Check(bool condition, const char* description)
+{
+    if (!condition) {
+        std::cerr << "FAILED: " << description << '\n';
+        ++failures;
+    }
+}
+
+game::SectorTopologyWallPartSettings MakePart(
+        const char* textureId,
+        float scaleX,
+        float scaleY,
+        float offsetX,
+        float offsetY)
+{
+    game::SectorTopologyWallPartSettings part;
+    part.textureId = textureId;
+    part.uv.scale = {scaleX, scaleY};
+    part.uv.offset = {offsetX, offsetY};
+    return part;
+}
+
+SectorTopologyMap MakeSquare()
+{
+    SectorTopologyMap map;
+    map.texturesById.emplace("wall", SectorTextureDefinition{
+            "wall", "textures/wall.png", SectorTextureFilter::Point});
+    map.texturesById.emplace("floor", SectorTextureDefinition{
+            "floor", "textures/floor.png", SectorTextureFilter::Bilinear});
+    map.texturesById.emplace("ceiling", SectorTextureDefinition{
+            "ceiling", "textures/ceiling.png", SectorTextureFilter::Bilinear});
+
+    map.vertices = {
+            {1, 0, 0},
+            {2, 64, 0},
+            {3, 64, 64},
+            {4, 0, 64}
+    };
+    map.lineDefs = {
+            {1, 1, 2, 1, -1},
+            {2, 2, 3, 2, -1},
+            {3, 3, 4, 3, -1},
+            {4, 4, 1, 4, -1}
+    };
+    for (int i = 1; i <= 4; ++i) {
+        SectorTopologySideDef sideDef;
+        sideDef.id = i;
+        sideDef.lineDefId = i;
+        sideDef.side = SectorTopologySideKind::Front;
+        sideDef.sectorId = 1;
+        sideDef.wall = MakePart("wall", 1.0f + i, 2.0f, 0.25f * i, 0.5f);
+        sideDef.lower = MakePart("wall", 0.5f, 0.75f, 1.0f, 2.0f);
+        sideDef.upper = MakePart("wall", 3.0f, 4.0f, 5.0f, 6.0f);
+        map.sideDefs.push_back(sideDef);
+    }
+
+    SectorTopologySector sector;
+    sector.id = 1;
+    sector.name = "sector_001";
+    sector.floorZ = -2.5f;
+    sector.ceilingZ = 24.25f;
+    sector.floorTextureId = "floor";
+    sector.ceilingTextureId = "ceiling";
+    sector.floorUv.scale = {2.0f, 3.0f};
+    sector.floorUv.offset = {4.0f, 5.0f};
+    sector.ceilingUv.scale = {6.0f, 7.0f};
+    sector.ceilingUv.offset = {8.0f, 9.0f};
+    sector.ambientColor = Color{10, 20, 30, 40};
+    sector.ambientIntensity = 0.625f;
+    sector.defaultWall = MakePart("wall", 1.0f, 2.0f, 3.0f, 4.0f);
+    sector.defaultLower = MakePart("wall", 5.0f, 6.0f, 7.0f, 8.0f);
+    sector.defaultUpper = MakePart("wall", 9.0f, 10.0f, 11.0f, 12.0f);
+    map.sectors.push_back(sector);
+    return map;
+}
+
+bool LoadText(const std::string& text, SectorTopologyMap& map, std::string& error)
+{
+    error.clear();
+    return game::LoadSectorTopologyMapFromJsonString(text, map, &error);
+}
+
+std::string SaveText(const SectorTopologyMap& map)
+{
+    std::string text;
+    std::string error;
+    Check(game::SaveSectorTopologyMapToJsonString(map, text, &error), "test map serializes");
+    Check(error.empty(), "successful serialization clears error");
+    return text;
+}
+
+void ExpectRejected(const Json& json, const char* description)
+{
+    SectorTopologyMap output = MakeSquare();
+    std::string error;
+    Check(!LoadText(json.dump(), output, error), description);
+    Check(!error.empty(), "rejected JSON reports an error");
+}
+
+void TestRoundTrip()
+{
+    const SectorTopologyMap original = MakeSquare();
+    const std::string text = SaveText(original);
+    const Json saved = Json::parse(text);
+    Check(saved["vertices"][1]["x"].is_number_integer(), "vertex x is written as an integer");
+    Check(saved["vertices"][2]["y"].get<int>() == 64, "integer coordinate is exact");
+
+    SectorTopologyMap loaded;
+    std::string error = "stale";
+    Check(LoadText(text, loaded, error), "serialized topology loads");
+    Check(error.empty(), "successful load clears error");
+    Check(loaded.vertices.size() == 4 && loaded.vertices[2].x == 64,
+          "vertex coordinates round-trip without drift");
+    Check(loaded.sideDefs[2].wall.uv.offset.x == 0.75f,
+          "concrete sidedef settings round-trip");
+    Check(loaded.sectors[0].ambientColor.a == 40,
+          "ambient color alpha round-trips");
+    Check(loaded.sectors[0].defaultUpper.uv.offset.y == 12.0f,
+          "sector defaults round-trip");
+    Check(loaded.texturesById.at("wall").filter == SectorTextureFilter::Point,
+          "texture definition round-trips");
+    Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(loaded)),
+          "round-tripped map validates");
+    SectorTopologyLoopSet loops;
+    Check(game::ExtractSectorTopologyLoops(loaded, 1, loops)
+                  && loops.outer.signedAreaTwice > 0,
+          "round-tripped map extracts a CCW loop");
+}
+
+void TestHandAuthoredJson()
+{
+    const std::string text = R"json({
+  "formatVersion": 2,
+  "topology": "linedef",
+  "coordSubdivisions": 16,
+  "textures": {},
+  "vertices": [
+    {"id":1,"x":0,"y":0}, {"id":2,"x":32,"y":0},
+    {"id":3,"x":32,"y":32}, {"id":4,"x":0,"y":32}
+  ],
+  "linedefs": [
+    {"id":1,"startVertexId":1,"endVertexId":2,"frontSideDefId":1,"backSideDefId":-1},
+    {"id":2,"startVertexId":2,"endVertexId":3,"frontSideDefId":2,"backSideDefId":-1},
+    {"id":3,"startVertexId":3,"endVertexId":4,"frontSideDefId":3,"backSideDefId":-1},
+    {"id":4,"startVertexId":4,"endVertexId":1,"frontSideDefId":4,"backSideDefId":-1}
+  ],
+  "sidedefs": [
+    {"id":1,"lineDefId":1,"side":"front","sectorId":1,"wall":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"lower":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"upper":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}}},
+    {"id":2,"lineDefId":2,"side":"front","sectorId":1,"wall":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"lower":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"upper":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}}},
+    {"id":3,"lineDefId":3,"side":"front","sectorId":1,"wall":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"lower":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"upper":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}}},
+    {"id":4,"lineDefId":4,"side":"front","sectorId":1,"wall":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"lower":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"upper":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}}}
+  ],
+  "sectors": [{
+    "id":1,"name":"sector_001","floorZ":0,"ceilingZ":24,
+    "floorTextureId":"","ceilingTextureId":"",
+    "floorUv":{"scale":[1,1],"offset":[0,0]},
+    "ceilingUv":{"scale":[1,1],"offset":[0,0]},
+    "ambientColor":{"r":255,"g":255,"b":255,"a":255},"ambientIntensity":1,
+    "defaultWall":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},
+    "defaultLower":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},
+    "defaultUpper":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}}
+  }],
+  "futureMetadata": {"allowed": true}
+})json";
+
+    SectorTopologyMap map;
+    std::string error;
+    Check(LoadText(text, map, error), "hand-authored topology JSON loads");
+    Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(map)),
+          "hand-authored map validates");
+    SectorTopologyLoopSet loops;
+    Check(game::ExtractSectorTopologyLoops(map, 1, loops)
+                  && loops.outer.signedAreaTwice > 0,
+          "hand-authored map extracts a CCW outer loop");
+}
+
+void TestStrictMarkersAndShapes()
+{
+    Json valid = Json::parse(SaveText(MakeSquare()));
+    for (const char* field : {"formatVersion", "topology", "coordSubdivisions"}) {
+        Json changed = valid;
+        changed.erase(field);
+        ExpectRejected(changed, "missing marker is rejected");
+    }
+    Json changed = valid;
+    changed["formatVersion"] = 1;
+    ExpectRejected(changed, "format version 1 is rejected");
+    changed = valid;
+    changed["topology"] = "polygon";
+    ExpectRejected(changed, "polygon topology marker is rejected");
+    changed = valid;
+    changed["coordSubdivisions"] = 8;
+    ExpectRejected(changed, "wrong coordinate subdivisions are rejected");
+    changed = valid;
+    changed["coordSubdivisions"] = 16.0;
+    ExpectRejected(changed, "floating coordinate subdivisions are rejected");
+
+    for (const char* field : {"textures", "vertices", "linedefs", "sidedefs", "sectors"}) {
+        changed = valid;
+        changed.erase(field);
+        ExpectRejected(changed, "missing required collection is rejected");
+    }
+    changed = valid;
+    changed["vertices"] = Json::object();
+    ExpectRejected(changed, "malformed topology array is rejected");
+}
+
+void TestStrictValuesAndValidation()
+{
+    const Json valid = Json::parse(SaveText(MakeSquare()));
+    Json changed = valid;
+    changed["vertices"][0]["x"] = 0.0;
+    ExpectRejected(changed, "floating vertex x is rejected");
+    changed = valid;
+    changed["sidedefs"][0]["side"] = "outside";
+    ExpectRejected(changed, "invalid side string is rejected");
+    changed = valid;
+    changed["sidedefs"][0].erase("wall");
+    ExpectRejected(changed, "missing required sidedef field is rejected");
+    changed = valid;
+    changed["sectors"][0]["floorUv"]["scale"] = Json::array({1});
+    ExpectRejected(changed, "malformed UV is rejected");
+    changed = valid;
+    changed["sectors"][0]["ambientColor"]["r"] = 256;
+    ExpectRejected(changed, "out-of-range color is rejected");
+    changed = valid;
+    changed["textures"]["wall"]["filter"] = "nearest";
+    ExpectRejected(changed, "invalid texture filter is rejected");
+    changed = valid;
+    changed["linedefs"][0]["startVertexId"] = 999;
+    ExpectRejected(changed, "dangling vertex reference is rejected");
+    changed = valid;
+    changed["vertices"][1]["id"] = 1;
+    ExpectRejected(changed, "duplicate IDs are rejected");
+}
+
+void TestTransactionalFailures()
+{
+    SectorTopologyMap output = MakeSquare();
+    const size_t originalVertexCount = output.vertices.size();
+    const int originalFirstX = output.vertices.front().x;
+    std::string error;
+    Check(!LoadText("{\"formatVersion\":2}", output, error), "invalid load fails");
+    Check(!error.empty(), "failed load reports an error");
+    Check(output.vertices.size() == originalVertexCount
+                  && output.vertices.front().x == originalFirstX,
+          "failed load leaves output map unchanged");
+
+    SectorTopologyMap invalid = MakeSquare();
+    invalid.lineDefs.front().startVertexId = 999;
+    std::string jsonOutput = "sentinel";
+    error.clear();
+    Check(!game::SaveSectorTopologyMapToJsonString(invalid, jsonOutput, &error),
+          "invalid map is rejected before save");
+    Check(!error.empty(), "failed save reports an error");
+    Check(jsonOutput == "sentinel", "failed save leaves JSON output unchanged");
+}
+
+void TestDeterministicOutput()
+{
+    SectorTopologyMap first = MakeSquare();
+    SectorTopologyMap second = first;
+    std::reverse(second.vertices.begin(), second.vertices.end());
+    std::reverse(second.lineDefs.begin(), second.lineDefs.end());
+    std::reverse(second.sideDefs.begin(), second.sideDefs.end());
+    second.texturesById.clear();
+    second.texturesById.emplace("ceiling", first.texturesById.at("ceiling"));
+    second.texturesById.emplace("wall", first.texturesById.at("wall"));
+    second.texturesById.emplace("floor", first.texturesById.at("floor"));
+    Check(SaveText(first) == SaveText(second),
+          "serialization is independent of vector and hash-map insertion order");
+    Check(SaveText(first) == SaveText(first), "repeated serialization is identical");
+}
+
+void TestFileApi()
+{
+    const std::filesystem::path path =
+            std::filesystem::temp_directory_path() / "sector_topology_serialization_test.json";
+    std::error_code removeError;
+    std::filesystem::remove(path, removeError);
+
+    std::string error;
+    const SectorTopologyMap original = MakeSquare();
+    Check(game::SaveSectorTopologyMap(path.string().c_str(), original, &error),
+          "file save succeeds");
+    SectorTopologyMap loaded;
+    Check(game::LoadSectorTopologyMap(path.string().c_str(), loaded, &error),
+          "file load succeeds");
+    Check(loaded.vertices.size() == original.vertices.size(), "file API round-trips map");
+    std::filesystem::remove(path, removeError);
+}
+
+} // namespace
+
+int main()
+{
+    TestRoundTrip();
+    TestHandAuthoredJson();
+    TestStrictMarkersAndShapes();
+    TestStrictValuesAndValidation();
+    TestTransactionalFailures();
+    TestDeterministicOutput();
+    TestFileApi();
+
+    if (failures != 0) {
+        std::cerr << failures << " topology serialization test(s) failed\n";
+        return 1;
+    }
+    std::cout << "Sector topology serialization tests passed\n";
+    return 0;
+}
