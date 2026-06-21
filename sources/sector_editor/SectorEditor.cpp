@@ -86,22 +86,43 @@ bool BuildLevelPaths(const std::string& name, LevelPaths& paths, std::string& er
     return true;
 }
 
-SectorMap MakeBlankSectorMap()
+template<typename TextureMap>
+void PopulateDefaultSectorTextures(TextureMap& texturesById)
 {
-    SectorMap map;
-    const auto addTexture = [&map](const char* id, const char* path) {
+    const auto addTexture = [&texturesById](const char* id, const char* path) {
         SectorTextureDefinition definition;
         definition.id = id;
         definition.path = path;
         definition.filter = SectorTextureFilter::Bilinear;
-        map.texturesById.emplace(id, std::move(definition));
+        texturesById.emplace(id, std::move(definition));
     };
     addTexture("wall", "assets/images/wall.png");
     addTexture("floor", "assets/images/floor.png");
     addTexture("ceiling", "assets/images/ceiling.png");
     addTexture("step_wall", "assets/images/wall.png");
     addTexture("upper_wall", "assets/images/wall.png");
+}
+
+SectorMap MakeBlankSectorMap()
+{
+    SectorMap map;
+    PopulateDefaultSectorTextures(map.texturesById);
     return map;
+}
+
+SectorTopologyMap CreateEmptySectorTopologyDocument()
+{
+    SectorTopologyMap map;
+    PopulateDefaultSectorTextures(map.texturesById);
+    return map;
+}
+
+void ResetEditorTopologyDocumentState(SectorEditorState& state)
+{
+    state.topologyMap = CreateEmptySectorTopologyDocument();
+    state.topologyDocumentInitialized = true;
+    state.topologyDocumentDirty = false;
+    state.topologyDocumentStatus = "Topology document: empty, inactive";
 }
 
 std::vector<LevelListEntry> ScanLevels(std::string& error)
@@ -5313,6 +5334,7 @@ void SectorEditor::ResetToBlankMap(engine::AssetManager& assets)
     state = SectorEditorState{};
     uiState = SectorEditorUiState{};
     state.map = MakeBlankSectorMap();
+    ResetEditorTopologyDocumentState(state);
     state.viewCenter = Vector2{9.0f, 6.0f};
     state.viewZoom = 48.0f;
     state.gridSize = 8;
@@ -5341,6 +5363,7 @@ bool SectorEditor::LoadLevel(
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     state.map = std::move(loaded);
+    ResetEditorTopologyDocumentState(state);
     state.currentLevelName = levelName;
     state.currentLevelPath = jsonAssetPath;
     state.hasCurrentLevelPath = true;

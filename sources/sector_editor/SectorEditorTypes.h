@@ -3,6 +3,7 @@
 #include "engine/ui/UI.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshPreview.h"
+#include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTypes.h"
 
 #include <raylib.h>
@@ -184,6 +185,10 @@ struct LightDragState {
 
 struct SectorEditorState {
     SectorMap map;
+    SectorTopologyMap topologyMap;
+    bool topologyDocumentInitialized = false;
+    bool topologyDocumentDirty = false;
+    std::string topologyDocumentStatus;
 
     SectorEditorTool currentTool = SectorEditorTool::Select;
     SectorEditorMode mode = SectorEditorMode::Edit2D;

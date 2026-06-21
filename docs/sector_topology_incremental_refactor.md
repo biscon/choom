@@ -45,3 +45,11 @@ Topology maps now have a parallel mesh-building path that routes through the top
 The shared CPU batch-data conversion can be tested without opening a window or uploading GPU meshes. The topology mesh builder still preserves existing material assumptions, does not load textures, and does not require texture files to exist.
 
 Triangle winding is covered by non-GUI tests that compare every generated triangle's geometric normal against its emitted surface normal, because the preview renders with backface culling. This phase does not migrate the editor, preview UI, old save/load workflow, renderer callers, or lightmap pipeline to topology meshes.
+
+## Phase 6: dormant editor topology document state
+
+The existing editor shell now owns a dormant `SectorTopologyMap` beside the original polygon `SectorMap`. New blank editor documents and successfully loaded polygon documents reset this topology state to an empty, inactive topology document with the same default texture definitions used by the blank polygon map.
+
+The polygon `SectorMap` remains the active editor document. The existing editor UI, tools, inspector, texture picker, modals, 2D drawing, selection, 3D preview, save/load/reload workflow, renderer callers, and lightmap workflow still use the polygon map.
+
+No topology UI, drawing, selection, editing tools, topology save/load, preview, renderer, or lightmap migration is part of this phase. Future phases will switch document workflow and editor subsystems to topology one piece at a time.
