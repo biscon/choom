@@ -53,3 +53,11 @@ The existing editor shell now owns a dormant `SectorTopologyMap` beside the orig
 The polygon `SectorMap` remains the active editor document. The existing editor UI, tools, inspector, texture picker, modals, 2D drawing, selection, 3D preview, save/load/reload workflow, renderer callers, and lightmap workflow still use the polygon map.
 
 No topology UI, drawing, selection, editing tools, topology save/load, preview, renderer, or lightmap migration is part of this phase. Future phases will switch document workflow and editor subsystems to topology one piece at a time.
+
+## Phase 7: topology editor document workflow
+
+The existing full editor shell now treats `SectorTopologyMap` as the document for New, Load, Save, Save As, and Reload. Those document actions use the Phase 3 topology v2 JSON serialization path, while the old polygon `SectorMap` remains in editor state only as a blank compatibility canvas for the not-yet-migrated shell, panels, grid, and rendering code.
+
+New creates an empty topology document with the default texture definitions and no vertices, linedefs, sidedefs, or sectors. Loading and reloading parse topology v2 JSON into a temporary map before replacing the editor document, and saving writes topology v2 JSON to the existing `assets/levels/<levelName>/<levelName>.json` layout.
+
+Old polygon JSON is rejected by the topology loader; there is still no legacy polygon-to-topology conversion. Topology 2D rendering, topology selection and tools, inspector migration, 3D preview migration, renderer caller migration, and lightmap migration remain deferred.

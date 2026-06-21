@@ -5,6 +5,7 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMap.h"
+#include "sector_demo/SectorTopologySerialization.h"
 #include "sector_demo/SectorUnits.h"
 #include "util/earcut.h"
 
@@ -122,7 +123,7 @@ void ResetEditorTopologyDocumentState(SectorEditorState& state)
     state.topologyMap = CreateEmptySectorTopologyDocument();
     state.topologyDocumentInitialized = true;
     state.topologyDocumentDirty = false;
-    state.topologyDocumentStatus = "Topology document: empty, inactive";
+    state.topologyDocumentStatus = "Topology document: empty";
 }
 
 std::vector<LevelListEntry> ScanLevels(std::string& error)
@@ -3086,10 +3087,10 @@ void SectorEditor::DrawPreviewOverlay(
                     preview.LightmapStatusText(),
                     state.useBakedAmbientOcclusion ? "on" : "off",
                     statusText.empty() ? "Ready" : statusText.c_str(),
-                    state.hasUnsavedChanges ? " | unsaved changes" : ""
+                    state.topologyDocumentDirty ? " | unsaved changes" : ""
             ),
             engine::UITextJustify::Left,
-            state.hasUnsavedChanges ? Color{236, 196, 92, 255} : config.mutedTextColor
+            state.topologyDocumentDirty ? Color{236, 196, 92, 255} : config.mutedTextColor
     );
 }
 
@@ -4974,7 +4975,7 @@ void SectorEditor::DrawLoadLevelModal(
             return;
         }
         const LevelListEntry selected = loadState.levels[static_cast<size_t>(loadState.selectedIndex)];
-        if (state.hasUnsavedChanges) {
+        if (state.topologyDocumentDirty) {
             OpenConfirmation(
                     "Load Level",
                     "Discard unsaved changes and load selected level?",
@@ -5300,11 +5301,11 @@ void SectorEditor::DrawStatusPanel(
     const char* text = TextFormat(
             "%s%s | %s%s | map %s%s | grid %d | %s | selected %s",
             statusText.empty() ? "Map not loaded" : statusText.c_str(),
-            state.hasUnsavedChanges ? " *modified" : "",
+            state.topologyDocumentDirty ? " *modified" : "",
             ToolHelpText(state.currentTool),
             pendingText.c_str(),
             shortMapPath.c_str(),
-            state.hasUnsavedChanges ? "*" : "",
+            state.topologyDocumentDirty ? "*" : "",
             state.gridSize,
             lightmapText,
             selectedLabel.c_str()
@@ -5349,11 +5350,13 @@ bool SectorEditor::LoadLevel(
         const std::string& levelName,
         const std::string& jsonAssetPath)
 {
-    SectorMap loaded;
+    SectorTopologyMap loaded;
     std::string error;
     const std::string filePath = ResolveEditorAssetPath(jsonAssetPath);
-    if (!LoadSectorMap(filePath.c_str(), loaded, &error)) {
-        state.loadLevelModal.errorMessage = error.empty() ? "Failed to load level" : error;
+    if (!LoadSectorTopologyMap(filePath.c_str(), loaded, &error)) {
+        state.loadLevelModal.errorMessage = error.empty()
+                ? "Topology v2 load failed"
+                : TextFormat("Topology v2 load failed: %s", error.c_str());
         statusText = state.loadLevelModal.errorMessage;
         return false;
     }
@@ -5362,8 +5365,11 @@ bool SectorEditor::LoadLevel(
     CancelPendingSector(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
-    state.map = std::move(loaded);
-    ResetEditorTopologyDocumentState(state);
+    state.map = MakeBlankSectorMap();
+    state.topologyMap = std::move(loaded);
+    state.topologyDocumentInitialized = true;
+    state.topologyDocumentDirty = false;
+    state.topologyDocumentStatus = TextFormat("Topology document: loaded %s", jsonAssetPath.c_str());
     state.currentLevelName = levelName;
     state.currentLevelPath = jsonAssetPath;
     state.hasCurrentLevelPath = true;
@@ -5376,9 +5382,20 @@ bool SectorEditor::LoadLevel(
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
     ClearSelection();
+    state.hoveredSectorIndex = -1;
+    state.hoveredEdgeSectorIndex = -1;
+    state.hoveredEdgeRingKind = SectorBoundaryRingKind::Outer;
+    state.hoveredEdgeHoleIndex = -1;
+    state.hoveredEdgeIndex = -1;
+    state.hoveredLightIndex = -1;
+    state.hasHoveredVertex = false;
+    state.hoveredVertexRefs.clear();
+    state.pendingSector = PendingSectorDraw{};
+    state.vertexDrag = VertexDragState{};
+    state.lightDrag = LightDragState{};
     RefreshDefaultTextures();
     RefreshEditorTextureAssets(assets);
-    statusText = TextFormat("Loaded %s", jsonAssetPath.c_str());
+    statusText = TextFormat("Loaded topology %s", jsonAssetPath.c_str());
     return true;
 }
 
@@ -5480,25 +5497,25 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
         return false;
     }
 
-    SectorMap mapToSave = state.map;
-    if (!savingToCurrentPath) {
-        mapToSave.bakedLightmap = SectorLightmapMetadata{};
-        mapToSave.bakedLightmap.path = paths.lightmapAssetPath;
-    }
-    if (!SaveSectorMap(paths.jsonFilePath.string().c_str(), mapToSave)) {
-        modal.errorMessage = "Could not write level JSON";
+    std::string saveError;
+    if (!SaveSectorTopologyMap(paths.jsonFilePath.string().c_str(), state.topologyMap, &saveError)) {
+        modal.errorMessage = saveError.empty()
+                ? "Could not write topology level JSON"
+                : TextFormat("Could not write topology level JSON: %s", saveError.c_str());
         statusText = TextFormat("Save failed: %s", paths.jsonAssetPath.c_str());
         return false;
     }
 
-    state.map = std::move(mapToSave);
     state.currentLevelName = name;
     state.currentLevelPath = paths.jsonAssetPath;
     state.hasCurrentLevelPath = true;
     state.hasUnsavedChanges = false;
+    state.topologyDocumentInitialized = true;
+    state.topologyDocumentDirty = false;
+    state.topologyDocumentStatus = TextFormat("Topology document: saved %s", paths.jsonAssetPath.c_str());
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
-    statusText = TextFormat("Saved %s", paths.jsonAssetPath.c_str());
+    statusText = TextFormat("Saved topology %s", paths.jsonAssetPath.c_str());
     return true;
 }
 
@@ -5628,11 +5645,7 @@ engine::TextureHandle SectorEditor::EditorTextureHandleForId(const std::string& 
 void SectorEditor::OpenAddMapTextureModal(engine::AssetManager& assets)
 {
     CloseAddMapTextureModal(assets);
-    state.addMapTexture.open = true;
-    RefreshAddMapTextureScan();
-    if (!state.addMapTexture.paths.empty()) {
-        SelectAddMapTexturePath(0);
-    }
+    statusText = "Topology texture editing is not migrated yet.";
 }
 
 void SectorEditor::CloseAddMapTextureModal(engine::AssetManager& assets)
