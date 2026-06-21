@@ -3519,8 +3519,8 @@ void SectorEditor::DrawTopologyDocument()
 
     const Color fill = Color{82, 112, 154, 42};
     const Color outline = Color{116, 139, 174, 235};
-    const Color selectedFill = Color{84, 204, 255, 84};
-    const Color selectedOutline = Color{248, 238, 124, 255};
+    const Color selectedFill = Color{72, 220, 128, 38};
+    const Color selectedOutline = Color{86, 232, 142, 135};
     ClearStaleTopologySelection();
     const SectorTopologySector* selectedSector = SelectedTopologySector();
     for (const SectorTopologySector& sector : state.topologyMap.sectors) {
@@ -3530,7 +3530,7 @@ void SectorEditor::DrawTopologyDocument()
         DrawTopologySectorLoops(sector, fill, outline);
     }
     if (selectedSector != nullptr) {
-        DrawTopologySectorLoops(*selectedSector, selectedFill, selectedOutline, 3.5f);
+        DrawTopologySectorLoops(*selectedSector, selectedFill, selectedOutline, 10.0f);
     }
 
     DrawTopologyLineDefs();

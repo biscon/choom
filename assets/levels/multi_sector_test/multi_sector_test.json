@@ -1156,7 +1156,7 @@
     {
       "id": 2,
       "name": "sector_002",
-      "floorZ": 0.0,
+      "floorZ": -2.0,
       "ceilingZ": 24.0,
       "floorTextureId": "floor",
       "ceilingTextureId": "ceiling",
@@ -1230,8 +1230,8 @@
     {
       "id": 3,
       "name": "sector_003",
-      "floorZ": 0.0,
-      "ceilingZ": 24.0,
+      "floorZ": -5.0,
+      "ceilingZ": 34.0,
       "floorTextureId": "floor",
       "ceilingTextureId": "ceiling",
       "floorUv": {
@@ -1260,7 +1260,7 @@
         "b": 255,
         "a": 255
       },
-      "ambientIntensity": 1.0,
+      "ambientIntensity": 0.699999988079071,
       "defaultWall": {
         "textureId": "wall",
         "uv": {
@@ -1304,8 +1304,8 @@
     {
       "id": 4,
       "name": "sector_004",
-      "floorZ": 0.0,
-      "ceilingZ": 24.0,
+      "floorZ": -1.0,
+      "ceilingZ": 20.0,
       "floorTextureId": "floor",
       "ceilingTextureId": "ceiling",
       "floorUv": {
@@ -1379,7 +1379,7 @@
       "id": 5,
       "name": "sector_005",
       "floorZ": 0.0,
-      "ceilingZ": 24.0,
+      "ceilingZ": 23.0,
       "floorTextureId": "floor",
       "ceilingTextureId": "ceiling",
       "floorUv": {
