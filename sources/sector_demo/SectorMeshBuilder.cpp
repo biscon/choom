@@ -17,22 +17,9 @@ namespace game {
 
 namespace {
 
-struct SurfaceVertex {
-    Vector3 position = {};
-    Vector3 normal = {};
-    Vector2 uv = {};
-    Vector2 lightmapUv = {};
-    Color color = WHITE;
-};
-
-struct BatchBuilder {
-    std::string textureId;
-    std::vector<SurfaceVertex> vertices;
-};
-
-BatchBuilder& BatchForTexture(
+SectorMeshBatchData& BatchForTexture(
         std::unordered_map<std::string, size_t>& batchIndexByTexture,
-        std::vector<BatchBuilder>& batches,
+        std::vector<SectorMeshBatchData>& batches,
         const std::string& textureId)
 {
     const auto existing = batchIndexByTexture.find(textureId);
@@ -40,7 +27,7 @@ BatchBuilder& BatchForTexture(
         return batches[existing->second];
     }
 
-    BatchBuilder batch;
+    SectorMeshBatchData batch;
     batch.textureId = textureId;
     batches.push_back(std::move(batch));
     const size_t index = batches.size() - 1;
@@ -62,7 +49,7 @@ Vector2 ResolveLightmapUv(
     return layout->charts[surfaceIndex].vertexUvs[vertexIndex];
 }
 
-Mesh CreateMeshFromBatch(const BatchBuilder& batch)
+Mesh CreateMeshFromBatch(const SectorMeshBatchData& batch)
 {
     Mesh mesh = {};
     if (batch.vertices.empty() || batch.vertices.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
@@ -88,7 +75,7 @@ Mesh CreateMeshFromBatch(const BatchBuilder& batch)
     }
 
     for (int i = 0; i < mesh.vertexCount; ++i) {
-        const SurfaceVertex& vertex = batch.vertices[static_cast<size_t>(i)];
+        const SectorMeshBatchVertex& vertex = batch.vertices[static_cast<size_t>(i)];
         mesh.vertices[i * 3 + 0] = vertex.position.x;
         mesh.vertices[i * 3 + 1] = vertex.position.y;
         mesh.vertices[i * 3 + 2] = vertex.position.z;
@@ -111,24 +98,21 @@ Mesh CreateMeshFromBatch(const BatchBuilder& batch)
 
 } // namespace
 
-SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map, const SectorLightmapLayout* lightmapLayout)
+SectorMeshBatchDataResult BuildSectorMeshBatchData(
+        const SectorGeneratedGeometry& geometry,
+        const SectorLightmapLayout* lightmapLayout)
 {
-    SectorMeshBuildResult result;
-    SectorGeneratedGeometry geometry;
-    if (!BuildSectorGeneratedGeometry(map, geometry)) {
-        return result;
-    }
+    SectorMeshBatchDataResult result;
 
-    std::vector<BatchBuilder> batchBuilders;
     std::unordered_map<std::string, size_t> batchIndexByTexture;
 
     for (size_t surfaceIndex = 0; surfaceIndex < geometry.surfaces.size(); ++surfaceIndex) {
         const SectorGeneratedSurface& surface = geometry.surfaces[surfaceIndex];
-        BatchBuilder& batch = BatchForTexture(batchIndexByTexture, batchBuilders, surface.textureId);
+        SectorMeshBatchData& batch = BatchForTexture(batchIndexByTexture, result.batches, surface.textureId);
         batch.vertices.reserve(batch.vertices.size() + surface.vertices.size());
         for (size_t vertexIndex = 0; vertexIndex < surface.vertices.size(); ++vertexIndex) {
             const SectorGeneratedVertex& vertex = surface.vertices[vertexIndex];
-            batch.vertices.push_back(SurfaceVertex{
+            batch.vertices.push_back(SectorMeshBatchVertex{
                     vertex.position,
                     vertex.normal,
                     vertex.uv,
@@ -138,7 +122,27 @@ SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map, const SectorLightm
         }
     }
 
-    for (const BatchBuilder& builder : batchBuilders) {
+    for (SectorMeshBatchData& batch : result.batches) {
+        batch.vertexCount = static_cast<int>(batch.vertices.size());
+        batch.triangleCount = batch.vertexCount / 3;
+        result.vertexCount += batch.vertexCount;
+        result.triangleCount += batch.triangleCount;
+    }
+
+    return result;
+}
+
+SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map, const SectorLightmapLayout* lightmapLayout)
+{
+    SectorMeshBuildResult result;
+    SectorGeneratedGeometry geometry;
+    if (!BuildSectorGeneratedGeometry(map, geometry)) {
+        return result;
+    }
+
+    const SectorMeshBatchDataResult batchData = BuildSectorMeshBatchData(geometry, lightmapLayout);
+
+    for (const SectorMeshBatchData& builder : batchData.batches) {
         Mesh mesh = CreateMeshFromBatch(builder);
         if (mesh.vertexCount <= 0) {
             continue;
@@ -157,6 +161,50 @@ SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map, const SectorLightm
     std::fprintf(
             stdout,
             "[SectorDemo] Generated %d vertices, %d triangles, %zu mesh batches\n",
+            result.vertexCount,
+            result.triangleCount,
+            result.batches.size()
+    );
+
+    return result;
+}
+
+SectorMeshBuildResult BuildSectorMeshes(
+        const SectorTopologyMap& map,
+        const SectorLightmapLayout* lightmapLayout,
+        std::string* outError)
+{
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    SectorMeshBuildResult result;
+    SectorGeneratedGeometry geometry;
+    if (!BuildSectorGeneratedGeometry(map, geometry, outError)) {
+        return result;
+    }
+
+    const SectorMeshBatchDataResult batchData = BuildSectorMeshBatchData(geometry, lightmapLayout);
+
+    for (const SectorMeshBatchData& builder : batchData.batches) {
+        Mesh mesh = CreateMeshFromBatch(builder);
+        if (mesh.vertexCount <= 0) {
+            continue;
+        }
+
+        SectorMeshBatch batch;
+        batch.textureId = builder.textureId;
+        batch.mesh = mesh;
+        batch.vertexCount = mesh.vertexCount;
+        batch.triangleCount = mesh.triangleCount;
+        result.vertexCount += batch.vertexCount;
+        result.triangleCount += batch.triangleCount;
+        result.batches.push_back(batch);
+    }
+
+    std::fprintf(
+            stdout,
+            "[SectorDemo] Generated %d vertices, %d triangles, %zu topology mesh batches\n",
             result.vertexCount,
             result.triangleCount,
             result.batches.size()

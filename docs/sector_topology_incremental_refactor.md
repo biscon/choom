@@ -37,3 +37,11 @@ Topology maps can now produce `SectorGeneratedGeometry` through a separate overl
 Each sector's deterministic extracted outer loop and holes are triangulated with earcut into one floor surface and one ceiling surface. Directed sidedefs produce full walls for one-sided lines and lower or upper spans where adjacent sector heights differ. Equal-height two-sided portals intentionally produce no wall mesh. Wall lengths retain floating coordinate-space precision when converted to world units.
 
 Generated surface refs now carry stable topology sector, linedef, sidedef, and front/back IDs for future picking, diagnostics, and lightmap identity. This phase does not migrate the editor, renderer, 3D preview, old save/load workflow, or lightmap pipeline to topology geometry.
+
+## Phase 5: topology mesh-building path
+
+Topology maps now have a parallel mesh-building path that routes through the topology generated-geometry overload before batching generated vertices by texture ID into raylib-compatible mesh data. The original polygon `BuildSectorMeshes(const SectorMap&, ...)` path remains in place for existing editor, preview, renderer, and document workflow callers.
+
+The shared CPU batch-data conversion can be tested without opening a window or uploading GPU meshes. The topology mesh builder still preserves existing material assumptions, does not load textures, and does not require texture files to exist.
+
+Triangle winding is covered by non-GUI tests that compare every generated triangle's geometric normal against its emitted surface normal, because the preview renders with backface culling. This phase does not migrate the editor, preview UI, old save/load workflow, renderer callers, or lightmap pipeline to topology meshes.
