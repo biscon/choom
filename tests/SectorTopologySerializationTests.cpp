@@ -99,6 +99,75 @@ SectorTopologyMap MakeSquare()
     return map;
 }
 
+SectorTopologyMap MakeAdjacentSquares()
+{
+    SectorTopologyMap map;
+    map.texturesById.emplace("wall", SectorTextureDefinition{
+            "wall", "textures/wall.png", SectorTextureFilter::Point});
+    map.texturesById.emplace("front_wall", SectorTextureDefinition{
+            "front_wall", "textures/front.png", SectorTextureFilter::Point});
+    map.texturesById.emplace("back_wall", SectorTextureDefinition{
+            "back_wall", "textures/back.png", SectorTextureFilter::Point});
+    map.texturesById.emplace("floor", SectorTextureDefinition{
+            "floor", "textures/floor.png", SectorTextureFilter::Bilinear});
+    map.texturesById.emplace("ceiling", SectorTextureDefinition{
+            "ceiling", "textures/ceiling.png", SectorTextureFilter::Bilinear});
+
+    map.vertices = {
+            {1, 0, 0},
+            {2, 64, 0},
+            {3, 64, 64},
+            {4, 0, 64},
+            {5, 128, 0},
+            {6, 128, 64}
+    };
+    map.lineDefs = {
+            {1, 1, 2, 1, -1},
+            {2, 2, 3, 2, 8},
+            {3, 3, 4, 3, -1},
+            {4, 4, 1, 4, -1},
+            {5, 2, 5, 5, -1},
+            {6, 5, 6, 6, -1},
+            {7, 6, 3, 7, -1}
+    };
+
+    const auto addSide = [&map](int id, int lineId, SectorTopologySideKind side, int sectorId) {
+        SectorTopologySideDef sideDef;
+        sideDef.id = id;
+        sideDef.lineDefId = lineId;
+        sideDef.side = side;
+        sideDef.sectorId = sectorId;
+        sideDef.wall = MakePart("wall", 1.0f, 1.0f, 0.0f, 0.0f);
+        sideDef.lower = MakePart("wall", 1.0f, 1.0f, 0.0f, 0.0f);
+        sideDef.upper = MakePart("wall", 1.0f, 1.0f, 0.0f, 0.0f);
+        map.sideDefs.push_back(sideDef);
+    };
+    addSide(1, 1, SectorTopologySideKind::Front, 1);
+    addSide(2, 2, SectorTopologySideKind::Front, 1);
+    addSide(3, 3, SectorTopologySideKind::Front, 1);
+    addSide(4, 4, SectorTopologySideKind::Front, 1);
+    addSide(5, 5, SectorTopologySideKind::Front, 2);
+    addSide(6, 6, SectorTopologySideKind::Front, 2);
+    addSide(7, 7, SectorTopologySideKind::Front, 2);
+    addSide(8, 2, SectorTopologySideKind::Back, 2);
+
+    SectorTopologySector left;
+    left.id = 1;
+    left.name = "left";
+    left.floorTextureId = "floor";
+    left.ceilingTextureId = "ceiling";
+    left.defaultWall = MakePart("wall", 1.0f, 1.0f, 0.0f, 0.0f);
+    left.defaultLower = MakePart("wall", 1.0f, 1.0f, 0.0f, 0.0f);
+    left.defaultUpper = MakePart("wall", 1.0f, 1.0f, 0.0f, 0.0f);
+    map.sectors.push_back(left);
+
+    SectorTopologySector right = left;
+    right.id = 2;
+    right.name = "right";
+    map.sectors.push_back(right);
+    return map;
+}
+
 bool LoadText(const std::string& text, SectorTopologyMap& map, std::string& error)
 {
     error.clear();
@@ -297,6 +366,65 @@ void TestDeterministicOutput()
     Check(SaveText(first) == SaveText(first), "repeated serialization is identical");
 }
 
+void TestIndependentFrontBackSidedefEdits()
+{
+    SectorTopologyMap map = MakeAdjacentSquares();
+    SectorTopologySideDef* front = game::FindSectorTopologySideDef(map, 2);
+    SectorTopologySideDef* back = game::FindSectorTopologySideDef(map, 8);
+    Check(front != nullptr && back != nullptr, "shared linedef has editable front and back sidedefs");
+    if (front == nullptr || back == nullptr) {
+        return;
+    }
+
+    front->wall.textureId = "front_wall";
+    front->wall.uv.scale = {2.0f, 3.0f};
+    front->wall.uv.offset = {4.0f, 5.0f};
+    back->wall.textureId = "back_wall";
+    back->wall.uv.scale = {6.0f, 7.0f};
+    back->wall.uv.offset = {8.0f, 9.0f};
+
+    Check(front->wall.textureId != back->wall.textureId,
+          "front and back sidedef textures can differ");
+    Check(front->wall.uv.scale.x != back->wall.uv.scale.x
+                  && front->wall.uv.offset.x != back->wall.uv.offset.x,
+          "front and back sidedef UVs can differ");
+    Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(map)),
+          "independently edited adjacent map validates");
+
+    const std::string text = SaveText(map);
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "independently edited adjacent map reloads");
+    const SectorTopologySideDef* loadedFront = game::FindSectorTopologySideDef(loaded, 2);
+    const SectorTopologySideDef* loadedBack = game::FindSectorTopologySideDef(loaded, 8);
+    Check(loadedFront != nullptr && loadedBack != nullptr,
+          "round-tripped adjacent map retains shared sidedefs");
+    if (loadedFront != nullptr && loadedBack != nullptr) {
+        Check(loadedFront->wall.textureId == "front_wall"
+                      && loadedFront->wall.uv.scale.x == 2.0f
+                      && loadedFront->wall.uv.offset.y == 5.0f,
+              "front sidedef edit round-trips");
+        Check(loadedBack->wall.textureId == "back_wall"
+                      && loadedBack->wall.uv.scale.y == 7.0f
+                      && loadedBack->wall.uv.offset.x == 8.0f,
+              "back sidedef edit round-trips");
+    }
+}
+
+void TestOppositeSidedefLookup()
+{
+    const SectorTopologyMap map = MakeAdjacentSquares();
+    const SectorTopologySideDef* frontOpposite = game::FindOppositeSectorTopologySideDef(map, 2);
+    const SectorTopologySideDef* backOpposite = game::FindOppositeSectorTopologySideDef(map, 8);
+    const SectorTopologySideDef* oneSidedOpposite = game::FindOppositeSectorTopologySideDef(map, 1);
+    Check(frontOpposite != nullptr && frontOpposite->id == 8,
+          "front sidedef finds back opposite");
+    Check(backOpposite != nullptr && backOpposite->id == 2,
+          "back sidedef finds front opposite");
+    Check(oneSidedOpposite == nullptr,
+          "one-sided linedef reports no opposite sidedef");
+}
+
 void TestFileApi()
 {
     const std::filesystem::path path =
@@ -325,6 +453,8 @@ int main()
     TestStrictValuesAndValidation();
     TestTransactionalFailures();
     TestDeterministicOutput();
+    TestIndependentFrontBackSidedefEdits();
+    TestOppositeSidedefLookup();
     TestFileApi();
 
     if (failures != 0) {

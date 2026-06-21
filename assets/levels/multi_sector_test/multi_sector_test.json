@@ -3,6 +3,10 @@
   "topology": "linedef",
   "coordSubdivisions": 16,
   "textures": {
+    "biker_chick": {
+      "path": "assets/images/biker_chick.png",
+      "filter": "point"
+    },
     "ceiling": {
       "path": "assets/images/ceiling.png",
       "filter": "bilinear"
@@ -254,10 +258,10 @@
         }
       },
       "upper": {
-        "textureId": "upper_wall",
+        "textureId": "biker_chick",
         "uv": {
           "scale": [
-            1.0,
+            2.0,
             1.0
           ],
           "offset": [
@@ -601,7 +605,7 @@
         }
       },
       "lower": {
-        "textureId": "step_wall",
+        "textureId": "biker_chick",
         "uv": {
           "scale": [
             1.0,
@@ -1231,7 +1235,7 @@
       "id": 3,
       "name": "sector_003",
       "floorZ": -5.0,
-      "ceilingZ": 34.0,
+      "ceilingZ": 20.0,
       "floorTextureId": "floor",
       "ceilingTextureId": "ceiling",
       "floorUv": {

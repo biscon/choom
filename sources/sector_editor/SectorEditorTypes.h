@@ -80,6 +80,25 @@ enum class TexturePickerTargetKind {
     EdgeUpperWall
 };
 
+enum class TopologyTexturePickerTargetKind {
+    None,
+    Sector,
+    SideDef
+};
+
+enum class TopologySelectionKind {
+    None,
+    Sector,
+    SideDef,
+    LineDef
+};
+
+enum class TopologyWallPart {
+    Wall,
+    Lower,
+    Upper
+};
+
 enum class TopologySectorTextureField {
     None,
     Floor,
@@ -121,8 +140,11 @@ struct SectorSurfaceHit {
 
 struct TexturePickerState {
     bool open = false;
+    TopologyTexturePickerTargetKind topologyTargetKind = TopologyTexturePickerTargetKind::None;
     TopologySectorTextureField topologyField = TopologySectorTextureField::None;
     int topologySectorId = -1;
+    int topologySideDefId = -1;
+    TopologyWallPart topologyWallPart = TopologyWallPart::Wall;
     int selectedTextureIndex = -1;
     engine::UIScrollState scroll;
     std::vector<std::string> textureIds;
@@ -205,7 +227,12 @@ struct SectorEditorState {
     int gridSize = 8;
 
     int selectedSectorIndex = -1;
+    TopologySelectionKind topologySelectionKind = TopologySelectionKind::None;
     int selectedTopologySectorId = -1;
+    int selectedTopologySideDefId = -1;
+    int selectedTopologyLineDefId = -1;
+    SectorTopologySideKind selectedTopologySideKind = SectorTopologySideKind::Front;
+    TopologyWallPart selectedTopologyWallPart = TopologyWallPart::Wall;
     SectorBoundaryRingKind selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
     int selectedEdgeHoleIndex = -1;
     int selectedEdgeIndex = -1;
@@ -288,6 +315,7 @@ struct SectorEditorUiState {
     engine::UIFloatInputState surface3DUvOffsetUInput;
     engine::UIFloatInputState surface3DUvOffsetVInput;
     engine::UIFloatInputState topologySectorUvInputs[20];
+    engine::UIFloatInputState topologySideDefUvInputs[4];
     engine::UIScrollState toolsScroll;
     engine::UIScrollState inspectorScroll;
     char selectedSectorIdBuffer[64] = {};

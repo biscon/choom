@@ -69,6 +69,7 @@ private:
     void DrawGrid() const;
     void DrawTopologyDocument();
     void DrawTopologySectorLoops(const SectorTopologySector& sector, Color fill, Color outline, float outlineThickness = 2.0f);
+    void DrawTopologySelectedLineHighlight() const;
     void DrawTopologyLineDefs() const;
     void DrawTopologyVertices() const;
     void DrawTopologySnapCrosshair() const;
@@ -106,6 +107,16 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font);
     bool DrawTopologySectorInspector(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::UIScrollAreaResult scroll,
+            float contentW,
+            float rowH,
+            float gap);
+    bool DrawTopologySideDefInspector(
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::Input& input,
@@ -162,6 +173,13 @@ private:
     bool PointInTopologySector(Vector2 mapPoint, const SectorTopologySector& sector) const;
     SectorSurfaceHit PickSectorSurface3D(Vector2 mousePosition, Rectangle viewportRect) const;
     int FindTopologySectorAt(Vector2 mapPoint, bool* outMultipleMatches = nullptr) const;
+    bool FindTopologyLineNearScreenPoint(
+            Vector2 screenPoint,
+            Vector2 mapPoint,
+            int& outLineDefId,
+            int& outSideDefId,
+            SectorTopologySideKind& outSide,
+            bool& outPreferredMissing) const;
     int FindSectorAt(Vector2 mapPoint) const;
     int FindLightNearScreenPoint(Vector2 screenPoint) const;
     bool FindEdgeNearScreenPoint(Vector2 screenPoint, SectorEdgeRef& outEdge) const;
@@ -201,10 +219,16 @@ private:
     std::string GenerateUniqueSectorId() const;
     SectorTopologySector* SelectedTopologySector();
     const SectorTopologySector* SelectedTopologySector() const;
+    SectorTopologySideDef* SelectedTopologySideDef();
+    const SectorTopologySideDef* SelectedTopologySideDef() const;
+    SectorTopologyLineDef* SelectedTopologyLineDef();
+    const SectorTopologyLineDef* SelectedTopologyLineDef() const;
     void ClearStaleTopologySelection();
     void SyncSelectedSectorIdBuffer();
     void SyncSelectedLightIdBuffer();
     void SelectTopologySector(int sectorId);
+    void SelectTopologySideDef(int sideDefId, TopologyWallPart wallPart);
+    void SelectTopologyLineDef(int lineDefId, SectorTopologySideKind side, TopologyWallPart wallPart);
     void SelectSector(int sectorIndex);
     void SelectEdge(
             int sectorIndex,
@@ -229,6 +253,7 @@ private:
     SectorEdgeOverride& EnsureEdgeOverride(SectorBoundaryEdgeRef edge);
     void RemoveEdgeOverrideIfEmpty(SectorBoundaryEdgeRef edge);
     void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field);
+    void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart);
     void ApplyTexturePickerSelection(engine::AssetManager& assets);
     std::string CurrentTextureForPickerTarget() const;
     bool TryRenameSelectedTopologySector();

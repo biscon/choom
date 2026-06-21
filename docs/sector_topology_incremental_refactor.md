@@ -95,3 +95,13 @@ Successful inspector edits mark the topology document dirty and persist through 
 Sector default wall/lower/upper edits only update the selected sector defaults for future sidedefs. Existing `SectorTopologySideDef` wall/lower/upper records are not rewritten by the inspector path.
 
 The 3D preview, lightmap baking, sidedef/wall inspector editing, Move, Erase, Insert Sector Inside, Split Linedef, vertex dragging, light placement, and polygon-to-topology conversion remain deferred.
+
+## Phase 11: topology sidedef selection and inspector
+
+The Select tool can now select topology linedefs and sidedefs in the 2D viewport before falling back to sector picking. Linedef hit testing uses screen-space distance for stable zoom-independent picking, while front/back side choice uses the click position relative to the directed linedef in topology authoring space. If a clicked side has no sidedef but the opposite side exists, the editor selects the existing opposite sidedef; if neither side exists, it selects the linedef as line-only.
+
+Selected sidedefs render as a thick translucent offset halo on the selected side of the linedef, while line-only selections render as a centered neutral halo. These highlights draw above sector fills and the selected-sector halo, but below normal linedefs, direction arrows, front/back ticks, vertices, labels, pending draw overlays, and the snap crosshair.
+
+The inspector now edits concrete `SectorTopologySideDef` wall, lower, and upper texture and UV settings independently per side. Texture picker targets use stable topology sidedef IDs plus an explicit wall/lower/upper part and continue to draw choices from `state.topologyMap.texturesById`. Reset UV actions restore scale to `(1,1)` and offset to `(0,0)` for the selected part without changing its texture or other parts.
+
+Two-sided linedefs expose a Switch to opposite side action when the opposite sidedef exists. Equal-height portals remain selectable and editable because 2D selection uses topology linedefs and sidedefs, not generated wall meshes. Sector selection and the topology sector inspector remain working. The 3D preview, lightmaps, Move, Erase, Insert Sector Inside, Split Linedef, vertex dragging, light placement, sidedef creation, and polygon-to-topology conversion remain deferred.
