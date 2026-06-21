@@ -1,5 +1,6 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -254,6 +255,46 @@ void TestDiagonalLength()
           "diagonal wall chart width preserves Euclidean length");
 }
 
+void TestHeightEditsAffectTopologyGeometry()
+{
+    game::SectorTopologyMap map = MakeSquare();
+    map.sectors.front().floorZ = 4.0f;
+    map.sectors.front().ceilingZ = 18.0f;
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "height-edited topology sector builds");
+
+    const auto* floor = FindSurface(geometry, game::SectorGeneratedSurfaceKind::Floor, 10);
+    const auto* ceiling = FindSurface(geometry, game::SectorGeneratedSurfaceKind::Ceiling, 10);
+    const auto* wall = FindSurface(geometry, game::SectorGeneratedSurfaceKind::Wall, 10, 1);
+    const float expectedFloorY = game::SectorAuthoringToWorldDistance(4.0f);
+    const float expectedCeilingY = game::SectorAuthoringToWorldDistance(18.0f);
+    Check(floor != nullptr && !floor->vertices.empty(), "height-edited floor exists");
+    Check(ceiling != nullptr && !ceiling->vertices.empty(), "height-edited ceiling exists");
+    Check(wall != nullptr && !wall->vertices.empty(), "height-edited wall exists");
+
+    if (floor != nullptr && !floor->vertices.empty()) {
+        Check(Near(floor->vertices.front().position.y, expectedFloorY),
+              "floor vertices use edited floorZ");
+    }
+    if (ceiling != nullptr && !ceiling->vertices.empty()) {
+        Check(Near(ceiling->vertices.front().position.y, expectedCeilingY),
+              "ceiling vertices use edited ceilingZ");
+    }
+    if (wall != nullptr && wall->vertices.size() >= 4) {
+        float minY = wall->vertices.front().position.y;
+        float maxY = wall->vertices.front().position.y;
+        for (const game::SectorGeneratedVertex& vertex : wall->vertices) {
+            minY = std::min(minY, vertex.position.y);
+            maxY = std::max(maxY, vertex.position.y);
+        }
+        Check(Near(minY, expectedFloorY) && Near(maxY, expectedCeilingY),
+              "wall span uses edited floorZ and ceilingZ");
+    }
+}
+
 void TestInvalidAndEmptyMaps()
 {
     game::SectorTopologyMap invalid = MakeSquare();
@@ -283,6 +324,7 @@ int main()
     TestDifferentFloorPortal();
     TestDifferentCeilingPortal();
     TestDiagonalLength();
+    TestHeightEditsAffectTopologyGeometry();
     TestInvalidAndEmptyMaps();
     if (failures == 0) {
         std::puts("Sector topology generated geometry tests passed");

@@ -127,6 +127,44 @@ void TestAdjacentSharesFullEdge()
           "shared linedef has both front and back sidedefs");
 }
 
+void TestChangingSectorDefaultsDoesNotRewriteExistingSideDefs()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "default rewrite test sector creation succeeds");
+    Check(!map.sideDefs.empty(), "default rewrite test has sidedefs");
+
+    std::vector<std::string> wallTextures;
+    std::vector<std::string> lowerTextures;
+    std::vector<std::string> upperTextures;
+    wallTextures.reserve(map.sideDefs.size());
+    lowerTextures.reserve(map.sideDefs.size());
+    upperTextures.reserve(map.sideDefs.size());
+    for (const game::SectorTopologySideDef& sideDef : map.sideDefs) {
+        wallTextures.push_back(sideDef.wall.textureId);
+        lowerTextures.push_back(sideDef.lower.textureId);
+        upperTextures.push_back(sideDef.upper.textureId);
+    }
+
+    game::SectorTopologySector* sector = game::FindSectorTopologySector(map, sectorId);
+    Check(sector != nullptr, "default rewrite test finds sector");
+    if (sector != nullptr) {
+        sector->defaultWall.textureId = "future_wall";
+        sector->defaultLower.textureId = "future_lower";
+        sector->defaultUpper.textureId = "future_upper";
+    }
+
+    for (size_t i = 0; i < map.sideDefs.size(); ++i) {
+        Check(map.sideDefs[i].wall.textureId == wallTextures[i],
+              "changing default wall leaves existing sidedef wall unchanged");
+        Check(map.sideDefs[i].lower.textureId == lowerTextures[i],
+              "changing default lower leaves existing sidedef lower unchanged");
+        Check(map.sideDefs[i].upper.textureId == upperTextures[i],
+              "changing default upper leaves existing sidedef upper unchanged");
+    }
+}
+
 void TestRejectOccupiedSlot()
 {
     SectorTopologyMap map;
@@ -209,6 +247,7 @@ int main()
 {
     TestCreateSquare();
     TestAdjacentSharesFullEdge();
+    TestChangingSectorDefaultsDoesNotRewriteExistingSideDefs();
     TestRejectOccupiedSlot();
     TestRejectPartialOverlap();
     TestRejectCrossing();

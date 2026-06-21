@@ -83,3 +83,15 @@ Linedefs are reused by exact endpoint pair. A same-direction shared edge occupie
 Invalid topology creation is rejected transactionally. Duplicate or repeated canonical points, zero-area polygons, occupied linedef side slots, partial overlaps, crossings, and non-shared interior touches fail without partially editing the map. Clockwise input is normalized to the Phase 2 CCW outer-loop convention before creation.
 
 Topology selection, inspector editing, Insert Sector Inside, Move, Erase, Light placement, 3D preview migration, and lightmaps remain deferred. The old polygon `state.map` remains compatibility state and is not mutated or saved as document geometry by the Sector draw workflow.
+
+## Phase 10: topology sector selection and inspector
+
+The Select tool can now select topology sectors in the 2D viewport. Picking uses extracted topology sector loops from `state.topologyMap`, respects holes, and resolves boundary or overlap ties deterministically by choosing the lowest stable topology sector ID. Sidedef, wall, edge, and vertex selection remain deferred.
+
+The existing inspector panel now displays and edits selected `SectorTopologySector` data, including the sector name, heights, floor and ceiling textures/UVs, ambient color/intensity, and default wall/lower/upper texture and UV settings. Texture picker targets use the topology texture table and a stable topology sector ID plus explicit sector field, not old polygon sector indexes.
+
+Successful inspector edits mark the topology document dirty and persist through topology v2 JSON Save/Reload. Invalid height edits are rejected before they can make the topology sector invalid.
+
+Sector default wall/lower/upper edits only update the selected sector defaults for future sidedefs. Existing `SectorTopologySideDef` wall/lower/upper records are not rewritten by the inspector path.
+
+The 3D preview, lightmap baking, sidedef/wall inspector editing, Move, Erase, Insert Sector Inside, Split Linedef, vertex dragging, light placement, and polygon-to-topology conversion remain deferred.
