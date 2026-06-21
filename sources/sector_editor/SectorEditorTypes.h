@@ -3,6 +3,7 @@
 #include "engine/ui/UI.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshPreview.h"
+#include "sector_demo/SectorTopologyCreation.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTypes.h"
 
@@ -202,10 +203,13 @@ struct ConfirmationModalState {
 
 struct VertexDragState {
     bool active = false;
-    SectorPoint originalPoint = {};
-    SectorPoint currentPoint = {};
-    SectorPoint snappedPoint = {};
-    std::vector<SectorVertexRef> affectedVertices;
+    int topologyVertexId = -1;
+    SectorTopologyCoordPoint originalPoint = {};
+    SectorTopologyCoordPoint previewPoint = {};
+    SectorTopologyCoordPoint lastValidatedPoint = {};
+    bool hasPreviewPoint = false;
+    bool hasValidatedPreview = false;
+    bool lastPreviewValid = true;
     std::string errorMessage;
 };
 
@@ -252,6 +256,8 @@ struct SectorEditorState {
     bool hasHoveredVertex = false;
     SectorPoint hoveredVertexPoint = {};
     std::vector<SectorVertexRef> hoveredVertexRefs;
+    int hoveredTopologyVertexId = -1;
+    SectorTopologyCoordPoint hoveredTopologyVertexPoint = {};
 
     Vector2 snappedMouseMap = {0.0f, 0.0f};
     Vector2 rawMouseMap = {0.0f, 0.0f};

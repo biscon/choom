@@ -129,3 +129,11 @@ Insert validation is strict and transactional. The inserted polygon must be whol
 Nested inserts work naturally by selecting a child sector and inserting inside it. Generated topology geometry sees parent holes through `ExtractSectorTopologyLoops()`, so raised/lowered inserted children produce platform, pit, and riser behavior through the existing topology preview path.
 
 Move, Erase, Split Linedef, sector deletion, vertex dragging, Light placement, lightmap baking, and topology lightmap layout remain deferred.
+
+## Phase 14: topology Move tool vertex dragging
+
+The existing Move tool now edits topology vertices directly by stable vertex ID. Dragging moves exactly one `SectorTopologyVertex`; connected linedefs and every sector loop that references those linedefs update through the shared vertex reference instead of through coordinate-group edits or duplicate vertex creation.
+
+Vertex movement previews in the 2D editor without mutating the live topology document during drag. On release, the editor commits through a reusable transactional topology helper that copies the candidate map, changes only the target vertex coordinate, validates with `ValidateSectorTopologyMap()`, and replaces the live map only on success. Moves that would place a vertex exactly on another existing vertex are rejected because merge support remains a separate deferred operation.
+
+Invalid moves that create collapsed edges, crossings, overlaps, invalid touches, or invalid sector/hole loops are rejected transactionally and leave the original topology unchanged. Vertex merge, split, delete, a persistent vertex inspector, 3D vertex movement, Erase, Light placement, Split Linedef, sector deletion, lightmap baking, and topology lightmap layout remain deferred.

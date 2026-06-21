@@ -6,6 +6,7 @@
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_demo/SectorMeshPreview.h"
 #include "sector_demo/SectorTopologyCreation.h"
+#include "sector_demo/SectorTopologyEdit.h"
 
 #include <raylib.h>
 
@@ -42,7 +43,7 @@ private:
     bool IsMouseOverCanvas(const engine::Input& input) const;
     void UpdateHoverAndMouse(engine::Input& input);
     void HandleCanvasInput(engine::Input& input, float dt);
-    void StartVertexDrag(SectorPoint point, const std::vector<SectorVertexRef>& refs);
+    void StartVertexDrag(int vertexId, SectorTopologyCoordPoint point);
     void UpdateVertexDrag(engine::Input& input);
     void FinishVertexDrag();
     void CancelVertexDrag(const char* message);
@@ -185,15 +186,15 @@ private:
     bool FindEdgeNearScreenPoint(Vector2 screenPoint, SectorEdgeRef& outEdge) const;
     std::vector<SectorEdgeHitCandidate> FindEdgeHitCandidates(Vector2 screenPoint) const;
     bool ResolveEdgeHit(Vector2 screenPoint, Vector2 rawMapPoint, SectorEdgeRef& outEdge) const;
-    std::vector<SectorVertexRef> FindVerticesAtPoint(SectorPoint point) const;
-    bool FindVertexNearScreenPoint(
+    bool FindTopologyVertexNearScreenPoint(
             Vector2 screenPoint,
-            SectorPoint& outPoint,
-            std::vector<SectorVertexRef>& outRefs) const;
-    SectorPoint SnapVertexMoveTarget(Vector2 mapPoint) const;
+            int& outVertexId,
+            SectorTopologyCoordPoint& outPoint) const;
+    bool SnapTopologyVertexMoveTarget(
+            Vector2 mapPoint,
+            SectorTopologyCoordPoint& outPoint,
+            std::string& error) const;
     bool ValidateExistingSectorMap(const SectorMap& map, std::string& error) const;
-    bool ValidateMovedVertexGroup(SectorPoint targetPoint, std::string& error) const;
-    SectorMap BuildMapWithMovedVertexGroup(SectorPoint targetPoint) const;
     void ResetToBlankMap(engine::AssetManager& assets);
     bool LoadLevel(engine::AssetManager& assets, const std::string& levelName, const std::string& jsonAssetPath);
     void OpenNewConfirmation(engine::AssetManager& assets);

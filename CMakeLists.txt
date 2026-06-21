@@ -146,6 +146,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorMap.cpp
             sources/sector_demo/SectorTopologyCreation.cpp
+            sources/sector_demo/SectorTopologyEdit.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp

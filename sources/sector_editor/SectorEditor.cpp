@@ -159,6 +159,11 @@ SectorPoint SectorTopologyCoordPointToSectorPoint(SectorTopologyCoordPoint point
     };
 }
 
+bool SameTopologyPoint(SectorTopologyCoordPoint a, SectorTopologyCoordPoint b)
+{
+    return a.x == b.x && a.y == b.y;
+}
+
 void ResetEditorTopologyDocumentState(SectorEditorState& state)
 {
     state.topologyMap = CreateEmptySectorTopologyDocument();
@@ -1370,9 +1375,22 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
     state.hoveredEdgeIndex = -1;
     state.hoveredLightIndex = -1;
     state.hoveredSectorIndex = -1;
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
 
     if (!initialized || !IsMouseOverCanvas(input)) {
         return;
+    }
+
+    if (state.currentTool == SectorEditorTool::Move) {
+        int vertexId = -1;
+        SectorTopologyCoordPoint point;
+        if (FindTopologyVertexNearScreenPoint(input.MousePosition(), vertexId, point)) {
+            state.hasHoveredVertex = true;
+            state.hoveredTopologyVertexId = vertexId;
+            state.hoveredTopologyVertexPoint = point;
+            state.hoveredVertexPoint = SectorTopologyCoordPointToSectorPoint(point);
+        }
     }
 }
 
@@ -1513,7 +1531,13 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
-                statusText = "Topology movement is not migrated yet.";
+                int vertexId = -1;
+                SectorTopologyCoordPoint point;
+                if (FindTopologyVertexNearScreenPoint(event.mouseButton.position, vertexId, point)) {
+                    StartVertexDrag(vertexId, point);
+                } else {
+                    statusText = "Move: click a topology vertex";
+                }
                 engine::ConsumeEvent(event);
             }
     );
@@ -1631,28 +1655,39 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::Move) {
-                    statusText = "Topology movement is not migrated yet.";
+                    statusText = "Move: click a topology vertex";
                     engine::ConsumeEvent(event);
                 }
             }
     );
 }
 
-void SectorEditor::StartVertexDrag(SectorPoint point, const std::vector<SectorVertexRef>& refs)
+void SectorEditor::StartVertexDrag(int vertexId, SectorTopologyCoordPoint point)
 {
-    if (refs.empty()) {
+    if (!IsValidSectorTopologyId(vertexId)
+            || FindSectorTopologyVertex(state.topologyMap, vertexId) == nullptr) {
         return;
     }
 
     state.vertexDrag.active = true;
+    state.vertexDrag.topologyVertexId = vertexId;
     state.vertexDrag.originalPoint = point;
-    state.vertexDrag.currentPoint = point;
-    state.vertexDrag.snappedPoint = point;
-    state.vertexDrag.affectedVertices = refs;
+    state.vertexDrag.previewPoint = point;
+    state.vertexDrag.lastValidatedPoint = point;
+    state.vertexDrag.hasPreviewPoint = true;
+    state.vertexDrag.hasValidatedPreview = true;
+    state.vertexDrag.lastPreviewValid = true;
     state.vertexDrag.errorMessage.clear();
-    statusText = refs.size() > 1
-            ? TextFormat("Moving shared vertex used by %zu points", refs.size())
-            : "Moving vertex";
+
+    size_t connectedCount = 0;
+    for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
+        if (lineDef.startVertexId == vertexId || lineDef.endVertexId == vertexId) {
+            ++connectedCount;
+        }
+    }
+    statusText = connectedCount > 1
+            ? TextFormat("Moving topology vertex %d (%zu connected linedefs)", vertexId, connectedCount)
+            : TextFormat("Moving topology vertex %d", vertexId);
 }
 
 void SectorEditor::UpdateVertexDrag(engine::Input& input)
@@ -1661,21 +1696,45 @@ void SectorEditor::UpdateVertexDrag(engine::Input& input)
         return;
     }
 
-    state.vertexDrag.currentPoint = Vector2ToSectorPoint(ScreenToMap(input.MousePosition()));
-    state.vertexDrag.snappedPoint = SnapVertexMoveTarget(SectorPointToVector2(state.vertexDrag.currentPoint));
-
     std::string error;
-    if (SamePoint(state.vertexDrag.snappedPoint, state.vertexDrag.originalPoint)) {
-        state.vertexDrag.errorMessage.clear();
-        statusText = "Moving vertex: original point";
-    } else if (ValidateMovedVertexGroup(state.vertexDrag.snappedPoint, error)) {
-        state.vertexDrag.errorMessage.clear();
-        statusText = state.vertexDrag.affectedVertices.size() > 1
-                ? TextFormat("Moving shared vertex used by %zu points", state.vertexDrag.affectedVertices.size())
-                : "Moving vertex";
-    } else {
+    SectorTopologyCoordPoint snappedPoint;
+    if (!SnapTopologyVertexMoveTarget(ScreenToMap(input.MousePosition()), snappedPoint, error)) {
         state.vertexDrag.errorMessage = error;
+        state.vertexDrag.hasPreviewPoint = false;
+        state.vertexDrag.lastPreviewValid = false;
         statusText = TextFormat("Move rejected: %s", error.c_str());
+        return;
+    }
+
+    state.vertexDrag.previewPoint = snappedPoint;
+    state.vertexDrag.hasPreviewPoint = true;
+    if (SameTopologyPoint(state.vertexDrag.previewPoint, state.vertexDrag.originalPoint)) {
+        state.vertexDrag.errorMessage.clear();
+        state.vertexDrag.hasValidatedPreview = true;
+        state.vertexDrag.lastValidatedPoint = state.vertexDrag.previewPoint;
+        state.vertexDrag.lastPreviewValid = true;
+        statusText = "Moving vertex: original point";
+        return;
+    }
+
+    if (!state.vertexDrag.hasValidatedPreview
+            || !SameTopologyPoint(state.vertexDrag.previewPoint, state.vertexDrag.lastValidatedPoint)) {
+        SectorTopologyMap previewMap = state.topologyMap;
+        state.vertexDrag.lastPreviewValid = MoveSectorTopologyVertex(
+                previewMap,
+                state.vertexDrag.topologyVertexId,
+                state.vertexDrag.previewPoint,
+                &error);
+        state.vertexDrag.lastValidatedPoint = state.vertexDrag.previewPoint;
+        state.vertexDrag.hasValidatedPreview = true;
+        state.vertexDrag.errorMessage = state.vertexDrag.lastPreviewValid ? std::string{} : error;
+    }
+
+    if (state.vertexDrag.lastPreviewValid) {
+        state.vertexDrag.errorMessage.clear();
+        statusText = TextFormat("Moving topology vertex %d", state.vertexDrag.topologyVertexId);
+    } else {
+        statusText = TextFormat("Move rejected: %s", state.vertexDrag.errorMessage.c_str());
     }
 }
 
@@ -1685,35 +1744,45 @@ void SectorEditor::FinishVertexDrag()
         return;
     }
 
-    const SectorPoint original = state.vertexDrag.originalPoint;
-    const SectorPoint target = state.vertexDrag.snappedPoint;
-    const std::vector<SectorVertexRef> affected = state.vertexDrag.affectedVertices;
+    const int vertexId = state.vertexDrag.topologyVertexId;
+    const SectorTopologyCoordPoint original = state.vertexDrag.originalPoint;
+    const SectorTopologyCoordPoint target = state.vertexDrag.previewPoint;
 
-    if (SamePoint(target, original)) {
+    if (!state.vertexDrag.hasPreviewPoint) {
+        const std::string error = state.vertexDrag.errorMessage.empty()
+                ? "Move target is outside topology coordinate range"
+                : state.vertexDrag.errorMessage;
+        state.vertexDrag = VertexDragState{};
+        statusText = TextFormat("Move rejected: %s", error.c_str());
+        return;
+    }
+
+    if (SameTopologyPoint(target, original)) {
         state.vertexDrag = VertexDragState{};
         statusText = "Vertex unchanged";
         return;
     }
 
     std::string error;
-    if (!ValidateMovedVertexGroup(target, error)) {
+    if (!MoveSectorTopologyVertex(state.topologyMap, vertexId, target, &error)) {
         state.vertexDrag = VertexDragState{};
         statusText = TextFormat("Move rejected: %s", error.c_str());
         return;
     }
 
-    state.map = BuildMapWithMovedVertexGroup(target);
-    if (state.selectedSectorIndex < 0 && !affected.empty()) {
-        SelectSector(affected.front().sectorIndex);
-    }
+    ClearStaleTopologySelection();
+    state.topologyDocumentDirty = true;
+    state.topologyRenderWarning.clear();
     state.hasUnsavedChanges = true;
+    state.selectedSurface3D = SectorSurfaceRef{};
     state.vertexDrag = VertexDragState{};
     statusText = TextFormat(
-            "Moved vertex %.2f,%.2f -> %.2f,%.2f",
-            original.x,
-            original.y,
-            target.x,
-            target.y
+            "Moved topology vertex %d %.2f,%.2f -> %.2f,%.2f",
+            vertexId,
+            SectorCoordToVisibleAuthoring(original.x),
+            SectorCoordToVisibleAuthoring(original.y),
+            SectorCoordToVisibleAuthoring(target.x),
+            SectorCoordToVisibleAuthoring(target.y)
     );
 }
 
@@ -1980,6 +2049,8 @@ void SectorEditor::FinalizePendingSector()
     state.hoveredEdgeIndex = -1;
     state.hasHoveredVertex = false;
     state.hoveredVertexRefs.clear();
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
     SelectTopologySector(createdSectorId);
@@ -2847,73 +2918,51 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
     return true;
 }
 
-std::vector<SectorVertexRef> SectorEditor::FindVerticesAtPoint(SectorPoint point) const
-{
-    std::vector<SectorVertexRef> refs;
-    for (size_t sectorIndex = 0; sectorIndex < state.map.sectors.size(); ++sectorIndex) {
-        const SectorDefinition& sector = state.map.sectors[sectorIndex];
-        const size_t ringCount = 1 + sector.holes.size();
-        for (size_t ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
-            const std::vector<SectorPoint>& ring = ringIndex == 0
-                    ? sector.points : sector.holes[ringIndex - 1];
-            for (size_t pointIndex = 0; pointIndex < ring.size(); ++pointIndex) {
-                if (SamePoint(ring[pointIndex], point)) {
-                    refs.push_back(SectorVertexRef{
-                            static_cast<int>(sectorIndex),
-                            ringIndex == 0 ? SectorBoundaryRingKind::Outer : SectorBoundaryRingKind::Hole,
-                            ringIndex == 0 ? -1 : static_cast<int>(ringIndex - 1),
-                            static_cast<int>(pointIndex)
-                    });
-                }
-            }
-        }
-    }
-    return refs;
-}
-
-bool SectorEditor::FindVertexNearScreenPoint(
+bool SectorEditor::FindTopologyVertexNearScreenPoint(
         Vector2 screenPoint,
-        SectorPoint& outPoint,
-        std::vector<SectorVertexRef>& outRefs) const
+        int& outVertexId,
+        SectorTopologyCoordPoint& outPoint) const
 {
     float bestDistance2 = ScreenVertexSnapPixels * ScreenVertexSnapPixels;
-    bool found = false;
-    SectorPoint bestPoint{};
+    int bestVertexId = -1;
+    SectorTopologyCoordPoint bestPoint{};
 
-    for (const SectorDefinition& sector : state.map.sectors) {
-        std::vector<const std::vector<SectorPoint>*> rings{&sector.points};
-        for (const std::vector<SectorPoint>& hole : sector.holes) {
-            rings.push_back(&hole);
+    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
+        const Vector2 screenVertex = MapToScreen(SectorTopologyVertexToMap(vertex));
+        const float dx = screenVertex.x - screenPoint.x;
+        const float dy = screenVertex.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 > bestDistance2) {
+            continue;
         }
-        for (const std::vector<SectorPoint>* ring : rings) {
-            for (SectorPoint point : *ring) {
-                const Vector2 screenVertex = MapToScreen(SectorPointToVector2(point));
-                const float dx = screenVertex.x - screenPoint.x;
-                const float dy = screenVertex.y - screenPoint.y;
-                const float distance2 = dx * dx + dy * dy;
-                if (distance2 <= bestDistance2) {
-                    bestDistance2 = distance2;
-                    bestPoint = point;
-                    found = true;
-                }
-            }
+        if (bestVertexId >= 0
+                && std::fabs(distance2 - bestDistance2) <= 0.001f
+                && vertex.id >= bestVertexId) {
+            continue;
         }
+        bestDistance2 = distance2;
+        bestVertexId = vertex.id;
+        bestPoint = SectorTopologyCoordPoint{vertex.x, vertex.y};
     }
 
-    if (!found) {
-        outRefs.clear();
+    if (bestVertexId < 0) {
+        outVertexId = -1;
+        outPoint = SectorTopologyCoordPoint{};
         return false;
     }
 
+    outVertexId = bestVertexId;
     outPoint = bestPoint;
-    outRefs = FindVerticesAtPoint(bestPoint);
-    return !outRefs.empty();
+    return true;
 }
 
-SectorPoint SectorEditor::SnapVertexMoveTarget(Vector2 mapPoint) const
+bool SectorEditor::SnapTopologyVertexMoveTarget(
+        Vector2 mapPoint,
+        SectorTopologyCoordPoint& outPoint,
+        std::string& error) const
 {
     const float grid = static_cast<float>(std::max(1, state.gridSize));
-    SectorPoint snapped{
+    Vector2 snapped{
             std::round(mapPoint.x / grid) * grid,
             std::round(mapPoint.y / grid) * grid
     };
@@ -2924,46 +2973,46 @@ SectorPoint SectorEditor::SnapVertexMoveTarget(Vector2 mapPoint) const
     );
     float bestDistance2 = threshold * threshold;
     bool found = false;
-    SectorPoint best = snapped;
+    Vector2 best = snapped;
+    int bestVertexId = -1;
 
-    for (size_t sectorIndex = 0; sectorIndex < state.map.sectors.size(); ++sectorIndex) {
-        const SectorDefinition& sector = state.map.sectors[sectorIndex];
-        const size_t ringCount = 1 + sector.holes.size();
-        for (size_t ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
-            const std::vector<SectorPoint>& ring = ringIndex == 0
-                    ? sector.points : sector.holes[ringIndex - 1];
-            const SectorBoundaryRingKind ringKind = ringIndex == 0
-                    ? SectorBoundaryRingKind::Outer : SectorBoundaryRingKind::Hole;
-            const int holeIndex = ringIndex == 0 ? -1 : static_cast<int>(ringIndex - 1);
-            for (size_t pointIndex = 0; pointIndex < ring.size(); ++pointIndex) {
-                const bool isDraggedRef = std::any_of(
-                        state.vertexDrag.affectedVertices.begin(),
-                        state.vertexDrag.affectedVertices.end(),
-                        [sectorIndex, ringKind, holeIndex, pointIndex](SectorVertexRef ref) {
-                            return ref.sectorIndex == static_cast<int>(sectorIndex)
-                                    && ref.ringKind == ringKind
-                                    && ref.holeIndex == holeIndex
-                                    && ref.pointIndex == static_cast<int>(pointIndex);
-                        }
-                );
-                if (isDraggedRef) {
-                    continue;
-                }
-
-                const SectorPoint point = ring[pointIndex];
-                const float dx = point.x - mapPoint.x;
-                const float dy = point.y - mapPoint.y;
-                const float distance2 = dx * dx + dy * dy;
-                if (distance2 <= bestDistance2) {
-                    bestDistance2 = distance2;
-                    best = point;
-                    found = true;
-                }
-            }
+    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
+        if (state.vertexDrag.active && vertex.id == state.vertexDrag.topologyVertexId) {
+            continue;
         }
+
+        const Vector2 vertexMap = SectorTopologyVertexToMap(vertex);
+        const float dx = vertexMap.x - mapPoint.x;
+        const float dy = vertexMap.y - mapPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 > bestDistance2) {
+            continue;
+        }
+        if (found
+                && std::fabs(distance2 - bestDistance2) <= 0.001f
+                && vertex.id >= bestVertexId) {
+            continue;
+        }
+
+        bestDistance2 = distance2;
+        best = vertexMap;
+        bestVertexId = vertex.id;
+        found = true;
     }
 
-    return found ? best : snapped;
+    const Vector2 canonical = found ? best : snapped;
+    SectorCoord x = 0;
+    SectorCoord y = 0;
+    if (!VisibleAuthoringToSectorCoord(canonical.x, x)
+            || !VisibleAuthoringToSectorCoord(canonical.y, y)) {
+        error = "Move target is outside topology coordinate range";
+        outPoint = SectorTopologyCoordPoint{};
+        return false;
+    }
+
+    outPoint = SectorTopologyCoordPoint{x, y};
+    error.clear();
+    return true;
 }
 
 bool SectorEditor::ValidateExistingSectorMap(const SectorMap& map, std::string& error) const
@@ -3057,33 +3106,6 @@ bool SectorEditor::ValidateExistingSectorMap(const SectorMap& map, std::string& 
     }
 
     return true;
-}
-
-SectorMap SectorEditor::BuildMapWithMovedVertexGroup(SectorPoint targetPoint) const
-{
-    SectorMap moved = state.map;
-    for (SectorVertexRef ref : state.vertexDrag.affectedVertices) {
-        if (ref.sectorIndex < 0
-                || ref.sectorIndex >= static_cast<int>(moved.sectors.size())) {
-            continue;
-        }
-
-        std::vector<SectorPoint>* ring = GetSectorBoundaryRing(
-                moved,
-                SectorBoundaryEdgeRef{ref.sectorIndex, ref.ringKind, ref.holeIndex, ref.pointIndex});
-        if (ring == nullptr
-                || ref.pointIndex < 0 || ref.pointIndex >= static_cast<int>(ring->size())) {
-            continue;
-        }
-        (*ring)[static_cast<size_t>(ref.pointIndex)] = targetPoint;
-    }
-    return moved;
-}
-
-bool SectorEditor::ValidateMovedVertexGroup(SectorPoint targetPoint, std::string& error) const
-{
-    const SectorMap moved = BuildMapWithMovedVertexGroup(targetPoint);
-    return ValidateExistingSectorMap(moved, error);
 }
 
 bool SectorEditor::ValidatePendingPoint(SectorPoint point, std::string& error) const
@@ -3660,6 +3682,7 @@ void SectorEditor::DrawTopologyDocument()
     DrawTopologySelectedLineHighlight();
     DrawTopologyLineDefs();
     DrawTopologyVertices();
+    DrawVertexMoveOverlay();
     DrawPendingSector();
     DrawTopologySnapCrosshair();
 
@@ -4028,7 +4051,14 @@ void SectorEditor::DrawVertexMoveOverlay() const
 
     if (!state.vertexDrag.active && state.hasHoveredVertex) {
         const Vector2 point = MapToScreen(SectorPointToVector2(state.hoveredVertexPoint));
-        const Color color = state.hoveredVertexRefs.size() > 1
+        size_t connectedCount = 0;
+        for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
+            if (lineDef.startVertexId == state.hoveredTopologyVertexId
+                    || lineDef.endVertexId == state.hoveredTopologyVertexId) {
+                ++connectedCount;
+            }
+        }
+        const Color color = connectedCount > 1
                 ? Color{122, 220, 244, 255}
                 : Color{245, 226, 154, 255};
         DrawCircleLines(static_cast<int>(std::round(point.x)), static_cast<int>(std::round(point.y)), 11.0f, color);
@@ -4044,50 +4074,38 @@ void SectorEditor::DrawVertexMoveOverlay() const
     const Color targetColor = invalid ? Color{230, 82, 82, 255} : Color{120, 230, 154, 255};
     const Color previewColor = invalid ? Color{230, 82, 82, 205} : Color{122, 220, 244, 220};
     const Color originalColor = Color{245, 226, 154, 230};
+    const Vector2 original = MapToScreen(SectorPointToVector2(
+            SectorTopologyCoordPointToSectorPoint(state.vertexDrag.originalPoint)));
 
-    for (size_t sectorIndex = 0; sectorIndex < state.map.sectors.size(); ++sectorIndex) {
-        const bool affected = std::any_of(
-                state.vertexDrag.affectedVertices.begin(),
-                state.vertexDrag.affectedVertices.end(),
-                [sectorIndex](SectorVertexRef ref) {
-                    return ref.sectorIndex == static_cast<int>(sectorIndex);
-                }
-        );
-        if (!affected) {
-            continue;
-        }
-
-        const SectorDefinition& sector = state.map.sectors[sectorIndex];
-        if (sector.points.size() < 2) {
-            continue;
-        }
-
-        for (size_t pointIndex = 0; pointIndex < sector.points.size(); ++pointIndex) {
-            SectorPoint a = sector.points[pointIndex];
-            SectorPoint b = sector.points[(pointIndex + 1) % sector.points.size()];
-            for (SectorVertexRef ref : state.vertexDrag.affectedVertices) {
-                if (ref.sectorIndex == static_cast<int>(sectorIndex)
-                        && ref.ringKind == SectorBoundaryRingKind::Outer
-                        && ref.pointIndex == static_cast<int>(pointIndex)) {
-                    a = state.vertexDrag.snappedPoint;
-                }
-                if (ref.sectorIndex == static_cast<int>(sectorIndex)
-                        && ref.ringKind == SectorBoundaryRingKind::Outer
-                        && ref.pointIndex == static_cast<int>((pointIndex + 1) % sector.points.size())) {
-                    b = state.vertexDrag.snappedPoint;
-                }
-            }
-            DrawLineEx(
-                    MapToScreen(SectorPointToVector2(a)),
-                    MapToScreen(SectorPointToVector2(b)),
-                    4.0f,
-                    previewColor
-            );
-        }
+    if (!state.vertexDrag.hasPreviewPoint) {
+        DrawCircleLines(static_cast<int>(std::round(original.x)), static_cast<int>(std::round(original.y)), 10.0f, originalColor);
+        return;
     }
 
-    const Vector2 original = MapToScreen(SectorPointToVector2(state.vertexDrag.originalPoint));
-    const Vector2 target = MapToScreen(SectorPointToVector2(state.vertexDrag.snappedPoint));
+    const int draggedVertexId = state.vertexDrag.topologyVertexId;
+    const Vector2 previewMap = SectorPointToVector2(
+            SectorTopologyCoordPointToSectorPoint(state.vertexDrag.previewPoint));
+    for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
+        if (lineDef.startVertexId != draggedVertexId && lineDef.endVertexId != draggedVertexId) {
+            continue;
+        }
+
+        const int otherVertexId = lineDef.startVertexId == draggedVertexId
+                ? lineDef.endVertexId
+                : lineDef.startVertexId;
+        const SectorTopologyVertex* otherVertex = FindSectorTopologyVertex(state.topologyMap, otherVertexId);
+        if (otherVertex == nullptr) {
+            continue;
+        }
+        DrawLineEx(
+                MapToScreen(previewMap),
+                MapToScreen(SectorTopologyVertexToMap(*otherVertex)),
+                4.0f,
+                previewColor
+        );
+    }
+
+    const Vector2 target = MapToScreen(previewMap);
     DrawLineEx(original, target, 2.0f, WithAlpha(targetColor, 180));
     DrawCircleLines(static_cast<int>(std::round(original.x)), static_cast<int>(std::round(original.y)), 10.0f, originalColor);
     DrawCircleLines(static_cast<int>(std::round(target.x)), static_cast<int>(std::round(target.y)), 13.0f, targetColor);
@@ -6519,6 +6537,8 @@ bool SectorEditor::LoadLevel(
     state.hoveredLightIndex = -1;
     state.hasHoveredVertex = false;
     state.hoveredVertexRefs.clear();
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
     state.pendingSector = PendingSectorDraw{};
     state.vertexDrag = VertexDragState{};
     state.lightDrag = LightDragState{};
@@ -7703,6 +7723,8 @@ bool SectorEditor::SplitSelectedEdge(engine::AssetManager& assets)
     state.hasHoveredVertex = false;
     state.hoveredVertexPoint = SectorPoint{};
     state.hoveredVertexRefs.clear();
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
     state.hoveredSurface3D = SectorSurfaceHit{};
     uiState.edgeUvScaleUInput = engine::UIFloatInputState{};
     uiState.edgeUvScaleVInput = engine::UIFloatInputState{};

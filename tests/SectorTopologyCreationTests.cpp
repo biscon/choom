@@ -1,6 +1,8 @@
 #include "sector_demo/SectorTopologyCreation.h"
+#include "sector_demo/SectorTopologyEdit.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -12,6 +14,7 @@ using game::SectorTopologyCoordPoint;
 using game::SectorTopologyCreatePolygonOptions;
 using game::SectorTopologyInsertPolygonOptions;
 using game::SectorTopologyLineDef;
+using game::SectorTopologyLoop;
 using game::SectorTopologyLoopSet;
 using game::SectorTopologyMap;
 using game::SectorTopologySideKind;
@@ -86,6 +89,24 @@ void CheckUnchanged(
     Check(before.lineDefs.size() == after.lineDefs.size(), description);
     Check(before.sideDefs.size() == after.sideDefs.size(), description);
     Check(before.sectors.size() == after.sectors.size(), description);
+    if (before.vertices.size() == after.vertices.size()) {
+        for (size_t i = 0; i < before.vertices.size(); ++i) {
+            Check(before.vertices[i].id == after.vertices[i].id
+                          && before.vertices[i].x == after.vertices[i].x
+                          && before.vertices[i].y == after.vertices[i].y,
+                  description);
+        }
+    }
+    if (before.lineDefs.size() == after.lineDefs.size()) {
+        for (size_t i = 0; i < before.lineDefs.size(); ++i) {
+            Check(before.lineDefs[i].id == after.lineDefs[i].id
+                          && before.lineDefs[i].startVertexId == after.lineDefs[i].startVertexId
+                          && before.lineDefs[i].endVertexId == after.lineDefs[i].endVertexId
+                          && before.lineDefs[i].frontSideDefId == after.lineDefs[i].frontSideDefId
+                          && before.lineDefs[i].backSideDefId == after.lineDefs[i].backSideDefId,
+                  description);
+        }
+    }
 }
 
 const game::SectorTopologySideDef* FindSideDef(const SectorTopologyMap& map, int sideDefId)
@@ -109,6 +130,22 @@ const SectorTopologyLineDef* FindLine(
         }
     }
     return nullptr;
+}
+
+int CountLinesReferencingVertex(const SectorTopologyMap& map, int vertexId)
+{
+    int count = 0;
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        if (lineDef.startVertexId == vertexId || lineDef.endVertexId == vertexId) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool LoopContainsVertex(const SectorTopologyLoop& loop, int vertexId)
+{
+    return std::find(loop.vertexIds.begin(), loop.vertexIds.end(), vertexId) != loop.vertexIds.end();
 }
 
 std::vector<const SectorTopologyLineDef*> InsertedBoundaryLines(
@@ -543,6 +580,144 @@ void TestChangingSectorDefaultsDoesNotRewriteExistingSideDefs()
     }
 }
 
+void TestMoveOuterVertex()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "move outer vertex square creation succeeds");
+    const size_t vertexCount = map.vertices.size();
+    const int movedVertexId = 3;
+    const int connectedBefore = CountLinesReferencingVertex(map, movedVertexId);
+
+    std::string error;
+    Check(game::MoveSectorTopologyVertex(map, movedVertexId, {80, 64}, &error),
+          "move outer vertex succeeds");
+    Check(error.empty(), "successful outer vertex move clears error");
+    Check(map.vertices.size() == vertexCount, "move outer vertex creates no vertex");
+    const game::SectorTopologyVertex* moved = game::FindSectorTopologyVertex(map, movedVertexId);
+    Check(moved != nullptr && moved->x == 80 && moved->y == 64,
+          "moved outer vertex keeps stable ID with new coordinate");
+    Check(CountLinesReferencingVertex(map, movedVertexId) == connectedBefore,
+          "moved outer vertex connected linedefs keep stable vertex ID");
+
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, sectorId, loops), "moved outer vertex validates and extracts");
+}
+
+void TestMoveSharedAdjacentVertex()
+{
+    SectorTopologyMap map;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "move shared first adjacent square succeeds");
+    Check(Create(map, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "move shared second adjacent square succeeds");
+    const size_t vertexCount = map.vertices.size();
+    const int movedVertexId = 3;
+    const int connectedBefore = CountLinesReferencingVertex(map, movedVertexId);
+
+    std::string error;
+    Check(game::MoveSectorTopologyVertex(map, movedVertexId, {64, 80}, &error),
+          "move shared adjacent vertex succeeds");
+    Check(map.vertices.size() == vertexCount, "move shared adjacent vertex creates no vertex");
+    Check(CountLinesReferencingVertex(map, movedVertexId) == connectedBefore,
+          "move shared adjacent vertex preserves connected linedef references");
+
+    SectorTopologyLoopSet leftLoops;
+    SectorTopologyLoopSet rightLoops;
+    Check(ValidateAndExtract(map, leftId, leftLoops), "moved shared left sector extracts");
+    Check(ValidateAndExtract(map, rightId, rightLoops), "moved shared right sector extracts");
+    Check(LoopContainsVertex(leftLoops.outer, movedVertexId),
+          "moved shared vertex remains in left sector loop");
+    Check(LoopContainsVertex(rightLoops.outer, movedVertexId),
+          "moved shared vertex remains in right sector loop");
+}
+
+void TestMoveInsertedPlatformVertex()
+{
+    SectorTopologyMap map;
+    int parentId = -1;
+    int childId = -1;
+    Check(Create(map, {{0, 0}, {160, 0}, {160, 160}, {0, 160}}, &parentId),
+          "move platform parent creation succeeds");
+    Check(Insert(map, parentId, {{48, 48}, {112, 48}, {112, 112}, {48, 112}}, &childId),
+          "move platform insert succeeds");
+
+    const std::vector<const SectorTopologyLineDef*> boundary =
+            InsertedBoundaryLines(map, parentId, childId);
+    Check(boundary.size() == 4, "move platform finds child parent boundary");
+    if (boundary.empty()) {
+        return;
+    }
+    const int movedVertexId = boundary.front()->startVertexId;
+    const size_t vertexCount = map.vertices.size();
+    const int connectedBefore = CountLinesReferencingVertex(map, movedVertexId);
+
+    std::string error;
+    Check(game::MoveSectorTopologyVertex(map, movedVertexId, {40, 48}, &error),
+          "move inserted platform vertex succeeds");
+    Check(map.vertices.size() == vertexCount, "move platform vertex creates no vertex");
+    Check(CountLinesReferencingVertex(map, movedVertexId) == connectedBefore,
+          "move platform vertex preserves connected linedef references");
+
+    SectorTopologyLoopSet parentLoops;
+    SectorTopologyLoopSet childLoops;
+    Check(ValidateAndExtract(map, parentId, parentLoops), "moved platform parent extracts");
+    Check(ValidateAndExtract(map, childId, childLoops), "moved platform child extracts");
+    Check(parentLoops.holes.size() == 1, "moved platform parent still has one hole");
+    Check(LoopContainsVertex(parentLoops.holes.front(), movedVertexId),
+          "moved platform vertex remains in parent hole loop");
+    Check(LoopContainsVertex(childLoops.outer, movedVertexId),
+          "moved platform vertex remains in child outer loop");
+}
+
+void TestRejectMoveOntoExistingVertex()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "move onto existing square creation succeeds");
+    const SectorTopologyMap before = map;
+
+    std::string error;
+    Check(!game::MoveSectorTopologyVertex(map, 3, {64, 0}, &error),
+          "move onto existing vertex fails");
+    Check(error.find("existing vertex") != std::string::npos,
+          "move onto existing vertex reports merge limitation");
+    CheckUnchanged(before, map, "move onto existing vertex leaves map unchanged");
+}
+
+void TestRejectInvalidMovedLoop()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "invalid moved loop square creation succeeds");
+    const SectorTopologyMap before = map;
+
+    std::string error;
+    Check(!game::MoveSectorTopologyVertex(map, 3, {32, 0}, &error),
+          "move creating invalid loop fails");
+    Check(!error.empty(), "move creating invalid loop reports error");
+    CheckUnchanged(before, map, "move creating invalid loop leaves map unchanged");
+}
+
+void TestRejectMovedCrossing()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "crossing move first square creation succeeds");
+    Check(Create(map, {{96, 0}, {160, 0}, {160, 64}, {96, 64}}),
+          "crossing move second square creation succeeds");
+    const SectorTopologyMap before = map;
+
+    std::string error;
+    Check(!game::MoveSectorTopologyVertex(map, 3, {128, 32}, &error),
+          "move creating crossing linedef fails");
+    Check(!error.empty(), "move creating crossing linedef reports error");
+    CheckUnchanged(before, map, "move creating crossing linedef leaves map unchanged");
+}
+
 void TestRejectOccupiedSlot()
 {
     SectorTopologyMap map;
@@ -633,6 +808,12 @@ int main()
     TestInvalidInsertsRejectTransactionally();
     TestAdjacentSharesFullEdge();
     TestChangingSectorDefaultsDoesNotRewriteExistingSideDefs();
+    TestMoveOuterVertex();
+    TestMoveSharedAdjacentVertex();
+    TestMoveInsertedPlatformVertex();
+    TestRejectMoveOntoExistingVertex();
+    TestRejectInvalidMovedLoop();
+    TestRejectMovedCrossing();
     TestRejectOccupiedSlot();
     TestRejectPartialOverlap();
     TestRejectCrossing();
