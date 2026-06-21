@@ -61,6 +61,11 @@ private:
     SectorPoint CurrentSnappedSectorPoint() const;
 
     void DrawGrid() const;
+    void DrawTopologyDocument();
+    void DrawTopologySectorLoops(const SectorTopologySector& sector, Color fill, Color outline);
+    void DrawTopologyLineDefs() const;
+    void DrawTopologyVertices() const;
+    void DrawTopologySnapCrosshair() const;
     void DrawSectors() const;
     void DrawSector(const SectorDefinition& sector, int sectorIndex) const;
     void DrawStaticLights() const;

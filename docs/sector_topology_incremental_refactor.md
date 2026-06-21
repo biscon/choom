@@ -61,3 +61,13 @@ The existing full editor shell now treats `SectorTopologyMap` as the document fo
 New creates an empty topology document with the default texture definitions and no vertices, linedefs, sidedefs, or sectors. Loading and reloading parse topology v2 JSON into a temporary map before replacing the editor document, and saving writes topology v2 JSON to the existing `assets/levels/<levelName>/<levelName>.json` layout.
 
 Old polygon JSON is rejected by the topology loader; there is still no legacy polygon-to-topology conversion. Topology 2D rendering, topology selection and tools, inspector migration, 3D preview migration, renderer caller migration, and lightmap migration remain deferred.
+
+## Phase 8: topology 2D editor rendering
+
+The existing 2D editor viewport now renders document geometry from `state.topologyMap`. Topology vertices, linedefs, linedef direction markers, passive front/back sidedef indicators, and sector loop fills/outlines are drawn directly from the topology document. Sector loops use `ExtractSectorTopologyLoops()`, and render warnings are reported in the editor status/viewport instead of opening repeated dialogs.
+
+Topology linedefs are always drawn from the topology data, not from generated wall meshes, so equal-height two-sided portals remain visible in 2D even when they would not produce 3D wall surfaces. The old polygon compatibility map is no longer visible document geometry.
+
+The Add Map Texture workflow now updates `state.topologyMap.texturesById`, marks the topology document dirty, and persists through topology v2 JSON save/reload. Static lights are still deferred because the topology document model does not own static lights yet.
+
+Topology selection, editing tools, deletion, movement, light placement, inspector editing, 3D preview migration, and lightmap migration remain deferred. Old polygon edit actions are blocked with status messages rather than partially ported.

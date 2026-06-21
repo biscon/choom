@@ -6,6 +6,7 @@
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMap.h"
 #include "sector_demo/SectorTopologySerialization.h"
+#include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
 #include "util/earcut.h"
 
@@ -116,6 +117,37 @@ SectorTopologyMap CreateEmptySectorTopologyDocument()
     SectorTopologyMap map;
     PopulateDefaultSectorTextures(map.texturesById);
     return map;
+}
+
+const SectorTextureDefinition* FindSectorTopologyTexture(
+        const SectorTopologyMap& map,
+        const std::string& id)
+{
+    if (id.empty()) {
+        return nullptr;
+    }
+
+    const auto it = map.texturesById.find(id);
+    return it == map.texturesById.end() ? nullptr : &it->second;
+}
+
+std::vector<std::string> SortedSectorTopologyTextureIds(const SectorTopologyMap& map)
+{
+    std::vector<std::string> ids;
+    ids.reserve(map.texturesById.size());
+    for (const auto& texture : map.texturesById) {
+        ids.push_back(texture.first);
+    }
+    std::sort(ids.begin(), ids.end());
+    return ids;
+}
+
+Vector2 SectorTopologyVertexToMap(const SectorTopologyVertex& vertex)
+{
+    return Vector2{
+            SectorCoordToVisibleAuthoring(vertex.x),
+            SectorCoordToVisibleAuthoring(vertex.y)
+    };
 }
 
 void ResetEditorTopologyDocumentState(SectorEditorState& state)
@@ -1034,11 +1066,7 @@ void SectorEditor::Render(engine::AssetManager& assets)
     if (state.showGrid) {
         DrawGrid();
     }
-    DrawSectors();
-    DrawStaticLights();
-    DrawPendingSector();
-    DrawVertexMoveOverlay();
-    DrawLightMoveOverlay();
+    DrawTopologyDocument();
     EndScissorMode();
 
     DrawRectangleLinesEx(canvasRect, 2.0f, Color{67, 76, 93, 255});
@@ -1238,40 +1266,10 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
     state.hoveredEdgeHoleIndex = -1;
     state.hoveredEdgeIndex = -1;
     state.hoveredLightIndex = -1;
+    state.hoveredSectorIndex = -1;
 
     if (!initialized || !IsMouseOverCanvas(input)) {
-        state.hoveredSectorIndex = -1;
         return;
-    }
-
-    state.hoveredLightIndex = FindLightNearScreenPoint(input.MousePosition());
-
-    if (state.currentTool == SectorEditorTool::Select) {
-        SectorEdgeRef edge{};
-        if (state.hoveredLightIndex < 0 && ResolveEdgeHit(input.MousePosition(), state.rawMouseMap, edge)) {
-            state.hoveredEdgeSectorIndex = edge.sectorIndex;
-            state.hoveredEdgeRingKind = edge.ringKind;
-            state.hoveredEdgeHoleIndex = edge.holeIndex;
-            state.hoveredEdgeIndex = edge.edgeIndex;
-        }
-    }
-    state.hoveredSectorIndex = FindSectorAt(state.rawMouseMap);
-    if (state.currentTool == SectorEditorTool::Move && !state.vertexDrag.active && !state.lightDrag.active) {
-        if (state.hoveredLightIndex >= 0) {
-            const SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.hoveredLightIndex)];
-            statusText = TextFormat("Move: drag %s", light.id.c_str());
-            return;
-        }
-        state.hasHoveredVertex = FindVertexNearScreenPoint(
-                input.MousePosition(),
-                state.hoveredVertexPoint,
-                state.hoveredVertexRefs
-        );
-        if (state.hasHoveredVertex) {
-            statusText = state.hoveredVertexRefs.size() > 1
-                    ? TextFormat("Move: shared vertex used by %zu points", state.hoveredVertexRefs.size())
-                    : "Move: drag vertex";
-        }
     }
 }
 
@@ -1316,9 +1314,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (event.key.key == KEY_DELETE) {
-                    if (DeleteSelectedLight() || DeleteSelectedSector()) {
-                        engine::ConsumeEvent(event);
-                    }
+                    statusText = "Topology deletion is not migrated yet.";
+                    engine::ConsumeEvent(event);
                     return;
                 }
             }
@@ -1413,19 +1410,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
-                const int lightIndex = FindLightNearScreenPoint(event.mouseButton.position);
-                if (lightIndex >= 0) {
-                    StartLightDrag(lightIndex);
-                    engine::ConsumeEvent(event);
-                    return;
-                }
-
-                SectorPoint point{};
-                std::vector<SectorVertexRef> refs;
-                if (FindVertexNearScreenPoint(event.mouseButton.position, point, refs)) {
-                    StartVertexDrag(point, refs);
-                    engine::ConsumeEvent(event);
-                }
+                statusText = "Topology movement is not migrated yet.";
+                engine::ConsumeEvent(event);
             }
     );
 
@@ -1462,50 +1448,33 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::Select) {
-                    SectorEdgeRef edge{};
-                    const Vector2 rawMap = ScreenToMap(event.mouseClick.releasePosition);
-                    const int lightIndex = FindLightNearScreenPoint(event.mouseClick.releasePosition);
-                    if (lightIndex >= 0) {
-                        SelectLight(lightIndex);
-                    } else if (ResolveEdgeHit(event.mouseClick.releasePosition, rawMap, edge)) {
-                        SelectEdge(edge.sectorIndex, edge.edgeIndex, edge.ringKind, edge.holeIndex);
-                    } else {
-                        SelectSector(FindSectorAt(rawMap));
-                    }
+                    ClearSelection();
+                    statusText = "Topology selection is not migrated yet.";
                     engine::ConsumeEvent(event);
                     return;
                 }
 
                 if (state.currentTool == SectorEditorTool::Sector
                         || state.currentTool == SectorEditorTool::InsertSectorInside) {
-                    const SectorPoint point = Vector2ToSectorPoint(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
-                    if (CanClosePendingSectorAt(point)) {
-                        FinalizePendingSector();
-                    } else {
-                        AddPendingSectorPoint(point);
-                    }
+                    statusText = "Topology sector editing is not migrated yet.";
                     engine::ConsumeEvent(event);
                     return;
                 }
 
                 if (state.currentTool == SectorEditorTool::Light) {
-                    AddStaticLightAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    statusText = "Topology light placement is not migrated yet.";
                     engine::ConsumeEvent(event);
                     return;
                 }
 
                 if (state.currentTool == SectorEditorTool::Erase) {
-                    const int lightIndex = FindLightNearScreenPoint(event.mouseClick.releasePosition);
-                    if (lightIndex >= 0) {
-                        DeleteLightAt(lightIndex);
-                    } else if (const int sectorIndex = FindSectorAt(ScreenToMap(event.mouseClick.releasePosition)); sectorIndex >= 0) {
-                        DeleteSectorAt(sectorIndex);
-                    }
+                    statusText = "Topology deletion is not migrated yet.";
                     engine::ConsumeEvent(event);
                     return;
                 }
 
                 if (state.currentTool == SectorEditorTool::Move) {
+                    statusText = "Topology movement is not migrated yet.";
                     engine::ConsumeEvent(event);
                 }
             }
@@ -2187,7 +2156,8 @@ void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
 
 bool SectorEditor::BakeLightmaps()
 {
-    return StartLightmapBake();
+    statusText = "Topology lightmap baking is not migrated yet.";
+    return false;
 }
 
 bool SectorEditor::StartLightmapBake()
@@ -3317,6 +3287,241 @@ void SectorEditor::DrawGrid() const
         const Vector2 origin = MapToScreen(Vector2{0.0f, 0.0f});
         DrawCircleV(origin, 5.0f, Color{180, 210, 190, 255});
     }
+}
+
+void SectorEditor::DrawTopologyDocument()
+{
+    state.topologyRenderWarning.clear();
+    if (!initialized) {
+        DrawText("Topology map failed to load", static_cast<int>(canvasRect.x + 24.0f), static_cast<int>(canvasRect.y + 24.0f), 28, RED);
+        return;
+    }
+
+    const auto issues = ValidateSectorTopologyMap(state.topologyMap);
+    if (!issues.empty()) {
+        state.topologyRenderWarning = "Topology render warning: "
+                + FormatSectorTopologyValidationIssue(issues.front());
+    }
+
+    const Color fill = Color{82, 112, 154, 42};
+    const Color outline = Color{116, 139, 174, 235};
+    for (const SectorTopologySector& sector : state.topologyMap.sectors) {
+        DrawTopologySectorLoops(sector, fill, outline);
+    }
+
+    DrawTopologyLineDefs();
+    DrawTopologyVertices();
+    DrawTopologySnapCrosshair();
+
+    if (!state.topologyRenderWarning.empty()) {
+        DrawText(
+                state.topologyRenderWarning.c_str(),
+                static_cast<int>(canvasRect.x + 16.0f),
+                static_cast<int>(canvasRect.y + 14.0f),
+                18,
+                Color{236, 196, 92, 255}
+        );
+    }
+}
+
+void SectorEditor::DrawTopologySectorLoops(
+        const SectorTopologySector& sector,
+        Color fill,
+        Color outline)
+{
+    SectorTopologyLoopSet loops;
+    std::vector<SectorTopologyValidationIssue> loopIssues;
+    if (!ExtractSectorTopologyLoops(state.topologyMap, sector.id, loops, &loopIssues)) {
+        if (state.topologyRenderWarning.empty() && !loopIssues.empty()) {
+            state.topologyRenderWarning = "Topology render warning: "
+                    + FormatSectorTopologyValidationIssue(loopIssues.front());
+        }
+        return;
+    }
+
+    using DrawEarcutPoint = std::array<double, 2>;
+    std::vector<std::vector<DrawEarcutPoint>> polygon;
+    std::vector<Vector2> flattened;
+    bool missingVertex = false;
+    const auto appendLoop = [&](const SectorTopologyLoop& loop) {
+        polygon.emplace_back();
+        polygon.back().reserve(loop.vertexIds.size());
+        for (int vertexId : loop.vertexIds) {
+            const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+            if (vertex == nullptr) {
+                missingVertex = true;
+                continue;
+            }
+            const Vector2 map = SectorTopologyVertexToMap(*vertex);
+            polygon.back().push_back(DrawEarcutPoint{map.x, map.y});
+            flattened.push_back(map);
+        }
+    };
+    appendLoop(loops.outer);
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        appendLoop(hole);
+    }
+
+    if (missingVertex) {
+        if (state.topologyRenderWarning.empty()) {
+            state.topologyRenderWarning = TextFormat(
+                    "Topology render warning: sector %d references a missing loop vertex",
+                    sector.id
+            );
+        }
+        return;
+    }
+
+    const std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
+    for (size_t i = 0; i + 2 < indices.size(); i += 3) {
+        if (indices[i] < flattened.size()
+                && indices[i + 1] < flattened.size()
+                && indices[i + 2] < flattened.size()) {
+            DrawTriangle(
+                    MapToScreen(flattened[indices[i]]),
+                    MapToScreen(flattened[indices[i + 1]]),
+                    MapToScreen(flattened[indices[i + 2]]),
+                    fill
+            );
+        }
+    }
+
+    const auto drawLoopOutline = [&](const SectorTopologyLoop& loop, Color color) {
+        if (loop.vertexIds.size() < 2) {
+            return;
+        }
+        for (size_t i = 0; i < loop.vertexIds.size(); ++i) {
+            const SectorTopologyVertex* a = FindSectorTopologyVertex(state.topologyMap, loop.vertexIds[i]);
+            const SectorTopologyVertex* b = FindSectorTopologyVertex(
+                    state.topologyMap,
+                    loop.vertexIds[(i + 1) % loop.vertexIds.size()]
+            );
+            if (a == nullptr || b == nullptr) {
+                continue;
+            }
+            DrawLineEx(
+                    MapToScreen(SectorTopologyVertexToMap(*a)),
+                    MapToScreen(SectorTopologyVertexToMap(*b)),
+                    2.0f,
+                    color
+            );
+        }
+    };
+    drawLoopOutline(loops.outer, outline);
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        drawLoopOutline(hole, Color{164, 187, 220, 245});
+    }
+
+    if (state.showSectorIds && !loops.outer.vertexIds.empty()) {
+        Vector2 center{};
+        int count = 0;
+        for (int vertexId : loops.outer.vertexIds) {
+            const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+            if (vertex == nullptr) {
+                continue;
+            }
+            const Vector2 map = SectorTopologyVertexToMap(*vertex);
+            center.x += map.x;
+            center.y += map.y;
+            ++count;
+        }
+        if (count > 0) {
+            center.x /= static_cast<float>(count);
+            center.y /= static_cast<float>(count);
+            const Vector2 screen = MapToScreen(center);
+            const char* label = sector.name.empty()
+                    ? TextFormat("%d", sector.id)
+                    : sector.name.c_str();
+            DrawText(label, static_cast<int>(screen.x - 18.0f), static_cast<int>(screen.y - 10.0f), 18, RAYWHITE);
+        }
+    }
+}
+
+void SectorEditor::DrawTopologyLineDefs() const
+{
+    const Color oneSidedColor = Color{142, 184, 230, 255};
+    const Color twoSidedColor = Color{122, 220, 244, 255};
+    const Color warningColor = Color{230, 82, 82, 255};
+    const Color frontColor = Color{196, 244, 255, 230};
+    const Color backColor = Color{236, 154, 214, 220};
+    const Color arrowColor = Color{236, 196, 92, 240};
+
+    for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
+        const SectorTopologyVertex* start = nullptr;
+        const SectorTopologyVertex* end = nullptr;
+        const bool validEndpoints = GetSectorTopologyLineVertices(state.topologyMap, lineDef, start, end);
+        if (!validEndpoints) {
+            const SectorTopologyVertex* partial = FindSectorTopologyVertex(state.topologyMap, lineDef.startVertexId);
+            if (partial == nullptr) {
+                partial = FindSectorTopologyVertex(state.topologyMap, lineDef.endVertexId);
+            }
+            if (partial != nullptr) {
+                const Vector2 point = MapToScreen(SectorTopologyVertexToMap(*partial));
+                DrawCircleLines(static_cast<int>(std::round(point.x)), static_cast<int>(std::round(point.y)), 11.0f, warningColor);
+            }
+            continue;
+        }
+
+        const bool hasFront = lineDef.frontSideDefId >= 0
+                && FindSectorTopologySideDef(state.topologyMap, lineDef.frontSideDefId) != nullptr;
+        const bool hasBack = lineDef.backSideDefId >= 0
+                && FindSectorTopologySideDef(state.topologyMap, lineDef.backSideDefId) != nullptr;
+        const bool twoSided = hasFront && hasBack;
+        const Color lineColor = validEndpoints ? (twoSided ? twoSidedColor : oneSidedColor) : warningColor;
+
+        const Vector2 a = MapToScreen(SectorTopologyVertexToMap(*start));
+        const Vector2 b = MapToScreen(SectorTopologyVertexToMap(*end));
+        DrawLineEx(a, b, twoSided ? 3.5f : 3.0f, lineColor);
+
+        Vector2 dir{b.x - a.x, b.y - a.y};
+        const float length = std::sqrt(dir.x * dir.x + dir.y * dir.y);
+        if (length <= GeometryEpsilon) {
+            continue;
+        }
+        dir.x /= length;
+        dir.y /= length;
+        const Vector2 normal{-dir.y, dir.x};
+        const Vector2 mid{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
+
+        const Vector2 arrowStart{mid.x - dir.x * 10.0f, mid.y - dir.y * 10.0f};
+        const Vector2 arrowEnd{mid.x + dir.x * 10.0f, mid.y + dir.y * 10.0f};
+        DrawLineEx(arrowStart, arrowEnd, 2.0f, arrowColor);
+        DrawLineEx(arrowEnd, Vector2{arrowEnd.x - dir.x * 6.0f + normal.x * 4.0f, arrowEnd.y - dir.y * 6.0f + normal.y * 4.0f}, 2.0f, arrowColor);
+        DrawLineEx(arrowEnd, Vector2{arrowEnd.x - dir.x * 6.0f - normal.x * 4.0f, arrowEnd.y - dir.y * 6.0f - normal.y * 4.0f}, 2.0f, arrowColor);
+
+        if (hasFront) {
+            const Vector2 frontEnd{mid.x + normal.x * 15.0f, mid.y + normal.y * 15.0f};
+            DrawLineEx(mid, frontEnd, 2.0f, frontColor);
+            DrawCircleV(frontEnd, 3.0f, frontColor);
+        }
+        if (hasBack) {
+            const Vector2 backEnd{mid.x - normal.x * 15.0f, mid.y - normal.y * 15.0f};
+            DrawLineEx(mid, backEnd, 2.0f, backColor);
+            DrawCircleV(backEnd, 3.0f, backColor);
+        }
+    }
+}
+
+void SectorEditor::DrawTopologyVertices() const
+{
+    const Color pointColor = Color{245, 226, 154, 255};
+    const Color outlineColor = Color{20, 24, 32, 255};
+    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
+        const Vector2 screen = MapToScreen(SectorTopologyVertexToMap(vertex));
+        DrawCircleV(screen, 4.5f, pointColor);
+        DrawCircleLines(static_cast<int>(std::round(screen.x)), static_cast<int>(std::round(screen.y)), 7.0f, outlineColor);
+    }
+}
+
+void SectorEditor::DrawTopologySnapCrosshair() const
+{
+    if (!Contains(canvasRect, GetMousePosition())) {
+        return;
+    }
+
+    const Vector2 snap = MapToScreen(state.snappedMouseMap);
+    DrawLineEx(Vector2{snap.x - 9.0f, snap.y}, Vector2{snap.x + 9.0f, snap.y}, 2.0f, Color{235, 224, 130, 255});
+    DrawLineEx(Vector2{snap.x, snap.y - 9.0f}, Vector2{snap.x, snap.y + 9.0f}, 2.0f, Color{235, 224, 130, 255});
 }
 
 void SectorEditor::DrawSectors() const
@@ -5298,9 +5503,14 @@ void SectorEditor::DrawStatusPanel(
             ? state.currentLevelPath
             : std::string{"<untitled>"};
     const char* lightmapText = SectorLightmapStatusText(GetSectorLightmapStatus(state.map));
+    std::string status = statusText.empty() ? "Ready" : statusText;
+    if (!state.topologyRenderWarning.empty()) {
+        status += " | ";
+        status += state.topologyRenderWarning;
+    }
     const char* text = TextFormat(
             "%s%s | %s%s | map %s%s | grid %d | %s | selected %s",
-            statusText.empty() ? "Map not loaded" : statusText.c_str(),
+            status.c_str(),
             state.topologyDocumentDirty ? " *modified" : "",
             ToolHelpText(state.currentTool),
             pendingText.c_str(),
@@ -5533,6 +5743,9 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
         return false;
     }
 
+    statusText = "Topology 3D preview is not migrated yet.";
+    return false;
+
     CancelPendingSector(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
@@ -5582,14 +5795,14 @@ void SectorEditor::LeavePreview3D()
 void SectorEditor::RefreshDefaultTextures()
 {
     auto findTexture = [this](const char* preferred, const std::string& fallback = std::string{}) {
-        const auto preferredIt = state.map.texturesById.find(preferred);
-        if (preferredIt != state.map.texturesById.end()) {
+        const auto preferredIt = state.topologyMap.texturesById.find(preferred);
+        if (preferredIt != state.topologyMap.texturesById.end()) {
             return preferredIt->first;
         }
         if (!fallback.empty()) {
             return fallback;
         }
-        const std::vector<std::string> textureIds = SortedSectorTextureIds(state.map);
+        const std::vector<std::string> textureIds = SortedSectorTopologyTextureIds(state.topologyMap);
         return textureIds.empty() ? std::string{} : textureIds.front();
     };
 
@@ -5608,7 +5821,7 @@ void SectorEditor::RefreshEditorTextureAssets(engine::AssetManager& assets)
     }
     state.editorTextureHandlesById.clear();
 
-    if (state.map.texturesById.empty()) {
+    if (state.topologyMap.texturesById.empty()) {
         return;
     }
 
@@ -5617,8 +5830,8 @@ void SectorEditor::RefreshEditorTextureAssets(engine::AssetManager& assets)
         return;
     }
 
-    for (const std::string& textureId : SortedSectorTextureIds(state.map)) {
-        const SectorTextureDefinition* texture = FindSectorTexture(state.map, textureId);
+    for (const std::string& textureId : SortedSectorTopologyTextureIds(state.topologyMap)) {
+        const SectorTextureDefinition* texture = FindSectorTopologyTexture(state.topologyMap, textureId);
         if (texture == nullptr) {
             continue;
         }
@@ -5645,7 +5858,10 @@ engine::TextureHandle SectorEditor::EditorTextureHandleForId(const std::string& 
 void SectorEditor::OpenAddMapTextureModal(engine::AssetManager& assets)
 {
     CloseAddMapTextureModal(assets);
-    statusText = "Topology texture editing is not migrated yet.";
+    state.addMapTexture.open = true;
+    RefreshAddMapTextureScan();
+    SelectAddMapTexturePath(state.addMapTexture.selectedPathIndex);
+    statusText = "Add topology texture";
 }
 
 void SectorEditor::CloseAddMapTextureModal(engine::AssetManager& assets)
@@ -5682,7 +5898,7 @@ void SectorEditor::SelectAddMapTexturePath(int pathIndex)
     const std::string base = GeneratedTextureIdBase(modalState.paths[static_cast<size_t>(pathIndex)]);
     std::string uniqueId = base;
     int suffix = 1;
-    while (FindSectorTexture(state.map, uniqueId) != nullptr) {
+    while (FindSectorTopologyTexture(state.topologyMap, uniqueId) != nullptr) {
         char suffixBuffer[16] = {};
         std::snprintf(suffixBuffer, sizeof(suffixBuffer), "_%03d", suffix);
         uniqueId = base + suffixBuffer;
@@ -5752,10 +5968,6 @@ bool SectorEditor::ValidateAddMapTextureId(std::string& error) const
         error = "Texture ID may only contain letters, digits, underscores, and dashes";
         return false;
     }
-    if (FindSectorTexture(state.map, id) != nullptr) {
-        error = "Texture ID already exists";
-        return false;
-    }
     return true;
 }
 
@@ -5770,16 +5982,18 @@ bool SectorEditor::AddSelectedMapTexture(engine::AssetManager& assets)
     AddMapTextureState& modalState = state.addMapTexture;
     const std::string id = modalState.textureIdBuffer;
     const std::string path = modalState.paths[static_cast<size_t>(modalState.selectedPathIndex)];
+    const bool replacing = FindSectorTopologyTexture(state.topologyMap, id) != nullptr;
 
     SectorTextureDefinition definition;
     definition.id = id;
     definition.path = path;
     definition.filter = modalState.filter;
-    state.map.texturesById.emplace(id, std::move(definition));
+    state.topologyMap.texturesById[id] = std::move(definition);
 
     RefreshEditorTextureAssets(assets);
     state.hasUnsavedChanges = true;
-    statusText = TextFormat("Added texture %s", id.c_str());
+    state.topologyDocumentDirty = true;
+    statusText = TextFormat("%s texture %s", replacing ? "Updated" : "Added", id.c_str());
     CloseAddMapTextureModal(assets);
     return true;
 }

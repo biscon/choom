@@ -189,6 +189,7 @@ struct SectorEditorState {
     bool topologyDocumentInitialized = false;
     bool topologyDocumentDirty = false;
     std::string topologyDocumentStatus;
+    std::string topologyRenderWarning;
 
     SectorEditorTool currentTool = SectorEditorTool::Select;
     SectorEditorMode mode = SectorEditorMode::Edit2D;
