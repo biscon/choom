@@ -53,6 +53,33 @@ T* FindById(std::vector<T>& values, int id)
 
 } // namespace
 
+SectorTopologyIndexes BuildSectorTopologyIndexes(const SectorTopologyMap& map)
+{
+    SectorTopologyIndexes indexes;
+
+    for (size_t i = 0; i < map.vertices.size(); ++i) {
+        indexes.vertexIndicesById[map.vertices[i].id].push_back(i);
+    }
+    for (size_t i = 0; i < map.lineDefs.size(); ++i) {
+        indexes.lineDefIndicesById[map.lineDefs[i].id].push_back(i);
+    }
+    for (size_t i = 0; i < map.sideDefs.size(); ++i) {
+        const SectorTopologySideDef& sideDef = map.sideDefs[i];
+        indexes.sideDefIndicesById[sideDef.id].push_back(i);
+        indexes.sideDefIndicesBySectorId[sideDef.sectorId].push_back(i);
+        if (sideDef.side == SectorTopologySideKind::Front) {
+            indexes.frontSideDefIndicesByLineDefId[sideDef.lineDefId].push_back(i);
+        } else if (sideDef.side == SectorTopologySideKind::Back) {
+            indexes.backSideDefIndicesByLineDefId[sideDef.lineDefId].push_back(i);
+        }
+    }
+    for (size_t i = 0; i < map.sectors.size(); ++i) {
+        indexes.sectorIndicesById[map.sectors[i].id].push_back(i);
+    }
+
+    return indexes;
+}
+
 bool IsValidSectorTopologyId(int id)
 {
     return id > 0;

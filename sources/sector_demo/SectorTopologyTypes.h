@@ -4,7 +4,9 @@
 
 #include <raylib.h>
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace game {
 
@@ -71,6 +73,49 @@ struct SectorTopologySector {
     SectorTopologyWallPartSettings defaultWall;
     SectorTopologyWallPartSettings defaultLower;
     SectorTopologyWallPartSettings defaultUpper;
+};
+
+enum class SectorTopologyValidationSeverity {
+    Warning,
+    Error
+};
+
+enum class SectorTopologyObjectKind {
+    Map,
+    Vertex,
+    LineDef,
+    SideDef,
+    Sector
+};
+
+struct SectorTopologyValidationIssue {
+    SectorTopologyValidationSeverity severity = SectorTopologyValidationSeverity::Error;
+    SectorTopologyObjectKind objectKind = SectorTopologyObjectKind::Map;
+    int objectId = -1;
+    std::string message;
+};
+
+struct SectorTopologyLoopEdge {
+    int sideDefId = -1;
+    int lineDefId = -1;
+    SectorTopologySideKind side = SectorTopologySideKind::Front;
+    int startVertexId = -1;
+    int endVertexId = -1;
+};
+
+// Positive signed area is counter-clockwise in topology coordinates, where
+// positive X points right and positive Y points up. Outer loops are CCW and
+// hole loops are clockwise.
+struct SectorTopologyLoop {
+    std::vector<int> vertexIds;
+    std::vector<int> sideDefIds;
+    std::vector<SectorTopologyLoopEdge> edges;
+    int64_t signedAreaTwice = 0;
+};
+
+struct SectorTopologyLoopSet {
+    SectorTopologyLoop outer;
+    std::vector<SectorTopologyLoop> holes;
 };
 
 } // namespace game

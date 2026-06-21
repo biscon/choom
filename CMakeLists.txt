@@ -95,6 +95,18 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(raylib)
 
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(sector_topology_tests
+            tests/SectorTopologyValidationTests.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_topology_tests PRIVATE sources)
+    target_link_libraries(sector_topology_tests PRIVATE raylib)
+    add_test(NAME sector_topology_validation COMMAND sector_topology_tests)
+endif()
+
 # -------------------------------
 # ASSETS_PATH define
 # -------------------------------

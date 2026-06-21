@@ -3,6 +3,7 @@
 #include "sector_demo/SectorTopologyTypes.h"
 #include "sector_demo/SectorTypes.h"
 
+#include <cstddef>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -16,6 +17,21 @@ struct SectorTopologyMap {
     std::vector<SectorTopologySideDef> sideDefs;
     std::vector<SectorTopologySector> sectors;
 };
+
+// Transient lookup data. Index vectors intentionally retain duplicate IDs so
+// malformed maps can be diagnosed without choosing an arbitrary object.
+struct SectorTopologyIndexes {
+    std::unordered_map<int, std::vector<size_t>> vertexIndicesById;
+    std::unordered_map<int, std::vector<size_t>> lineDefIndicesById;
+    std::unordered_map<int, std::vector<size_t>> sideDefIndicesById;
+    std::unordered_map<int, std::vector<size_t>> sectorIndicesById;
+
+    std::unordered_map<int, std::vector<size_t>> sideDefIndicesBySectorId;
+    std::unordered_map<int, std::vector<size_t>> frontSideDefIndicesByLineDefId;
+    std::unordered_map<int, std::vector<size_t>> backSideDefIndicesByLineDefId;
+};
+
+SectorTopologyIndexes BuildSectorTopologyIndexes(const SectorTopologyMap& map);
 
 bool IsValidSectorTopologyId(int id);
 const char* SectorTopologySideKindName(SectorTopologySideKind side);
@@ -47,5 +63,20 @@ bool GetSectorTopologyLineVertices(
         const SectorTopologyLineDef& line,
         const SectorTopologyVertex*& outStart,
         const SectorTopologyVertex*& outEnd);
+
+bool ExtractSectorTopologyLoops(
+        const SectorTopologyMap& map,
+        int sectorId,
+        SectorTopologyLoopSet& outLoops,
+        std::vector<SectorTopologyValidationIssue>* outIssues = nullptr);
+
+std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
+        const SectorTopologyMap& map);
+
+bool HasSectorTopologyValidationErrors(
+        const std::vector<SectorTopologyValidationIssue>& issues);
+
+std::string FormatSectorTopologyValidationIssue(
+        const SectorTopologyValidationIssue& issue);
 
 } // namespace game
