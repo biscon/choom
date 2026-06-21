@@ -17,7 +17,9 @@ using game::SectorTopologyLineDef;
 using game::SectorTopologyLoop;
 using game::SectorTopologyLoopSet;
 using game::SectorTopologyMap;
+using game::SectorTopologySideDef;
 using game::SectorTopologySideKind;
+using game::SectorTopologySplitLineResult;
 
 int failures = 0;
 
@@ -107,6 +109,37 @@ void CheckUnchanged(
                   description);
         }
     }
+    if (before.sideDefs.size() == after.sideDefs.size()) {
+        for (size_t i = 0; i < before.sideDefs.size(); ++i) {
+            Check(before.sideDefs[i].id == after.sideDefs[i].id
+                          && before.sideDefs[i].lineDefId == after.sideDefs[i].lineDefId
+                          && before.sideDefs[i].side == after.sideDefs[i].side
+                          && before.sideDefs[i].sectorId == after.sideDefs[i].sectorId
+                          && before.sideDefs[i].wall.textureId == after.sideDefs[i].wall.textureId
+                          && before.sideDefs[i].lower.textureId == after.sideDefs[i].lower.textureId
+                          && before.sideDefs[i].upper.textureId == after.sideDefs[i].upper.textureId
+                          && before.sideDefs[i].wall.uv.scale.x == after.sideDefs[i].wall.uv.scale.x
+                          && before.sideDefs[i].wall.uv.scale.y == after.sideDefs[i].wall.uv.scale.y
+                          && before.sideDefs[i].wall.uv.offset.x == after.sideDefs[i].wall.uv.offset.x
+                          && before.sideDefs[i].wall.uv.offset.y == after.sideDefs[i].wall.uv.offset.y
+                          && before.sideDefs[i].lower.uv.scale.x == after.sideDefs[i].lower.uv.scale.x
+                          && before.sideDefs[i].lower.uv.scale.y == after.sideDefs[i].lower.uv.scale.y
+                          && before.sideDefs[i].lower.uv.offset.x == after.sideDefs[i].lower.uv.offset.x
+                          && before.sideDefs[i].lower.uv.offset.y == after.sideDefs[i].lower.uv.offset.y
+                          && before.sideDefs[i].upper.uv.scale.x == after.sideDefs[i].upper.uv.scale.x
+                          && before.sideDefs[i].upper.uv.scale.y == after.sideDefs[i].upper.uv.scale.y
+                          && before.sideDefs[i].upper.uv.offset.x == after.sideDefs[i].upper.uv.offset.x
+                          && before.sideDefs[i].upper.uv.offset.y == after.sideDefs[i].upper.uv.offset.y,
+                  description);
+        }
+    }
+    if (before.sectors.size() == after.sectors.size()) {
+        for (size_t i = 0; i < before.sectors.size(); ++i) {
+            Check(before.sectors[i].id == after.sectors[i].id
+                          && before.sectors[i].name == after.sectors[i].name,
+                  description);
+        }
+    }
 }
 
 const game::SectorTopologySideDef* FindSideDef(const SectorTopologyMap& map, int sideDefId)
@@ -183,6 +216,48 @@ const game::SectorGeneratedSurface* FindSurface(
         }
     }
     return nullptr;
+}
+
+const SectorTopologyLineDef* FindLineById(const SectorTopologyMap& map, int lineDefId)
+{
+    return game::FindSectorTopologyLineDef(map, lineDefId);
+}
+
+bool SameUv(game::SectorTopologyUvSettings a, game::SectorTopologyUvSettings b)
+{
+    return a.scale.x == b.scale.x
+           && a.scale.y == b.scale.y
+           && a.offset.x == b.offset.x
+           && a.offset.y == b.offset.y;
+}
+
+bool SameWallPart(
+        const game::SectorTopologyWallPartSettings& a,
+        const game::SectorTopologyWallPartSettings& b)
+{
+    return a.textureId == b.textureId && SameUv(a.uv, b.uv);
+}
+
+bool SameSideDefSettings(const SectorTopologySideDef& a, const SectorTopologySideDef& b)
+{
+    return a.side == b.side
+           && a.sectorId == b.sectorId
+           && SameWallPart(a.wall, b.wall)
+           && SameWallPart(a.lower, b.lower)
+           && SameWallPart(a.upper, b.upper);
+}
+
+void SetDistinctSideSettings(SectorTopologySideDef& sideDef, const char* prefix)
+{
+    sideDef.wall.textureId = std::string{prefix} + "_wall";
+    sideDef.wall.uv.scale = {2.0f, 3.0f};
+    sideDef.wall.uv.offset = {4.0f, 5.0f};
+    sideDef.lower.textureId = std::string{prefix} + "_lower";
+    sideDef.lower.uv.scale = {6.0f, 7.0f};
+    sideDef.lower.uv.offset = {8.0f, 9.0f};
+    sideDef.upper.textureId = std::string{prefix} + "_upper";
+    sideDef.upper.uv.scale = {10.0f, 11.0f};
+    sideDef.upper.uv.offset = {12.0f, 13.0f};
 }
 
 double TriangleAreaXZ(const game::SectorGeneratedSurface& surface)
@@ -580,6 +655,233 @@ void TestChangingSectorDefaultsDoesNotRewriteExistingSideDefs()
     }
 }
 
+void TestSplitOneSidedWall()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "split one-sided square creation succeeds");
+    const SectorTopologyLineDef originalLine = map.lineDefs.front();
+    SectorTopologySideDef* originalSide = FindSideDef(map, originalLine.frontSideDefId);
+    Check(originalSide != nullptr, "split one-sided finds original side");
+    if (originalSide == nullptr) {
+        return;
+    }
+    SetDistinctSideSettings(*originalSide, "outer");
+    const SectorTopologySideDef expectedSide = *originalSide;
+    const size_t vertexCount = map.vertices.size();
+    const size_t lineCount = map.lineDefs.size();
+    const size_t sideCount = map.sideDefs.size();
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDef(map, originalLine.id, &split, &error),
+          "split one-sided wall succeeds");
+    Check(error.empty(), "successful one-sided split clears error");
+    Check(map.vertices.size() == vertexCount + 1, "split one-sided adds midpoint vertex");
+    Check(map.lineDefs.size() == lineCount + 1, "split one-sided replaces one line with two");
+    Check(map.sideDefs.size() == sideCount + 1, "split one-sided replaces one sidedef with two");
+    Check(game::FindSectorTopologyVertex(map, split.midpointVertexId) != nullptr,
+          "split one-sided midpoint exists");
+    Check(FindLineById(map, originalLine.id) == nullptr, "split one-sided removes original line");
+    Check(FindSideDef(map, expectedSide.id) == nullptr, "split one-sided removes original sidedef");
+
+    const SectorTopologyLineDef* first = FindLineById(map, split.firstLineDefId);
+    const SectorTopologyLineDef* second = FindLineById(map, split.secondLineDefId);
+    Check(first != nullptr && second != nullptr, "split one-sided replacement lines exist");
+    if (first != nullptr && second != nullptr) {
+        Check(first->startVertexId == originalLine.startVertexId
+                      && first->endVertexId == split.midpointVertexId,
+              "split one-sided first line is A to midpoint");
+        Check(second->startVertexId == split.midpointVertexId
+                      && second->endVertexId == originalLine.endVertexId,
+              "split one-sided second line is midpoint to B");
+        Check(first->frontSideDefId == split.firstFrontSideDefId
+                      && first->backSideDefId == -1
+                      && second->frontSideDefId == split.secondFrontSideDefId
+                      && second->backSideDefId == -1,
+              "split one-sided replacements remain one-sided front lines");
+    }
+
+    const SectorTopologySideDef* firstSide = FindSideDef(map, split.firstFrontSideDefId);
+    const SectorTopologySideDef* secondSide = FindSideDef(map, split.secondFrontSideDefId);
+    Check(firstSide != nullptr && secondSide != nullptr, "split one-sided duplicated sidedefs exist");
+    if (firstSide != nullptr && secondSide != nullptr) {
+        Check(SameSideDefSettings(*firstSide, expectedSide),
+              "split one-sided first side preserves settings");
+        Check(SameSideDefSettings(*secondSide, expectedSide),
+              "split one-sided second side preserves settings");
+        Check(firstSide->side == SectorTopologySideKind::Front
+                      && secondSide->side == SectorTopologySideKind::Front,
+              "split one-sided preserves front side kind");
+    }
+
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, sectorId, loops), "split one-sided validates and extracts");
+    Check(LoopContainsVertex(loops.outer, split.midpointVertexId),
+          "split one-sided sector loop includes midpoint");
+}
+
+void TestSplitTwoSidedSharedLine()
+{
+    SectorTopologyMap map;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "split shared first adjacent square succeeds");
+    Check(Create(map, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "split shared second adjacent square succeeds");
+    const SectorTopologyLineDef* shared = FindLine(map, 2, 3);
+    Check(shared != nullptr, "split shared finds shared linedef");
+    if (shared == nullptr) {
+        return;
+    }
+    SectorTopologySideDef* front = FindSideDef(map, shared->frontSideDefId);
+    SectorTopologySideDef* back = FindSideDef(map, shared->backSideDefId);
+    Check(front != nullptr && back != nullptr, "split shared finds front and back");
+    if (front == nullptr || back == nullptr) {
+        return;
+    }
+    SetDistinctSideSettings(*front, "front");
+    SetDistinctSideSettings(*back, "back");
+    const SectorTopologySideDef expectedFront = *front;
+    const SectorTopologySideDef expectedBack = *back;
+    const int sharedLineId = shared->id;
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDef(map, sharedLineId, &split, &error),
+          "split shared two-sided line succeeds");
+    Check(error.empty(), "successful shared split clears error");
+
+    const SectorTopologyLineDef* first = FindLineById(map, split.firstLineDefId);
+    const SectorTopologyLineDef* second = FindLineById(map, split.secondLineDefId);
+    Check(first != nullptr && second != nullptr, "split shared replacement lines exist");
+    if (first != nullptr && second != nullptr) {
+        Check(first->frontSideDefId == split.firstFrontSideDefId
+                      && first->backSideDefId == split.firstBackSideDefId
+                      && second->frontSideDefId == split.secondFrontSideDefId
+                      && second->backSideDefId == split.secondBackSideDefId,
+              "split shared replacement lines are two-sided");
+    }
+
+    const SectorTopologySideDef* firstFront = FindSideDef(map, split.firstFrontSideDefId);
+    const SectorTopologySideDef* secondFront = FindSideDef(map, split.secondFrontSideDefId);
+    const SectorTopologySideDef* firstBack = FindSideDef(map, split.firstBackSideDefId);
+    const SectorTopologySideDef* secondBack = FindSideDef(map, split.secondBackSideDefId);
+    Check(firstFront != nullptr && secondFront != nullptr && firstBack != nullptr && secondBack != nullptr,
+          "split shared duplicated sidedefs exist");
+    if (firstFront != nullptr && secondFront != nullptr && firstBack != nullptr && secondBack != nullptr) {
+        Check(SameSideDefSettings(*firstFront, expectedFront)
+                      && SameSideDefSettings(*secondFront, expectedFront),
+              "split shared preserves front settings on both halves");
+        Check(SameSideDefSettings(*firstBack, expectedBack)
+                      && SameSideDefSettings(*secondBack, expectedBack),
+              "split shared preserves back settings on both halves");
+        Check(firstFront->side == SectorTopologySideKind::Front
+                      && secondFront->side == SectorTopologySideKind::Front
+                      && firstBack->side == SectorTopologySideKind::Back
+                      && secondBack->side == SectorTopologySideKind::Back,
+              "split shared preserves original side kinds");
+    }
+    Check(FindLineById(map, sharedLineId) == nullptr, "split shared removes original line");
+    Check(FindSideDef(map, expectedFront.id) == nullptr, "split shared removes original front sidedef");
+    Check(FindSideDef(map, expectedBack.id) == nullptr, "split shared removes original back sidedef");
+
+    SectorTopologyLoopSet leftLoops;
+    SectorTopologyLoopSet rightLoops;
+    Check(ValidateAndExtract(map, leftId, leftLoops), "split shared left sector extracts");
+    Check(ValidateAndExtract(map, rightId, rightLoops), "split shared right sector extracts");
+    Check(LoopContainsVertex(leftLoops.outer, split.midpointVertexId)
+                  && LoopContainsVertex(rightLoops.outer, split.midpointVertexId),
+          "split shared midpoint belongs to both sector loops");
+}
+
+void TestSplitInsertedPlatformBoundary()
+{
+    SectorTopologyMap map;
+    int parentId = -1;
+    int childId = -1;
+    Check(Create(map, {{0, 0}, {160, 0}, {160, 160}, {0, 160}}, &parentId),
+          "split inserted parent creation succeeds");
+    Check(Insert(map, parentId, {{48, 48}, {112, 48}, {112, 112}, {48, 112}}, &childId),
+          "split inserted child succeeds");
+    const std::vector<const SectorTopologyLineDef*> boundary =
+            InsertedBoundaryLines(map, parentId, childId);
+    Check(!boundary.empty(), "split inserted finds boundary line");
+    if (boundary.empty()) {
+        return;
+    }
+    const int lineId = boundary.front()->id;
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDef(map, lineId, &split, &error),
+          "split inserted boundary succeeds");
+    Check(error.empty(), "successful inserted split clears error");
+
+    const SectorTopologySideDef* firstFront = FindSideDef(map, split.firstFrontSideDefId);
+    const SectorTopologySideDef* firstBack = FindSideDef(map, split.firstBackSideDefId);
+    const SectorTopologySideDef* secondFront = FindSideDef(map, split.secondFrontSideDefId);
+    const SectorTopologySideDef* secondBack = FindSideDef(map, split.secondBackSideDefId);
+    Check(firstFront != nullptr && firstBack != nullptr && secondFront != nullptr && secondBack != nullptr,
+          "split inserted duplicated sidedefs exist");
+    if (firstFront != nullptr && firstBack != nullptr && secondFront != nullptr && secondBack != nullptr) {
+        Check(firstFront->sectorId == childId
+                      && secondFront->sectorId == childId
+                      && firstFront->side == SectorTopologySideKind::Front
+                      && secondFront->side == SectorTopologySideKind::Front,
+              "split inserted child remains front side");
+        Check(firstBack->sectorId == parentId
+                      && secondBack->sectorId == parentId
+                      && firstBack->side == SectorTopologySideKind::Back
+                      && secondBack->side == SectorTopologySideKind::Back,
+              "split inserted parent remains back side");
+    }
+
+    SectorTopologyLoopSet parentLoops;
+    SectorTopologyLoopSet childLoops;
+    Check(ValidateAndExtract(map, parentId, parentLoops), "split inserted parent extracts");
+    Check(ValidateAndExtract(map, childId, childLoops), "split inserted child extracts");
+    Check(parentLoops.holes.size() == 1, "split inserted parent still has one hole");
+    Check(childLoops.holes.empty(), "split inserted child still has one outer loop only");
+    Check(LoopContainsVertex(parentLoops.holes.front(), split.midpointVertexId),
+          "split inserted parent hole includes midpoint");
+    Check(LoopContainsVertex(childLoops.outer, split.midpointVertexId),
+          "split inserted child outer includes midpoint");
+}
+
+void TestRejectNonRepresentableSplitMidpoint()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {1, 0}, {1, 16}, {0, 16}}),
+          "fractional midpoint square creation succeeds");
+    const SectorTopologyMap before = map;
+
+    std::string error;
+    Check(!game::SplitSectorTopologyLineDef(map, map.lineDefs.front().id, nullptr, &error),
+          "fractional midpoint split fails");
+    Check(error.find("integer coordinate grid") != std::string::npos,
+          "fractional midpoint split reports coordinate grid error");
+    CheckUnchanged(before, map, "fractional midpoint split leaves map unchanged");
+}
+
+void TestSplitGeneratedGeometryBuilds()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "split geometry square creation succeeds");
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDef(map, map.lineDefs.front().id, &split, &error),
+          "split geometry line succeeds");
+
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "generated geometry builds after split");
+}
+
 void TestMoveOuterVertex()
 {
     SectorTopologyMap map;
@@ -808,6 +1110,11 @@ int main()
     TestInvalidInsertsRejectTransactionally();
     TestAdjacentSharesFullEdge();
     TestChangingSectorDefaultsDoesNotRewriteExistingSideDefs();
+    TestSplitOneSidedWall();
+    TestSplitTwoSidedSharedLine();
+    TestSplitInsertedPlatformBoundary();
+    TestRejectNonRepresentableSplitMidpoint();
+    TestSplitGeneratedGeometryBuilds();
     TestMoveOuterVertex();
     TestMoveSharedAdjacentVertex();
     TestMoveInsertedPlatformVertex();

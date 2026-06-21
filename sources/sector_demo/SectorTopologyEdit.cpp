@@ -1,5 +1,7 @@
 #include "sector_demo/SectorTopologyEdit.h"
 
+#include <algorithm>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -21,6 +23,66 @@ std::string FirstValidationError(const std::vector<SectorTopologyValidationIssue
         }
     }
     return "Topology validation failed";
+}
+
+bool RequireAllocatedId(int id, const char* objectName, std::string* outError)
+{
+    if (IsValidSectorTopologyId(id)) {
+        return true;
+    }
+    SetError(outError, std::string{"Could not allocate topology "} + objectName + " ID");
+    return false;
+}
+
+bool FindSideDefCopy(
+        const SectorTopologyMap& map,
+        int sideDefId,
+        SectorTopologySideKind expectedSide,
+        SectorTopologySideDef& outSideDef,
+        std::string* outError)
+{
+    if (sideDefId == -1) {
+        return false;
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, sideDefId);
+    if (sideDef == nullptr) {
+        SetError(outError, "Topology linedef references a missing sidedef");
+        return false;
+    }
+    if (sideDef->side != expectedSide) {
+        SetError(outError, "Topology linedef sidedef slot has the wrong side kind");
+        return false;
+    }
+
+    outSideDef = *sideDef;
+    return true;
+}
+
+void RemoveSideDefById(SectorTopologyMap& map, int sideDefId)
+{
+    if (sideDefId == -1) {
+        return;
+    }
+    map.sideDefs.erase(
+            std::remove_if(
+                    map.sideDefs.begin(),
+                    map.sideDefs.end(),
+                    [sideDefId](const SectorTopologySideDef& sideDef) {
+                        return sideDef.id == sideDefId;
+                    }),
+            map.sideDefs.end());
+}
+
+SectorTopologySideDef DuplicateSideDef(
+        const SectorTopologySideDef& source,
+        int newSideDefId,
+        int newLineDefId)
+{
+    SectorTopologySideDef duplicate = source;
+    duplicate.id = newSideDefId;
+    duplicate.lineDefId = newLineDefId;
+    return duplicate;
 }
 
 } // namespace
@@ -76,6 +138,207 @@ bool MoveSectorTopologyVertex(
     }
 
     map = std::move(candidate);
+    return true;
+}
+
+bool SplitSectorTopologyLineDef(
+        SectorTopologyMap& map,
+        int lineDefId,
+        SectorTopologySplitLineResult* outResult,
+        std::string* outError)
+{
+    if (outResult != nullptr) {
+        *outResult = SectorTopologySplitLineResult{};
+    }
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    if (!IsValidSectorTopologyId(lineDefId)) {
+        SetError(outError, "Invalid topology linedef ID");
+        return false;
+    }
+
+    const SectorTopologyLineDef* existing = FindSectorTopologyLineDef(map, lineDefId);
+    if (existing == nullptr) {
+        SetError(outError, "Topology linedef not found");
+        return false;
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(map, *existing, start, end)) {
+        SetError(outError, "Topology linedef endpoints are invalid");
+        return false;
+    }
+
+    const int64_t midpointXSum = static_cast<int64_t>(start->x) + static_cast<int64_t>(end->x);
+    const int64_t midpointYSum = static_cast<int64_t>(start->y) + static_cast<int64_t>(end->y);
+    if ((midpointXSum % 2) != 0 || (midpointYSum % 2) != 0) {
+        SetError(outError, "Cannot split this linedef exactly on the integer coordinate grid.");
+        return false;
+    }
+
+    const int64_t midpointX = midpointXSum / 2;
+    const int64_t midpointY = midpointYSum / 2;
+    if (midpointX < std::numeric_limits<SectorCoord>::min()
+            || midpointX > std::numeric_limits<SectorCoord>::max()
+            || midpointY < std::numeric_limits<SectorCoord>::min()
+            || midpointY > std::numeric_limits<SectorCoord>::max()) {
+        SetError(outError, "Cannot split this linedef exactly on the integer coordinate grid.");
+        return false;
+    }
+
+    SectorTopologySideDef originalFront;
+    SectorTopologySideDef originalBack;
+    std::string error;
+    const bool hasFront = FindSideDefCopy(
+            map,
+            existing->frontSideDefId,
+            SectorTopologySideKind::Front,
+            originalFront,
+            &error);
+    if (!hasFront && !error.empty()) {
+        SetError(outError, error);
+        return false;
+    }
+    const bool hasBack = FindSideDefCopy(
+            map,
+            existing->backSideDefId,
+            SectorTopologySideKind::Back,
+            originalBack,
+            &error);
+    if (!hasBack && !error.empty()) {
+        SetError(outError, error);
+        return false;
+    }
+
+    SectorTopologyMap candidate = map;
+    SectorTopologySplitLineResult result;
+
+    result.midpointVertexId = AllocateSectorTopologyVertexId(candidate);
+    if (!RequireAllocatedId(result.midpointVertexId, "vertex", outError)) {
+        return false;
+    }
+    candidate.vertices.push_back(SectorTopologyVertex{
+            result.midpointVertexId,
+            static_cast<SectorCoord>(midpointX),
+            static_cast<SectorCoord>(midpointY)
+    });
+
+    result.firstLineDefId = AllocateSectorTopologyLineDefId(candidate);
+    if (!RequireAllocatedId(result.firstLineDefId, "linedef", outError)) {
+        return false;
+    }
+    candidate.lineDefs.push_back(SectorTopologyLineDef{
+            result.firstLineDefId,
+            existing->startVertexId,
+            result.midpointVertexId,
+            -1,
+            -1
+    });
+
+    result.secondLineDefId = AllocateSectorTopologyLineDefId(candidate);
+    if (!RequireAllocatedId(result.secondLineDefId, "linedef", outError)) {
+        return false;
+    }
+    candidate.lineDefs.push_back(SectorTopologyLineDef{
+            result.secondLineDefId,
+            result.midpointVertexId,
+            existing->endVertexId,
+            -1,
+            -1
+    });
+
+    SectorTopologyLineDef* firstLine = FindSectorTopologyLineDef(candidate, result.firstLineDefId);
+    SectorTopologyLineDef* secondLine = FindSectorTopologyLineDef(candidate, result.secondLineDefId);
+    if (firstLine == nullptr || secondLine == nullptr) {
+        SetError(outError, "Could not resolve replacement topology linedefs");
+        return false;
+    }
+
+    if (hasFront) {
+        result.firstFrontSideDefId = AllocateSectorTopologySideDefId(candidate);
+        if (!RequireAllocatedId(result.firstFrontSideDefId, "sidedef", outError)) {
+            return false;
+        }
+        candidate.sideDefs.push_back(DuplicateSideDef(
+                originalFront,
+                result.firstFrontSideDefId,
+                result.firstLineDefId));
+        firstLine->frontSideDefId = result.firstFrontSideDefId;
+
+        result.secondFrontSideDefId = AllocateSectorTopologySideDefId(candidate);
+        if (!RequireAllocatedId(result.secondFrontSideDefId, "sidedef", outError)) {
+            return false;
+        }
+        candidate.sideDefs.push_back(DuplicateSideDef(
+                originalFront,
+                result.secondFrontSideDefId,
+                result.secondLineDefId));
+        secondLine->frontSideDefId = result.secondFrontSideDefId;
+    }
+
+    if (hasBack) {
+        result.firstBackSideDefId = AllocateSectorTopologySideDefId(candidate);
+        if (!RequireAllocatedId(result.firstBackSideDefId, "sidedef", outError)) {
+            return false;
+        }
+        candidate.sideDefs.push_back(DuplicateSideDef(
+                originalBack,
+                result.firstBackSideDefId,
+                result.firstLineDefId));
+        firstLine->backSideDefId = result.firstBackSideDefId;
+
+        result.secondBackSideDefId = AllocateSectorTopologySideDefId(candidate);
+        if (!RequireAllocatedId(result.secondBackSideDefId, "sidedef", outError)) {
+            return false;
+        }
+        candidate.sideDefs.push_back(DuplicateSideDef(
+                originalBack,
+                result.secondBackSideDefId,
+                result.secondLineDefId));
+        secondLine->backSideDefId = result.secondBackSideDefId;
+    }
+
+    RemoveSideDefById(candidate, existing->frontSideDefId);
+    RemoveSideDefById(candidate, existing->backSideDefId);
+    candidate.lineDefs.erase(
+            std::remove_if(
+                    candidate.lineDefs.begin(),
+                    candidate.lineDefs.end(),
+                    [lineDefId](const SectorTopologyLineDef& lineDef) {
+                        return lineDef.id == lineDefId;
+                    }),
+            candidate.lineDefs.end());
+
+    const std::vector<SectorTopologyValidationIssue> issues = ValidateSectorTopologyMap(candidate);
+    if (HasSectorTopologyValidationErrors(issues)) {
+        SetError(outError, FirstValidationError(issues));
+        return false;
+    }
+
+    if (hasFront) {
+        SectorTopologyLoopSet loops;
+        std::vector<SectorTopologyValidationIssue> loopIssues;
+        if (!ExtractSectorTopologyLoops(candidate, originalFront.sectorId, loops, &loopIssues)) {
+            SetError(outError, FirstValidationError(loopIssues));
+            return false;
+        }
+    }
+    if (hasBack && (!hasFront || originalBack.sectorId != originalFront.sectorId)) {
+        SectorTopologyLoopSet loops;
+        std::vector<SectorTopologyValidationIssue> loopIssues;
+        if (!ExtractSectorTopologyLoops(candidate, originalBack.sectorId, loops, &loopIssues)) {
+            SetError(outError, FirstValidationError(loopIssues));
+            return false;
+        }
+    }
+
+    map = std::move(candidate);
+    if (outResult != nullptr) {
+        *outResult = result;
+    }
     return true;
 }
 

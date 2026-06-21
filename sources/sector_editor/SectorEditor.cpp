@@ -3586,21 +3586,6 @@ void SectorEditor::DrawPreviewUvPanel(
         ResetSurface3DUv(state.selectedSurface3D, assets);
     }
 
-    if (IsWallSurface(state.selectedSurface3D.kind)) {
-        engine::Separator(config, Rectangle{panel.x + margin, panel.y + 134.0f, panel.width - margin * 2.0f, 12.0f});
-        if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_3d_split_edge",
-                Rectangle{panel.x + margin, panel.y + 154.0f, panel.width - margin * 2.0f, 38.0f},
-                font,
-                "Split Edge")) {
-            SplitSelectedEdge(assets);
-        }
-    }
-
     input.ForEachEvent(
             engine::InputEventType::MouseClick,
             true,
@@ -4637,10 +4622,10 @@ void SectorEditor::DrawSectorsPanel(
             return 1700.0f;
         }
         if (hasSelectedTopologySideDef) {
-            return 620.0f;
+            return 668.0f;
         }
         if (hasSelectedTopologyLineDef) {
-            return 170.0f;
+            return 218.0f;
         }
         if (!hasSelectedSector) {
             return 42.0f;
@@ -5539,6 +5524,20 @@ bool SectorEditor::DrawTopologySideDefInspector(
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Line endpoints are invalid", engine::UITextJustify::Left, config.invalidColor);
         y += 32.0f;
     }
+
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_split_linedef",
+                Rectangle{0.0f, y, contentW, 38.0f},
+                font,
+                "Split Linedef")) {
+        SplitSelectedTopologyLineDef();
+        return true;
+    }
+    y += 38.0f + gap;
 
     if (sideDef == nullptr) {
         engine::Text(
@@ -7782,6 +7781,66 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
     preview.ApplyPose(pose);
     preview.SetMouseLookEnabled(mouseLook);
     state.selectedSurface3D = IsValidSurfaceRef(selected) ? selected : SectorSurfaceRef{};
+    return true;
+}
+
+bool SectorEditor::SplitSelectedTopologyLineDef()
+{
+    const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
+    if (lineDef == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology linedef before splitting.";
+        return false;
+    }
+
+    const int originalLineDefId = lineDef->id;
+    const TopologySelectionKind previousSelectionKind = state.topologySelectionKind;
+    const SectorTopologySideKind previousSide = state.selectedTopologySideKind;
+    const TopologyWallPart previousWallPart = state.selectedTopologyWallPart;
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    if (!SplitSectorTopologyLineDef(state.topologyMap, originalLineDefId, &split, &error)) {
+        statusText = error.empty() ? "Cannot split topology linedef" : error;
+        return false;
+    }
+
+    state.hoveredSectorIndex = -1;
+    state.hoveredEdgeSectorIndex = -1;
+    state.hoveredEdgeRingKind = SectorBoundaryRingKind::Outer;
+    state.hoveredEdgeHoleIndex = -1;
+    state.hoveredEdgeIndex = -1;
+    state.hasHoveredVertex = false;
+    state.hoveredVertexRefs.clear();
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.selectedSurface3D = SectorSurfaceRef{};
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+
+    if (previousSelectionKind == TopologySelectionKind::SideDef) {
+        const int secondSideDefId = previousSide == SectorTopologySideKind::Front
+                ? split.secondFrontSideDefId
+                : split.secondBackSideDefId;
+        if (FindSectorTopologySideDef(state.topologyMap, secondSideDefId) != nullptr) {
+            SelectTopologySideDef(secondSideDefId, previousWallPart);
+        } else {
+            SelectTopologyLineDef(split.secondLineDefId, previousSide, previousWallPart);
+        }
+    } else {
+        SelectTopologyLineDef(split.secondLineDefId, previousSide, previousWallPart);
+    }
+
+    state.topologyDocumentDirty = true;
+    state.topologyRenderWarning.clear();
+    state.hasUnsavedChanges = true;
+    statusText = TextFormat(
+            "Split topology linedef %d; selected linedef %d",
+            originalLineDefId,
+            split.secondLineDefId);
     return true;
 }
 

@@ -137,3 +137,17 @@ The existing Move tool now edits topology vertices directly by stable vertex ID.
 Vertex movement previews in the 2D editor without mutating the live topology document during drag. On release, the editor commits through a reusable transactional topology helper that copies the candidate map, changes only the target vertex coordinate, validates with `ValidateSectorTopologyMap()`, and replaces the live map only on success. Moves that would place a vertex exactly on another existing vertex are rejected because merge support remains a separate deferred operation.
 
 Invalid moves that create collapsed edges, crossings, overlaps, invalid touches, or invalid sector/hole loops are rejected transactionally and leave the original topology unchanged. Vertex merge, split, delete, a persistent vertex inspector, 3D vertex movement, Erase, Light placement, Split Linedef, sector deletion, lightmap baking, and topology lightmap layout remain deferred.
+
+## Phase 15: topology Split Linedef
+
+The topology sidedef/linedef inspector now exposes Split Linedef near the top when a topology sidedef or line-only linedef is selected. Splitting is inspector-driven only; there is no toolbar mode, arbitrary click-to-split behavior, or 3D line splitting in this phase.
+
+Splitting creates one exact midpoint vertex and replaces the original linedef with two new linedefs from A to midpoint and midpoint to B. The original linedef and its original sidedefs are removed, and existing front/back sidedefs are duplicated onto both replacement lines with fresh stable IDs.
+
+Duplicated sidedefs preserve their original sector IDs, side kind, and wall/lower/upper texture and UV settings independently. Front sidedefs remain front sidedefs on both replacement lines, and back sidedefs remain back sidedefs; side ownership is not reinterpreted from geometry.
+
+Midpoints must be exactly representable on the integer topology coordinate grid. If either endpoint coordinate sum is odd, the split is rejected without rounding, without half-coordinate floats, and without mutating the map.
+
+After a successful split, selection moves to the second replacement line. Sidedef selection preserves the selected wall/lower/upper part and selects the corresponding duplicated sidedef on the second half; line-only selection selects the second line.
+
+Erase, Delete, Light placement, lightmaps, vertex merge/delete, arbitrary line cutting, automatic overlap splitting, and 3D line splitting remain deferred.
