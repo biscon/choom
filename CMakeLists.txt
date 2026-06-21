@@ -140,6 +140,16 @@ if(BUILD_TESTING)
     target_include_directories(sector_topology_mesh_builder_tests PRIVATE sources)
     target_link_libraries(sector_topology_mesh_builder_tests PRIVATE raylib)
     add_test(NAME sector_topology_mesh_builder COMMAND sector_topology_mesh_builder_tests)
+
+    add_executable(sector_topology_creation_tests
+            tests/SectorTopologyCreationTests.cpp
+            sources/sector_demo/SectorTopologyCreation.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_topology_creation_tests PRIVATE sources)
+    target_link_libraries(sector_topology_creation_tests PRIVATE raylib)
+    add_test(NAME sector_topology_creation COMMAND sector_topology_creation_tests)
 endif()
 
 # -------------------------------

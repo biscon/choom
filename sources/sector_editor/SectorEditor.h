@@ -5,6 +5,7 @@
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_demo/SectorMeshPreview.h"
+#include "sector_demo/SectorTopologyCreation.h"
 
 #include <raylib.h>
 
@@ -59,6 +60,11 @@ private:
     void FinalizePendingSector();
     bool CanClosePendingSectorAt(SectorPoint point) const;
     SectorPoint CurrentSnappedSectorPoint() const;
+    bool ToTopologyCoordPoint(SectorPoint point, SectorTopologyCoordPoint& outPoint, std::string& error) const;
+    bool ToCanonicalSectorPoint(SectorPoint point, SectorPoint& outPoint, std::string& error) const;
+    bool BuildPendingTopologyPoints(std::vector<SectorTopologyCoordPoint>& outPoints, std::string& error) const;
+    bool ValidatePendingTopologyPoint(SectorPoint point, std::string& error) const;
+    SectorTopologyCreatePolygonOptions BuildTopologyCreateOptions() const;
 
     void DrawGrid() const;
     void DrawTopologyDocument();

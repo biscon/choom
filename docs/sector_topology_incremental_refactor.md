@@ -71,3 +71,15 @@ Topology linedefs are always drawn from the topology data, not from generated wa
 The Add Map Texture workflow now updates `state.topologyMap.texturesById`, marks the topology document dirty, and persists through topology v2 JSON save/reload. Static lights are still deferred because the topology document model does not own static lights yet.
 
 Topology selection, editing tools, deletion, movement, light placement, inspector editing, 3D preview migration, and lightmap migration remain deferred. Old polygon edit actions are blocked with status messages rather than partially ported.
+
+## Phase 9: topology sector drawing
+
+The existing Sector draw workflow now creates topology document geometry. Finalizing a new drawn polygon adds exact integer topology vertices, endpoint-pair linedefs, concrete sidedefs, and one sector to `state.topologyMap`, then saves and reloads through the v2 topology JSON path.
+
+Drawn points are converted to `SectorCoord` values before identity checks or topology mutation. Vertices are reused only when an existing topology vertex has the exact same stored integer coordinate, so adjacent sectors drawn on the same grid endpoints share vertex IDs instead of creating nearly-identical duplicates.
+
+Linedefs are reused by exact endpoint pair. A same-direction shared edge occupies the front sidedef slot, a reversed shared edge occupies the back sidedef slot, and adjacent sectors that share a full edge persist as one linedef with both front and back sidedefs occupied.
+
+Invalid topology creation is rejected transactionally. Duplicate or repeated canonical points, zero-area polygons, occupied linedef side slots, partial overlaps, crossings, and non-shared interior touches fail without partially editing the map. Clockwise input is normalized to the Phase 2 CCW outer-loop convention before creation.
+
+Topology selection, inspector editing, Insert Sector Inside, Move, Erase, Light placement, 3D preview migration, and lightmaps remain deferred. The old polygon `state.map` remains compatibility state and is not mutated or saved as document geometry by the Sector draw workflow.
