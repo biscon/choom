@@ -29,3 +29,11 @@ The topology layer now has separate JSON string and file load/save functions for
 Loading parses into a temporary map and validates it before replacing the caller's map. Saving validates before producing or writing JSON. Invalid shapes, value types, side names, fixed-coordinate markers, texture definitions, and topology references are reported as readable errors. Output is deterministic: topology records are sorted by stable ID and textures by texture ID.
 
 The existing editor document workflow and polygon `SectorMap` load/save path remain unchanged. There is no legacy conversion, generated topology geometry, topology rendering or editing, editor migration, or lightmap integration in this phase.
+
+## Phase 4: topology generated geometry
+
+Topology maps can now produce `SectorGeneratedGeometry` through a separate overload while the original polygon geometry path remains intact. The topology builder validates the complete map and uses all-or-nothing output: validation, loop extraction, lookup, or triangulation failures return a readable error and no surfaces.
+
+Each sector's deterministic extracted outer loop and holes are triangulated with earcut into one floor surface and one ceiling surface. Directed sidedefs produce full walls for one-sided lines and lower or upper spans where adjacent sector heights differ. Equal-height two-sided portals intentionally produce no wall mesh. Wall lengths retain floating coordinate-space precision when converted to world units.
+
+Generated surface refs now carry stable topology sector, linedef, sidedef, and front/back IDs for future picking, diagnostics, and lightmap identity. This phase does not migrate the editor, renderer, 3D preview, old save/load workflow, or lightmap pipeline to topology geometry.

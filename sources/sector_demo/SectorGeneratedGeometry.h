@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTypes.h"
 
 #include <raylib.h>
@@ -23,6 +24,11 @@ struct SectorGeneratedSurfaceRef {
     SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
     int holeIndex = -1;
     int edgeIndex = -1;
+
+    int topologySectorId = -1;
+    int topologyLineDefId = -1;
+    int topologySideDefId = -1;
+    SectorTopologySideKind topologySide = SectorTopologySideKind::Front;
 };
 
 struct SectorGeneratedVertex {
@@ -47,6 +53,11 @@ struct SectorGeneratedGeometry {
 };
 
 bool BuildSectorGeneratedGeometry(const SectorMap& map, SectorGeneratedGeometry& outGeometry);
+bool BuildSectorGeneratedGeometry(
+        const SectorTopologyMap& map,
+        SectorGeneratedGeometry& outGeometry,
+        std::string* outError = nullptr);
 const char* SectorGeneratedSurfaceKindName(SectorGeneratedSurfaceKind kind);
+std::string FormatSectorGeneratedSurfaceLabel(const SectorGeneratedSurfaceRef& ref);
 
 } // namespace game

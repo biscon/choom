@@ -115,6 +115,18 @@ if(BUILD_TESTING)
     target_include_directories(sector_topology_serialization_tests PRIVATE sources)
     target_link_libraries(sector_topology_serialization_tests PRIVATE raylib)
     add_test(NAME sector_topology_serialization COMMAND sector_topology_serialization_tests)
+
+    add_executable(sector_topology_generated_geometry_tests
+            tests/SectorTopologyGeneratedGeometryTests.cpp
+            sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorMap.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_topology_generated_geometry_tests PRIVATE sources)
+    target_link_libraries(sector_topology_generated_geometry_tests PRIVATE raylib)
+    add_test(NAME sector_topology_generated_geometry COMMAND sector_topology_generated_geometry_tests)
 endif()
 
 # -------------------------------

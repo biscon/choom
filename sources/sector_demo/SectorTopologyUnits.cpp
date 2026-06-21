@@ -34,6 +34,12 @@ float SectorCoordToWorldDistance(SectorCoord value)
     return SectorAuthoringToWorldDistance(SectorCoordToVisibleAuthoring(value));
 }
 
+float SectorCoordDistanceToWorldDistance(double coordDistance)
+{
+    const double authoringDistance = coordDistance / static_cast<double>(SectorCoordSubdivisions);
+    return static_cast<float>(authoringDistance * static_cast<double>(kSectorWorldUnitsPerAuthoringUnit));
+}
+
 Vector2 SectorCoordToWorldPosition2(SectorCoord x, SectorCoord y)
 {
     return Vector2{

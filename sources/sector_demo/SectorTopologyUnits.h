@@ -14,6 +14,7 @@ float SectorCoordToVisibleAuthoring(SectorCoord value);
 bool VisibleAuthoringToSectorCoord(float value, SectorCoord& outValue);
 
 float SectorCoordToWorldDistance(SectorCoord value);
+float SectorCoordDistanceToWorldDistance(double coordDistance);
 Vector2 SectorCoordToWorldPosition2(SectorCoord x, SectorCoord y);
 Vector3 SectorCoordToWorldPosition3(SectorCoord x, float heightAuthoring, SectorCoord y);
 
