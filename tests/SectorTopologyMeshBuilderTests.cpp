@@ -201,6 +201,11 @@ bool TriangleWindingMatchesSurfaceNormal(const game::SectorGeneratedSurface& sur
     return true;
 }
 
+Ray MakeRay(Vector3 position, Vector3 direction)
+{
+    return Ray{position, direction};
+}
+
 game::SectorGeneratedGeometry BuildGeometryOrFail(const game::SectorTopologyMap& map, const char* description)
 {
     game::SectorGeneratedGeometry geometry;
@@ -317,6 +322,44 @@ void TestInvalidTopologyMeshBuilder()
           "invalid topology mesh builder reports validation error");
 }
 
+void TestGeneratedGeometryPickingKeepsTopologyRefs()
+{
+    const game::SectorGeneratedGeometry square = BuildGeometryOrFail(MakeSquare(), "pick square geometry builds");
+    const game::SectorGeneratedSurfaceHit floorHit = game::PickSectorGeneratedGeometry(
+            square,
+            MakeRay(Vector3{0.25f, -1.0f, 0.25f}, Vector3{0.0f, 1.0f, 0.0f}));
+    Check(floorHit.hit, "floor ray hits generated topology geometry");
+    Check(floorHit.ref.kind == game::SectorGeneratedSurfaceKind::Floor, "floor ray returns floor kind");
+    Check(floorHit.ref.topologySectorId == 10, "floor ray preserves topology sector id");
+
+    const game::SectorGeneratedSurfaceHit wallHit = game::PickSectorGeneratedGeometry(
+            square,
+            MakeRay(Vector3{0.25f, 1.5f, -1.0f}, Vector3{0.0f, 0.0f, 1.0f}));
+    Check(wallHit.hit, "wall ray hits generated topology geometry");
+    Check(wallHit.ref.kind == game::SectorGeneratedSurfaceKind::Wall, "wall ray returns wall kind");
+    Check(wallHit.ref.topologyLineDefId == 1, "wall ray preserves topology linedef id");
+    Check(wallHit.ref.topologySideDefId == 1, "wall ray preserves topology sidedef id");
+    Check(wallHit.ref.topologySide == game::SectorTopologySideKind::Front, "wall ray preserves topology side");
+
+    const game::SectorGeneratedGeometry stepped =
+            BuildGeometryOrFail(MakeAdjacent(0.0f, 24.0f, 8.0f, 16.0f), "pick stepped geometry builds");
+    const game::SectorGeneratedSurfaceHit lowerHit = game::PickSectorGeneratedGeometry(
+            stepped,
+            MakeRay(Vector3{1.0f, 0.5f, 0.25f}, Vector3{-1.0f, 0.0f, 0.0f}));
+    Check(lowerHit.hit, "lower wall ray hits generated topology geometry");
+    Check(lowerHit.ref.kind == game::SectorGeneratedSurfaceKind::LowerWall, "lower wall ray returns lower kind");
+    Check(lowerHit.ref.topologyLineDefId == 2, "lower wall ray preserves topology linedef id");
+    Check(lowerHit.ref.topologySideDefId == 2, "lower wall ray preserves topology sidedef id");
+
+    const game::SectorGeneratedSurfaceHit upperHit = game::PickSectorGeneratedGeometry(
+            stepped,
+            MakeRay(Vector3{1.0f, 2.5f, 0.25f}, Vector3{-1.0f, 0.0f, 0.0f}));
+    Check(upperHit.hit, "upper wall ray hits generated topology geometry");
+    Check(upperHit.ref.kind == game::SectorGeneratedSurfaceKind::UpperWall, "upper wall ray returns upper kind");
+    Check(upperHit.ref.topologyLineDefId == 2, "upper wall ray preserves topology linedef id");
+    Check(upperHit.ref.topologySideDefId == 2, "upper wall ray preserves topology sidedef id");
+}
+
 } // namespace
 
 int main()
@@ -327,6 +370,7 @@ int main()
     TestDifferentHeightPortal();
     TestTriangleWindingAgainstNormals();
     TestInvalidTopologyMeshBuilder();
+    TestGeneratedGeometryPickingKeepsTopologyRefs();
     if (failures == 0) {
         std::puts("Sector topology mesh builder tests passed");
     }

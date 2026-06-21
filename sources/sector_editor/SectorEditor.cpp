@@ -590,6 +590,35 @@ SectorSurfaceKind ToEditorSurfaceKind(SectorGeneratedSurfaceKind kind)
     return SectorSurfaceKind::None;
 }
 
+TopologyWallPart SurfaceKindToTopologyWallPart(SectorSurfaceKind kind)
+{
+    switch (kind) {
+        case SectorSurfaceKind::LowerWall: return TopologyWallPart::Lower;
+        case SectorSurfaceKind::UpperWall: return TopologyWallPart::Upper;
+        case SectorSurfaceKind::Wall:
+        case SectorSurfaceKind::Floor:
+        case SectorSurfaceKind::Ceiling:
+        case SectorSurfaceKind::None:
+            break;
+    }
+    return TopologyWallPart::Wall;
+}
+
+SectorSurfaceRef ToEditorSurfaceRef(const SectorGeneratedSurfaceRef& ref)
+{
+    SectorSurfaceRef surface;
+    surface.kind = ToEditorSurfaceKind(ref.kind);
+    surface.sectorIndex = ref.sectorIndex;
+    surface.ringKind = ref.ringKind;
+    surface.holeIndex = ref.holeIndex;
+    surface.edgeIndex = ref.edgeIndex;
+    surface.topologySectorId = ref.topologySectorId;
+    surface.topologyLineDefId = ref.topologyLineDefId;
+    surface.topologySideDefId = ref.topologySideDefId;
+    surface.topologySide = ref.topologySide;
+    return surface;
+}
+
 EdgeUvPart SurfaceKindToEdgeUvPart(SectorSurfaceKind kind)
 {
     switch (kind) {
@@ -1175,14 +1204,10 @@ void SectorEditor::RenderUI(
             return;
         }
         DrawPreviewOverlay(config, assets, font);
-        if (!preview.IsMouseLookEnabled()) {
-            DrawPreviewUvPanel(ui, config, input, assets, font);
-        } else {
-            ui.hotId = 0;
-            ui.activeId = 0;
-            ui.openOptionId = 0;
-            ui.focusedId = 0;
-        }
+        ui.hotId = 0;
+        ui.activeId = 0;
+        ui.openOptionId = 0;
+        ui.focusedId = 0;
         DrawTexturePickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = ui.focusedId != 0;
         if (state.texturePicker.open) {
@@ -1815,9 +1840,7 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
 
     const Rectangle viewport{0.0f, 0.0f, EditorWidth, EditorHeight};
     const Vector2 mouse = input.MousePosition();
-    const Rectangle panel = BuildPreviewUvPanelRect();
-    const bool overPanel = state.selectedSurface3D.kind != SectorSurfaceKind::None
-            && Contains(panel, mouse);
+    const bool overPanel = false;
     state.hoveredSurface3D = overPanel
             ? SectorSurfaceHit{}
             : PickSectorSurface3D(mouse, viewport);
@@ -1829,7 +1852,7 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
                 if (event.mouseClick.button != MOUSE_LEFT_BUTTON) {
                     return;
                 }
-                if (overPanel || Contains(BuildPreviewUvPanelRect(), event.mouseClick.releasePosition)) {
+                if (overPanel) {
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -3239,45 +3262,18 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
             static_cast<int>(std::round(viewportRect.height))
     );
 
-    SectorGeneratedGeometry geometry;
-    if (!BuildSectorGeneratedGeometry(state.map, geometry)) {
+    const SectorGeneratedSurfaceHit hit = PickSectorGeneratedGeometry(
+            preview.GeneratedGeometry(),
+            ray,
+            GeometryEpsilon);
+    if (!hit.hit) {
         return best;
     }
 
-    for (const SectorGeneratedSurface& surface : geometry.surfaces) {
-        for (size_t i = 0; i + 2 < surface.vertices.size(); i += 3) {
-            RayCollision collision = GetRayCollisionTriangle(
-                    ray,
-                    surface.vertices[i + 0].position,
-                    surface.vertices[i + 1].position,
-                    surface.vertices[i + 2].position
-            );
-            if (!collision.hit) {
-                collision = GetRayCollisionTriangle(
-                        ray,
-                        surface.vertices[i + 2].position,
-                        surface.vertices[i + 1].position,
-                        surface.vertices[i + 0].position
-                );
-            }
-            if (!collision.hit || collision.distance <= GeometryEpsilon) {
-                continue;
-            }
-            if (!best.hit || collision.distance < best.distance) {
-                best.hit = true;
-                best.surface = SectorSurfaceRef{
-                        ToEditorSurfaceKind(surface.ref.kind),
-                        surface.ref.sectorIndex,
-                        surface.ref.ringKind,
-                        surface.ref.holeIndex,
-                        surface.ref.edgeIndex
-                };
-                best.worldPosition = collision.point;
-                best.distance = collision.distance;
-            }
-        }
-    }
-
+    best.hit = true;
+    best.surface = ToEditorSurfaceRef(hit.ref);
+    best.worldPosition = hit.worldPosition;
+    best.distance = hit.distance;
     return best;
 }
 
@@ -3291,65 +3287,22 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
         if (!IsValidSurfaceRef(surface)) {
             return;
         }
-
-        const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
-        if (surface.kind == SectorSurfaceKind::Floor || surface.kind == SectorSurfaceKind::Ceiling) {
-            const float lift = surface.kind == SectorSurfaceKind::Floor ? PreviewHighlightLift : -PreviewHighlightLift;
-            const float height = surface.kind == SectorSurfaceKind::Floor ? sector.floorZ : sector.ceilingZ;
-            const Vector3 liftOffset{0.0f, lift, 0.0f};
-            const size_t ringCount = 1 + sector.holes.size();
-            for (size_t ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
-                const std::vector<SectorPoint>& ring = ringIndex == 0
-                        ? sector.points : sector.holes[ringIndex - 1];
-                for (size_t i = 0; i < ring.size(); ++i) {
-                    const SectorPoint a = ring[i];
-                    const SectorPoint b = ring[(i + 1) % ring.size()];
-                    DrawLine3D(
-                            Vector3Add(SectorPointToWorld(a, height), liftOffset),
-                            Vector3Add(SectorPointToWorld(b, height), liftOffset),
-                            color
-                    );
-                }
+        const float lift = IsWallSurface(surface.kind) ? PreviewHighlightLift : PreviewHighlightLift * 2.0f;
+        for (const SectorGeneratedSurface& generated : preview.GeneratedGeometry().surfaces) {
+            const SectorSurfaceRef generatedRef = ToEditorSurfaceRef(generated.ref);
+            if (!SameSurfaceRef(surface, generatedRef)) {
+                continue;
             }
-            (void)thickness;
-            return;
+            const Vector3 offset = Vector3Scale(generated.normal, lift);
+            for (size_t i = 0; i + 2 < generated.vertices.size(); i += 3) {
+                const Vector3 a = Vector3Add(generated.vertices[i + 0].position, offset);
+                const Vector3 b = Vector3Add(generated.vertices[i + 1].position, offset);
+                const Vector3 c = Vector3Add(generated.vertices[i + 2].position, offset);
+                DrawLine3D(a, b, color);
+                DrawLine3D(b, c, color);
+                DrawLine3D(c, a, color);
+            }
         }
-
-        SectorPoint a{};
-        SectorPoint b{};
-        const SectorBoundaryEdgeRef boundary{
-                surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex};
-        if (!GetSectorBoundaryEdge(state.map, boundary, a, b)) {
-            return;
-        }
-        float bottom = sector.floorZ;
-        float top = sector.ceilingZ;
-        const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(state.map, boundary);
-        if (surface.kind == SectorSurfaceKind::LowerWall && neighbor.hasNeighbor) {
-            top = state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)].floorZ;
-        } else if (surface.kind == SectorSurfaceKind::UpperWall && neighbor.hasNeighbor) {
-            bottom = state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)].ceilingZ;
-        }
-        if (top <= bottom + GeometryEpsilon) {
-            return;
-        }
-
-        const float dx = b.x - a.x;
-        const float dz = b.y - a.y;
-        const float len = std::sqrt(dx * dx + dz * dz);
-        Vector3 offset{};
-        if (len > GeometryEpsilon) {
-            offset = Vector3Scale(Vector3{-dz / len, 0.0f, dx / len}, PreviewHighlightLift);
-        }
-
-        const Vector3 ab = Vector3Add(SectorPointToWorld(a, bottom), offset);
-        const Vector3 at = Vector3Add(SectorPointToWorld(a, top), offset);
-        const Vector3 bb = Vector3Add(SectorPointToWorld(b, bottom), offset);
-        const Vector3 bt = Vector3Add(SectorPointToWorld(b, top), offset);
-        DrawLine3D(ab, at, color);
-        DrawLine3D(at, bt, color);
-        DrawLine3D(bt, bb, color);
-        DrawLine3D(bb, ab, color);
         (void)thickness;
     };
 
@@ -6659,9 +6612,6 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
         return false;
     }
 
-    statusText = "Topology 3D preview is not migrated yet.";
-    return false;
-
     CancelPendingSector(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
@@ -6672,7 +6622,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     uiState.keyboardCaptured = false;
 
     std::string error;
-    if (!preview.Rebuild(assets, state.map, "sector_editor_preview", error)) {
+    if (!preview.Rebuild(assets, state.topologyMap, "sector_editor_preview", error)) {
         state.mode = SectorEditorMode::Edit2D;
         if (StartsWith(error, "Preview failed:")) {
             statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
@@ -7393,33 +7343,32 @@ void SectorEditor::SelectSurface3D(SectorSurfaceRef surface)
     if (!SameSurfaceRef(state.selectedSurface3D, surface)) {
         ResetSurface3DUiState();
     }
-    state.selectedSurface3D = surface;
 
     if (IsWallSurface(surface.kind)) {
-        SelectEdge(surface.sectorIndex, surface.edgeIndex, surface.ringKind, surface.holeIndex);
-        state.selectedEdgeUvPart = SurfaceKindToEdgeUvPart(surface.kind);
+        SelectTopologySideDef(
+                surface.topologySideDefId,
+                SurfaceKindToTopologyWallPart(surface.kind));
     } else {
-        SelectSector(surface.sectorIndex);
+        SelectTopologySector(surface.topologySectorId);
     }
+    state.selectedSurface3D = surface;
 }
 
 bool SectorEditor::IsValidSurfaceRef(SectorSurfaceRef surface) const
 {
-    if (surface.kind == SectorSurfaceKind::None
-            || surface.sectorIndex < 0
-            || surface.sectorIndex >= static_cast<int>(state.map.sectors.size())) {
+    if (surface.kind == SectorSurfaceKind::None) {
         return false;
     }
 
-    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
     if (IsWallSurface(surface.kind)) {
-        const std::vector<SectorPoint>* ring = GetSectorBoundaryRing(
-                state.map,
-                SectorBoundaryEdgeRef{surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex});
-        return ring != nullptr && surface.edgeIndex >= 0
-                && surface.edgeIndex < static_cast<int>(ring->size());
+        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
+                state.topologyMap,
+                surface.topologySideDefId);
+        return sideDef != nullptr
+                && sideDef->lineDefId == surface.topologyLineDefId
+                && sideDef->side == surface.topologySide;
     }
-    return surface.edgeIndex < 0;
+    return FindSectorTopologySector(state.topologyMap, surface.topologySectorId) != nullptr;
 }
 
 bool SectorEditor::SameSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b) const
@@ -7428,7 +7377,11 @@ bool SectorEditor::SameSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b) const
             && a.sectorIndex == b.sectorIndex
             && a.ringKind == b.ringKind
             && a.holeIndex == b.holeIndex
-            && a.edgeIndex == b.edgeIndex;
+            && a.edgeIndex == b.edgeIndex
+            && a.topologySectorId == b.topologySectorId
+            && a.topologyLineDefId == b.topologyLineDefId
+            && a.topologySideDefId == b.topologySideDefId
+            && a.topologySide == b.topologySide;
 }
 
 void SectorEditor::ResetSurface3DUiState()
@@ -7744,7 +7697,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
     const SectorSurfaceRef selected = state.selectedSurface3D;
 
     std::string error;
-    if (!preview.Rebuild(assets, state.map, "sector_editor_preview", error)) {
+    if (!preview.Rebuild(assets, state.topologyMap, "sector_editor_preview", error)) {
         if (StartsWith(error, "Preview failed:")) {
             statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
         } else {

@@ -649,6 +649,40 @@ const char* SectorGeneratedSurfaceKindName(SectorGeneratedSurfaceKind kind)
     return "Unknown";
 }
 
+SectorGeneratedSurfaceHit PickSectorGeneratedGeometry(
+        const SectorGeneratedGeometry& geometry,
+        Ray ray,
+        float minDistance)
+{
+    SectorGeneratedSurfaceHit best;
+    for (const SectorGeneratedSurface& surface : geometry.surfaces) {
+        for (size_t i = 0; i + 2 < surface.vertices.size(); i += 3) {
+            RayCollision collision = GetRayCollisionTriangle(
+                    ray,
+                    surface.vertices[i + 0].position,
+                    surface.vertices[i + 1].position,
+                    surface.vertices[i + 2].position);
+            if (!collision.hit) {
+                collision = GetRayCollisionTriangle(
+                        ray,
+                        surface.vertices[i + 2].position,
+                        surface.vertices[i + 1].position,
+                        surface.vertices[i + 0].position);
+            }
+            if (!collision.hit || collision.distance <= minDistance) {
+                continue;
+            }
+            if (!best.hit || collision.distance < best.distance) {
+                best.hit = true;
+                best.ref = surface.ref;
+                best.worldPosition = collision.point;
+                best.distance = collision.distance;
+            }
+        }
+    }
+    return best;
+}
+
 std::string FormatSectorGeneratedSurfaceLabel(const SectorGeneratedSurfaceRef& ref)
 {
     std::ostringstream label;

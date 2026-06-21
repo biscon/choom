@@ -52,11 +52,22 @@ struct SectorGeneratedGeometry {
     std::vector<SectorGeneratedSurface> surfaces;
 };
 
+struct SectorGeneratedSurfaceHit {
+    bool hit = false;
+    SectorGeneratedSurfaceRef ref;
+    Vector3 worldPosition = {};
+    float distance = 0.0f;
+};
+
 bool BuildSectorGeneratedGeometry(const SectorMap& map, SectorGeneratedGeometry& outGeometry);
 bool BuildSectorGeneratedGeometry(
         const SectorTopologyMap& map,
         SectorGeneratedGeometry& outGeometry,
         std::string* outError = nullptr);
+SectorGeneratedSurfaceHit PickSectorGeneratedGeometry(
+        const SectorGeneratedGeometry& geometry,
+        Ray ray,
+        float minDistance = 0.001f);
 const char* SectorGeneratedSurfaceKindName(SectorGeneratedSurfaceKind kind);
 std::string FormatSectorGeneratedSurfaceLabel(const SectorGeneratedSurfaceRef& ref);
 

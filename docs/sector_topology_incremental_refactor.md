@@ -105,3 +105,13 @@ Selected sidedefs render as a thick translucent offset halo on the selected side
 The inspector now edits concrete `SectorTopologySideDef` wall, lower, and upper texture and UV settings independently per side. Texture picker targets use stable topology sidedef IDs plus an explicit wall/lower/upper part and continue to draw choices from `state.topologyMap.texturesById`. Reset UV actions restore scale to `(1,1)` and offset to `(0,0)` for the selected part without changing its texture or other parts.
 
 Two-sided linedefs expose a Switch to opposite side action when the opposite sidedef exists. Equal-height portals remain selectable and editable because 2D selection uses topology linedefs and sidedefs, not generated wall meshes. Sector selection and the topology sector inspector remain working. The 3D preview, lightmaps, Move, Erase, Insert Sector Inside, Split Linedef, vertex dragging, light placement, sidedef creation, and polygon-to-topology conversion remain deferred.
+
+## Phase 12: topology 3D preview and picking
+
+The existing 3D preview mode now builds from topology generated geometry and the topology mesh path using `state.topologyMap`. The old polygon compatibility map is not used for editor preview rendering, while the old polygon preview overload remains in place for legacy callers.
+
+Preview texture requests now come from `state.topologyMap.texturesById`. Topology preview stores CPU-side generated surface triangles for 3D picking and highlight overlays, and clears that CPU-side geometry on rebuild failure or shutdown so stale surface refs cannot be picked.
+
+3D picking maps floor and ceiling surfaces to topology sector selection. Wall, lower-wall, and upper-wall surfaces map to topology sidedef selection with the matching wall part, preserving the generated stable sector, linedef, sidedef, and side IDs. Equal-height portals remain 2D-selectable only because they intentionally generate no 3D wall mesh.
+
+The preview preserves the existing camera controls, entry/exit flow, and F11 cursor/mouselook behavior. Topology preview renders without lightmaps; lightmap baking and topology lightmap layout remain deferred.

@@ -129,6 +129,10 @@ struct SectorSurfaceRef {
     SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
     int holeIndex = -1;
     int edgeIndex = -1;
+    int topologySectorId = -1;
+    int topologyLineDefId = -1;
+    int topologySideDefId = -1;
+    SectorTopologySideKind topologySide = SectorTopologySideKind::Front;
 };
 
 struct SectorSurfaceHit {
