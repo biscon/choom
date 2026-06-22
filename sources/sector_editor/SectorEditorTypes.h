@@ -186,6 +186,8 @@ struct VertexDragState {
     bool hasPreviewPoint = false;
     bool hasValidatedPreview = false;
     bool lastPreviewValid = true;
+    bool hasMergeTarget = false;
+    int mergeTargetVertexId = -1;
     std::string errorMessage;
 };
 
@@ -205,6 +207,14 @@ struct PendingTopologyLineSplitAtPoint {
     SectorTopologyCoordPoint candidatePoint = {};
     bool hasCandidatePoint = false;
     bool hasValidCandidate = false;
+    std::string message;
+};
+
+struct PendingTopologyVertexMerge {
+    bool active = false;
+    int sourceVertexId = -1;
+    int hoveredTargetVertexId = -1;
+    bool hasValidTarget = false;
     std::string message;
 };
 
@@ -233,6 +243,7 @@ struct SectorEditorState {
     bool hasHoveredVertex = false;
     int hoveredTopologyVertexId = -1;
     SectorTopologyCoordPoint hoveredTopologyVertexPoint = {};
+    int inspectedTopologyVertexId = -1;
 
     Vector2 snappedMouseMap = {0.0f, 0.0f};
     Vector2 rawMouseMap = {0.0f, 0.0f};
@@ -241,6 +252,7 @@ struct SectorEditorState {
     VertexDragState vertexDrag;
     LightDragState lightDrag;
     PendingTopologyLineSplitAtPoint pendingTopologyLineSplitAtPoint;
+    PendingTopologyVertexMerge pendingTopologyVertexMerge;
     float defaultSectorFloorZ = 0.0f;
     float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);
     std::string defaultFloorTextureId;

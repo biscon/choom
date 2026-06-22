@@ -64,8 +64,8 @@ views and maps to world Z for generated 3D geometry.
 - Sector tool: draw topology sectors. Finalized sectors reuse exact existing
   vertices and exact endpoint-pair linedefs when possible.
 - Light tool: place a topology static baked light inside the clicked sector.
-- Move tool: drag topology vertices by stable vertex ID or drag static lights by
-  X/Z.
+- Move tool: drag topology vertices by stable vertex ID, merge vertices by
+  dragging exactly onto an existing vertex, or drag static lights by X/Z.
 - Erase tool: click a sector to confirm deletion. Light deletion is available
   from selection/Delete.
 - Click the first pending point or press `Enter`: finalize the pending sector.
@@ -225,17 +225,27 @@ filtering. It does not copy external files into the project.
 Moving a topology vertex edits exactly one stable vertex ID. Connected linedefs
 and all sector loops using that vertex update through the shared reference.
 Movement previews validate a candidate topology before committing on mouse
-release. Moving a vertex onto another existing vertex is rejected because vertex
-merge is not implemented.
+release.
+
+Topology vertices can be merged conservatively. With the Move tool, hover a
+vertex and use `Merge Into...`, then click the target vertex. Dragging a vertex
+so its snapped release point exactly matches another existing vertex also
+attempts the same merge. The target vertex survives, the source vertex is
+removed, and existing linedefs are rewired only if the candidate topology remains
+valid.
+
+Vertex merge rejects cases that would collapse a linedef, create duplicate
+physical linedefs, require automatic sidedef merging, or invalidate topology.
 
 Moving a light edits only its X/Z position during the drag. Y remains unchanged.
 
 Splitting is inspector-driven. It always splits at the exact stored-coordinate
 midpoint and fails if that midpoint is not representable on the integer grid.
 
-Sector deletion and vertex movement use copy/validate/commit style topology
-edits. Direct linedef deletion, direct sidedef deletion, standalone vertex
-deletion, vertex merge, and undo/redo are not available yet.
+Sector deletion, vertex movement, and conservative vertex merge use
+copy/validate/commit style topology edits. Direct linedef deletion, direct
+sidedef deletion, standalone vertex deletion, and undo/redo are not available
+yet.
 
 ## 3D Mode
 
@@ -311,5 +321,5 @@ chart.
 - Single fixed-size lightmap atlas; no multi-atlas packing.
 - No 3D geometry editing beyond texture and UV edits on generated surfaces.
 - No direct linedef or sidedef deletion.
-- No standalone vertex deletion or vertex merge.
+- No standalone vertex deletion.
 - No arbitrary line cutting or automatic overlap splitting.

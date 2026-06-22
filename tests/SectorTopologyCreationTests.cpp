@@ -18,6 +18,7 @@ using game::SectorTopologyLineDef;
 using game::SectorTopologyLoop;
 using game::SectorTopologyLoopSet;
 using game::SectorTopologyMap;
+using game::SectorTopologyMergeVerticesResult;
 using game::SectorTopologySideDef;
 using game::SectorTopologySideKind;
 using game::SectorTopologyDeleteSectorResult;
@@ -247,6 +248,21 @@ bool SameSideDefSettings(const SectorTopologySideDef& a, const SectorTopologySid
            && SameWallPart(a.wall, b.wall)
            && SameWallPart(a.lower, b.lower)
            && SameWallPart(a.upper, b.upper);
+}
+
+bool SameAllSideDefSettings(const SectorTopologyMap& before, const SectorTopologyMap& after)
+{
+    if (before.sideDefs.size() != after.sideDefs.size()) {
+        return false;
+    }
+    for (const SectorTopologySideDef& beforeSideDef : before.sideDefs) {
+        const SectorTopologySideDef* afterSideDef =
+                game::FindSectorTopologySideDef(after, beforeSideDef.id);
+        if (afterSideDef == nullptr || !SameSideDefSettings(beforeSideDef, *afterSideDef)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void SetDistinctSideSettings(SectorTopologySideDef& sideDef, const char* prefix)
@@ -1469,6 +1485,148 @@ void TestRejectMovedCrossing()
     CheckUnchanged(before, map, "move creating crossing linedef leaves map unchanged");
 }
 
+void TestMergeVertexIntoUnreferencedTarget()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "merge success square creation succeeds");
+    for (SectorTopologySideDef& sideDef : map.sideDefs) {
+        SetDistinctSideSettings(sideDef, TextFormat("merge_side_%d", sideDef.id));
+    }
+
+    const int sourceVertexId = 3;
+    const int targetVertexId = game::AllocateSectorTopologyVertexId(map);
+    map.vertices.push_back(game::SectorTopologyVertex{targetVertexId, 80, 64});
+    const SectorTopologyMap before = map;
+
+    SectorTopologyMergeVerticesResult result;
+    std::string error;
+    Check(game::MergeSectorTopologyVertices(map, sourceVertexId, targetVertexId, &result, &error),
+          "merge vertex into unreferenced target succeeds");
+    Check(error.empty(), "successful merge clears error");
+    Check(result.mergedVertexId == targetVertexId && result.removedVertexId == sourceVertexId,
+          "merge reports surviving and removed vertices");
+    Check(game::FindSectorTopologyVertex(map, sourceVertexId) == nullptr,
+          "merge removes source vertex");
+    Check(game::FindSectorTopologyVertex(map, targetVertexId) != nullptr,
+          "merge keeps target vertex");
+    Check(CountLinesReferencingVertex(map, sourceVertexId) == 0,
+          "merge rewires all source references");
+    Check(CountLinesReferencingVertex(map, targetVertexId) == 2,
+          "merge rewires incident linedefs to target");
+    Check(map.lineDefs.size() == before.lineDefs.size()
+                  && map.sideDefs.size() == before.sideDefs.size()
+                  && map.sectors.size() == before.sectors.size(),
+          "merge does not remove linedefs, sidedefs, or sectors");
+    Check(SameAllSideDefSettings(before, map),
+          "merge preserves sidedef wall/lower/upper materials and UVs");
+
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, sectorId, loops), "merged sector validates and extracts");
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "generated geometry builds after merge");
+}
+
+void ExpectMergeRejected(
+        const SectorTopologyMap& input,
+        int sourceVertexId,
+        int targetVertexId,
+        const char* expectedErrorText,
+        const char* description)
+{
+    SectorTopologyMap map = input;
+    const SectorTopologyMap before = map;
+    std::string error;
+    Check(!game::MergeSectorTopologyVertices(map, sourceVertexId, targetVertexId, nullptr, &error),
+          description);
+    Check(!error.empty(), "rejected merge reports an error");
+    if (expectedErrorText != nullptr) {
+        Check(error.find(expectedErrorText) != std::string::npos,
+              "rejected merge reports expected error text");
+    }
+    CheckUnchanged(before, map, "rejected merge leaves map unchanged");
+}
+
+void TestRejectInvalidMergeInputs()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "invalid merge input square creation succeeds");
+
+    ExpectMergeRejected(map, 999, 1, "Source topology vertex not found",
+                        "merge missing source fails");
+    ExpectMergeRejected(map, 1, 999, "Target topology vertex not found",
+                        "merge missing target fails");
+    ExpectMergeRejected(map, 1, 1, "itself",
+                        "merge source into itself fails");
+}
+
+void TestRejectMergeCollapsedLineDef()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "collapsed merge square creation succeeds");
+    ExpectMergeRejected(map, 1, 2, "collapse",
+                        "merge that collapses a linedef fails");
+}
+
+void TestRejectMergeDuplicatePhysicalLineDef()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {96, 0}, {96, 96}, {0, 96}}, &sectorId),
+          "duplicate merge base square creation succeeds");
+
+    const int sourceVertexId = game::AllocateSectorTopologyVertexId(map);
+    map.vertices.push_back(game::SectorTopologyVertex{sourceVertexId, 32, 32});
+
+    const int targetVertexId = game::AllocateSectorTopologyVertexId(map);
+    map.vertices.push_back(game::SectorTopologyVertex{targetVertexId, 64, 32});
+
+    const int firstSideDefId = game::AllocateSectorTopologySideDefId(map);
+    const int firstLineDefId = game::AllocateSectorTopologyLineDefId(map);
+    map.sideDefs.push_back(SectorTopologySideDef{
+            firstSideDefId,
+            firstLineDefId,
+            SectorTopologySideKind::Front,
+            sectorId,
+            game::SectorTopologyWallPartSettings{},
+            game::SectorTopologyWallPartSettings{},
+            game::SectorTopologyWallPartSettings{}
+    });
+    map.lineDefs.push_back(SectorTopologyLineDef{firstLineDefId, sourceVertexId, 1, firstSideDefId, -1});
+
+    const int secondSideDefId = game::AllocateSectorTopologySideDefId(map);
+    const int secondLineDefId = game::AllocateSectorTopologyLineDefId(map);
+    map.sideDefs.push_back(SectorTopologySideDef{
+            secondSideDefId,
+            secondLineDefId,
+            SectorTopologySideKind::Front,
+            sectorId,
+            game::SectorTopologyWallPartSettings{},
+            game::SectorTopologyWallPartSettings{},
+            game::SectorTopologyWallPartSettings{}
+    });
+    map.lineDefs.push_back(SectorTopologyLineDef{secondLineDefId, targetVertexId, 1, secondSideDefId, -1});
+
+    ExpectMergeRejected(map, sourceVertexId, targetVertexId, "duplicate physical linedefs",
+                        "merge creating duplicate physical linedef fails");
+}
+
+void TestRejectMergeInvalidTopology()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "invalid topology merge square creation succeeds");
+    const int targetVertexId = game::AllocateSectorTopologyVertexId(map);
+    map.vertices.push_back(game::SectorTopologyVertex{targetVertexId, 32, 0});
+
+    ExpectMergeRejected(map, 3, targetVertexId, nullptr,
+                        "merge creating invalid topology fails");
+}
+
 void TestRejectOccupiedSlot()
 {
     SectorTopologyMap map;
@@ -1581,6 +1739,11 @@ int main()
     TestRejectMoveOntoExistingVertex();
     TestRejectInvalidMovedLoop();
     TestRejectMovedCrossing();
+    TestMergeVertexIntoUnreferencedTarget();
+    TestRejectInvalidMergeInputs();
+    TestRejectMergeCollapsedLineDef();
+    TestRejectMergeDuplicatePhysicalLineDef();
+    TestRejectMergeInvalidTopology();
     TestRejectOccupiedSlot();
     TestRejectPartialOverlap();
     TestRejectCrossing();

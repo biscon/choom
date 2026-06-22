@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -88,6 +89,75 @@ SectorTopologySideDef DuplicateSideDef(
     return duplicate;
 }
 
+struct LineEndpointPair {
+    int a = -1;
+    int b = -1;
+
+    bool operator==(const LineEndpointPair& other) const
+    {
+        return a == other.a && b == other.b;
+    }
+};
+
+struct LineEndpointPairHash {
+    size_t operator()(const LineEndpointPair& pair) const
+    {
+        return (static_cast<size_t>(pair.a) << 32U) ^ static_cast<size_t>(pair.b);
+    }
+};
+
+LineEndpointPair MakeLineEndpointPair(const SectorTopologyLineDef& lineDef)
+{
+    return LineEndpointPair{
+            std::min(lineDef.startVertexId, lineDef.endVertexId),
+            std::max(lineDef.startVertexId, lineDef.endVertexId)
+    };
+}
+
+bool ValidateNoCollapsedLineDefs(const SectorTopologyMap& map, std::string* outError)
+{
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        if (lineDef.startVertexId == lineDef.endVertexId) {
+            SetError(
+                    outError,
+                    "Merge would collapse topology linedef " + std::to_string(lineDef.id)
+                            + " to a single vertex.");
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ValidateNoDuplicatePhysicalLineDefs(const SectorTopologyMap& map, std::string* outError)
+{
+    std::unordered_map<LineEndpointPair, int, LineEndpointPairHash> lineIdByEndpointPair;
+    lineIdByEndpointPair.reserve(map.lineDefs.size());
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        const LineEndpointPair pair = MakeLineEndpointPair(lineDef);
+        const auto inserted = lineIdByEndpointPair.emplace(pair, lineDef.id);
+        if (!inserted.second) {
+            SetError(
+                    outError,
+                    "Merge would create duplicate physical linedefs "
+                            + std::to_string(inserted.first->second)
+                            + " and " + std::to_string(lineDef.id) + ".");
+            return false;
+        }
+    }
+    return true;
+}
+
+void AddSideDefSectorId(
+        const SectorTopologyMap& map,
+        int sideDefId,
+        std::unordered_set<int>& sectorIds)
+{
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, sideDefId);
+    if (sideDef != nullptr && IsValidSectorTopologyId(sideDef->sectorId)) {
+        sectorIds.insert(sideDef->sectorId);
+    }
+}
+
 } // namespace
 
 bool MoveSectorTopologyVertex(
@@ -141,6 +211,99 @@ bool MoveSectorTopologyVertex(
     }
 
     map = std::move(candidate);
+    return true;
+}
+
+bool MergeSectorTopologyVertices(
+        SectorTopologyMap& map,
+        int sourceVertexId,
+        int targetVertexId,
+        SectorTopologyMergeVerticesResult* outResult,
+        std::string* outError)
+{
+    if (outResult != nullptr) {
+        *outResult = SectorTopologyMergeVerticesResult{};
+    }
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    if (!IsValidSectorTopologyId(sourceVertexId)) {
+        SetError(outError, "Invalid source topology vertex ID");
+        return false;
+    }
+    if (!IsValidSectorTopologyId(targetVertexId)) {
+        SetError(outError, "Invalid target topology vertex ID");
+        return false;
+    }
+    if (sourceVertexId == targetVertexId) {
+        SetError(outError, "Cannot merge topology vertex into itself.");
+        return false;
+    }
+
+    if (FindSectorTopologyVertex(map, sourceVertexId) == nullptr) {
+        SetError(outError, "Source topology vertex not found");
+        return false;
+    }
+    if (FindSectorTopologyVertex(map, targetVertexId) == nullptr) {
+        SetError(outError, "Target topology vertex not found");
+        return false;
+    }
+
+    std::unordered_set<int> affectedSectorIds;
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        if (lineDef.startVertexId == sourceVertexId || lineDef.endVertexId == sourceVertexId) {
+            AddSideDefSectorId(map, lineDef.frontSideDefId, affectedSectorIds);
+            AddSideDefSectorId(map, lineDef.backSideDefId, affectedSectorIds);
+        }
+    }
+
+    SectorTopologyMap candidate = map;
+    for (SectorTopologyLineDef& lineDef : candidate.lineDefs) {
+        if (lineDef.startVertexId == sourceVertexId) {
+            lineDef.startVertexId = targetVertexId;
+        }
+        if (lineDef.endVertexId == sourceVertexId) {
+            lineDef.endVertexId = targetVertexId;
+        }
+    }
+
+    candidate.vertices.erase(
+            std::remove_if(
+                    candidate.vertices.begin(),
+                    candidate.vertices.end(),
+                    [sourceVertexId](const SectorTopologyVertex& vertex) {
+                        return vertex.id == sourceVertexId;
+                    }),
+            candidate.vertices.end());
+
+    if (!ValidateNoCollapsedLineDefs(candidate, outError)) {
+        return false;
+    }
+    if (!ValidateNoDuplicatePhysicalLineDefs(candidate, outError)) {
+        return false;
+    }
+
+    const std::vector<SectorTopologyValidationIssue> issues = ValidateSectorTopologyMap(candidate);
+    if (HasSectorTopologyValidationErrors(issues)) {
+        SetError(outError, FirstValidationError(issues));
+        return false;
+    }
+
+    for (int sectorId : affectedSectorIds) {
+        SectorTopologyLoopSet loops;
+        std::vector<SectorTopologyValidationIssue> loopIssues;
+        if (!ExtractSectorTopologyLoops(candidate, sectorId, loops, &loopIssues)) {
+            SetError(outError, FirstValidationError(loopIssues));
+            return false;
+        }
+    }
+
+    map = std::move(candidate);
+    if (outResult != nullptr) {
+        outResult->mergedVertexId = targetVertexId;
+        outResult->removedVertexId = sourceVertexId;
+    }
     return true;
 }
 

@@ -1125,6 +1125,9 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
         const int lightId = FindTopologyLightNearScreenPoint(input.MousePosition());
         if (lightId >= 0) {
             state.hoveredTopologyLightId = lightId;
+            if (!state.pendingTopologyVertexMerge.active) {
+                state.inspectedTopologyVertexId = -1;
+            }
         } else {
             int vertexId = -1;
             SectorTopologyCoordPoint point;
@@ -1132,6 +1135,9 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
                 state.hasHoveredVertex = true;
                 state.hoveredTopologyVertexId = vertexId;
                 state.hoveredTopologyVertexPoint = point;
+                state.inspectedTopologyVertexId = vertexId;
+            } else if (!state.pendingTopologyVertexMerge.active) {
+                state.inspectedTopologyVertexId = -1;
             }
         }
     }
@@ -1152,6 +1158,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         CancelVertexDrag("Cancelled vertex move");
                     } else if (state.lightDrag.active) {
                         CancelLightDrag("Cancelled light move");
+                    } else if (state.pendingTopologyVertexMerge.active) {
+                        CancelPendingTopologyVertexMerge("Cancelled vertex merge");
                     } else if (state.pendingTopologyLineSplitAtPoint.active) {
                         CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
                     } else if (state.pendingSector.active) {
@@ -1196,6 +1204,41 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
             }
     );
+
+    if (state.pendingTopologyVertexMerge.active) {
+        UpdatePendingTopologyVertexMerge(input);
+
+        input.ForEachEvent(
+                engine::InputEventType::MouseButtonPressed,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (event.mouseButton.button == MOUSE_RIGHT_BUTTON) {
+                        CancelPendingTopologyVertexMerge("Cancelled vertex merge");
+                        engine::ConsumeEvent(event);
+                    }
+                }
+        );
+
+        input.ForEachEvent(
+                engine::InputEventType::MouseClick,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (!Contains(canvasRect, event.mouseClick.releasePosition)) {
+                        return;
+                    }
+                    if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
+                        CancelPendingTopologyVertexMerge("Cancelled vertex merge");
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+                    if (event.mouseClick.button == MOUSE_LEFT_BUTTON) {
+                        CommitPendingTopologyVertexMerge();
+                        engine::ConsumeEvent(event);
+                    }
+                }
+        );
+        return;
+    }
 
     if (state.vertexDrag.active || state.lightDrag.active) {
         if (state.vertexDrag.active) {
@@ -1515,21 +1558,41 @@ void SectorEditor::UpdateVertexDrag(engine::Input& input)
         state.vertexDrag.errorMessage = error;
         state.vertexDrag.hasPreviewPoint = false;
         state.vertexDrag.lastPreviewValid = false;
+        state.vertexDrag.hasMergeTarget = false;
+        state.vertexDrag.mergeTargetVertexId = -1;
         statusText = TextFormat("Move rejected: %s", error.c_str());
         return;
     }
 
     state.vertexDrag.previewPoint = snappedPoint;
     state.vertexDrag.hasPreviewPoint = true;
+    const int mergeTargetVertexId = FindTopologyVertexAtCoordPoint(
+            state.vertexDrag.previewPoint,
+            state.vertexDrag.topologyVertexId);
     if (SameTopologyPoint(state.vertexDrag.previewPoint, state.vertexDrag.originalPoint)) {
         state.vertexDrag.errorMessage.clear();
         state.vertexDrag.hasValidatedPreview = true;
         state.vertexDrag.lastValidatedPoint = state.vertexDrag.previewPoint;
         state.vertexDrag.lastPreviewValid = true;
+        state.vertexDrag.hasMergeTarget = false;
+        state.vertexDrag.mergeTargetVertexId = -1;
         statusText = "Moving vertex: original point";
         return;
     }
 
+    if (mergeTargetVertexId >= 0) {
+        state.vertexDrag.errorMessage.clear();
+        state.vertexDrag.lastPreviewValid = true;
+        state.vertexDrag.hasMergeTarget = true;
+        state.vertexDrag.mergeTargetVertexId = mergeTargetVertexId;
+        state.vertexDrag.hasValidatedPreview = true;
+        state.vertexDrag.lastValidatedPoint = state.vertexDrag.previewPoint;
+        statusText = TextFormat("Release to merge into vertex %d", mergeTargetVertexId);
+        return;
+    }
+
+    state.vertexDrag.hasMergeTarget = false;
+    state.vertexDrag.mergeTargetVertexId = -1;
     if (!state.vertexDrag.hasValidatedPreview
             || !SameTopologyPoint(state.vertexDrag.previewPoint, state.vertexDrag.lastValidatedPoint)) {
         SectorTopologyMap previewMap = state.topologyMap;
@@ -1576,6 +1639,34 @@ void SectorEditor::FinishVertexDrag()
         return;
     }
 
+    if (state.vertexDrag.hasMergeTarget) {
+        const int targetVertexId = state.vertexDrag.mergeTargetVertexId;
+        SectorTopologyMergeVerticesResult merge;
+        std::string error;
+        if (!MergeSectorTopologyVertices(state.topologyMap, vertexId, targetVertexId, &merge, &error)) {
+            state.vertexDrag = VertexDragState{};
+            statusText = TextFormat("Merge rejected: %s", error.c_str());
+            return;
+        }
+
+        ClearTransientTopologyEditStateAfterGeometryChange();
+        state.inspectedTopologyVertexId = merge.mergedVertexId;
+        state.hasHoveredVertex = true;
+        state.hoveredTopologyVertexId = merge.mergedVertexId;
+        const SectorTopologyVertex* merged = FindSectorTopologyVertex(
+                state.topologyMap,
+                merge.mergedVertexId);
+        state.hoveredTopologyVertexPoint = merged != nullptr
+                ? SectorTopologyCoordPoint{merged->x, merged->y}
+                : SectorTopologyCoordPoint{};
+        state.vertexDrag = VertexDragState{};
+        MarkTopologyDocumentEdited(TextFormat(
+                "Merged vertex %d into vertex %d.",
+                merge.removedVertexId,
+                merge.mergedVertexId));
+        return;
+    }
+
     std::string error;
     if (!MoveSectorTopologyVertex(state.topologyMap, vertexId, target, &error)) {
         state.vertexDrag = VertexDragState{};
@@ -1583,21 +1674,16 @@ void SectorEditor::FinishVertexDrag()
         return;
     }
 
-    ClearStaleTopologySelection();
-    state.topologyDocumentDirty = true;
-    state.topologyRenderWarning.clear();
-    state.hasUnsavedChanges = true;
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ClearTransientTopologyEditStateAfterGeometryChange();
     state.vertexDrag = VertexDragState{};
-    statusText = TextFormat(
+    MarkTopologyDocumentEdited(TextFormat(
             "Moved topology vertex %d %.2f,%.2f -> %.2f,%.2f",
             vertexId,
             SectorCoordToVisibleAuthoring(original.x),
             SectorCoordToVisibleAuthoring(original.y),
             SectorCoordToVisibleAuthoring(target.x),
             SectorCoordToVisibleAuthoring(target.y)
-    );
+    ));
 }
 
 void SectorEditor::CancelVertexDrag(const char* message)
@@ -1696,6 +1782,117 @@ void SectorEditor::CancelLightDrag(const char* message)
     }
 }
 
+void SectorEditor::StartPendingTopologyVertexMerge(int sourceVertexId)
+{
+    const SectorTopologyVertex* source = FindSectorTopologyVertex(state.topologyMap, sourceVertexId);
+    if (source == nullptr) {
+        state.inspectedTopologyVertexId = -1;
+        statusText = "Select a topology vertex before merging.";
+        return;
+    }
+
+    CancelPendingSector(nullptr);
+    CancelVertexDrag(nullptr);
+    CancelLightDrag(nullptr);
+    CancelPendingTopologyLineSplitAtPoint(nullptr);
+
+    PendingTopologyVertexMerge pending;
+    pending.active = true;
+    pending.sourceVertexId = sourceVertexId;
+    pending.message = "Click target vertex to merge, Escape/right click to cancel.";
+    state.pendingTopologyVertexMerge = pending;
+    state.currentTool = SectorEditorTool::Move;
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.inspectedTopologyVertexId = sourceVertexId;
+    statusText = pending.message;
+}
+
+void SectorEditor::CancelPendingTopologyVertexMerge(const char* message)
+{
+    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+    if (message != nullptr && message[0] != '\0') {
+        statusText = message;
+    }
+}
+
+void SectorEditor::UpdatePendingTopologyVertexMerge(engine::Input& input)
+{
+    PendingTopologyVertexMerge& pending = state.pendingTopologyVertexMerge;
+    if (!pending.active) {
+        return;
+    }
+
+    if (FindSectorTopologyVertex(state.topologyMap, pending.sourceVertexId) == nullptr) {
+        CancelPendingTopologyVertexMerge("Vertex merge cancelled: source vertex no longer exists.");
+        return;
+    }
+
+    pending.hoveredTargetVertexId = -1;
+    pending.hasValidTarget = false;
+    pending.message = "Click target vertex to merge, Escape/right click to cancel.";
+
+    if (!IsMouseOverCanvas(input)) {
+        statusText = pending.message;
+        return;
+    }
+
+    int targetVertexId = -1;
+    SectorTopologyCoordPoint point;
+    if (!FindTopologyVertexNearScreenPoint(input.MousePosition(), targetVertexId, point)) {
+        pending.message = "Click target vertex to merge, Escape/right click to cancel.";
+        statusText = pending.message;
+        return;
+    }
+
+    pending.hoveredTargetVertexId = targetVertexId;
+    pending.hasValidTarget = targetVertexId != pending.sourceVertexId;
+    pending.message = pending.hasValidTarget
+            ? TextFormat("Click to merge into vertex %d.", targetVertexId)
+            : "Choose a different target vertex.";
+    statusText = pending.message;
+}
+
+void SectorEditor::CommitPendingTopologyVertexMerge()
+{
+    if (!state.pendingTopologyVertexMerge.active) {
+        return;
+    }
+
+    const PendingTopologyVertexMerge pending = state.pendingTopologyVertexMerge;
+    if (!pending.hasValidTarget) {
+        statusText = pending.message.empty() ? "Choose a target vertex to merge into." : pending.message;
+        return;
+    }
+
+    SectorTopologyMergeVerticesResult merge;
+    std::string error;
+    if (!MergeSectorTopologyVertices(
+                state.topologyMap,
+                pending.sourceVertexId,
+                pending.hoveredTargetVertexId,
+                &merge,
+                &error)) {
+        state.pendingTopologyVertexMerge.message =
+                error.empty() ? "Merge rejected." : TextFormat("Merge rejected: %s", error.c_str());
+        statusText = state.pendingTopologyVertexMerge.message;
+        return;
+    }
+
+    ClearTransientTopologyEditStateAfterGeometryChange();
+    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+    state.inspectedTopologyVertexId = merge.mergedVertexId;
+    state.hasHoveredVertex = true;
+    state.hoveredTopologyVertexId = merge.mergedVertexId;
+    const SectorTopologyVertex* merged = FindSectorTopologyVertex(state.topologyMap, merge.mergedVertexId);
+    state.hoveredTopologyVertexPoint = merged != nullptr
+            ? SectorTopologyCoordPoint{merged->x, merged->y}
+            : SectorTopologyCoordPoint{};
+    MarkTopologyDocumentEdited(TextFormat(
+            "Merged vertex %d into vertex %d.",
+            merge.removedVertexId,
+            merge.mergedVertexId));
+}
+
 void SectorEditor::StartPendingTopologyLineSplitAtPoint()
 {
     const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
@@ -1708,6 +1905,7 @@ void SectorEditor::StartPendingTopologyLineSplitAtPoint()
     CancelPendingSector(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
+    CancelPendingTopologyVertexMerge(nullptr);
 
     PendingTopologyLineSplitAtPoint pending;
     pending.active = true;
@@ -2362,6 +2560,16 @@ void SectorEditor::MarkTopologyDocumentEdited(const char* status)
     }
 }
 
+void SectorEditor::ClearTransientTopologyEditStateAfterGeometryChange()
+{
+    ClearStaleTopologySelection();
+    state.topologyRenderWarning.clear();
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+}
+
 void SectorEditor::SyncSelectedSectorIdBuffer()
 {
     const SectorTopologySector* sector = SelectedTopologySector();
@@ -2902,6 +3110,25 @@ bool SectorEditor::FindTopologyVertexNearScreenPoint(
     return true;
 }
 
+int SectorEditor::FindTopologyVertexAtCoordPoint(
+        SectorTopologyCoordPoint point,
+        int excludedVertexId) const
+{
+    int bestVertexId = -1;
+    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
+        if (vertex.id == excludedVertexId) {
+            continue;
+        }
+        if (vertex.x != point.x || vertex.y != point.y) {
+            continue;
+        }
+        if (bestVertexId < 0 || vertex.id < bestVertexId) {
+            bestVertexId = vertex.id;
+        }
+    }
+    return bestVertexId;
+}
+
 bool SectorEditor::SnapTopologyVertexMoveTarget(
         Vector2 mapPoint,
         SectorTopologyCoordPoint& outPoint,
@@ -3353,6 +3580,7 @@ void SectorEditor::DrawTopologyDocument()
     DrawTopologyLineDefs();
     DrawTopologyVertices();
     DrawVertexMoveOverlay();
+    DrawPendingTopologyVertexMerge();
     DrawPendingTopologyLineSplitAtPoint();
     DrawStaticLights();
     DrawLightMoveOverlay();
@@ -3764,8 +3992,61 @@ void SectorEditor::DrawVertexMoveOverlay() const
     const Vector2 target = MapToScreen(previewMap);
     DrawLineEx(original, target, 2.0f, WithAlpha(targetColor, 180));
     DrawCircleLines(static_cast<int>(std::round(original.x)), static_cast<int>(std::round(original.y)), 10.0f, originalColor);
-    DrawCircleLines(static_cast<int>(std::round(target.x)), static_cast<int>(std::round(target.y)), 13.0f, targetColor);
+    DrawCircleLines(static_cast<int>(std::round(target.x)), static_cast<int>(std::round(target.y)), state.vertexDrag.hasMergeTarget ? 17.0f : 13.0f, targetColor);
+    if (state.vertexDrag.hasMergeTarget) {
+        DrawCircleLines(static_cast<int>(std::round(target.x)), static_cast<int>(std::round(target.y)), 22.0f, Color{236, 196, 92, 235});
+    }
     DrawCircleV(target, 5.0f, targetColor);
+}
+
+void SectorEditor::DrawPendingTopologyVertexMerge() const
+{
+    if (!state.pendingTopologyVertexMerge.active) {
+        return;
+    }
+
+    const PendingTopologyVertexMerge& pending = state.pendingTopologyVertexMerge;
+    const SectorTopologyVertex* source = FindSectorTopologyVertex(
+            state.topologyMap,
+            pending.sourceVertexId);
+    if (source == nullptr) {
+        return;
+    }
+
+    const Vector2 sourceScreen = MapToScreen(SectorTopologyVertexToMap(*source));
+    DrawCircleLines(
+            static_cast<int>(std::round(sourceScreen.x)),
+            static_cast<int>(std::round(sourceScreen.y)),
+            17.0f,
+            Color{236, 196, 92, 255});
+    DrawCircleLines(
+            static_cast<int>(std::round(sourceScreen.x)),
+            static_cast<int>(std::round(sourceScreen.y)),
+            23.0f,
+            Color{236, 196, 92, 170});
+
+    if (pending.hoveredTargetVertexId < 0) {
+        return;
+    }
+
+    const SectorTopologyVertex* target = FindSectorTopologyVertex(
+            state.topologyMap,
+            pending.hoveredTargetVertexId);
+    if (target == nullptr) {
+        return;
+    }
+
+    const Color targetColor = pending.hasValidTarget
+            ? Color{120, 230, 154, 255}
+            : Color{230, 82, 82, 255};
+    const Vector2 targetScreen = MapToScreen(SectorTopologyVertexToMap(*target));
+    DrawLineEx(sourceScreen, targetScreen, 2.0f, WithAlpha(targetColor, 170));
+    DrawCircleLines(
+            static_cast<int>(std::round(targetScreen.x)),
+            static_cast<int>(std::round(targetScreen.y)),
+            18.0f,
+            targetColor);
+    DrawCircleV(targetScreen, 5.5f, targetColor);
 }
 
 void SectorEditor::DrawLightMoveOverlay() const
@@ -3968,6 +4249,9 @@ void SectorEditor::DrawToolsPanel(
             if (state.pendingTopologyLineSplitAtPoint.active) {
                 CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
             }
+            if (state.pendingTopologyVertexMerge.active) {
+                CancelPendingTopologyVertexMerge("Cancelled vertex merge");
+            }
             state.currentTool = tool;
         }
         y += rowH + gap;
@@ -4139,6 +4423,15 @@ void SectorEditor::DrawSectorsPanel(
     const bool hasSelectedTopologyLineDef = state.topologySelectionKind == TopologySelectionKind::LineDef
             && SelectedTopologyLineDef() != nullptr;
     const bool hasSelectedLight = SelectedTopologyLight() != nullptr;
+    const SectorTopologyVertex* inspectedVertex = FindSectorTopologyVertex(
+            state.topologyMap,
+            state.inspectedTopologyVertexId);
+    const bool hasInspectedVertex = !hasSelectedTopologySector
+            && !hasSelectedTopologySideDef
+            && !hasSelectedTopologyLineDef
+            && !hasSelectedLight
+            && state.currentTool == SectorEditorTool::Move
+            && inspectedVertex != nullptr;
 
     const float rowH = 40.0f;
     const float gap = 8.0f;
@@ -4165,6 +4458,9 @@ void SectorEditor::DrawSectorsPanel(
         }
         if (hasSelectedTopologyLineDef) {
             return 218.0f;
+        }
+        if (hasInspectedVertex || state.pendingTopologyVertexMerge.active) {
+            return 170.0f;
         }
         return 42.0f;
     };
@@ -4314,6 +4610,80 @@ void SectorEditor::DrawSectorsPanel(
 
         if (engine::Button(ui, config, input, assets, "sector_editor_light_bake", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
             BakeLightmaps();
+        }
+
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return;
+    }
+
+    if (hasInspectedVertex || state.pendingTopologyVertexMerge.active) {
+        const int vertexId = state.pendingTopologyVertexMerge.active
+                ? state.pendingTopologyVertexMerge.sourceVertexId
+                : inspectedVertex->id;
+        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+        if (vertex != nullptr) {
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 34.0f},
+                    font,
+                    TextFormat("Topology Vertex: %d", vertex->id),
+                    engine::UITextJustify::Left,
+                    config.textColor);
+            y += 38.0f;
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 30.0f},
+                    font,
+                    TextFormat(
+                            "Position %.2f, %.2f",
+                            SectorCoordToVisibleAuthoring(vertex->x),
+                            SectorCoordToVisibleAuthoring(vertex->y)),
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
+            y += 34.0f;
+
+            if (state.pendingTopologyVertexMerge.active) {
+                engine::Text(
+                        ui,
+                        config,
+                        assets,
+                        Rectangle{0.0f, y, contentW, 44.0f},
+                        font,
+                        state.pendingTopologyVertexMerge.message.c_str(),
+                        engine::UITextJustify::Left,
+                        state.pendingTopologyVertexMerge.hasValidTarget
+                                ? config.textColor
+                                : config.mutedTextColor);
+                y += 48.0f;
+                if (engine::Button(
+                            ui,
+                            config,
+                            input,
+                            assets,
+                            "sector_editor_cancel_vertex_merge",
+                            Rectangle{0.0f, y, contentW, rowH},
+                            font,
+                            "Cancel Merge")) {
+                    CancelPendingTopologyVertexMerge("Cancelled vertex merge");
+                }
+            } else if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_merge_vertex_into",
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font,
+                        "Merge Into...")) {
+                StartPendingTopologyVertexMerge(vertex->id);
+            }
+        } else {
+            state.inspectedTopologyVertexId = -1;
         }
 
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
@@ -5573,6 +5943,7 @@ bool SectorEditor::LoadLevel(
 
     preview.Shutdown(assets);
     CancelPendingSector(nullptr);
+    CancelPendingTopologyVertexMerge(nullptr);
     CancelPendingTopologyLineSplitAtPoint(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
@@ -5742,6 +6113,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     }
 
     CancelPendingSector(nullptr);
+    CancelPendingTopologyVertexMerge(nullptr);
     CancelPendingTopologyLineSplitAtPoint(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
@@ -6171,6 +6543,7 @@ void SectorEditor::SelectTopologySector(int sectorId)
     state.selectedTopologyLineDefId = -1;
     state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
+    state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
@@ -6209,6 +6582,7 @@ void SectorEditor::SelectTopologySideDef(int sideDefId, TopologyWallPart wallPar
     state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = sideDef->side;
     state.selectedTopologyWallPart = wallPart;
+    state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
@@ -6238,6 +6612,7 @@ void SectorEditor::SelectTopologyLineDef(
     state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = side;
     state.selectedTopologyWallPart = wallPart;
+    state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
@@ -6263,6 +6638,7 @@ void SectorEditor::SelectTopologyLight(int topologyLightId)
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
+    state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
@@ -6374,11 +6750,13 @@ void SectorEditor::ResetSurface3DUiState()
 void SectorEditor::ClearSelection()
 {
     state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
     state.topologySelectionKind = TopologySelectionKind::None;
     state.selectedTopologySectorId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
+    state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();

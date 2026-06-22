@@ -51,6 +51,10 @@ private:
     void UpdateLightDrag(engine::Input& input);
     void FinishLightDrag();
     void CancelLightDrag(const char* message);
+    void StartPendingTopologyVertexMerge(int sourceVertexId);
+    void CancelPendingTopologyVertexMerge(const char* message);
+    void UpdatePendingTopologyVertexMerge(engine::Input& input);
+    void CommitPendingTopologyVertexMerge();
     void StartPendingTopologyLineSplitAtPoint();
     void CancelPendingTopologyLineSplitAtPoint(const char* message);
     bool ValidatePendingTopologyLineSplitAtPointTarget(const char* staleMessage);
@@ -82,6 +86,7 @@ private:
     void DrawStaticLights() const;
     void DrawPendingSector() const;
     void DrawVertexMoveOverlay() const;
+    void DrawPendingTopologyVertexMerge() const;
     void DrawLightMoveOverlay() const;
     void DrawPendingTopologyLineSplitAtPoint() const;
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
@@ -188,6 +193,9 @@ private:
             Vector2 screenPoint,
             int& outVertexId,
             SectorTopologyCoordPoint& outPoint) const;
+    int FindTopologyVertexAtCoordPoint(
+            SectorTopologyCoordPoint point,
+            int excludedVertexId = -1) const;
     bool SnapTopologyVertexMoveTarget(
             Vector2 mapPoint,
             SectorTopologyCoordPoint& outPoint,
@@ -241,6 +249,7 @@ private:
     bool ResetSurface3DUv(TopologySurfaceEditTarget target, engine::AssetManager& assets);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     bool SplitSelectedTopologyLineDef();
+    void ClearTransientTopologyEditStateAfterGeometryChange();
     void OpenDeleteSelectedTopologySectorConfirmation();
     void OpenDeleteTopologySectorConfirmation(int sectorId);
     bool DeleteSelectedTopologySectorConfirmed(int sectorId);

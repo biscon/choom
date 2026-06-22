@@ -27,10 +27,22 @@ struct SectorTopologyDeleteSectorResult {
     int removedVertexCount = 0;
 };
 
+struct SectorTopologyMergeVerticesResult {
+    int mergedVertexId = 0;
+    int removedVertexId = 0;
+};
+
 bool MoveSectorTopologyVertex(
         SectorTopologyMap& map,
         int vertexId,
         SectorTopologyCoordPoint newPosition,
+        std::string* outError = nullptr);
+
+bool MergeSectorTopologyVertices(
+        SectorTopologyMap& map,
+        int sourceVertexId,
+        int targetVertexId,
+        SectorTopologyMergeVerticesResult* outResult = nullptr,
         std::string* outError = nullptr);
 
 bool SplitSectorTopologyLineDef(
