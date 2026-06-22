@@ -170,7 +170,7 @@ void TestSquare()
               "wall ref contains side kind");
     }
     Check(floor != nullptr
-          && game::FormatSectorGeneratedSurfaceLabel(floor->ref).find("sectorId=10") != std::string::npos,
+          && game::FormatSectorGeneratedSurfaceLabel(floor->ref).find("sector=10") != std::string::npos,
           "topology surface label includes stable sector ID");
 }
 

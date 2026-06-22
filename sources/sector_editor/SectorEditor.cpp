@@ -2757,8 +2757,7 @@ void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
 
 bool SectorEditor::BakeLightmaps()
 {
-    statusText = "Topology lightmap baking is not migrated yet.";
-    return false;
+    return StartLightmapBake();
 }
 
 bool SectorEditor::StartLightmapBake()
@@ -2773,7 +2772,7 @@ bool SectorEditor::StartLightmapBake()
         return false;
     }
 
-    if (state.map.sectors.empty()) {
+    if (state.topologyMap.sectors.empty()) {
         statusText = "Bake failed: no sectors";
         return false;
     }
@@ -2787,9 +2786,9 @@ bool SectorEditor::StartLightmapBake()
     const std::string finalOutputPath = levelPaths.lightmapFilePath.string();
     const std::string temporaryOutputPath = MakeTemporaryLightmapPath(finalOutputPath);
 
-    SectorLightmapBakeInput input;
-    input.mapSnapshot = state.map;
-    input.expectedSourceHash = ComputeSectorLightmapSourceHash(state.map);
+    SectorTopologyLightmapBakeInput input;
+    input.mapSnapshot = state.topologyMap;
+    input.expectedSourceHash = ComputeSectorLightmapSourceHash(state.topologyMap);
     input.finalOutputPath = finalOutputPath;
     input.temporaryOutputPath = temporaryOutputPath;
 
@@ -2969,9 +2968,9 @@ bool SectorEditor::ConsumeLightmapBakeResult(const SectorLightmapBakeAsyncResult
 
 bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets)
 {
-    if (ComputeSectorLightmapSourceHash(state.map) != result.expectedSourceHash) {
+    if (ComputeSectorLightmapSourceHash(state.topologyMap) != result.expectedSourceHash) {
         DeleteFileIfExists(result.temporaryOutputPath);
-        statusText = "Bake discarded: map changed during bake";
+        statusText = "Bake discarded: document changed during bake";
         return false;
     }
 
@@ -3012,11 +3011,12 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
         statusText = TextFormat("Bake failed: %s", pathError.c_str());
         return false;
     }
-    state.map.bakedLightmap.path = levelPaths.lightmapAssetPath;
-    state.map.bakedLightmap.width = result.bakeResult.width;
-    state.map.bakedLightmap.height = result.bakeResult.height;
-    state.map.bakedLightmap.sourceHash = result.bakeResult.sourceHash;
+    state.topologyMap.bakedLightmap.path = levelPaths.lightmapAssetPath;
+    state.topologyMap.bakedLightmap.width = result.bakeResult.width;
+    state.topologyMap.bakedLightmap.height = result.bakeResult.height;
+    state.topologyMap.bakedLightmap.sourceHash = result.bakeResult.sourceHash;
     state.hasUnsavedChanges = true;
+    state.topologyDocumentDirty = true;
 
     std::istringstream report(result.bakeReportText);
     std::string line;
@@ -4582,19 +4582,20 @@ void SectorEditor::DrawToolsPanel(
         if (result.changed && edited != value) {
             value = edited;
             state.hasUnsavedChanges = true;
+            state.topologyDocumentDirty = true;
             statusText = status;
         }
         y += rowH + gap;
     };
 
-    state.map.lightmapSettings.ambientOcclusionRadius = ClampAmbientOcclusionRadius(state.map.lightmapSettings.ambientOcclusionRadius);
-    state.map.lightmapSettings.ambientOcclusionStrength = ClampAmbientOcclusionStrength(state.map.lightmapSettings.ambientOcclusionStrength);
-    state.map.lightmapSettings.indirectBounceRadius = ClampIndirectBounceRadius(state.map.lightmapSettings.indirectBounceRadius);
-    state.map.lightmapSettings.indirectBounceStrength = ClampIndirectBounceStrength(state.map.lightmapSettings.indirectBounceStrength);
+    state.topologyMap.lightmapSettings.ambientOcclusionRadius = ClampAmbientOcclusionRadius(state.topologyMap.lightmapSettings.ambientOcclusionRadius);
+    state.topologyMap.lightmapSettings.ambientOcclusionStrength = ClampAmbientOcclusionStrength(state.topologyMap.lightmapSettings.ambientOcclusionStrength);
+    state.topologyMap.lightmapSettings.indirectBounceRadius = ClampIndirectBounceRadius(state.topologyMap.lightmapSettings.indirectBounceRadius);
+    state.topologyMap.lightmapSettings.indirectBounceStrength = ClampIndirectBounceStrength(state.topologyMap.lightmapSettings.indirectBounceStrength);
     drawLightmapSetting(
             "sector_editor_ao_radius",
             "AO radius",
-            state.map.lightmapSettings.ambientOcclusionRadius,
+            state.topologyMap.lightmapSettings.ambientOcclusionRadius,
             uiState.ambientOcclusionRadiusInput,
             SectorWorldToAuthoringDistance(0.05f),
             SectorWorldToAuthoringDistance(16.0f),
@@ -4604,7 +4605,7 @@ void SectorEditor::DrawToolsPanel(
     drawLightmapSetting(
             "sector_editor_ao_strength",
             "AO strength",
-            state.map.lightmapSettings.ambientOcclusionStrength,
+            state.topologyMap.lightmapSettings.ambientOcclusionStrength,
             uiState.ambientOcclusionStrengthInput,
             0.0f,
             1.0f,
@@ -4614,7 +4615,7 @@ void SectorEditor::DrawToolsPanel(
     drawLightmapSetting(
             "sector_editor_bounce_radius",
             "Bounce radius",
-            state.map.lightmapSettings.indirectBounceRadius,
+            state.topologyMap.lightmapSettings.indirectBounceRadius,
             uiState.indirectBounceRadiusInput,
             SectorWorldToAuthoringDistance(0.05f),
             SectorWorldToAuthoringDistance(16.0f),
@@ -4624,7 +4625,7 @@ void SectorEditor::DrawToolsPanel(
     drawLightmapSetting(
             "sector_editor_bounce_strength",
             "Bounce strength",
-            state.map.lightmapSettings.indirectBounceStrength,
+            state.topologyMap.lightmapSettings.indirectBounceStrength,
             uiState.indirectBounceStrengthInput,
             0.0f,
             1.0f,
@@ -6556,7 +6557,7 @@ void SectorEditor::DrawStatusPanel(
     const std::string shortMapPath = state.hasCurrentLevelPath
             ? state.currentLevelPath
             : std::string{"<untitled>"};
-    const char* lightmapText = SectorLightmapStatusText(GetSectorLightmapStatus(state.map));
+    const char* lightmapText = SectorLightmapStatusText(GetSectorLightmapStatus(state.topologyMap));
     std::string status = statusText.empty() ? "Ready" : statusText;
     if (!state.topologyRenderWarning.empty()) {
         status += " | ";

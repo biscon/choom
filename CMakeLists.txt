@@ -141,6 +141,20 @@ if(BUILD_TESTING)
     target_link_libraries(sector_topology_mesh_builder_tests PRIVATE raylib)
     add_test(NAME sector_topology_mesh_builder COMMAND sector_topology_mesh_builder_tests)
 
+    add_executable(sector_topology_lightmap_tests
+            tests/SectorTopologyLightmapTests.cpp
+            sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorMap.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_topology_lightmap_tests PRIVATE sources)
+    target_compile_definitions(sector_topology_lightmap_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+    target_link_libraries(sector_topology_lightmap_tests PRIVATE raylib)
+    add_test(NAME sector_topology_lightmap COMMAND sector_topology_lightmap_tests)
+
     add_executable(sector_topology_creation_tests
             tests/SectorTopologyCreationTests.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp

@@ -688,13 +688,13 @@ std::string FormatSectorGeneratedSurfaceLabel(const SectorGeneratedSurfaceRef& r
     std::ostringstream label;
     label << SectorGeneratedSurfaceKindName(ref.kind);
     if (ref.topologySectorId >= 0) {
-        label << " sectorId=" << ref.topologySectorId;
+        label << " sector=" << ref.topologySectorId;
         if (ref.topologyLineDefId >= 0) {
-            label << " lineDefId=" << ref.topologyLineDefId;
+            label << " line=" << ref.topologyLineDefId;
         }
         if (ref.topologySideDefId >= 0) {
-            label << " sideDefId=" << ref.topologySideDefId
-                  << " side=" << SectorTopologySideKindName(ref.topologySide);
+            label << " sideDef=" << ref.topologySideDefId
+                  << " " << (ref.topologySide == SectorTopologySideKind::Front ? "front" : "back");
         }
         return label.str();
     }

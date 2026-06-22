@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTypes.h"
 
 #include <raylib.h>
@@ -10,6 +11,8 @@
 #include <vector>
 
 namespace game {
+
+struct SectorGeneratedSurfaceRef;
 
 struct SectorLightmapChart {
     int surfaceIndex = -1;
@@ -99,6 +102,14 @@ struct SectorLightmapBakeInput {
     uint64_t editorMapRevision = 0;
 };
 
+struct SectorTopologyLightmapBakeInput {
+    SectorTopologyMap mapSnapshot;
+    std::string expectedSourceHash;
+    std::string finalOutputPath;
+    std::string temporaryOutputPath;
+    uint64_t editorMapRevision = 0;
+};
+
 enum class SectorLightmapStatus {
     None,
     Valid,
@@ -109,7 +120,9 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-constexpr int kSectorLightmapBakeVersion = 5;
+// Version 6: topology lightmap identity uses topology sector/linedef/sidedef
+// refs and topology static lights.
+constexpr int kSectorLightmapBakeVersion = 6;
 constexpr int kDirectSoftShadowSampleCount = 8;
 constexpr int kAmbientOcclusionSampleCount = 12;
 constexpr int kIndirectBounceSampleCount = 8;
@@ -119,6 +132,10 @@ bool BuildSectorLightmapLayout(
         const SectorMap& map,
         SectorLightmapLayout& outLayout,
         std::string& outError);
+bool BuildSectorLightmapLayout(
+        const SectorTopologyMap& map,
+        SectorLightmapLayout& outLayout,
+        std::string& outError);
 
 bool BakeSectorLightmap(
         const SectorMap& map,
@@ -126,9 +143,22 @@ bool BakeSectorLightmap(
         const char* outputPath,
         SectorLightmapBakeResult& outResult,
         std::string& outError);
+bool BakeSectorLightmap(
+        const SectorTopologyMap& map,
+        const SectorLightmapLayout& layout,
+        const char* outputPath,
+        SectorLightmapBakeResult& outResult,
+        std::string& outError);
 
 bool BakeSectorLightmap(
         const SectorMap& map,
+        const SectorLightmapLayout& layout,
+        const char* outputPath,
+        const SectorLightmapBakeCallbacks& callbacks,
+        SectorLightmapBakeResult& outResult,
+        std::string& outError);
+bool BakeSectorLightmap(
+        const SectorTopologyMap& map,
         const SectorLightmapLayout& layout,
         const char* outputPath,
         const SectorLightmapBakeCallbacks& callbacks,
@@ -140,12 +170,22 @@ bool BakeSectorLightmap(
         const SectorLightmapBakeCallbacks& callbacks,
         SectorLightmapBakeResult& outResult,
         std::string& outError);
+bool BakeSectorLightmap(
+        const SectorTopologyLightmapBakeInput& input,
+        const SectorLightmapBakeCallbacks& callbacks,
+        SectorLightmapBakeResult& outResult,
+        std::string& outError);
 
 std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& result);
 void PrintSectorLightmapBakeReport(const SectorLightmapBakeResult& result);
 std::string ComputeSectorLightmapSourceHash(const SectorMap& map);
+std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map);
 SectorLightmapStatus GetSectorLightmapStatus(const SectorMap& map);
+SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map);
 const char* SectorLightmapStatusText(SectorLightmapStatus status);
+bool IsSameLogicalSectorLightmapSurface(
+        const SectorGeneratedSurfaceRef& a,
+        const SectorGeneratedSurfaceRef& b);
 std::string ResolveSectorAssetPath(const std::string& path);
 std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath);
 std::string MakeSectorAssetRelativePath(const std::string& path);

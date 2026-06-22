@@ -185,6 +185,55 @@ SectorTopologyWallPartSettings ReadWallPart(const Json& value, const std::string
     return part;
 }
 
+SectorLightmapBakeSettings ReadLightmapSettings(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorLightmapBakeSettings settings;
+    settings.ambientOcclusionRadius = std::clamp(
+            ReadFloat(value, "ambientOcclusionRadius", context),
+            SectorWorldToAuthoringDistance(0.05f),
+            SectorWorldToAuthoringDistance(16.0f));
+    settings.ambientOcclusionStrength = std::clamp(
+            ReadFloat(value, "ambientOcclusionStrength", context),
+            0.0f,
+            1.0f);
+    settings.indirectBounceRadius = std::clamp(
+            ReadFloat(value, "indirectBounceRadius", context),
+            SectorWorldToAuthoringDistance(0.05f),
+            SectorWorldToAuthoringDistance(16.0f));
+    settings.indirectBounceStrength = std::clamp(
+            ReadFloat(value, "indirectBounceStrength", context),
+            0.0f,
+            1.0f);
+    return settings;
+}
+
+SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorLightmapMetadata metadata;
+    metadata.path = ReadString(value, "path", context);
+    metadata.width = ReadInt(value, "width", context);
+    metadata.height = ReadInt(value, "height", context);
+    metadata.sourceHash = ReadString(value, "sourceHash", context);
+    if (metadata.path.empty()) {
+        Fail(context + ".path must not be empty");
+    }
+    if (metadata.width <= 0 || metadata.height <= 0) {
+        Fail(context + " dimensions must be positive");
+    }
+    if (metadata.sourceHash.empty()) {
+        Fail(context + ".sourceHash must not be empty");
+    }
+    return metadata;
+}
+
 unsigned char ReadColorChannel(const Json& object, const char* field, const std::string& context)
 {
     const int value = ReadInt(object, field, context);
@@ -258,6 +307,32 @@ Json WriteWallPart(const SectorTopologyWallPartSettings& part, const std::string
     return Json{
             {"textureId", part.textureId},
             {"uv", WriteUv(part.uv, context + ".uv")}
+    };
+}
+
+Json WriteLightmapSettings(const SectorLightmapBakeSettings& settings)
+{
+    return Json{
+            {"ambientOcclusionRadius", std::clamp(
+                    settings.ambientOcclusionRadius,
+                    SectorWorldToAuthoringDistance(0.05f),
+                    SectorWorldToAuthoringDistance(16.0f))},
+            {"ambientOcclusionStrength", std::clamp(settings.ambientOcclusionStrength, 0.0f, 1.0f)},
+            {"indirectBounceRadius", std::clamp(
+                    settings.indirectBounceRadius,
+                    SectorWorldToAuthoringDistance(0.05f),
+                    SectorWorldToAuthoringDistance(16.0f))},
+            {"indirectBounceStrength", std::clamp(settings.indirectBounceStrength, 0.0f, 1.0f)}
+    };
+}
+
+Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
+{
+    return Json{
+            {"path", metadata.path},
+            {"width", metadata.width},
+            {"height", metadata.height},
+            {"sourceHash", metadata.sourceHash}
     };
 }
 
@@ -446,6 +521,16 @@ SectorTopologyMap ParseMap(const Json& root)
         }
     }
 
+    const auto lightmapSettingsIt = root.find("lightmapSettings");
+    if (lightmapSettingsIt != root.end()) {
+        map.lightmapSettings = ReadLightmapSettings(*lightmapSettingsIt, "root.lightmapSettings");
+    }
+
+    const auto bakedLightmapIt = root.find("bakedLightmap");
+    if (bakedLightmapIt != root.end()) {
+        map.bakedLightmap = ReadBakedLightmap(*bakedLightmapIt, "root.bakedLightmap");
+    }
+
     ValidateForSerialization(map);
     return map;
 }
@@ -554,6 +639,14 @@ Json SerializeMap(const SectorTopologyMap& map)
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
         });
+    }
+
+    root["lightmapSettings"] = WriteLightmapSettings(map.lightmapSettings);
+    if (!map.bakedLightmap.path.empty()
+            && map.bakedLightmap.width > 0
+            && map.bakedLightmap.height > 0
+            && !map.bakedLightmap.sourceHash.empty()) {
+        root["bakedLightmap"] = WriteBakedLightmap(map.bakedLightmap);
     }
 
     return root;

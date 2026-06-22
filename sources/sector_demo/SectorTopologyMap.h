@@ -17,6 +17,8 @@ struct SectorTopologyMap {
     std::vector<SectorTopologySideDef> sideDefs;
     std::vector<SectorTopologySector> sectors;
     std::vector<SectorTopologyStaticPointLight> staticLights;
+    SectorLightmapBakeSettings lightmapSettings;
+    SectorLightmapMetadata bakedLightmap;
 };
 
 // Transient lookup data. Index vectors intentionally retain duplicate IDs so

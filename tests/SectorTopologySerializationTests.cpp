@@ -282,6 +282,51 @@ void TestStaticLightRoundTrip()
     Check(oldStyle.staticLights.empty(), "omitted staticLights field loads empty");
 }
 
+void TestLightmapMetadataRoundTrip()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.lightmapSettings.ambientOcclusionRadius = 3.5f;
+    original.lightmapSettings.ambientOcclusionStrength = 0.25f;
+    original.lightmapSettings.indirectBounceRadius = 9.0f;
+    original.lightmapSettings.indirectBounceStrength = 0.35f;
+    original.bakedLightmap.path = "assets/levels/test/test.lightmap.png";
+    original.bakedLightmap.width = 2048;
+    original.bakedLightmap.height = 2048;
+    original.bakedLightmap.sourceHash = "abc123";
+
+    const std::string text = SaveText(original);
+    const Json saved = Json::parse(text);
+    Check(saved["lightmapSettings"].is_object(), "topology lightmap settings are written");
+    Check(saved["bakedLightmap"].is_object(), "topology baked lightmap metadata is written");
+    Check(saved["bakedLightmap"]["path"].get<std::string>() == original.bakedLightmap.path,
+          "topology baked lightmap path is serialized");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "topology lightmap metadata JSON loads");
+    Check(std::fabs(loaded.lightmapSettings.ambientOcclusionRadius - 3.5f) <= 0.0001f
+                  && std::fabs(loaded.lightmapSettings.ambientOcclusionStrength - 0.25f) <= 0.0001f
+                  && std::fabs(loaded.lightmapSettings.indirectBounceRadius - 9.0f) <= 0.0001f
+                  && std::fabs(loaded.lightmapSettings.indirectBounceStrength - 0.35f) <= 0.0001f,
+          "topology lightmap settings round-trip");
+    Check(loaded.bakedLightmap.path == original.bakedLightmap.path
+                  && loaded.bakedLightmap.width == 2048
+                  && loaded.bakedLightmap.height == 2048
+                  && loaded.bakedLightmap.sourceHash == "abc123",
+          "topology baked lightmap metadata round-trips");
+
+    Json withoutLightmap = saved;
+    withoutLightmap.erase("lightmapSettings");
+    withoutLightmap.erase("bakedLightmap");
+    SectorTopologyMap oldStyle;
+    Check(LoadText(withoutLightmap.dump(), oldStyle, error), "omitted topology lightmap fields are accepted");
+    Check(oldStyle.bakedLightmap.path.empty()
+                  && oldStyle.bakedLightmap.width == 0
+                  && oldStyle.bakedLightmap.height == 0
+                  && oldStyle.bakedLightmap.sourceHash.empty(),
+          "omitted baked lightmap metadata loads empty");
+}
+
 void TestHandAuthoredJson()
 {
     const std::string text = R"json({
@@ -605,6 +650,7 @@ int main()
 {
     TestRoundTrip();
     TestStaticLightRoundTrip();
+    TestLightmapMetadataRoundTrip();
     TestHandAuthoredJson();
     TestStrictMarkersAndShapes();
     TestStrictValuesAndValidation();

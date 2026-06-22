@@ -284,8 +284,27 @@ bool SectorMeshPreview::Rebuild(
         textureHandlesById.emplace(texture.id, handle);
     }
 
+    SectorLightmapLayout lightmapLayout;
+    const SectorLightmapStatus status = GetSectorLightmapStatus(map);
+    lightmapStatus = static_cast<int>(status);
+    const bool useLightmapLayout = status == SectorLightmapStatus::Valid
+            && BuildSectorLightmapLayout(map, lightmapLayout, error);
+    if (status == SectorLightmapStatus::Valid && !useLightmapLayout) {
+        std::fprintf(stderr, "[SectorDemo WARNING] %s\n", error.c_str());
+        error.clear();
+    }
+
+    if (useLightmapLayout) {
+        const std::string resolvedPath = ResolveAssetPath(map.bakedLightmap.path);
+        lightmapTexture = assets.RequestTexture(
+                assetScope,
+                "sector_lightmap_atlas",
+                resolvedPath.c_str(),
+                engine::TextureLoad_BilinearFilter);
+    }
+
     std::string meshError;
-    meshes = BuildSectorMeshes(map, nullptr, &meshError);
+    meshes = BuildSectorMeshes(map, useLightmapLayout ? &lightmapLayout : nullptr, &meshError);
     if (meshes.batches.empty()) {
         Shutdown(assets);
         error = meshError.empty()
@@ -305,8 +324,6 @@ bool SectorMeshPreview::Rebuild(
         return false;
     }
 
-    lightmapStatus = static_cast<int>(SectorLightmapStatus::None);
-    lightmapTexture = engine::NullTextureHandle();
     sectorCount = map.sectors.size();
 
     Vector3 boundsMin{};

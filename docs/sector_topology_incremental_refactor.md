@@ -188,3 +188,38 @@ load validation rejects malformed or duplicate light records transactionally.
 Lightmap baking, topology lightmap layout, bake source hashing, and bake version
 changes remain deferred to Phase 17. Pressing Bake Lightmaps still reports that
 topology lightmap baking is not migrated yet.
+
+## Phase 17: topology lightmap baking
+
+The editor Bake Lightmaps workflow now consumes `state.topologyMap` instead of
+the old polygon compatibility map. Topology baking routes through topology
+generated geometry, topology static lights, topology lightmap settings, and
+topology baked-lightmap metadata while preserving the existing atlas packing,
+BVH, ambient occlusion, bounce lighting, progress, cancellation, and PNG output
+layout.
+
+Topology v2 JSON persists lightmap settings and baked-lightmap metadata as
+top-level fields. Older v2 topology files without those fields still load with
+default bake settings and no baked lightmap.
+
+Topology lightmap source hashes are deterministic over topology IDs and sorted
+records: coord subdivisions, texture definitions, vertices, linedefs, sidedefs,
+sectors, bake settings, and static light position/color/intensity/radius/source
+radius. The hash does not rely on `unordered_map` iteration order or transient
+editor state.
+
+Generated surface refs and logical self-surface comparison now use topology
+sector, linedef, sidedef, and side IDs for topology bakes. Floors and ceilings
+compare by kind and topology sector ID; wall-like surfaces compare by kind,
+topology sector ID, linedef ID, sidedef ID, and side. Debug labels report
+readable topology IDs such as `Floor sector=3` and
+`Wall sector=3 line=12 sideDef=18 front`.
+
+The sector lightmap bake version was bumped to account for topology lightmap
+identity and topology static lights. Old polygon-baked metadata is therefore
+stale/incompatible for topology documents. Equal-height two-sided portals still
+emit no wall mesh and intentionally produce no lightmap chart.
+
+The old polygon lightmap APIs and polygon model remain in place for later
+cleanup. The editor document workflow no longer uses the old polygon lightmap
+path.
