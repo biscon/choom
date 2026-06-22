@@ -26,6 +26,7 @@ struct SectorMeshBatchVertex {
 struct SectorMeshBatchData {
     std::string textureId;
     std::string decalTextureId;
+    float decalOpacity = 1.0f;
     std::vector<SectorMeshBatchVertex> vertices;
     int vertexCount = 0;
     int triangleCount = 0;

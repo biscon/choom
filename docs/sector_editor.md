@@ -201,9 +201,15 @@ The sidedef/linedef inspector supports:
 - line-only inspection and splitting when no sidedef is selected
 
 Topology JSON can also store optional decal data for floor, ceiling, wall,
-lower, and upper surface materials. Decal data is carried through generated
-geometry and mesh batch data, but decal rendering and editor controls are
-deferred to a later phase.
+lower, and upper surface materials. Decals are rendered when present in topology
+JSON, but editor controls for assigning or editing decals are still deferred.
+Decal UVs are masked outside `0..1`, so decals do not tile across the whole
+surface. Decals are composited over the base texture first, then lit like the
+base surface.
+
+For manual decal verification, load `decal_test` from the `Load` dialog. The
+sample level lives at `assets/levels/decal_test/decal_test.json` and uses
+`assets/images/biker_chick.png` as a transparent wall and floor decal.
 
 `Split Linedef` creates one exact midpoint vertex and replaces the selected line
 with two new linedefs. Existing front/back sidedefs are duplicated onto both

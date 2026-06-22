@@ -20,10 +20,13 @@ namespace {
 struct SectorMeshBatchKey {
     std::string textureId;
     std::string decalTextureId;
+    float decalOpacity = 1.0f;
 
     bool operator==(const SectorMeshBatchKey& other) const
     {
-        return textureId == other.textureId && decalTextureId == other.decalTextureId;
+        return textureId == other.textureId
+                && decalTextureId == other.decalTextureId
+                && decalOpacity == other.decalOpacity;
     }
 };
 
@@ -32,7 +35,10 @@ struct SectorMeshBatchKeyHash {
     {
         const size_t textureHash = std::hash<std::string>{}(key.textureId);
         const size_t decalHash = std::hash<std::string>{}(key.decalTextureId);
-        return textureHash ^ (decalHash + 0x9e3779b9u + (textureHash << 6u) + (textureHash >> 2u));
+        const size_t opacityHash = std::hash<float>{}(key.decalOpacity);
+        size_t hash = textureHash ^ (decalHash + 0x9e3779b9u + (textureHash << 6u) + (textureHash >> 2u));
+        hash ^= opacityHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
+        return hash;
     }
 };
 
@@ -40,9 +46,10 @@ SectorMeshBatchData& BatchForKey(
         std::unordered_map<SectorMeshBatchKey, size_t, SectorMeshBatchKeyHash>& batchIndexByKey,
         std::vector<SectorMeshBatchData>& batches,
         const std::string& textureId,
-        const std::string& decalTextureId)
+        const std::string& decalTextureId,
+        float decalOpacity)
 {
-    const SectorMeshBatchKey key{textureId, decalTextureId};
+    const SectorMeshBatchKey key{textureId, decalTextureId, decalTextureId.empty() ? 1.0f : decalOpacity};
     const auto existing = batchIndexByKey.find(key);
     if (existing != batchIndexByKey.end()) {
         return batches[existing->second];
@@ -51,6 +58,7 @@ SectorMeshBatchData& BatchForKey(
     SectorMeshBatchData batch;
     batch.textureId = textureId;
     batch.decalTextureId = decalTextureId;
+    batch.decalOpacity = key.decalOpacity;
     batches.push_back(std::move(batch));
     const size_t index = batches.size() - 1;
     batchIndexByKey.emplace(key, index);
@@ -84,12 +92,14 @@ Mesh CreateMeshFromBatch(const SectorMeshBatchData& batch)
     mesh.normals = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 3 * sizeof(float))));
     mesh.texcoords = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 2 * sizeof(float))));
     mesh.texcoords2 = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 2 * sizeof(float))));
+    mesh.tangents = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 4 * sizeof(float))));
     mesh.colors = static_cast<unsigned char*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 4 * sizeof(unsigned char))));
 
     if (mesh.vertices == nullptr
             || mesh.normals == nullptr
             || mesh.texcoords == nullptr
             || mesh.texcoords2 == nullptr
+            || mesh.tangents == nullptr
             || mesh.colors == nullptr) {
         std::fprintf(stderr, "[SectorDemo ERROR] Failed to allocate mesh data for texture '%s'\n", batch.textureId.c_str());
         UnloadMesh(mesh);
@@ -108,6 +118,10 @@ Mesh CreateMeshFromBatch(const SectorMeshBatchData& batch)
         mesh.texcoords[i * 2 + 1] = vertex.uv.y;
         mesh.texcoords2[i * 2 + 0] = vertex.lightmapUv.x;
         mesh.texcoords2[i * 2 + 1] = vertex.lightmapUv.y;
+        mesh.tangents[i * 4 + 0] = vertex.decalUv.x;
+        mesh.tangents[i * 4 + 1] = vertex.decalUv.y;
+        mesh.tangents[i * 4 + 2] = 0.0f;
+        mesh.tangents[i * 4 + 3] = 1.0f;
         mesh.colors[i * 4 + 0] = vertex.color.r;
         mesh.colors[i * 4 + 1] = vertex.color.g;
         mesh.colors[i * 4 + 2] = vertex.color.b;
@@ -134,7 +148,8 @@ SectorMeshBatchDataResult BuildSectorMeshBatchData(
                 batchIndexByKey,
                 result.batches,
                 surface.textureId,
-                surface.decalTextureId);
+                surface.decalTextureId,
+                surface.decalOpacity);
         batch.vertices.reserve(batch.vertices.size() + surface.vertices.size());
         for (size_t vertexIndex = 0; vertexIndex < surface.vertices.size(); ++vertexIndex) {
             const SectorGeneratedVertex& vertex = surface.vertices[vertexIndex];
@@ -186,6 +201,7 @@ SectorMeshBuildResult BuildSectorMeshes(
         SectorMeshBatch batch;
         batch.textureId = builder.textureId;
         batch.decalTextureId = builder.decalTextureId;
+        batch.decalOpacity = builder.decalOpacity;
         batch.mesh = mesh;
         batch.vertexCount = mesh.vertexCount;
         batch.triangleCount = mesh.triangleCount;

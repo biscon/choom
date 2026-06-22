@@ -10,6 +10,7 @@ namespace game {
 struct SectorMeshBatch {
     std::string textureId;
     std::string decalTextureId;
+    float decalOpacity = 1.0f;
     Mesh mesh = {};
     int vertexCount = 0;
     int triangleCount = 0;
