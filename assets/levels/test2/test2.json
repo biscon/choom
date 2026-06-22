@@ -9,11 +9,11 @@
     },
     "ceiling": {
       "path": "assets/images/ceiling.png",
-      "filter": "bilinear"
+      "filter": "anisotropic8x"
     },
     "floor": {
       "path": "assets/images/floor.png",
-      "filter": "bilinear"
+      "filter": "anisotropic8x"
     },
     "industrial_ceiling_1": {
       "path": "assets/images/ceilings/industrial_ceiling_1.png",
@@ -21,11 +21,23 @@
     },
     "industrial_ceiling_1_b": {
       "path": "assets/images/ceilings/industrial_ceiling_1.png",
-      "filter": "bilinear"
+      "filter": "anisotropic8x"
+    },
+    "industrial_floor1": {
+      "path": "assets/images/floors/industrial_floor1.png",
+      "filter": "anisotropic8x"
+    },
+    "industrial_wall_01": {
+      "path": "assets/images/walls/industrial_wall_01.png",
+      "filter": "anisotropic8x"
+    },
+    "industrial_wall_02": {
+      "path": "assets/images/walls/industrial_wall_02.png",
+      "filter": "anisotropic8x"
     },
     "metal": {
       "path": "assets/images/test/metal.png",
-      "filter": "bilinear"
+      "filter": "anisotropic8x"
     },
     "square_ceiling_light": {
       "path": "assets/images/decals/square_ceiling_light.png",
@@ -35,17 +47,21 @@
       "path": "assets/images/decals/square_ceiling_light2.png",
       "filter": "point"
     },
+    "square_ceiling_light_001": {
+      "path": "assets/images/decals/square_ceiling_light.png",
+      "filter": "anisotropic8x"
+    },
     "step_wall": {
       "path": "assets/images/wall.png",
-      "filter": "bilinear"
+      "filter": "anisotropic8x"
     },
     "upper_wall": {
       "path": "assets/images/wall.png",
-      "filter": "bilinear"
+      "filter": "anisotropic8x"
     },
     "wall": {
       "path": "assets/images/wall.png",
-      "filter": "bilinear"
+      "filter": "anisotropic8x"
     }
   },
   "vertices": [
@@ -4680,7 +4696,7 @@
       "side": "front",
       "sectorId": 8,
       "wall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -4688,7 +4704,7 @@
           ],
           "offset": [
             0.0,
-            0.0
+            -1.875
           ]
         }
       },
@@ -4725,7 +4741,7 @@
       "side": "front",
       "sectorId": 8,
       "wall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -4931,7 +4947,7 @@
         }
       },
       "upper": {
-        "textureId": "upper_wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -5915,7 +5931,7 @@
       "side": "front",
       "sectorId": 15,
       "wall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -5960,7 +5976,7 @@
       "side": "front",
       "sectorId": 8,
       "wall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -6005,7 +6021,7 @@
       "side": "front",
       "sectorId": 8,
       "wall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -6013,7 +6029,7 @@
           ],
           "offset": [
             0.0,
-            0.0
+            -1.875
           ]
         }
       },
@@ -6140,7 +6156,7 @@
       "side": "front",
       "sectorId": 16,
       "wall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -6185,7 +6201,7 @@
       "side": "front",
       "sectorId": 15,
       "wall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -6230,7 +6246,7 @@
       "side": "front",
       "sectorId": 15,
       "wall": {
-        "textureId": "ceiling",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -6238,7 +6254,7 @@
           ],
           "offset": [
             0.0,
-            0.0
+            -1.875
           ]
         },
         "decal": {
@@ -6295,14 +6311,14 @@
       "side": "front",
       "sectorId": 16,
       "wall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
             1.0
           ],
           "offset": [
-            0.0,
+            2.0,
             -1.5625
           ]
         }
@@ -6366,7 +6382,7 @@
         }
       },
       "upper": {
-        "textureId": "upper_wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -6591,7 +6607,7 @@
         }
       },
       "upper": {
-        "textureId": "metal",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -6681,7 +6697,7 @@
         }
       },
       "upper": {
-        "textureId": "metal",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -6771,7 +6787,7 @@
         }
       },
       "upper": {
-        "textureId": "metal",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -6861,7 +6877,7 @@
         }
       },
       "upper": {
-        "textureId": "metal",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -7400,7 +7416,7 @@
       "floorZ": 7.0,
       "ceilingZ": 30.0,
       "floorTextureId": "floor",
-      "ceilingTextureId": "ceiling",
+      "ceilingTextureId": "industrial_ceiling_1_b",
       "floorUv": {
         "scale": [
           1.0,
@@ -7418,7 +7434,7 @@
         ],
         "offset": [
           0.0,
-          0.0
+          0.125
         ]
       },
       "ambientColor": {
@@ -7429,7 +7445,7 @@
       },
       "ambientIntensity": 0.20000000298023224,
       "defaultWall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -7917,7 +7933,7 @@
       "name": "sector_015",
       "floorZ": 5.0,
       "ceilingZ": 30.0,
-      "floorTextureId": "floor",
+      "floorTextureId": "industrial_floor1",
       "ceilingTextureId": "industrial_ceiling_1_b",
       "floorUv": {
         "scale": [
@@ -7931,8 +7947,8 @@
       },
       "ceilingUv": {
         "scale": [
-          2.0,
-          2.0
+          1.0,
+          1.0
         ],
         "offset": [
           0.0,
@@ -7947,7 +7963,7 @@
       },
       "ambientIntensity": 0.20000000298023224,
       "defaultWall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -7991,8 +8007,8 @@
       "name": "sector_016",
       "floorZ": 5.0,
       "ceilingZ": 25.0,
-      "floorTextureId": "floor",
-      "ceilingTextureId": "ceiling",
+      "floorTextureId": "industrial_floor1",
+      "ceilingTextureId": "industrial_ceiling_1",
       "floorUv": {
         "scale": [
           1.0,
@@ -8009,8 +8025,8 @@
           1.0
         ],
         "offset": [
-          0.0,
-          0.0
+          0.5,
+          0.15000000596046448
         ]
       },
       "ambientColor": {
@@ -8139,7 +8155,7 @@
       "name": "sector_018",
       "floorZ": 5.0,
       "ceilingZ": 29.0,
-      "floorTextureId": "floor",
+      "floorTextureId": "industrial_floor1",
       "ceilingTextureId": "metal",
       "floorUv": {
         "scale": [
@@ -8208,7 +8224,7 @@
         }
       },
       "ceilingDecal": {
-        "textureId": "square_ceiling_light2",
+        "textureId": "square_ceiling_light_001",
         "uv": {
           "scale": [
             2.0,
@@ -8343,6 +8359,6 @@
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "d1376f3d00bc38c4"
+    "sourceHash": "a679a39242208c72"
   }
 }
