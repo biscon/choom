@@ -7,6 +7,7 @@
 namespace game {
 
 struct SectorTopologySplitLineResult {
+    int newVertexId = -1;
     int midpointVertexId = -1;
 
     int firstLineDefId = -1;
@@ -35,6 +36,13 @@ bool MoveSectorTopologyVertex(
 bool SplitSectorTopologyLineDef(
         SectorTopologyMap& map,
         int lineDefId,
+        SectorTopologySplitLineResult* outResult = nullptr,
+        std::string* outError = nullptr);
+
+bool SplitSectorTopologyLineDefAtPoint(
+        SectorTopologyMap& map,
+        int lineDefId,
+        SectorTopologyCoordPoint point,
         SectorTopologySplitLineResult* outResult = nullptr,
         std::string* outError = nullptr);
 

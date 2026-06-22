@@ -6,6 +6,7 @@
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyCreation.h"
+#include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorTopologySerialization.h"
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
@@ -1151,6 +1152,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         CancelVertexDrag("Cancelled vertex move");
                     } else if (state.lightDrag.active) {
                         CancelLightDrag("Cancelled light move");
+                    } else if (state.pendingTopologyLineSplitAtPoint.active) {
+                        CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
                     } else if (state.pendingSector.active) {
                         CancelPendingSector("Cancelled sector");
                     } else if (state.selectedTopologyLightId >= 0
@@ -1244,6 +1247,40 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
         return;
     }
 
+    if (state.pendingTopologyLineSplitAtPoint.active) {
+        UpdatePendingTopologyLineSplitAtPoint(input);
+
+        input.ForEachEvent(
+                engine::InputEventType::MouseButtonPressed,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (event.mouseButton.button == MOUSE_RIGHT_BUTTON) {
+                        CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
+                        engine::ConsumeEvent(event);
+                    }
+                }
+        );
+
+        input.ForEachEvent(
+                engine::InputEventType::MouseClick,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (!Contains(canvasRect, event.mouseClick.releasePosition)) {
+                        return;
+                    }
+                    if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
+                        CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+                    if (event.mouseClick.button == MOUSE_LEFT_BUTTON) {
+                        CommitPendingTopologyLineSplitAtPoint();
+                        engine::ConsumeEvent(event);
+                    }
+                }
+        );
+    }
+
     if (!uiState.keyboardCaptured) {
         Vector2 pan{};
         if (input.IsKeyDown(KEY_A)) {
@@ -1270,6 +1307,10 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
     }
 
     if (!IsMouseOverCanvas(input)) {
+        return;
+    }
+
+    if (state.pendingTopologyLineSplitAtPoint.active) {
         return;
     }
 
@@ -1653,6 +1694,196 @@ void SectorEditor::CancelLightDrag(const char* message)
     if (message != nullptr && message[0] != '\0') {
         statusText = message;
     }
+}
+
+void SectorEditor::StartPendingTopologyLineSplitAtPoint()
+{
+    const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
+    if (lineDef == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology linedef before splitting at point.";
+        return;
+    }
+
+    CancelPendingSector(nullptr);
+    CancelVertexDrag(nullptr);
+    CancelLightDrag(nullptr);
+
+    PendingTopologyLineSplitAtPoint pending;
+    pending.active = true;
+    pending.lineDefId = lineDef->id;
+    pending.sideDefId = state.topologySelectionKind == TopologySelectionKind::SideDef
+            ? state.selectedTopologySideDefId
+            : -1;
+    pending.side = state.selectedTopologySideKind;
+    pending.wallPart = state.selectedTopologyWallPart;
+    pending.message = "Click a snapped point on the selected linedef; Escape or right click cancels.";
+    state.pendingTopologyLineSplitAtPoint = pending;
+    state.currentTool = SectorEditorTool::Select;
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    statusText = pending.message;
+}
+
+void SectorEditor::CancelPendingTopologyLineSplitAtPoint(const char* message)
+{
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+    if (message != nullptr && message[0] != '\0') {
+        statusText = message;
+    }
+}
+
+bool SectorEditor::ValidatePendingTopologyLineSplitAtPointTarget(const char* staleMessage)
+{
+    if (!state.pendingTopologyLineSplitAtPoint.active) {
+        return false;
+    }
+
+    const PendingTopologyLineSplitAtPoint& pending = state.pendingTopologyLineSplitAtPoint;
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
+            state.topologyMap,
+            pending.lineDefId);
+    if (lineDef == nullptr) {
+        CancelPendingTopologyLineSplitAtPoint(staleMessage);
+        return false;
+    }
+
+    if (pending.sideDefId >= 0) {
+        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
+                state.topologyMap,
+                pending.sideDefId);
+        if (sideDef == nullptr || sideDef->lineDefId != lineDef->id) {
+            CancelPendingTopologyLineSplitAtPoint(staleMessage);
+            return false;
+        }
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
+        CancelPendingTopologyLineSplitAtPoint(staleMessage);
+        return false;
+    }
+    return true;
+}
+
+void SectorEditor::UpdatePendingTopologyLineSplitAtPoint(engine::Input& input)
+{
+    if (!ValidatePendingTopologyLineSplitAtPointTarget(
+                "Split at point cancelled: target linedef no longer exists.")) {
+        return;
+    }
+
+    PendingTopologyLineSplitAtPoint& pending = state.pendingTopologyLineSplitAtPoint;
+    pending.hasCandidatePoint = false;
+    pending.hasValidCandidate = false;
+
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
+            state.topologyMap,
+            pending.lineDefId);
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (lineDef == nullptr || !GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
+        CancelPendingTopologyLineSplitAtPoint("Split at point cancelled: target linedef no longer exists.");
+        return;
+    }
+
+    if (!Contains(canvasRect, input.MousePosition())) {
+        pending.message = "Move over the selected linedef to choose a split point.";
+        statusText = pending.message;
+        return;
+    }
+
+    SectorTopologyCoordPoint candidate;
+    std::string error;
+    if (!ToTopologyCoordPoint(Vector2ToSectorPoint(state.snappedMouseMap), candidate, error)) {
+        pending.message = error;
+        statusText = error;
+        return;
+    }
+
+    pending.candidatePoint = candidate;
+    pending.hasCandidatePoint = true;
+
+    const SectorTopologyCoordPoint startPoint{start->x, start->y};
+    const SectorTopologyCoordPoint endPoint{end->x, end->y};
+    if (!SectorTopologyPointStrictlyInsideSegment(candidate, startPoint, endPoint)) {
+        pending.message = "Split point must be inside the selected linedef.";
+        statusText = pending.message;
+        return;
+    }
+
+    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
+        if (vertex.x == candidate.x && vertex.y == candidate.y) {
+            pending.message = "Split point is already occupied by a topology vertex.";
+            statusText = pending.message;
+            return;
+        }
+    }
+
+    pending.hasValidCandidate = true;
+    pending.message = "Click to split selected linedef; Escape or right click cancels.";
+    statusText = pending.message;
+}
+
+void SectorEditor::CommitPendingTopologyLineSplitAtPoint()
+{
+    if (!ValidatePendingTopologyLineSplitAtPointTarget(
+                "Split at point cancelled: target linedef no longer exists.")) {
+        return;
+    }
+
+    const PendingTopologyLineSplitAtPoint pending = state.pendingTopologyLineSplitAtPoint;
+    if (!pending.hasCandidatePoint || !pending.hasValidCandidate) {
+        statusText = pending.message.empty()
+                ? "Choose a valid split point on the selected linedef."
+                : pending.message;
+        return;
+    }
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    if (!SplitSectorTopologyLineDefAtPoint(
+                state.topologyMap,
+                pending.lineDefId,
+                pending.candidatePoint,
+                &split,
+                &error)) {
+        statusText = error.empty() ? "Cannot split topology linedef at point" : error;
+        return;
+    }
+
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+    state.hasHoveredVertex = false;
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+
+    if (pending.sideDefId >= 0) {
+        const int secondSideDefId = pending.side == SectorTopologySideKind::Front
+                ? split.secondFrontSideDefId
+                : split.secondBackSideDefId;
+        if (FindSectorTopologySideDef(state.topologyMap, secondSideDefId) != nullptr) {
+            SelectTopologySideDef(secondSideDefId, pending.wallPart);
+        } else {
+            SelectTopologyLineDef(split.secondLineDefId, pending.side, pending.wallPart);
+        }
+    } else {
+        SelectTopologyLineDef(split.secondLineDefId, pending.side, pending.wallPart);
+    }
+
+    state.topologyDocumentDirty = true;
+    state.topologyRenderWarning.clear();
+    state.hasUnsavedChanges = true;
+    statusText = TextFormat(
+            "Split topology linedef %d at point; selected linedef %d",
+            pending.lineDefId,
+            split.secondLineDefId);
 }
 
 void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
@@ -2101,6 +2332,14 @@ void SectorEditor::ClearStaleTopologySelection()
     }
 
     if (stale) {
+        if (state.pendingTopologyLineSplitAtPoint.active
+                && (state.pendingTopologyLineSplitAtPoint.lineDefId == state.selectedTopologyLineDefId
+                        || FindSectorTopologyLineDef(
+                                state.topologyMap,
+                                state.pendingTopologyLineSplitAtPoint.lineDefId) == nullptr)) {
+            CancelPendingTopologyLineSplitAtPoint(
+                    "Split at point cancelled: target linedef no longer exists.");
+        }
         state.topologySelectionKind = TopologySelectionKind::None;
         state.selectedTopologySectorId = -1;
         state.selectedTopologySideDefId = -1;
@@ -2232,6 +2471,8 @@ void SectorEditor::OpenDeleteTopologySectorConfirmation(int sectorId)
 
 bool SectorEditor::DeleteSelectedTopologySectorConfirmed(int sectorId)
 {
+    const bool hadPendingSplit = state.pendingTopologyLineSplitAtPoint.active;
+    const int pendingSplitLineDefId = state.pendingTopologyLineSplitAtPoint.lineDefId;
     SectorTopologyDeleteSectorResult result;
     std::string error;
     if (!DeleteSectorTopologySector(state.topologyMap, sectorId, &result, &error)) {
@@ -2252,11 +2493,18 @@ bool SectorEditor::DeleteSelectedTopologySectorConfirmed(int sectorId)
     for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
         inputState = engine::UIFloatInputState{};
     }
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
     ClearStaleTopologySelection();
     state.topologyRenderWarning.clear();
     state.topologyDocumentDirty = true;
     state.hasUnsavedChanges = true;
-    statusText = TextFormat(
+    const bool pendingSplitTargetRemoved = hadPendingSplit
+            && FindSectorTopologyLineDef(state.topologyMap, pendingSplitLineDefId) == nullptr;
+    statusText = pendingSplitTargetRemoved
+            ? TextFormat(
+                    "Deleted topology sector %d; split at point cancelled",
+                    result.deletedSectorId)
+            : TextFormat(
             "Deleted topology sector %d; removed %d sidedefs, %d linedefs, %d vertices",
             result.deletedSectorId,
             result.removedSideDefCount,
@@ -3105,6 +3353,7 @@ void SectorEditor::DrawTopologyDocument()
     DrawTopologyLineDefs();
     DrawTopologyVertices();
     DrawVertexMoveOverlay();
+    DrawPendingTopologyLineSplitAtPoint();
     DrawStaticLights();
     DrawLightMoveOverlay();
     DrawPendingSector();
@@ -3559,6 +3808,48 @@ void SectorEditor::DrawLightMoveOverlay() const
     DrawCircleLines(static_cast<int>(std::round(center.x)), static_cast<int>(std::round(center.y)), 13.0f, Color{245, 226, 154, 255});
 }
 
+void SectorEditor::DrawPendingTopologyLineSplitAtPoint() const
+{
+    if (!state.pendingTopologyLineSplitAtPoint.active) {
+        return;
+    }
+
+    const PendingTopologyLineSplitAtPoint& pending = state.pendingTopologyLineSplitAtPoint;
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
+            state.topologyMap,
+            pending.lineDefId);
+    if (lineDef == nullptr) {
+        return;
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
+        return;
+    }
+
+    const Vector2 a = MapToScreen(SectorTopologyVertexToMap(*start));
+    const Vector2 b = MapToScreen(SectorTopologyVertexToMap(*end));
+    DrawLineEx(a, b, 13.0f, Color{236, 196, 92, 120});
+    DrawLineEx(a, b, 4.0f, Color{236, 196, 92, 245});
+
+    if (!pending.hasCandidatePoint) {
+        return;
+    }
+
+    const Vector2 candidate = MapToScreen(SectorPointToVector2(
+            SectorTopologyCoordPointToSectorPoint(pending.candidatePoint)));
+    const Color color = pending.hasValidCandidate
+            ? Color{120, 230, 154, 255}
+            : Color{230, 82, 82, 245};
+    DrawCircleLines(
+            static_cast<int>(std::round(candidate.x)),
+            static_cast<int>(std::round(candidate.y)),
+            pending.hasValidCandidate ? 13.0f : 11.0f,
+            color);
+    DrawCircleV(candidate, pending.hasValidCandidate ? 5.5f : 4.5f, color);
+}
+
 void SectorEditor::DrawStaticLights() const
 {
     for (const SectorTopologyStaticPointLight& light : state.topologyMap.staticLights) {
@@ -3673,6 +3964,9 @@ void SectorEditor::DrawToolsPanel(
             }
             if (state.lightDrag.active && tool != SectorEditorTool::Move) {
                 CancelLightDrag("Cancelled light move");
+            }
+            if (state.pendingTopologyLineSplitAtPoint.active) {
+                CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
             }
             state.currentTool = tool;
         }
@@ -4328,6 +4622,20 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 font,
                 "Split Linedef")) {
         SplitSelectedTopologyLineDef();
+        return true;
+    }
+    y += 38.0f + gap;
+
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_split_linedef_at_point",
+                Rectangle{0.0f, y, contentW, 38.0f},
+                font,
+                "Split At Point")) {
+        StartPendingTopologyLineSplitAtPoint();
         return true;
     }
     y += 38.0f + gap;
@@ -5188,6 +5496,8 @@ void SectorEditor::DrawStatusPanel(
     std::string pendingText;
     if (state.pendingSector.active) {
         pendingText = TextFormat(" | pending %zu pts", state.pendingSector.points.size());
+    } else if (state.pendingTopologyLineSplitAtPoint.active) {
+        pendingText = " | split at point";
     }
     const std::string shortMapPath = state.hasCurrentLevelPath
             ? state.currentLevelPath
@@ -5249,6 +5559,7 @@ bool SectorEditor::LoadLevel(
         const std::string& levelName,
         const std::string& jsonAssetPath)
 {
+    const bool hadPendingSplit = state.pendingTopologyLineSplitAtPoint.active;
     SectorTopologyMap loaded;
     std::string error;
     const std::string filePath = ResolveEditorAssetPath(jsonAssetPath);
@@ -5262,6 +5573,7 @@ bool SectorEditor::LoadLevel(
 
     preview.Shutdown(assets);
     CancelPendingSector(nullptr);
+    CancelPendingTopologyLineSplitAtPoint(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     state.topologyMap = std::move(loaded);
@@ -5289,7 +5601,9 @@ bool SectorEditor::LoadLevel(
     state.lightDrag = LightDragState{};
     RefreshDefaultTextures();
     RefreshEditorTextureAssets(assets);
-    statusText = TextFormat("Loaded topology %s", jsonAssetPath.c_str());
+    statusText = hadPendingSplit
+            ? TextFormat("Loaded topology %s; split at point cancelled", jsonAssetPath.c_str())
+            : TextFormat("Loaded topology %s", jsonAssetPath.c_str());
     return true;
 }
 
@@ -5428,6 +5742,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     }
 
     CancelPendingSector(nullptr);
+    CancelPendingTopologyLineSplitAtPoint(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     ui.hotId = 0;
@@ -6058,6 +6373,7 @@ void SectorEditor::ResetSurface3DUiState()
 
 void SectorEditor::ClearSelection()
 {
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
     state.topologySelectionKind = TopologySelectionKind::None;
     state.selectedTopologySectorId = -1;
     state.selectedTopologySideDefId = -1;
@@ -6263,6 +6579,7 @@ bool SectorEditor::SplitSelectedTopologyLineDef()
         return false;
     }
 
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
     state.hasHoveredVertex = false;
     state.hoveredTopologyVertexId = -1;
     state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};

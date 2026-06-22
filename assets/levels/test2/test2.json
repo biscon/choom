@@ -264,6 +264,61 @@
       "id": 48,
       "x": 1408,
       "y": 2688
+    },
+    {
+      "id": 49,
+      "x": 3072,
+      "y": 256
+    },
+    {
+      "id": 50,
+      "x": 3072,
+      "y": -128
+    },
+    {
+      "id": 51,
+      "x": 4352,
+      "y": -128
+    },
+    {
+      "id": 52,
+      "x": 4352,
+      "y": 256
+    },
+    {
+      "id": 53,
+      "x": 2560,
+      "y": -640
+    },
+    {
+      "id": 54,
+      "x": 2048,
+      "y": -640
+    },
+    {
+      "id": 55,
+      "x": 2048,
+      "y": -768
+    },
+    {
+      "id": 56,
+      "x": 2304,
+      "y": -1152
+    },
+    {
+      "id": 57,
+      "x": 2688,
+      "y": -896
+    },
+    {
+      "id": 58,
+      "x": 512,
+      "y": -256
+    },
+    {
+      "id": 59,
+      "x": 512,
+      "y": 0
     }
   ],
   "linedefs": [
@@ -273,13 +328,6 @@
       "endVertexId": 2,
       "frontSideDefId": 1,
       "backSideDefId": -1
-    },
-    {
-      "id": 2,
-      "startVertexId": 2,
-      "endVertexId": 3,
-      "frontSideDefId": 2,
-      "backSideDefId": 9
     },
     {
       "id": 3,
@@ -485,20 +533,6 @@
       "backSideDefId": -1
     },
     {
-      "id": 34,
-      "startVertexId": 27,
-      "endVertexId": 29,
-      "frontSideDefId": 50,
-      "backSideDefId": -1
-    },
-    {
-      "id": 35,
-      "startVertexId": 29,
-      "endVertexId": 30,
-      "frontSideDefId": 51,
-      "backSideDefId": -1
-    },
-    {
       "id": 36,
       "startVertexId": 30,
       "endVertexId": 28,
@@ -637,57 +671,124 @@
       "endVertexId": 41,
       "frontSideDefId": 88,
       "backSideDefId": 89
+    },
+    {
+      "id": 58,
+      "startVertexId": 49,
+      "endVertexId": 30,
+      "frontSideDefId": 91,
+      "backSideDefId": -1
+    },
+    {
+      "id": 59,
+      "startVertexId": 29,
+      "endVertexId": 50,
+      "frontSideDefId": 92,
+      "backSideDefId": -1
+    },
+    {
+      "id": 60,
+      "startVertexId": 50,
+      "endVertexId": 49,
+      "frontSideDefId": 93,
+      "backSideDefId": 97
+    },
+    {
+      "id": 61,
+      "startVertexId": 50,
+      "endVertexId": 51,
+      "frontSideDefId": 94,
+      "backSideDefId": -1
+    },
+    {
+      "id": 62,
+      "startVertexId": 51,
+      "endVertexId": 52,
+      "frontSideDefId": 95,
+      "backSideDefId": -1
+    },
+    {
+      "id": 63,
+      "startVertexId": 52,
+      "endVertexId": 49,
+      "frontSideDefId": 96,
+      "backSideDefId": -1
+    },
+    {
+      "id": 65,
+      "startVertexId": 53,
+      "endVertexId": 29,
+      "frontSideDefId": 99,
+      "backSideDefId": -1
+    },
+    {
+      "id": 66,
+      "startVertexId": 27,
+      "endVertexId": 54,
+      "frontSideDefId": 100,
+      "backSideDefId": -1
+    },
+    {
+      "id": 67,
+      "startVertexId": 54,
+      "endVertexId": 53,
+      "frontSideDefId": 101,
+      "backSideDefId": 105
+    },
+    {
+      "id": 68,
+      "startVertexId": 54,
+      "endVertexId": 55,
+      "frontSideDefId": 102,
+      "backSideDefId": -1
+    },
+    {
+      "id": 69,
+      "startVertexId": 55,
+      "endVertexId": 56,
+      "frontSideDefId": 103,
+      "backSideDefId": -1
+    },
+    {
+      "id": 71,
+      "startVertexId": 56,
+      "endVertexId": 57,
+      "frontSideDefId": 106,
+      "backSideDefId": -1
+    },
+    {
+      "id": 72,
+      "startVertexId": 57,
+      "endVertexId": 53,
+      "frontSideDefId": 107,
+      "backSideDefId": -1
+    },
+    {
+      "id": 73,
+      "startVertexId": 2,
+      "endVertexId": 58,
+      "frontSideDefId": 108,
+      "backSideDefId": 110
+    },
+    {
+      "id": 75,
+      "startVertexId": 58,
+      "endVertexId": 59,
+      "frontSideDefId": 112,
+      "backSideDefId": 114
+    },
+    {
+      "id": 76,
+      "startVertexId": 59,
+      "endVertexId": 3,
+      "frontSideDefId": 113,
+      "backSideDefId": 115
     }
   ],
   "sidedefs": [
     {
       "id": 1,
       "lineDefId": 1,
-      "side": "front",
-      "sectorId": 1,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "step_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "upper_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 2,
-      "lineDefId": 2,
       "side": "front",
       "sectorId": 1,
       "wall": {
@@ -869,51 +970,6 @@
       "id": 8,
       "lineDefId": 8,
       "side": "front",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "step_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "upper_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 9,
-      "lineDefId": 2,
-      "side": "back",
       "sectorId": 2,
       "wall": {
         "textureId": "wall",
@@ -2756,96 +2812,6 @@
       }
     },
     {
-      "id": 50,
-      "lineDefId": 34,
-      "side": "front",
-      "sectorId": 8,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "step_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "upper_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 51,
-      "lineDefId": 35,
-      "side": "front",
-      "sectorId": 8,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "step_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "upper_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
       "id": 52,
       "lineDefId": 36,
       "side": "front",
@@ -4509,6 +4475,951 @@
           ]
         }
       }
+    },
+    {
+      "id": 91,
+      "lineDefId": 58,
+      "side": "front",
+      "sectorId": 8,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 92,
+      "lineDefId": 59,
+      "side": "front",
+      "sectorId": 8,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 93,
+      "lineDefId": 60,
+      "side": "front",
+      "sectorId": 8,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 94,
+      "lineDefId": 61,
+      "side": "front",
+      "sectorId": 11,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 95,
+      "lineDefId": 62,
+      "side": "front",
+      "sectorId": 11,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 96,
+      "lineDefId": 63,
+      "side": "front",
+      "sectorId": 11,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 97,
+      "lineDefId": 60,
+      "side": "back",
+      "sectorId": 11,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 99,
+      "lineDefId": 65,
+      "side": "front",
+      "sectorId": 8,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 100,
+      "lineDefId": 66,
+      "side": "front",
+      "sectorId": 8,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 101,
+      "lineDefId": 67,
+      "side": "front",
+      "sectorId": 8,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 102,
+      "lineDefId": 68,
+      "side": "front",
+      "sectorId": 12,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 103,
+      "lineDefId": 69,
+      "side": "front",
+      "sectorId": 12,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 105,
+      "lineDefId": 67,
+      "side": "back",
+      "sectorId": 12,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 106,
+      "lineDefId": 71,
+      "side": "front",
+      "sectorId": 12,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 107,
+      "lineDefId": 72,
+      "side": "front",
+      "sectorId": 12,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 108,
+      "lineDefId": 73,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 110,
+      "lineDefId": 73,
+      "side": "back",
+      "sectorId": 2,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 112,
+      "lineDefId": 75,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "ceiling",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 113,
+      "lineDefId": 76,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 114,
+      "lineDefId": 75,
+      "side": "back",
+      "sectorId": 2,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 115,
+      "lineDefId": 76,
+      "side": "back",
+      "sectorId": 2,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
     }
   ],
   "sectors": [
@@ -5251,6 +6162,154 @@
           ]
         }
       }
+    },
+    {
+      "id": 11,
+      "name": "sector_011",
+      "floorZ": 0.0,
+      "ceilingZ": 24.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.20000000298023224,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 12,
+      "name": "sector_012",
+      "floorZ": 0.0,
+      "ceilingZ": 24.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.5,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
     }
   ],
   "staticLights": [
@@ -5333,6 +6392,6 @@
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "382adb515f37ab6c"
+    "sourceHash": "4a66ecc72ae39f37"
   }
 }

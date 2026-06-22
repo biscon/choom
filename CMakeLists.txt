@@ -161,6 +161,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyCreation.cpp
             sources/sector_demo/SectorTopologyEdit.cpp
+            sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp

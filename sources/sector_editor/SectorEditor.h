@@ -51,6 +51,11 @@ private:
     void UpdateLightDrag(engine::Input& input);
     void FinishLightDrag();
     void CancelLightDrag(const char* message);
+    void StartPendingTopologyLineSplitAtPoint();
+    void CancelPendingTopologyLineSplitAtPoint(const char* message);
+    bool ValidatePendingTopologyLineSplitAtPointTarget(const char* staleMessage);
+    void UpdatePendingTopologyLineSplitAtPoint(engine::Input& input);
+    void CommitPendingTopologyLineSplitAtPoint();
     void UpdatePreview3D(engine::Input& input, float dt);
     void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingSector(const char* message);
@@ -78,6 +83,7 @@ private:
     void DrawPendingSector() const;
     void DrawVertexMoveOverlay() const;
     void DrawLightMoveOverlay() const;
+    void DrawPendingTopologyLineSplitAtPoint() const;
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
     void RenderPreview3D(engine::AssetManager& assets);
     void DrawPreviewSurfaceHighlights() const;

@@ -1,5 +1,7 @@
 #include "sector_demo/SectorTopologyEdit.h"
 
+#include "sector_demo/SectorTopologyGeometry.h"
+
 #include <algorithm>
 #include <limits>
 #include <unordered_set>
@@ -190,11 +192,71 @@ bool SplitSectorTopologyLineDef(
         return false;
     }
 
+    const SectorTopologyCoordPoint midpoint{
+            static_cast<SectorCoord>(midpointX),
+            static_cast<SectorCoord>(midpointY)
+    };
+    return SplitSectorTopologyLineDefAtPoint(map, lineDefId, midpoint, outResult, outError);
+}
+
+bool SplitSectorTopologyLineDefAtPoint(
+        SectorTopologyMap& map,
+        int lineDefId,
+        SectorTopologyCoordPoint point,
+        SectorTopologySplitLineResult* outResult,
+        std::string* outError)
+{
+    if (outResult != nullptr) {
+        *outResult = SectorTopologySplitLineResult{};
+    }
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    if (!IsValidSectorTopologyId(lineDefId)) {
+        SetError(outError, "Invalid topology linedef ID");
+        return false;
+    }
+
+    const SectorTopologyLineDef* existing = FindSectorTopologyLineDef(map, lineDefId);
+    if (existing == nullptr) {
+        SetError(outError, "Topology linedef not found");
+        return false;
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(map, *existing, start, end)) {
+        SetError(outError, "Topology linedef endpoints are invalid");
+        return false;
+    }
+
+    const SectorTopologyCoordPoint startPoint{start->x, start->y};
+    const SectorTopologyCoordPoint endPoint{end->x, end->y};
+    if (!SectorTopologyPointOnSegment(point, startPoint, endPoint)) {
+        SetError(outError, "Split point must lie exactly on the topology linedef.");
+        return false;
+    }
+    if (!SectorTopologyPointStrictlyInsideSegment(point, startPoint, endPoint)) {
+        SetError(outError, "Split point cannot be a linedef endpoint.");
+        return false;
+    }
+
+    for (const SectorTopologyVertex& vertex : map.vertices) {
+        if (vertex.x == point.x && vertex.y == point.y) {
+            SetError(outError, "Split point is already occupied by a topology vertex.");
+            return false;
+        }
+    }
+
+    SectorTopologyMap candidate = map;
+    SectorTopologySplitLineResult result;
+
     SectorTopologySideDef originalFront;
     SectorTopologySideDef originalBack;
     std::string error;
     const bool hasFront = FindSideDefCopy(
-            map,
+            candidate,
             existing->frontSideDefId,
             SectorTopologySideKind::Front,
             originalFront,
@@ -204,7 +266,7 @@ bool SplitSectorTopologyLineDef(
         return false;
     }
     const bool hasBack = FindSideDefCopy(
-            map,
+            candidate,
             existing->backSideDefId,
             SectorTopologySideKind::Back,
             originalBack,
@@ -214,17 +276,15 @@ bool SplitSectorTopologyLineDef(
         return false;
     }
 
-    SectorTopologyMap candidate = map;
-    SectorTopologySplitLineResult result;
-
-    result.midpointVertexId = AllocateSectorTopologyVertexId(candidate);
-    if (!RequireAllocatedId(result.midpointVertexId, "vertex", outError)) {
+    result.newVertexId = AllocateSectorTopologyVertexId(candidate);
+    if (!RequireAllocatedId(result.newVertexId, "vertex", outError)) {
         return false;
     }
+    result.midpointVertexId = result.newVertexId;
     candidate.vertices.push_back(SectorTopologyVertex{
-            result.midpointVertexId,
-            static_cast<SectorCoord>(midpointX),
-            static_cast<SectorCoord>(midpointY)
+            result.newVertexId,
+            point.x,
+            point.y
     });
 
     result.firstLineDefId = AllocateSectorTopologyLineDefId(candidate);
@@ -234,7 +294,7 @@ bool SplitSectorTopologyLineDef(
     candidate.lineDefs.push_back(SectorTopologyLineDef{
             result.firstLineDefId,
             existing->startVertexId,
-            result.midpointVertexId,
+            result.newVertexId,
             -1,
             -1
     });
@@ -245,7 +305,7 @@ bool SplitSectorTopologyLineDef(
     }
     candidate.lineDefs.push_back(SectorTopologyLineDef{
             result.secondLineDefId,
-            result.midpointVertexId,
+            result.newVertexId,
             existing->endVertexId,
             -1,
             -1

@@ -1,5 +1,6 @@
 #include "sector_demo/SectorTopologyCreation.h"
 #include "sector_demo/SectorTopologyEdit.h"
+#include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 
 #include <algorithm>
@@ -682,6 +683,245 @@ void TestChangingSectorDefaultsDoesNotRewriteExistingSideDefs()
     }
 }
 
+void TestTopologyGeometryHelpers()
+{
+    Check(game::SectorTopologyPointOnSegment({32, 0}, {0, 0}, {64, 0}),
+          "geometry helper accepts horizontal point");
+    Check(game::SectorTopologyPointOnSegment({0, 32}, {0, 0}, {0, 64}),
+          "geometry helper accepts vertical point");
+    Check(game::SectorTopologyPointOnSegment({32, 32}, {0, 0}, {64, 64}),
+          "geometry helper accepts diagonal point");
+    Check(game::SectorTopologyPointStrictlyInsideSegment({32, 32}, {0, 0}, {64, 64}),
+          "geometry helper accepts strict diagonal interior point");
+    Check(!game::SectorTopologyPointStrictlyInsideSegment({0, 0}, {0, 0}, {64, 64}),
+          "geometry helper strict inside rejects start endpoint");
+    Check(!game::SectorTopologyPointStrictlyInsideSegment({64, 64}, {0, 0}, {64, 64}),
+          "geometry helper strict inside rejects end endpoint");
+    Check(!game::SectorTopologyPointOnSegment({96, 0}, {0, 0}, {64, 0}),
+          "geometry helper rejects off-segment collinear point");
+    Check(!game::SectorTopologyPointOnSegment({32, 16}, {0, 0}, {64, 0}),
+          "geometry helper rejects non-collinear point");
+}
+
+void TestSplitOneSidedWallAtPoint()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "split at point one-sided square creation succeeds");
+    const SectorTopologyLineDef originalLine = map.lineDefs.front();
+    SectorTopologySideDef* originalSide = FindSideDef(map, originalLine.frontSideDefId);
+    Check(originalSide != nullptr, "split at point one-sided finds original side");
+    if (originalSide == nullptr) {
+        return;
+    }
+    SetDistinctSideSettings(*originalSide, "point_outer");
+    const SectorTopologySideDef expectedSide = *originalSide;
+    const size_t vertexCount = map.vertices.size();
+    const size_t lineCount = map.lineDefs.size();
+    const size_t sideCount = map.sideDefs.size();
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, originalLine.id, {16, 0}, &split, &error),
+          "split at point one-sided wall succeeds");
+    Check(error.empty(), "successful one-sided point split clears error");
+    Check(split.newVertexId == split.midpointVertexId, "point split reports new vertex in midpoint-compatible field");
+    Check(map.vertices.size() == vertexCount + 1, "point split one-sided adds vertex");
+    Check(map.lineDefs.size() == lineCount + 1, "point split one-sided replaces one line with two");
+    Check(map.sideDefs.size() == sideCount + 1, "point split one-sided replaces one sidedef with two");
+    const game::SectorTopologyVertex* splitVertex = game::FindSectorTopologyVertex(map, split.newVertexId);
+    Check(splitVertex != nullptr && splitVertex->x == 16 && splitVertex->y == 0,
+          "point split one-sided creates vertex at requested point");
+    Check(FindLineById(map, originalLine.id) == nullptr, "point split one-sided removes original line");
+    Check(FindSideDef(map, expectedSide.id) == nullptr, "point split one-sided removes original sidedef");
+
+    const SectorTopologyLineDef* first = FindLineById(map, split.firstLineDefId);
+    const SectorTopologyLineDef* second = FindLineById(map, split.secondLineDefId);
+    Check(first != nullptr && second != nullptr, "point split one-sided replacement lines exist");
+    if (first != nullptr && second != nullptr) {
+        Check(first->startVertexId == originalLine.startVertexId
+                      && first->endVertexId == split.newVertexId,
+              "point split one-sided first line is A to split point");
+        Check(second->startVertexId == split.newVertexId
+                      && second->endVertexId == originalLine.endVertexId,
+              "point split one-sided second line is split point to B");
+    }
+
+    const SectorTopologySideDef* firstSide = FindSideDef(map, split.firstFrontSideDefId);
+    const SectorTopologySideDef* secondSide = FindSideDef(map, split.secondFrontSideDefId);
+    Check(firstSide != nullptr && secondSide != nullptr, "point split one-sided duplicated sidedefs exist");
+    if (firstSide != nullptr && secondSide != nullptr) {
+        Check(SameSideDefSettings(*firstSide, expectedSide),
+              "point split one-sided first side preserves settings");
+        Check(SameSideDefSettings(*secondSide, expectedSide),
+              "point split one-sided second side preserves settings");
+    }
+
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, sectorId, loops), "point split one-sided validates and extracts");
+    Check(LoopContainsVertex(loops.outer, split.newVertexId),
+          "point split one-sided sector loop includes split vertex");
+}
+
+void TestSplitTwoSidedSharedLineAtPoint()
+{
+    SectorTopologyMap map;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "point split shared first adjacent square succeeds");
+    Check(Create(map, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "point split shared second adjacent square succeeds");
+    const SectorTopologyLineDef* shared = FindLine(map, 2, 3);
+    Check(shared != nullptr, "point split shared finds shared linedef");
+    if (shared == nullptr) {
+        return;
+    }
+    SectorTopologySideDef* front = FindSideDef(map, shared->frontSideDefId);
+    SectorTopologySideDef* back = FindSideDef(map, shared->backSideDefId);
+    Check(front != nullptr && back != nullptr, "point split shared finds front and back");
+    if (front == nullptr || back == nullptr) {
+        return;
+    }
+    SetDistinctSideSettings(*front, "point_front");
+    SetDistinctSideSettings(*back, "point_back");
+    const SectorTopologySideDef expectedFront = *front;
+    const SectorTopologySideDef expectedBack = *back;
+    const int sharedLineId = shared->id;
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, sharedLineId, {64, 16}, &split, &error),
+          "point split shared two-sided line succeeds");
+    Check(error.empty(), "successful shared point split clears error");
+
+    const SectorTopologySideDef* firstFront = FindSideDef(map, split.firstFrontSideDefId);
+    const SectorTopologySideDef* secondFront = FindSideDef(map, split.secondFrontSideDefId);
+    const SectorTopologySideDef* firstBack = FindSideDef(map, split.firstBackSideDefId);
+    const SectorTopologySideDef* secondBack = FindSideDef(map, split.secondBackSideDefId);
+    Check(firstFront != nullptr && secondFront != nullptr && firstBack != nullptr && secondBack != nullptr,
+          "point split shared duplicated sidedefs exist");
+    if (firstFront != nullptr && secondFront != nullptr && firstBack != nullptr && secondBack != nullptr) {
+        Check(SameSideDefSettings(*firstFront, expectedFront)
+                      && SameSideDefSettings(*secondFront, expectedFront),
+              "point split shared preserves front settings on both halves");
+        Check(SameSideDefSettings(*firstBack, expectedBack)
+                      && SameSideDefSettings(*secondBack, expectedBack),
+              "point split shared preserves back settings on both halves");
+        Check(firstFront->sectorId == leftId
+                      && secondFront->sectorId == leftId
+                      && firstBack->sectorId == rightId
+                      && secondBack->sectorId == rightId,
+              "point split shared preserves front/back sector ownership");
+    }
+    Check(FindLineById(map, sharedLineId) == nullptr, "point split shared removes original line");
+
+    SectorTopologyLoopSet leftLoops;
+    SectorTopologyLoopSet rightLoops;
+    Check(ValidateAndExtract(map, leftId, leftLoops), "point split shared left sector extracts");
+    Check(ValidateAndExtract(map, rightId, rightLoops), "point split shared right sector extracts");
+    Check(LoopContainsVertex(leftLoops.outer, split.newVertexId)
+                  && LoopContainsVertex(rightLoops.outer, split.newVertexId),
+          "point split shared vertex belongs to both sector loops");
+}
+
+void TestSplitDiagonalLineAtPoint()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "diagonal point split triangle creation succeeds");
+    const SectorTopologyLineDef originalLine = map.lineDefs.front();
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, originalLine.id, {32, 32}, &split, &error),
+          "diagonal point split succeeds");
+    const game::SectorTopologyVertex* splitVertex = game::FindSectorTopologyVertex(map, split.newVertexId);
+    Check(splitVertex != nullptr && splitVertex->x == 32 && splitVertex->y == 32,
+          "diagonal point split creates exact integer vertex");
+
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, sectorId, loops), "diagonal point split validates and extracts");
+}
+
+void TestRejectInvalidSplitAtPoint()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "invalid point split square creation succeeds");
+    const int lineId = map.lineDefs.front().id;
+
+    {
+        SectorTopologyMap candidate = map;
+        const SectorTopologyMap before = candidate;
+        std::string error;
+        Check(!game::SplitSectorTopologyLineDefAtPoint(candidate, 999999, {16, 0}, nullptr, &error),
+              "point split rejects missing line ID");
+        Check(!error.empty(), "missing line point split reports error");
+        CheckUnchanged(before, candidate, "missing line point split leaves map unchanged");
+    }
+    {
+        SectorTopologyMap candidate = map;
+        const SectorTopologyMap before = candidate;
+        std::string error;
+        Check(!game::SplitSectorTopologyLineDefAtPoint(candidate, lineId, {16, 8}, nullptr, &error),
+              "point split rejects point not on segment");
+        Check(!error.empty(), "off-line point split reports error");
+        CheckUnchanged(before, candidate, "off-line point split leaves map unchanged");
+    }
+    {
+        SectorTopologyMap candidate = map;
+        const SectorTopologyMap before = candidate;
+        std::string error;
+        Check(!game::SplitSectorTopologyLineDefAtPoint(candidate, lineId, {0, 0}, nullptr, &error),
+              "point split rejects endpoint");
+        Check(!error.empty(), "endpoint point split reports error");
+        CheckUnchanged(before, candidate, "endpoint point split leaves map unchanged");
+    }
+    {
+        SectorTopologyMap candidate = map;
+        candidate.vertices.push_back(game::SectorTopologyVertex{999, 32, 0});
+        const SectorTopologyMap before = candidate;
+        std::string error;
+        Check(!game::SplitSectorTopologyLineDefAtPoint(candidate, lineId, {32, 0}, nullptr, &error),
+              "point split rejects existing vertex coordinate");
+        Check(!error.empty(), "existing vertex point split reports error");
+        CheckUnchanged(before, candidate, "existing vertex point split leaves map unchanged");
+    }
+    {
+        SectorTopologyMap candidate = map;
+        Check(!candidate.sideDefs.empty(), "transaction failure setup has sideDefs");
+        if (candidate.sideDefs.empty()) {
+            return;
+        }
+        candidate.sideDefs.back().sectorId = 999999;
+        const SectorTopologyMap before = candidate;
+        std::string error;
+        Check(!game::SplitSectorTopologyLineDefAtPoint(candidate, lineId, {16, 0}, nullptr, &error),
+              "point split transactional validation failure rejects");
+        Check(!error.empty(), "transactional point split failure reports error");
+        CheckUnchanged(before, candidate, "transactional point split failure leaves map unchanged");
+    }
+}
+
+void TestSplitAtPointGeneratedGeometryBuilds()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "point split geometry square creation succeeds");
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, map.lineDefs.front().id, {16, 0}, &split, &error),
+          "point split geometry line succeeds");
+
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "generated geometry builds after point split");
+}
+
 void TestSplitOneSidedWall()
 {
     SectorTopologyMap map;
@@ -1319,6 +1559,12 @@ int main()
     TestInvalidInsertsRejectTransactionally();
     TestAdjacentSharesFullEdge();
     TestChangingSectorDefaultsDoesNotRewriteExistingSideDefs();
+    TestTopologyGeometryHelpers();
+    TestSplitOneSidedWallAtPoint();
+    TestSplitTwoSidedSharedLineAtPoint();
+    TestSplitDiagonalLineAtPoint();
+    TestRejectInvalidSplitAtPoint();
+    TestSplitAtPointGeneratedGeometryBuilds();
     TestDeleteStandaloneSector();
     TestDeleteAdjacentSector();
     TestDeleteInsertedChildSector();

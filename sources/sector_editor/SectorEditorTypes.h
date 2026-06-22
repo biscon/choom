@@ -196,6 +196,18 @@ struct LightDragState {
     Vector3 snappedPosition = {};
 };
 
+struct PendingTopologyLineSplitAtPoint {
+    bool active = false;
+    int lineDefId = -1;
+    int sideDefId = -1;
+    SectorTopologySideKind side = SectorTopologySideKind::Front;
+    TopologyWallPart wallPart = TopologyWallPart::Wall;
+    SectorTopologyCoordPoint candidatePoint = {};
+    bool hasCandidatePoint = false;
+    bool hasValidCandidate = false;
+    std::string message;
+};
+
 struct SectorEditorState {
     SectorTopologyMap topologyMap;
     bool topologyDocumentInitialized = false;
@@ -228,6 +240,7 @@ struct SectorEditorState {
     PendingSectorDraw pendingSector;
     VertexDragState vertexDrag;
     LightDragState lightDrag;
+    PendingTopologyLineSplitAtPoint pendingTopologyLineSplitAtPoint;
     float defaultSectorFloorZ = 0.0f;
     float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);
     std::string defaultFloorTextureId;

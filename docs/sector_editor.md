@@ -139,6 +139,7 @@ The sidedef/linedef inspector supports:
 - wall, lower, and upper UV scale/offset editing
 - reset UV for the selected wall/lower/upper part
 - `Split Linedef`
+- `Split At Point`
 - line-only inspection and splitting when no sidedef is selected
 
 `Split Linedef` creates one exact midpoint vertex and replaces the selected line
@@ -146,6 +147,12 @@ with two new linedefs. Existing front/back sidedefs are duplicated onto both
 replacement lines with fresh stable IDs, preserving sector ownership, side kind,
 texture IDs, and UVs. Splitting fails if the midpoint cannot be represented
 exactly on the integer coordinate grid.
+
+`Split At Point` starts a pending canvas action for the selected linedef. Click a
+snapped point exactly on that linedef to split there, or press Escape/right click
+to cancel. The clicked point must be strictly inside the linedef segment; endpoint
+points and coordinates already occupied by an existing topology vertex are
+rejected without changing the map.
 
 ## Insert Sector Inside
 
