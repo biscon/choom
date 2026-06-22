@@ -98,6 +98,7 @@ private:
     static bool IsTerminal(TextureState state);
     static std::string MakeTextureRequestKey(const char* key, const char* path, TextureLoadFlags flags);
     static std::string MakeGeneratedTextureKey(const char* key, TextureLoadFlags flags);
+    static void ApplyTextureLoadFlags(Texture2D& texture, TextureLoadFlags flags);
 
     void QueueTextureUnloadNoLock(TextureHandle handle);
     void UnloadReadyTextures();

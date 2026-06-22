@@ -99,7 +99,7 @@ void PopulateDefaultSectorTextures(TextureMap& texturesById)
         SectorTextureDefinition definition;
         definition.id = id;
         definition.path = path;
-        definition.filter = SectorTextureFilter::Bilinear;
+        definition.filter = SectorTextureFilter::Anisotropic8x;
         texturesById.emplace(id, std::move(definition));
     };
     addTexture("wall", "assets/images/wall.png");
@@ -6947,6 +6947,13 @@ void SectorEditor::DrawAddMapTextureModal(
     }
     if (engine::ToolButton(ui, config, input, assets, "sector_editor_add_texture_filter_bilinear", Rectangle{rightX + 278.0f, y, 132.0f, 38.0f}, font, "Bilinear", modalState.filter == SectorTextureFilter::Bilinear)) {
         modalState.filter = SectorTextureFilter::Bilinear;
+    }
+    y += 44.0f;
+    if (engine::ToolButton(ui, config, input, assets, "sector_editor_add_texture_filter_trilinear", Rectangle{rightX + 136.0f, y, 132.0f, 38.0f}, font, "Trilinear", modalState.filter == SectorTextureFilter::Trilinear)) {
+        modalState.filter = SectorTextureFilter::Trilinear;
+    }
+    if (engine::ToolButton(ui, config, input, assets, "sector_editor_add_texture_filter_aniso8x", Rectangle{rightX + 278.0f, y, 132.0f, 38.0f}, font, "Aniso 8x", modalState.filter == SectorTextureFilter::Anisotropic8x)) {
+        modalState.filter = SectorTextureFilter::Anisotropic8x;
     }
     y += 54.0f;
 

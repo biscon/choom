@@ -9,13 +9,15 @@ namespace game {
 
 enum class SectorTextureFilter {
     Point,
-    Bilinear
+    Bilinear,
+    Trilinear,
+    Anisotropic8x
 };
 
 struct SectorTextureDefinition {
     std::string id;
     std::string path;
-    SectorTextureFilter filter = SectorTextureFilter::Bilinear;
+    SectorTextureFilter filter = SectorTextureFilter::Anisotropic8x;
 };
 
 struct SectorTextureBinding {

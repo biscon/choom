@@ -15,12 +15,24 @@
       "path": "assets/images/floor.png",
       "filter": "bilinear"
     },
+    "industrial_ceiling_1": {
+      "path": "assets/images/ceilings/industrial_ceiling_1.png",
+      "filter": "point"
+    },
+    "industrial_ceiling_1_b": {
+      "path": "assets/images/ceilings/industrial_ceiling_1.png",
+      "filter": "bilinear"
+    },
     "metal": {
       "path": "assets/images/test/metal.png",
       "filter": "bilinear"
     },
     "square_ceiling_light": {
       "path": "assets/images/decals/square_ceiling_light.png",
+      "filter": "point"
+    },
+    "square_ceiling_light2": {
+      "path": "assets/images/decals/square_ceiling_light2.png",
       "filter": "point"
     },
     "step_wall": {
@@ -7906,7 +7918,7 @@
       "floorZ": 5.0,
       "ceilingZ": 30.0,
       "floorTextureId": "floor",
-      "ceilingTextureId": "ceiling",
+      "ceilingTextureId": "industrial_ceiling_1_b",
       "floorUv": {
         "scale": [
           1.0,
@@ -7919,12 +7931,12 @@
       },
       "ceilingUv": {
         "scale": [
-          1.0,
-          1.0
+          2.0,
+          2.0
         ],
         "offset": [
           0.0,
-          0.0
+          0.125
         ]
       },
       "ambientColor": {
@@ -8196,7 +8208,7 @@
         }
       },
       "ceilingDecal": {
-        "textureId": "square_ceiling_light",
+        "textureId": "square_ceiling_light2",
         "uv": {
           "scale": [
             2.0,
@@ -8298,8 +8310,8 @@
       "intensity": 4.0,
       "color": {
         "r": 255,
-        "g": 255,
-        "b": 255,
+        "g": 246,
+        "b": 190,
         "a": 255
       }
     },
@@ -8331,6 +8343,6 @@
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "678b602ee95fa15f"
+    "sourceHash": "d1376f3d00bc38c4"
   }
 }

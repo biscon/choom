@@ -327,10 +327,16 @@ SectorTextureFilter ReadTextureFilter(const std::string& value, const std::strin
     if (value == "point") {
         return SectorTextureFilter::Point;
     }
-    if (value == "bilinear") {
+    if (value == "linear") {
         return SectorTextureFilter::Bilinear;
     }
-    Fail(context + ".filter must be 'point' or 'bilinear'");
+    if (value == "trilinear") {
+        return SectorTextureFilter::Trilinear;
+    }
+    if (value == "anisotropic8x" || value == "bilinear") {
+        return SectorTextureFilter::Anisotropic8x;
+    }
+    Fail(context + ".filter must be 'point', 'linear', 'trilinear', or 'anisotropic8x'");
 }
 
 const char* WriteTextureFilter(SectorTextureFilter filter)
@@ -339,7 +345,11 @@ const char* WriteTextureFilter(SectorTextureFilter filter)
         case SectorTextureFilter::Point:
             return "point";
         case SectorTextureFilter::Bilinear:
-            return "bilinear";
+            return "linear";
+        case SectorTextureFilter::Trilinear:
+            return "trilinear";
+        case SectorTextureFilter::Anisotropic8x:
+            return "anisotropic8x";
     }
     Fail("texture definition has an invalid filter value");
 }

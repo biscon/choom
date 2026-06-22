@@ -8,7 +8,10 @@ enum TextureLoadFlags : uint32_t {
     TextureLoad_None = 0,
     TextureLoad_PremultiplyAlpha = 1 << 0,
     TextureLoad_PointFilter = 1 << 1,
-    TextureLoad_BilinearFilter = 1 << 2
+    TextureLoad_BilinearFilter = 1 << 2,
+    TextureLoad_Mipmaps = 1 << 3,
+    TextureLoad_TrilinearFilter = 1 << 4,
+    TextureLoad_Anisotropic8x = 1 << 5
 };
 
 inline TextureLoadFlags operator|(TextureLoadFlags lhs, TextureLoadFlags rhs)

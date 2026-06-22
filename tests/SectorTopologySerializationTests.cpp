@@ -248,12 +248,51 @@ void TestRoundTrip()
           "sector defaults round-trip");
     Check(loaded.texturesById.at("wall").filter == SectorTextureFilter::Point,
           "texture definition round-trips");
+    Check(loaded.texturesById.at("floor").filter == SectorTextureFilter::Bilinear,
+          "linear texture definition round-trips");
     Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(loaded)),
           "round-tripped map validates");
     SectorTopologyLoopSet loops;
     Check(game::ExtractSectorTopologyLoops(loaded, 1, loops)
                   && loops.outer.signedAreaTwice > 0,
           "round-tripped map extracts a CCW loop");
+}
+
+void TestTextureFilterSerialization()
+{
+    SectorTopologyMap map = MakeSquare();
+    map.texturesById.emplace("tri", SectorTextureDefinition{
+            "tri", "textures/tri.png", SectorTextureFilter::Trilinear});
+    map.texturesById.emplace("aniso", SectorTextureDefinition{
+            "aniso", "textures/aniso.png", SectorTextureFilter::Anisotropic8x});
+
+    const Json saved = Json::parse(SaveText(map));
+    Check(saved["textures"]["wall"]["filter"] == "point",
+          "point texture filter serializes");
+    Check(saved["textures"]["floor"]["filter"] == "linear",
+          "linear texture filter serializes");
+    Check(saved["textures"]["tri"]["filter"] == "trilinear",
+          "trilinear texture filter serializes");
+    Check(saved["textures"]["aniso"]["filter"] == "anisotropic8x",
+          "anisotropic texture filter serializes");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error), "all texture filter presets load");
+    Check(loaded.texturesById.at("wall").filter == SectorTextureFilter::Point,
+          "point texture filter loads");
+    Check(loaded.texturesById.at("floor").filter == SectorTextureFilter::Bilinear,
+          "linear texture filter loads");
+    Check(loaded.texturesById.at("tri").filter == SectorTextureFilter::Trilinear,
+          "trilinear texture filter loads");
+    Check(loaded.texturesById.at("aniso").filter == SectorTextureFilter::Anisotropic8x,
+          "anisotropic texture filter loads");
+
+    Json legacy = saved;
+    legacy["textures"]["floor"]["filter"] = "bilinear";
+    Check(LoadText(legacy.dump(), loaded, error), "legacy bilinear texture filter loads");
+    Check(loaded.texturesById.at("floor").filter == SectorTextureFilter::Anisotropic8x,
+          "legacy bilinear upgrades to anisotropic filtering");
 }
 
 void TestStaticLightRoundTrip()
@@ -913,6 +952,7 @@ void TestFileApi()
 int main()
 {
     TestRoundTrip();
+    TestTextureFilterSerialization();
     TestStaticLightRoundTrip();
     TestLightmapMetadataRoundTrip();
     TestDecalDefaultsAndOmission();

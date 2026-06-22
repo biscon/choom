@@ -357,8 +357,10 @@ lighting, or geometry. Keyboard shortcuts are not implemented for this workflow
 yet, so use the inspector or 3D panel buttons.
 
 `Add Map Texture` scans `assets/images` recursively for PNG files. It can add or
-update a texture ID in the map texture table and choose point or bilinear
-filtering. It does not copy external files into the project.
+update a texture ID in the map texture table and choose point, bilinear,
+trilinear, or anisotropic 8x filtering. Legacy saved `"bilinear"` texture
+filters load as anisotropic 8x; exact bilinear filtering serializes as
+`"linear"`. It does not copy external files into the project.
 
 ## Move, Split, And Delete Tools
 

@@ -168,12 +168,12 @@ struct AddMapTextureState {
     std::vector<const char*> optionLabels;
     int selectedPathIndex = -1;
     char textureIdBuffer[96] = {};
-    SectorTextureFilter filter = SectorTextureFilter::Bilinear;
+    SectorTextureFilter filter = SectorTextureFilter::Anisotropic8x;
     std::string validationMessage;
     engine::AssetScopeHandle previewScope = engine::NullAssetScopeHandle();
     engine::TextureHandle previewTexture = engine::NullTextureHandle();
     std::string previewPath;
-    SectorTextureFilter previewFilter = SectorTextureFilter::Bilinear;
+    SectorTextureFilter previewFilter = SectorTextureFilter::Anisotropic8x;
 };
 
 struct SaveLevelModalState {
