@@ -195,6 +195,7 @@ The sidedef/linedef inspector supports:
 - wall, lower, and upper texture selection
 - wall, lower, and upper UV scale/offset editing
 - reset UV for the selected wall/lower/upper part
+- fit width, height, or both for the selected wall/lower/upper part
 - `Split Linedef`
 - `Split At Point`
 - line-only inspection and splitting when no sidedef is selected
@@ -204,6 +205,15 @@ with two new linedefs. Existing front/back sidedefs are duplicated onto both
 replacement lines with fresh stable IDs, preserving sector ownership, side kind,
 texture IDs, and UVs. Splitting fails if the midpoint cannot be represented
 exactly on the integer coordinate grid.
+
+Wall-like surfaces use distance-based generated base UVs. Wall, lower, and
+upper U spans are based on physical linedef length, and V spans are based on the
+visible wall height. Reset UV restores scale `(1, 1)` and offset `(0, 0)`, which
+tiles the texture every 2 world units. `Fit Width`, `Fit Height`, and `Fit Both`
+adjust only the selected wall/lower/upper part's UV scale and reset the fitted
+offset axis so that the selected texture spans once across the selected width
+and/or height. Fit preserves the selected part's texture ID and does not change
+other wall parts, the opposite sidedef, sector defaults, floors, or ceilings.
 
 `Split At Point` starts a pending canvas action for the selected linedef. Click a
 snapped point exactly on that linedef to split there, or press Escape/right click
@@ -365,7 +375,8 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 The 3D surface panel edits only the selected surface target. Floor/ceiling
 targets edit sector texture and UV settings. Wall/lower/upper targets edit the
 selected sidedef's matching wall part. The Texture button opens the topology
-texture picker, Reset UV resets only the selected surface target, and Copy/Paste
+texture picker, Reset UV resets only the selected surface target, Fit Width /
+Fit Height / Fit Both fit only selected wall-like targets, and Copy/Paste
 Material copies texture ID plus UV scale/offset between matching selected
 surface kinds.
 

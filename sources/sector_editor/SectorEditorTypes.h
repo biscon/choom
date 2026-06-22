@@ -71,6 +71,12 @@ enum class TopologyWallPart {
     Upper
 };
 
+enum class TopologyUvFitMode {
+    Width,
+    Height,
+    Both
+};
+
 enum class TopologySectorTextureField {
     None,
     Floor,

@@ -9,6 +9,8 @@
 
 namespace game {
 
+constexpr float kSectorGeneratedTextureWorldSize = 2.0f;
+
 enum class SectorGeneratedSurfaceKind {
     Floor,
     Ceiling,

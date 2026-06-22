@@ -39,6 +39,8 @@ constexpr float LeftPanelWidth = 360.0f;
 constexpr float RightPanelWidth = 384.0f;
 constexpr float BottomPanelHeight = 78.0f;
 constexpr float PanelGap = 10.0f;
+constexpr float TopologyUvScaleMin = 0.001f;
+constexpr float TopologyUvScaleMax = 64.0f;
 constexpr float MinZoom = 8.0f;
 constexpr float MaxZoom = 256.0f;
 constexpr float PanPixelsPerSecond = 720.0f;
@@ -631,6 +633,23 @@ const char* TopologyMaterialKindName(TopologySurfaceEditTargetKind kind)
             break;
     }
     return "none";
+}
+
+bool IsWallTopologyEditTarget(TopologySurfaceEditTargetKind kind)
+{
+    return kind == TopologySurfaceEditTargetKind::SideDefWall
+            || kind == TopologySurfaceEditTargetKind::SideDefLower
+            || kind == TopologySurfaceEditTargetKind::SideDefUpper;
+}
+
+const char* TopologyUvFitModeStatusName(TopologyUvFitMode mode)
+{
+    switch (mode) {
+        case TopologyUvFitMode::Width: return "width";
+        case TopologyUvFitMode::Height: return "height";
+        case TopologyUvFitMode::Both: return "width and height";
+    }
+    return "UV";
 }
 
 TopologySectorTextureField TopologyEditTargetSectorTextureField(TopologySurfaceEditTargetKind kind)
@@ -3847,8 +3866,8 @@ void SectorEditor::DrawPreviewUvPanel(
         }
     };
 
-    drawFloat("sector_editor_3d_uv_scale_u", "Scale U", uvScale.x, uiState.surface3DUvScaleUInput, 0, 0.01f, 64.0f, startX);
-    drawFloat("sector_editor_3d_uv_scale_v", "Scale V", uvScale.y, uiState.surface3DUvScaleVInput, 1, 0.01f, 64.0f, startX + (colW + gap));
+    drawFloat("sector_editor_3d_uv_scale_u", "Scale U", uvScale.x, uiState.surface3DUvScaleUInput, 0, TopologyUvScaleMin, TopologyUvScaleMax, startX);
+    drawFloat("sector_editor_3d_uv_scale_v", "Scale V", uvScale.y, uiState.surface3DUvScaleVInput, 1, TopologyUvScaleMin, TopologyUvScaleMax, startX + (colW + gap));
     drawFloat("sector_editor_3d_uv_offset_u", "Offset U", uvOffset.x, uiState.surface3DUvOffsetUInput, 2, -1024.0f, 1024.0f, startX + (colW + gap) * 2.0f);
     drawFloat("sector_editor_3d_uv_offset_v", "Offset V", uvOffset.y, uiState.surface3DUvOffsetVInput, 3, -1024.0f, 1024.0f, startX + (colW + gap) * 3.0f);
 
@@ -3882,6 +3901,44 @@ void SectorEditor::DrawPreviewUvPanel(
             font,
             "Reset UV")) {
         ResetSurface3DUv(target, assets);
+    }
+
+    if (IsWallTopologyEditTarget(target.kind)) {
+        const float fitButtonW = 118.0f;
+        const float fitTop = panel.y + 142.0f;
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_fit_width",
+                    Rectangle{startX, fitTop, fitButtonW, 32.0f},
+                    font,
+                    "Fit Width")) {
+            FitSelectedWallMaterial(target, TopologyUvFitMode::Width, &assets);
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_fit_height",
+                    Rectangle{startX + fitButtonW + gap, fitTop, fitButtonW, 32.0f},
+                    font,
+                    "Fit Height")) {
+            FitSelectedWallMaterial(target, TopologyUvFitMode::Height, &assets);
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_fit_both",
+                    Rectangle{startX + (fitButtonW + gap) * 2.0f, fitTop, fitButtonW, 32.0f},
+                    font,
+                    "Fit Both")) {
+            FitSelectedWallMaterial(target, TopologyUvFitMode::Both, &assets);
+        }
     }
 
     if (engine::Button(
@@ -5472,8 +5529,8 @@ bool SectorEditor::DrawTopologySectorInspector(
             }
         };
 
-        drawFloat(0, "_scale_u", "Scale U", uv.scale.x, 0.01f, 64.0f, Rectangle{0.0f, y, uvColumnW, uvBlockH}, [&](float value) { uv.scale.x = value; });
-        drawFloat(1, "_scale_v", "Scale V", uv.scale.y, 0.01f, 64.0f, Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH}, [&](float value) { uv.scale.y = value; });
+        drawFloat(0, "_scale_u", "Scale U", uv.scale.x, TopologyUvScaleMin, TopologyUvScaleMax, Rectangle{0.0f, y, uvColumnW, uvBlockH}, [&](float value) { uv.scale.x = value; });
+        drawFloat(1, "_scale_v", "Scale V", uv.scale.y, TopologyUvScaleMin, TopologyUvScaleMax, Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH}, [&](float value) { uv.scale.y = value; });
         y += uvBlockH + gap;
         drawFloat(2, "_offset_u", "Offset U", uv.offset.x, -1024.0f, 1024.0f, Rectangle{0.0f, y, uvColumnW, uvBlockH}, [&](float value) { uv.offset.x = value; });
         drawFloat(3, "_offset_v", "Offset V", uv.offset.y, -1024.0f, 1024.0f, Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH}, [&](float value) { uv.offset.y = value; });
@@ -5846,8 +5903,8 @@ bool SectorEditor::DrawTopologySideDefInspector(
             "sector_editor_topology_sidedef_uv_scale_u",
             "Scale U",
             selectedPart.uv.scale.x,
-            0.01f,
-            64.0f,
+            TopologyUvScaleMin,
+            TopologyUvScaleMax,
             Rectangle{0.0f, y, uvColumnW, uvBlockH},
             [&](float value) { selectedPart.uv.scale.x = value; });
     drawUvInput(
@@ -5855,8 +5912,8 @@ bool SectorEditor::DrawTopologySideDefInspector(
             "sector_editor_topology_sidedef_uv_scale_v",
             "Scale V",
             selectedPart.uv.scale.y,
-            0.01f,
-            64.0f,
+            TopologyUvScaleMin,
+            TopologyUvScaleMax,
             Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH},
             [&](float value) { selectedPart.uv.scale.y = value; });
     y += uvBlockH + gap;
@@ -5898,6 +5955,42 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 "Reset topology sidedef %d %s UV",
                 sideDef->id,
                 TopologyWallPartStatusName(state.selectedTopologyWallPart)));
+    }
+    y += 38.0f + gap;
+
+    const float fitButtonW = (contentW - gap * 2.0f) / 3.0f;
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_fit_width",
+                Rectangle{0.0f, y, fitButtonW, 34.0f},
+                font,
+                "Fit Width")) {
+        FitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Width, &assets);
+    }
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_fit_height",
+                Rectangle{fitButtonW + gap, y, fitButtonW, 34.0f},
+                font,
+                "Fit Height")) {
+        FitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Height, &assets);
+    }
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_fit_both",
+                Rectangle{(fitButtonW + gap) * 2.0f, y, fitButtonW, 34.0f},
+                font,
+                "Fit Both")) {
+        FitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Both, &assets);
     }
 
     return true;
@@ -7640,6 +7733,10 @@ bool SectorEditor::ApplySurface3DUvValue(TopologySurfaceEditTarget target, int c
     if (!IsValidTopologySurfaceEditTarget(target) || !std::isfinite(value)) {
         return false;
     }
+    if ((component == 0 || component == 1)
+            && (value < TopologyUvScaleMin || value > TopologyUvScaleMax)) {
+        return false;
+    }
 
     auto applyComponent = [component, value](auto& uv) {
         switch (component) {
@@ -7732,6 +7829,163 @@ bool SectorEditor::ResetSurface3DUv(TopologySurfaceEditTarget target, engine::As
     ResetSurface3DUiState();
     MarkTopologyDocumentEdited(TextFormat("Reset 3D %s UV", SurfaceKindName(state.selectedSurface3D.kind)));
     return RebuildPreviewMeshesPreservingView(assets);
+}
+
+bool SectorEditor::FitSelectedWallMaterial(
+        TopologySurfaceEditTarget target,
+        TopologyUvFitMode mode,
+        engine::AssetManager* assets)
+{
+    if (!IsWallTopologyEditTarget(target.kind) || !IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Select a wall, lower, or upper surface before fitting UVs.";
+        return false;
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (sideDef == nullptr
+            || sideDef->lineDefId != target.lineDefId
+            || sideDef->sectorId != target.sectorId
+            || sideDef->side != target.side) {
+        statusText = "Selected sidedef is no longer valid.";
+        return false;
+    }
+
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, sideDef->lineDefId);
+    if (lineDef == nullptr) {
+        statusText = "Selected sidedef references a missing linedef.";
+        return false;
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)
+            || start == nullptr || end == nullptr) {
+        statusText = "Selected linedef endpoints are missing.";
+        return false;
+    }
+
+    const double dx = static_cast<double>(end->x) - static_cast<double>(start->x);
+    const double dy = static_cast<double>(end->y) - static_cast<double>(start->y);
+    const double coordLength = std::sqrt(dx * dx + dy * dy);
+    const float wallLengthWorld = SectorCoordDistanceToWorldDistance(coordLength);
+    if (!(wallLengthWorld > 0.0f) || !std::isfinite(wallLengthWorld)) {
+        statusText = "Selected wall has invalid length.";
+        return false;
+    }
+
+    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sideDef->sectorId);
+    if (sector == nullptr) {
+        statusText = "Selected sidedef references a missing sector.";
+        return false;
+    }
+
+    const int oppositeSideDefId = sideDef->side == SectorTopologySideKind::Front
+            ? lineDef->backSideDefId
+            : lineDef->frontSideDefId;
+    const SectorTopologySideDef* opposite = FindOppositeSectorTopologySideDef(state.topologyMap, sideDef->id);
+    if (oppositeSideDefId != -1 && opposite == nullptr) {
+        statusText = "Selected sidedef's opposite side is no longer valid.";
+        return false;
+    }
+
+    const SectorTopologySector* oppositeSector = nullptr;
+    if (opposite != nullptr) {
+        oppositeSector = FindSectorTopologySector(state.topologyMap, opposite->sectorId);
+        if (oppositeSector == nullptr) {
+            statusText = "Selected sidedef's opposite sector is missing.";
+            return false;
+        }
+    }
+
+    const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+    float heightAuthoring = 0.0f;
+    switch (wallPart) {
+        case TopologyWallPart::Wall:
+            if (opposite != nullptr) {
+                statusText = "Selected wall part has no visible solid wall span.";
+                return false;
+            }
+            heightAuthoring = std::fabs(sector->ceilingZ - sector->floorZ);
+            break;
+        case TopologyWallPart::Lower:
+            if (oppositeSector == nullptr) {
+                statusText = "Lower wall fit needs an opposite sector.";
+                return false;
+            }
+            if (!(oppositeSector->floorZ > sector->floorZ)) {
+                statusText = "Selected lower wall has no visible height span.";
+                return false;
+            }
+            heightAuthoring = oppositeSector->floorZ - sector->floorZ;
+            break;
+        case TopologyWallPart::Upper:
+            if (oppositeSector == nullptr) {
+                statusText = "Upper wall fit needs an opposite sector.";
+                return false;
+            }
+            if (!(sector->ceilingZ > oppositeSector->ceilingZ)) {
+                statusText = "Selected upper wall has no visible height span.";
+                return false;
+            }
+            heightAuthoring = sector->ceilingZ - oppositeSector->ceilingZ;
+            break;
+    }
+
+    const float wallHeightWorld = SectorAuthoringToWorldDistance(std::fabs(heightAuthoring));
+    const bool fitWidth = mode == TopologyUvFitMode::Width || mode == TopologyUvFitMode::Both;
+    const bool fitHeight = mode == TopologyUvFitMode::Height || mode == TopologyUvFitMode::Both;
+    if (fitHeight && (!(wallHeightWorld > 0.0f) || !std::isfinite(wallHeightWorld))) {
+        statusText = "Selected wall has invalid height.";
+        return false;
+    }
+
+    const auto validateScale = [](float scale) {
+        return std::isfinite(scale)
+                && scale >= TopologyUvScaleMin
+                && scale <= TopologyUvScaleMax;
+    };
+    const float widthScale = kSectorGeneratedTextureWorldSize / wallLengthWorld;
+    const float heightScale = fitHeight
+            ? kSectorGeneratedTextureWorldSize / wallHeightWorld
+            : 1.0f;
+    if (fitWidth && !validateScale(widthScale)) {
+        statusText = "Fit width requires a UV scale outside the editable range.";
+        return false;
+    }
+    if (fitHeight && !validateScale(heightScale)) {
+        statusText = "Fit height requires a UV scale outside the editable range.";
+        return false;
+    }
+
+    SectorTopologySideDef* mutableSideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (mutableSideDef == nullptr) {
+        statusText = "Selected sidedef is no longer valid.";
+        return false;
+    }
+    SectorTopologyUvSettings& uv = TopologyWallPartSettingsFor(*mutableSideDef, wallPart).uv;
+    if (fitWidth) {
+        uv.scale.x = widthScale;
+        uv.offset.x = 0.0f;
+    }
+    if (fitHeight) {
+        uv.scale.y = heightScale;
+        uv.offset.y = 0.0f;
+    }
+
+    state.topologyRenderWarning.clear();
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+
+    MarkTopologyDocumentEdited(TextFormat(
+            "Fit %s material %s.",
+            TopologyWallPartStatusName(wallPart),
+            TopologyUvFitModeStatusName(mode)));
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
 }
 
 bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& assets)
