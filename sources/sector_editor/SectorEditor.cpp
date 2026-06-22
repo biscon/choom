@@ -1184,7 +1184,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         OpenDeleteSelectedTopologySectorConfirmation();
                     } else if (state.topologySelectionKind == TopologySelectionKind::SideDef
                             || state.topologySelectionKind == TopologySelectionKind::LineDef) {
-                        statusText = "Direct linedef/sidedef deletion is not migrated yet.";
+                        statusText = "Direct linedef/sidedef deletion is not available yet.";
                     } else {
                         statusText = "Select a topology sector to delete.";
                     }
