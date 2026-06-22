@@ -39,6 +39,22 @@ struct SectorTopologyDissolveVertexResult {
     int replacementBackSideDefId = 0;
 };
 
+struct SectorTopologyBoundaryCutPoint {
+    int vertexId = -1;
+    int lineDefId = -1;
+    SectorTopologyCoordPoint point;
+};
+
+struct SectorTopologyCutSectorResult {
+    int originalSectorId = -1;
+    int newSectorId = -1;
+    int firstEndpointVertexId = -1;
+    int secondEndpointVertexId = -1;
+    int cutLineDefId = -1;
+    int originalSectorSideDefId = -1;
+    int newSectorSideDefId = -1;
+};
+
 bool MoveSectorTopologyVertex(
         SectorTopologyMap& map,
         int vertexId,
@@ -75,6 +91,14 @@ bool DeleteSectorTopologySector(
         SectorTopologyMap& map,
         int sectorId,
         SectorTopologyDeleteSectorResult* outResult = nullptr,
+        std::string* outError = nullptr);
+
+bool CutSectorTopologySectorBetweenBoundaryPoints(
+        SectorTopologyMap& map,
+        int sectorId,
+        SectorTopologyBoundaryCutPoint firstPoint,
+        SectorTopologyBoundaryCutPoint secondPoint,
+        SectorTopologyCutSectorResult* outResult = nullptr,
         std::string* outError = nullptr);
 
 } // namespace game

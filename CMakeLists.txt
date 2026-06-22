@@ -158,6 +158,7 @@ if(BUILD_TESTING)
     add_executable(sector_topology_creation_tests
             tests/SectorTopologyCreationTests.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyCreation.cpp
             sources/sector_demo/SectorTopologyEdit.cpp
@@ -167,6 +168,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorTopologyValidation.cpp
     )
     target_include_directories(sector_topology_creation_tests PRIVATE sources)
+    target_compile_definitions(sector_topology_creation_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(sector_topology_creation_tests PRIVATE raylib)
     add_test(NAME sector_topology_creation COMMAND sector_topology_creation_tests)
 endif()

@@ -60,6 +60,11 @@ private:
     bool ValidatePendingTopologyLineSplitAtPointTarget(const char* staleMessage);
     void UpdatePendingTopologyLineSplitAtPoint(engine::Input& input);
     void CommitPendingTopologyLineSplitAtPoint();
+    void StartPendingTopologySectorCut();
+    void CancelPendingTopologySectorCut(const char* message);
+    bool ValidatePendingTopologySectorCutTarget(const char* staleMessage);
+    void UpdatePendingTopologySectorCut(engine::Input& input);
+    void CommitPendingTopologySectorCut();
     void UpdatePreview3D(engine::Input& input, float dt);
     void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingSector(const char* message);
@@ -89,6 +94,7 @@ private:
     void DrawPendingTopologyVertexMerge() const;
     void DrawLightMoveOverlay() const;
     void DrawPendingTopologyLineSplitAtPoint() const;
+    void DrawPendingTopologySectorCut() const;
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
     void RenderPreview3D(engine::AssetManager& assets);
     void DrawPreviewSurfaceHighlights() const;
@@ -193,6 +199,9 @@ private:
             Vector2 screenPoint,
             int& outVertexId,
             SectorTopologyCoordPoint& outPoint) const;
+    bool FindSelectedSectorBoundaryCutPointNearScreenPoint(
+            Vector2 screenPoint,
+            SectorTopologyBoundaryCutPoint& outPoint) const;
     int FindTopologyVertexAtCoordPoint(
             SectorTopologyCoordPoint point,
             int excludedVertexId = -1) const;

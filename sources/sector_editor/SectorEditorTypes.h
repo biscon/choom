@@ -6,6 +6,7 @@
 #include "sector_demo/SectorPointTypes.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyCreation.h"
+#include "sector_demo/SectorTopologyEdit.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
@@ -219,6 +220,23 @@ struct PendingTopologyVertexMerge {
     std::string message;
 };
 
+struct PendingTopologySectorCut {
+    bool active = false;
+    int sectorId = -1;
+    bool hasFirstPoint = false;
+    SectorTopologyBoundaryCutPoint firstPoint;
+    SectorTopologyBoundaryCutPoint candidatePoint;
+    bool hasCandidatePoint = false;
+    bool hasValidCandidate = false;
+    bool cacheHasFirstPoint = false;
+    SectorTopologyBoundaryCutPoint cachedFirstPoint;
+    SectorTopologyBoundaryCutPoint cachedCandidatePoint;
+    int cachedSectorId = -1;
+    bool cachedValid = false;
+    std::string cachedError;
+    std::string message;
+};
+
 struct SectorEditorState {
     SectorTopologyMap topologyMap;
     bool topologyDocumentInitialized = false;
@@ -255,6 +273,7 @@ struct SectorEditorState {
     LightDragState lightDrag;
     PendingTopologyLineSplitAtPoint pendingTopologyLineSplitAtPoint;
     PendingTopologyVertexMerge pendingTopologyVertexMerge;
+    PendingTopologySectorCut pendingTopologySectorCut;
     float defaultSectorFloorZ = 0.0f;
     float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);
     std::string defaultFloorTextureId;

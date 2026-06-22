@@ -112,6 +112,7 @@ Selecting a topology sector opens the sector inspector. It edits:
 - ambient color and intensity
 - default wall, lower, and upper texture IDs and UV scale/offset
 - `Insert Sector Inside`
+- `Cut Sector`
 - `Delete Sector`
 
 Sector default wall/lower/upper settings initialize future sidedefs created for
@@ -122,6 +123,35 @@ clears those slots from linedefs, removes linedefs with no remaining side, prune
 unreferenced vertices, validates the candidate topology, and commits only if it
 is valid. Surviving opposite sides on shared linedefs keep their texture and UV
 settings and become one-sided boundaries.
+
+## Cut Sector
+
+`Cut Sector` starts a pending two-click canvas action for the selected topology
+sector. Click two points on the selected sector's outer boundary, or press
+Escape/right click to cancel. Picking prefers existing selected-boundary
+vertices near the cursor, then snapped points strictly inside selected outer
+linedefs. Holes and unrelated linedefs are not valid endpoints.
+
+The cut is topology-only and transactional. The original sector ID, name, and
+properties are preserved for one result. One new sector ID is allocated for the
+other result, copying the original sector fields and receiving a generated
+non-duplicate sector name. Preview validation runs against a copied map and does
+not mutate live topology.
+
+Accepted cuts must stay inside the selected sector and produce two valid outer
+loops with at least three vertices each. The editor/backend rejects same
+endpoints, same-edge cuts, boundary-aligned cuts, cuts through unrelated
+vertices, duplicate physical linedefs, crossing/touching/overlapping existing
+topology, concave cuts outside the sector, hole crossings/touches, ambiguous
+hole assignment, and any candidate that fails topology validation.
+
+Existing boundary sidedefs inherited by each result keep their concrete
+wall/lower/upper texture IDs and UV settings. Existing holes are not cut: each
+hole boundary must lie strictly inside exactly one result sector, or the cut is
+rejected. The new cut edge is one two-sided portal linedef with independent
+front/back sidedefs initialized from the two owning sectors' default wall,
+lower, and upper settings. Like other two-sided portals, it produces lower/upper
+3D wall surfaces only where adjacent sector heights differ.
 
 ## Sidedef And Linedef Inspector
 

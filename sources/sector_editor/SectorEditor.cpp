@@ -114,6 +114,16 @@ SectorTopologyMap CreateEmptySectorTopologyDocument()
     return map;
 }
 
+bool SameBoundaryCutPoint(
+        const SectorTopologyBoundaryCutPoint& a,
+        const SectorTopologyBoundaryCutPoint& b)
+{
+    return a.vertexId == b.vertexId
+            && a.lineDefId == b.lineDefId
+            && a.point.x == b.point.x
+            && a.point.y == b.point.y;
+}
+
 const SectorTextureDefinition* FindSectorTopologyTexture(
         const SectorTopologyMap& map,
         const std::string& id)
@@ -1162,6 +1172,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         CancelPendingTopologyVertexMerge("Cancelled vertex merge");
                     } else if (state.pendingTopologyLineSplitAtPoint.active) {
                         CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
+                    } else if (state.pendingTopologySectorCut.active) {
+                        CancelPendingTopologySectorCut("Cancelled sector cut");
                     } else if (state.pendingSector.active) {
                         CancelPendingSector("Cancelled sector");
                     } else if (state.selectedTopologyLightId >= 0
@@ -1236,6 +1248,41 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     }
                     if (event.mouseClick.button == MOUSE_LEFT_BUTTON) {
                         CommitPendingTopologyVertexMerge();
+                        engine::ConsumeEvent(event);
+                    }
+                }
+        );
+        return;
+    }
+
+    if (state.pendingTopologySectorCut.active) {
+        UpdatePendingTopologySectorCut(input);
+
+        input.ForEachEvent(
+                engine::InputEventType::MouseButtonPressed,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (event.mouseButton.button == MOUSE_RIGHT_BUTTON) {
+                        CancelPendingTopologySectorCut("Cancelled sector cut");
+                        engine::ConsumeEvent(event);
+                    }
+                }
+        );
+
+        input.ForEachEvent(
+                engine::InputEventType::MouseClick,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (!Contains(canvasRect, event.mouseClick.releasePosition)) {
+                        return;
+                    }
+                    if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
+                        CancelPendingTopologySectorCut("Cancelled sector cut");
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+                    if (event.mouseClick.button == MOUSE_LEFT_BUTTON) {
+                        CommitPendingTopologySectorCut();
                         engine::ConsumeEvent(event);
                     }
                 }
@@ -1356,7 +1403,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
         return;
     }
 
-    if (state.pendingTopologyLineSplitAtPoint.active) {
+    if (state.pendingTopologyLineSplitAtPoint.active || state.pendingTopologySectorCut.active) {
         return;
     }
 
@@ -1813,6 +1860,7 @@ void SectorEditor::StartPendingTopologyVertexMerge(int sourceVertexId)
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     CancelPendingTopologyLineSplitAtPoint(nullptr);
+    CancelPendingTopologySectorCut(nullptr);
 
     PendingTopologyVertexMerge pending;
     pending.active = true;
@@ -1925,6 +1973,7 @@ void SectorEditor::StartPendingTopologyLineSplitAtPoint()
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     CancelPendingTopologyVertexMerge(nullptr);
+    CancelPendingTopologySectorCut(nullptr);
 
     PendingTopologyLineSplitAtPoint pending;
     pending.active = true;
@@ -2101,6 +2150,172 @@ void SectorEditor::CommitPendingTopologyLineSplitAtPoint()
             "Split topology linedef %d at point; selected linedef %d",
             pending.lineDefId,
             split.secondLineDefId);
+}
+
+void SectorEditor::StartPendingTopologySectorCut()
+{
+    const SectorTopologySector* sector = SelectedTopologySector();
+    if (sector == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology sector before cutting it.";
+        return;
+    }
+
+    CancelPendingSector(nullptr);
+    CancelVertexDrag(nullptr);
+    CancelLightDrag(nullptr);
+    CancelPendingTopologyVertexMerge(nullptr);
+    CancelPendingTopologyLineSplitAtPoint(nullptr);
+
+    PendingTopologySectorCut pending;
+    pending.active = true;
+    pending.sectorId = sector->id;
+    pending.message = "Click first boundary point for sector cut; Escape or right click cancels.";
+    state.pendingTopologySectorCut = pending;
+    state.currentTool = SectorEditorTool::Select;
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    statusText = pending.message;
+}
+
+void SectorEditor::CancelPendingTopologySectorCut(const char* message)
+{
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
+    if (message != nullptr && message[0] != '\0') {
+        statusText = message;
+    }
+}
+
+bool SectorEditor::ValidatePendingTopologySectorCutTarget(const char* staleMessage)
+{
+    if (!state.pendingTopologySectorCut.active) {
+        return false;
+    }
+    if (FindSectorTopologySector(state.topologyMap, state.pendingTopologySectorCut.sectorId) == nullptr) {
+        CancelPendingTopologySectorCut(staleMessage);
+        return false;
+    }
+    return true;
+}
+
+void SectorEditor::UpdatePendingTopologySectorCut(engine::Input& input)
+{
+    if (!ValidatePendingTopologySectorCutTarget(
+                "Sector cut cancelled: selected sector no longer exists.")) {
+        return;
+    }
+
+    PendingTopologySectorCut& pending = state.pendingTopologySectorCut;
+    pending.hasCandidatePoint = false;
+    pending.hasValidCandidate = false;
+
+    if (!Contains(canvasRect, input.MousePosition())) {
+        pending.message = pending.hasFirstPoint
+                ? "Move over the selected sector boundary to choose the second cut point."
+                : "Move over the selected sector boundary to choose the first cut point.";
+        statusText = pending.message;
+        return;
+    }
+
+    SectorTopologyBoundaryCutPoint candidate;
+    if (!FindSelectedSectorBoundaryCutPointNearScreenPoint(input.MousePosition(), candidate)) {
+        pending.message = pending.hasFirstPoint
+                ? "Choose a second point on the selected sector outer boundary."
+                : "Choose a first point on the selected sector outer boundary.";
+        statusText = pending.message;
+        return;
+    }
+
+    pending.candidatePoint = candidate;
+    pending.hasCandidatePoint = true;
+
+    if (!pending.hasFirstPoint) {
+        pending.hasValidCandidate = true;
+        pending.message = "Click to place first cut point.";
+        statusText = pending.message;
+        return;
+    }
+
+    const bool cacheMatches =
+            pending.cacheHasFirstPoint
+            && pending.cachedSectorId == pending.sectorId
+            && SameBoundaryCutPoint(pending.cachedFirstPoint, pending.firstPoint)
+            && SameBoundaryCutPoint(pending.cachedCandidatePoint, pending.candidatePoint);
+    if (!cacheMatches) {
+        SectorTopologyMap candidateMap = state.topologyMap;
+        SectorTopologyCutSectorResult previewResult;
+        std::string error;
+        pending.cachedValid = CutSectorTopologySectorBetweenBoundaryPoints(
+                candidateMap,
+                pending.sectorId,
+                pending.firstPoint,
+                pending.candidatePoint,
+                &previewResult,
+                &error);
+        pending.cachedError = pending.cachedValid ? std::string{} : error;
+        pending.cachedSectorId = pending.sectorId;
+        pending.cachedFirstPoint = pending.firstPoint;
+        pending.cachedCandidatePoint = pending.candidatePoint;
+        pending.cacheHasFirstPoint = true;
+    }
+
+    pending.hasValidCandidate = pending.cachedValid;
+    pending.message = pending.cachedValid
+            ? "Click to cut selected sector; Escape or right click cancels."
+            : (pending.cachedError.empty() ? "Sector cut rejected." : pending.cachedError);
+    statusText = pending.message;
+}
+
+void SectorEditor::CommitPendingTopologySectorCut()
+{
+    if (!ValidatePendingTopologySectorCutTarget(
+                "Sector cut cancelled: selected sector no longer exists.")) {
+        return;
+    }
+
+    PendingTopologySectorCut& pending = state.pendingTopologySectorCut;
+    if (!pending.hasCandidatePoint || !pending.hasValidCandidate) {
+        statusText = pending.message.empty()
+                ? "Choose a valid boundary point for sector cut."
+                : pending.message;
+        return;
+    }
+
+    if (!pending.hasFirstPoint) {
+        pending.firstPoint = pending.candidatePoint;
+        pending.hasFirstPoint = true;
+        pending.cacheHasFirstPoint = false;
+        pending.message = "Click second boundary point for sector cut; Escape or right click cancels.";
+        statusText = pending.message;
+        return;
+    }
+
+    const PendingTopologySectorCut committed = pending;
+    SectorTopologyCutSectorResult cut;
+    std::string error;
+    if (!CutSectorTopologySectorBetweenBoundaryPoints(
+                state.topologyMap,
+                committed.sectorId,
+                committed.firstPoint,
+                committed.candidatePoint,
+                &cut,
+                &error)) {
+        pending.cacheHasFirstPoint = false;
+        pending.hasValidCandidate = false;
+        pending.message = error.empty() ? "Sector cut rejected." : error;
+        statusText = pending.message;
+        return;
+    }
+
+    ClearTransientTopologyEditStateAfterGeometryChange();
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
+    SelectTopologySector(cut.originalSectorId);
+    MarkTopologyDocumentEdited(TextFormat(
+            "Cut topology sector %d; created sector %d.",
+            cut.originalSectorId,
+            cut.newSectorId));
 }
 
 void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
@@ -2603,6 +2818,7 @@ void SectorEditor::ClearTransientTopologyEditStateAfterGeometryChange()
 {
     ClearStaleTopologySelection();
     state.topologyRenderWarning.clear();
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
@@ -3149,6 +3365,100 @@ bool SectorEditor::FindTopologyVertexNearScreenPoint(
     return true;
 }
 
+bool SectorEditor::FindSelectedSectorBoundaryCutPointNearScreenPoint(
+        Vector2 screenPoint,
+        SectorTopologyBoundaryCutPoint& outPoint) const
+{
+    outPoint = SectorTopologyBoundaryCutPoint{};
+    const SectorTopologySector* sector = SelectedTopologySector();
+    if (sector == nullptr) {
+        return false;
+    }
+
+    SectorTopologyLoopSet loops;
+    if (!ExtractSectorTopologyLoops(state.topologyMap, sector->id, loops)) {
+        return false;
+    }
+
+    float bestVertexDistance2 = ScreenVertexSnapPixels * ScreenVertexSnapPixels;
+    int bestVertexId = -1;
+    SectorTopologyCoordPoint bestVertexPoint{};
+    for (int vertexId : loops.outer.vertexIds) {
+        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+        if (vertex == nullptr) {
+            continue;
+        }
+        const Vector2 screenVertex = MapToScreen(SectorTopologyVertexToMap(*vertex));
+        const float dx = screenVertex.x - screenPoint.x;
+        const float dy = screenVertex.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 > bestVertexDistance2) {
+            continue;
+        }
+        if (bestVertexId >= 0
+                && std::fabs(distance2 - bestVertexDistance2) <= 0.001f
+                && vertex->id >= bestVertexId) {
+            continue;
+        }
+        bestVertexDistance2 = distance2;
+        bestVertexId = vertex->id;
+        bestVertexPoint = SectorTopologyCoordPoint{vertex->x, vertex->y};
+    }
+    if (bestVertexId >= 0) {
+        outPoint.vertexId = bestVertexId;
+        outPoint.point = bestVertexPoint;
+        return true;
+    }
+
+    SectorTopologyCoordPoint snappedPoint;
+    std::string error;
+    if (!ToTopologyCoordPoint(Vector2ToSectorPoint(state.snappedMouseMap), snappedPoint, error)) {
+        return false;
+    }
+
+    float bestLineDistance = ScreenEdgePickPixels;
+    int bestLineDefId = -1;
+    for (const SectorTopologyLoopEdge& edge : loops.outer.edges) {
+        const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, edge.lineDefId);
+        if (lineDef == nullptr) {
+            continue;
+        }
+        const SectorTopologyVertex* start = nullptr;
+        const SectorTopologyVertex* end = nullptr;
+        if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
+            continue;
+        }
+        const SectorTopologyCoordPoint startPoint{start->x, start->y};
+        const SectorTopologyCoordPoint endPoint{end->x, end->y};
+        if (!SectorTopologyPointStrictlyInsideSegment(snappedPoint, startPoint, endPoint)) {
+            continue;
+        }
+
+        const Vector2 screenStart = MapToScreen(SectorTopologyVertexToMap(*start));
+        const Vector2 screenEnd = MapToScreen(SectorTopologyVertexToMap(*end));
+        const float distance = DistancePointToSegment(screenPoint, screenStart, screenEnd);
+        if (distance > ScreenEdgePickPixels) {
+            continue;
+        }
+        if (bestLineDefId >= 0
+                && (distance > bestLineDistance + 0.001f
+                        || (std::fabs(distance - bestLineDistance) <= 0.001f
+                                && lineDef->id >= bestLineDefId))) {
+            continue;
+        }
+        bestLineDistance = distance;
+        bestLineDefId = lineDef->id;
+    }
+
+    if (bestLineDefId < 0) {
+        return false;
+    }
+
+    outPoint.lineDefId = bestLineDefId;
+    outPoint.point = snappedPoint;
+    return true;
+}
+
 int SectorEditor::FindTopologyVertexAtCoordPoint(
         SectorTopologyCoordPoint point,
         int excludedVertexId) const
@@ -3621,6 +3931,7 @@ void SectorEditor::DrawTopologyDocument()
     DrawVertexMoveOverlay();
     DrawPendingTopologyVertexMerge();
     DrawPendingTopologyLineSplitAtPoint();
+    DrawPendingTopologySectorCut();
     DrawStaticLights();
     DrawLightMoveOverlay();
     DrawPendingSector();
@@ -4191,6 +4502,65 @@ void SectorEditor::DrawPendingTopologyLineSplitAtPoint() const
     DrawCircleV(candidate, pending.hasValidCandidate ? 5.5f : 4.5f, color);
 }
 
+void SectorEditor::DrawPendingTopologySectorCut() const
+{
+    if (!state.pendingTopologySectorCut.active) {
+        return;
+    }
+
+    const PendingTopologySectorCut& pending = state.pendingTopologySectorCut;
+    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, pending.sectorId);
+    if (sector == nullptr) {
+        return;
+    }
+
+    auto pointToScreen = [this](const SectorTopologyBoundaryCutPoint& point, Vector2& outScreen) {
+        if (point.vertexId >= 0) {
+            const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, point.vertexId);
+            if (vertex == nullptr) {
+                return false;
+            }
+            outScreen = MapToScreen(SectorTopologyVertexToMap(*vertex));
+            return true;
+        }
+        outScreen = MapToScreen(SectorPointToVector2(
+                SectorTopologyCoordPointToSectorPoint(point.point)));
+        return true;
+    };
+
+    Vector2 firstScreen{};
+    if (pending.hasFirstPoint && pointToScreen(pending.firstPoint, firstScreen)) {
+        DrawCircleLines(
+                static_cast<int>(std::round(firstScreen.x)),
+                static_cast<int>(std::round(firstScreen.y)),
+                15.0f,
+                Color{236, 196, 92, 255});
+        DrawCircleV(firstScreen, 5.5f, Color{236, 196, 92, 255});
+    }
+
+    if (!pending.hasCandidatePoint) {
+        return;
+    }
+
+    Vector2 candidateScreen{};
+    if (!pointToScreen(pending.candidatePoint, candidateScreen)) {
+        return;
+    }
+
+    const Color color = pending.hasFirstPoint
+            ? (pending.hasValidCandidate ? Color{120, 230, 154, 255} : Color{230, 82, 82, 245})
+            : Color{236, 196, 92, 255};
+    if (pending.hasFirstPoint) {
+        DrawLineEx(firstScreen, candidateScreen, 3.0f, WithAlpha(color, 210));
+    }
+    DrawCircleLines(
+            static_cast<int>(std::round(candidateScreen.x)),
+            static_cast<int>(std::round(candidateScreen.y)),
+            pending.hasValidCandidate || !pending.hasFirstPoint ? 13.0f : 11.0f,
+            color);
+    DrawCircleV(candidateScreen, pending.hasValidCandidate || !pending.hasFirstPoint ? 5.0f : 4.0f, color);
+}
+
 void SectorEditor::DrawStaticLights() const
 {
     for (const SectorTopologyStaticPointLight& light : state.topologyMap.staticLights) {
@@ -4513,7 +4883,7 @@ void SectorEditor::DrawSectorsPanel(
             return height;
         }
         if (hasSelectedTopologySector) {
-            return 1700.0f;
+            return 1748.0f;
         }
         if (hasSelectedTopologyVertex) {
             return 280.0f;
@@ -4896,6 +5266,20 @@ bool SectorEditor::DrawTopologySectorInspector(
                 font,
                 "Insert Sector Inside")) {
         StartInsertSectorInside();
+    }
+    y += rowH + gap;
+
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_cut_sector",
+                Rectangle{0.0f, y, contentW, rowH},
+                font,
+                "Cut Sector")) {
+        StartPendingTopologySectorCut();
+        return true;
     }
     y += rowH + gap;
 
@@ -6063,6 +6447,7 @@ bool SectorEditor::LoadLevel(
     CancelPendingSector(nullptr);
     CancelPendingTopologyVertexMerge(nullptr);
     CancelPendingTopologyLineSplitAtPoint(nullptr);
+    CancelPendingTopologySectorCut(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     state.topologyMap = std::move(loaded);
@@ -6233,6 +6618,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     CancelPendingSector(nullptr);
     CancelPendingTopologyVertexMerge(nullptr);
     CancelPendingTopologyLineSplitAtPoint(nullptr);
+    CancelPendingTopologySectorCut(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     ui.hotId = 0;
@@ -6898,6 +7284,7 @@ void SectorEditor::ClearSelection()
 {
     state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
     state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
     state.topologySelectionKind = TopologySelectionKind::None;
     state.selectedTopologySectorId = -1;
     state.selectedTopologyVertexId = -1;
@@ -7107,6 +7494,7 @@ bool SectorEditor::SplitSelectedTopologyLineDef()
     }
 
     state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
     state.hasHoveredVertex = false;
     state.hoveredTopologyVertexId = -1;
     state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
@@ -7160,6 +7548,7 @@ bool SectorEditor::DissolveSelectedTopologyVertex()
 
     state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
     state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
     state.hasHoveredVertex = false;
     state.hoveredTopologyVertexId = -1;
     state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
