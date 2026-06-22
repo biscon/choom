@@ -151,3 +151,13 @@ Midpoints must be exactly representable on the integer topology coordinate grid.
 After a successful split, selection moves to the second replacement line. Sidedef selection preserves the selected wall/lower/upper part and selects the corresponding duplicated sidedef on the second half; line-only selection selects the second line.
 
 Erase, Delete, Light placement, lightmaps, vertex merge/delete, arbitrary line cutting, automatic overlap splitting, and 3D line splitting remain deferred.
+
+## Phase 16: topology sector deletion
+
+Topology sector deletion now works through a reusable transactional edit helper. Deleting a sector removes sidedefs that reference that sector, clears those sidedef slots from linedefs, removes linedefs that no longer have either side, removes vertices no remaining linedef references, validates the candidate topology, and commits only when validation succeeds.
+
+The editor routes selected topology sector deletion through the existing confirmation dialog before mutating the document. The Delete key, the topology sector inspector's Delete Sector button, and simple Erase-tool sector clicks all open the same destructive confirmation flow.
+
+Surviving opposite sides on shared linedefs are preserved with their existing material and UV settings and become one-sided boundaries. Deleting an inserted child sector leaves the parent's former-hole boundary as one-sided topology rather than healing the hole back into a solid floor. Deleting a parent sector is non-cascading when the remaining child topology validates.
+
+Direct linedef deletion, direct sidedef deletion, standalone vertex deletion, vertex merge, Light placement, lightmap baking/topology lightmap layout, and broader Erase tool behavior remain deferred.

@@ -249,6 +249,9 @@ private:
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     bool SplitSelectedTopologyLineDef();
     bool SplitSelectedEdge(engine::AssetManager& assets);
+    void OpenDeleteSelectedTopologySectorConfirmation();
+    void OpenDeleteTopologySectorConfirmation(int sectorId);
+    bool DeleteSelectedTopologySectorConfirmed(int sectorId);
     void ClearSelection();
     SectorEdgeOverride* FindMutableEdgeOverride(SectorBoundaryEdgeRef edge);
     const SectorEdgeOverride* FindEdgeOverride(SectorBoundaryEdgeRef edge) const;

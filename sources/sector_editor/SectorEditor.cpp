@@ -1435,7 +1435,15 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (event.key.key == KEY_DELETE) {
-                    statusText = "Topology deletion is not migrated yet.";
+                    if (state.topologySelectionKind == TopologySelectionKind::Sector
+                            && state.selectedTopologySectorId >= 0) {
+                        OpenDeleteSelectedTopologySectorConfirmation();
+                    } else if (state.topologySelectionKind == TopologySelectionKind::SideDef
+                            || state.topologySelectionKind == TopologySelectionKind::LineDef) {
+                        statusText = "Direct linedef/sidedef deletion is not migrated yet.";
+                    } else {
+                        statusText = "Select a topology sector to delete.";
+                    }
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -1649,7 +1657,14 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::Erase) {
-                    statusText = "Topology deletion is not migrated yet.";
+                    const int sectorId = FindTopologySectorAt(
+                            ScreenToMap(event.mouseClick.releasePosition));
+                    if (sectorId >= 0) {
+                        SelectTopologySector(sectorId);
+                        OpenDeleteTopologySectorConfirmation(sectorId);
+                    } else {
+                        statusText = "Select a topology sector to delete.";
+                    }
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -2531,7 +2546,81 @@ bool SectorEditor::TryRenameSelectedLight()
 
 bool SectorEditor::DeleteSelectedSector()
 {
+    if (state.topologySelectionKind == TopologySelectionKind::Sector
+            && state.selectedTopologySectorId >= 0) {
+        OpenDeleteSelectedTopologySectorConfirmation();
+        return true;
+    }
     return DeleteSectorAt(state.selectedSectorIndex);
+}
+
+void SectorEditor::OpenDeleteSelectedTopologySectorConfirmation()
+{
+    const SectorTopologySector* sector = SelectedTopologySector();
+    if (sector == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology sector to delete.";
+        return;
+    }
+    OpenDeleteTopologySectorConfirmation(sector->id);
+}
+
+void SectorEditor::OpenDeleteTopologySectorConfirmation(int sectorId)
+{
+    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sectorId);
+    if (sector == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology sector to delete.";
+        return;
+    }
+
+    const std::string label = sector->name.empty()
+            ? TextFormat("topology sector %d", sector->id)
+            : TextFormat("%s", sector->name.c_str());
+    OpenConfirmation(
+            "Delete Sector",
+            TextFormat("Delete sector \"%s\"?", label.c_str()),
+            [this, sectorId]() { DeleteSelectedTopologySectorConfirmed(sectorId); });
+}
+
+bool SectorEditor::DeleteSelectedTopologySectorConfirmed(int sectorId)
+{
+    SectorTopologyDeleteSectorResult result;
+    std::string error;
+    if (!DeleteSectorTopologySector(state.topologyMap, sectorId, &result, &error)) {
+        statusText = error.empty() ? "Cannot delete topology sector" : error;
+        return false;
+    }
+
+    state.hoveredSectorIndex = -1;
+    state.hoveredEdgeSectorIndex = -1;
+    state.hoveredEdgeRingKind = SectorBoundaryRingKind::Outer;
+    state.hoveredEdgeHoleIndex = -1;
+    state.hoveredEdgeIndex = -1;
+    state.hasHoveredVertex = false;
+    state.hoveredVertexRefs.clear();
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.selectedSurface3D = SectorSurfaceRef{};
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+    ClearStaleTopologySelection();
+    state.topologyRenderWarning.clear();
+    state.topologyDocumentDirty = true;
+    state.hasUnsavedChanges = true;
+    statusText = TextFormat(
+            "Deleted topology sector %d; removed %d sidedefs, %d linedefs, %d vertices",
+            result.deletedSectorId,
+            result.removedSideDefCount,
+            result.removedLineDefCount,
+            result.removedVertexCount);
+    return true;
 }
 
 bool SectorEditor::DeleteSectorAt(int sectorIndex)
@@ -5310,6 +5399,19 @@ bool SectorEditor::DrawTopologySectorInspector(
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, uiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
         y += 36.0f;
     }
+
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_delete_sector",
+                Rectangle{0.0f, y, contentW, rowH},
+                font,
+                "Delete Sector")) {
+        OpenDeleteSelectedTopologySectorConfirmation();
+    }
+    y += rowH + gap;
 
     if (engine::Button(
                 ui,

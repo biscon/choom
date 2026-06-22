@@ -19,6 +19,13 @@ struct SectorTopologySplitLineResult {
     int secondBackSideDefId = -1;
 };
 
+struct SectorTopologyDeleteSectorResult {
+    int deletedSectorId = -1;
+    int removedSideDefCount = 0;
+    int removedLineDefCount = 0;
+    int removedVertexCount = 0;
+};
+
 bool MoveSectorTopologyVertex(
         SectorTopologyMap& map,
         int vertexId,
@@ -29,6 +36,12 @@ bool SplitSectorTopologyLineDef(
         SectorTopologyMap& map,
         int lineDefId,
         SectorTopologySplitLineResult* outResult = nullptr,
+        std::string* outError = nullptr);
+
+bool DeleteSectorTopologySector(
+        SectorTopologyMap& map,
+        int sectorId,
+        SectorTopologyDeleteSectorResult* outResult = nullptr,
         std::string* outError = nullptr);
 
 } // namespace game

@@ -19,6 +19,7 @@ using game::SectorTopologyLoopSet;
 using game::SectorTopologyMap;
 using game::SectorTopologySideDef;
 using game::SectorTopologySideKind;
+using game::SectorTopologyDeleteSectorResult;
 using game::SectorTopologySplitLineResult;
 
 int failures = 0;
@@ -258,6 +259,32 @@ void SetDistinctSideSettings(SectorTopologySideDef& sideDef, const char* prefix)
     sideDef.upper.textureId = std::string{prefix} + "_upper";
     sideDef.upper.uv.scale = {10.0f, 11.0f};
     sideDef.upper.uv.offset = {12.0f, 13.0f};
+}
+
+int CountSideDefsForSector(const SectorTopologyMap& map, int sectorId)
+{
+    int count = 0;
+    for (const SectorTopologySideDef& sideDef : map.sideDefs) {
+        if (sideDef.sectorId == sectorId) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+int CountOneSidedLinesForSector(const SectorTopologyMap& map, int sectorId)
+{
+    int count = 0;
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        const SectorTopologySideDef* front = FindSideDef(map, lineDef.frontSideDefId);
+        const SectorTopologySideDef* back = FindSideDef(map, lineDef.backSideDefId);
+        if (front != nullptr && front->sectorId == sectorId && back == nullptr) {
+            ++count;
+        } else if (back != nullptr && back->sectorId == sectorId && front == nullptr) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 double TriangleAreaXZ(const game::SectorGeneratedSurface& surface)
@@ -722,6 +749,188 @@ void TestSplitOneSidedWall()
           "split one-sided sector loop includes midpoint");
 }
 
+void TestDeleteStandaloneSector()
+{
+    SectorTopologyMap map;
+    map.texturesById["floor"] = game::SectorTextureDefinition{"floor", "floor.png"};
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "delete standalone square creation succeeds");
+
+    SectorTopologyDeleteSectorResult result;
+    std::string error;
+    Check(game::DeleteSectorTopologySector(map, sectorId, &result, &error),
+          "delete standalone sector succeeds");
+    Check(error.empty(), "successful standalone delete clears error");
+    Check(result.deletedSectorId == sectorId, "standalone delete reports deleted sector");
+    Check(result.removedSideDefCount == 4, "standalone delete removes four sidedefs");
+    Check(result.removedLineDefCount == 4, "standalone delete removes four linedefs");
+    Check(result.removedVertexCount == 4, "standalone delete removes four vertices");
+    Check(map.sectors.empty(), "standalone delete leaves no sectors");
+    Check(map.sideDefs.empty(), "standalone delete leaves no sidedefs");
+    Check(map.lineDefs.empty(), "standalone delete leaves no linedefs");
+    Check(map.vertices.empty(), "standalone delete leaves no vertices");
+    Check(map.texturesById.find("floor") != map.texturesById.end(),
+          "standalone delete preserves textures");
+    Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(map)),
+          "empty map validates after standalone delete");
+}
+
+void TestDeleteAdjacentSector()
+{
+    SectorTopologyMap map;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "delete adjacent first square succeeds");
+    Check(Create(map, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "delete adjacent second square succeeds");
+
+    const SectorTopologyLineDef* shared = FindLine(map, 2, 3);
+    Check(shared != nullptr, "delete adjacent finds shared line");
+    if (shared == nullptr) {
+        return;
+    }
+    SectorTopologySideDef* survivingSide = FindSideDef(map, shared->backSideDefId);
+    Check(survivingSide != nullptr && survivingSide->sectorId == rightId,
+          "delete adjacent finds surviving shared side");
+    if (survivingSide == nullptr) {
+        return;
+    }
+    SetDistinctSideSettings(*survivingSide, "survivor");
+    const SectorTopologySideDef expectedSurvivor = *survivingSide;
+    const int sharedLineId = shared->id;
+
+    SectorTopologyDeleteSectorResult result;
+    std::string error;
+    Check(game::DeleteSectorTopologySector(map, leftId, &result, &error),
+          "delete adjacent sector succeeds");
+    Check(error.empty(), "successful adjacent delete clears error");
+    Check(map.sectors.size() == 1
+                  && game::FindSectorTopologySector(map, rightId) != nullptr
+                  && game::FindSectorTopologySector(map, leftId) == nullptr,
+          "delete adjacent leaves only surviving sector");
+    Check(result.removedSideDefCount == 4, "delete adjacent removes deleted sector sidedefs");
+    Check(result.removedLineDefCount == 3, "delete adjacent removes only deleted outer linedefs");
+    Check(result.removedVertexCount == 2, "delete adjacent removes unreferenced deleted outer vertices");
+
+    const SectorTopologyLineDef* remainingShared = FindLineById(map, sharedLineId);
+    Check(remainingShared != nullptr, "delete adjacent keeps shared linedef");
+    if (remainingShared != nullptr) {
+        Check(remainingShared->frontSideDefId == -1
+                      && remainingShared->backSideDefId == expectedSurvivor.id,
+              "delete adjacent shared line becomes one-sided for survivor");
+    }
+    const SectorTopologySideDef* actualSurvivor = FindSideDef(map, expectedSurvivor.id);
+    Check(actualSurvivor != nullptr && SameSideDefSettings(*actualSurvivor, expectedSurvivor),
+          "delete adjacent preserves surviving sidedef settings");
+    Check(CountSideDefsForSector(map, leftId) == 0, "delete adjacent removes deleted sector sidedefs");
+
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, rightId, loops), "delete adjacent survivor validates and extracts");
+}
+
+void TestDeleteInsertedChildSector()
+{
+    SectorTopologyMap map;
+    int parentId = -1;
+    int childId = -1;
+    Check(Create(map, {{0, 0}, {160, 0}, {160, 160}, {0, 160}}, &parentId),
+          "delete child parent creation succeeds");
+    Check(Insert(map, parentId, {{48, 48}, {112, 48}, {112, 112}, {48, 112}}, &childId),
+          "delete child insert succeeds");
+
+    std::vector<int> boundaryLineIds;
+    for (const SectorTopologyLineDef* lineDef : InsertedBoundaryLines(map, parentId, childId)) {
+        boundaryLineIds.push_back(lineDef->id);
+    }
+    Check(boundaryLineIds.size() == 4, "delete child finds inserted boundary");
+
+    SectorTopologyDeleteSectorResult result;
+    std::string error;
+    Check(game::DeleteSectorTopologySector(map, childId, &result, &error),
+          "delete inserted child succeeds");
+    Check(error.empty(), "successful child delete clears error");
+    Check(game::FindSectorTopologySector(map, parentId) != nullptr
+                  && game::FindSectorTopologySector(map, childId) == nullptr,
+          "delete child leaves parent and removes child");
+    Check(CountSideDefsForSector(map, childId) == 0, "delete child removes child sidedefs");
+    for (int lineId : boundaryLineIds) {
+        const SectorTopologyLineDef* lineDef = FindLineById(map, lineId);
+        Check(lineDef != nullptr, "delete child keeps parent former-hole boundary line");
+        if (lineDef != nullptr) {
+            const SectorTopologySideDef* front = FindSideDef(map, lineDef->frontSideDefId);
+            const SectorTopologySideDef* back = FindSideDef(map, lineDef->backSideDefId);
+            Check(front == nullptr && back != nullptr && back->sectorId == parentId,
+                  "delete child former-hole boundary is parent one-sided back side");
+        }
+    }
+
+    SectorTopologyLoopSet parentLoops;
+    Check(ValidateAndExtract(map, parentId, parentLoops), "delete child parent validates and extracts");
+    Check(parentLoops.holes.size() == 1, "delete child leaves parent former hole boundary");
+    Check(CountOneSidedLinesForSector(map, parentId) == 8,
+          "delete child leaves parent outer and former-hole boundaries one-sided");
+}
+
+void TestDeleteParentWithChildSector()
+{
+    SectorTopologyMap map;
+    int parentId = -1;
+    int childId = -1;
+    Check(Create(map, {{0, 0}, {160, 0}, {160, 160}, {0, 160}}, &parentId),
+          "delete parent parent creation succeeds");
+    Check(Insert(map, parentId, {{48, 48}, {112, 48}, {112, 112}, {48, 112}}, &childId),
+          "delete parent child insert succeeds");
+
+    SectorTopologyDeleteSectorResult result;
+    std::string error;
+    Check(game::DeleteSectorTopologySector(map, parentId, &result, &error),
+          "delete parent with child succeeds");
+    Check(error.empty(), "successful parent delete clears error");
+    Check(game::FindSectorTopologySector(map, parentId) == nullptr
+                  && game::FindSectorTopologySector(map, childId) != nullptr,
+          "delete parent removes parent and leaves child");
+    Check(CountSideDefsForSector(map, parentId) == 0, "delete parent removes parent sidedefs");
+    Check(CountOneSidedLinesForSector(map, childId) == 4,
+          "delete parent leaves child boundary one-sided");
+    Check(map.vertices.size() == 4 && map.lineDefs.size() == 4 && map.sideDefs.size() == 4,
+          "delete parent removes orphaned parent outer topology");
+
+    SectorTopologyLoopSet childLoops;
+    Check(ValidateAndExtract(map, childId, childLoops), "delete parent child validates and extracts");
+    Check(childLoops.holes.empty(), "delete parent child has no holes");
+}
+
+void TestDeleteFailureIsTransactional()
+{
+    SectorTopologyMap map;
+    int deletedId = -1;
+    int brokenId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &deletedId),
+          "delete transaction first sector creation succeeds");
+    Check(Create(map, {{96, 0}, {160, 0}, {160, 64}, {96, 64}}, &brokenId),
+          "delete transaction second sector creation succeeds");
+    Check(!map.sideDefs.empty(), "delete transaction has sidedefs to corrupt");
+    if (map.sideDefs.empty()) {
+        return;
+    }
+    map.sideDefs.back().sectorId = 999999;
+    const SectorTopologyMap before = map;
+
+    SectorTopologyDeleteSectorResult result;
+    std::string error;
+    Check(!game::DeleteSectorTopologySector(map, deletedId, &result, &error),
+          "delete transaction fails when candidate validation fails");
+    Check(!error.empty(), "failed delete reports validation error");
+    Check(result.deletedSectorId == -1
+                  && result.removedSideDefCount == 0
+                  && result.removedLineDefCount == 0
+                  && result.removedVertexCount == 0,
+          "failed delete leaves result default");
+    CheckUnchanged(before, map, "failed delete leaves map unchanged");
+}
+
 void TestSplitTwoSidedSharedLine()
 {
     SectorTopologyMap map;
@@ -1110,6 +1319,11 @@ int main()
     TestInvalidInsertsRejectTransactionally();
     TestAdjacentSharesFullEdge();
     TestChangingSectorDefaultsDoesNotRewriteExistingSideDefs();
+    TestDeleteStandaloneSector();
+    TestDeleteAdjacentSector();
+    TestDeleteInsertedChildSector();
+    TestDeleteParentWithChildSector();
+    TestDeleteFailureIsTransactional();
     TestSplitOneSidedWall();
     TestSplitTwoSidedSharedLine();
     TestSplitInsertedPlatformBoundary();

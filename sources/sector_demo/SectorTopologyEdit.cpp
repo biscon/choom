@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -333,6 +334,108 @@ bool SplitSectorTopologyLineDef(
             SetError(outError, FirstValidationError(loopIssues));
             return false;
         }
+    }
+
+    map = std::move(candidate);
+    if (outResult != nullptr) {
+        *outResult = result;
+    }
+    return true;
+}
+
+bool DeleteSectorTopologySector(
+        SectorTopologyMap& map,
+        int sectorId,
+        SectorTopologyDeleteSectorResult* outResult,
+        std::string* outError)
+{
+    if (outResult != nullptr) {
+        *outResult = SectorTopologyDeleteSectorResult{};
+    }
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    if (!IsValidSectorTopologyId(sectorId)) {
+        SetError(outError, "Invalid topology sector ID");
+        return false;
+    }
+    if (FindSectorTopologySector(map, sectorId) == nullptr) {
+        SetError(outError, "Topology sector not found");
+        return false;
+    }
+
+    SectorTopologyMap candidate = map;
+    SectorTopologyDeleteSectorResult result;
+    result.deletedSectorId = sectorId;
+
+    std::unordered_set<int> removedSideDefIds;
+    for (const SectorTopologySideDef& sideDef : candidate.sideDefs) {
+        if (sideDef.sectorId == sectorId) {
+            removedSideDefIds.insert(sideDef.id);
+        }
+    }
+    result.removedSideDefCount = static_cast<int>(removedSideDefIds.size());
+
+    for (SectorTopologyLineDef& lineDef : candidate.lineDefs) {
+        if (removedSideDefIds.find(lineDef.frontSideDefId) != removedSideDefIds.end()) {
+            lineDef.frontSideDefId = -1;
+        }
+        if (removedSideDefIds.find(lineDef.backSideDefId) != removedSideDefIds.end()) {
+            lineDef.backSideDefId = -1;
+        }
+    }
+
+    candidate.sideDefs.erase(
+            std::remove_if(
+                    candidate.sideDefs.begin(),
+                    candidate.sideDefs.end(),
+                    [&removedSideDefIds](const SectorTopologySideDef& sideDef) {
+                        return removedSideDefIds.find(sideDef.id) != removedSideDefIds.end();
+                    }),
+            candidate.sideDefs.end());
+
+    candidate.sectors.erase(
+            std::remove_if(
+                    candidate.sectors.begin(),
+                    candidate.sectors.end(),
+                    [sectorId](const SectorTopologySector& sector) {
+                        return sector.id == sectorId;
+                    }),
+            candidate.sectors.end());
+
+    const size_t lineCountBefore = candidate.lineDefs.size();
+    candidate.lineDefs.erase(
+            std::remove_if(
+                    candidate.lineDefs.begin(),
+                    candidate.lineDefs.end(),
+                    [](const SectorTopologyLineDef& lineDef) {
+                        return lineDef.frontSideDefId == -1 && lineDef.backSideDefId == -1;
+                    }),
+            candidate.lineDefs.end());
+    result.removedLineDefCount = static_cast<int>(lineCountBefore - candidate.lineDefs.size());
+
+    std::unordered_set<int> referencedVertexIds;
+    for (const SectorTopologyLineDef& lineDef : candidate.lineDefs) {
+        referencedVertexIds.insert(lineDef.startVertexId);
+        referencedVertexIds.insert(lineDef.endVertexId);
+    }
+
+    const size_t vertexCountBefore = candidate.vertices.size();
+    candidate.vertices.erase(
+            std::remove_if(
+                    candidate.vertices.begin(),
+                    candidate.vertices.end(),
+                    [&referencedVertexIds](const SectorTopologyVertex& vertex) {
+                        return referencedVertexIds.find(vertex.id) == referencedVertexIds.end();
+                    }),
+            candidate.vertices.end());
+    result.removedVertexCount = static_cast<int>(vertexCountBefore - candidate.vertices.size());
+
+    const std::vector<SectorTopologyValidationIssue> issues = ValidateSectorTopologyMap(candidate);
+    if (HasSectorTopologyValidationErrors(issues)) {
+        SetError(outError, FirstValidationError(issues));
+        return false;
     }
 
     map = std::move(candidate);
