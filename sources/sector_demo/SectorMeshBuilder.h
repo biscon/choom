@@ -17,12 +17,15 @@ struct SectorMeshBatchVertex {
     Vector3 position = {};
     Vector3 normal = {};
     Vector2 uv = {};
+    Vector2 decalUv = {};
     Vector2 lightmapUv = {};
+    float decalOpacity = 1.0f;
     Color color = WHITE;
 };
 
 struct SectorMeshBatchData {
     std::string textureId;
+    std::string decalTextureId;
     std::vector<SectorMeshBatchVertex> vertices;
     int vertexCount = 0;
     int triangleCount = 0;

@@ -9,6 +9,7 @@ namespace game {
 
 struct SectorMeshBatch {
     std::string textureId;
+    std::string decalTextureId;
     Mesh mesh = {};
     int vertexCount = 0;
     int triangleCount = 0;

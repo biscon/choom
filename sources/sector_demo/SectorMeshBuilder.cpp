@@ -17,21 +17,43 @@ namespace game {
 
 namespace {
 
-SectorMeshBatchData& BatchForTexture(
-        std::unordered_map<std::string, size_t>& batchIndexByTexture,
+struct SectorMeshBatchKey {
+    std::string textureId;
+    std::string decalTextureId;
+
+    bool operator==(const SectorMeshBatchKey& other) const
+    {
+        return textureId == other.textureId && decalTextureId == other.decalTextureId;
+    }
+};
+
+struct SectorMeshBatchKeyHash {
+    size_t operator()(const SectorMeshBatchKey& key) const
+    {
+        const size_t textureHash = std::hash<std::string>{}(key.textureId);
+        const size_t decalHash = std::hash<std::string>{}(key.decalTextureId);
+        return textureHash ^ (decalHash + 0x9e3779b9u + (textureHash << 6u) + (textureHash >> 2u));
+    }
+};
+
+SectorMeshBatchData& BatchForKey(
+        std::unordered_map<SectorMeshBatchKey, size_t, SectorMeshBatchKeyHash>& batchIndexByKey,
         std::vector<SectorMeshBatchData>& batches,
-        const std::string& textureId)
+        const std::string& textureId,
+        const std::string& decalTextureId)
 {
-    const auto existing = batchIndexByTexture.find(textureId);
-    if (existing != batchIndexByTexture.end()) {
+    const SectorMeshBatchKey key{textureId, decalTextureId};
+    const auto existing = batchIndexByKey.find(key);
+    if (existing != batchIndexByKey.end()) {
         return batches[existing->second];
     }
 
     SectorMeshBatchData batch;
     batch.textureId = textureId;
+    batch.decalTextureId = decalTextureId;
     batches.push_back(std::move(batch));
     const size_t index = batches.size() - 1;
-    batchIndexByTexture.emplace(textureId, index);
+    batchIndexByKey.emplace(key, index);
     return batches[index];
 }
 
@@ -104,11 +126,15 @@ SectorMeshBatchDataResult BuildSectorMeshBatchData(
 {
     SectorMeshBatchDataResult result;
 
-    std::unordered_map<std::string, size_t> batchIndexByTexture;
+    std::unordered_map<SectorMeshBatchKey, size_t, SectorMeshBatchKeyHash> batchIndexByKey;
 
     for (size_t surfaceIndex = 0; surfaceIndex < geometry.surfaces.size(); ++surfaceIndex) {
         const SectorGeneratedSurface& surface = geometry.surfaces[surfaceIndex];
-        SectorMeshBatchData& batch = BatchForTexture(batchIndexByTexture, result.batches, surface.textureId);
+        SectorMeshBatchData& batch = BatchForKey(
+                batchIndexByKey,
+                result.batches,
+                surface.textureId,
+                surface.decalTextureId);
         batch.vertices.reserve(batch.vertices.size() + surface.vertices.size());
         for (size_t vertexIndex = 0; vertexIndex < surface.vertices.size(); ++vertexIndex) {
             const SectorGeneratedVertex& vertex = surface.vertices[vertexIndex];
@@ -116,7 +142,9 @@ SectorMeshBatchDataResult BuildSectorMeshBatchData(
                     vertex.position,
                     vertex.normal,
                     vertex.uv,
+                    vertex.decalUv,
                     ResolveLightmapUv(lightmapLayout, surfaceIndex, vertexIndex),
+                    surface.decalOpacity,
                     vertex.color
             });
         }
@@ -157,6 +185,7 @@ SectorMeshBuildResult BuildSectorMeshes(
 
         SectorMeshBatch batch;
         batch.textureId = builder.textureId;
+        batch.decalTextureId = builder.decalTextureId;
         batch.mesh = mesh;
         batch.vertexCount = mesh.vertexCount;
         batch.triangleCount = mesh.triangleCount;

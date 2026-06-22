@@ -18,6 +18,16 @@ void Check(bool condition, const char* description)
     }
 }
 
+bool Near(float actual, float expected, float epsilon = 0.00001f)
+{
+    return std::fabs(actual - expected) <= epsilon;
+}
+
+bool Near(Vector2 actual, Vector2 expected, float epsilon = 0.00001f)
+{
+    return Near(actual.x, expected.x, epsilon) && Near(actual.y, expected.y, epsilon);
+}
+
 game::SectorTopologyWallPartSettings Part(const char* textureId)
 {
     game::SectorTopologyWallPartSettings part;
@@ -133,6 +143,70 @@ bool HasBatchTexture(const game::SectorMeshBatchDataResult& result, const std::s
     return false;
 }
 
+const game::SectorMeshBatchData* FindBatch(
+        const game::SectorMeshBatchDataResult& result,
+        const std::string& textureId,
+        const std::string& decalTextureId)
+{
+    for (const game::SectorMeshBatchData& batch : result.batches) {
+        if (batch.textureId == textureId && batch.decalTextureId == decalTextureId) {
+            return &batch;
+        }
+    }
+    return nullptr;
+}
+
+int CountBatches(
+        const game::SectorMeshBatchDataResult& result,
+        const std::string& textureId,
+        const std::string& decalTextureId)
+{
+    int count = 0;
+    for (const game::SectorMeshBatchData& batch : result.batches) {
+        if (batch.textureId == textureId && batch.decalTextureId == decalTextureId) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+game::SectorGeneratedSurface MakeBatchTestSurface(
+        const char* textureId,
+        const char* decalTextureId,
+        Vector2 decalUv,
+        float decalOpacity,
+        float xOffset)
+{
+    game::SectorGeneratedSurface surface;
+    surface.textureId = textureId;
+    surface.decalTextureId = decalTextureId;
+    surface.decalOpacity = decalTextureId[0] == '\0' ? 1.0f : decalOpacity;
+    surface.normal = Vector3{0.0f, 1.0f, 0.0f};
+    surface.vertices = {
+            game::SectorGeneratedVertex{
+                    Vector3{xOffset, 0.0f, 0.0f},
+                    surface.normal,
+                    Vector2{0.0f, 0.0f},
+                    decalUv,
+                    Vector2{0.0f, 0.0f},
+                    WHITE},
+            game::SectorGeneratedVertex{
+                    Vector3{xOffset + 1.0f, 0.0f, 0.0f},
+                    surface.normal,
+                    Vector2{1.0f, 0.0f},
+                    Vector2{decalUv.x + 1.0f, decalUv.y},
+                    Vector2{1.0f, 0.0f},
+                    WHITE},
+            game::SectorGeneratedVertex{
+                    Vector3{xOffset, 0.0f, 1.0f},
+                    surface.normal,
+                    Vector2{0.0f, 1.0f},
+                    Vector2{decalUv.x, decalUv.y + 1.0f},
+                    Vector2{0.0f, 1.0f},
+                    WHITE}};
+    return surface;
+}
+
 int CountTrianglesByKind(
         const game::SectorGeneratedGeometry& geometry,
         game::SectorGeneratedSurfaceKind kind,
@@ -225,6 +299,44 @@ void TestSquareTopologyMeshBatchData()
     Check(HasBatchTexture(result, "floor-10"), "square topology batch data contains floor texture");
     Check(HasBatchTexture(result, "ceiling-10"), "square topology batch data contains ceiling texture");
     Check(HasBatchTexture(result, "square-wall"), "square topology batch data contains wall texture");
+}
+
+void TestDecalMeshBatchData()
+{
+    game::SectorGeneratedGeometry geometry;
+    geometry.surfaces.push_back(MakeBatchTestSurface("stone", "poster-a", Vector2{0.25f, 0.5f}, 0.6f, 0.0f));
+    geometry.surfaces.push_back(MakeBatchTestSurface("stone", "poster-b", Vector2{1.25f, 1.5f}, 0.7f, 2.0f));
+    geometry.surfaces.push_back(MakeBatchTestSurface("stone", "poster-a", Vector2{2.25f, 2.5f}, 0.6f, 4.0f));
+    geometry.surfaces.push_back(MakeBatchTestSurface("stone", "", Vector2{3.25f, 3.5f}, 1.0f, 6.0f));
+    geometry.surfaces.push_back(MakeBatchTestSurface("stone", "", Vector2{4.25f, 4.5f}, 1.0f, 8.0f));
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshBatchData(geometry);
+    Check(result.batches.size() == 3, "decal batch key separates base texture by decal texture");
+    Check(CountBatches(result, "stone", "poster-a") == 1, "same base and decal texture share one batch");
+    Check(CountBatches(result, "stone", "poster-b") == 1, "different decal texture creates separate batch");
+    Check(CountBatches(result, "stone", "") == 1, "missing decals batch with empty decal key");
+
+    const game::SectorMeshBatchData* posterA = FindBatch(result, "stone", "poster-a");
+    const game::SectorMeshBatchData* posterB = FindBatch(result, "stone", "poster-b");
+    const game::SectorMeshBatchData* noDecal = FindBatch(result, "stone", "");
+    Check(posterA != nullptr && posterA->vertices.size() == 6,
+          "same decal batch contains both poster-a surfaces");
+    Check(posterB != nullptr && posterB->vertices.size() == 3,
+          "different decal batch contains poster-b surface");
+    Check(noDecal != nullptr && noDecal->vertices.size() == 6,
+          "empty decal batch contains no-decal surfaces");
+
+    if (posterA != nullptr && !posterA->vertices.empty()) {
+        Check(Near(posterA->vertices.front().decalUv, Vector2{0.25f, 0.5f}),
+              "mesh batch preserves decal UV");
+        Check(Near(posterA->vertices.front().decalOpacity, 0.6f),
+              "mesh batch preserves decal opacity");
+    }
+    if (noDecal != nullptr && !noDecal->vertices.empty()) {
+        Check(noDecal->decalTextureId.empty(), "no-decal batch stores empty decal texture ID");
+        Check(Near(noDecal->vertices.front().decalOpacity, 1.0f),
+              "no-decal batch stores default opacity");
+    }
 }
 
 void TestHoleTopologyMeshBatchData()
@@ -365,6 +477,7 @@ void TestGeneratedGeometryPickingKeepsTopologyRefs()
 int main()
 {
     TestSquareTopologyMeshBatchData();
+    TestDecalMeshBatchData();
     TestHoleTopologyMeshBatchData();
     TestEqualHeightPortal();
     TestDifferentHeightPortal();

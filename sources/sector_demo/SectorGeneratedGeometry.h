@@ -31,6 +31,7 @@ struct SectorGeneratedVertex {
     Vector3 position = {};
     Vector3 normal = {};
     Vector2 uv = {};
+    Vector2 decalUv = {};
     Vector2 chartUv = {};
     Color color = WHITE;
 };
@@ -38,6 +39,8 @@ struct SectorGeneratedVertex {
 struct SectorGeneratedSurface {
     SectorGeneratedSurfaceRef ref;
     std::string textureId;
+    std::string decalTextureId;
+    float decalOpacity = 1.0f;
     Vector3 normal = {};
     std::vector<SectorGeneratedVertex> vertices;
     float chartWidth = 0.0f;

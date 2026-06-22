@@ -74,7 +74,11 @@ bool ValidateTopologyGeometryValues(
         if (!std::isfinite(sector.floorZ) || !std::isfinite(sector.ceilingZ)
             || !std::isfinite(sector.ambientIntensity)
             || !IsFinite(sector.floorUv.scale) || !IsFinite(sector.floorUv.offset)
-            || !IsFinite(sector.ceilingUv.scale) || !IsFinite(sector.ceilingUv.offset)) {
+            || !IsFinite(sector.ceilingUv.scale) || !IsFinite(sector.ceilingUv.offset)
+            || !IsFinite(sector.floorDecal.uv.scale) || !IsFinite(sector.floorDecal.uv.offset)
+            || !std::isfinite(sector.floorDecal.opacity)
+            || !IsFinite(sector.ceilingDecal.uv.scale) || !IsFinite(sector.ceilingDecal.uv.offset)
+            || !std::isfinite(sector.ceilingDecal.opacity)) {
             return SetTopologyError(
                     outGeometry,
                     outError,
@@ -94,12 +98,14 @@ bool ValidateTopologyGeometryValues(
         const std::array<const SectorTopologyWallPartSettings*, 3> parts{
                 &sideDef.wall, &sideDef.lower, &sideDef.upper};
         for (const SectorTopologyWallPartSettings* part : parts) {
-            if (!IsFinite(part->uv.scale) || !IsFinite(part->uv.offset)) {
+            if (!IsFinite(part->uv.scale) || !IsFinite(part->uv.offset)
+                || !IsFinite(part->decal.uv.scale) || !IsFinite(part->decal.uv.offset)
+                || !std::isfinite(part->decal.opacity)) {
                 return SetTopologyError(
                         outGeometry,
                         outError,
                         "Topology sidedef " + std::to_string(sideDef.id)
-                                + " contains non-finite UV values");
+                                + " contains non-finite generated-geometry values");
             }
         }
     }
@@ -116,6 +122,7 @@ bool BuildTopologyFlatSurface(
         bool facePositiveY,
         const std::string& textureId,
         const SectorTopologyUvSettings& uvSettings,
+        const SectorTopologyDecalLayer& decal,
         SectorGeneratedSurface& outSurface,
         std::string& outError)
 {
@@ -177,6 +184,8 @@ bool BuildTopologyFlatSurface(
     surface.ref.kind = kind;
     surface.ref.topologySectorId = sector.id;
     surface.textureId = textureId;
+    surface.decalTextureId = decal.textureId;
+    surface.decalOpacity = decal.textureId.empty() ? 1.0f : decal.opacity;
     surface.normal = normal;
     surface.chartWidth = std::max(maxX - minX, EdgeEpsilon);
     surface.chartHeight = std::max(maxZ - minZ, EdgeEpsilon);
@@ -212,13 +221,14 @@ bool BuildTopologyFlatSurface(
 
         const auto appendVertex = [&](const SectorTopologyVertex& vertex) {
             const Vector2 world = SectorCoordToWorldPosition2(vertex.x, vertex.y);
+            const Vector2 baseSurfaceUv{
+                    world.x / kSectorGeneratedTextureWorldSize,
+                    world.y / kSectorGeneratedTextureWorldSize};
             surface.vertices.push_back(SectorGeneratedVertex{
                     SectorCoordToWorldPosition3(vertex.x, height, vertex.y),
                     normal,
-                    ApplyUvSettings(
-                            Vector2{world.x / kSectorGeneratedTextureWorldSize, world.y / kSectorGeneratedTextureWorldSize},
-                            uvSettings.scale,
-                            uvSettings.offset),
+                    ApplyUvSettings(baseSurfaceUv, uvSettings.scale, uvSettings.offset),
+                    ApplyUvSettings(baseSurfaceUv, decal.uv.scale, decal.uv.offset),
                     Vector2{world.x - minX, world.y - minZ},
                     color});
         };
@@ -284,21 +294,31 @@ bool BuildTopologyWallSurface(
     surface.ref.topologySideDefId = sideDef.id;
     surface.ref.topologySide = sideDef.side;
     surface.textureId = settings.textureId;
+    surface.decalTextureId = settings.decal.textureId;
+    surface.decalOpacity = settings.decal.textureId.empty() ? 1.0f : settings.decal.opacity;
     surface.normal = normal;
     surface.chartWidth = length;
     surface.chartHeight = height;
     surface.vertices.reserve(6);
+    const Vector2 afBaseUv{0.0f, v0};
+    const Vector2 acBaseUv{0.0f, 0.0f};
+    const Vector2 bcBaseUv{u1, 0.0f};
+    const Vector2 bfBaseUv{u1, v0};
     const SectorGeneratedVertex af{afPosition, normal,
-            ApplyUvSettings(Vector2{0.0f, v0}, settings.uv.scale, settings.uv.offset),
+            ApplyUvSettings(afBaseUv, settings.uv.scale, settings.uv.offset),
+            ApplyUvSettings(afBaseUv, settings.decal.uv.scale, settings.decal.uv.offset),
             Vector2{0.0f, height}, color};
     const SectorGeneratedVertex ac{acPosition, normal,
-            ApplyUvSettings(Vector2{0.0f, 0.0f}, settings.uv.scale, settings.uv.offset),
+            ApplyUvSettings(acBaseUv, settings.uv.scale, settings.uv.offset),
+            ApplyUvSettings(acBaseUv, settings.decal.uv.scale, settings.decal.uv.offset),
             Vector2{0.0f, 0.0f}, color};
     const SectorGeneratedVertex bc{bcPosition, normal,
-            ApplyUvSettings(Vector2{u1, 0.0f}, settings.uv.scale, settings.uv.offset),
+            ApplyUvSettings(bcBaseUv, settings.uv.scale, settings.uv.offset),
+            ApplyUvSettings(bcBaseUv, settings.decal.uv.scale, settings.decal.uv.offset),
             Vector2{length, 0.0f}, color};
     const SectorGeneratedVertex bf{bfPosition, normal,
-            ApplyUvSettings(Vector2{u1, v0}, settings.uv.scale, settings.uv.offset),
+            ApplyUvSettings(bfBaseUv, settings.uv.scale, settings.uv.offset),
+            ApplyUvSettings(bfBaseUv, settings.decal.uv.scale, settings.decal.uv.offset),
             Vector2{length, height}, color};
     surface.vertices.push_back(af);
     surface.vertices.push_back(bc);
@@ -425,7 +445,7 @@ bool BuildSectorGeneratedGeometry(
         if (!BuildTopologyFlatSurface(
                     map, sector, loops, SectorGeneratedSurfaceKind::Floor,
                     sector.floorZ, Vector3{0.0f, 1.0f, 0.0f}, true,
-                    sector.floorTextureId, sector.floorUv, floor, error)) {
+                    sector.floorTextureId, sector.floorUv, sector.floorDecal, floor, error)) {
             return SetTopologyError(outGeometry, outError, error);
         }
         generated.surfaces.push_back(std::move(floor));
@@ -434,7 +454,7 @@ bool BuildSectorGeneratedGeometry(
         if (!BuildTopologyFlatSurface(
                     map, sector, loops, SectorGeneratedSurfaceKind::Ceiling,
                     sector.ceilingZ, Vector3{0.0f, -1.0f, 0.0f}, false,
-                    sector.ceilingTextureId, sector.ceilingUv, ceiling, error)) {
+                    sector.ceilingTextureId, sector.ceilingUv, sector.ceilingDecal, ceiling, error)) {
             return SetTopologyError(outGeometry, outError, error);
         }
         generated.surfaces.push_back(std::move(ceiling));
