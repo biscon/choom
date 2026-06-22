@@ -121,6 +121,13 @@ struct TopologySurfaceEditTarget {
     SectorTopologySideKind side = SectorTopologySideKind::Front;
 };
 
+struct TopologyMaterialPayload {
+    bool valid = false;
+    TopologySurfaceEditTargetKind kind = TopologySurfaceEditTargetKind::None;
+    std::string textureId;
+    SectorTopologyUvSettings uv;
+};
+
 struct TexturePickerState {
     bool open = false;
     bool rebuildPreviewOnApply = false;
@@ -295,6 +302,7 @@ struct SectorEditorState {
     SectorSurfaceHit hoveredSurface3D;
     SectorSurfaceRef selectedSurface3D;
     TopologySurfaceEditTarget selectedTopologySurface3D;
+    TopologyMaterialPayload copiedTopologyMaterial;
 
     engine::AssetScopeHandle editorTextureScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;

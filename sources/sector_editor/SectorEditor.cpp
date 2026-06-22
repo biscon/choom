@@ -609,6 +609,30 @@ TopologyWallPart TopologyEditTargetWallPart(TopologySurfaceEditTargetKind kind)
     return TopologyWallPart::Wall;
 }
 
+TopologySurfaceEditTargetKind TopologyWallPartEditTargetKind(TopologyWallPart part)
+{
+    switch (part) {
+        case TopologyWallPart::Wall: return TopologySurfaceEditTargetKind::SideDefWall;
+        case TopologyWallPart::Lower: return TopologySurfaceEditTargetKind::SideDefLower;
+        case TopologyWallPart::Upper: return TopologySurfaceEditTargetKind::SideDefUpper;
+    }
+    return TopologySurfaceEditTargetKind::SideDefWall;
+}
+
+const char* TopologyMaterialKindName(TopologySurfaceEditTargetKind kind)
+{
+    switch (kind) {
+        case TopologySurfaceEditTargetKind::SectorFloor: return "floor";
+        case TopologySurfaceEditTargetKind::SectorCeiling: return "ceiling";
+        case TopologySurfaceEditTargetKind::SideDefWall: return "wall";
+        case TopologySurfaceEditTargetKind::SideDefLower: return "lower";
+        case TopologySurfaceEditTargetKind::SideDefUpper: return "upper";
+        case TopologySurfaceEditTargetKind::None:
+            break;
+    }
+    return "none";
+}
+
 TopologySectorTextureField TopologyEditTargetSectorTextureField(TopologySurfaceEditTargetKind kind)
 {
     switch (kind) {
@@ -3860,6 +3884,30 @@ void SectorEditor::DrawPreviewUvPanel(
         ResetSurface3DUv(target, assets);
     }
 
+    if (engine::Button(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_3d_copy_material",
+            Rectangle{panel.x + panel.width - 172.0f, panel.y + 134.0f, 146.0f, 32.0f},
+            font,
+            "Copy Material")) {
+        CopyTopologyMaterial(target);
+    }
+
+    if (engine::Button(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_3d_paste_material",
+            Rectangle{panel.x + panel.width - 172.0f, panel.y + 174.0f, 146.0f, 32.0f},
+            font,
+            "Paste Material")) {
+        PasteTopologyMaterial(target, assets);
+    }
+
     input.ForEachEvent(
             engine::InputEventType::MouseClick,
             true,
@@ -5413,17 +5461,42 @@ bool SectorEditor::DrawTopologySectorInspector(
         y += uvBlockH + gap;
     };
 
-    auto drawSurfaceSection = [&](const char* title, const char* textureButtonId, const std::string& textureId, TopologySectorTextureField field, const char* uvPrefix, SectorTopologyUvSettings& uv, int stateOffset) {
+    auto drawSurfaceSection = [&](const char* title, const char* textureButtonId, const std::string& textureId, TopologySectorTextureField field, const char* uvPrefix, SectorTopologyUvSettings& uv, int stateOffset, TopologySurfaceEditTargetKind materialKind) {
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
         y += 18.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, title, engine::UITextJustify::Left, config.textColor);
         y += 30.0f;
+        const TopologySurfaceEditTarget target{materialKind, sector->id};
+        const float buttonW = (contentW - gap) * 0.5f;
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("%s_copy_material", uvPrefix),
+                    Rectangle{0.0f, y, buttonW, 36.0f},
+                    font,
+                    "Copy")) {
+            CopyTopologyMaterial(target);
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("%s_paste_material", uvPrefix),
+                    Rectangle{buttonW + gap, y, buttonW, 36.0f},
+                    font,
+                    "Paste")) {
+            PasteTopologyMaterial(target, assets);
+        }
+        y += 36.0f + gap;
         drawTextureRow(textureButtonId, "Texture:", textureId, field);
         drawUvSettings(uvPrefix, uv, stateOffset);
     };
 
-    drawSurfaceSection("Floor", "sector_editor_topology_pick_floor", sector->floorTextureId, TopologySectorTextureField::Floor, "sector_editor_topology_floor_uv", sector->floorUv, 0);
-    drawSurfaceSection("Ceiling", "sector_editor_topology_pick_ceiling", sector->ceilingTextureId, TopologySectorTextureField::Ceiling, "sector_editor_topology_ceiling_uv", sector->ceilingUv, 4);
+    drawSurfaceSection("Floor", "sector_editor_topology_pick_floor", sector->floorTextureId, TopologySectorTextureField::Floor, "sector_editor_topology_floor_uv", sector->floorUv, 0, TopologySurfaceEditTargetKind::SectorFloor);
+    drawSurfaceSection("Ceiling", "sector_editor_topology_pick_ceiling", sector->ceilingTextureId, TopologySectorTextureField::Ceiling, "sector_editor_topology_ceiling_uv", sector->ceilingUv, 4, TopologySurfaceEditTargetKind::SectorCeiling);
 
     auto drawWallDefaultSection = [&](const char* title, const char* textureButtonId, SectorTopologyWallPartSettings& part, TopologySectorTextureField field, const char* uvPrefix, int stateOffset) {
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
@@ -5682,6 +5755,38 @@ bool SectorEditor::DrawTopologySideDefInspector(
             }
             statusText = TextFormat("Editing topology %s UV", TopologyWallPartStatusName(part));
         }
+    }
+    y += 38.0f + gap;
+
+    const TopologySurfaceEditTarget selectedMaterialTarget{
+            TopologyWallPartEditTargetKind(state.selectedTopologyWallPart),
+            sideDef->sectorId,
+            sideDef->lineDefId,
+            sideDef->id,
+            sideDef->side};
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_copy_material",
+                Rectangle{0.0f, y, contentW, 38.0f},
+                font,
+                TextFormat("Copy %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
+        CopyTopologyMaterial(selectedMaterialTarget);
+    }
+    y += 38.0f + gap;
+
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_paste_material",
+                Rectangle{0.0f, y, contentW, 38.0f},
+                font,
+                TextFormat("Paste %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
+        PasteTopologyMaterial(selectedMaterialTarget, assets);
     }
     y += 38.0f + gap;
 
@@ -7407,6 +7512,108 @@ std::string SectorEditor::CurrentTextureForSurface(TopologySurfaceEditTarget tar
             break;
     }
     return std::string{"<none>"};
+}
+
+bool SectorEditor::CopyTopologyMaterial(TopologySurfaceEditTarget target)
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+
+    TopologyMaterialPayload payload;
+    payload.valid = true;
+    payload.kind = target.kind;
+
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            statusText = "Selected material target is no longer valid.";
+            return false;
+        }
+
+        if (target.kind == TopologySurfaceEditTargetKind::SectorFloor) {
+            payload.textureId = sector->floorTextureId;
+            payload.uv = sector->floorUv;
+        } else {
+            payload.textureId = sector->ceilingTextureId;
+            payload.uv = sector->ceilingUv;
+        }
+    } else {
+        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+        if (sideDef == nullptr) {
+            statusText = "Selected material target is no longer valid.";
+            return false;
+        }
+
+        const SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(
+                *sideDef,
+                TopologyEditTargetWallPart(target.kind));
+        payload.textureId = part.textureId;
+        payload.uv = part.uv;
+    }
+
+    state.copiedTopologyMaterial = payload;
+    statusText = TextFormat("Copied %s material.", TopologyMaterialKindName(payload.kind));
+    return true;
+}
+
+bool SectorEditor::PasteTopologyMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets)
+{
+    if (!state.copiedTopologyMaterial.valid) {
+        statusText = "No copied material.";
+        return false;
+    }
+
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+
+    if (state.copiedTopologyMaterial.kind != target.kind) {
+        statusText = TextFormat(
+                "Copied material is for %s; selected target is %s.",
+                TopologyMaterialKindName(state.copiedTopologyMaterial.kind),
+                TopologyMaterialKindName(target.kind));
+        return false;
+    }
+
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            statusText = "Selected material target is no longer valid.";
+            return false;
+        }
+
+        if (target.kind == TopologySurfaceEditTargetKind::SectorFloor) {
+            sector->floorTextureId = state.copiedTopologyMaterial.textureId;
+            sector->floorUv = state.copiedTopologyMaterial.uv;
+        } else {
+            sector->ceilingTextureId = state.copiedTopologyMaterial.textureId;
+            sector->ceilingUv = state.copiedTopologyMaterial.uv;
+        }
+    } else {
+        SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+        if (sideDef == nullptr) {
+            statusText = "Selected material target is no longer valid.";
+            return false;
+        }
+
+        SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(
+                *sideDef,
+                TopologyEditTargetWallPart(target.kind));
+        part.textureId = state.copiedTopologyMaterial.textureId;
+        part.uv = state.copiedTopologyMaterial.uv;
+    }
+
+    state.topologyRenderWarning.clear();
+    MarkTopologyDocumentEdited(TextFormat("Pasted %s material.", TopologyMaterialKindName(target.kind)));
+    if (state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        RebuildPreviewMeshesPreservingView(assets);
+    }
+    return true;
 }
 
 bool SectorEditor::ApplySurface3DUvValue(TopologySurfaceEditTarget target, int component, float value, engine::AssetManager& assets)

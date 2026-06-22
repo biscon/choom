@@ -257,6 +257,8 @@ private:
     void ResetSurface3DUiState();
     Rectangle BuildPreviewUvPanelRect() const;
     std::string CurrentTextureForSurface(TopologySurfaceEditTarget target) const;
+    bool CopyTopologyMaterial(TopologySurfaceEditTarget target);
+    bool PasteTopologyMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets);
     bool ApplySurface3DUvValue(TopologySurfaceEditTarget target, int component, float value, engine::AssetManager& assets);
     bool ResetSurface3DUv(TopologySurfaceEditTarget target, engine::AssetManager& assets);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);

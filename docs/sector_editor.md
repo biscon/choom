@@ -303,6 +303,15 @@ Texture pickers are used for:
 - sidedef wall/lower/upper textures
 - 3D surface panel texture targets
 
+Surface materials can be copied and pasted between matching surface types from
+the 2D inspectors and the 3D surface panel. The copied material includes the
+texture ID and UV scale/offset only. Floor materials paste only to floors,
+ceiling materials paste only to ceilings, and wall/lower/upper materials paste
+only to the matching concrete sidedef wall part. Paste mutates only the selected
+target surface; it does not edit the opposite sidedef, sector defaults, ambient
+lighting, or geometry. Keyboard shortcuts are not implemented for this workflow
+yet, so use the inspector or 3D panel buttons.
+
 `Add Map Texture` scans `assets/images` recursively for PNG files. It can add or
 update a texture ID in the map texture table and choose point or bilinear
 filtering. It does not copy external files into the project.
@@ -356,7 +365,9 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 The 3D surface panel edits only the selected surface target. Floor/ceiling
 targets edit sector texture and UV settings. Wall/lower/upper targets edit the
 selected sidedef's matching wall part. The Texture button opens the topology
-texture picker, and Reset UV resets only the selected surface target.
+texture picker, Reset UV resets only the selected surface target, and Copy/Paste
+Material copies texture ID plus UV scale/offset between matching selected
+surface kinds.
 
 Equal-height portals have no generated 3D wall surface, so edit their sidedefs
 from the 2D linedef/sidedef inspector.
