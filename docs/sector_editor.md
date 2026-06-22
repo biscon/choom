@@ -200,6 +200,10 @@ The sidedef/linedef inspector supports:
 - `Split At Point`
 - line-only inspection and splitting when no sidedef is selected
 
+Topology JSON can also store optional decal data for floor, ceiling, wall,
+lower, and upper surface materials. Decal rendering and editor controls are
+deferred to a later phase.
+
 `Split Linedef` creates one exact midpoint vertex and replaces the selected line
 with two new linedefs. Existing front/back sidedefs are duplicated onto both
 replacement lines with fresh stable IDs, preserving sector ownership, side kind,

@@ -174,6 +174,49 @@ SectorTopologyUvSettings ReadUv(const Json& value, const std::string& context)
     return uv;
 }
 
+SectorTopologyDecalLayer ReadDecal(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorTopologyDecalLayer decal;
+    decal.textureId = ReadString(value, "textureId", context);
+    if (decal.textureId.empty()) {
+        Fail(context + ".textureId must not be empty");
+    }
+    decal.uv = ReadUv(RequireField(value, "uv", context), context + ".uv");
+    const auto opacityIt = value.find("opacity");
+    if (opacityIt != value.end()) {
+        if (!opacityIt->is_number()) {
+            Fail(context + ".opacity must be a number");
+        }
+        const double opacity = opacityIt->get<double>();
+        if (!std::isfinite(opacity)
+                || opacity < 0.0
+                || opacity > 1.0
+                || opacity > std::numeric_limits<float>::max()) {
+            Fail(context + ".opacity must be a finite float between 0 and 1");
+        }
+        decal.opacity = static_cast<float>(opacity);
+    }
+    return decal;
+}
+
+void ReadOptionalDecal(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        SectorTopologyDecalLayer& outDecal)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        outDecal = {};
+        return;
+    }
+    outDecal = ReadDecal(*it, context + "." + field);
+}
+
 SectorTopologyWallPartSettings ReadWallPart(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -182,6 +225,7 @@ SectorTopologyWallPartSettings ReadWallPart(const Json& value, const std::string
     SectorTopologyWallPartSettings part;
     part.textureId = ReadString(value, "textureId", context);
     part.uv = ReadUv(RequireField(value, "uv", context), context + ".uv");
+    ReadOptionalDecal(value, "decal", context, part.decal);
     return part;
 }
 
@@ -302,12 +346,35 @@ Json WriteUv(const SectorTopologyUvSettings& uv, const std::string& context)
     };
 }
 
+bool HasDecal(const SectorTopologyDecalLayer& decal)
+{
+    return !decal.textureId.empty();
+}
+
+Json WriteDecal(const SectorTopologyDecalLayer& decal, const std::string& context)
+{
+    if (!std::isfinite(decal.opacity)
+            || decal.opacity < 0.0f
+            || decal.opacity > 1.0f) {
+        Fail(context + ".opacity must be a finite float between 0 and 1");
+    }
+    return Json{
+            {"textureId", decal.textureId},
+            {"uv", WriteUv(decal.uv, context + ".uv")},
+            {"opacity", decal.opacity}
+    };
+}
+
 Json WriteWallPart(const SectorTopologyWallPartSettings& part, const std::string& context)
 {
-    return Json{
+    Json value{
             {"textureId", part.textureId},
             {"uv", WriteUv(part.uv, context + ".uv")}
     };
+    if (HasDecal(part.decal)) {
+        value["decal"] = WriteDecal(part.decal, context + ".decal");
+    }
+    return value;
 }
 
 Json WriteLightmapSettings(const SectorLightmapBakeSettings& settings)
@@ -485,6 +552,8 @@ SectorTopologyMap ParseMap(const Json& root)
         sector.ceilingTextureId = ReadString(value, "ceilingTextureId", context);
         sector.floorUv = ReadUv(RequireField(value, "floorUv", context), context + ".floorUv");
         sector.ceilingUv = ReadUv(RequireField(value, "ceilingUv", context), context + ".ceilingUv");
+        ReadOptionalDecal(value, "floorDecal", context, sector.floorDecal);
+        ReadOptionalDecal(value, "ceilingDecal", context, sector.ceilingDecal);
         sector.ambientColor = ReadColor(
                 RequireField(value, "ambientColor", context), context + ".ambientColor");
         sector.ambientIntensity = ReadFloat(value, "ambientIntensity", context);
@@ -608,7 +677,7 @@ Json SerializeMap(const SectorTopologyMap& map)
         RequireFinite(sector->floorZ, context + ".floorZ");
         RequireFinite(sector->ceilingZ, context + ".ceilingZ");
         RequireFinite(sector->ambientIntensity, context + ".ambientIntensity");
-        root["sectors"].push_back(Json{
+        Json sectorJson{
                 {"id", sector->id},
                 {"name", sector->name},
                 {"floorZ", sector->floorZ},
@@ -622,7 +691,15 @@ Json SerializeMap(const SectorTopologyMap& map)
                 {"defaultWall", WriteWallPart(sector->defaultWall, context + ".defaultWall")},
                 {"defaultLower", WriteWallPart(sector->defaultLower, context + ".defaultLower")},
                 {"defaultUpper", WriteWallPart(sector->defaultUpper, context + ".defaultUpper")}
-        });
+        };
+        if (HasDecal(sector->floorDecal)) {
+            sectorJson["floorDecal"] = WriteDecal(sector->floorDecal, context + ".floorDecal");
+        }
+        if (HasDecal(sector->ceilingDecal)) {
+            sectorJson["ceilingDecal"] = WriteDecal(
+                    sector->ceilingDecal, context + ".ceilingDecal");
+        }
+        root["sectors"].push_back(std::move(sectorJson));
     }
 
     root["staticLights"] = Json::array();
