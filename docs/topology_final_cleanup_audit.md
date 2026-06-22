@@ -481,3 +481,13 @@ Old `SectorMap.cpp` helper APIs were no longer referenced after the overload rem
 `SectorTypes.h` still contains deferred old polygon model declarations such as `SectorMap`, `SectorDefinition`, edge override structs, `SectorBoundaryRingKind`, and `SectorBoundaryEdgeRef`. Current searches show those names are not referenced by active editor/demo/test/topology code outside that declaration header, so final model declaration deletion is deferred to a later phase.
 
 Topology editor, preview, serialization, JSON format, and lightmap behavior were not intentionally changed in this phase beyond removing dead old polygon paths.
+
+## Phase 18G note: final old polygon declaration removal
+
+The remaining dead old polygon model declarations were removed by deleting `sources/sector_demo/SectorTypes.h`. No active source, test, or CMake file included that header, so no include replacement was needed.
+
+Old polygon model types such as `SectorMap`, `SectorDefinition`, `SectorBoundaryRingKind`, old edge override structs, old static point lights, `EffectiveEdgeSettings`, and `EdgeNeighborInfo` no longer exist in `sources` or `tests`.
+
+The shared topology-safe types extracted in Phase 18A remain in the neutral headers: `SectorPointTypes.h`, `SectorTextureTypes.h/.cpp`, `SectorLightmapTypes.h`, and `SectorMeshTypes.h`.
+
+Topology editor, preview, generated geometry, mesh, serialization, JSON format, and lightmap behavior were not intentionally changed in this phase.
