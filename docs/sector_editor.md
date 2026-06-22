@@ -1,8 +1,15 @@
 # Sector Editor
 
-The sector editor is a 2D editor for `SectorMap` JSON data with an integrated
-3D Mode. The app starts with a blank, unmodified level containing the default
-texture table required by newly created sectors.
+The sector editor works on `SectorTopologyMap` topology v2 documents. It is a
+Doom-like topology editor built around vertices, linedefs, sidedefs, sectors,
+map-local texture definitions, static baked lights, lightmap settings, and
+optional baked lightmap metadata.
+
+The editor has a 2D authoring mode for topology creation and inspection, plus a
+3D preview/edit mode for checking generated geometry and editing surface texture
+and UV settings.
+
+## File Layout And JSON Format
 
 Levels use one directory per level:
 
@@ -13,523 +20,289 @@ assets/levels/<level_name>/<level_name>.lightmap.png
 
 Level names may contain only letters, digits, underscores, and dashes.
 
+Current level JSON is topology v2:
+
+```text
+formatVersion: 2
+topology: "linedef"
+coordSubdivisions: 16
+textures
+vertices
+linedefs
+sidedefs
+sectors
+staticLights
+lightmapSettings
+bakedLightmap
+```
+
+`bakedLightmap` is written only after a successful bake has installed valid
+metadata. The topology format does not store parent sector hole arrays; holes and
+adjacency are implied by sidedefs around linedefs.
+
 ## Coordinates
 
-- Sector map JSON uses authoring units. `1` authoring unit is `0.125` world
-  units.
-- Grid `8` corresponds to the previous 1-world-unit snap spacing. Grid `1`
-  enables fine 1/8-scale detail.
-- The default grid size is `8`.
-- Map `x` is horizontal.
-- Map `y` is top-down vertical and is drawn downward on screen to match the JSON
-  point layout directly.
-- The view center and zoom are calibrated to world/editor scale, while status
-  text and saved values remain authoring units.
+Topology planar coordinates are stored as integer `SectorCoord` values. The
+document uses `coordSubdivisions = 16`, so visible authoring X/Y coordinates are
+converted to and from stored integer coordinates at 16 subdivisions per authoring
+unit.
 
-Maps authored before this calibration must multiply authored spatial values by
-eight to preserve their physical size. This includes sector points,
-floor/ceiling heights, player and light positions, light radius/source radius,
-ambient occlusion radius, and indirect bounce radius. Colors, intensities,
-texture paths/IDs/filtering, and UV scale/offset values are unchanged.
+Sector floor/ceiling heights and static-light Y/radius/sourceRadius values
+remain authoring floats. Geometry generation, 3D preview, and lightmap baking
+convert authoring units to world units at their boundaries. The current world
+scale is 8 authoring units per world unit.
 
-## 2D Editor Controls
+Map X is horizontal in 2D. Map Y is the top-down second planar axis in authoring
+views and maps to world Z for generated 3D geometry.
+
+## 2D Controls
 
 - `WASD`: pan the 2D view.
 - Mouse wheel over the canvas: zoom.
-- Left click with Select tool: select an edge, select a sector, or clear
-  selection. Static lights take priority when the cursor is directly over a
-  light icon; otherwise edges take priority over sectors when the cursor is
-  near both.
-- Left click with Sector tool: add a sector point.
-- Left click with Light tool: add a baked static point light inside the clicked
-  sector.
-- Left drag with Move tool: move a static light icon or an existing sector
-  vertex on the snapped grid.
-- Left click with Erase tool: delete the clicked light or sector.
-- Click the first point, or press `Enter`: close the pending sector.
-- Right click or `Escape`: cancel a pending sector, active light move, or active
-  vertex move.
-- `Backspace`: remove the last pending sector point.
-- `Delete`: delete the selected light or sector.
+- Select tool: click static lights first, then topology linedefs/sidedefs, then
+  sectors. Clicking empty canvas clears selection.
+- Sector tool: draw topology sectors. Finalized sectors reuse exact existing
+  vertices and exact endpoint-pair linedefs when possible.
+- Light tool: place a topology static baked light inside the clicked sector.
+- Move tool: drag topology vertices by stable vertex ID or drag static lights by
+  X/Z.
+- Erase tool: click a sector to confirm deletion. Light deletion is available
+  from selection/Delete.
+- Click the first pending point or press `Enter`: finalize the pending sector.
+- `Backspace`: remove the last pending point.
+- Right click or `Escape`: cancel a pending sector, active vertex move, or active
+  light move.
+- `Delete`: delete the selected light, or confirm deletion for the selected
+  sector. Direct linedef and sidedef deletion is not available yet.
 - `Escape`: clear selection, then return to Select tool.
-- `New`: confirm and reset to a blank level without deleting files.
-- `Load`: select a canonical level under `assets/levels`; unsaved edits require
+- `New`: confirm and reset to a blank topology level.
+- `Load`: select a level under `assets/levels`; unsaved edits require
   confirmation before loading.
-- `Save`: open the level-name dialog. Changing the current name performs Save
-  As, with confirmation before overwriting another level.
-- `Reload`: confirm and reload the current saved level. It is unavailable for
-  an unsaved blank level.
-- `Add Map Texture`: add an existing project PNG from `assets/images` to the
-  current map texture table.
-- `Bake Lightmaps`: bake static point-light direct lighting and ambient
-  occlusion to a shared atlas.
+- `Save`: save the current topology document, or save as a named level.
+- `Reload`: confirm and reload the current saved level.
+- `Add Map Texture`: add or update a texture entry from a PNG under
+  `assets/images`.
+- `Bake Lightmaps`: bake topology static lights into the level lightmap atlas.
+- `3D Mode`: rebuild the 3D preview from the current in-memory topology map.
+
+## Topology Model
+
+- Vertex: a stable positive integer ID plus an exact planar `SectorCoord`
+  coordinate.
+- Linedef: a physical line between two vertices, directed from start vertex to
+  end vertex.
+- Sidedef: a directed sector-owned side of a linedef. The front side follows the
+  linedef start-to-end direction; the back side follows end-to-start. The owning
+  sector lies to the left of the directed side.
+- Sector: stores sector properties and is bounded by its sidedefs.
+- Two-sided linedef: a portal/adjacency between two sectors.
+- One-sided linedef: a solid boundary.
+
+Two-sided portals generate lower and/or upper wall surfaces only where adjacent
+sector heights differ. Equal-height two-sided portals remain visible and
+editable in 2D, but produce no 3D wall surface to pick or texture in 3D.
 
 ## Sector Inspector
 
-- The right inspector no longer contains a sector list. Select sectors by
-  clicking them in the graph/canvas; sector IDs can still be shown in the map
-  view.
-- Inspector content is vertically scrollable and should avoid horizontal
-  scrolling at the normal right-panel width.
-- Edit the selected sector `Id` field and press `Enter` to rename it.
-- Sector IDs must be unique and non-empty.
-- Sector IDs may contain letters, digits, underscores, and dashes.
-- Sector floor, ceiling, wall, lower wall, and upper wall textures are editable
-  with compact `>` buttons. The editor opens a centered modal texture picker instead
-  of using a dropdown, so large texture lists can scroll without clipping off
-  screen.
-- The `Lighting` section edits the selected sector's ambient intensity and RGB
-  tint. The swatch shows the final clamped tint that will be applied to generated
-  3D mesh vertices.
-- New sectors still receive generated IDs such as `sector_001`, using the first
-  available generated ID that does not collide with existing renamed sectors.
-- Deletion has no undo/redo yet. Reloading before saving can recover unsaved
-  deletes; saving persists the current sector list.
+Selecting a topology sector opens the sector inspector. It edits:
 
-### Insert Sector Inside
+- sector name and stable integer ID display
+- floor and ceiling heights
+- floor and ceiling texture IDs and UV scale/offset
+- ambient color and intensity
+- default wall, lower, and upper texture IDs and UV scale/offset
+- `Insert Sector Inside`
+- `Delete Sector`
 
-With a sector selected, `Insert Sector Inside` starts a contained-sector draw.
-Left click adds snapped points, clicking the first point or pressing `Enter`
-finalizes, `Backspace` removes the last point, and right click or `Escape`
-cancels. The polygon must be strictly inside the selected sector's usable area;
-it may not touch the outer boundary, an existing hole, or another sector.
+Sector default wall/lower/upper settings initialize future sidedefs created for
+that sector. Editing those defaults does not rewrite existing concrete sidedefs.
 
-Finalizing adds the reversed polygon as a hole in the parent and creates a new
-selected child sector from the forward polygon. The child inherits the parent's
-heights, surface and wall texture defaults, ambient lighting, and floor/ceiling
-UV defaults. It does not inherit holes or edge overrides. Repeating the workflow
-on the child creates nested platforms, pits, or pedestals.
+Sector deletion is transactional. It removes sidedefs owned by the sector,
+clears those slots from linedefs, removes linedefs with no remaining side, prunes
+unreferenced vertices, validates the candidate topology, and commits only if it
+is valid. Surviving opposite sides on shared linedefs keep their texture and UV
+settings and become one-sided boundaries.
 
-Outer rings are stored counter-clockwise and hole rings clockwise. This makes a
-parent hole edge the exact directed reverse of its child outer edge, allowing
-the existing portal lower/upper wall generation to handle height differences.
-Parent hole edges and child outer edges are independently editable directed
-sides. Both initially use their owning sector defaults, and selecting either
-side exposes the normal wall/lower/upper texture, UV, reset, and split controls.
+## Sidedef And Linedef Inspector
 
-Sector JSON stores holes only when present:
+Selecting near a linedef in 2D selects the clicked side when that side has a
+sidedef. If the clicked side is missing but the opposite side exists, the editor
+selects the existing opposite sidedef and reports that the clicked side has no
+sidedef. If neither side has a sidedef, the editor selects the linedef as a
+line-only selection.
 
-```json
-"holes": [
-  [[24, 24], [24, 40], [40, 40], [40, 24]]
-]
-```
+The sidedef/linedef inspector supports:
 
-Older maps without `holes` continue to load with no holes. Deleting a child
-does not automatically remove or heal its parent hole.
+- front/back sidedef selection
+- `Switch to opposite side` when the opposite sidedef exists
+- wall, lower, and upper texture selection
+- wall, lower, and upper UV scale/offset editing
+- reset UV for the selected wall/lower/upper part
+- `Split Linedef`
+- line-only inspection and splitting when no sidedef is selected
 
-## Sector Ambient Lighting
+`Split Linedef` creates one exact midpoint vertex and replaces the selected line
+with two new linedefs. Existing front/back sidedefs are duplicated onto both
+replacement lines with fresh stable IDs, preserving sector ownership, side kind,
+texture IDs, and UVs. Splitting fails if the midpoint cannot be represented
+exactly on the integer coordinate grid.
 
-Sector ambient lighting is the first simple lighting layer for mood, darkness,
-and local color tinting. It is stored per sector and applied when 3D sector
-meshes are generated.
+## Insert Sector Inside
 
-- `ambientIntensity`: range `0.0` to `1.0`; `1.0` keeps normal texture
-  brightness and `0.0` makes the surface black for this phase.
-- `ambientColor`: RGB tint stored as three `0..255` channel values.
-- Defaults are white `{255, 255, 255}` and intensity `1.0`.
+With a parent sector selected, `Insert Sector Inside` starts a contained-sector
+draw using the normal pending-point controls. The inserted polygon must be
+strictly inside the selected parent sector's usable area. It must not touch
+existing topology vertices, touch or cross existing topology edges, overlap
+existing topology, overlap an existing parent hole, or exactly match existing
+topology.
 
-Generated floor, ceiling, solid wall, lower portal wall, and upper portal wall
-vertices receive `ambientColor * ambientIntensity`. Portal wall spans use the
-owning directed sector side's lighting, so two sides of a shared portal may have
-different tints. This lighting only tints/darkens the base texture; it is not
-dynamic lighting, shadows, GI, lightmaps, probes, SSAO, PBR, or fog. Future
-lighting work may add static lightmaps and cheap dynamic lights.
+Finalizing creates one child sector. Each inserted boundary edge creates:
 
-Sector JSON saves lighting fields on each sector:
+- a child front sidedef
+- a parent back sidedef
+- one linedef shared by those two sides
 
-```json
-"ambientColor": [90, 130, 115],
-"ambientIntensity": 0.35
-```
+Parent holes are implied by those parent back sidedefs; they are not stored as a
+sector field in JSON. The child initially copies the parent sector's fields,
+including heights, floor/ceiling texture and UV settings, ambient settings, and
+default wall/lower/upper settings. Child/front and parent/back sidedefs are
+independent concrete records after creation.
 
-Older maps without these fields still load with the default white/full-bright
-ambient lighting.
+Nested inserts are allowed when the resulting topology validates. Deleting an
+inserted child does not heal the former hole into the parent floor; the former
+boundary remains as one-sided topology when validation succeeds.
 
 ## Static Baked Lights
 
-The Light tool places static point lights used only by the lightmap baker. They
-are not dynamic runtime lights and do not cast dynamic shadows. Click inside a
-sector to add a light at the snapped map X/Z position and at the sector floor
-height plus `1.8`.
+Topology documents own static point lights directly. These lights are used by
+the lightmap baker only; they are not dynamic runtime lights and do not cast
+dynamic runtime shadows.
 
-Static light defaults:
+The Light tool places a light inside the clicked topology sector at the clicked
+X/Z position and at the sector floor height plus 1.8 world units expressed in
+authoring units. New lights use stable positive integer IDs.
 
-- Color: white.
-- Intensity: `1.0`, clamped to `0.0..8.0`.
-- Radius: `64.0` authoring units, equivalent to `8.0` world units.
-- Source radius: new lights default to `2.0` authoring units, equivalent to
-  `0.25` world units, and is capped to half the light radius.
-- Generated IDs use `light_001`, `light_002`, and so on.
+Static light fields:
 
-In Select mode, clicking near a light icon selects it before sector or edge
-selection. The inspector shows ID, X/Y/Z position, intensity, radius, RGB
-channels, source radius, and a color swatch. `sourceRadius` controls the baked
-emitting size: `0.0` keeps the hard point-light shadow path, while nonzero values
-use deterministic finite-source samples to create baked soft penumbrae. The
-Erase tool or `Delete` removes the selected or clicked light without
-confirmation. There is still no undo/redo.
+- integer `id`
+- position X/Y/Z
+- color
+- intensity
+- radius
+- sourceRadius
 
-Static lights are saved in map JSON as `staticLights`. Older maps without the
-field still load normally. Older static lights without `sourceRadius` load as
-`0.0`, preserving the previous hard-shadow look until edited.
+Select mode picks lights before linedefs/sidedefs/sectors. The Move tool drags
+lights in X/Z and keeps their Y value unchanged. The inspector edits position,
+color, intensity, radius, and sourceRadius. Deleting a selected light removes it
+from the topology document after confirmation.
 
-```json
-{
-  "id": "light_001",
-  "position": [4.0, 2.0, 3.0],
-  "color": [255, 185, 110],
-  "intensity": 2.0,
-  "radius": 8.0,
-  "sourceRadius": 0.35
-}
-```
+## Texture Picker And Add Map Texture
 
-## Baked Lightmaps
+Map textures live in `topologyMap.texturesById`. Texture fields store texture
+IDs, not file paths or raylib texture objects. The texture picker choices come
+from the current map texture table.
 
-`Bake Lightmaps` starts an asynchronous worker-thread bake of direct colored
-lighting from static point lights, one-bounce indirect fill, and ambient
-occlusion into a single shared lightmap atlas. The editor window keeps
-rendering while the bake runs. The output path is derived from the current map
-identity. Save the level before baking; unsaved levels do not use a temporary
-lightmap path. For example:
+Texture pickers are used for:
 
-```text
-assets/levels/awesome_level/awesome_level.json
-assets/levels/awesome_level/awesome_level.lightmap.png
-```
+- sector floor and ceiling textures
+- sector default wall/lower/upper textures
+- sidedef wall/lower/upper textures
+- 3D surface panel texture targets
 
-The left tools panel includes compact lightmap settings:
+`Add Map Texture` scans `assets/images` recursively for PNG files. It can add or
+update a texture ID in the map texture table and choose point or bilinear
+filtering. It does not copy external files into the project.
 
-- `AO radius`: world-space ray distance for baked ambient occlusion, clamped to
-  `0.05..16.0`.
-- `AO strength`: how much gathered occlusion darkens sector ambient, clamped to
-  `0.0..1.0`; `0.0` disables AO ray work.
-- `Bounce radius`: maximum world-space distance for one-bounce indirect gather
-  rays, clamped to `0.05..16.0`.
-- `Bounce strength`: artist-facing multiplier for indirect fill, clamped to
-  `0.0..1.0`; `0.0` disables bounce ray work.
+## Move, Split, And Delete Tools
 
-Map JSON saves these settings as:
+Moving a topology vertex edits exactly one stable vertex ID. Connected linedefs
+and all sector loops using that vertex update through the shared reference.
+Movement previews validate a candidate topology before committing on mouse
+release. Moving a vertex onto another existing vertex is rejected because vertex
+merge is not implemented.
 
-```json
-"lightmapSettings": {
-  "ambientOcclusionRadius": 1.25,
-  "ambientOcclusionStrength": 0.55,
-  "indirectBounceRadius": 4.0,
-  "indirectBounceStrength": 0.2
-}
-```
+Moving a light edits only its X/Z position during the drag. Y remains unchanged.
 
-The baked PNG stores:
+Splitting is inspector-driven. It always splits at the exact stored-coordinate
+midpoint and fails if that midpoint is not representable on the integer grid.
 
-```text
-RGB = baked direct static point-light contribution + one-bounce indirect light
-A   = baked ambient-occlusion factor, where 255 is fully open
-```
-
-The map stores `bakedLightmap` metadata with the asset-relative atlas path,
-dimensions, and a deterministic source hash. The hash includes the bake format
-version, sector geometry, floor and ceiling heights, static light values
-including `sourceRadius`, AO settings, bounce settings, fixed bake sample
-counts, and the neutral bounce albedo constant. It does not include the baked
-metadata itself.
-
-3D Mode uses the baked atlas only when the metadata exists, the atlas file can
-be found, and the stored source hash matches the current in-memory map. If a
-geometry or static-light edit changes the hash, the bake is reported as stale
-and rendering falls back to sector ambient lighting only. When an asynchronous
-bake finishes, the main thread validates this same source hash before
-installing the generated PNG. If the map changed during the bake, the temporary
-output is discarded and the previous lightmap remains intact.
-
-Lighting combines as:
-
-```text
-bakedSample = texture(lightmapAtlas, secondaryUv)
-ambient = sectorAmbientVertexColor * bakedSample.a
-direct = bakedSample.rgb
-finalColor = baseTexture * clamp(ambient + direct, 0..1)
-```
-
-Ambient occlusion modulates only the sector ambient layer; it does not darken
-the baked direct or indirect contribution. Sector ambient remains the baseline
-mood/darkness layer. A sector with ambient intensity `0.0` can still be lit by
-baked light. Maps without valid baked data continue to render with ambient
-vertex lighting only.
-
-The indirect pass is currently one bounce only. It shoots 8 deterministic
-cosine-weighted hemisphere rays from each valid chart texel, finds the first
-nearby visible surface hit, maps that hit back through its secondary lightmap
-UV, and samples only the direct-light float buffer. It uses a fixed neutral grey
-reflectance for now. It does not recursively feed indirect results back into
-the bake, and it does not use sector ambient or base-texture pixels as bounce
-sources.
-
-In 3D Mode, `F1` toggles baked ambient occlusion on and off for visual
-debugging. This only changes the shader's use of lightmap alpha: AO off renders
-sector ambient without AO darkening while keeping baked direct RGB lighting
-visible. The toggle does not rebake lighting, reload textures, rebuild meshes,
-mark the map dirty, or save to level JSON.
-
-The bake format version is currently `3`. Existing version-2 bakes contain
-direct RGB lighting plus AO alpha, so they intentionally become `Lightmap stale
-- rebake required` after this update. The maps still load normally; rebake to
-generate indirect RGB.
-
-Current bake characteristics:
-
-- Fixed `2048 x 2048` atlas.
-- About `8` texels per world unit.
-- At least `2` texels of chart gutter.
-- Wall charts are rectangular; floor and ceiling charts are one chart per
-  generated triangle.
-- Colored direct point-light contribution in RGB.
-- One-bounce indirect light is added to RGB.
-- Ambient occlusion factor in alpha.
-- Hard static shadows when `sourceRadius` is `0.0`.
-- Baked soft shadows from 8 deterministic finite-source samples when
-  `sourceRadius` is nonzero.
-- Baked AO from 12 deterministic cosine-weighted hemisphere samples.
-- Baked indirect fill from 8 deterministic cosine-weighted hemisphere samples.
-- Bake-local static BVH acceleration for direct shadow rays, soft-shadow source
-  samples, AO rays, and one-bounce indirect gather rays.
-- Worker-thread execution for the CPU bake, with one bake worker at a time.
-- No recursive bounces, path tracing, texture/material-colored bounce, dynamic
-  light contribution, dynamic shadows, shadow maps, SSAO, probes, normal maps,
-  PBR, GI denoising, parallel ray batches, runtime BVH usage, or multi-atlas
-  support.
-
-Every bake builds a static BVH from that bake's generated triangle list after
-lightmap layout exists and before lighting rays are cast. The BVH stores only
-triangle indices; the generated bake triangles remain the source of
-world-space positions, normals, and lightmap UVs. This is a CPU bake
-optimization only. It is not reused between bakes, and it is not used by
-runtime rendering, gameplay collision, or editor picking.
-
-While baking, a centered modal shows the current phase, approximate progress,
-and elapsed time. Phases include layout, BVH build, direct lighting, ambient
-occlusion, indirect bounce, and dilation/output. Progress is coarse and
-weighted by phase, so it is intended to show forward movement rather than exact
-timing. The modal blocks normal editor interaction: map edits, texture pickers,
-save/reload, and 3D Mode entry are unavailable until the bake completes,
-fails, or is cancelled.
-
-`Cancel` requests cancellation and waits for the worker to exit at the next
-coarse chunk boundary. Cancellation does not replace the current lightmap PNG
-or baked metadata, and temporary bake output is removed. If the bake fails, the
-previous valid lightmap remains intact.
-
-The worker performs CPU-only work and writes a temporary PNG. GPU upload and
-texture refresh happen later on the main thread through the existing asset
-manager. Newly baked lightmaps keep bilinear filtering. If 3D Mode is entered
-after a bake, its preview scope requests the freshly installed atlas; if a
-future bake completes while 3D Mode is active, the preview is rebuilt on the
-main thread.
-
-The 2D status bar and 3D overlay show `Lightmap valid`, `Lightmap stale -
-rebake required`, or `No baked lightmap`. Re-bake after geometry, static-light,
-source-radius, AO-setting, or bounce-setting changes.
-
-After a successful bake, the console prints a report with atlas dimensions,
-valid chart texels, valid atlas occupancy, allocated chart rectangle area,
-chart rectangle occupancy, chart payload efficiency, static geometry triangle
-count, BVH node/leaf counts, BVH leaf statistics, static light count, per-pass
-ray/AABB/triangle-test statistics, and timings for layout, BVH build, direct
-lighting, AO, indirect bounce, gutter dilation/export, and total bake time.
-
-## Edge Inspector
-
-With the Select tool, click near a sector edge to select that directed edge.
-The selected edge is highlighted in the 2D canvas and the inspector shows its
-own sector, edge index, endpoints, selected side, and opposite side when an
-exact reversed-edge neighbor exists.
-
-When two opposite directed edges share the same physical line, selection uses
-the raw mouse position to choose the side whose sector contains the cursor. The
-selected side is drawn with a slight inward offset and normal marker so shared
-edges remain visually distinguishable. Shared edges also expose `Edit opposite
-side`, which switches the inspector to the reversed edge without changing map
-data.
-
-Edge texture rows show compact `Wall`, `Lower`, and `Upper` labels plus the
-effective texture. Inherited texture text uses the muted text color; overridden
-texture text uses the accent color. Use `>` to override wall, lower wall, or
-upper wall textures for the selected side only. In edge texture pickers, the
-first row is `<sector default>`; selecting it clears that one edge texture
-override and returns that field to the sector-wide texture.
-
-Edge overrides are directed sector-side data. If two neighboring sectors share a
-physical edge, each sector side can use different textures and UV settings.
-This is still a transitional sector polygon format, not a full linedef/sidedef
-topology system.
-
-The edge inspector also exposes numeric UV controls split by wall part. Use the
-`Wall`, `Lower`, and `Upper` toggle buttons to choose which wall part is being
-edited:
-
-- `Scale U/V`: scales texture coordinates for the selected wall part.
-- `Offset U/V`: offsets texture coordinates for the selected wall part.
-- `Reset <part> UV`: clears UV overrides only for the selected wall part and
-  returns it to scale `{1, 1}` and offset `{0, 0}`.
-
-Solid outer wall spans use `Wall` UV settings. Lower wall spans use `Lower` UV
-settings. Upper wall spans use `Upper` UV settings. 3D Mode uses unsaved
-in-memory UV changes when it rebuilds and can edit floor, ceiling, wall, lower
-wall, and upper wall UVs directly from the 3D view.
-
-Current JSON writes per-part UV fields only when that part has an override:
-`wallUvScale`, `wallUvOffset`, `lowerUvScale`, `lowerUvOffset`,
-`upperUvScale`, and `upperUvOffset`. Older maps with edge-level `uvScale` or
-`uvOffset` still load; those legacy values are applied to Wall, Lower, and
-Upper to preserve the previous shared-UV behavior.
-
-Edge overrides identify their boundary ring explicitly. Outer overrides use
-`"ring": "outer"`; hole overrides use `"ring": "hole"` plus a zero-based
-`"hole"` index. Both use `"edge"` for the edge index within that ring. Legacy
-entries without `ring` continue to load as outer-ring overrides.
-
-Floor and ceiling UV overrides are sector-level fields. JSON writes
-`floorUvScale`, `floorUvOffset`, `ceilingUvScale`, and `ceilingUvOffset` only
-when those values are overridden. Older maps without these fields load with
-scale `{1, 1}` and offset `{0, 0}`.
-
-## Texture Picker
-
-Texture fields use a modal picker with a dim backdrop, a scrollable
-single-selection texture ID list, a preview image, path text, `Select`, and
-`Cancel`. `Cancel` and `Escape` close without changing the map. `Select` and
-`Enter` apply the current selection and mark the map dirty only if the value
-changed.
-
-The preview uses the editor asset scope and the existing asset manager. Missing
-or not-yet-ready textures show the existing placeholder image widget output.
-
-## Add Map Texture
-
-`Add Map Texture` opens a centered modal for adding an existing project PNG to
-the current map texture table. This is not an external import flow: it does not
-open native file dialogs, copy files, or browse outside the project assets
-directory.
-
-The modal scans `assets/images` recursively and lists PNG files only. Extension
-matching is case-insensitive, so `.png`, `.PNG`, and mixed-case variants are
-accepted. Stored paths are asset-relative, for example
-`assets/images/walls/brick_wall.png`, and never absolute filesystem paths.
-
-Selecting a file generates a default texture ID from the filename stem, with
-spaces and punctuation normalized to underscores. Generated IDs are made unique
-with numeric suffixes such as `_001`. The ID can be edited before adding, but it
-must be non-empty, unique in the current map texture table, and contain only
-letters, digits, underscores, and dashes.
-
-Each added texture stores a filter mode:
-
-- `Point`: nearest-neighbor sampling for pixel art.
-- `Bilinear`: smoothed sampling and the default for old texture JSON entries.
-
-After adding, the new texture ID is immediately available in the existing
-sector, edge, and 3D Mode texture pickers. Texture assignments still store only
-texture ID references on sectors and edges.
-
-Texture JSON now saves in object form:
-
-```json
-"textures": {
-  "brick_wall": {
-    "path": "assets/images/walls/brick_wall.png",
-    "filter": "point"
-  }
-}
-```
-
-Older string texture entries such as `"wall": "assets/images/wall.png"` still
-load and are treated as bilinear. Saving rewrites all texture entries using the
-new object format.
-
-## Move Tool
-
-The Move tool moves static lights and reshapes existing sectors. Hover a light
-icon or vertex in the canvas, then drag with the left mouse button. The target
-position always snaps to the grid, with nearby existing vertices used as snap
-targets when moving vertices.
-
-Static lights take priority over vertices when both are under the pointer.
-Dragging a static light changes only authored X/Z. Height/Y, radius, source
-radius, intensity, and color remain edited numerically in the inspector.
-
-If multiple sector point entries share the same coordinate, they move together.
-For example, dragging a corner shared by two adjacent sectors updates both
-matching point entries, preserving exact shared edges and portal adjacency.
-
-Moves are validated before they are committed. Invalid moves are rejected and
-the current map remains unchanged. Rejected cases include duplicate adjacent
-points, collapsed or zero-area sectors, self-intersections, edge crossings,
-partial shared-edge overlaps, T-junctions, and sector interior overlaps.
-
-The Move tool does not split edges, insert vertices, delete vertices, move
-whole sectors, move lights in 3D Mode, edit light height/radius handles, create
-holes/islands, or provide undo/redo yet.
+Sector deletion and vertex movement use copy/validate/commit style topology
+edits. Direct linedef deletion, direct sidedef deletion, standalone vertex
+deletion, vertex merge, and undo/redo are not available yet.
 
 ## 3D Mode
 
-Click `3D Mode` to rebuild raylib meshes from the current in-memory
-`SectorMap` and enter the 3D editor mode. 3D Mode uses unsaved editor
-changes, including newly drawn sectors, unsaved floor/ceiling edits, sector
-texture edits, directed edge texture overrides, and edge UV edits. Saving is not
-required before entering 3D Mode.
+`3D Mode` builds the preview from the current in-memory topology map. It does
+not require saving first, but unsaved changes remain unsaved until `Save`.
 
-3D Mode controls:
+3D controls:
 
-- Hidden cursor: fly only. `WASD` moves, mouse look rotates, and
-  `Space` / `Ctrl` move up/down. Hover, selection, and the UV panel are hidden.
-- Visible cursor: camera is locked. Hover surfaces to highlight them and click a
-  highlighted surface to select it.
-- `F11`: toggle between hidden-cursor fly mode and visible-cursor edit mode.
-- `F1`: toggle baked ambient occlusion for visual comparison. The toggle affects
-  sector ambient lighting only; baked direct light remains visible.
-- `Tab` or `Escape`: return to the 2D editor.
+- `F11`: toggle mouse-look/captured cursor mode.
+- `F1`: toggle baked ambient-occlusion display.
+- `Tab` or `Escape`: return to 2D mode.
+- In mouse-look mode: `WASD` move, mouse looks, `Space` moves up, `Ctrl` moves
+  down.
+- In visible-cursor mode: click generated surfaces to select/edit them.
 
-Selectable 3D surfaces are floor, ceiling, solid wall, lower portal wall, and
-upper portal wall. Wall-like selections map to the directed sector edge and the
-same `Wall`, `Lower`, or `Upper` UV data used by the 2D edge inspector. Floor
-and ceiling selections map to the sector-level floor or ceiling UV override.
+3D picking maps generated surfaces back to topology:
 
-When a surface is selected in visible-cursor mode, a bottom UV panel shows the
-surface type, sector id, edge index for wall-like surfaces, current texture id,
-numeric UV scale/offset fields, `Texture`, and `Reset UV`. Numeric scale uses
-`0.01..64`; numeric offset uses `-1024..1024`.
+- floor and ceiling surfaces select the sector
+- wall, lower, and upper surfaces select the concrete sidedef and wall part
 
-UV and texture edits update the in-memory `SectorMap`, mark the map dirty, and
-rebuild the 3D Mode meshes immediately without leaving 3D Mode. The current
-camera pose and selected surface are preserved when the rebuild succeeds. Use
-`Save` later in the 2D editor to persist changes.
+The 3D surface panel edits only the selected surface target. Floor/ceiling
+targets edit sector texture and UV settings. Wall/lower/upper targets edit the
+selected sidedef's matching wall part. The Texture button opens the topology
+texture picker, and Reset UV resets only the selected surface target.
 
-The `Texture` button opens the same modal picker used by the 2D inspector.
-Floor and ceiling selections assign sector floor/ceiling textures. Wall, lower
-wall, and upper wall selections assign directed edge texture overrides for the
-selected wall part; choosing `<sector default>` clears that edge override.
+Equal-height portals have no generated 3D wall surface, so edit their sidedefs
+from the 2D linedef/sidedef inspector.
 
-Returning to the 2D editor keeps the current map, selection, dirty state, pan,
-zoom, and last 3D Mode position/look direction. The first 3D Mode entry after
-loading or reloading a map starts at the player start; later entries in the
-same editor session restore the last 3D pose. Meshes are reused while open,
-unloaded on editor shutdown, and rebuilt every time `3D Mode` is clicked or a
-3D UV edit changes the map.
+## Baked Lightmaps
+
+`Bake Lightmaps` uses topology generated geometry and topology static lights. It
+writes the PNG to:
+
+```text
+assets/levels/<level_name>/<level_name>.lightmap.png
+```
+
+The topology JSON stores bake settings in `lightmapSettings` and installed bake
+metadata in `bakedLightmap`. Bake settings include ambient occlusion radius and
+strength, plus indirect bounce radius and strength.
+
+The bake runs asynchronously with progress and cancellation. It writes to a
+temporary output first. When the worker finishes, the main thread installs the
+result only if the current topology source hash still matches the snapshot used
+for the bake. If the document changed during the bake, the temporary result is
+discarded.
+
+The source hash is deterministic over the topology lightmap bake version
+(`6`), atlas and sample constants, coordinate subdivision value, map texture
+table, vertex/linedef/sidedef/sector IDs and geometry, sector and sidedef texture
+and UV fields, static lights, and bake settings. It does not include the
+installed baked-lightmap metadata itself.
+
+The baked PNG stores direct static-light contribution and one-bounce indirect
+light in RGB, and ambient occlusion in alpha. 3D Mode uses a baked atlas only
+when metadata exists, the atlas file is present, and the stored source hash
+matches the current topology. Otherwise the preview falls back to sector ambient
+lighting.
+
+Equal-height portals generate no wall surface and therefore no wall lightmap
+chart.
 
 ## Current Limitations
 
-- No collision or floor-constrained movement.
-- No player-start editing.
-- No true gameplay mode.
-- No full Doom-style linedef/sidedef system.
-- No vertex insertion/deletion, edge splitting, whole-sector movement, or
-  undo/redo.
-- Lightmaps are single-atlas, synchronous, fixed-resolution, CPU ray traced
-  with a bake-local BVH, and direct plus one indirect bounce; there is no bake
-  progress UI, threading, GPU acceleration, BVH reuse between bakes, dynamic
-  lighting, or multi-atlas support.
-- No external texture importing, texture copying, texture removal, unused
-  texture cleanup, normal/material maps, thumbnail grid browser, texture search,
-  3D texture painting, 3D geometry editing, doors, lifts, dynamic lights,
-  dynamic shadowing, mesh culling, or file dialog.
+- No undo/redo.
+- No external texture import/copy; texture files must already exist under
+  `assets/images`.
+- No player-start editing in the sector editor.
+- No gameplay mode.
+- No collision or floor-constrained 3D preview movement.
+- No dynamic runtime lights or dynamic shadows.
+- No normal maps, material maps, PBR material editing, or texture search UI.
+- Single fixed-size lightmap atlas; no multi-atlas packing.
+- No 3D geometry editing beyond texture and UV edits on generated surfaces.
+- No direct linedef or sidedef deletion.
+- No standalone vertex deletion or vertex merge.
+- No arbitrary line cutting or automatic overlap splitting.

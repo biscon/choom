@@ -1,3 +1,5 @@
+# Historical migration/audit document. Not current editor behavior.
+
 # Sector Topology Incremental Refactor
 
 ## Phase 1

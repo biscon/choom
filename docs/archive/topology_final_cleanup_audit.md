@@ -1,3 +1,5 @@
+# Historical migration/audit document. Not current editor behavior.
+
 # Topology Final Cleanup Audit
 
 ## 1. Executive summary
@@ -342,12 +344,12 @@ Classification:
 - Classification: Update.
 - Reason: Still describes the editor as a `SectorMap` JSON editor, polygon holes, old edge overrides, old static light IDs, old polygon move/split behavior, and old 3D sector/edge UV workflow as current behavior.
 
-`docs/sector_topology_incremental_refactor.md`
+`docs/archive/sector_topology_incremental_refactor.md`
 
 - Classification: Archive as historical or leave as migration log.
 - Reason: Early sections intentionally describe old polygon paths as active at those phases. Later sections document topology migration status and cleanup notes. It should not be used as current user-facing behavior without context.
 
-`docs/doom_like_topology_prototype_salvage_audit.md`
+`docs/archive/doom_like_topology_prototype_salvage_audit.md`
 
 - Classification: Archive as historical.
 - Reason: It is a prototype/salvage audit, not current behavior. It includes references to prototype `SectorMap` topology experiments and old migration advice.
@@ -422,7 +424,7 @@ Observed before writing the report: `git status --short` already showed an unrel
 The intended audit change is this file only:
 
 ```text
-docs/topology_final_cleanup_audit.md
+docs/archive/topology_final_cleanup_audit.md
 ```
 
 ## Phase 18A note: shared sector type extraction

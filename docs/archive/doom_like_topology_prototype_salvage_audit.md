@@ -1,3 +1,5 @@
+# Historical migration/audit document. Not current editor behavior.
+
 # Doom-like Topology Prototype Salvage Audit
 
 Audit target: `experimental/doom-like-data-model` (`f8c424e`)  
