@@ -3,9 +3,10 @@
 #include "engine/ui/UI.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshPreview.h"
+#include "sector_demo/SectorPointTypes.h"
+#include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyCreation.h"
 #include "sector_demo/SectorTopologyMap.h"
-#include "sector_demo/SectorTypes.h"
 
 #include <raylib.h>
 
@@ -43,43 +44,9 @@ struct PendingSectorDraw {
     std::vector<SectorPoint> points;
     bool active = false;
     PendingSectorDrawKind kind = PendingSectorDrawKind::NewSector;
-    int parentSectorIndex = -1;
     int parentTopologySectorId = -1;
-    std::string parentSectorId;
-    std::vector<SectorPoint> parentOuterSnapshot;
-    std::vector<std::vector<SectorPoint>> parentHolesSnapshot;
+    std::string parentSectorLabel;
     std::string errorMessage;
-};
-
-struct SectorVertexRef {
-    int sectorIndex = -1;
-    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
-    int holeIndex = -1;
-    int pointIndex = -1;
-};
-
-struct SectorEdgeRef {
-    int sectorIndex = -1;
-    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
-    int holeIndex = -1;
-    int edgeIndex = -1;
-};
-
-struct SectorEdgeHitCandidate {
-    SectorEdgeRef edge;
-    float screenDistance = 0.0f;
-};
-
-enum class TexturePickerTargetKind {
-    None,
-    SectorFloor,
-    SectorCeiling,
-    SectorWall,
-    SectorLowerWall,
-    SectorUpperWall,
-    EdgeWall,
-    EdgeLowerWall,
-    EdgeUpperWall
 };
 
 enum class TopologyTexturePickerTargetKind {
@@ -111,12 +78,6 @@ enum class TopologySectorTextureField {
     DefaultUpper
 };
 
-enum class EdgeUvPart {
-    Wall,
-    Lower,
-    Upper
-};
-
 enum class SectorSurfaceKind {
     None,
     Floor,
@@ -128,10 +89,6 @@ enum class SectorSurfaceKind {
 
 struct SectorSurfaceRef {
     SectorSurfaceKind kind = SectorSurfaceKind::None;
-    int sectorIndex = -1;
-    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
-    int holeIndex = -1;
-    int edgeIndex = -1;
     int topologySectorId = -1;
     int topologyLineDefId = -1;
     int topologySideDefId = -1;
@@ -240,7 +197,6 @@ struct LightDragState {
 };
 
 struct SectorEditorState {
-    SectorMap map;
     SectorTopologyMap topologyMap;
     bool topologyDocumentInitialized = false;
     bool topologyDocumentDirty = false;
@@ -254,27 +210,15 @@ struct SectorEditorState {
     float viewZoom = 48.0f;
     int gridSize = 8;
 
-    int selectedSectorIndex = -1;
     TopologySelectionKind topologySelectionKind = TopologySelectionKind::None;
     int selectedTopologySectorId = -1;
     int selectedTopologySideDefId = -1;
     int selectedTopologyLineDefId = -1;
     SectorTopologySideKind selectedTopologySideKind = SectorTopologySideKind::Front;
     TopologyWallPart selectedTopologyWallPart = TopologyWallPart::Wall;
-    SectorBoundaryRingKind selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
-    int selectedEdgeHoleIndex = -1;
-    int selectedEdgeIndex = -1;
     int selectedTopologyLightId = -1;
-    EdgeUvPart selectedEdgeUvPart = EdgeUvPart::Wall;
-    int hoveredSectorIndex = -1;
-    int hoveredEdgeSectorIndex = -1;
-    SectorBoundaryRingKind hoveredEdgeRingKind = SectorBoundaryRingKind::Outer;
-    int hoveredEdgeHoleIndex = -1;
-    int hoveredEdgeIndex = -1;
     int hoveredTopologyLightId = -1;
     bool hasHoveredVertex = false;
-    SectorPoint hoveredVertexPoint = {};
-    std::vector<SectorVertexRef> hoveredVertexRefs;
     int hoveredTopologyVertexId = -1;
     SectorTopologyCoordPoint hoveredTopologyVertexPoint = {};
 
@@ -337,10 +281,6 @@ struct SectorEditorUiState {
     engine::UIIntInputState lightRedInput;
     engine::UIIntInputState lightGreenInput;
     engine::UIIntInputState lightBlueInput;
-    engine::UIFloatInputState edgeUvScaleUInput;
-    engine::UIFloatInputState edgeUvScaleVInput;
-    engine::UIFloatInputState edgeUvOffsetUInput;
-    engine::UIFloatInputState edgeUvOffsetVInput;
     engine::UIFloatInputState surface3DUvScaleUInput;
     engine::UIFloatInputState surface3DUvScaleVInput;
     engine::UIFloatInputState surface3DUvOffsetUInput;

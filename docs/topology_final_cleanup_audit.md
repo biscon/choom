@@ -441,3 +441,11 @@ Shared, topology-safe definitions were moved out of the old polygon model header
 The old polygon files and APIs still remain intentionally: `SectorTypes.h`, `SectorMap.h/.cpp`, `SectorMap`, `SectorDefinition`, old save/load, old generated geometry/mesh/preview/lightmap overloads, `SectorDemo`, and editor fallback state. Remaining `SectorTypes.h` / `SectorMap.h` includes are expected in files that still expose or compile old polygon overloads, legacy editor fallback fields, or `SectorDemo`.
 
 Topology test targets still compile `SectorMap.cpp` because mixed implementation files still compile old polygon overloads that reference polygon helpers. The new `SectorTextureTypes.cpp` is explicitly linked into those targets so shared texture helpers are no longer supplied by `SectorMap.cpp`.
+
+## Phase 18B note: topology-only editor state
+
+Old polygon editor state was removed from the sector editor. `SectorEditorState::map` is gone, along with the old polygon sector/edge selection fields and old polygon hover fields.
+
+`SectorEditor.cpp` no longer contains the old polygon inspector, renderer, hit-test, split, delete, rename, or edge override editor branches. The editor document behavior now uses `state.topologyMap` only, including topology sector/sidedef/linedef/light selection, topology texture picker routing, 3D surface editing, and lightmap bake/status UI.
+
+The old polygon subsystem files and APIs still remain intentionally for later cleanup: `SectorMap`, `SectorDefinition`, old save/load, old generated geometry/mesh/preview/lightmap overloads, and `SectorDemo`.

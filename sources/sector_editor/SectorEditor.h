@@ -74,10 +74,7 @@ private:
     void DrawTopologyLineDefs() const;
     void DrawTopologyVertices() const;
     void DrawTopologySnapCrosshair() const;
-    void DrawSectors() const;
-    void DrawSector(const SectorDefinition& sector, int sectorIndex) const;
     void DrawStaticLights() const;
-    Vector2 SelectedEdgeInwardNormal(const SectorDefinition& sector, int edgeIndex) const;
     void DrawPendingSector() const;
     void DrawVertexMoveOverlay() const;
     void DrawLightMoveOverlay() const;
@@ -169,7 +166,6 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font);
 
-    bool PointInSectorPolygon(Vector2 mapPoint, const SectorDefinition& sector) const;
     bool PointInTopologyLoop(Vector2 mapPoint, const SectorTopologyLoop& loop) const;
     bool PointInTopologySector(Vector2 mapPoint, const SectorTopologySector& sector) const;
     SectorSurfaceHit PickSectorSurface3D(Vector2 mousePosition, Rectangle viewportRect) const;
@@ -181,11 +177,7 @@ private:
             int& outSideDefId,
             SectorTopologySideKind& outSide,
             bool& outPreferredMissing) const;
-    int FindSectorAt(Vector2 mapPoint) const;
     int FindTopologyLightNearScreenPoint(Vector2 screenPoint) const;
-    bool FindEdgeNearScreenPoint(Vector2 screenPoint, SectorEdgeRef& outEdge) const;
-    std::vector<SectorEdgeHitCandidate> FindEdgeHitCandidates(Vector2 screenPoint) const;
-    bool ResolveEdgeHit(Vector2 screenPoint, Vector2 rawMapPoint, SectorEdgeRef& outEdge) const;
     bool FindTopologyVertexNearScreenPoint(
             Vector2 screenPoint,
             int& outVertexId,
@@ -194,7 +186,6 @@ private:
             Vector2 mapPoint,
             SectorTopologyCoordPoint& outPoint,
             std::string& error) const;
-    bool ValidateExistingSectorMap(const SectorMap& map, std::string& error) const;
     void ResetToBlankMap(engine::AssetManager& assets);
     bool LoadLevel(engine::AssetManager& assets, const std::string& levelName, const std::string& jsonAssetPath);
     void OpenNewConfirmation(engine::AssetManager& assets);
@@ -217,7 +208,6 @@ private:
     void RefreshAddMapTexturePreview(engine::AssetManager& assets);
     bool ValidateAddMapTextureId(std::string& error) const;
     bool AddSelectedMapTexture(engine::AssetManager& assets);
-    std::string GenerateUniqueSectorId() const;
     SectorTopologySector* SelectedTopologySector();
     const SectorTopologySector* SelectedTopologySector() const;
     SectorTopologySideDef* SelectedTopologySideDef();
@@ -232,12 +222,6 @@ private:
     void SelectTopologySector(int sectorId);
     void SelectTopologySideDef(int sideDefId, TopologyWallPart wallPart);
     void SelectTopologyLineDef(int lineDefId, SectorTopologySideKind side, TopologyWallPart wallPart);
-    void SelectSector(int sectorIndex);
-    void SelectEdge(
-            int sectorIndex,
-            int edgeIndex,
-            SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer,
-            int holeIndex = -1);
     void SelectTopologyLight(int topologyLightId);
     void SelectSurface3D(SectorSurfaceRef surface);
     bool IsValidSurfaceRef(SectorSurfaceRef surface) const;
@@ -247,30 +231,21 @@ private:
     void ResetSurface3DUiState();
     Rectangle BuildPreviewUvPanelRect() const;
     std::string CurrentTextureForSurface(TopologySurfaceEditTarget target) const;
-    TexturePickerTargetKind TexturePickerTargetForSurface(SectorSurfaceRef surface) const;
     bool ApplySurface3DUvValue(TopologySurfaceEditTarget target, int component, float value, engine::AssetManager& assets);
     bool ResetSurface3DUv(TopologySurfaceEditTarget target, engine::AssetManager& assets);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     bool SplitSelectedTopologyLineDef();
-    bool SplitSelectedEdge(engine::AssetManager& assets);
     void OpenDeleteSelectedTopologySectorConfirmation();
     void OpenDeleteTopologySectorConfirmation(int sectorId);
     bool DeleteSelectedTopologySectorConfirmed(int sectorId);
     void ClearSelection();
-    SectorEdgeOverride* FindMutableEdgeOverride(SectorBoundaryEdgeRef edge);
-    const SectorEdgeOverride* FindEdgeOverride(SectorBoundaryEdgeRef edge) const;
-    SectorEdgeOverride& EnsureEdgeOverride(SectorBoundaryEdgeRef edge);
-    void RemoveEdgeOverrideIfEmpty(SectorBoundaryEdgeRef edge);
     void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field);
     void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart);
     void ApplyTexturePickerSelection(engine::AssetManager& assets);
     std::string CurrentTextureForPickerTarget() const;
     bool TryRenameSelectedTopologySector();
     void MarkTopologyDocumentEdited(const char* status);
-    bool TryRenameSelectedSector();
     bool TryRenameSelectedLight();
-    bool DeleteSelectedSector();
-    bool DeleteSectorAt(int sectorIndex);
     bool DeleteSelectedLight();
     bool DeleteLightById(int topologyLightId);
     void AddStaticLightAt(Vector2 mapPoint);
@@ -283,13 +258,6 @@ private:
     bool IsLightmapBakeBlocking() const;
     bool ConsumeLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
     bool InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
-    bool ValidatePendingPoint(SectorPoint point, std::string& error) const;
-    bool ValidateSectorPolygon(const std::vector<SectorPoint>& points, std::string& error) const;
-    bool ValidateInsertSectorPolygon(
-            int parentSectorIndex,
-            const std::vector<SectorPoint>& points,
-            std::string& error) const;
-
     SectorEditorState state;
     SectorEditorUiState uiState;
     LightmapBakeAsyncState lightmapBake;
