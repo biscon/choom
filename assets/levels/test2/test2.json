@@ -8195,32 +8195,12 @@
           ]
         }
       },
-      "floorDecal": {
-        "textureId": "square_ceiling_light",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        },
-        "opacity": 1.0,
-        "emissive": true,
-        "tint": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      },
       "ceilingDecal": {
         "textureId": "square_ceiling_light",
         "uv": {
           "scale": [
-            1.0,
-            1.0
+            2.0,
+            2.0
           ],
           "offset": [
             0.0,
@@ -8310,12 +8290,12 @@
       "id": 5,
       "position": [
         148.0,
-        28.0,
+        27.0,
         -8.0
       ],
-      "radius": 64.0,
+      "radius": 44.0,
       "sourceRadius": 2.0,
-      "intensity": 2.0,
+      "intensity": 4.0,
       "color": {
         "r": 255,
         "g": 255,
@@ -8351,6 +8331,6 @@
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "afe76dc77e904d8d"
+    "sourceHash": "678b602ee95fa15f"
   }
 }

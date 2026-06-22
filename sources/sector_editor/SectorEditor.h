@@ -277,6 +277,8 @@ private:
     bool OpenDecalTintModal(TopologySurfaceEditTarget target);
     bool ClearSurfaceDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool ResetSurface3DUv(TopologySurfaceEditTarget target, TopologyMaterialLayer layer, engine::AssetManager& assets);
+    bool FitSelectedDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
+    bool FitSelectedFlatDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialU(TopologySurfaceEditTarget target, TopologyUAlignDirection direction, engine::AssetManager* assets, TopologyMaterialLayer layer);
