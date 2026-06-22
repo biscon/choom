@@ -325,6 +325,7 @@ struct SectorEditorState {
     bool hasCurrentLevelPath = false;
     bool hasUnsavedChanges = false;
     bool useBakedAmbientOcclusion = true;
+    bool previewUiHidden = false;
     bool hasPreviewPose = false;
     SectorMeshPreviewPose lastPreviewPose = {};
     SectorSurfaceHit hoveredSurface3D;

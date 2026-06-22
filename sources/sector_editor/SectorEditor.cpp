@@ -1307,8 +1307,15 @@ void SectorEditor::RenderUI(
             engine::EndUI(ui, config, input, assets);
             return;
         }
-        DrawPreviewOverlay(config, assets, font);
-        if (!state.texturePicker.open && !state.decalTintModal.open) {
+        if (state.previewUiHidden) {
+            ui.hotId = 0;
+            ui.activeId = 0;
+            ui.focusedId = 0;
+            ui.openOptionId = 0;
+        } else {
+            DrawPreviewOverlay(config, assets, font);
+        }
+        if (!state.previewUiHidden && !state.texturePicker.open && !state.decalTintModal.open) {
             DrawPreviewUvPanel(ui, config, input, assets, font);
         }
         if (state.decalTintModal.open) {
@@ -2698,6 +2705,18 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                     return;
                 }
 
+                if (event.key.key == KEY_F2) {
+                    state.previewUiHidden = !state.previewUiHidden;
+                    if (state.previewUiHidden) {
+                        state.hoveredSurface3D = SectorSurfaceHit{};
+                    }
+                    statusText = state.previewUiHidden
+                            ? "3D UI hidden"
+                            : "3D UI shown";
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
@@ -2713,7 +2732,11 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
 
 void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
 {
-    if (!initialized || !preview.IsReady() || preview.IsMouseLookEnabled() || state.texturePicker.open) {
+    if (!initialized
+            || !preview.IsReady()
+            || preview.IsMouseLookEnabled()
+            || state.previewUiHidden
+            || state.texturePicker.open) {
         state.hoveredSurface3D = SectorSurfaceHit{};
         return;
     }
@@ -3905,7 +3928,9 @@ bool SectorEditor::SnapTopologyVertexMoveTarget(
 void SectorEditor::RenderPreview3D(engine::AssetManager& assets)
 {
     preview.Render(assets, state.useBakedAmbientOcclusion);
-    DrawPreviewSurfaceHighlights();
+    if (!state.previewUiHidden) {
+        DrawPreviewSurfaceHighlights();
+    }
 }
 
 SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectangle viewportRect) const
@@ -4000,8 +4025,8 @@ void SectorEditor::DrawPreviewOverlay(
             engine::UITextJustify::Left
     );
     const char* interactionText = preview.IsMouseLookEnabled()
-            ? "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F11 cursor | Tab/Escape return"
-            : "F1 AO | F11 cursor | click surface to select | Tab/Escape return";
+            ? "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return"
+            : "F1 AO | F2 hide UI | F11 cursor | click surface to select | Tab/Escape return";
     engine::Text(
             config,
             assets,
@@ -7883,6 +7908,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     }
 
     state.mode = SectorEditorMode::Preview3D;
+    state.previewUiHidden = false;
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
