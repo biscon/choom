@@ -1,6 +1,7 @@
 #include "sector_demo/SectorDemo.h"
 
-#include "sector_demo/SectorMap.h"
+#include "sector_demo/SectorTopologyMap.h"
+#include "sector_demo/SectorTopologySerialization.h"
 
 #include <raylib.h>
 
@@ -13,12 +14,13 @@ bool SectorDemo::Init(engine::AssetManager& assets, const char* mapPath)
 {
     Shutdown(assets);
 
-    SectorMap map;
-    if (!LoadSectorMap(mapPath, map)) {
+    SectorTopologyMap map;
+    std::string error;
+    if (!LoadSectorTopologyMap(mapPath, map, &error)) {
+        std::fprintf(stderr, "[SectorDemo ERROR] %s\n", error.c_str());
         return false;
     }
 
-    std::string error;
     if (!preview.Rebuild(assets, map, "sector_demo", error)) {
         std::fprintf(stderr, "[SectorDemo ERROR] %s\n", error.c_str());
         return false;

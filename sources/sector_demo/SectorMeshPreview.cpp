@@ -3,14 +3,18 @@
 #include "engine/assets/TextureLoadFlags.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshBuilder.h"
-#include "sector_demo/SectorMap.h"
+#include "sector_demo/SectorTextureTypes.h"
+#include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
 
 #include <raylib.h>
 #include <raymath.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
+#include <vector>
 
 namespace game {
 
@@ -74,11 +78,73 @@ bool StartsWith(const std::string& value, const char* prefix)
     return value.compare(0, prefixString.size(), prefixString) == 0;
 }
 
+std::vector<std::string> SortedTopologyTextureIds(const SectorTopologyMap& map)
+{
+    std::vector<std::string> ids;
+    ids.reserve(map.texturesById.size());
+    for (const auto& texture : map.texturesById) {
+        ids.push_back(texture.first);
+    }
+    std::sort(ids.begin(), ids.end());
+    return ids;
+}
+
+bool LoadPreviewMaterial(
+        Material& material,
+        Texture2D& defaultMaterialTexture,
+        bool& materialLoaded,
+        int& useLightmapLoc,
+        int& useBakedAmbientOcclusionLoc,
+        std::string& error)
+{
+    material = LoadMaterialDefault();
+    Shader shader = LoadShaderFromMemory(SectorLightmapVs, SectorLightmapFs);
+    if (shader.id == 0) {
+        UnloadMaterial(material);
+        material = Material{};
+        error = "Preview failed: could not load sector lightmap shader";
+        return false;
+    }
+    material.shader = shader;
+    material.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(material.shader, "texture0");
+    material.shader.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(material.shader, "texture1");
+    useLightmapLoc = GetShaderLocation(material.shader, "useLightmap");
+    useBakedAmbientOcclusionLoc = GetShaderLocation(material.shader, "useBakedAmbientOcclusion");
+    defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
+    materialLoaded = true;
+    return true;
+}
+
+bool ComputeGeometryBounds(const SectorGeneratedGeometry& geometry, Vector3& outMin, Vector3& outMax)
+{
+    outMin = Vector3{
+            std::numeric_limits<float>::max(),
+            std::numeric_limits<float>::max(),
+            std::numeric_limits<float>::max()};
+    outMax = Vector3{
+            -std::numeric_limits<float>::max(),
+            -std::numeric_limits<float>::max(),
+            -std::numeric_limits<float>::max()};
+    bool found = false;
+    for (const SectorGeneratedSurface& surface : geometry.surfaces) {
+        for (const SectorGeneratedVertex& vertex : surface.vertices) {
+            outMin.x = std::min(outMin.x, vertex.position.x);
+            outMin.y = std::min(outMin.y, vertex.position.y);
+            outMin.z = std::min(outMin.z, vertex.position.z);
+            outMax.x = std::max(outMax.x, vertex.position.x);
+            outMax.y = std::max(outMax.y, vertex.position.y);
+            outMax.z = std::max(outMax.z, vertex.position.z);
+            found = true;
+        }
+    }
+    return found;
+}
+
 } // namespace
 
 bool SectorMeshPreview::Rebuild(
         engine::AssetManager& assets,
-        const SectorMap& map,
+        const SectorTopologyMap& map,
         const char* scopeName,
         std::string& error)
 {
@@ -86,35 +152,44 @@ bool SectorMeshPreview::Rebuild(
     error.clear();
 
     if (map.sectors.empty()) {
-        error = "Preview failed: no sectors";
+        error = "Preview failed: topology map has no sectors";
         return false;
     }
 
     if (map.texturesById.empty()) {
-        error = "Preview failed: missing texture table";
+        error = "Preview failed: missing topology texture table";
+        return false;
+    }
+
+    if (!BuildSectorGeneratedGeometry(map, generatedGeometry, &error)) {
+        error = error.empty()
+                ? "Preview failed: topology generated no geometry"
+                : "Preview failed: " + error;
+        generatedGeometry = {};
         return false;
     }
 
     assetScope = assets.CreateScope(scopeName == nullptr ? "sector_mesh_preview" : scopeName);
     if (engine::IsNull(assetScope)) {
+        generatedGeometry = {};
         error = "Preview failed: could not create asset scope";
         return false;
     }
 
-    for (const std::string& textureId : SortedSectorTextureIds(map)) {
-        const SectorTextureDefinition* texture = FindSectorTexture(map, textureId);
-        if (texture == nullptr) {
+    for (const std::string& textureId : SortedTopologyTextureIds(map)) {
+        const auto it = map.texturesById.find(textureId);
+        if (it == map.texturesById.end()) {
             continue;
         }
 
-        const std::string resolvedPath = ResolveAssetPath(texture->path);
+        const SectorTextureDefinition& texture = it->second;
+        const std::string resolvedPath = ResolveAssetPath(texture.path);
         engine::TextureHandle handle = assets.RequestTexture(
                 assetScope,
-                texture->id.c_str(),
+                texture.id.c_str(),
                 resolvedPath.c_str(),
-                SectorTextureLoadFlags(texture->filter)
-        );
-        textureHandlesById.emplace(texture->id, handle);
+                SectorTextureLoadFlags(texture.filter));
+        textureHandlesById.emplace(texture.id, handle);
     }
 
     SectorLightmapLayout lightmapLayout;
@@ -133,36 +208,42 @@ bool SectorMeshPreview::Rebuild(
                 assetScope,
                 "sector_lightmap_atlas",
                 resolvedPath.c_str(),
-                engine::TextureLoad_BilinearFilter
-        );
+                engine::TextureLoad_BilinearFilter);
     }
 
-    meshes = BuildSectorMeshes(map, useLightmapLayout ? &lightmapLayout : nullptr);
+    std::string meshError;
+    meshes = BuildSectorMeshes(map, useLightmapLayout ? &lightmapLayout : nullptr, &meshError);
     if (meshes.batches.empty()) {
         Shutdown(assets);
-        error = "Preview failed: mesh builder produced no batches";
+        error = meshError.empty()
+                ? "Preview failed: topology mesh builder produced no batches"
+                : "Preview failed: " + meshError;
         return false;
     }
 
-    material = LoadMaterialDefault();
-    Shader shader = LoadShaderFromMemory(SectorLightmapVs, SectorLightmapFs);
-    if (shader.id == 0) {
-        UnloadMaterial(material);
-        material = Material{};
-        error = "Preview failed: could not load sector lightmap shader";
+    if (!LoadPreviewMaterial(
+                material,
+                defaultMaterialTexture,
+                materialLoaded,
+                useLightmapLoc,
+                useBakedAmbientOcclusionLoc,
+                error)) {
+        Shutdown(assets);
         return false;
     }
-    material.shader = shader;
-    material.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(material.shader, "texture0");
-    material.shader.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(material.shader, "texture1");
-    useLightmapLoc = GetShaderLocation(material.shader, "useLightmap");
-    useBakedAmbientOcclusionLoc = GetShaderLocation(material.shader, "useBakedAmbientOcclusion");
-    defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
-    materialLoaded = true;
 
     sectorCount = map.sectors.size();
-    position = SectorAuthoringToWorldPosition(map.playerStartPosition);
-    yawRadians = map.playerStartYawRadians;
+
+    Vector3 boundsMin{};
+    Vector3 boundsMax{};
+    if (ComputeGeometryBounds(generatedGeometry, boundsMin, boundsMax)) {
+        const Vector3 center = Vector3Scale(Vector3Add(boundsMin, boundsMax), 0.5f);
+        const float height = std::max(1.6f, (boundsMax.y - boundsMin.y) * 0.5f);
+        position = Vector3{center.x, boundsMin.y + height, center.z};
+    } else {
+        position = Vector3{0.0f, 1.6f, 0.0f};
+    }
+    yawRadians = 0.0f;
     pitchRadians = 0.0f;
     mouseLookEnabled = true;
     camera.fovy = 75.0f;
@@ -176,6 +257,7 @@ bool SectorMeshPreview::Rebuild(
 
 void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
 {
+    generatedGeometry = {};
     if (!initialized
             && engine::IsNull(assetScope)
             && meshes.batches.empty()

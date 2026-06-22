@@ -95,6 +95,81 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(raylib)
 
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(sector_topology_tests
+            tests/SectorTopologyValidationTests.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_topology_tests PRIVATE sources)
+    target_link_libraries(sector_topology_tests PRIVATE raylib)
+    add_test(NAME sector_topology_validation COMMAND sector_topology_tests)
+
+    add_executable(sector_topology_serialization_tests
+            tests/SectorTopologySerializationTests.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologySerialization.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_topology_serialization_tests PRIVATE sources)
+    target_link_libraries(sector_topology_serialization_tests PRIVATE raylib)
+    add_test(NAME sector_topology_serialization COMMAND sector_topology_serialization_tests)
+
+    add_executable(sector_topology_generated_geometry_tests
+            tests/SectorTopologyGeneratedGeometryTests.cpp
+            sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorTextureTypes.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_topology_generated_geometry_tests PRIVATE sources)
+    target_link_libraries(sector_topology_generated_geometry_tests PRIVATE raylib)
+    add_test(NAME sector_topology_generated_geometry COMMAND sector_topology_generated_geometry_tests)
+
+    add_executable(sector_topology_mesh_builder_tests
+            tests/SectorTopologyMeshBuilderTests.cpp
+            sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorMeshBuilder.cpp
+            sources/sector_demo/SectorTextureTypes.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_topology_mesh_builder_tests PRIVATE sources)
+    target_link_libraries(sector_topology_mesh_builder_tests PRIVATE raylib)
+    add_test(NAME sector_topology_mesh_builder COMMAND sector_topology_mesh_builder_tests)
+
+    add_executable(sector_topology_lightmap_tests
+            tests/SectorTopologyLightmapTests.cpp
+            sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorTextureTypes.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_topology_lightmap_tests PRIVATE sources)
+    target_compile_definitions(sector_topology_lightmap_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+    target_link_libraries(sector_topology_lightmap_tests PRIVATE raylib)
+    add_test(NAME sector_topology_lightmap COMMAND sector_topology_lightmap_tests)
+
+    add_executable(sector_topology_creation_tests
+            tests/SectorTopologyCreationTests.cpp
+            sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorTextureTypes.cpp
+            sources/sector_demo/SectorTopologyCreation.cpp
+            sources/sector_demo/SectorTopologyEdit.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_topology_creation_tests PRIVATE sources)
+    target_link_libraries(sector_topology_creation_tests PRIVATE raylib)
+    add_test(NAME sector_topology_creation COMMAND sector_topology_creation_tests)
+endif()
+
 # -------------------------------
 # ASSETS_PATH define
 # -------------------------------

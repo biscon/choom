@@ -4,7 +4,10 @@
 #include "engine/input/InputEvents.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
-#include "sector_demo/SectorMap.h"
+#include "sector_demo/SectorTextureTypes.h"
+#include "sector_demo/SectorTopologyCreation.h"
+#include "sector_demo/SectorTopologySerialization.h"
+#include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
 #include "util/earcut.h"
 
@@ -86,22 +89,80 @@ bool BuildLevelPaths(const std::string& name, LevelPaths& paths, std::string& er
     return true;
 }
 
-SectorMap MakeBlankSectorMap()
+template<typename TextureMap>
+void PopulateDefaultSectorTextures(TextureMap& texturesById)
 {
-    SectorMap map;
-    const auto addTexture = [&map](const char* id, const char* path) {
+    const auto addTexture = [&texturesById](const char* id, const char* path) {
         SectorTextureDefinition definition;
         definition.id = id;
         definition.path = path;
         definition.filter = SectorTextureFilter::Bilinear;
-        map.texturesById.emplace(id, std::move(definition));
+        texturesById.emplace(id, std::move(definition));
     };
     addTexture("wall", "assets/images/wall.png");
     addTexture("floor", "assets/images/floor.png");
     addTexture("ceiling", "assets/images/ceiling.png");
     addTexture("step_wall", "assets/images/wall.png");
     addTexture("upper_wall", "assets/images/wall.png");
+}
+
+SectorTopologyMap CreateEmptySectorTopologyDocument()
+{
+    SectorTopologyMap map;
+    PopulateDefaultSectorTextures(map.texturesById);
     return map;
+}
+
+const SectorTextureDefinition* FindSectorTopologyTexture(
+        const SectorTopologyMap& map,
+        const std::string& id)
+{
+    if (id.empty()) {
+        return nullptr;
+    }
+
+    const auto it = map.texturesById.find(id);
+    return it == map.texturesById.end() ? nullptr : &it->second;
+}
+
+std::vector<std::string> SortedSectorTopologyTextureIds(const SectorTopologyMap& map)
+{
+    std::vector<std::string> ids;
+    ids.reserve(map.texturesById.size());
+    for (const auto& texture : map.texturesById) {
+        ids.push_back(texture.first);
+    }
+    std::sort(ids.begin(), ids.end());
+    return ids;
+}
+
+Vector2 SectorTopologyVertexToMap(const SectorTopologyVertex& vertex)
+{
+    return Vector2{
+            SectorCoordToVisibleAuthoring(vertex.x),
+            SectorCoordToVisibleAuthoring(vertex.y)
+    };
+}
+
+SectorPoint SectorTopologyCoordPointToSectorPoint(SectorTopologyCoordPoint point)
+{
+    return SectorPoint{
+            SectorCoordToVisibleAuthoring(point.x),
+            SectorCoordToVisibleAuthoring(point.y)
+    };
+}
+
+bool SameTopologyPoint(SectorTopologyCoordPoint a, SectorTopologyCoordPoint b)
+{
+    return a.x == b.x && a.y == b.y;
+}
+
+void ResetEditorTopologyDocumentState(SectorEditorState& state)
+{
+    state.topologyMap = CreateEmptySectorTopologyDocument();
+    state.topologyDocumentInitialized = true;
+    state.topologyDocumentDirty = false;
+    state.topologyDocumentStatus = "Topology document: empty";
 }
 
 std::vector<LevelListEntry> ScanLevels(std::string& error)
@@ -309,7 +370,7 @@ int ClampAmbientChannel(int value)
     return std::clamp(value, 0, 255);
 }
 
-Color SectorAmbientPreviewColor(const SectorDefinition& sector, unsigned char alpha)
+Color TopologySectorAmbientPreviewColor(const SectorTopologySector& sector, unsigned char alpha)
 {
     const float intensity = ClampAmbientIntensity(sector.ambientIntensity);
     return Color{
@@ -444,22 +505,22 @@ const char* ToolName(SectorEditorTool tool)
     return "Unknown";
 }
 
-const char* EdgeUvPartName(EdgeUvPart part)
+const char* TopologyWallPartName(TopologyWallPart part)
 {
     switch (part) {
-        case EdgeUvPart::Wall: return "Wall";
-        case EdgeUvPart::Lower: return "Lower";
-        case EdgeUvPart::Upper: return "Upper";
+        case TopologyWallPart::Wall: return "Wall";
+        case TopologyWallPart::Lower: return "Lower";
+        case TopologyWallPart::Upper: return "Upper";
     }
     return "Wall";
 }
 
-const char* EdgeUvPartStatusName(EdgeUvPart part)
+const char* TopologyWallPartStatusName(TopologyWallPart part)
 {
     switch (part) {
-        case EdgeUvPart::Wall: return "wall";
-        case EdgeUvPart::Lower: return "lower";
-        case EdgeUvPart::Upper: return "upper";
+        case TopologyWallPart::Wall: return "wall";
+        case TopologyWallPart::Lower: return "lower";
+        case TopologyWallPart::Upper: return "upper";
     }
     return "wall";
 }
@@ -496,18 +557,70 @@ SectorSurfaceKind ToEditorSurfaceKind(SectorGeneratedSurfaceKind kind)
     return SectorSurfaceKind::None;
 }
 
-EdgeUvPart SurfaceKindToEdgeUvPart(SectorSurfaceKind kind)
+TopologyWallPart SurfaceKindToTopologyWallPart(SectorSurfaceKind kind)
 {
     switch (kind) {
-        case SectorSurfaceKind::LowerWall: return EdgeUvPart::Lower;
-        case SectorSurfaceKind::UpperWall: return EdgeUvPart::Upper;
+        case SectorSurfaceKind::LowerWall: return TopologyWallPart::Lower;
+        case SectorSurfaceKind::UpperWall: return TopologyWallPart::Upper;
         case SectorSurfaceKind::Wall:
         case SectorSurfaceKind::Floor:
         case SectorSurfaceKind::Ceiling:
         case SectorSurfaceKind::None:
             break;
     }
-    return EdgeUvPart::Wall;
+    return TopologyWallPart::Wall;
+}
+
+TopologySurfaceEditTargetKind SurfaceKindToTopologyEditTargetKind(SectorSurfaceKind kind)
+{
+    switch (kind) {
+        case SectorSurfaceKind::Floor: return TopologySurfaceEditTargetKind::SectorFloor;
+        case SectorSurfaceKind::Ceiling: return TopologySurfaceEditTargetKind::SectorCeiling;
+        case SectorSurfaceKind::Wall: return TopologySurfaceEditTargetKind::SideDefWall;
+        case SectorSurfaceKind::LowerWall: return TopologySurfaceEditTargetKind::SideDefLower;
+        case SectorSurfaceKind::UpperWall: return TopologySurfaceEditTargetKind::SideDefUpper;
+        case SectorSurfaceKind::None: break;
+    }
+    return TopologySurfaceEditTargetKind::None;
+}
+
+TopologyWallPart TopologyEditTargetWallPart(TopologySurfaceEditTargetKind kind)
+{
+    switch (kind) {
+        case TopologySurfaceEditTargetKind::SideDefLower: return TopologyWallPart::Lower;
+        case TopologySurfaceEditTargetKind::SideDefUpper: return TopologyWallPart::Upper;
+        case TopologySurfaceEditTargetKind::SideDefWall:
+        case TopologySurfaceEditTargetKind::SectorFloor:
+        case TopologySurfaceEditTargetKind::SectorCeiling:
+        case TopologySurfaceEditTargetKind::None:
+            break;
+    }
+    return TopologyWallPart::Wall;
+}
+
+TopologySectorTextureField TopologyEditTargetSectorTextureField(TopologySurfaceEditTargetKind kind)
+{
+    switch (kind) {
+        case TopologySurfaceEditTargetKind::SectorFloor: return TopologySectorTextureField::Floor;
+        case TopologySurfaceEditTargetKind::SectorCeiling: return TopologySectorTextureField::Ceiling;
+        case TopologySurfaceEditTargetKind::SideDefWall:
+        case TopologySurfaceEditTargetKind::SideDefLower:
+        case TopologySurfaceEditTargetKind::SideDefUpper:
+        case TopologySurfaceEditTargetKind::None:
+            break;
+    }
+    return TopologySectorTextureField::None;
+}
+
+SectorSurfaceRef ToEditorSurfaceRef(const SectorGeneratedSurfaceRef& ref)
+{
+    SectorSurfaceRef surface;
+    surface.kind = ToEditorSurfaceKind(ref.kind);
+    surface.topologySectorId = ref.topologySectorId;
+    surface.topologyLineDefId = ref.topologyLineDefId;
+    surface.topologySideDefId = ref.topologySideDefId;
+    surface.topologySide = ref.topologySide;
+    return surface;
 }
 
 Vector3 SectorPointToWorld(SectorPoint point, float height)
@@ -518,53 +631,41 @@ Vector3 SectorPointToWorld(SectorPoint point, float height)
 const char* ToolHelpText(SectorEditorTool tool)
 {
     switch (tool) {
-        case SectorEditorTool::Select: return "Select: click edges or sectors in canvas";
+        case SectorEditorTool::Select: return "Select: click lights, linedefs, or sectors in canvas";
         case SectorEditorTool::Sector: return "Sector: left click add, click first closes, right click/Esc cancels, Backspace removes";
         case SectorEditorTool::InsertSectorInside: return "Insert sector: draw inside selected parent; Enter closes, right click/Esc cancels";
         case SectorEditorTool::Light: return "Light: click inside a sector to place a baked static point light";
-        case SectorEditorTool::Move: return "Move: drag light or vertex";
+        case SectorEditorTool::Move: return "Move: drag topology light or vertex";
         case SectorEditorTool::Erase: return "Erase: click sector to delete";
     }
     return "";
 }
 
-const char* TextureTargetLabel(TexturePickerTargetKind target)
+const char* TopologySectorTextureFieldLabel(TopologySectorTextureField field)
 {
-    switch (target) {
-        case TexturePickerTargetKind::SectorFloor: return "floor texture";
-        case TexturePickerTargetKind::SectorCeiling: return "ceiling texture";
-        case TexturePickerTargetKind::SectorWall: return "wall texture";
-        case TexturePickerTargetKind::SectorLowerWall: return "lower wall texture";
-        case TexturePickerTargetKind::SectorUpperWall: return "upper wall texture";
-        case TexturePickerTargetKind::EdgeWall: return "edge wall texture";
-        case TexturePickerTargetKind::EdgeLowerWall: return "edge lower wall texture";
-        case TexturePickerTargetKind::EdgeUpperWall: return "edge upper wall texture";
-        case TexturePickerTargetKind::None: break;
+    switch (field) {
+        case TopologySectorTextureField::Floor: return "floor texture";
+        case TopologySectorTextureField::Ceiling: return "ceiling texture";
+        case TopologySectorTextureField::DefaultWall: return "default wall texture";
+        case TopologySectorTextureField::DefaultLower: return "default lower texture";
+        case TopologySectorTextureField::DefaultUpper: return "default upper texture";
+        case TopologySectorTextureField::None: break;
     }
     return "texture";
+}
+
+const char* TopologyPickerTargetLabel(const TexturePickerState& picker)
+{
+    if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef) {
+        return TextFormat("%s sidedef texture", TopologyWallPartStatusName(picker.topologyWallPart));
+    }
+    return TopologySectorTextureFieldLabel(picker.topologyField);
 }
 
 Color WithAlpha(Color color, unsigned char alpha)
 {
     color.a = alpha;
     return color;
-}
-
-Vector2 AverageSectorPoint(const SectorDefinition& sector)
-{
-    Vector2 center{};
-    if (sector.points.empty()) {
-        return center;
-    }
-
-    for (SectorPoint point : sector.points) {
-        center.x += point.x;
-        center.y += point.y;
-    }
-    const float invCount = 1.0f / static_cast<float>(sector.points.size());
-    center.x *= invCount;
-    center.y *= invCount;
-    return center;
 }
 
 float Cross(Vector2 a, Vector2 b, Vector2 c)
@@ -593,6 +694,30 @@ float DistancePointToSegment(Vector2 point, Vector2 a, Vector2 b)
     const float px = point.x - closest.x;
     const float py = point.y - closest.y;
     return std::sqrt(px * px + py * py);
+}
+
+SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
+        SectorTopologySideDef& sideDef,
+        TopologyWallPart part)
+{
+    switch (part) {
+        case TopologyWallPart::Wall: return sideDef.wall;
+        case TopologyWallPart::Lower: return sideDef.lower;
+        case TopologyWallPart::Upper: return sideDef.upper;
+    }
+    return sideDef.wall;
+}
+
+const SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
+        const SectorTopologySideDef& sideDef,
+        TopologyWallPart part)
+{
+    switch (part) {
+        case TopologyWallPart::Wall: return sideDef.wall;
+        case TopologyWallPart::Lower: return sideDef.lower;
+        case TopologyWallPart::Upper: return sideDef.upper;
+    }
+    return sideDef.wall;
 }
 
 float PolygonArea2(const std::vector<SectorPoint>& points)
@@ -719,82 +844,6 @@ bool StrictPointInPolygon(SectorPoint point, const std::vector<SectorPoint>& pol
     return inside;
 }
 
-bool SameRing(const std::vector<SectorPoint>& a, const std::vector<SectorPoint>& b)
-{
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (size_t i = 0; i < a.size(); ++i) {
-        if (!SamePoint(a[i], b[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool SameHoles(
-        const std::vector<std::vector<SectorPoint>>& a,
-        const std::vector<std::vector<SectorPoint>>& b)
-{
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (size_t i = 0; i < a.size(); ++i) {
-        if (!SameRing(a[i], b[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool StrictPointInSectorUsableArea(SectorPoint point, const SectorDefinition& sector)
-{
-    if (!StrictPointInPolygon(point, sector.points)) {
-        return false;
-    }
-    for (const std::vector<SectorPoint>& hole : sector.holes) {
-        if (StrictPointInPolygon(point, hole) || PointOnPolygonBoundary(point, hole)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool RingsIntersect(
-        const std::vector<SectorPoint>& a,
-        const std::vector<SectorPoint>& b)
-{
-    for (size_t edgeA = 0; edgeA < a.size(); ++edgeA) {
-        const SectorPoint a0 = a[edgeA];
-        const SectorPoint a1 = a[(edgeA + 1) % a.size()];
-        for (size_t edgeB = 0; edgeB < b.size(); ++edgeB) {
-            const SectorPoint b0 = b[edgeB];
-            const SectorPoint b1 = b[(edgeB + 1) % b.size()];
-            if (SegmentsIntersect(a0, a1, b0, b1)) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-SectorPoint PolygonCentroidApprox(const std::vector<SectorPoint>& points)
-{
-    SectorPoint centroid{};
-    if (points.empty()) {
-        return centroid;
-    }
-
-    for (SectorPoint point : points) {
-        centroid.x += point.x;
-        centroid.y += point.y;
-    }
-    const float invCount = 1.0f / static_cast<float>(points.size());
-    centroid.x *= invCount;
-    centroid.y *= invCount;
-    return centroid;
-}
-
 bool FileExists(const std::string& path)
 {
     std::ifstream file(path);
@@ -805,137 +854,6 @@ std::string ShortPath(const std::string& path)
 {
     const size_t slash = path.find_last_of("/\\");
     return slash == std::string::npos ? path : path.substr(slash + 1);
-}
-
-bool IsEmptyEdgeOverride(const SectorEdgeOverride& edgeOverride)
-{
-    return !edgeOverride.hasWallTexture
-            && !edgeOverride.hasLowerWallTexture
-            && !edgeOverride.hasUpperWallTexture
-            && !edgeOverride.wallUv.hasUvScale
-            && !edgeOverride.wallUv.hasUvOffset
-            && !edgeOverride.lowerUv.hasUvScale
-            && !edgeOverride.lowerUv.hasUvOffset
-            && !edgeOverride.upperUv.hasUvScale
-            && !edgeOverride.upperUv.hasUvOffset;
-}
-
-bool ValidateSectorShape(const std::vector<SectorPoint>& points, std::string& error)
-{
-    if (points.size() < 3) {
-        error = "Need at least 3 points to close sector";
-        return false;
-    }
-
-    for (size_t i = 0; i < points.size(); ++i) {
-        const SectorPoint a = points[i];
-        const SectorPoint b = points[(i + 1) % points.size()];
-        if (SamePoint(a, b)) {
-            error = "Duplicate point";
-            return false;
-        }
-        for (size_t j = i + 1; j < points.size(); ++j) {
-            if (SamePoint(points[i], points[j])) {
-                error = "Duplicate point";
-                return false;
-            }
-        }
-    }
-
-    if (std::fabs(PolygonArea2(points)) <= GeometryEpsilon) {
-        error = "Sector polygon has zero area";
-        return false;
-    }
-
-    for (size_t edgeA = 0; edgeA < points.size(); ++edgeA) {
-        const SectorPoint a0 = points[edgeA];
-        const SectorPoint a1 = points[(edgeA + 1) % points.size()];
-        for (size_t edgeB = edgeA + 1; edgeB < points.size(); ++edgeB) {
-            if (EdgesAreAdjacent(edgeA, edgeB, points.size())) {
-                continue;
-            }
-
-            const SectorPoint b0 = points[edgeB];
-            const SectorPoint b1 = points[(edgeB + 1) % points.size()];
-            if (SegmentsIntersect(a0, a1, b0, b1)) {
-                error = "Sector polygon self-intersects";
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
-bool ValidateSectorAgainstSector(
-        const std::vector<SectorPoint>& points,
-        const std::vector<SectorPoint>& other,
-        std::string& error)
-{
-    if (other.size() < 3) {
-        return true;
-    }
-
-    for (size_t a = 0; a < points.size(); ++a) {
-        const SectorPoint a0 = points[a];
-        const SectorPoint a1 = points[(a + 1) % points.size()];
-        for (size_t b = 0; b < other.size(); ++b) {
-            const SectorPoint b0 = other[b];
-            const SectorPoint b1 = other[(b + 1) % other.size()];
-
-            if (SameUndirectedSegment(a0, a1, b0, b1)) {
-                continue;
-            }
-
-            if (ProperSegmentsCross(a0, a1, b0, b1)) {
-                error = "Sector edge crosses existing sector";
-                return false;
-            }
-
-            if (CollinearSegmentsOverlap(a0, a1, b0, b1)) {
-                error = "Partial shared edges are not supported";
-                return false;
-            }
-
-            if (PointOnSegment(a0, b0, b1) && !SamePoint(a0, b0) && !SamePoint(a0, b1)) {
-                error = "T-junctions are not supported";
-                return false;
-            }
-            if (PointOnSegment(a1, b0, b1) && !SamePoint(a1, b0) && !SamePoint(a1, b1)) {
-                error = "T-junctions are not supported";
-                return false;
-            }
-            if (PointOnSegment(b0, a0, a1) && !SamePoint(b0, a0) && !SamePoint(b0, a1)) {
-                error = "T-junctions are not supported";
-                return false;
-            }
-            if (PointOnSegment(b1, a0, a1) && !SamePoint(b1, a0) && !SamePoint(b1, a1)) {
-                error = "T-junctions are not supported";
-                return false;
-            }
-        }
-    }
-
-    // TODO: Replace centroid/vertex tests with robust polygon clipping if authoring needs holes or nested sectors.
-    if (StrictPointInPolygon(PolygonCentroidApprox(points), other)
-            || StrictPointInPolygon(PolygonCentroidApprox(other), points)) {
-        error = "Sector overlaps existing sector";
-        return false;
-    }
-    for (SectorPoint point : points) {
-        if (StrictPointInPolygon(point, other)) {
-            error = "Sector overlaps existing sector";
-            return false;
-        }
-    }
-    for (SectorPoint point : other) {
-        if (StrictPointInPolygon(point, points)) {
-            error = "Sector overlaps existing sector";
-            return false;
-        }
-    }
-
-    return true;
 }
 
 } // namespace
@@ -1012,11 +930,7 @@ void SectorEditor::Render(engine::AssetManager& assets)
     if (state.showGrid) {
         DrawGrid();
     }
-    DrawSectors();
-    DrawStaticLights();
-    DrawPendingSector();
-    DrawVertexMoveOverlay();
-    DrawLightMoveOverlay();
+    DrawTopologyDocument();
     EndScissorMode();
 
     DrawRectangleLinesEx(canvasRect, 2.0f, Color{67, 76, 93, 255});
@@ -1040,13 +954,8 @@ void SectorEditor::RenderUI(
             return;
         }
         DrawPreviewOverlay(config, assets, font);
-        if (!preview.IsMouseLookEnabled()) {
+        if (!state.texturePicker.open) {
             DrawPreviewUvPanel(ui, config, input, assets, font);
-        } else {
-            ui.hotId = 0;
-            ui.activeId = 0;
-            ui.openOptionId = 0;
-            ui.focusedId = 0;
         }
         DrawTexturePickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = ui.focusedId != 0;
@@ -1153,22 +1062,15 @@ Vector2 SectorEditor::SnapMapPoint(Vector2 map) const
     float bestDistance2 = threshold * threshold;
     bool found = false;
     Vector2 best = snapped;
-    for (const SectorDefinition& sector : state.map.sectors) {
-        const size_t ringCount = 1 + sector.holes.size();
-        for (size_t ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
-            const std::vector<SectorPoint>& ring = ringIndex == 0
-                    ? sector.points : sector.holes[ringIndex - 1];
-            for (SectorPoint point : ring) {
-                const Vector2 vertex = SectorPointToVector2(point);
-                const float dx = vertex.x - map.x;
-                const float dy = vertex.y - map.y;
-                const float distance2 = dx * dx + dy * dy;
-                if (distance2 <= bestDistance2) {
-                    bestDistance2 = distance2;
-                    best = vertex;
-                    found = true;
-                }
-            }
+    for (const SectorTopologyVertex& topologyVertex : state.topologyMap.vertices) {
+        const Vector2 vertex = SectorTopologyVertexToMap(topologyVertex);
+        const float dx = vertex.x - map.x;
+        const float dy = vertex.y - map.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 <= bestDistance2) {
+            bestDistance2 = distance2;
+            best = vertex;
+            found = true;
         }
     }
 
@@ -1210,45 +1112,26 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
     state.rawMouseMap = ScreenToMap(input.MousePosition());
     state.snappedMouseMap = SnapMapPoint(state.rawMouseMap);
     state.hasHoveredVertex = false;
-    state.hoveredVertexRefs.clear();
-    state.hoveredEdgeSectorIndex = -1;
-    state.hoveredEdgeRingKind = SectorBoundaryRingKind::Outer;
-    state.hoveredEdgeHoleIndex = -1;
-    state.hoveredEdgeIndex = -1;
-    state.hoveredLightIndex = -1;
+    state.hoveredTopologyLightId = -1;
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
 
     if (!initialized || !IsMouseOverCanvas(input)) {
-        state.hoveredSectorIndex = -1;
         return;
     }
 
-    state.hoveredLightIndex = FindLightNearScreenPoint(input.MousePosition());
-
-    if (state.currentTool == SectorEditorTool::Select) {
-        SectorEdgeRef edge{};
-        if (state.hoveredLightIndex < 0 && ResolveEdgeHit(input.MousePosition(), state.rawMouseMap, edge)) {
-            state.hoveredEdgeSectorIndex = edge.sectorIndex;
-            state.hoveredEdgeRingKind = edge.ringKind;
-            state.hoveredEdgeHoleIndex = edge.holeIndex;
-            state.hoveredEdgeIndex = edge.edgeIndex;
-        }
-    }
-    state.hoveredSectorIndex = FindSectorAt(state.rawMouseMap);
-    if (state.currentTool == SectorEditorTool::Move && !state.vertexDrag.active && !state.lightDrag.active) {
-        if (state.hoveredLightIndex >= 0) {
-            const SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.hoveredLightIndex)];
-            statusText = TextFormat("Move: drag %s", light.id.c_str());
-            return;
-        }
-        state.hasHoveredVertex = FindVertexNearScreenPoint(
-                input.MousePosition(),
-                state.hoveredVertexPoint,
-                state.hoveredVertexRefs
-        );
-        if (state.hasHoveredVertex) {
-            statusText = state.hoveredVertexRefs.size() > 1
-                    ? TextFormat("Move: shared vertex used by %zu points", state.hoveredVertexRefs.size())
-                    : "Move: drag vertex";
+    if (state.currentTool == SectorEditorTool::Move) {
+        const int lightId = FindTopologyLightNearScreenPoint(input.MousePosition());
+        if (lightId >= 0) {
+            state.hoveredTopologyLightId = lightId;
+        } else {
+            int vertexId = -1;
+            SectorTopologyCoordPoint point;
+            if (FindTopologyVertexNearScreenPoint(input.MousePosition(), vertexId, point)) {
+                state.hasHoveredVertex = true;
+                state.hoveredTopologyVertexId = vertexId;
+                state.hoveredTopologyVertexPoint = point;
+            }
         }
     }
 }
@@ -1270,9 +1153,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         CancelLightDrag("Cancelled light move");
                     } else if (state.pendingSector.active) {
                         CancelPendingSector("Cancelled sector");
-                    } else if (state.selectedLightIndex >= 0 || state.selectedSectorIndex >= 0) {
-                        ClearSelection();
-                    } else if (state.selectedSectorIndex >= 0) {
+                    } else if (state.selectedTopologyLightId >= 0
+                            || state.topologySelectionKind != TopologySelectionKind::None) {
                         ClearSelection();
                     } else {
                         state.currentTool = SectorEditorTool::Select;
@@ -1294,9 +1176,19 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (event.key.key == KEY_DELETE) {
-                    if (DeleteSelectedLight() || DeleteSelectedSector()) {
-                        engine::ConsumeEvent(event);
+                    if (state.topologySelectionKind == TopologySelectionKind::Light
+                            && state.selectedTopologyLightId >= 0) {
+                        DeleteSelectedLight();
+                    } else if (state.topologySelectionKind == TopologySelectionKind::Sector
+                            && state.selectedTopologySectorId >= 0) {
+                        OpenDeleteSelectedTopologySectorConfirmation();
+                    } else if (state.topologySelectionKind == TopologySelectionKind::SideDef
+                            || state.topologySelectionKind == TopologySelectionKind::LineDef) {
+                        statusText = "Direct linedef/sidedef deletion is not available yet.";
+                    } else {
+                        statusText = "Select a topology sector to delete.";
                     }
+                    engine::ConsumeEvent(event);
                     return;
                 }
             }
@@ -1391,19 +1283,19 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
-                const int lightIndex = FindLightNearScreenPoint(event.mouseButton.position);
-                if (lightIndex >= 0) {
-                    StartLightDrag(lightIndex);
-                    engine::ConsumeEvent(event);
-                    return;
+                const int lightId = FindTopologyLightNearScreenPoint(event.mouseButton.position);
+                if (lightId >= 0) {
+                    StartLightDrag(lightId);
+                } else {
+                    int vertexId = -1;
+                    SectorTopologyCoordPoint point;
+                    if (FindTopologyVertexNearScreenPoint(event.mouseButton.position, vertexId, point)) {
+                        StartVertexDrag(vertexId, point);
+                    } else {
+                        statusText = "Move: click a topology light or vertex";
+                    }
                 }
-
-                SectorPoint point{};
-                std::vector<SectorVertexRef> refs;
-                if (FindVertexNearScreenPoint(event.mouseButton.position, point, refs)) {
-                    StartVertexDrag(point, refs);
-                    engine::ConsumeEvent(event);
-                }
+                engine::ConsumeEvent(event);
             }
     );
 
@@ -1440,15 +1332,56 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::Select) {
-                    SectorEdgeRef edge{};
-                    const Vector2 rawMap = ScreenToMap(event.mouseClick.releasePosition);
-                    const int lightIndex = FindLightNearScreenPoint(event.mouseClick.releasePosition);
-                    if (lightIndex >= 0) {
-                        SelectLight(lightIndex);
-                    } else if (ResolveEdgeHit(event.mouseClick.releasePosition, rawMap, edge)) {
-                        SelectEdge(edge.sectorIndex, edge.edgeIndex, edge.ringKind, edge.holeIndex);
+                    const int lightId = FindTopologyLightNearScreenPoint(event.mouseClick.releasePosition);
+                    if (lightId >= 0) {
+                        SelectTopologyLight(lightId);
+                        statusText = TextFormat("Selected topology light %d", lightId);
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+
+                    int lineDefId = -1;
+                    int sideDefId = -1;
+                    SectorTopologySideKind side = SectorTopologySideKind::Front;
+                    bool preferredMissing = false;
+                    if (FindTopologyLineNearScreenPoint(
+                                event.mouseClick.releasePosition,
+                                ScreenToMap(event.mouseClick.releasePosition),
+                                lineDefId,
+                                sideDefId,
+                                side,
+                                preferredMissing)) {
+                        if (sideDefId >= 0) {
+                            SelectTopologySideDef(sideDefId, state.selectedTopologyWallPart);
+                            statusText = preferredMissing
+                                    ? TextFormat(
+                                            "Selected topology %s sidedef %d; clicked side has no sidedef",
+                                            SectorTopologySideKindName(side),
+                                            sideDefId)
+                                    : TextFormat(
+                                            "Selected topology %s sidedef %d",
+                                            SectorTopologySideKindName(side),
+                                            sideDefId);
+                        } else {
+                            SelectTopologyLineDef(lineDefId, side, state.selectedTopologyWallPart);
+                            statusText = TextFormat("Selected topology linedef %d (no sidedef)", lineDefId);
+                        }
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+
+                    bool multipleMatches = false;
+                    const int sectorId = FindTopologySectorAt(
+                            ScreenToMap(event.mouseClick.releasePosition),
+                            &multipleMatches);
+                    if (sectorId >= 0) {
+                        SelectTopologySector(sectorId);
+                        statusText = multipleMatches
+                                ? TextFormat("Selected topology sector %d (lowest ID on boundary)", sectorId)
+                                : TextFormat("Selected topology sector %d", sectorId);
                     } else {
-                        SelectSector(FindSectorAt(rawMap));
+                        ClearSelection();
+                        statusText = "Selected: none";
                     }
                     engine::ConsumeEvent(event);
                     return;
@@ -1456,7 +1389,15 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
 
                 if (state.currentTool == SectorEditorTool::Sector
                         || state.currentTool == SectorEditorTool::InsertSectorInside) {
-                    const SectorPoint point = Vector2ToSectorPoint(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    if (state.currentTool == SectorEditorTool::InsertSectorInside
+                            && (!state.pendingSector.active
+                                    || state.pendingSector.kind != PendingSectorDrawKind::InsertInside)) {
+                        statusText = "Select a topology sector before inserting inside it.";
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+
+                    const SectorPoint point = CurrentSnappedSectorPoint();
                     if (CanClosePendingSectorAt(point)) {
                         FinalizePendingSector();
                     } else {
@@ -1473,38 +1414,52 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::Erase) {
-                    const int lightIndex = FindLightNearScreenPoint(event.mouseClick.releasePosition);
-                    if (lightIndex >= 0) {
-                        DeleteLightAt(lightIndex);
-                    } else if (const int sectorIndex = FindSectorAt(ScreenToMap(event.mouseClick.releasePosition)); sectorIndex >= 0) {
-                        DeleteSectorAt(sectorIndex);
+                    const int sectorId = FindTopologySectorAt(
+                            ScreenToMap(event.mouseClick.releasePosition));
+                    if (sectorId >= 0) {
+                        SelectTopologySector(sectorId);
+                        OpenDeleteTopologySectorConfirmation(sectorId);
+                    } else {
+                        statusText = "Select a topology sector to delete.";
                     }
                     engine::ConsumeEvent(event);
                     return;
                 }
 
                 if (state.currentTool == SectorEditorTool::Move) {
+                    statusText = "Move: click a topology light or vertex";
                     engine::ConsumeEvent(event);
                 }
             }
     );
 }
 
-void SectorEditor::StartVertexDrag(SectorPoint point, const std::vector<SectorVertexRef>& refs)
+void SectorEditor::StartVertexDrag(int vertexId, SectorTopologyCoordPoint point)
 {
-    if (refs.empty()) {
+    if (!IsValidSectorTopologyId(vertexId)
+            || FindSectorTopologyVertex(state.topologyMap, vertexId) == nullptr) {
         return;
     }
 
     state.vertexDrag.active = true;
+    state.vertexDrag.topologyVertexId = vertexId;
     state.vertexDrag.originalPoint = point;
-    state.vertexDrag.currentPoint = point;
-    state.vertexDrag.snappedPoint = point;
-    state.vertexDrag.affectedVertices = refs;
+    state.vertexDrag.previewPoint = point;
+    state.vertexDrag.lastValidatedPoint = point;
+    state.vertexDrag.hasPreviewPoint = true;
+    state.vertexDrag.hasValidatedPreview = true;
+    state.vertexDrag.lastPreviewValid = true;
     state.vertexDrag.errorMessage.clear();
-    statusText = refs.size() > 1
-            ? TextFormat("Moving shared vertex used by %zu points", refs.size())
-            : "Moving vertex";
+
+    size_t connectedCount = 0;
+    for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
+        if (lineDef.startVertexId == vertexId || lineDef.endVertexId == vertexId) {
+            ++connectedCount;
+        }
+    }
+    statusText = connectedCount > 1
+            ? TextFormat("Moving topology vertex %d (%zu connected linedefs)", vertexId, connectedCount)
+            : TextFormat("Moving topology vertex %d", vertexId);
 }
 
 void SectorEditor::UpdateVertexDrag(engine::Input& input)
@@ -1513,21 +1468,45 @@ void SectorEditor::UpdateVertexDrag(engine::Input& input)
         return;
     }
 
-    state.vertexDrag.currentPoint = Vector2ToSectorPoint(ScreenToMap(input.MousePosition()));
-    state.vertexDrag.snappedPoint = SnapVertexMoveTarget(SectorPointToVector2(state.vertexDrag.currentPoint));
-
     std::string error;
-    if (SamePoint(state.vertexDrag.snappedPoint, state.vertexDrag.originalPoint)) {
-        state.vertexDrag.errorMessage.clear();
-        statusText = "Moving vertex: original point";
-    } else if (ValidateMovedVertexGroup(state.vertexDrag.snappedPoint, error)) {
-        state.vertexDrag.errorMessage.clear();
-        statusText = state.vertexDrag.affectedVertices.size() > 1
-                ? TextFormat("Moving shared vertex used by %zu points", state.vertexDrag.affectedVertices.size())
-                : "Moving vertex";
-    } else {
+    SectorTopologyCoordPoint snappedPoint;
+    if (!SnapTopologyVertexMoveTarget(ScreenToMap(input.MousePosition()), snappedPoint, error)) {
         state.vertexDrag.errorMessage = error;
+        state.vertexDrag.hasPreviewPoint = false;
+        state.vertexDrag.lastPreviewValid = false;
         statusText = TextFormat("Move rejected: %s", error.c_str());
+        return;
+    }
+
+    state.vertexDrag.previewPoint = snappedPoint;
+    state.vertexDrag.hasPreviewPoint = true;
+    if (SameTopologyPoint(state.vertexDrag.previewPoint, state.vertexDrag.originalPoint)) {
+        state.vertexDrag.errorMessage.clear();
+        state.vertexDrag.hasValidatedPreview = true;
+        state.vertexDrag.lastValidatedPoint = state.vertexDrag.previewPoint;
+        state.vertexDrag.lastPreviewValid = true;
+        statusText = "Moving vertex: original point";
+        return;
+    }
+
+    if (!state.vertexDrag.hasValidatedPreview
+            || !SameTopologyPoint(state.vertexDrag.previewPoint, state.vertexDrag.lastValidatedPoint)) {
+        SectorTopologyMap previewMap = state.topologyMap;
+        state.vertexDrag.lastPreviewValid = MoveSectorTopologyVertex(
+                previewMap,
+                state.vertexDrag.topologyVertexId,
+                state.vertexDrag.previewPoint,
+                &error);
+        state.vertexDrag.lastValidatedPoint = state.vertexDrag.previewPoint;
+        state.vertexDrag.hasValidatedPreview = true;
+        state.vertexDrag.errorMessage = state.vertexDrag.lastPreviewValid ? std::string{} : error;
+    }
+
+    if (state.vertexDrag.lastPreviewValid) {
+        state.vertexDrag.errorMessage.clear();
+        statusText = TextFormat("Moving topology vertex %d", state.vertexDrag.topologyVertexId);
+    } else {
+        statusText = TextFormat("Move rejected: %s", state.vertexDrag.errorMessage.c_str());
     }
 }
 
@@ -1537,35 +1516,46 @@ void SectorEditor::FinishVertexDrag()
         return;
     }
 
-    const SectorPoint original = state.vertexDrag.originalPoint;
-    const SectorPoint target = state.vertexDrag.snappedPoint;
-    const std::vector<SectorVertexRef> affected = state.vertexDrag.affectedVertices;
+    const int vertexId = state.vertexDrag.topologyVertexId;
+    const SectorTopologyCoordPoint original = state.vertexDrag.originalPoint;
+    const SectorTopologyCoordPoint target = state.vertexDrag.previewPoint;
 
-    if (SamePoint(target, original)) {
+    if (!state.vertexDrag.hasPreviewPoint) {
+        const std::string error = state.vertexDrag.errorMessage.empty()
+                ? "Move target is outside topology coordinate range"
+                : state.vertexDrag.errorMessage;
+        state.vertexDrag = VertexDragState{};
+        statusText = TextFormat("Move rejected: %s", error.c_str());
+        return;
+    }
+
+    if (SameTopologyPoint(target, original)) {
         state.vertexDrag = VertexDragState{};
         statusText = "Vertex unchanged";
         return;
     }
 
     std::string error;
-    if (!ValidateMovedVertexGroup(target, error)) {
+    if (!MoveSectorTopologyVertex(state.topologyMap, vertexId, target, &error)) {
         state.vertexDrag = VertexDragState{};
         statusText = TextFormat("Move rejected: %s", error.c_str());
         return;
     }
 
-    state.map = BuildMapWithMovedVertexGroup(target);
-    if (state.selectedSectorIndex < 0 && !affected.empty()) {
-        SelectSector(affected.front().sectorIndex);
-    }
+    ClearStaleTopologySelection();
+    state.topologyDocumentDirty = true;
+    state.topologyRenderWarning.clear();
     state.hasUnsavedChanges = true;
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     state.vertexDrag = VertexDragState{};
     statusText = TextFormat(
-            "Moved vertex %.2f,%.2f -> %.2f,%.2f",
-            original.x,
-            original.y,
-            target.x,
-            target.y
+            "Moved topology vertex %d %.2f,%.2f -> %.2f,%.2f",
+            vertexId,
+            SectorCoordToVisibleAuthoring(original.x),
+            SectorCoordToVisibleAuthoring(original.y),
+            SectorCoordToVisibleAuthoring(target.x),
+            SectorCoordToVisibleAuthoring(target.y)
     );
 }
 
@@ -1577,36 +1567,42 @@ void SectorEditor::CancelVertexDrag(const char* message)
     }
 }
 
-void SectorEditor::StartLightDrag(int lightIndex)
+void SectorEditor::StartLightDrag(int topologyLightId)
 {
-    if (lightIndex < 0 || lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    const SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
+            state.topologyMap,
+            topologyLightId);
+    if (light == nullptr) {
         return;
     }
 
-    SelectLight(lightIndex);
-    const SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(lightIndex)];
+    SelectTopologyLight(topologyLightId);
     state.lightDrag.active = true;
-    state.lightDrag.lightIndex = lightIndex;
-    state.lightDrag.originalPosition = light.position;
-    state.lightDrag.snappedPosition = light.position;
-    statusText = TextFormat("Moving %s", light.id.c_str());
+    state.lightDrag.topologyLightId = topologyLightId;
+    state.lightDrag.originalPosition = light->position;
+    state.lightDrag.snappedPosition = light->position;
+    statusText = TextFormat("Moving topology light %d", light->id);
 }
 
 void SectorEditor::UpdateLightDrag(engine::Input& input)
 {
-    if (!state.lightDrag.active
-            || state.lightDrag.lightIndex < 0
-            || state.lightDrag.lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    if (!state.lightDrag.active) {
         return;
     }
 
-    SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.lightDrag.lightIndex)];
+    SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
+            state.topologyMap,
+            state.lightDrag.topologyLightId);
+    if (light == nullptr) {
+        return;
+    }
+
     const Vector2 snapped = SnapMapPoint(ScreenToMap(input.MousePosition()));
     state.lightDrag.snappedPosition = Vector3{snapped.x, state.lightDrag.originalPosition.y, snapped.y};
-    light.position.x = state.lightDrag.snappedPosition.x;
-    light.position.y = state.lightDrag.snappedPosition.y;
-    light.position.z = state.lightDrag.snappedPosition.z;
-    statusText = TextFormat("Moving %s", light.id.c_str());
+    light->position.x = state.lightDrag.snappedPosition.x;
+    light->position.y = state.lightDrag.originalPosition.y;
+    light->position.z = state.lightDrag.snappedPosition.z;
+    statusText = TextFormat("Moving topology light %d", light->id);
 }
 
 void SectorEditor::FinishLightDrag()
@@ -1615,38 +1611,42 @@ void SectorEditor::FinishLightDrag()
         return;
     }
 
-    const int lightIndex = state.lightDrag.lightIndex;
+    const int lightId = state.lightDrag.topologyLightId;
     const Vector3 original = state.lightDrag.originalPosition;
     state.lightDrag = LightDragState{};
-    if (lightIndex < 0 || lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(state.topologyMap, lightId);
+    if (light == nullptr) {
         return;
     }
 
-    SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(lightIndex)];
-    SelectLight(lightIndex);
-    if (std::fabs(light.position.x - original.x) <= GeometryEpsilon
-            && std::fabs(light.position.z - original.z) <= GeometryEpsilon) {
-        light.position = original;
+    SelectTopologyLight(lightId);
+    if (std::fabs(light->position.x - original.x) <= GeometryEpsilon
+            && std::fabs(light->position.z - original.z) <= GeometryEpsilon) {
+        light->position = original;
         statusText = "Light unchanged";
         return;
     }
 
+    state.topologyDocumentDirty = true;
     state.hasUnsavedChanges = true;
     statusText = TextFormat(
-            "Moved %s to X %.2f, Z %.2f",
-            light.id.c_str(),
-            light.position.x,
-            light.position.z
+            "Moved topology light %d to X %.2f, Z %.2f",
+            light->id,
+            light->position.x,
+            light->position.z
     );
 }
 
 void SectorEditor::CancelLightDrag(const char* message)
 {
-    if (state.lightDrag.active
-            && state.lightDrag.lightIndex >= 0
-            && state.lightDrag.lightIndex < static_cast<int>(state.map.staticLights.size())) {
-        state.map.staticLights[static_cast<size_t>(state.lightDrag.lightIndex)].position = state.lightDrag.originalPosition;
-        SelectLight(state.lightDrag.lightIndex);
+    if (state.lightDrag.active) {
+        SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
+                state.topologyMap,
+                state.lightDrag.topologyLightId);
+        if (light != nullptr) {
+            light->position = state.lightDrag.originalPosition;
+            SelectTopologyLight(light->id);
+        }
     }
 
     state.lightDrag = LightDragState{};
@@ -1692,9 +1692,8 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
 
     const Rectangle viewport{0.0f, 0.0f, EditorWidth, EditorHeight};
     const Vector2 mouse = input.MousePosition();
-    const Rectangle panel = BuildPreviewUvPanelRect();
-    const bool overPanel = state.selectedSurface3D.kind != SectorSurfaceKind::None
-            && Contains(panel, mouse);
+    const bool overPanel = IsValidTopologySurfaceEditTarget(state.selectedTopologySurface3D)
+            && Contains(BuildPreviewUvPanelRect(), mouse);
     state.hoveredSurface3D = overPanel
             ? SectorSurfaceHit{}
             : PickSectorSurface3D(mouse, viewport);
@@ -1706,7 +1705,7 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
                 if (event.mouseClick.button != MOUSE_LEFT_BUTTON) {
                     return;
                 }
-                if (overPanel || Contains(BuildPreviewUvPanelRect(), event.mouseClick.releasePosition)) {
+                if (overPanel) {
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -1746,29 +1745,41 @@ void SectorEditor::RemoveLastPendingSectorPoint()
                 ? TextFormat(
                         "Insert sector: %zu points inside %s",
                         state.pendingSector.points.size(),
-                        state.pendingSector.parentSectorId.c_str())
+                        state.pendingSector.parentSectorLabel.c_str())
                 : TextFormat("Pending sector: %zu points", state.pendingSector.points.size());
     }
 }
 
 void SectorEditor::AddPendingSectorPoint(SectorPoint point)
 {
+    const PendingSectorDrawKind pendingKind = state.pendingSector.active
+            ? state.pendingSector.kind
+            : PendingSectorDrawKind::NewSector;
     std::string error;
-    if (!ValidatePendingPoint(point, error)) {
+    SectorPoint canonicalPoint;
+    if (!ToCanonicalSectorPoint(point, canonicalPoint, error)) {
+        state.pendingSector.errorMessage = error;
+        statusText = error;
+        return;
+    }
+    if (!ValidatePendingTopologyPoint(canonicalPoint, error)) {
         state.pendingSector.errorMessage = error;
         statusText = error;
         return;
     }
 
     state.pendingSector.active = true;
-    state.pendingSector.points.push_back(point);
+    state.pendingSector.kind = pendingKind;
+    state.pendingSector.points.push_back(canonicalPoint);
     state.pendingSector.errorMessage.clear();
-    statusText = state.pendingSector.kind == PendingSectorDrawKind::InsertInside
-            ? TextFormat(
-                    "Insert sector: %zu points inside %s",
-                    state.pendingSector.points.size(),
-                    state.pendingSector.parentSectorId.c_str())
-            : TextFormat("Pending sector: %zu points", state.pendingSector.points.size());
+    if (state.pendingSector.kind == PendingSectorDrawKind::InsertInside) {
+        statusText = TextFormat(
+                "Insert sector: %zu points inside %s",
+                state.pendingSector.points.size(),
+                state.pendingSector.parentSectorLabel.c_str());
+    } else {
+        statusText = TextFormat("Pending sector: %zu points", state.pendingSector.points.size());
+    }
 }
 
 void SectorEditor::FinalizePendingSector()
@@ -1779,388 +1790,552 @@ void SectorEditor::FinalizePendingSector()
         return;
     }
 
-    const bool inserting = state.pendingSector.kind == PendingSectorDrawKind::InsertInside;
-    if (inserting && !IsPendingInsertParentValid()) {
-        CancelPendingSector("Insert sector cancelled: parent sector changed");
-        return;
-    }
-
     std::string error;
-    const bool valid = inserting
-            ? ValidateInsertSectorPolygon(state.pendingSector.parentSectorIndex, state.pendingSector.points, error)
-            : ValidateSectorPolygon(state.pendingSector.points, error);
-    if (!valid) {
+    std::vector<SectorTopologyCoordPoint> topologyPoints;
+    if (!BuildPendingTopologyPoints(topologyPoints, error)) {
         state.pendingSector.errorMessage = error;
         statusText = error;
         return;
     }
 
-    SectorDefinition sector;
-    if (inserting) {
-        sector = state.map.sectors[static_cast<size_t>(state.pendingSector.parentSectorIndex)];
-        sector.holes.clear();
-        sector.edgeOverrides.clear();
-    }
-    sector.id = GenerateUniqueSectorId();
-    sector.points = state.pendingSector.points;
-    if (PolygonArea2(sector.points) < 0.0f) {
-        std::reverse(sector.points.begin(), sector.points.end());
-    }
-    if (!inserting) {
-        sector.floorZ = state.defaultSectorFloorZ;
-        sector.ceilingZ = state.defaultSectorCeilingZ;
-        sector.floorTextureId = state.defaultFloorTextureId;
-        sector.ceilingTextureId = state.defaultCeilingTextureId;
-        sector.wallTextureId = state.defaultWallTextureId;
-        sector.lowerWallTextureId = state.defaultLowerWallTextureId.empty() ? sector.wallTextureId : state.defaultLowerWallTextureId;
-        sector.upperWallTextureId = state.defaultUpperWallTextureId.empty() ? sector.wallTextureId : state.defaultUpperWallTextureId;
+    int createdSectorId = -1;
+    bool created = false;
+    if (state.pendingSector.kind == PendingSectorDrawKind::InsertInside) {
+        SectorTopologyInsertPolygonOptions options;
+        created = InsertSectorTopologyPolygon(
+                state.topologyMap,
+                state.pendingSector.parentTopologySectorId,
+                topologyPoints,
+                options,
+                &createdSectorId,
+                &error);
     } else {
-        std::vector<SectorPoint> hole = sector.points;
-        std::reverse(hole.begin(), hole.end());
-        state.map.sectors[static_cast<size_t>(state.pendingSector.parentSectorIndex)].holes.push_back(std::move(hole));
+        SectorTopologyCreatePolygonOptions options = BuildTopologyCreateOptions();
+        created = CreateSectorTopologyPolygon(
+                state.topologyMap,
+                topologyPoints,
+                options,
+                &createdSectorId,
+                &error);
+    }
+    if (!created) {
+        state.pendingSector.errorMessage = error.empty() ? "Could not create topology sector" : error;
+        statusText = state.pendingSector.errorMessage;
+        return;
     }
 
-    state.map.sectors.push_back(std::move(sector));
-    SelectSector(static_cast<int>(state.map.sectors.size()) - 1);
-    const std::string createdId = state.map.sectors.back().id;
+    const bool insertedInside = state.pendingSector.kind == PendingSectorDrawKind::InsertInside;
     state.pendingSector = PendingSectorDraw{};
-    if (inserting) {
-        state.currentTool = SectorEditorTool::Select;
-    }
-    state.hoveredSectorIndex = -1;
-    state.hoveredEdgeSectorIndex = -1;
-    state.hoveredEdgeRingKind = SectorBoundaryRingKind::Outer;
-    state.hoveredEdgeHoleIndex = -1;
-    state.hoveredEdgeIndex = -1;
     state.hasHoveredVertex = false;
-    state.hoveredVertexRefs.clear();
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    SelectTopologySector(createdSectorId);
+    state.topologyDocumentDirty = true;
+    state.topologyRenderWarning.clear();
     state.hasUnsavedChanges = true;
-    statusText = inserting
-            ? TextFormat("Inserted sector %s", createdId.c_str())
-            : TextFormat("Created sector %s", createdId.c_str());
+    statusText = insertedInside
+            ? TextFormat("Inserted topology sector %d", createdSectorId)
+            : TextFormat("Created topology sector %d", createdSectorId);
 }
 
 void SectorEditor::StartInsertSectorInside()
 {
-    if (state.selectedSectorIndex < 0
-            || state.selectedSectorIndex >= static_cast<int>(state.map.sectors.size())) {
-        statusText = "Insert sector failed: select a parent sector";
+    const SectorTopologySector* parent = SelectedTopologySector();
+    if (parent == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology sector before inserting inside it.";
         return;
     }
-    const SectorDefinition& parent = state.map.sectors[static_cast<size_t>(state.selectedSectorIndex)];
-    state.pendingSector = PendingSectorDraw{};
-    state.pendingSector.active = true;
-    state.pendingSector.kind = PendingSectorDrawKind::InsertInside;
-    state.pendingSector.parentSectorIndex = state.selectedSectorIndex;
-    state.pendingSector.parentSectorId = parent.id;
-    state.pendingSector.parentOuterSnapshot = parent.points;
-    state.pendingSector.parentHolesSnapshot = parent.holes;
+
+    PendingSectorDraw pending;
+    pending.active = true;
+    pending.kind = PendingSectorDrawKind::InsertInside;
+    pending.parentTopologySectorId = parent->id;
+    pending.parentSectorLabel = parent->name.empty()
+            ? TextFormat("sector %d", parent->id)
+            : parent->name;
+    state.pendingSector = std::move(pending);
     state.currentTool = SectorEditorTool::InsertSectorInside;
-    state.selectedEdgeIndex = -1;
-    state.selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
-    state.selectedEdgeHoleIndex = -1;
-    statusText = TextFormat("Insert sector: draw polygon inside %s", parent.id.c_str());
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    statusText = TextFormat("Draw a sector inside %s", state.pendingSector.parentSectorLabel.c_str());
 }
 
 bool SectorEditor::IsPendingInsertParentValid() const
 {
     if (!state.pendingSector.active
             || state.pendingSector.kind != PendingSectorDrawKind::InsertInside
-            || state.pendingSector.parentSectorIndex < 0
-            || state.pendingSector.parentSectorIndex >= static_cast<int>(state.map.sectors.size())
-            || state.selectedSectorIndex != state.pendingSector.parentSectorIndex) {
+            || state.pendingSector.parentTopologySectorId < 0) {
         return false;
     }
-    const SectorDefinition& parent = state.map.sectors[static_cast<size_t>(state.pendingSector.parentSectorIndex)];
-    return parent.id == state.pendingSector.parentSectorId
-            && SameRing(parent.points, state.pendingSector.parentOuterSnapshot)
-            && SameHoles(parent.holes, state.pendingSector.parentHolesSnapshot);
+    return FindSectorTopologySector(state.topologyMap, state.pendingSector.parentTopologySectorId) != nullptr;
 }
 
 bool SectorEditor::CanClosePendingSectorAt(SectorPoint point) const
 {
-    return state.pendingSector.active
-            && state.pendingSector.points.size() >= 3
-            && SamePoint(point, state.pendingSector.points.front());
+    if (!state.pendingSector.active
+            || state.pendingSector.points.size() < 3) {
+        return false;
+    }
+
+    SectorTopologyCoordPoint candidate;
+    SectorTopologyCoordPoint first;
+    std::string error;
+    return ToTopologyCoordPoint(point, candidate, error)
+            && ToTopologyCoordPoint(state.pendingSector.points.front(), first, error)
+            && candidate.x == first.x
+            && candidate.y == first.y;
 }
 
 SectorPoint SectorEditor::CurrentSnappedSectorPoint() const
 {
-    return Vector2ToSectorPoint(state.snappedMouseMap);
+    const SectorPoint point = Vector2ToSectorPoint(state.snappedMouseMap);
+    SectorPoint canonical;
+    std::string error;
+    return ToCanonicalSectorPoint(point, canonical, error) ? canonical : point;
 }
 
-std::string SectorEditor::GenerateUniqueSectorId() const
+bool SectorEditor::ToTopologyCoordPoint(
+        SectorPoint point,
+        SectorTopologyCoordPoint& outPoint,
+        std::string& error) const
 {
-    for (int id = 1; id < 10000; ++id) {
-        char candidate[32];
-        std::snprintf(candidate, sizeof(candidate), "sector_%03d", id);
-        const bool used = std::any_of(
-                state.map.sectors.begin(),
-                state.map.sectors.end(),
-                [candidate](const SectorDefinition& sector) { return sector.id == candidate; }
-        );
-        if (!used) {
-            return candidate;
+    SectorCoord x = 0;
+    SectorCoord y = 0;
+    if (!VisibleAuthoringToSectorCoord(point.x, x)
+            || !VisibleAuthoringToSectorCoord(point.y, y)) {
+        error = "Point is outside topology coordinate range";
+        return false;
+    }
+    outPoint = SectorTopologyCoordPoint{x, y};
+    error.clear();
+    return true;
+}
+
+bool SectorEditor::ToCanonicalSectorPoint(
+        SectorPoint point,
+        SectorPoint& outPoint,
+        std::string& error) const
+{
+    SectorTopologyCoordPoint topologyPoint;
+    if (!ToTopologyCoordPoint(point, topologyPoint, error)) {
+        return false;
+    }
+    outPoint = SectorTopologyCoordPointToSectorPoint(topologyPoint);
+    return true;
+}
+
+bool SectorEditor::BuildPendingTopologyPoints(
+        std::vector<SectorTopologyCoordPoint>& outPoints,
+        std::string& error) const
+{
+    if (!state.pendingSector.active
+            || (state.pendingSector.kind != PendingSectorDrawKind::NewSector
+                    && state.pendingSector.kind != PendingSectorDrawKind::InsertInside)) {
+        error = "No topology sector draw is active";
+        return false;
+    }
+
+    outPoints.clear();
+    outPoints.reserve(state.pendingSector.points.size());
+    for (SectorPoint point : state.pendingSector.points) {
+        SectorTopologyCoordPoint topologyPoint;
+        if (!ToTopologyCoordPoint(point, topologyPoint, error)) {
+            return false;
+        }
+        outPoints.push_back(topologyPoint);
+    }
+    error.clear();
+    return true;
+}
+
+bool SectorEditor::ValidatePendingTopologyPoint(SectorPoint point, std::string& error) const
+{
+    SectorTopologyCoordPoint candidate;
+    if (!ToTopologyCoordPoint(point, candidate, error)) {
+        return false;
+    }
+
+    if (!state.pendingSector.active || state.pendingSector.points.empty()) {
+        error.clear();
+        return true;
+    }
+    std::vector<SectorTopologyCoordPoint> existing;
+    if (!BuildPendingTopologyPoints(existing, error)) {
+        return false;
+    }
+
+    const SectorTopologyCoordPoint previous = existing.back();
+    if (candidate.x == previous.x && candidate.y == previous.y) {
+        error = "Duplicate point";
+        return false;
+    }
+
+    if (existing.size() >= 2
+            && candidate.x == existing.front().x
+            && candidate.y == existing.front().y) {
+        error = existing.size() >= 3
+                ? "Click first point to close sector"
+                : "Need at least 3 points to close sector";
+        return false;
+    }
+
+    for (SectorTopologyCoordPoint point : existing) {
+        if (candidate.x == point.x && candidate.y == point.y) {
+            error = "Duplicate point";
+            return false;
         }
     }
 
-    return TextFormat("sector_%zu", state.map.sectors.size() + 1);
+    error.clear();
+    return true;
+}
+
+SectorTopologyCreatePolygonOptions SectorEditor::BuildTopologyCreateOptions() const
+{
+    SectorTopologyCreatePolygonOptions options;
+    options.floorZ = state.defaultSectorFloorZ;
+    options.ceilingZ = state.defaultSectorCeilingZ;
+    options.floorTextureId = state.defaultFloorTextureId;
+    options.ceilingTextureId = state.defaultCeilingTextureId;
+    options.defaultWall.textureId = state.defaultWallTextureId;
+    options.defaultLower.textureId = state.defaultLowerWallTextureId.empty()
+            ? state.defaultWallTextureId
+            : state.defaultLowerWallTextureId;
+    options.defaultUpper.textureId = state.defaultUpperWallTextureId.empty()
+            ? state.defaultWallTextureId
+            : state.defaultUpperWallTextureId;
+    return options;
+}
+
+SectorTopologySector* SectorEditor::SelectedTopologySector()
+{
+    if (state.topologySelectionKind != TopologySelectionKind::Sector) {
+        return nullptr;
+    }
+    return FindSectorTopologySector(state.topologyMap, state.selectedTopologySectorId);
+}
+
+const SectorTopologySector* SectorEditor::SelectedTopologySector() const
+{
+    if (state.topologySelectionKind != TopologySelectionKind::Sector) {
+        return nullptr;
+    }
+    return FindSectorTopologySector(state.topologyMap, state.selectedTopologySectorId);
+}
+
+SectorTopologySideDef* SectorEditor::SelectedTopologySideDef()
+{
+    if (state.topologySelectionKind != TopologySelectionKind::SideDef) {
+        return nullptr;
+    }
+    return FindSectorTopologySideDef(state.topologyMap, state.selectedTopologySideDefId);
+}
+
+const SectorTopologySideDef* SectorEditor::SelectedTopologySideDef() const
+{
+    if (state.topologySelectionKind != TopologySelectionKind::SideDef) {
+        return nullptr;
+    }
+    return FindSectorTopologySideDef(state.topologyMap, state.selectedTopologySideDefId);
+}
+
+SectorTopologyLineDef* SectorEditor::SelectedTopologyLineDef()
+{
+    if (state.topologySelectionKind != TopologySelectionKind::LineDef
+            && state.topologySelectionKind != TopologySelectionKind::SideDef) {
+        return nullptr;
+    }
+    return FindSectorTopologyLineDef(state.topologyMap, state.selectedTopologyLineDefId);
+}
+
+const SectorTopologyLineDef* SectorEditor::SelectedTopologyLineDef() const
+{
+    if (state.topologySelectionKind != TopologySelectionKind::LineDef
+            && state.topologySelectionKind != TopologySelectionKind::SideDef) {
+        return nullptr;
+    }
+    return FindSectorTopologyLineDef(state.topologyMap, state.selectedTopologyLineDefId);
+}
+
+SectorTopologyStaticPointLight* SectorEditor::SelectedTopologyLight()
+{
+    if (state.topologySelectionKind != TopologySelectionKind::Light) {
+        return nullptr;
+    }
+    return FindSectorTopologyStaticLight(state.topologyMap, state.selectedTopologyLightId);
+}
+
+const SectorTopologyStaticPointLight* SectorEditor::SelectedTopologyLight() const
+{
+    if (state.topologySelectionKind != TopologySelectionKind::Light) {
+        return nullptr;
+    }
+    return FindSectorTopologyStaticLight(state.topologyMap, state.selectedTopologyLightId);
+}
+
+void SectorEditor::ClearStaleTopologySelection()
+{
+    bool stale = false;
+    if (state.topologySelectionKind == TopologySelectionKind::Sector) {
+        stale = state.selectedTopologySectorId < 0
+                || FindSectorTopologySector(state.topologyMap, state.selectedTopologySectorId) == nullptr;
+    } else if (state.topologySelectionKind == TopologySelectionKind::SideDef) {
+        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
+                state.topologyMap,
+                state.selectedTopologySideDefId);
+        const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
+                state.topologyMap,
+                state.selectedTopologyLineDefId);
+        stale = sideDef == nullptr
+                || lineDef == nullptr
+                || sideDef->lineDefId != lineDef->id;
+    } else if (state.topologySelectionKind == TopologySelectionKind::LineDef) {
+        stale = state.selectedTopologyLineDefId < 0
+                || FindSectorTopologyLineDef(state.topologyMap, state.selectedTopologyLineDefId) == nullptr;
+    } else if (state.topologySelectionKind == TopologySelectionKind::Light) {
+        stale = state.selectedTopologyLightId < 0
+                || FindSectorTopologyStaticLight(state.topologyMap, state.selectedTopologyLightId) == nullptr;
+    }
+
+    if (stale) {
+        state.topologySelectionKind = TopologySelectionKind::None;
+        state.selectedTopologySectorId = -1;
+        state.selectedTopologySideDefId = -1;
+        state.selectedTopologyLineDefId = -1;
+        state.selectedTopologyLightId = -1;
+        state.selectedTopologySideKind = SectorTopologySideKind::Front;
+        uiState.idBufferSectorIndex = -1;
+        uiState.idBufferLightIndex = -1;
+        SyncSelectedSectorIdBuffer();
+        SyncSelectedLightIdBuffer();
+    }
+}
+
+void SectorEditor::MarkTopologyDocumentEdited(const char* status)
+{
+    state.topologyDocumentDirty = true;
+    state.hasUnsavedChanges = true;
+    if (status != nullptr && status[0] != '\0') {
+        statusText = status;
+    }
 }
 
 void SectorEditor::SyncSelectedSectorIdBuffer()
 {
-    if (state.selectedSectorIndex < 0
-            || state.selectedSectorIndex >= static_cast<int>(state.map.sectors.size())) {
+    const SectorTopologySector* sector = SelectedTopologySector();
+    if (sector == nullptr) {
         uiState.selectedSectorIdBuffer[0] = '\0';
         uiState.idBufferSectorIndex = -1;
         uiState.idEditError.clear();
         return;
     }
 
-    if (uiState.idBufferSectorIndex == state.selectedSectorIndex) {
+    if (uiState.idBufferSectorIndex == state.selectedTopologySectorId) {
         return;
     }
 
-    const std::string& id = state.map.sectors[static_cast<size_t>(state.selectedSectorIndex)].id;
-    std::snprintf(uiState.selectedSectorIdBuffer, sizeof(uiState.selectedSectorIdBuffer), "%s", id.c_str());
-    uiState.idBufferSectorIndex = state.selectedSectorIndex;
+    std::snprintf(
+            uiState.selectedSectorIdBuffer,
+            sizeof(uiState.selectedSectorIdBuffer),
+            "%s",
+            sector->name.c_str());
+    uiState.idBufferSectorIndex = state.selectedTopologySectorId;
     uiState.idEditError.clear();
 }
 
 void SectorEditor::SyncSelectedLightIdBuffer()
 {
-    if (state.selectedLightIndex < 0
-            || state.selectedLightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    const SectorTopologyStaticPointLight* light = SelectedTopologyLight();
+    if (light == nullptr) {
         uiState.selectedLightIdBuffer[0] = '\0';
         uiState.idBufferLightIndex = -1;
-        if (state.selectedSectorIndex < 0) {
+        if (state.topologySelectionKind == TopologySelectionKind::None) {
             uiState.idEditError.clear();
         }
         return;
     }
 
-    if (uiState.idBufferLightIndex == state.selectedLightIndex) {
+    if (uiState.idBufferLightIndex == light->id) {
         return;
     }
 
-    const std::string& id = state.map.staticLights[static_cast<size_t>(state.selectedLightIndex)].id;
-    std::snprintf(uiState.selectedLightIdBuffer, sizeof(uiState.selectedLightIdBuffer), "%s", id.c_str());
-    uiState.idBufferLightIndex = state.selectedLightIndex;
+    std::snprintf(uiState.selectedLightIdBuffer, sizeof(uiState.selectedLightIdBuffer), "%d", light->id);
+    uiState.idBufferLightIndex = light->id;
     uiState.idEditError.clear();
 }
 
-bool SectorEditor::TryRenameSelectedSector()
+bool SectorEditor::TryRenameSelectedTopologySector()
 {
-    if (state.selectedSectorIndex < 0
-            || state.selectedSectorIndex >= static_cast<int>(state.map.sectors.size())) {
-        uiState.idEditError = "No sector selected";
+    SectorTopologySector* sector = SelectedTopologySector();
+    if (sector == nullptr) {
+        uiState.idEditError = "No topology sector selected";
         statusText = uiState.idEditError;
         return false;
     }
 
-    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(state.selectedSectorIndex)];
-    const std::string newId = uiState.selectedSectorIdBuffer;
-    if (newId == sector.id) {
+    const std::string newName = uiState.selectedSectorIdBuffer;
+    if (newName == sector->name) {
         uiState.idEditError.clear();
         return true;
     }
 
-    if (newId.empty()) {
-        uiState.idEditError = "Sector id cannot be empty";
-        statusText = uiState.idEditError;
-        return false;
-    }
-
-    if (std::isspace(static_cast<unsigned char>(newId.front()))
-            || std::isspace(static_cast<unsigned char>(newId.back()))) {
-        uiState.idEditError = "Sector id cannot start or end with whitespace";
-        statusText = uiState.idEditError;
-        return false;
-    }
-
-    for (char ch : newId) {
-        const unsigned char value = static_cast<unsigned char>(ch);
-        if (!(std::isalnum(value) || ch == '_' || ch == '-')) {
-            uiState.idEditError = "Use letters, digits, underscore, or dash";
-            statusText = uiState.idEditError;
-            return false;
-        }
-    }
-
-    for (size_t i = 0; i < state.map.sectors.size(); ++i) {
-        if (static_cast<int>(i) != state.selectedSectorIndex
-                && state.map.sectors[i].id == newId) {
-            uiState.idEditError = "Sector id already exists";
-            statusText = uiState.idEditError;
-            return false;
-        }
-    }
-
-    sector.id = newId;
-    state.hasUnsavedChanges = true;
+    sector->name = newName;
     uiState.idEditError.clear();
-    statusText = TextFormat("Renamed sector to %s", sector.id.c_str());
+    MarkTopologyDocumentEdited(TextFormat("Renamed topology sector %d", sector->id));
     return true;
 }
 
 bool SectorEditor::TryRenameSelectedLight()
 {
-    if (state.selectedLightIndex < 0
-            || state.selectedLightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    if (SelectedTopologyLight() == nullptr) {
         uiState.idEditError = "No light selected";
         statusText = uiState.idEditError;
         return false;
     }
 
-    SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.selectedLightIndex)];
-    const std::string newId = uiState.selectedLightIdBuffer;
-    if (newId == light.id) {
-        uiState.idEditError.clear();
-        return true;
+    uiState.idEditError = "Topology light IDs are stable";
+    statusText = uiState.idEditError;
+    return false;
+}
+
+void SectorEditor::OpenDeleteSelectedTopologySectorConfirmation()
+{
+    const SectorTopologySector* sector = SelectedTopologySector();
+    if (sector == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology sector to delete.";
+        return;
+    }
+    OpenDeleteTopologySectorConfirmation(sector->id);
+}
+
+void SectorEditor::OpenDeleteTopologySectorConfirmation(int sectorId)
+{
+    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sectorId);
+    if (sector == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology sector to delete.";
+        return;
     }
 
-    if (newId.empty()) {
-        uiState.idEditError = "Light id cannot be empty";
-        statusText = uiState.idEditError;
+    const std::string label = sector->name.empty()
+            ? TextFormat("topology sector %d", sector->id)
+            : TextFormat("%s", sector->name.c_str());
+    OpenConfirmation(
+            "Delete Sector",
+            TextFormat("Delete sector \"%s\"?", label.c_str()),
+            [this, sectorId]() { DeleteSelectedTopologySectorConfirmed(sectorId); });
+}
+
+bool SectorEditor::DeleteSelectedTopologySectorConfirmed(int sectorId)
+{
+    SectorTopologyDeleteSectorResult result;
+    std::string error;
+    if (!DeleteSectorTopologySector(state.topologyMap, sectorId, &result, &error)) {
+        statusText = error.empty() ? "Cannot delete topology sector" : error;
         return false;
     }
 
-    for (char ch : newId) {
-        const unsigned char value = static_cast<unsigned char>(ch);
-        if (!(std::isalnum(value) || ch == '_' || ch == '-')) {
-            uiState.idEditError = "Use letters, digits, underscore, or dash";
-            statusText = uiState.idEditError;
-            return false;
-        }
+    state.hasHoveredVertex = false;
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+        inputState = engine::UIFloatInputState{};
     }
-
-    for (size_t i = 0; i < state.map.staticLights.size(); ++i) {
-        if (static_cast<int>(i) != state.selectedLightIndex
-                && state.map.staticLights[i].id == newId) {
-            uiState.idEditError = "Light id already exists";
-            statusText = uiState.idEditError;
-            return false;
-        }
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
     }
-
-    light.id = newId;
+    ClearStaleTopologySelection();
+    state.topologyRenderWarning.clear();
+    state.topologyDocumentDirty = true;
     state.hasUnsavedChanges = true;
-    uiState.idEditError.clear();
-    statusText = TextFormat("Renamed light to %s", light.id.c_str());
-    return true;
-}
-
-bool SectorEditor::DeleteSelectedSector()
-{
-    return DeleteSectorAt(state.selectedSectorIndex);
-}
-
-bool SectorEditor::DeleteSectorAt(int sectorIndex)
-{
-    if (sectorIndex < 0 || sectorIndex >= static_cast<int>(state.map.sectors.size())) {
-        return false;
-    }
-
-    const bool wasInsert = state.pendingSector.active
-            && state.pendingSector.kind == PendingSectorDrawKind::InsertInside;
-    const std::string deletedId = state.map.sectors[static_cast<size_t>(sectorIndex)].id;
-    state.map.sectors.erase(state.map.sectors.begin() + sectorIndex);
-    state.pendingSector = PendingSectorDraw{};
-    if (wasInsert) {
-        state.currentTool = SectorEditorTool::Select;
-    }
-    state.hoveredSectorIndex = -1;
-
-    if (state.selectedSectorIndex == sectorIndex) {
-        ClearSelection();
-    } else if (state.selectedSectorIndex > sectorIndex) {
-        --state.selectedSectorIndex;
-    } else if (state.selectedEdgeIndex >= 0
-            && (state.selectedSectorIndex < 0
-                    || state.selectedSectorIndex >= static_cast<int>(state.map.sectors.size())
-                    || GetSectorBoundaryRing(
-                            state.map,
-                            SectorBoundaryEdgeRef{
-                                    state.selectedSectorIndex,
-                                    state.selectedEdgeRingKind,
-                                    state.selectedEdgeHoleIndex,
-                                    state.selectedEdgeIndex}) == nullptr)) {
-        state.selectedEdgeIndex = -1;
-        state.selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
-        state.selectedEdgeHoleIndex = -1;
-    }
-
-    SyncSelectedSectorIdBuffer();
-    state.hasUnsavedChanges = true;
-    statusText = TextFormat("Deleted sector %s", deletedId.c_str());
+    statusText = TextFormat(
+            "Deleted topology sector %d; removed %d sidedefs, %d linedefs, %d vertices",
+            result.deletedSectorId,
+            result.removedSideDefCount,
+            result.removedLineDefCount,
+            result.removedVertexCount);
     return true;
 }
 
 bool SectorEditor::DeleteSelectedLight()
 {
-    return DeleteLightAt(state.selectedLightIndex);
-}
-
-bool SectorEditor::DeleteLightAt(int lightIndex)
-{
-    if (lightIndex < 0 || lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    const SectorTopologyStaticPointLight* light = SelectedTopologyLight();
+    if (light == nullptr) {
         return false;
     }
 
-    const std::string deletedId = state.map.staticLights[static_cast<size_t>(lightIndex)].id;
-    state.map.staticLights.erase(state.map.staticLights.begin() + lightIndex);
-    if (state.selectedLightIndex == lightIndex) {
-        ClearSelection();
-    } else if (state.selectedLightIndex > lightIndex) {
-        --state.selectedLightIndex;
-    }
-    state.hoveredLightIndex = -1;
-    state.hasUnsavedChanges = true;
-    statusText = TextFormat("Deleted light %s", deletedId.c_str());
+    const int lightId = light->id;
+    OpenConfirmation(
+            "Delete Light",
+            TextFormat("Delete topology light %d?", lightId),
+            [this, lightId]() { DeleteLightById(lightId); });
     return true;
 }
 
-std::string SectorEditor::GenerateUniqueLightId() const
+bool SectorEditor::DeleteLightById(int topologyLightId)
 {
-    for (int id = 1; id < 10000; ++id) {
-        char candidate[32];
-        std::snprintf(candidate, sizeof(candidate), "light_%03d", id);
-        const bool used = std::any_of(
-                state.map.staticLights.begin(),
-                state.map.staticLights.end(),
-                [candidate](const SectorStaticPointLight& light) { return light.id == candidate; }
-        );
-        if (!used) {
-            return candidate;
-        }
+    if (FindSectorTopologyStaticLight(state.topologyMap, topologyLightId) == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology light to delete.";
+        return false;
     }
 
-    return TextFormat("light_%zu", state.map.staticLights.size() + 1);
+    if (!RemoveSectorTopologyStaticLight(state.topologyMap, topologyLightId)) {
+        statusText = "Failed to delete topology light.";
+        return false;
+    }
+
+    if (state.selectedTopologyLightId == topologyLightId) {
+        ClearSelection();
+    }
+    if (state.hoveredTopologyLightId == topologyLightId) {
+        state.hoveredTopologyLightId = -1;
+    }
+    if (state.lightDrag.topologyLightId == topologyLightId) {
+        state.lightDrag = LightDragState{};
+    }
+    state.topologyDocumentDirty = true;
+    state.hasUnsavedChanges = true;
+    statusText = TextFormat("Deleted topology light %d", topologyLightId);
+    return true;
 }
 
 void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
 {
-    const int sectorIndex = FindSectorAt(mapPoint);
-    if (sectorIndex < 0 || sectorIndex >= static_cast<int>(state.map.sectors.size())) {
+    const int sectorId = FindTopologySectorAt(mapPoint);
+    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sectorId);
+    if (sector == nullptr) {
         statusText = "Light placement failed: click inside a sector";
         return;
     }
 
-    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(sectorIndex)];
-    SectorStaticPointLight light;
-    light.id = GenerateUniqueLightId();
-    light.position = Vector3{mapPoint.x, sector.floorZ + SectorWorldToAuthoringDistance(1.8f), mapPoint.y};
+    const int lightId = AllocateSectorTopologyStaticLightId(state.topologyMap);
+    if (!IsValidSectorTopologyId(lightId)) {
+        statusText = "Light placement failed: no topology light IDs available";
+        return;
+    }
+
+    SectorTopologyStaticPointLight light;
+    light.id = lightId;
+    light.position = Vector3{mapPoint.x, sector->floorZ + SectorWorldToAuthoringDistance(1.8f), mapPoint.y};
     light.color = WHITE;
     light.intensity = 1.0f;
     light.radius = SectorWorldToAuthoringDistance(8.0f);
     light.sourceRadius = SectorWorldToAuthoringDistance(0.25f);
 
-    state.map.staticLights.push_back(std::move(light));
-    SelectLight(static_cast<int>(state.map.staticLights.size()) - 1);
+    state.topologyMap.staticLights.push_back(light);
+    SelectTopologyLight(lightId);
+    state.topologyDocumentDirty = true;
     state.hasUnsavedChanges = true;
-    statusText = TextFormat("Added static light %s", state.map.staticLights.back().id.c_str());
+    statusText = TextFormat("Added topology light %d", lightId);
 }
 
 bool SectorEditor::BakeLightmaps()
@@ -2180,7 +2355,7 @@ bool SectorEditor::StartLightmapBake()
         return false;
     }
 
-    if (state.map.sectors.empty()) {
+    if (state.topologyMap.sectors.empty()) {
         statusText = "Bake failed: no sectors";
         return false;
     }
@@ -2194,9 +2369,9 @@ bool SectorEditor::StartLightmapBake()
     const std::string finalOutputPath = levelPaths.lightmapFilePath.string();
     const std::string temporaryOutputPath = MakeTemporaryLightmapPath(finalOutputPath);
 
-    SectorLightmapBakeInput input;
-    input.mapSnapshot = state.map;
-    input.expectedSourceHash = ComputeSectorLightmapSourceHash(state.map);
+    SectorTopologyLightmapBakeInput input;
+    input.mapSnapshot = state.topologyMap;
+    input.expectedSourceHash = ComputeSectorLightmapSourceHash(state.topologyMap);
     input.finalOutputPath = finalOutputPath;
     input.temporaryOutputPath = temporaryOutputPath;
 
@@ -2376,9 +2551,9 @@ bool SectorEditor::ConsumeLightmapBakeResult(const SectorLightmapBakeAsyncResult
 
 bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets)
 {
-    if (ComputeSectorLightmapSourceHash(state.map) != result.expectedSourceHash) {
+    if (ComputeSectorLightmapSourceHash(state.topologyMap) != result.expectedSourceHash) {
         DeleteFileIfExists(result.temporaryOutputPath);
-        statusText = "Bake discarded: map changed during bake";
+        statusText = "Bake discarded: document changed during bake";
         return false;
     }
 
@@ -2419,11 +2594,12 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
         statusText = TextFormat("Bake failed: %s", pathError.c_str());
         return false;
     }
-    state.map.bakedLightmap.path = levelPaths.lightmapAssetPath;
-    state.map.bakedLightmap.width = result.bakeResult.width;
-    state.map.bakedLightmap.height = result.bakeResult.height;
-    state.map.bakedLightmap.sourceHash = result.bakeResult.sourceHash;
+    state.topologyMap.bakedLightmap.path = levelPaths.lightmapAssetPath;
+    state.topologyMap.bakedLightmap.width = result.bakeResult.width;
+    state.topologyMap.bakedLightmap.height = result.bakeResult.height;
+    state.topologyMap.bakedLightmap.sourceHash = result.bakeResult.sourceHash;
     state.hasUnsavedChanges = true;
+    state.topologyDocumentDirty = true;
 
     std::istringstream report(result.bakeReportText);
     std::string line;
@@ -2440,73 +2616,51 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
     return true;
 }
 
-std::vector<SectorVertexRef> SectorEditor::FindVerticesAtPoint(SectorPoint point) const
-{
-    std::vector<SectorVertexRef> refs;
-    for (size_t sectorIndex = 0; sectorIndex < state.map.sectors.size(); ++sectorIndex) {
-        const SectorDefinition& sector = state.map.sectors[sectorIndex];
-        const size_t ringCount = 1 + sector.holes.size();
-        for (size_t ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
-            const std::vector<SectorPoint>& ring = ringIndex == 0
-                    ? sector.points : sector.holes[ringIndex - 1];
-            for (size_t pointIndex = 0; pointIndex < ring.size(); ++pointIndex) {
-                if (SamePoint(ring[pointIndex], point)) {
-                    refs.push_back(SectorVertexRef{
-                            static_cast<int>(sectorIndex),
-                            ringIndex == 0 ? SectorBoundaryRingKind::Outer : SectorBoundaryRingKind::Hole,
-                            ringIndex == 0 ? -1 : static_cast<int>(ringIndex - 1),
-                            static_cast<int>(pointIndex)
-                    });
-                }
-            }
-        }
-    }
-    return refs;
-}
-
-bool SectorEditor::FindVertexNearScreenPoint(
+bool SectorEditor::FindTopologyVertexNearScreenPoint(
         Vector2 screenPoint,
-        SectorPoint& outPoint,
-        std::vector<SectorVertexRef>& outRefs) const
+        int& outVertexId,
+        SectorTopologyCoordPoint& outPoint) const
 {
     float bestDistance2 = ScreenVertexSnapPixels * ScreenVertexSnapPixels;
-    bool found = false;
-    SectorPoint bestPoint{};
+    int bestVertexId = -1;
+    SectorTopologyCoordPoint bestPoint{};
 
-    for (const SectorDefinition& sector : state.map.sectors) {
-        std::vector<const std::vector<SectorPoint>*> rings{&sector.points};
-        for (const std::vector<SectorPoint>& hole : sector.holes) {
-            rings.push_back(&hole);
+    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
+        const Vector2 screenVertex = MapToScreen(SectorTopologyVertexToMap(vertex));
+        const float dx = screenVertex.x - screenPoint.x;
+        const float dy = screenVertex.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 > bestDistance2) {
+            continue;
         }
-        for (const std::vector<SectorPoint>* ring : rings) {
-            for (SectorPoint point : *ring) {
-                const Vector2 screenVertex = MapToScreen(SectorPointToVector2(point));
-                const float dx = screenVertex.x - screenPoint.x;
-                const float dy = screenVertex.y - screenPoint.y;
-                const float distance2 = dx * dx + dy * dy;
-                if (distance2 <= bestDistance2) {
-                    bestDistance2 = distance2;
-                    bestPoint = point;
-                    found = true;
-                }
-            }
+        if (bestVertexId >= 0
+                && std::fabs(distance2 - bestDistance2) <= 0.001f
+                && vertex.id >= bestVertexId) {
+            continue;
         }
+        bestDistance2 = distance2;
+        bestVertexId = vertex.id;
+        bestPoint = SectorTopologyCoordPoint{vertex.x, vertex.y};
     }
 
-    if (!found) {
-        outRefs.clear();
+    if (bestVertexId < 0) {
+        outVertexId = -1;
+        outPoint = SectorTopologyCoordPoint{};
         return false;
     }
 
+    outVertexId = bestVertexId;
     outPoint = bestPoint;
-    outRefs = FindVerticesAtPoint(bestPoint);
-    return !outRefs.empty();
+    return true;
 }
 
-SectorPoint SectorEditor::SnapVertexMoveTarget(Vector2 mapPoint) const
+bool SectorEditor::SnapTopologyVertexMoveTarget(
+        Vector2 mapPoint,
+        SectorTopologyCoordPoint& outPoint,
+        std::string& error) const
 {
     const float grid = static_cast<float>(std::max(1, state.gridSize));
-    SectorPoint snapped{
+    Vector2 snapped{
             std::round(mapPoint.x / grid) * grid,
             std::round(mapPoint.y / grid) * grid
     };
@@ -2517,344 +2671,45 @@ SectorPoint SectorEditor::SnapVertexMoveTarget(Vector2 mapPoint) const
     );
     float bestDistance2 = threshold * threshold;
     bool found = false;
-    SectorPoint best = snapped;
+    Vector2 best = snapped;
+    int bestVertexId = -1;
 
-    for (size_t sectorIndex = 0; sectorIndex < state.map.sectors.size(); ++sectorIndex) {
-        const SectorDefinition& sector = state.map.sectors[sectorIndex];
-        const size_t ringCount = 1 + sector.holes.size();
-        for (size_t ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
-            const std::vector<SectorPoint>& ring = ringIndex == 0
-                    ? sector.points : sector.holes[ringIndex - 1];
-            const SectorBoundaryRingKind ringKind = ringIndex == 0
-                    ? SectorBoundaryRingKind::Outer : SectorBoundaryRingKind::Hole;
-            const int holeIndex = ringIndex == 0 ? -1 : static_cast<int>(ringIndex - 1);
-            for (size_t pointIndex = 0; pointIndex < ring.size(); ++pointIndex) {
-                const bool isDraggedRef = std::any_of(
-                        state.vertexDrag.affectedVertices.begin(),
-                        state.vertexDrag.affectedVertices.end(),
-                        [sectorIndex, ringKind, holeIndex, pointIndex](SectorVertexRef ref) {
-                            return ref.sectorIndex == static_cast<int>(sectorIndex)
-                                    && ref.ringKind == ringKind
-                                    && ref.holeIndex == holeIndex
-                                    && ref.pointIndex == static_cast<int>(pointIndex);
-                        }
-                );
-                if (isDraggedRef) {
-                    continue;
-                }
-
-                const SectorPoint point = ring[pointIndex];
-                const float dx = point.x - mapPoint.x;
-                const float dy = point.y - mapPoint.y;
-                const float distance2 = dx * dx + dy * dy;
-                if (distance2 <= bestDistance2) {
-                    bestDistance2 = distance2;
-                    best = point;
-                    found = true;
-                }
-            }
-        }
-    }
-
-    return found ? best : snapped;
-}
-
-bool SectorEditor::ValidateExistingSectorMap(const SectorMap& map, std::string& error) const
-{
-    for (size_t i = 0; i < map.sectors.size(); ++i) {
-        const SectorDefinition& sector = map.sectors[i];
-        if (!ValidateSectorShape(sector.points, error)) {
-            return false;
-        }
-        if (PolygonArea2(sector.points) <= GeometryEpsilon) {
-            error = "Sector outer winding cannot be reversed";
-            return false;
-        }
-        for (size_t holeIndex = 0; holeIndex < sector.holes.size(); ++holeIndex) {
-            const std::vector<SectorPoint>& hole = sector.holes[holeIndex];
-            if (!ValidateSectorShape(hole, error)) {
-                error = "Invalid sector hole: " + error;
-                return false;
-            }
-            if (PolygonArea2(hole) >= -GeometryEpsilon) {
-                error = "Sector hole winding cannot be reversed";
-                return false;
-            }
-            if (RingsIntersect(hole, sector.points)) {
-                error = "Sector hole touches or crosses its outer boundary";
-                return false;
-            }
-            for (SectorPoint point : hole) {
-                if (!StrictPointInPolygon(point, sector.points)) {
-                    error = "Sector hole must be strictly inside its outer boundary";
-                    return false;
-                }
-            }
-            for (size_t otherHoleIndex = 0; otherHoleIndex < holeIndex; ++otherHoleIndex) {
-                const std::vector<SectorPoint>& otherHole = sector.holes[otherHoleIndex];
-                if (RingsIntersect(hole, otherHole)) {
-                    error = "Sector holes touch or cross";
-                    return false;
-                }
-                if (StrictPointInPolygon(hole.front(), otherHole)
-                        || StrictPointInPolygon(otherHole.front(), hole)) {
-                    error = "Sector holes overlap";
-                    return false;
-                }
-            }
-        }
-    }
-
-    for (size_t a = 0; a < map.sectors.size(); ++a) {
-        for (size_t b = a + 1; b < map.sectors.size(); ++b) {
-            const SectorDefinition& sectorA = map.sectors[a];
-            const SectorDefinition& sectorB = map.sectors[b];
-            const size_t ringCountA = 1 + sectorA.holes.size();
-            const size_t ringCountB = 1 + sectorB.holes.size();
-            for (size_t ringAIndex = 0; ringAIndex < ringCountA; ++ringAIndex) {
-                const std::vector<SectorPoint>& ringA = ringAIndex == 0
-                        ? sectorA.points : sectorA.holes[ringAIndex - 1];
-                for (size_t ringBIndex = 0; ringBIndex < ringCountB; ++ringBIndex) {
-                    const std::vector<SectorPoint>& ringB = ringBIndex == 0
-                            ? sectorB.points : sectorB.holes[ringBIndex - 1];
-                    for (size_t edgeA = 0; edgeA < ringA.size(); ++edgeA) {
-                        const SectorPoint a0 = ringA[edgeA];
-                        const SectorPoint a1 = ringA[(edgeA + 1) % ringA.size()];
-                        for (size_t edgeB = 0; edgeB < ringB.size(); ++edgeB) {
-                            const SectorPoint b0 = ringB[edgeB];
-                            const SectorPoint b1 = ringB[(edgeB + 1) % ringB.size()];
-                            if (SamePoint(a0, b1) && SamePoint(a1, b0)) {
-                                continue;
-                            }
-                            if (SegmentsIntersect(a0, a1, b0, b1)) {
-                                error = "Sector boundaries cross, touch, or partially overlap";
-                                return false;
-                            }
-                        }
-                    }
-                }
-            }
-            for (SectorPoint point : sectorA.points) {
-                if (StrictPointInSectorUsableArea(point, sectorB)) {
-                    error = "Sector usable areas overlap";
-                    return false;
-                }
-            }
-            for (SectorPoint point : sectorB.points) {
-                if (StrictPointInSectorUsableArea(point, sectorA)) {
-                    error = "Sector usable areas overlap";
-                    return false;
-                }
-            }
-        }
-    }
-
-    return true;
-}
-
-SectorMap SectorEditor::BuildMapWithMovedVertexGroup(SectorPoint targetPoint) const
-{
-    SectorMap moved = state.map;
-    for (SectorVertexRef ref : state.vertexDrag.affectedVertices) {
-        if (ref.sectorIndex < 0
-                || ref.sectorIndex >= static_cast<int>(moved.sectors.size())) {
+    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
+        if (state.vertexDrag.active && vertex.id == state.vertexDrag.topologyVertexId) {
             continue;
         }
 
-        std::vector<SectorPoint>* ring = GetSectorBoundaryRing(
-                moved,
-                SectorBoundaryEdgeRef{ref.sectorIndex, ref.ringKind, ref.holeIndex, ref.pointIndex});
-        if (ring == nullptr
-                || ref.pointIndex < 0 || ref.pointIndex >= static_cast<int>(ring->size())) {
+        const Vector2 vertexMap = SectorTopologyVertexToMap(vertex);
+        const float dx = vertexMap.x - mapPoint.x;
+        const float dy = vertexMap.y - mapPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 > bestDistance2) {
             continue;
         }
-        (*ring)[static_cast<size_t>(ref.pointIndex)] = targetPoint;
-    }
-    return moved;
-}
-
-bool SectorEditor::ValidateMovedVertexGroup(SectorPoint targetPoint, std::string& error) const
-{
-    const SectorMap moved = BuildMapWithMovedVertexGroup(targetPoint);
-    return ValidateExistingSectorMap(moved, error);
-}
-
-bool SectorEditor::ValidatePendingPoint(SectorPoint point, std::string& error) const
-{
-    if (!state.pendingSector.active || state.pendingSector.points.empty()) {
-        return true;
-    }
-
-    const std::vector<SectorPoint>& points = state.pendingSector.points;
-    const SectorPoint previous = points.back();
-    if (SamePoint(point, previous)) {
-        error = "Duplicate point";
-        return false;
-    }
-
-    if (points.size() >= 2 && SamePoint(point, points.front())) {
-        error = points.size() >= 3 ? "Click first point to close sector" : "Need at least 3 points to close sector";
-        return false;
-    }
-
-    for (size_t i = 0; i < points.size(); ++i) {
-        if (SamePoint(point, points[i])) {
-            error = "Duplicate point";
-            return false;
-        }
-    }
-
-    for (size_t i = 0; i + 1 < points.size(); ++i) {
-        if (i + 1 == points.size() - 1) {
+        if (found
+                && std::fabs(distance2 - bestDistance2) <= 0.001f
+                && vertex.id >= bestVertexId) {
             continue;
         }
-        if (SegmentsIntersect(previous, point, points[i], points[i + 1])) {
-            error = "Segment intersects pending polygon";
-            return false;
-        }
+
+        bestDistance2 = distance2;
+        best = vertexMap;
+        bestVertexId = vertex.id;
+        found = true;
     }
 
-    return true;
-}
-
-bool SectorEditor::ValidateSectorPolygon(const std::vector<SectorPoint>& points, std::string& error) const
-{
-    if (!ValidateSectorShape(points, error)) {
+    const Vector2 canonical = found ? best : snapped;
+    SectorCoord x = 0;
+    SectorCoord y = 0;
+    if (!VisibleAuthoringToSectorCoord(canonical.x, x)
+            || !VisibleAuthoringToSectorCoord(canonical.y, y)) {
+        error = "Move target is outside topology coordinate range";
+        outPoint = SectorTopologyCoordPoint{};
         return false;
     }
 
-    const std::string newId = GenerateUniqueSectorId();
-    const bool idUsed = std::any_of(
-            state.map.sectors.begin(),
-            state.map.sectors.end(),
-            [&newId](const SectorDefinition& sector) { return sector.id == newId; }
-    );
-    if (idUsed) {
-        error = "Sector id is not unique";
-        return false;
-    }
-
-    for (const SectorDefinition& existing : state.map.sectors) {
-        if (!ValidateSectorAgainstSector(points, existing.points, error)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool SectorEditor::ValidateInsertSectorPolygon(
-        int parentSectorIndex,
-        const std::vector<SectorPoint>& points,
-        std::string& error) const
-{
-    if (parentSectorIndex < 0 || parentSectorIndex >= static_cast<int>(state.map.sectors.size())) {
-        error = "Insert sector failed: parent sector is invalid";
-        return false;
-    }
-    if (!ValidateSectorShape(points, error)) {
-        return false;
-    }
-
-    const SectorDefinition& parent = state.map.sectors[static_cast<size_t>(parentSectorIndex)];
-    for (SectorPoint point : points) {
-        if (!StrictPointInPolygon(point, parent.points)) {
-            error = "Insert polygon must be strictly inside the parent sector";
-            return false;
-        }
-    }
-    if (RingsIntersect(points, parent.points)) {
-        error = "Insert polygon touches or crosses the parent boundary";
-        return false;
-    }
-
-    for (const std::vector<SectorPoint>& hole : parent.holes) {
-        if (RingsIntersect(points, hole)) {
-            error = "Insert polygon touches or crosses an existing hole";
-            return false;
-        }
-        for (SectorPoint point : points) {
-            if (StrictPointInPolygon(point, hole) || PointOnPolygonBoundary(point, hole)) {
-                error = "Insert polygon overlaps an existing hole";
-                return false;
-            }
-        }
-        for (SectorPoint point : hole) {
-            if (StrictPointInPolygon(point, points) || PointOnPolygonBoundary(point, points)) {
-                error = "Insert polygon overlaps an existing hole";
-                return false;
-            }
-        }
-    }
-
-    for (size_t sectorIndex = 0; sectorIndex < state.map.sectors.size(); ++sectorIndex) {
-        if (static_cast<int>(sectorIndex) == parentSectorIndex) {
-            continue;
-        }
-        const SectorDefinition& other = state.map.sectors[sectorIndex];
-        const size_t ringCount = 1 + other.holes.size();
-        for (size_t ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
-            const std::vector<SectorPoint>& ring = ringIndex == 0
-                    ? other.points : other.holes[ringIndex - 1];
-            if (RingsIntersect(points, ring)) {
-                error = "Insert polygon touches or crosses another sector boundary";
-                return false;
-            }
-        }
-        for (SectorPoint point : points) {
-            if (StrictPointInSectorUsableArea(point, other)) {
-                error = "Insert polygon overlaps another sector";
-                return false;
-            }
-        }
-        for (SectorPoint point : other.points) {
-            if (StrictPointInPolygon(point, points)) {
-                error = "Insert polygon overlaps another sector";
-                return false;
-            }
-        }
-    }
-
-    SectorMap triangulationMap;
-    triangulationMap.sectors.push_back(parent);
-    std::vector<SectorPoint> hole = points;
-    if (PolygonArea2(hole) > 0.0f) {
-        std::reverse(hole.begin(), hole.end());
-    }
-    triangulationMap.sectors[0].holes.push_back(std::move(hole));
-    SectorGeneratedGeometry geometry;
-    if (!BuildSectorGeneratedGeometry(triangulationMap, geometry)) {
-        error = "Insert polygon would create invalid triangulation";
-        return false;
-    }
-    double triangulatedArea = 0.0;
-    for (const SectorGeneratedSurface& surface : geometry.surfaces) {
-        if (surface.ref.sectorIndex != 0
-                || surface.ref.kind != SectorGeneratedSurfaceKind::Floor) {
-            continue;
-        }
-        for (size_t i = 0; i + 2 < surface.vertices.size(); i += 3) {
-            const Vector3 a = surface.vertices[i + 0].position;
-            const Vector3 b = surface.vertices[i + 1].position;
-            const Vector3 c = surface.vertices[i + 2].position;
-            triangulatedArea += std::fabs(
-                    static_cast<double>(b.x - a.x) * static_cast<double>(c.z - a.z)
-                    - static_cast<double>(b.z - a.z) * static_cast<double>(c.x - a.x)) * 0.5;
-        }
-    }
-    double expectedArea2 = std::fabs(static_cast<double>(PolygonArea2(parent.points)));
-    for (const std::vector<SectorPoint>& existingHole : parent.holes) {
-        expectedArea2 -= std::fabs(static_cast<double>(PolygonArea2(existingHole)));
-    }
-    expectedArea2 -= std::fabs(static_cast<double>(PolygonArea2(points)));
-    const double worldScale = static_cast<double>(SectorAuthoringToWorldDistance(1.0f));
-    const double expectedArea = expectedArea2 * 0.5 * worldScale * worldScale;
-    const double areaTolerance = std::max(0.0001, expectedArea * 0.001);
-    if (expectedArea <= 0.0 || triangulatedArea <= 0.0
-            || std::fabs(triangulatedArea - expectedArea) > areaTolerance) {
-        error = "Insert polygon would create invalid triangulation";
-        return false;
-    }
+    outPoint = SectorTopologyCoordPoint{x, y};
+    error.clear();
     return true;
 }
 
@@ -2882,45 +2737,18 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
             static_cast<int>(std::round(viewportRect.height))
     );
 
-    SectorGeneratedGeometry geometry;
-    if (!BuildSectorGeneratedGeometry(state.map, geometry)) {
+    const SectorGeneratedSurfaceHit hit = PickSectorGeneratedGeometry(
+            preview.GeneratedGeometry(),
+            ray,
+            GeometryEpsilon);
+    if (!hit.hit) {
         return best;
     }
 
-    for (const SectorGeneratedSurface& surface : geometry.surfaces) {
-        for (size_t i = 0; i + 2 < surface.vertices.size(); i += 3) {
-            RayCollision collision = GetRayCollisionTriangle(
-                    ray,
-                    surface.vertices[i + 0].position,
-                    surface.vertices[i + 1].position,
-                    surface.vertices[i + 2].position
-            );
-            if (!collision.hit) {
-                collision = GetRayCollisionTriangle(
-                        ray,
-                        surface.vertices[i + 2].position,
-                        surface.vertices[i + 1].position,
-                        surface.vertices[i + 0].position
-                );
-            }
-            if (!collision.hit || collision.distance <= GeometryEpsilon) {
-                continue;
-            }
-            if (!best.hit || collision.distance < best.distance) {
-                best.hit = true;
-                best.surface = SectorSurfaceRef{
-                        ToEditorSurfaceKind(surface.ref.kind),
-                        surface.ref.sectorIndex,
-                        surface.ref.ringKind,
-                        surface.ref.holeIndex,
-                        surface.ref.edgeIndex
-                };
-                best.worldPosition = collision.point;
-                best.distance = collision.distance;
-            }
-        }
-    }
-
+    best.hit = true;
+    best.surface = ToEditorSurfaceRef(hit.ref);
+    best.worldPosition = hit.worldPosition;
+    best.distance = hit.distance;
     return best;
 }
 
@@ -2934,65 +2762,22 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
         if (!IsValidSurfaceRef(surface)) {
             return;
         }
-
-        const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
-        if (surface.kind == SectorSurfaceKind::Floor || surface.kind == SectorSurfaceKind::Ceiling) {
-            const float lift = surface.kind == SectorSurfaceKind::Floor ? PreviewHighlightLift : -PreviewHighlightLift;
-            const float height = surface.kind == SectorSurfaceKind::Floor ? sector.floorZ : sector.ceilingZ;
-            const Vector3 liftOffset{0.0f, lift, 0.0f};
-            const size_t ringCount = 1 + sector.holes.size();
-            for (size_t ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
-                const std::vector<SectorPoint>& ring = ringIndex == 0
-                        ? sector.points : sector.holes[ringIndex - 1];
-                for (size_t i = 0; i < ring.size(); ++i) {
-                    const SectorPoint a = ring[i];
-                    const SectorPoint b = ring[(i + 1) % ring.size()];
-                    DrawLine3D(
-                            Vector3Add(SectorPointToWorld(a, height), liftOffset),
-                            Vector3Add(SectorPointToWorld(b, height), liftOffset),
-                            color
-                    );
-                }
+        const float lift = IsWallSurface(surface.kind) ? PreviewHighlightLift : PreviewHighlightLift * 2.0f;
+        for (const SectorGeneratedSurface& generated : preview.GeneratedGeometry().surfaces) {
+            const SectorSurfaceRef generatedRef = ToEditorSurfaceRef(generated.ref);
+            if (!SameSurfaceRef(surface, generatedRef)) {
+                continue;
             }
-            (void)thickness;
-            return;
+            const Vector3 offset = Vector3Scale(generated.normal, lift);
+            for (size_t i = 0; i + 2 < generated.vertices.size(); i += 3) {
+                const Vector3 a = Vector3Add(generated.vertices[i + 0].position, offset);
+                const Vector3 b = Vector3Add(generated.vertices[i + 1].position, offset);
+                const Vector3 c = Vector3Add(generated.vertices[i + 2].position, offset);
+                DrawLine3D(a, b, color);
+                DrawLine3D(b, c, color);
+                DrawLine3D(c, a, color);
+            }
         }
-
-        SectorPoint a{};
-        SectorPoint b{};
-        const SectorBoundaryEdgeRef boundary{
-                surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex};
-        if (!GetSectorBoundaryEdge(state.map, boundary, a, b)) {
-            return;
-        }
-        float bottom = sector.floorZ;
-        float top = sector.ceilingZ;
-        const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(state.map, boundary);
-        if (surface.kind == SectorSurfaceKind::LowerWall && neighbor.hasNeighbor) {
-            top = state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)].floorZ;
-        } else if (surface.kind == SectorSurfaceKind::UpperWall && neighbor.hasNeighbor) {
-            bottom = state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)].ceilingZ;
-        }
-        if (top <= bottom + GeometryEpsilon) {
-            return;
-        }
-
-        const float dx = b.x - a.x;
-        const float dz = b.y - a.y;
-        const float len = std::sqrt(dx * dx + dz * dz);
-        Vector3 offset{};
-        if (len > GeometryEpsilon) {
-            offset = Vector3Scale(Vector3{-dz / len, 0.0f, dx / len}, PreviewHighlightLift);
-        }
-
-        const Vector3 ab = Vector3Add(SectorPointToWorld(a, bottom), offset);
-        const Vector3 at = Vector3Add(SectorPointToWorld(a, top), offset);
-        const Vector3 bb = Vector3Add(SectorPointToWorld(b, bottom), offset);
-        const Vector3 bt = Vector3Add(SectorPointToWorld(b, top), offset);
-        DrawLine3D(ab, at, color);
-        DrawLine3D(at, bt, color);
-        DrawLine3D(bt, bb, color);
-        DrawLine3D(bb, ab, color);
         (void)thickness;
     };
 
@@ -3065,10 +2850,10 @@ void SectorEditor::DrawPreviewOverlay(
                     preview.LightmapStatusText(),
                     state.useBakedAmbientOcclusion ? "on" : "off",
                     statusText.empty() ? "Ready" : statusText.c_str(),
-                    state.hasUnsavedChanges ? " | unsaved changes" : ""
+                    state.topologyDocumentDirty ? " | unsaved changes" : ""
             ),
             engine::UITextJustify::Left,
-            state.hasUnsavedChanges ? Color{236, 196, 92, 255} : config.mutedTextColor
+            state.topologyDocumentDirty ? Color{236, 196, 92, 255} : config.mutedTextColor
     );
 }
 
@@ -3084,49 +2869,59 @@ void SectorEditor::DrawPreviewUvPanel(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
-    if (!IsValidSurfaceRef(state.selectedSurface3D)) {
-        state.selectedSurface3D = SectorSurfaceRef{};
+    if (preview.IsMouseLookEnabled()) {
         return;
     }
 
+    if (!IsValidSurfaceRef(state.selectedSurface3D)
+            || !IsValidTopologySurfaceEditTarget(state.selectedTopologySurface3D)) {
+        state.selectedSurface3D = SectorSurfaceRef{};
+        state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+        return;
+    }
+
+    const TopologySurfaceEditTarget target = state.selectedTopologySurface3D;
     const Rectangle panel = BuildPreviewUvPanelRect();
     DrawRectangleRec(panel, Color{12, 15, 20, 230});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
-    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(state.selectedSurface3D.sectorIndex)];
     Vector2 uvScale{1.0f, 1.0f};
     Vector2 uvOffset{0.0f, 0.0f};
+    std::string targetLabel;
 
-    if (state.selectedSurface3D.kind == SectorSurfaceKind::Floor) {
-        if (sector.floorUv.hasUvScale) {
-            uvScale = sector.floorUv.uvScale;
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            state.selectedSurface3D = SectorSurfaceRef{};
+            state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+            return;
         }
-        if (sector.floorUv.hasUvOffset) {
-            uvOffset = sector.floorUv.uvOffset;
-        }
-    } else if (state.selectedSurface3D.kind == SectorSurfaceKind::Ceiling) {
-        if (sector.ceilingUv.hasUvScale) {
-            uvScale = sector.ceilingUv.uvScale;
-        }
-        if (sector.ceilingUv.hasUvOffset) {
-            uvOffset = sector.ceilingUv.uvOffset;
-        }
+        const SectorTopologyUvSettings& uv = target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? sector->floorUv
+                : sector->ceilingUv;
+        uvScale = uv.scale;
+        uvOffset = uv.offset;
+        targetLabel = TextFormat(
+                "%s | sector %d",
+                target.kind == TopologySurfaceEditTargetKind::SectorFloor ? "Floor" : "Ceiling",
+                sector->id);
     } else {
-        const EffectiveEdgeSettings effective = GetEffectiveEdgeSettings(
-                state.map,
-                SectorBoundaryEdgeRef{
-                        state.selectedSurface3D.sectorIndex,
-                        state.selectedSurface3D.ringKind,
-                        state.selectedSurface3D.holeIndex,
-                        state.selectedSurface3D.edgeIndex});
-        const EffectiveEdgePartSettings* part = &effective.wall;
-        if (state.selectedSurface3D.kind == SectorSurfaceKind::LowerWall) {
-            part = &effective.lower;
-        } else if (state.selectedSurface3D.kind == SectorSurfaceKind::UpperWall) {
-            part = &effective.upper;
+        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+        if (sideDef == nullptr) {
+            state.selectedSurface3D = SectorSurfaceRef{};
+            state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+            return;
         }
-        uvScale = part->uvScale;
-        uvOffset = part->uvOffset;
+        const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+        const SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(*sideDef, wallPart);
+        uvScale = part.uv.scale;
+        uvOffset = part.uv.offset;
+        targetLabel = TextFormat(
+                "%s | sideDef %d line %d",
+                SurfaceKindName(state.selectedSurface3D.kind),
+                sideDef->id,
+                sideDef->lineDefId);
     }
 
     const float margin = 18.0f;
@@ -3136,35 +2931,28 @@ void SectorEditor::DrawPreviewUvPanel(
     const float gap = 14.0f;
     const float startX = panel.x + 390.0f;
 
-    const std::string edgeLabel = !IsWallSurface(state.selectedSurface3D.kind)
-            ? std::string{}
-            : state.selectedSurface3D.ringKind == SectorBoundaryRingKind::Hole
-                    ? TextFormat(" | hole %d edge %d", state.selectedSurface3D.holeIndex, state.selectedSurface3D.edgeIndex)
-                    : TextFormat(" | outer edge %d", state.selectedSurface3D.edgeIndex);
     engine::Text(
             ui,
             config,
             assets,
             Rectangle{panel.x + margin, top, 350.0f, 34.0f},
             font,
-            TextFormat(
-                    "%s | sector %s%s",
-                    SurfaceKindName(state.selectedSurface3D.kind),
-                    sector.id.c_str(),
-                    edgeLabel.c_str()
-            ),
+            targetLabel.c_str(),
             engine::UITextJustify::Left,
             config.textColor
     );
+    const std::string currentTexture = CurrentTextureForSurface(target);
+    const bool missingTexture = !currentTexture.empty()
+            && FindSectorTopologyTexture(state.topologyMap, currentTexture) == nullptr;
     engine::Text(
             ui,
             config,
             assets,
             Rectangle{panel.x + margin, top + 38.0f, 350.0f, 30.0f},
             font,
-            TextFormat("texture %s", CurrentTextureForSurface(state.selectedSurface3D).c_str()),
+            TextFormat("texture %s", currentTexture.empty() ? "<none>" : currentTexture.c_str()),
             engine::UITextJustify::Left,
-            config.mutedTextColor
+            missingTexture ? config.invalidColor : config.mutedTextColor
     );
 
     auto drawFloat = [&](const char* id, const char* label, float value, engine::UIFloatInputState& inputState, int component, float minValue, float maxValue, float x) {
@@ -3193,8 +2981,8 @@ void SectorEditor::DrawPreviewUvPanel(
                 maxValue,
                 3
         );
-        if (result.changed && edited != value) {
-            ApplySurface3DUvValue(state.selectedSurface3D, component, edited, assets);
+        if (result.changed && edited != value && std::isfinite(edited)) {
+            ApplySurface3DUvValue(target, component, edited, assets);
         }
     };
 
@@ -3212,13 +3000,14 @@ void SectorEditor::DrawPreviewUvPanel(
             Rectangle{panel.x + panel.width - 172.0f, panel.y + 38.0f, 146.0f, 38.0f},
             font,
             "Texture")) {
-        const TexturePickerTargetKind target = TexturePickerTargetForSurface(state.selectedSurface3D);
-        if (target != TexturePickerTargetKind::None) {
-            OpenTexturePicker(target, SectorBoundaryEdgeRef{
-                    state.selectedSurface3D.sectorIndex,
-                    state.selectedSurface3D.ringKind,
-                    state.selectedSurface3D.holeIndex,
-                    state.selectedSurface3D.edgeIndex});
+        if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+            OpenTopologyTexturePicker(target.sectorId, TopologyEditTargetSectorTextureField(target.kind));
+        } else {
+            OpenTopologySideDefTexturePicker(target.sideDefId, TopologyEditTargetWallPart(target.kind));
+        }
+        if (state.texturePicker.open) {
+            state.texturePicker.rebuildPreviewOnApply = true;
         }
     }
 
@@ -3231,22 +3020,7 @@ void SectorEditor::DrawPreviewUvPanel(
             Rectangle{panel.x + panel.width - 172.0f, panel.y + 86.0f, 146.0f, 38.0f},
             font,
             "Reset UV")) {
-        ResetSurface3DUv(state.selectedSurface3D, assets);
-    }
-
-    if (IsWallSurface(state.selectedSurface3D.kind)) {
-        engine::Separator(config, Rectangle{panel.x + margin, panel.y + 134.0f, panel.width - margin * 2.0f, 12.0f});
-        if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_3d_split_edge",
-                Rectangle{panel.x + margin, panel.y + 154.0f, panel.width - margin * 2.0f, 38.0f},
-                font,
-                "Split Edge")) {
-            SplitSelectedEdge(assets);
-        }
+        ResetSurface3DUv(target, assets);
     }
 
     input.ForEachEvent(
@@ -3297,22 +3071,306 @@ void SectorEditor::DrawGrid() const
     }
 }
 
-void SectorEditor::DrawSectors() const
+void SectorEditor::DrawTopologyDocument()
 {
+    state.topologyRenderWarning.clear();
     if (!initialized) {
-        DrawText("Sector map failed to load", static_cast<int>(canvasRect.x + 24.0f), static_cast<int>(canvasRect.y + 24.0f), 28, RED);
+        DrawText("Topology map failed to load", static_cast<int>(canvasRect.x + 24.0f), static_cast<int>(canvasRect.y + 24.0f), 28, RED);
         return;
     }
 
-    for (size_t i = 0; i < state.map.sectors.size(); ++i) {
-        DrawSector(state.map.sectors[i], static_cast<int>(i));
+    const auto issues = ValidateSectorTopologyMap(state.topologyMap);
+    if (!issues.empty()) {
+        state.topologyRenderWarning = "Topology render warning: "
+                + FormatSectorTopologyValidationIssue(issues.front());
     }
 
-    if (Contains(canvasRect, GetMousePosition())) {
-        const Vector2 snap = MapToScreen(state.snappedMouseMap);
-        DrawLineEx(Vector2{snap.x - 9.0f, snap.y}, Vector2{snap.x + 9.0f, snap.y}, 2.0f, Color{235, 224, 130, 255});
-        DrawLineEx(Vector2{snap.x, snap.y - 9.0f}, Vector2{snap.x, snap.y + 9.0f}, 2.0f, Color{235, 224, 130, 255});
+    const Color fill = Color{82, 112, 154, 42};
+    const Color outline = Color{116, 139, 174, 235};
+    const Color selectedFill = Color{72, 220, 128, 38};
+    const Color selectedOutline = Color{86, 232, 142, 135};
+    ClearStaleTopologySelection();
+    const SectorTopologySector* selectedSector = SelectedTopologySector();
+    for (const SectorTopologySector& sector : state.topologyMap.sectors) {
+        if (selectedSector != nullptr && sector.id == selectedSector->id) {
+            continue;
+        }
+        DrawTopologySectorLoops(sector, fill, outline);
     }
+    if (selectedSector != nullptr) {
+        DrawTopologySectorLoops(*selectedSector, selectedFill, selectedOutline, 10.0f);
+    }
+
+    DrawTopologySelectedLineHighlight();
+    DrawTopologyLineDefs();
+    DrawTopologyVertices();
+    DrawVertexMoveOverlay();
+    DrawStaticLights();
+    DrawLightMoveOverlay();
+    DrawPendingSector();
+    DrawTopologySnapCrosshair();
+
+    if (!state.topologyRenderWarning.empty()) {
+        DrawText(
+                state.topologyRenderWarning.c_str(),
+                static_cast<int>(canvasRect.x + 16.0f),
+                static_cast<int>(canvasRect.y + 14.0f),
+                18,
+                Color{236, 196, 92, 255}
+        );
+    }
+}
+
+void SectorEditor::DrawTopologySectorLoops(
+        const SectorTopologySector& sector,
+        Color fill,
+        Color outline,
+        float outlineThickness)
+{
+    SectorTopologyLoopSet loops;
+    std::vector<SectorTopologyValidationIssue> loopIssues;
+    if (!ExtractSectorTopologyLoops(state.topologyMap, sector.id, loops, &loopIssues)) {
+        if (state.topologyRenderWarning.empty() && !loopIssues.empty()) {
+            state.topologyRenderWarning = "Topology render warning: "
+                    + FormatSectorTopologyValidationIssue(loopIssues.front());
+        }
+        return;
+    }
+
+    using DrawEarcutPoint = std::array<double, 2>;
+    std::vector<std::vector<DrawEarcutPoint>> polygon;
+    std::vector<Vector2> flattened;
+    bool missingVertex = false;
+    const auto appendLoop = [&](const SectorTopologyLoop& loop) {
+        polygon.emplace_back();
+        polygon.back().reserve(loop.vertexIds.size());
+        for (int vertexId : loop.vertexIds) {
+            const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+            if (vertex == nullptr) {
+                missingVertex = true;
+                continue;
+            }
+            const Vector2 map = SectorTopologyVertexToMap(*vertex);
+            polygon.back().push_back(DrawEarcutPoint{map.x, map.y});
+            flattened.push_back(map);
+        }
+    };
+    appendLoop(loops.outer);
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        appendLoop(hole);
+    }
+
+    if (missingVertex) {
+        if (state.topologyRenderWarning.empty()) {
+            state.topologyRenderWarning = TextFormat(
+                    "Topology render warning: sector %d references a missing loop vertex",
+                    sector.id
+            );
+        }
+        return;
+    }
+
+    const std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
+    for (size_t i = 0; i + 2 < indices.size(); i += 3) {
+        if (indices[i] < flattened.size()
+                && indices[i + 1] < flattened.size()
+                && indices[i + 2] < flattened.size()) {
+            DrawTriangle(
+                    MapToScreen(flattened[indices[i]]),
+                    MapToScreen(flattened[indices[i + 1]]),
+                    MapToScreen(flattened[indices[i + 2]]),
+                    fill
+            );
+        }
+    }
+
+    const auto drawLoopOutline = [&](const SectorTopologyLoop& loop, Color color) {
+        if (loop.vertexIds.size() < 2) {
+            return;
+        }
+        for (size_t i = 0; i < loop.vertexIds.size(); ++i) {
+            const SectorTopologyVertex* a = FindSectorTopologyVertex(state.topologyMap, loop.vertexIds[i]);
+            const SectorTopologyVertex* b = FindSectorTopologyVertex(
+                    state.topologyMap,
+                    loop.vertexIds[(i + 1) % loop.vertexIds.size()]
+            );
+            if (a == nullptr || b == nullptr) {
+                continue;
+            }
+            DrawLineEx(
+                    MapToScreen(SectorTopologyVertexToMap(*a)),
+                    MapToScreen(SectorTopologyVertexToMap(*b)),
+                    outlineThickness,
+                    color
+            );
+        }
+    };
+    drawLoopOutline(loops.outer, outline);
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        drawLoopOutline(hole, Color{164, 187, 220, 245});
+    }
+
+    if (state.showSectorIds && !loops.outer.vertexIds.empty()) {
+        Vector2 center{};
+        int count = 0;
+        for (int vertexId : loops.outer.vertexIds) {
+            const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+            if (vertex == nullptr) {
+                continue;
+            }
+            const Vector2 map = SectorTopologyVertexToMap(*vertex);
+            center.x += map.x;
+            center.y += map.y;
+            ++count;
+        }
+        if (count > 0) {
+            center.x /= static_cast<float>(count);
+            center.y /= static_cast<float>(count);
+            const Vector2 screen = MapToScreen(center);
+            const char* label = sector.name.empty()
+                    ? TextFormat("%d", sector.id)
+                    : sector.name.c_str();
+            DrawText(label, static_cast<int>(screen.x - 18.0f), static_cast<int>(screen.y - 10.0f), 18, RAYWHITE);
+        }
+    }
+}
+
+void SectorEditor::DrawTopologySelectedLineHighlight() const
+{
+    if (state.topologySelectionKind != TopologySelectionKind::SideDef
+            && state.topologySelectionKind != TopologySelectionKind::LineDef) {
+        return;
+    }
+
+    const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
+    if (lineDef == nullptr) {
+        return;
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
+        return;
+    }
+
+    Vector2 a = MapToScreen(SectorTopologyVertexToMap(*start));
+    Vector2 b = MapToScreen(SectorTopologyVertexToMap(*end));
+    Vector2 dir{b.x - a.x, b.y - a.y};
+    const float length = std::sqrt(dir.x * dir.x + dir.y * dir.y);
+    if (length <= GeometryEpsilon) {
+        return;
+    }
+
+    dir.x /= length;
+    dir.y /= length;
+    Vector2 normal{-dir.y, dir.x};
+    Color color{72, 210, 246, 138};
+    if (state.topologySelectionKind == TopologySelectionKind::LineDef) {
+        normal = Vector2{0.0f, 0.0f};
+        color = Color{210, 214, 224, 125};
+    } else if (state.selectedTopologySideKind == SectorTopologySideKind::Back) {
+        normal.x = -normal.x;
+        normal.y = -normal.y;
+        color = Color{94, 238, 186, 132};
+    }
+
+    const float offset = state.topologySelectionKind == TopologySelectionKind::LineDef ? 0.0f : 7.0f;
+    a.x += normal.x * offset;
+    a.y += normal.y * offset;
+    b.x += normal.x * offset;
+    b.y += normal.y * offset;
+    DrawLineEx(a, b, 10.0f, color);
+}
+
+void SectorEditor::DrawTopologyLineDefs() const
+{
+    const Color oneSidedColor = Color{142, 184, 230, 255};
+    const Color twoSidedColor = Color{122, 220, 244, 255};
+    const Color warningColor = Color{230, 82, 82, 255};
+    const Color frontColor = Color{196, 244, 255, 230};
+    const Color backColor = Color{236, 154, 214, 220};
+    const Color arrowColor = Color{236, 196, 92, 240};
+
+    for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
+        const SectorTopologyVertex* start = nullptr;
+        const SectorTopologyVertex* end = nullptr;
+        const bool validEndpoints = GetSectorTopologyLineVertices(state.topologyMap, lineDef, start, end);
+        if (!validEndpoints) {
+            const SectorTopologyVertex* partial = FindSectorTopologyVertex(state.topologyMap, lineDef.startVertexId);
+            if (partial == nullptr) {
+                partial = FindSectorTopologyVertex(state.topologyMap, lineDef.endVertexId);
+            }
+            if (partial != nullptr) {
+                const Vector2 point = MapToScreen(SectorTopologyVertexToMap(*partial));
+                DrawCircleLines(static_cast<int>(std::round(point.x)), static_cast<int>(std::round(point.y)), 11.0f, warningColor);
+            }
+            continue;
+        }
+
+        const bool hasFront = lineDef.frontSideDefId >= 0
+                && FindSectorTopologySideDef(state.topologyMap, lineDef.frontSideDefId) != nullptr;
+        const bool hasBack = lineDef.backSideDefId >= 0
+                && FindSectorTopologySideDef(state.topologyMap, lineDef.backSideDefId) != nullptr;
+        const bool twoSided = hasFront && hasBack;
+        const Color lineColor = validEndpoints ? (twoSided ? twoSidedColor : oneSidedColor) : warningColor;
+
+        const Vector2 a = MapToScreen(SectorTopologyVertexToMap(*start));
+        const Vector2 b = MapToScreen(SectorTopologyVertexToMap(*end));
+        DrawLineEx(a, b, twoSided ? 3.5f : 3.0f, lineColor);
+
+        Vector2 dir{b.x - a.x, b.y - a.y};
+        const float length = std::sqrt(dir.x * dir.x + dir.y * dir.y);
+        if (length <= GeometryEpsilon) {
+            continue;
+        }
+        dir.x /= length;
+        dir.y /= length;
+        const Vector2 normal{-dir.y, dir.x};
+        const Vector2 mid{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
+
+        const Vector2 arrowStart{mid.x - dir.x * 10.0f, mid.y - dir.y * 10.0f};
+        const Vector2 arrowEnd{mid.x + dir.x * 10.0f, mid.y + dir.y * 10.0f};
+        DrawLineEx(arrowStart, arrowEnd, 2.0f, arrowColor);
+        DrawLineEx(arrowEnd, Vector2{arrowEnd.x - dir.x * 6.0f + normal.x * 4.0f, arrowEnd.y - dir.y * 6.0f + normal.y * 4.0f}, 2.0f, arrowColor);
+        DrawLineEx(arrowEnd, Vector2{arrowEnd.x - dir.x * 6.0f - normal.x * 4.0f, arrowEnd.y - dir.y * 6.0f - normal.y * 4.0f}, 2.0f, arrowColor);
+
+        if (hasFront) {
+            const Vector2 frontEnd{mid.x + normal.x * 15.0f, mid.y + normal.y * 15.0f};
+            DrawLineEx(mid, frontEnd, 2.0f, frontColor);
+            DrawCircleV(frontEnd, 3.0f, frontColor);
+        }
+        if (hasBack) {
+            const Vector2 backEnd{mid.x - normal.x * 15.0f, mid.y - normal.y * 15.0f};
+            DrawLineEx(mid, backEnd, 2.0f, backColor);
+            DrawCircleV(backEnd, 3.0f, backColor);
+        }
+    }
+}
+
+void SectorEditor::DrawTopologyVertices() const
+{
+    const Color pointColor = Color{245, 226, 154, 255};
+    const Color outlineColor = Color{20, 24, 32, 255};
+    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
+        const Vector2 screen = MapToScreen(SectorTopologyVertexToMap(vertex));
+        DrawCircleV(screen, 4.5f, pointColor);
+        DrawCircleLines(static_cast<int>(std::round(screen.x)), static_cast<int>(std::round(screen.y)), 7.0f, outlineColor);
+    }
+}
+
+void SectorEditor::DrawTopologySnapCrosshair() const
+{
+    if (!Contains(canvasRect, GetMousePosition())) {
+        return;
+    }
+
+    const bool useCanonicalSectorPoint = state.currentTool == SectorEditorTool::Sector
+            || state.pendingSector.active;
+    const Vector2 snap = useCanonicalSectorPoint
+            ? MapToScreen(SectorPointToVector2(CurrentSnappedSectorPoint()))
+            : MapToScreen(state.snappedMouseMap);
+    DrawLineEx(Vector2{snap.x - 9.0f, snap.y}, Vector2{snap.x + 9.0f, snap.y}, 2.0f, Color{235, 224, 130, 255});
+    DrawLineEx(Vector2{snap.x, snap.y - 9.0f}, Vector2{snap.x, snap.y + 9.0f}, 2.0f, Color{235, 224, 130, 255});
 }
 
 void SectorEditor::DrawPendingSector() const
@@ -3326,7 +3384,7 @@ void SectorEditor::DrawPendingSector() const
     std::string previewError = state.pendingSector.errorMessage;
     if (!closeable && state.pendingSector.active) {
         std::string candidateError;
-        if (!ValidatePendingPoint(cursorPoint, candidateError)
+        if (!ValidatePendingTopologyPoint(cursorPoint, candidateError)
                 && candidateError != "Click first point to close sector") {
             previewError = candidateError;
         }
@@ -3334,13 +3392,28 @@ void SectorEditor::DrawPendingSector() const
 
     if (state.pendingSector.points.size() >= 3 && previewError.empty()) {
         std::string finalError;
-        const bool valid = state.pendingSector.kind == PendingSectorDrawKind::InsertInside
-                ? ValidateInsertSectorPolygon(
-                        state.pendingSector.parentSectorIndex,
-                        state.pendingSector.points,
-                        finalError)
-                : ValidateSectorPolygon(state.pendingSector.points, finalError);
-        if (!valid) {
+        std::vector<SectorTopologyCoordPoint> topologyPoints;
+        SectorTopologyMap previewMap = state.topologyMap;
+        int previewSectorId = -1;
+        if (!BuildPendingTopologyPoints(topologyPoints, finalError)) {
+            previewError = finalError;
+        } else if (state.pendingSector.kind == PendingSectorDrawKind::InsertInside) {
+            SectorTopologyInsertPolygonOptions options;
+            if (!InsertSectorTopologyPolygon(
+                        previewMap,
+                        state.pendingSector.parentTopologySectorId,
+                        topologyPoints,
+                        options,
+                        &previewSectorId,
+                        &finalError)) {
+                previewError = finalError;
+            }
+        } else if (!CreateSectorTopologyPolygon(
+                    previewMap,
+                    topologyPoints,
+                    BuildTopologyCreateOptions(),
+                    &previewSectorId,
+                    &finalError)) {
             previewError = finalError;
         }
     }
@@ -3383,8 +3456,16 @@ void SectorEditor::DrawVertexMoveOverlay() const
     }
 
     if (!state.vertexDrag.active && state.hasHoveredVertex) {
-        const Vector2 point = MapToScreen(SectorPointToVector2(state.hoveredVertexPoint));
-        const Color color = state.hoveredVertexRefs.size() > 1
+        const Vector2 point = MapToScreen(SectorPointToVector2(
+                SectorTopologyCoordPointToSectorPoint(state.hoveredTopologyVertexPoint)));
+        size_t connectedCount = 0;
+        for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
+            if (lineDef.startVertexId == state.hoveredTopologyVertexId
+                    || lineDef.endVertexId == state.hoveredTopologyVertexId) {
+                ++connectedCount;
+            }
+        }
+        const Color color = connectedCount > 1
                 ? Color{122, 220, 244, 255}
                 : Color{245, 226, 154, 255};
         DrawCircleLines(static_cast<int>(std::round(point.x)), static_cast<int>(std::round(point.y)), 11.0f, color);
@@ -3400,50 +3481,38 @@ void SectorEditor::DrawVertexMoveOverlay() const
     const Color targetColor = invalid ? Color{230, 82, 82, 255} : Color{120, 230, 154, 255};
     const Color previewColor = invalid ? Color{230, 82, 82, 205} : Color{122, 220, 244, 220};
     const Color originalColor = Color{245, 226, 154, 230};
+    const Vector2 original = MapToScreen(SectorPointToVector2(
+            SectorTopologyCoordPointToSectorPoint(state.vertexDrag.originalPoint)));
 
-    for (size_t sectorIndex = 0; sectorIndex < state.map.sectors.size(); ++sectorIndex) {
-        const bool affected = std::any_of(
-                state.vertexDrag.affectedVertices.begin(),
-                state.vertexDrag.affectedVertices.end(),
-                [sectorIndex](SectorVertexRef ref) {
-                    return ref.sectorIndex == static_cast<int>(sectorIndex);
-                }
-        );
-        if (!affected) {
-            continue;
-        }
-
-        const SectorDefinition& sector = state.map.sectors[sectorIndex];
-        if (sector.points.size() < 2) {
-            continue;
-        }
-
-        for (size_t pointIndex = 0; pointIndex < sector.points.size(); ++pointIndex) {
-            SectorPoint a = sector.points[pointIndex];
-            SectorPoint b = sector.points[(pointIndex + 1) % sector.points.size()];
-            for (SectorVertexRef ref : state.vertexDrag.affectedVertices) {
-                if (ref.sectorIndex == static_cast<int>(sectorIndex)
-                        && ref.ringKind == SectorBoundaryRingKind::Outer
-                        && ref.pointIndex == static_cast<int>(pointIndex)) {
-                    a = state.vertexDrag.snappedPoint;
-                }
-                if (ref.sectorIndex == static_cast<int>(sectorIndex)
-                        && ref.ringKind == SectorBoundaryRingKind::Outer
-                        && ref.pointIndex == static_cast<int>((pointIndex + 1) % sector.points.size())) {
-                    b = state.vertexDrag.snappedPoint;
-                }
-            }
-            DrawLineEx(
-                    MapToScreen(SectorPointToVector2(a)),
-                    MapToScreen(SectorPointToVector2(b)),
-                    4.0f,
-                    previewColor
-            );
-        }
+    if (!state.vertexDrag.hasPreviewPoint) {
+        DrawCircleLines(static_cast<int>(std::round(original.x)), static_cast<int>(std::round(original.y)), 10.0f, originalColor);
+        return;
     }
 
-    const Vector2 original = MapToScreen(SectorPointToVector2(state.vertexDrag.originalPoint));
-    const Vector2 target = MapToScreen(SectorPointToVector2(state.vertexDrag.snappedPoint));
+    const int draggedVertexId = state.vertexDrag.topologyVertexId;
+    const Vector2 previewMap = SectorPointToVector2(
+            SectorTopologyCoordPointToSectorPoint(state.vertexDrag.previewPoint));
+    for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
+        if (lineDef.startVertexId != draggedVertexId && lineDef.endVertexId != draggedVertexId) {
+            continue;
+        }
+
+        const int otherVertexId = lineDef.startVertexId == draggedVertexId
+                ? lineDef.endVertexId
+                : lineDef.startVertexId;
+        const SectorTopologyVertex* otherVertex = FindSectorTopologyVertex(state.topologyMap, otherVertexId);
+        if (otherVertex == nullptr) {
+            continue;
+        }
+        DrawLineEx(
+                MapToScreen(previewMap),
+                MapToScreen(SectorTopologyVertexToMap(*otherVertex)),
+                4.0f,
+                previewColor
+        );
+    }
+
+    const Vector2 target = MapToScreen(previewMap);
     DrawLineEx(original, target, 2.0f, WithAlpha(targetColor, 180));
     DrawCircleLines(static_cast<int>(std::round(original.x)), static_cast<int>(std::round(original.y)), 10.0f, originalColor);
     DrawCircleLines(static_cast<int>(std::round(target.x)), static_cast<int>(std::round(target.y)), 13.0f, targetColor);
@@ -3457,15 +3526,16 @@ void SectorEditor::DrawLightMoveOverlay() const
     }
 
     if (state.lightDrag.active) {
-        if (state.lightDrag.lightIndex < 0
-                || state.lightDrag.lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+        const SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
+                state.topologyMap,
+                state.lightDrag.topologyLightId);
+        if (light == nullptr) {
             return;
         }
 
-        const SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.lightDrag.lightIndex)];
-        const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
-        const float radiusPixels = SectorAuthoringToWorldDistance(light.radius) * state.viewZoom;
-        Color color = light.color;
+        const Vector2 center = MapToScreen(Vector2{light->position.x, light->position.z});
+        const float radiusPixels = SectorAuthoringToWorldDistance(light->radius) * state.viewZoom;
+        Color color = light->color;
         color.a = 245;
         DrawCircleLines(
                 static_cast<int>(std::round(center.x)),
@@ -3478,139 +3548,24 @@ void SectorEditor::DrawLightMoveOverlay() const
         return;
     }
 
-    if (state.hoveredLightIndex < 0 || state.hoveredLightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    const SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
+            state.topologyMap,
+            state.hoveredTopologyLightId);
+    if (light == nullptr) {
         return;
     }
 
-    const SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.hoveredLightIndex)];
-    const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
+    const Vector2 center = MapToScreen(Vector2{light->position.x, light->position.z});
     DrawCircleLines(static_cast<int>(std::round(center.x)), static_cast<int>(std::round(center.y)), 13.0f, Color{245, 226, 154, 255});
-}
-
-void SectorEditor::DrawSector(const SectorDefinition& sector, int sectorIndex) const
-{
-    if (sector.points.size() < 3) {
-        return;
-    }
-
-    const bool hovered = sectorIndex == state.hoveredSectorIndex;
-    const bool selected = sectorIndex == state.selectedSectorIndex;
-    const bool eraseHovered = hovered && state.currentTool == SectorEditorTool::Erase;
-    const Color fill = eraseHovered
-            ? Color{205, 72, 72, 88}
-            : selected ? Color{88, 170, 120, 85}
-            : hovered ? Color{125, 164, 214, 72} : Color{82, 112, 154, 48};
-    const Color outline = eraseHovered
-            ? Color{240, 95, 95, 255}
-            : selected ? Color{118, 224, 156, 255}
-            : hovered ? Color{157, 194, 245, 255} : Color{116, 139, 174, 255};
-
-    using DrawEarcutPoint = std::array<double, 2>;
-    std::vector<std::vector<DrawEarcutPoint>> polygon;
-    std::vector<SectorPoint> flattened;
-    const auto appendRing = [&polygon, &flattened](const std::vector<SectorPoint>& ring) {
-        polygon.emplace_back();
-        polygon.back().reserve(ring.size());
-        for (SectorPoint point : ring) {
-            polygon.back().push_back(DrawEarcutPoint{point.x, point.y});
-            flattened.push_back(point);
-        }
-    };
-    appendRing(sector.points);
-    for (const std::vector<SectorPoint>& hole : sector.holes) {
-        appendRing(hole);
-    }
-    const std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
-    for (size_t i = 0; i + 2 < indices.size(); i += 3) {
-        if (indices[i] < flattened.size()
-                && indices[i + 1] < flattened.size()
-                && indices[i + 2] < flattened.size()) {
-            DrawTriangle(
-                    MapToScreen(SectorPointToVector2(flattened[indices[i]])),
-                    MapToScreen(SectorPointToVector2(flattened[indices[i + 1]])),
-                    MapToScreen(SectorPointToVector2(flattened[indices[i + 2]])),
-                    fill);
-        }
-    }
-
-    const size_t ringCount = 1 + sector.holes.size();
-    for (size_t ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
-        const std::vector<SectorPoint>& ring = ringIndex == 0
-                ? sector.points : sector.holes[ringIndex - 1];
-        for (size_t i = 0; i < ring.size(); ++i) {
-            const Vector2 a = MapToScreen(SectorPointToVector2(ring[i]));
-            const Vector2 b = MapToScreen(SectorPointToVector2(ring[(i + 1) % ring.size()]));
-            DrawLineEx(a, b, selected ? 3.0f : 2.0f, outline);
-            DrawRectangleRec(Rectangle{a.x - 4.0f, a.y - 4.0f, 8.0f, 8.0f}, WithAlpha(outline, 255));
-        }
-    }
-
-    if (state.hoveredEdgeSectorIndex == sectorIndex && state.hoveredEdgeIndex >= 0) {
-        const std::vector<SectorPoint>* hoveredRing = GetSectorBoundaryRing(
-                state.map,
-                SectorBoundaryEdgeRef{
-                        sectorIndex,
-                        state.hoveredEdgeRingKind,
-                        state.hoveredEdgeHoleIndex,
-                        state.hoveredEdgeIndex});
-        const size_t edgeIndex = static_cast<size_t>(state.hoveredEdgeIndex);
-        if (hoveredRing != nullptr && edgeIndex < hoveredRing->size()) {
-            DrawLineEx(
-                    MapToScreen(SectorPointToVector2((*hoveredRing)[edgeIndex])),
-                    MapToScreen(SectorPointToVector2((*hoveredRing)[(edgeIndex + 1) % hoveredRing->size()])),
-                    5.0f,
-                    Color{245, 226, 154, 230}
-            );
-        }
-    }
-
-    if (state.selectedSectorIndex == sectorIndex && state.selectedEdgeIndex >= 0) {
-        const std::vector<SectorPoint>* selectedRing = GetSectorBoundaryRing(
-                state.map,
-                SectorBoundaryEdgeRef{
-                        sectorIndex,
-                        state.selectedEdgeRingKind,
-                        state.selectedEdgeHoleIndex,
-                        state.selectedEdgeIndex});
-        const size_t edgeIndex = static_cast<size_t>(state.selectedEdgeIndex);
-        if (selectedRing != nullptr && edgeIndex < selectedRing->size()) {
-            const Vector2 a = MapToScreen(SectorPointToVector2((*selectedRing)[edgeIndex]));
-            const Vector2 b = MapToScreen(SectorPointToVector2((*selectedRing)[(edgeIndex + 1) % selectedRing->size()]));
-            DrawLineEx(a, b, 6.0f, Color{122, 220, 244, 255});
-            if (state.selectedEdgeRingKind == SectorBoundaryRingKind::Outer) {
-                const Vector2 inwardNormal = SelectedEdgeInwardNormal(sector, state.selectedEdgeIndex);
-                const Vector2 offset{
-                        inwardNormal.x * 8.0f,
-                        inwardNormal.y * 8.0f
-                };
-                const Vector2 offsetA{a.x + offset.x, a.y + offset.y};
-                const Vector2 offsetB{b.x + offset.x, b.y + offset.y};
-                DrawLineEx(offsetA, offsetB, 3.0f, Color{196, 244, 255, 255});
-                const Vector2 mid{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
-                const Vector2 markerEnd{
-                        mid.x + inwardNormal.x * 22.0f,
-                        mid.y + inwardNormal.y * 22.0f
-                };
-                DrawLineEx(mid, markerEnd, 3.0f, Color{196, 244, 255, 255});
-                DrawCircleV(markerEnd, 4.0f, Color{196, 244, 255, 255});
-                DrawText(TextFormat("%d", state.selectedEdgeIndex), static_cast<int>(mid.x + 8.0f), static_cast<int>(mid.y + 8.0f), 18, Color{122, 220, 244, 255});
-            }
-        }
-    }
-
-    if (state.showSectorIds) {
-        const Vector2 center = MapToScreen(AverageSectorPoint(sector));
-        DrawText(sector.id.c_str(), static_cast<int>(center.x - 24.0f), static_cast<int>(center.y - 10.0f), 18, RAYWHITE);
-    }
 }
 
 void SectorEditor::DrawStaticLights() const
 {
-    for (size_t i = 0; i < state.map.staticLights.size(); ++i) {
-        const SectorStaticPointLight& light = state.map.staticLights[i];
+    for (const SectorTopologyStaticPointLight& light : state.topologyMap.staticLights) {
         const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
-        const bool selected = static_cast<int>(i) == state.selectedLightIndex;
-        const bool hovered = static_cast<int>(i) == state.hoveredLightIndex;
+        const bool selected = state.topologySelectionKind == TopologySelectionKind::Light
+                && light.id == state.selectedTopologyLightId;
+        const bool hovered = light.id == state.hoveredTopologyLightId;
         Color color = light.color;
         color.a = selected ? 255 : hovered ? 235 : 205;
         const float radiusPixels = SectorAuthoringToWorldDistance(light.radius) * state.viewZoom;
@@ -3640,50 +3595,6 @@ void SectorEditor::DrawStaticLights() const
         DrawLineEx(Vector2{center.x - 10.0f, center.y}, Vector2{center.x + 10.0f, center.y}, 2.0f, color);
         DrawLineEx(Vector2{center.x, center.y - 10.0f}, Vector2{center.x, center.y + 10.0f}, 2.0f, color);
     }
-}
-
-Vector2 SectorEditor::SelectedEdgeInwardNormal(const SectorDefinition& sector, int edgeIndex) const
-{
-    if (edgeIndex < 0 || edgeIndex >= static_cast<int>(sector.points.size())) {
-        return Vector2{0.0f, 0.0f};
-    }
-
-    const SectorPoint from = sector.points[static_cast<size_t>(edgeIndex)];
-    const SectorPoint to = sector.points[(static_cast<size_t>(edgeIndex) + 1) % sector.points.size()];
-    const float dx = to.x - from.x;
-    const float dy = to.y - from.y;
-    const float length = std::sqrt(dx * dx + dy * dy);
-    if (length <= GeometryEpsilon) {
-        return Vector2{0.0f, 0.0f};
-    }
-
-    const Vector2 normalA{-dy / length, dx / length};
-    const Vector2 normalB{dy / length, -dx / length};
-    const Vector2 mid{(from.x + to.x) * 0.5f, (from.y + to.y) * 0.5f};
-    const float probeDistance = std::max(
-            SectorWorldToAuthoringDistance(0.05f),
-            SectorWorldToAuthoringDistance(3.0f / std::max(1.0f, state.viewZoom))
-    );
-    const Vector2 probeA{mid.x + normalA.x * probeDistance, mid.y + normalA.y * probeDistance};
-    if (PointInSectorPolygon(probeA, sector)) {
-        return normalA;
-    }
-
-    const Vector2 probeB{mid.x + normalB.x * probeDistance, mid.y + normalB.y * probeDistance};
-    if (PointInSectorPolygon(probeB, sector)) {
-        return normalB;
-    }
-
-    const Vector2 center = AverageSectorPoint(sector);
-    Vector2 fallback{center.x - mid.x, center.y - mid.y};
-    const float fallbackLength = std::sqrt(fallback.x * fallback.x + fallback.y * fallback.y);
-    if (fallbackLength > GeometryEpsilon) {
-        fallback.x /= fallbackLength;
-        fallback.y /= fallbackLength;
-        return fallback;
-    }
-
-    return normalA;
 }
 
 void SectorEditor::DrawToolsPanel(
@@ -3815,19 +3726,20 @@ void SectorEditor::DrawToolsPanel(
         if (result.changed && edited != value) {
             value = edited;
             state.hasUnsavedChanges = true;
+            state.topologyDocumentDirty = true;
             statusText = status;
         }
         y += rowH + gap;
     };
 
-    state.map.lightmapSettings.ambientOcclusionRadius = ClampAmbientOcclusionRadius(state.map.lightmapSettings.ambientOcclusionRadius);
-    state.map.lightmapSettings.ambientOcclusionStrength = ClampAmbientOcclusionStrength(state.map.lightmapSettings.ambientOcclusionStrength);
-    state.map.lightmapSettings.indirectBounceRadius = ClampIndirectBounceRadius(state.map.lightmapSettings.indirectBounceRadius);
-    state.map.lightmapSettings.indirectBounceStrength = ClampIndirectBounceStrength(state.map.lightmapSettings.indirectBounceStrength);
+    state.topologyMap.lightmapSettings.ambientOcclusionRadius = ClampAmbientOcclusionRadius(state.topologyMap.lightmapSettings.ambientOcclusionRadius);
+    state.topologyMap.lightmapSettings.ambientOcclusionStrength = ClampAmbientOcclusionStrength(state.topologyMap.lightmapSettings.ambientOcclusionStrength);
+    state.topologyMap.lightmapSettings.indirectBounceRadius = ClampIndirectBounceRadius(state.topologyMap.lightmapSettings.indirectBounceRadius);
+    state.topologyMap.lightmapSettings.indirectBounceStrength = ClampIndirectBounceStrength(state.topologyMap.lightmapSettings.indirectBounceStrength);
     drawLightmapSetting(
             "sector_editor_ao_radius",
             "AO radius",
-            state.map.lightmapSettings.ambientOcclusionRadius,
+            state.topologyMap.lightmapSettings.ambientOcclusionRadius,
             uiState.ambientOcclusionRadiusInput,
             SectorWorldToAuthoringDistance(0.05f),
             SectorWorldToAuthoringDistance(16.0f),
@@ -3837,7 +3749,7 @@ void SectorEditor::DrawToolsPanel(
     drawLightmapSetting(
             "sector_editor_ao_strength",
             "AO strength",
-            state.map.lightmapSettings.ambientOcclusionStrength,
+            state.topologyMap.lightmapSettings.ambientOcclusionStrength,
             uiState.ambientOcclusionStrengthInput,
             0.0f,
             1.0f,
@@ -3847,7 +3759,7 @@ void SectorEditor::DrawToolsPanel(
     drawLightmapSetting(
             "sector_editor_bounce_radius",
             "Bounce radius",
-            state.map.lightmapSettings.indirectBounceRadius,
+            state.topologyMap.lightmapSettings.indirectBounceRadius,
             uiState.indirectBounceRadiusInput,
             SectorWorldToAuthoringDistance(0.05f),
             SectorWorldToAuthoringDistance(16.0f),
@@ -3857,7 +3769,7 @@ void SectorEditor::DrawToolsPanel(
     drawLightmapSetting(
             "sector_editor_bounce_strength",
             "Bounce strength",
-            state.map.lightmapSettings.indirectBounceStrength,
+            state.topologyMap.lightmapSettings.indirectBounceStrength,
             uiState.indirectBounceStrengthInput,
             0.0f,
             1.0f,
@@ -3924,30 +3836,15 @@ void SectorEditor::DrawSectorsPanel(
             "Inspector"
     );
 
+    ClearStaleTopologySelection();
     SyncSelectedSectorIdBuffer();
     SyncSelectedLightIdBuffer();
 
-    const bool hasSelectedSector = state.selectedSectorIndex >= 0
-            && state.selectedSectorIndex < static_cast<int>(state.map.sectors.size());
-    const bool hasSelectedLight = state.selectedLightIndex >= 0
-            && state.selectedLightIndex < static_cast<int>(state.map.staticLights.size());
-    if (hasSelectedSector) {
-        const SectorDefinition& selectedSector = state.map.sectors[static_cast<size_t>(state.selectedSectorIndex)];
-        const std::vector<SectorPoint>* selectedRing = GetSectorBoundaryRing(
-                state.map,
-                SectorBoundaryEdgeRef{
-                        state.selectedSectorIndex,
-                        state.selectedEdgeRingKind,
-                        state.selectedEdgeHoleIndex,
-                        state.selectedEdgeIndex});
-        if (state.selectedEdgeIndex >= 0
-                && (selectedRing == nullptr
-                        || state.selectedEdgeIndex >= static_cast<int>(selectedRing->size()))) {
-            state.selectedEdgeIndex = -1;
-            state.selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
-            state.selectedEdgeHoleIndex = -1;
-        }
-    }
+    const bool hasSelectedTopologySector = SelectedTopologySector() != nullptr;
+    const bool hasSelectedTopologySideDef = SelectedTopologySideDef() != nullptr;
+    const bool hasSelectedTopologyLineDef = state.topologySelectionKind == TopologySelectionKind::LineDef
+            && SelectedTopologyLineDef() != nullptr;
+    const bool hasSelectedLight = SelectedTopologyLight() != nullptr;
 
     const float rowH = 40.0f;
     const float gap = 8.0f;
@@ -3966,58 +3863,16 @@ void SectorEditor::DrawSectorsPanel(
             height += rowH + gap; // Bake.
             return height;
         }
-        if (!hasSelectedSector) {
-            return 42.0f;
+        if (hasSelectedTopologySector) {
+            return 1700.0f;
         }
-
-        float height = 38.0f; // Sector title.
-        height += rowH + gap; // Id.
-        if (!uiState.idEditError.empty()) {
-            height += 36.0f;
+        if (hasSelectedTopologySideDef) {
+            return 668.0f;
         }
-        height += rowH + gap; // Delete.
-        height += rowH + gap; // Insert sector inside.
-        height += rowH + gap; // Floor.
-        height += rowH + gap; // Ceiling.
-        height += 18.0f; // Lighting separator.
-        height += 30.0f; // Lighting title.
-        height += rowH + gap; // Ambient intensity.
-        height += 3.0f * (rowH + gap); // Ambient RGB.
-        height += 36.0f + gap; // Ambient swatch.
-
-        if (state.selectedEdgeIndex < 0) {
-            height += 4.0f;
-            height += 5.0f * (36.0f + gap);
-            return height;
+        if (hasSelectedTopologyLineDef) {
+            return 218.0f;
         }
-
-        height += 8.0f; // Spacing before separator.
-        height += 18.0f; // Separator.
-        height += 34.0f; // Selected side.
-        height += 30.0f; // From/to.
-        height += 34.0f; // Opposite side.
-
-        const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(
-                state.map,
-                SectorBoundaryEdgeRef{
-                        state.selectedSectorIndex,
-                        state.selectedEdgeRingKind,
-                        state.selectedEdgeHoleIndex,
-                        state.selectedEdgeIndex}
-        );
-        if (neighbor.hasNeighbor) {
-            height += 38.0f + gap;
-        }
-
-        height += 3.0f * (36.0f + gap); // Edge texture rows.
-        height += 4.0f;
-        height += 38.0f + gap; // UV part buttons.
-        height += 62.0f + gap; // Scale inputs.
-        height += 62.0f + gap; // Offset inputs.
-        height += 38.0f; // Reset button.
-        height += gap + 18.0f; // Split separator.
-        height += 38.0f; // Split button.
-        return height;
+        return 42.0f;
     };
     const float contentH = inspectorContentHeight();
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
@@ -4034,30 +3889,30 @@ void SectorEditor::DrawSectorsPanel(
     const float contentW = scroll.viewport.width;
     float y = 0.0f;
 
+    if (hasSelectedTopologySector) {
+        if (DrawTopologySectorInspector(ui, config, input, assets, font, scroll, contentW, rowH, gap)) {
+            engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+            engine::EndPanel(ui, config, panel);
+            return;
+        }
+    }
+
+    if (hasSelectedTopologySideDef || hasSelectedTopologyLineDef) {
+        if (DrawTopologySideDefInspector(ui, config, input, assets, font, scroll, contentW, rowH, gap)) {
+            engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+            engine::EndPanel(ui, config, panel);
+            return;
+        }
+    }
+
     if (hasSelectedLight) {
-        SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.selectedLightIndex)];
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Static Light: %s", light.id.c_str()), engine::UITextJustify::Left, config.textColor);
+        SectorTopologyStaticPointLight& light = *SelectedTopologyLight();
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Static Light: %d", light.id), engine::UITextJustify::Left, config.textColor);
         y += 38.0f;
 
         const float labelW = 88.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, "Id", engine::UITextJustify::Left, config.mutedTextColor);
-        const engine::UITextInputResult idResult = engine::TextInput(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_selected_light_id",
-                Rectangle{labelW, y, contentW - labelW, rowH},
-                font,
-                uiState.selectedLightIdBuffer,
-                sizeof(uiState.selectedLightIdBuffer),
-                0,
-                sizeof(uiState.selectedLightIdBuffer) - 1,
-                engine::UITextJustify::Left
-        );
-        if (idResult.submitted) {
-            TryRenameSelectedLight();
-        }
+        engine::Text(ui, config, assets, Rectangle{labelW, y, contentW - labelW, rowH}, font, TextFormat("%d", light.id), engine::UITextJustify::Left, config.textColor);
         y += rowH + gap;
 
         if (!uiState.idEditError.empty()) {
@@ -4081,8 +3936,9 @@ void SectorEditor::DrawSectorsPanel(
             const engine::UINumericInputResult result = engine::FloatInput(ui, config, input, assets, id, Rectangle{numberLabelW, y, numberFieldW, rowH}, font, edited, inputState, minValue, maxValue, decimals);
             if (result.changed && edited != value) {
                 value = edited;
+                state.topologyDocumentDirty = true;
                 state.hasUnsavedChanges = true;
-                statusText = TextFormat("Updated light %s", light.id.c_str());
+                statusText = TextFormat("Updated topology light %d", light.id);
             }
             y += rowH + gap;
         };
@@ -4115,6 +3971,7 @@ void SectorEditor::DrawSectorsPanel(
             edited = ClampLightSourceRadius(edited, light.radius);
             if (result.changed && edited != light.sourceRadius) {
                 light.sourceRadius = edited;
+                state.topologyDocumentDirty = true;
                 state.hasUnsavedChanges = true;
                 statusText = "Updated light source radius";
             }
@@ -4141,8 +3998,9 @@ void SectorEditor::DrawSectorsPanel(
             if (result.changed && value != static_cast<int>(channel)) {
                 channel = static_cast<unsigned char>(ClampAmbientChannel(value));
                 light.color.a = 255;
+                state.topologyDocumentDirty = true;
                 state.hasUnsavedChanges = true;
-                statusText = TextFormat("Updated light %s color", light.id.c_str());
+                statusText = TextFormat("Updated topology light %d color", light.id);
             }
             y += rowH + gap;
         };
@@ -4169,35 +4027,62 @@ void SectorEditor::DrawSectorsPanel(
         return;
     }
 
-    if (!hasSelectedSector) {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 42.0f}, font, "Selected: none", engine::UITextJustify::Left, config.mutedTextColor);
-        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
-        engine::EndPanel(ui, config, panel);
-        return;
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 42.0f}, font, "Selected: none", engine::UITextJustify::Left, config.mutedTextColor);
+
+    // TODO: Add undo/redo.
+    // TODO: Add validation issue highlighting.
+
+    engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+    engine::EndPanel(ui, config, panel);
+}
+
+bool SectorEditor::DrawTopologySectorInspector(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::UIScrollAreaResult scroll,
+        float contentW,
+        float rowH,
+        float gap)
+{
+    SectorTopologySector* sector = SelectedTopologySector();
+    if (sector == nullptr) {
+        return false;
     }
 
-    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(state.selectedSectorIndex)];
-    engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Sector: %s", sector.id.c_str()), engine::UITextJustify::Left, config.textColor);
+    float y = 0.0f;
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{0.0f, y, contentW, 34.0f},
+            font,
+            TextFormat("Topology Sector: %d", sector->id),
+            engine::UITextJustify::Left,
+            config.textColor);
     y += 38.0f;
 
-    const float labelW = 70.0f;
-    engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, "Id", engine::UITextJustify::Left, config.mutedTextColor);
-    const engine::UITextInputResult idResult = engine::TextInput(
+    const float labelW = 92.0f;
+    const float numberFieldW = 112.0f;
+
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, "Name", engine::UITextJustify::Left, config.mutedTextColor);
+    const engine::UITextInputResult nameResult = engine::TextInput(
             ui,
             config,
             input,
             assets,
-            "sector_editor_selected_sector_id",
+            "sector_editor_selected_topology_sector_name",
             Rectangle{labelW, y, contentW - labelW, rowH},
             font,
             uiState.selectedSectorIdBuffer,
             sizeof(uiState.selectedSectorIdBuffer),
             0,
             sizeof(uiState.selectedSectorIdBuffer) - 1,
-            engine::UITextJustify::Left
-    );
-    if (idResult.submitted) {
-        TryRenameSelectedSector();
+            engine::UITextJustify::Left);
+    if (nameResult.submitted) {
+        TryRenameSelectedTopologySector();
     }
     y += rowH + gap;
 
@@ -4206,119 +4091,108 @@ void SectorEditor::DrawSectorsPanel(
         y += 36.0f;
     }
 
-    if (engine::Button(ui, config, input, assets, "sector_editor_delete_sector", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Sector")) {
-        DeleteSelectedSector();
-        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
-        engine::EndPanel(ui, config, panel);
-        return;
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_delete_sector",
+                Rectangle{0.0f, y, contentW, rowH},
+                font,
+                "Delete Sector")) {
+        OpenDeleteSelectedTopologySectorConfirmation();
     }
     y += rowH + gap;
 
     if (engine::Button(
-            ui,
-            config,
-            input,
-            assets,
-            "sector_editor_insert_sector_inside",
-            Rectangle{0.0f, y, contentW, rowH},
-            font,
-            "Insert Sector Inside")) {
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_insert_sector_inside",
+                Rectangle{0.0f, y, contentW, rowH},
+                font,
+                "Insert Sector Inside")) {
         StartInsertSectorInside();
     }
     y += rowH + gap;
 
-    const float numberLabelW = 92.0f;
-    const float numberFieldW = 102.0f;
-    engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, "Floor:", engine::UITextJustify::Right, config.mutedTextColor);
-    const engine::UINumericInputResult floorResult = engine::FloatInput(ui, config, input, assets, "sector_editor_floor", Rectangle{numberLabelW, y, numberFieldW, rowH}, font, sector.floorZ, uiState.floorInput, -512.0f, 512.0f, 2);
-    if (floorResult.changed) {
-        state.hasUnsavedChanges = true;
-        statusText = TextFormat("Edited sector %s", sector.id.c_str());
-    }
-    y += rowH + gap;
+    auto drawHeight = [&](const char* id, const char* label, float current, engine::UIFloatInputState& inputState, bool floorField) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
+        float edited = current;
+        const engine::UINumericInputResult result = engine::FloatInput(
+                ui, config, input, assets, id,
+                Rectangle{labelW, y, numberFieldW, rowH},
+                font, edited, inputState, -512.0f, 512.0f, 2);
+        if (result.changed && edited != current) {
+            const float nextFloor = floorField ? edited : sector->floorZ;
+            const float nextCeiling = floorField ? sector->ceilingZ : edited;
+            if (!std::isfinite(nextFloor) || !std::isfinite(nextCeiling) || nextCeiling <= nextFloor) {
+                statusText = "Invalid topology sector heights: ceiling must be greater than floor";
+            } else {
+                if (floorField) {
+                    sector->floorZ = edited;
+                } else {
+                    sector->ceilingZ = edited;
+                }
+                MarkTopologyDocumentEdited(TextFormat("Updated topology sector %d height", sector->id));
+            }
+        }
+        y += rowH + gap;
+    };
 
-    engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, "Ceiling:", engine::UITextJustify::Right, config.mutedTextColor);
-    const engine::UINumericInputResult ceilingResult = engine::FloatInput(ui, config, input, assets, "sector_editor_ceiling", Rectangle{numberLabelW, y, numberFieldW, rowH}, font, sector.ceilingZ, uiState.ceilingInput, -512.0f, 512.0f, 2);
-    if (ceilingResult.changed) {
-        state.hasUnsavedChanges = true;
-        statusText = TextFormat("Edited sector %s", sector.id.c_str());
-    }
-    y += rowH + gap;
+    drawHeight("sector_editor_topology_floor", "Floor:", sector->floorZ, uiState.floorInput, true);
+    drawHeight("sector_editor_topology_ceiling", "Ceiling:", sector->ceilingZ, uiState.ceilingInput, false);
 
     engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
     y += 18.0f;
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Lighting", engine::UITextJustify::Left, config.textColor);
     y += 30.0f;
 
-    engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, "Intensity:", engine::UITextJustify::Right, config.mutedTextColor);
-    float ambientIntensity = ClampAmbientIntensity(sector.ambientIntensity);
-    const engine::UINumericInputResult ambientIntensityResult = engine::FloatInput(
-            ui,
-            config,
-            input,
-            assets,
-            "sector_editor_ambient_intensity",
-            Rectangle{numberLabelW, y, numberFieldW, rowH},
-            font,
-            ambientIntensity,
-            uiState.ambientIntensityInput,
-            0.0f,
-            1.0f,
-            3
-    );
-    if (ambientIntensityResult.changed && ambientIntensity != sector.ambientIntensity) {
-        sector.ambientIntensity = ambientIntensity;
-        state.hasUnsavedChanges = true;
-        statusText = "Updated sector ambient intensity";
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, "Intensity:", engine::UITextJustify::Right, config.mutedTextColor);
+    float ambientIntensity = ClampAmbientIntensity(sector->ambientIntensity);
+    const engine::UINumericInputResult ambientResult = engine::FloatInput(
+            ui, config, input, assets, "sector_editor_topology_ambient_intensity",
+            Rectangle{labelW, y, numberFieldW, rowH},
+            font, ambientIntensity, uiState.ambientIntensityInput, 0.0f, 1.0f, 3);
+    if (ambientResult.changed && ambientIntensity != sector->ambientIntensity) {
+        sector->ambientIntensity = ambientIntensity;
+        MarkTopologyDocumentEdited("Updated topology sector ambient intensity");
     }
     y += rowH + gap;
 
-    auto drawAmbientChannel = [&](const char* id, const char* label, unsigned char& channel) {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
+    auto drawAmbientChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
         int value = static_cast<int>(channel);
-        engine::UIIntInputState& inputState = (label[0] == 'R')
-                ? uiState.ambientRedInput
-                : (label[0] == 'G') ? uiState.ambientGreenInput : uiState.ambientBlueInput;
         const engine::UINumericInputResult result = engine::IntInput(
-                ui,
-                config,
-                input,
-                assets,
-                id,
-                Rectangle{numberLabelW, y, contentW - numberLabelW, rowH},
-                font,
-                value,
-                inputState,
-                0,
-                255,
-                1
-        );
+                ui, config, input, assets, id,
+                Rectangle{labelW, y, contentW - labelW, rowH},
+                font, value, inputState, 0, 255, 1);
         if (result.changed && value != static_cast<int>(channel)) {
             channel = static_cast<unsigned char>(ClampAmbientChannel(value));
-            sector.ambientColor.a = 255;
-            state.hasUnsavedChanges = true;
-            statusText = "Updated sector ambient color";
+            sector->ambientColor.a = 255;
+            MarkTopologyDocumentEdited("Updated topology sector ambient color");
         }
         y += rowH + gap;
     };
-    drawAmbientChannel("sector_editor_ambient_r", "R:", sector.ambientColor.r);
-    drawAmbientChannel("sector_editor_ambient_g", "G:", sector.ambientColor.g);
-    drawAmbientChannel("sector_editor_ambient_b", "B:", sector.ambientColor.b);
+    drawAmbientChannel("sector_editor_topology_ambient_r", "R:", sector->ambientColor.r, uiState.ambientRedInput);
+    drawAmbientChannel("sector_editor_topology_ambient_g", "G:", sector->ambientColor.g, uiState.ambientGreenInput);
+    drawAmbientChannel("sector_editor_topology_ambient_b", "B:", sector->ambientColor.b, uiState.ambientBlueInput);
 
     const Rectangle swatch{
-            scroll.viewport.x + numberLabelW,
+            scroll.viewport.x + labelW,
             scroll.viewport.y - uiState.inspectorScroll.offset.y + y + 2.0f,
-            std::min(120.0f, contentW - numberLabelW),
-            28.0f
-    };
-    DrawRectangleRec(swatch, SectorAmbientPreviewColor(sector, 255));
+            std::min(120.0f, contentW - labelW),
+            28.0f};
+    DrawRectangleRec(swatch, TopologySectorAmbientPreviewColor(*sector, 255));
     DrawRectangleLinesEx(swatch, 1.0f, config.borderColor);
     y += 36.0f + gap;
 
-    auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TexturePickerTargetKind target, int edgeIndex, bool overridden) {
+    auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologySectorTextureField field) {
         const float buttonW = 38.0f;
-        const float labelColumnW = 74.0f;
+        const float labelColumnW = 82.0f;
         const Rectangle row{0.0f, y, contentW, 36.0f};
+        const bool missing = !textureId.empty() && FindSectorTopologyTexture(state.topologyMap, textureId) == nullptr;
         engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
         engine::Text(
                 ui,
@@ -4326,259 +4200,335 @@ void SectorEditor::DrawSectorsPanel(
                 assets,
                 Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
                 font,
-                textureId.c_str(),
+                textureId.empty() ? "<none>" : textureId.c_str(),
                 engine::UITextJustify::Left,
-                overridden ? config.accentColor : config.mutedTextColor
-        );
+                missing ? config.invalidColor : config.mutedTextColor);
         if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
-            OpenTexturePicker(target, SectorBoundaryEdgeRef{
-                    state.selectedSectorIndex,
-                    state.selectedEdgeRingKind,
-                    state.selectedEdgeHoleIndex,
-                    edgeIndex});
+            OpenTopologyTexturePicker(sector->id, field);
         }
         y += row.height + gap;
     };
 
-    if (state.selectedEdgeIndex < 0) {
-        y += 4.0f;
-        drawTextureRow("sector_editor_pick_floor", "Floor:", sector.floorTextureId, TexturePickerTargetKind::SectorFloor, -1, false);
-        drawTextureRow("sector_editor_pick_ceiling", "Ceil:", sector.ceilingTextureId, TexturePickerTargetKind::SectorCeiling, -1, false);
-        drawTextureRow("sector_editor_pick_wall", "Wall:", sector.wallTextureId, TexturePickerTargetKind::SectorWall, -1, false);
-        drawTextureRow("sector_editor_pick_lower_wall", "Lower:", sector.lowerWallTextureId, TexturePickerTargetKind::SectorLowerWall, -1, false);
-        drawTextureRow("sector_editor_pick_upper_wall", "Upper:", sector.upperWallTextureId, TexturePickerTargetKind::SectorUpperWall, -1, false);
-    } else {
-        y += 8.0f;
+    auto drawUvSettings = [&](const char* idPrefix, SectorTopologyUvSettings& uv, int stateOffset) {
+        const float uvColumnW = (contentW - gap) * 0.5f;
+        const float uvBlockH = 62.0f;
+        auto drawFloat = [&](int stateIndex, const char* suffix, const char* label, float value, float minValue, float maxValue, Rectangle bounds, auto applyValue) {
+            engine::Text(ui, config, assets, Rectangle{bounds.x, bounds.y, bounds.width, 26.0f}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+            float edited = value;
+            const std::string inputId = std::string(idPrefix) + suffix;
+            const engine::UINumericInputResult result = engine::FloatInput(
+                    ui, config, input, assets, inputId.c_str(),
+                    Rectangle{bounds.x, bounds.y + 26.0f, bounds.width, 36.0f},
+                    font, edited, uiState.topologySectorUvInputs[stateOffset + stateIndex], minValue, maxValue, 3);
+            if (result.changed && edited != value && std::isfinite(edited)) {
+                applyValue(edited);
+                MarkTopologyDocumentEdited(TextFormat("Updated topology sector %d UV", sector->id));
+            }
+        };
+
+        drawFloat(0, "_scale_u", "Scale U", uv.scale.x, 0.01f, 64.0f, Rectangle{0.0f, y, uvColumnW, uvBlockH}, [&](float value) { uv.scale.x = value; });
+        drawFloat(1, "_scale_v", "Scale V", uv.scale.y, 0.01f, 64.0f, Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH}, [&](float value) { uv.scale.y = value; });
+        y += uvBlockH + gap;
+        drawFloat(2, "_offset_u", "Offset U", uv.offset.x, -1024.0f, 1024.0f, Rectangle{0.0f, y, uvColumnW, uvBlockH}, [&](float value) { uv.offset.x = value; });
+        drawFloat(3, "_offset_v", "Offset V", uv.offset.y, -1024.0f, 1024.0f, Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH}, [&](float value) { uv.offset.y = value; });
+        y += uvBlockH + gap;
+    };
+
+    auto drawSurfaceSection = [&](const char* title, const char* textureButtonId, const std::string& textureId, TopologySectorTextureField field, const char* uvPrefix, SectorTopologyUvSettings& uv, int stateOffset) {
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
         y += 18.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, title, engine::UITextJustify::Left, config.textColor);
+        y += 30.0f;
+        drawTextureRow(textureButtonId, "Texture:", textureId, field);
+        drawUvSettings(uvPrefix, uv, stateOffset);
+    };
 
-        const int edgeIndex = state.selectedEdgeIndex;
-        const SectorBoundaryEdgeRef selectedEdge{
-                state.selectedSectorIndex,
-                state.selectedEdgeRingKind,
-                state.selectedEdgeHoleIndex,
-                edgeIndex};
-        const std::vector<SectorPoint>* selectedRing = GetSectorBoundaryRing(state.map, selectedEdge);
-        const SectorPoint from = (*selectedRing)[static_cast<size_t>(edgeIndex)];
-        const SectorPoint to = (*selectedRing)[(static_cast<size_t>(edgeIndex) + 1) % selectedRing->size()];
-        const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(state.map, selectedEdge);
-        const EffectiveEdgeSettings effective = GetEffectiveEdgeSettings(state.map, selectedEdge);
-        const SectorEdgeOverride* edgeOverride = FindEdgeOverride(selectedEdge);
-        const bool wallOverridden = edgeOverride != nullptr && edgeOverride->hasWallTexture;
-        const bool lowerOverridden = edgeOverride != nullptr && edgeOverride->hasLowerWallTexture;
-        const bool upperOverridden = edgeOverride != nullptr && edgeOverride->hasUpperWallTexture;
+    drawSurfaceSection("Floor", "sector_editor_topology_pick_floor", sector->floorTextureId, TopologySectorTextureField::Floor, "sector_editor_topology_floor_uv", sector->floorUv, 0);
+    drawSurfaceSection("Ceiling", "sector_editor_topology_pick_ceiling", sector->ceilingTextureId, TopologySectorTextureField::Ceiling, "sector_editor_topology_ceiling_uv", sector->ceilingUv, 4);
 
+    auto drawWallDefaultSection = [&](const char* title, const char* textureButtonId, SectorTopologyWallPartSettings& part, TopologySectorTextureField field, const char* uvPrefix, int stateOffset) {
+        engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
+        y += 18.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, title, engine::UITextJustify::Left, config.textColor);
+        y += 30.0f;
+        drawTextureRow(textureButtonId, "Texture:", part.textureId, field);
+        drawUvSettings(uvPrefix, part.uv, stateOffset);
+    };
+
+    drawWallDefaultSection("Default Wall", "sector_editor_topology_pick_default_wall", sector->defaultWall, TopologySectorTextureField::DefaultWall, "sector_editor_topology_wall_uv", 8);
+    drawWallDefaultSection("Default Lower", "sector_editor_topology_pick_default_lower", sector->defaultLower, TopologySectorTextureField::DefaultLower, "sector_editor_topology_lower_uv", 12);
+    drawWallDefaultSection("Default Upper", "sector_editor_topology_pick_default_upper", sector->defaultUpper, TopologySectorTextureField::DefaultUpper, "sector_editor_topology_upper_uv", 16);
+
+    return true;
+}
+
+bool SectorEditor::DrawTopologySideDefInspector(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::UIScrollAreaResult scroll,
+        float contentW,
+        float rowH,
+        float gap)
+{
+    const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
+    if (lineDef == nullptr) {
+        return false;
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    const bool hasEndpoints = GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end);
+
+    float y = 0.0f;
+    SectorTopologySideDef* sideDef = SelectedTopologySideDef();
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{0.0f, y, contentW, 34.0f},
+            font,
+            sideDef != nullptr
+                    ? TextFormat(
+                            "Topology %s SideDef: %d",
+                            SectorTopologySideKindName(sideDef->side),
+                            sideDef->id)
+                    : TextFormat("Topology LineDef: %d", lineDef->id),
+            engine::UITextJustify::Left,
+            config.textColor);
+    y += 38.0f;
+
+    if (hasEndpoints) {
+        const Vector2 from = SectorTopologyVertexToMap(*start);
+        const Vector2 to = SectorTopologyVertexToMap(*end);
         engine::Text(
                 ui,
                 config,
                 assets,
-                Rectangle{0.0f, y, contentW, 34.0f},
+                Rectangle{0.0f, y, contentW, 30.0f},
                 font,
-                state.selectedEdgeRingKind == SectorBoundaryRingKind::Hole
-                        ? TextFormat("Selected side: %s hole %d edge %d", sector.id.c_str(), state.selectedEdgeHoleIndex, edgeIndex)
-                        : TextFormat("Selected side: %s outer edge %d", sector.id.c_str(), edgeIndex),
+                TextFormat("Line %d  From %.2f, %.2f  To %.2f, %.2f", lineDef->id, from.x, from.y, to.x, to.y),
                 engine::UITextJustify::Left,
-                config.textColor
-        );
-        y += 34.0f;
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, TextFormat("From %.2f, %.2f  To %.2f, %.2f", from.x, from.y, to.x, to.y), engine::UITextJustify::Left, config.mutedTextColor);
-        y += 30.0f;
-        const char* neighborText = "Opposite side: none";
-        if (neighbor.hasNeighbor) {
-            neighborText = neighbor.ringKind == SectorBoundaryRingKind::Hole
-                    ? TextFormat(
-                            "Opposite side: %s hole %d edge %d",
-                            state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)].id.c_str(),
-                            neighbor.holeIndex,
-                            neighbor.edgeIndex)
-                    : TextFormat(
-                            "Opposite side: %s outer edge %d",
-                            state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)].id.c_str(),
-                            neighbor.edgeIndex);
-        }
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, neighborText, engine::UITextJustify::Left, config.mutedTextColor);
-        y += 34.0f;
-        if (neighbor.hasNeighbor) {
-            if (engine::Button(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    "sector_editor_edit_opposite_edge",
-                    Rectangle{0.0f, y, contentW, 38.0f},
-                    font,
-                    "Edit opposite side")) {
-                SelectEdge(
-                        neighbor.sectorIndex,
-                        neighbor.edgeIndex,
-                        neighbor.ringKind,
-                        neighbor.holeIndex);
-                statusText = TextFormat(
-                        "Selected opposite side %s edge %d",
-                        state.map.sectors[static_cast<size_t>(neighbor.sectorIndex)].id.c_str(),
-                        neighbor.edgeIndex
-                );
-                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
-                engine::EndPanel(ui, config, panel);
-                return;
-            }
-            y += 38.0f + gap;
-        }
+                config.mutedTextColor);
+        y += 32.0f;
+    } else {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Line endpoints are invalid", engine::UITextJustify::Left, config.invalidColor);
+        y += 32.0f;
+    }
 
-        drawTextureRow("sector_editor_pick_edge_wall", "Wall:", effective.wall.textureId, TexturePickerTargetKind::EdgeWall, edgeIndex, wallOverridden);
-        drawTextureRow("sector_editor_pick_edge_lower", "Lower:", effective.lower.textureId, TexturePickerTargetKind::EdgeLowerWall, edgeIndex, lowerOverridden);
-        drawTextureRow("sector_editor_pick_edge_upper", "Upper:", effective.upper.textureId, TexturePickerTargetKind::EdgeUpperWall, edgeIndex, upperOverridden);
-
-        y += 4.0f;
-        const float partButtonW = (contentW - gap * 2.0f) / 3.0f;
-        const EdgeUvPart parts[] = {EdgeUvPart::Wall, EdgeUvPart::Lower, EdgeUvPart::Upper};
-        for (int i = 0; i < 3; ++i) {
-            const EdgeUvPart part = parts[i];
-            if (engine::ToolButton(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    TextFormat("sector_editor_edge_uv_part_%d", i),
-                    Rectangle{static_cast<float>(i) * (partButtonW + gap), y, partButtonW, 38.0f},
-                    font,
-                    EdgeUvPartName(part),
-                    state.selectedEdgeUvPart == part)) {
-                state.selectedEdgeUvPart = part;
-                uiState.edgeUvScaleUInput = engine::UIFloatInputState{};
-                uiState.edgeUvScaleVInput = engine::UIFloatInputState{};
-                uiState.edgeUvOffsetUInput = engine::UIFloatInputState{};
-                uiState.edgeUvOffsetVInput = engine::UIFloatInputState{};
-                statusText = TextFormat("Editing %s UV", EdgeUvPartStatusName(part));
-            }
-        }
-        y += 38.0f + gap;
-
-        auto selectedEffectivePart = [&effective](EdgeUvPart part) -> const EffectiveEdgePartSettings& {
-            switch (part) {
-                case EdgeUvPart::Wall: return effective.wall;
-                case EdgeUvPart::Lower: return effective.lower;
-                case EdgeUvPart::Upper: return effective.upper;
-            }
-            return effective.wall;
-        };
-        auto selectedMutableUv = [](SectorEdgeOverride& edgeOverride, EdgeUvPart part) -> SectorEdgePartUvOverride& {
-            switch (part) {
-                case EdgeUvPart::Wall: return edgeOverride.wallUv;
-                case EdgeUvPart::Lower: return edgeOverride.lowerUv;
-                case EdgeUvPart::Upper: return edgeOverride.upperUv;
-            }
-            return edgeOverride.wallUv;
-        };
-        const EffectiveEdgePartSettings& selectedPart = selectedEffectivePart(state.selectedEdgeUvPart);
-
-        auto drawUvInput = [&](const char* id, const char* label, float value, engine::UIFloatInputState& inputState, float minValue, float maxValue, Rectangle bounds, auto applyValue) {
-            engine::Text(ui, config, assets, Rectangle{bounds.x, bounds.y, bounds.width, 26.0f}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
-            float editedValue = value;
-            const engine::UINumericInputResult result = engine::FloatInput(ui, config, input, assets, id, Rectangle{bounds.x, bounds.y + 26.0f, bounds.width, 36.0f}, font, editedValue, inputState, minValue, maxValue, 3);
-            if (result.changed && editedValue != value) {
-                SectorEdgeOverride& mutableOverride = EnsureEdgeOverride(selectedEdge);
-                SectorEdgePartUvOverride& uv = selectedMutableUv(mutableOverride, state.selectedEdgeUvPart);
-                applyValue(uv, editedValue);
-                state.hasUnsavedChanges = true;
-                statusText = TextFormat("Updated %s UV %s", EdgeUvPartStatusName(state.selectedEdgeUvPart), label);
-            }
-        };
-
-        const float uvColumnW = (contentW - gap) * 0.5f;
-        const float uvBlockH = 62.0f;
-        drawUvInput(
-                "sector_editor_edge_uv_scale_u",
-                "Scale U",
-                selectedPart.uvScale.x,
-                uiState.edgeUvScaleUInput,
-                0.01f,
-                64.0f,
-                Rectangle{0.0f, y, uvColumnW, uvBlockH},
-                [](SectorEdgePartUvOverride& uv, float value) {
-                    uv.uvScale.x = value;
-                    uv.hasUvScale = true;
-                }
-        );
-        drawUvInput(
-                "sector_editor_edge_uv_scale_v",
-                "Scale V",
-                selectedPart.uvScale.y,
-                uiState.edgeUvScaleVInput,
-                0.01f,
-                64.0f,
-                Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH},
-                [](SectorEdgePartUvOverride& uv, float value) {
-                    uv.uvScale.y = value;
-                    uv.hasUvScale = true;
-                }
-        );
-        y += uvBlockH + gap;
-        drawUvInput(
-                "sector_editor_edge_uv_offset_u",
-                "Offset U",
-                selectedPart.uvOffset.x,
-                uiState.edgeUvOffsetUInput,
-                -1024.0f,
-                1024.0f,
-                Rectangle{0.0f, y, uvColumnW, uvBlockH},
-                [](SectorEdgePartUvOverride& uv, float value) {
-                    uv.uvOffset.x = value;
-                    uv.hasUvOffset = true;
-                }
-        );
-        drawUvInput(
-                "sector_editor_edge_uv_offset_v",
-                "Offset V",
-                selectedPart.uvOffset.y,
-                uiState.edgeUvOffsetVInput,
-                -1024.0f,
-                1024.0f,
-                Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH},
-                [](SectorEdgePartUvOverride& uv, float value) {
-                    uv.uvOffset.y = value;
-                    uv.hasUvOffset = true;
-                }
-        );
-        y += uvBlockH + gap;
-
-        if (engine::Button(ui, config, input, assets, "sector_editor_edge_reset_uv", Rectangle{0.0f, y, contentW, 38.0f}, font, TextFormat("Reset %s UV", EdgeUvPartName(state.selectedEdgeUvPart)))) {
-            SectorEdgeOverride* mutableOverride = FindMutableEdgeOverride(selectedEdge);
-            if (mutableOverride != nullptr) {
-                SectorEdgePartUvOverride& uv = selectedMutableUv(*mutableOverride, state.selectedEdgeUvPart);
-                if (uv.hasUvScale || uv.hasUvOffset) {
-                    uv.uvScale = Vector2{1.0f, 1.0f};
-                    uv.uvOffset = Vector2{0.0f, 0.0f};
-                    uv.hasUvScale = false;
-                    uv.hasUvOffset = false;
-                    RemoveEdgeOverrideIfEmpty(selectedEdge);
-                    state.hasUnsavedChanges = true;
-                    statusText = TextFormat("Reset %s UV", EdgeUvPartStatusName(state.selectedEdgeUvPart));
-                }
-            }
-        }
-        y += 38.0f + gap;
-
-        engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
-        y += 18.0f;
-        if (engine::Button(
+    if (engine::Button(
                 ui,
                 config,
                 input,
                 assets,
-                "sector_editor_split_edge",
+                "sector_editor_topology_split_linedef",
                 Rectangle{0.0f, y, contentW, 38.0f},
                 font,
-                "Split Edge")) {
-            SplitSelectedEdge(assets);
-        }
+                "Split Linedef")) {
+        SplitSelectedTopologyLineDef();
+        return true;
+    }
+    y += 38.0f + gap;
+
+    if (sideDef == nullptr) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 64.0f},
+                font,
+                "Line-only selection: this linedef has no sidedef to edit.",
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        return true;
     }
 
-    // TODO: Add undo/redo.
-    // TODO: Add validation issue highlighting.
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{0.0f, y, contentW, 30.0f},
+            font,
+            TextFormat("Sector %d  Line %d", sideDef->sectorId, sideDef->lineDefId),
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
+    y += 34.0f;
 
-    engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
-    engine::EndPanel(ui, config, panel);
+    const SectorTopologySideDef* opposite = FindOppositeSectorTopologySideDef(
+            state.topologyMap,
+            sideDef->id);
+    if (opposite != nullptr) {
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_switch_opposite_side",
+                    Rectangle{0.0f, y, contentW, 38.0f},
+                    font,
+                    TextFormat("Switch to opposite side (%s)", SectorTopologySideKindName(opposite->side)))) {
+            const int oppositeId = opposite->id;
+            SelectTopologySideDef(oppositeId, state.selectedTopologyWallPart);
+            statusText = TextFormat("Selected opposite topology sidedef %d", oppositeId);
+            return true;
+        }
+        y += 38.0f + gap;
+    } else {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 30.0f},
+                font,
+                "Opposite side: none",
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        y += 34.0f;
+    }
+
+    auto drawTextureRow = [&](const char* id, const char* label, const SectorTopologyWallPartSettings& part, TopologyWallPart wallPart) {
+        const float buttonW = 38.0f;
+        const float labelColumnW = 74.0f;
+        const Rectangle row{0.0f, y, contentW, 36.0f};
+        const bool missing = !part.textureId.empty() && FindSectorTopologyTexture(state.topologyMap, part.textureId) == nullptr;
+        engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
+                font,
+                part.textureId.empty() ? "<none>" : part.textureId.c_str(),
+                engine::UITextJustify::Left,
+                missing ? config.invalidColor : config.mutedTextColor);
+        if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
+            OpenTopologySideDefTexturePicker(sideDef->id, wallPart);
+        }
+        y += row.height + gap;
+    };
+
+    drawTextureRow("sector_editor_topology_sidedef_pick_wall", "Wall:", sideDef->wall, TopologyWallPart::Wall);
+    drawTextureRow("sector_editor_topology_sidedef_pick_lower", "Lower:", sideDef->lower, TopologyWallPart::Lower);
+    drawTextureRow("sector_editor_topology_sidedef_pick_upper", "Upper:", sideDef->upper, TopologyWallPart::Upper);
+
+    y += 4.0f;
+    const float partButtonW = (contentW - gap * 2.0f) / 3.0f;
+    const TopologyWallPart parts[] = {TopologyWallPart::Wall, TopologyWallPart::Lower, TopologyWallPart::Upper};
+    for (int i = 0; i < 3; ++i) {
+        const TopologyWallPart part = parts[i];
+        if (engine::ToolButton(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("sector_editor_topology_sidedef_part_%d", i),
+                    Rectangle{static_cast<float>(i) * (partButtonW + gap), y, partButtonW, 38.0f},
+                    font,
+                    TopologyWallPartName(part),
+                    state.selectedTopologyWallPart == part)) {
+            state.selectedTopologyWallPart = part;
+            for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+                inputState = engine::UIFloatInputState{};
+            }
+            statusText = TextFormat("Editing topology %s UV", TopologyWallPartStatusName(part));
+        }
+    }
+    y += 38.0f + gap;
+
+    SectorTopologyWallPartSettings& selectedPart = TopologyWallPartSettingsFor(*sideDef, state.selectedTopologyWallPart);
+    const float uvColumnW = (contentW - gap) * 0.5f;
+    const float uvBlockH = 62.0f;
+    auto drawUvInput = [&](int stateIndex, const char* id, const char* label, float value, float minValue, float maxValue, Rectangle bounds, auto applyValue) {
+        engine::Text(ui, config, assets, Rectangle{bounds.x, bounds.y, bounds.width, 26.0f}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+        float edited = value;
+        const engine::UINumericInputResult result = engine::FloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                id,
+                Rectangle{bounds.x, bounds.y + 26.0f, bounds.width, 36.0f},
+                font,
+                edited,
+                uiState.topologySideDefUvInputs[stateIndex],
+                minValue,
+                maxValue,
+                3);
+        if (result.changed && edited != value) {
+            if (!std::isfinite(edited)) {
+                statusText = "Invalid topology sidedef UV value";
+                return;
+            }
+            applyValue(edited);
+            MarkTopologyDocumentEdited(TextFormat(
+                    "Updated topology sidedef %d %s UV",
+                    sideDef->id,
+                    TopologyWallPartStatusName(state.selectedTopologyWallPart)));
+        }
+    };
+
+    drawUvInput(
+            0,
+            "sector_editor_topology_sidedef_uv_scale_u",
+            "Scale U",
+            selectedPart.uv.scale.x,
+            0.01f,
+            64.0f,
+            Rectangle{0.0f, y, uvColumnW, uvBlockH},
+            [&](float value) { selectedPart.uv.scale.x = value; });
+    drawUvInput(
+            1,
+            "sector_editor_topology_sidedef_uv_scale_v",
+            "Scale V",
+            selectedPart.uv.scale.y,
+            0.01f,
+            64.0f,
+            Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH},
+            [&](float value) { selectedPart.uv.scale.y = value; });
+    y += uvBlockH + gap;
+    drawUvInput(
+            2,
+            "sector_editor_topology_sidedef_uv_offset_u",
+            "Offset U",
+            selectedPart.uv.offset.x,
+            -1024.0f,
+            1024.0f,
+            Rectangle{0.0f, y, uvColumnW, uvBlockH},
+            [&](float value) { selectedPart.uv.offset.x = value; });
+    drawUvInput(
+            3,
+            "sector_editor_topology_sidedef_uv_offset_v",
+            "Offset V",
+            selectedPart.uv.offset.y,
+            -1024.0f,
+            1024.0f,
+            Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH},
+            [&](float value) { selectedPart.uv.offset.y = value; });
+    y += uvBlockH + gap;
+
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_reset_uv",
+                Rectangle{0.0f, y, contentW, 38.0f},
+                font,
+                TextFormat("Reset %s UV", TopologyWallPartName(state.selectedTopologyWallPart)))) {
+        selectedPart.uv.scale = Vector2{1.0f, 1.0f};
+        selectedPart.uv.offset = Vector2{0.0f, 0.0f};
+        for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+        MarkTopologyDocumentEdited(TextFormat(
+                "Reset topology sidedef %d %s UV",
+                sideDef->id,
+                TopologyWallPartStatusName(state.selectedTopologyWallPart)));
+    }
+
+    return true;
 }
 
 void SectorEditor::DrawAddMapTextureModal(
@@ -4777,7 +4727,12 @@ void SectorEditor::DrawTexturePickerModal(
     DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
 
     float y = modal.y + 18.0f;
-    engine::Text(config, assets, Rectangle{modal.x + 22.0f, y, modal.width - 44.0f, 36.0f}, font, TextFormat("Pick %s", TextureTargetLabel(picker.target)));
+    engine::Text(
+            config,
+            assets,
+            Rectangle{modal.x + 22.0f, y, modal.width - 44.0f, 36.0f},
+            font,
+            TextFormat("Pick %s", TopologyPickerTargetLabel(picker)));
     y += 50.0f;
 
     const Rectangle listBounds{modal.x + 22.0f, y, 350.0f, 420.0f};
@@ -4815,17 +4770,14 @@ void SectorEditor::DrawTexturePickerModal(
         previewTextureId = picker.textureIds[static_cast<size_t>(picker.selectedTextureIndex)];
     }
     if (previewTextureId.empty()) {
-        previewTextureId = CurrentTextureForTarget(
-                picker.target,
-                SectorBoundaryEdgeRef{
-                        picker.sectorIndex, picker.ringKind, picker.holeIndex, picker.edgeIndex});
+        previewTextureId = CurrentTextureForPickerTarget();
     }
 
     const Rectangle previewBounds{modal.x + 402.0f, y, 376.0f, 300.0f};
     engine::Image(config, assets, previewBounds, EditorTextureHandleForId(previewTextureId));
     y += 316.0f;
 
-    const SectorTextureDefinition* previewTexture = FindSectorTexture(state.map, previewTextureId);
+    const SectorTextureDefinition* previewTexture = FindSectorTopologyTexture(state.topologyMap, previewTextureId);
     const std::string path = previewTexture == nullptr ? std::string{} : previewTexture->path;
     engine::Text(config, assets, Rectangle{modal.x + 402.0f, y, 376.0f, 34.0f}, font, TextFormat("Id: %s", previewTextureId.empty() ? "<none>" : previewTextureId.c_str()), engine::UITextJustify::Left, config.textColor);
     y += 38.0f;
@@ -4953,7 +4905,7 @@ void SectorEditor::DrawLoadLevelModal(
             return;
         }
         const LevelListEntry selected = loadState.levels[static_cast<size_t>(loadState.selectedIndex)];
-        if (state.hasUnsavedChanges) {
+        if (state.topologyDocumentDirty) {
             OpenConfirmation(
                     "Load Level",
                     "Discard unsaved changes and load selected level?",
@@ -5225,47 +5177,12 @@ void SectorEditor::DrawStatusPanel(
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
     std::string selectedLabel = "none";
-    if (state.selectedLightIndex >= 0
-            && state.selectedLightIndex < static_cast<int>(state.map.staticLights.size())) {
-        selectedLabel = state.map.staticLights[static_cast<size_t>(state.selectedLightIndex)].id;
-    } else if (state.selectedSectorIndex >= 0
-            && state.selectedSectorIndex < static_cast<int>(state.map.sectors.size())) {
-        const SectorDefinition& selectedSector = state.map.sectors[static_cast<size_t>(state.selectedSectorIndex)];
-        if (state.selectedEdgeIndex >= 0
-                && state.selectedEdgeRingKind == SectorBoundaryRingKind::Hole) {
-            const SectorBoundaryEdgeRef edge{
-                    state.selectedSectorIndex,
-                    state.selectedEdgeRingKind,
-                    state.selectedEdgeHoleIndex,
-                    state.selectedEdgeIndex};
-            const SectorEdgeOverride* edgeOverride = FindEdgeOverride(edge);
-            const bool hasTextureOverride = edgeOverride != nullptr
-                    && (edgeOverride->hasWallTexture || edgeOverride->hasLowerWallTexture || edgeOverride->hasUpperWallTexture);
-            selectedLabel = TextFormat(
-                    "%s hole %d edge %d %s UV %s",
-                    selectedSector.id.c_str(),
-                    state.selectedEdgeHoleIndex,
-                    state.selectedEdgeIndex,
-                    hasTextureOverride ? "override" : "inherited",
-                    EdgeUvPartName(state.selectedEdgeUvPart));
-        } else if (state.selectedEdgeIndex >= 0 && state.selectedEdgeIndex < static_cast<int>(selectedSector.points.size())) {
-            const SectorEdgeOverride* edgeOverride = FindEdgeOverride(SectorBoundaryEdgeRef{
-                    state.selectedSectorIndex,
-                    SectorBoundaryRingKind::Outer,
-                    -1,
-                    state.selectedEdgeIndex});
-            const bool hasTextureOverride = edgeOverride != nullptr
-                    && (edgeOverride->hasWallTexture || edgeOverride->hasLowerWallTexture || edgeOverride->hasUpperWallTexture);
-            selectedLabel = TextFormat(
-                    "%s edge %d %s UV %s",
-                    selectedSector.id.c_str(),
-                    state.selectedEdgeIndex,
-                    hasTextureOverride ? "override" : "inherited",
-                    EdgeUvPartName(state.selectedEdgeUvPart)
-            );
-        } else {
-            selectedLabel = selectedSector.id;
-        }
+    if (const SectorTopologyStaticPointLight* light = SelectedTopologyLight()) {
+        selectedLabel = TextFormat("topology light %d", light->id);
+    } else if (const SectorTopologySector* topologySector = SelectedTopologySector()) {
+        selectedLabel = topologySector->name.empty()
+                ? TextFormat("topology sector %d", topologySector->id)
+                : TextFormat("%s (%d)", topologySector->name.c_str(), topologySector->id);
     }
 
     std::string pendingText;
@@ -5275,15 +5192,20 @@ void SectorEditor::DrawStatusPanel(
     const std::string shortMapPath = state.hasCurrentLevelPath
             ? state.currentLevelPath
             : std::string{"<untitled>"};
-    const char* lightmapText = SectorLightmapStatusText(GetSectorLightmapStatus(state.map));
+    const char* lightmapText = SectorLightmapStatusText(GetSectorLightmapStatus(state.topologyMap));
+    std::string status = statusText.empty() ? "Ready" : statusText;
+    if (!state.topologyRenderWarning.empty()) {
+        status += " | ";
+        status += state.topologyRenderWarning;
+    }
     const char* text = TextFormat(
             "%s%s | %s%s | map %s%s | grid %d | %s | selected %s",
-            statusText.empty() ? "Map not loaded" : statusText.c_str(),
-            state.hasUnsavedChanges ? " *modified" : "",
+            status.c_str(),
+            state.topologyDocumentDirty ? " *modified" : "",
             ToolHelpText(state.currentTool),
             pendingText.c_str(),
             shortMapPath.c_str(),
-            state.hasUnsavedChanges ? "*" : "",
+            state.topologyDocumentDirty ? "*" : "",
             state.gridSize,
             lightmapText,
             selectedLabel.c_str()
@@ -5312,7 +5234,7 @@ void SectorEditor::ResetToBlankMap(engine::AssetManager& assets)
 
     state = SectorEditorState{};
     uiState = SectorEditorUiState{};
-    state.map = MakeBlankSectorMap();
+    ResetEditorTopologyDocumentState(state);
     state.viewCenter = Vector2{9.0f, 6.0f};
     state.viewZoom = 48.0f;
     state.gridSize = 8;
@@ -5327,11 +5249,13 @@ bool SectorEditor::LoadLevel(
         const std::string& levelName,
         const std::string& jsonAssetPath)
 {
-    SectorMap loaded;
+    SectorTopologyMap loaded;
     std::string error;
     const std::string filePath = ResolveEditorAssetPath(jsonAssetPath);
-    if (!LoadSectorMap(filePath.c_str(), loaded, &error)) {
-        state.loadLevelModal.errorMessage = error.empty() ? "Failed to load level" : error;
+    if (!LoadSectorTopologyMap(filePath.c_str(), loaded, &error)) {
+        state.loadLevelModal.errorMessage = error.empty()
+                ? "Topology v2 load failed"
+                : TextFormat("Topology v2 load failed: %s", error.c_str());
         statusText = state.loadLevelModal.errorMessage;
         return false;
     }
@@ -5340,7 +5264,10 @@ bool SectorEditor::LoadLevel(
     CancelPendingSector(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
-    state.map = std::move(loaded);
+    state.topologyMap = std::move(loaded);
+    state.topologyDocumentInitialized = true;
+    state.topologyDocumentDirty = false;
+    state.topologyDocumentStatus = TextFormat("Topology document: loaded %s", jsonAssetPath.c_str());
     state.currentLevelName = levelName;
     state.currentLevelPath = jsonAssetPath;
     state.hasCurrentLevelPath = true;
@@ -5353,9 +5280,16 @@ bool SectorEditor::LoadLevel(
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
     ClearSelection();
+    state.hoveredTopologyLightId = -1;
+    state.hasHoveredVertex = false;
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
+    state.pendingSector = PendingSectorDraw{};
+    state.vertexDrag = VertexDragState{};
+    state.lightDrag = LightDragState{};
     RefreshDefaultTextures();
     RefreshEditorTextureAssets(assets);
-    statusText = TextFormat("Loaded %s", jsonAssetPath.c_str());
+    statusText = TextFormat("Loaded topology %s", jsonAssetPath.c_str());
     return true;
 }
 
@@ -5457,25 +5391,25 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
         return false;
     }
 
-    SectorMap mapToSave = state.map;
-    if (!savingToCurrentPath) {
-        mapToSave.bakedLightmap = SectorLightmapMetadata{};
-        mapToSave.bakedLightmap.path = paths.lightmapAssetPath;
-    }
-    if (!SaveSectorMap(paths.jsonFilePath.string().c_str(), mapToSave)) {
-        modal.errorMessage = "Could not write level JSON";
+    std::string saveError;
+    if (!SaveSectorTopologyMap(paths.jsonFilePath.string().c_str(), state.topologyMap, &saveError)) {
+        modal.errorMessage = saveError.empty()
+                ? "Could not write topology level JSON"
+                : TextFormat("Could not write topology level JSON: %s", saveError.c_str());
         statusText = TextFormat("Save failed: %s", paths.jsonAssetPath.c_str());
         return false;
     }
 
-    state.map = std::move(mapToSave);
     state.currentLevelName = name;
     state.currentLevelPath = paths.jsonAssetPath;
     state.hasCurrentLevelPath = true;
     state.hasUnsavedChanges = false;
+    state.topologyDocumentInitialized = true;
+    state.topologyDocumentDirty = false;
+    state.topologyDocumentStatus = TextFormat("Topology document: saved %s", paths.jsonAssetPath.c_str());
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
-    statusText = TextFormat("Saved %s", paths.jsonAssetPath.c_str());
+    statusText = TextFormat("Saved topology %s", paths.jsonAssetPath.c_str());
     return true;
 }
 
@@ -5503,7 +5437,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     uiState.keyboardCaptured = false;
 
     std::string error;
-    if (!preview.Rebuild(assets, state.map, "sector_editor_preview", error)) {
+    if (!preview.Rebuild(assets, state.topologyMap, "sector_editor_preview", error)) {
         state.mode = SectorEditorMode::Edit2D;
         if (StartsWith(error, "Preview failed:")) {
             statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
@@ -5520,6 +5454,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     state.mode = SectorEditorMode::Preview3D;
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
     statusText = TextFormat(
             "3D mode rebuilt: %zu batches, %d triangles",
@@ -5542,14 +5477,14 @@ void SectorEditor::LeavePreview3D()
 void SectorEditor::RefreshDefaultTextures()
 {
     auto findTexture = [this](const char* preferred, const std::string& fallback = std::string{}) {
-        const auto preferredIt = state.map.texturesById.find(preferred);
-        if (preferredIt != state.map.texturesById.end()) {
+        const auto preferredIt = state.topologyMap.texturesById.find(preferred);
+        if (preferredIt != state.topologyMap.texturesById.end()) {
             return preferredIt->first;
         }
         if (!fallback.empty()) {
             return fallback;
         }
-        const std::vector<std::string> textureIds = SortedSectorTextureIds(state.map);
+        const std::vector<std::string> textureIds = SortedSectorTopologyTextureIds(state.topologyMap);
         return textureIds.empty() ? std::string{} : textureIds.front();
     };
 
@@ -5568,7 +5503,7 @@ void SectorEditor::RefreshEditorTextureAssets(engine::AssetManager& assets)
     }
     state.editorTextureHandlesById.clear();
 
-    if (state.map.texturesById.empty()) {
+    if (state.topologyMap.texturesById.empty()) {
         return;
     }
 
@@ -5577,8 +5512,8 @@ void SectorEditor::RefreshEditorTextureAssets(engine::AssetManager& assets)
         return;
     }
 
-    for (const std::string& textureId : SortedSectorTextureIds(state.map)) {
-        const SectorTextureDefinition* texture = FindSectorTexture(state.map, textureId);
+    for (const std::string& textureId : SortedSectorTopologyTextureIds(state.topologyMap)) {
+        const SectorTextureDefinition* texture = FindSectorTopologyTexture(state.topologyMap, textureId);
         if (texture == nullptr) {
             continue;
         }
@@ -5607,9 +5542,8 @@ void SectorEditor::OpenAddMapTextureModal(engine::AssetManager& assets)
     CloseAddMapTextureModal(assets);
     state.addMapTexture.open = true;
     RefreshAddMapTextureScan();
-    if (!state.addMapTexture.paths.empty()) {
-        SelectAddMapTexturePath(0);
-    }
+    SelectAddMapTexturePath(state.addMapTexture.selectedPathIndex);
+    statusText = "Add topology texture";
 }
 
 void SectorEditor::CloseAddMapTextureModal(engine::AssetManager& assets)
@@ -5646,7 +5580,7 @@ void SectorEditor::SelectAddMapTexturePath(int pathIndex)
     const std::string base = GeneratedTextureIdBase(modalState.paths[static_cast<size_t>(pathIndex)]);
     std::string uniqueId = base;
     int suffix = 1;
-    while (FindSectorTexture(state.map, uniqueId) != nullptr) {
+    while (FindSectorTopologyTexture(state.topologyMap, uniqueId) != nullptr) {
         char suffixBuffer[16] = {};
         std::snprintf(suffixBuffer, sizeof(suffixBuffer), "_%03d", suffix);
         uniqueId = base + suffixBuffer;
@@ -5716,10 +5650,6 @@ bool SectorEditor::ValidateAddMapTextureId(std::string& error) const
         error = "Texture ID may only contain letters, digits, underscores, and dashes";
         return false;
     }
-    if (FindSectorTexture(state.map, id) != nullptr) {
-        error = "Texture ID already exists";
-        return false;
-    }
     return true;
 }
 
@@ -5734,206 +5664,292 @@ bool SectorEditor::AddSelectedMapTexture(engine::AssetManager& assets)
     AddMapTextureState& modalState = state.addMapTexture;
     const std::string id = modalState.textureIdBuffer;
     const std::string path = modalState.paths[static_cast<size_t>(modalState.selectedPathIndex)];
+    const bool replacing = FindSectorTopologyTexture(state.topologyMap, id) != nullptr;
 
     SectorTextureDefinition definition;
     definition.id = id;
     definition.path = path;
     definition.filter = modalState.filter;
-    state.map.texturesById.emplace(id, std::move(definition));
+    state.topologyMap.texturesById[id] = std::move(definition);
 
     RefreshEditorTextureAssets(assets);
     state.hasUnsavedChanges = true;
-    statusText = TextFormat("Added texture %s", id.c_str());
+    state.topologyDocumentDirty = true;
+    statusText = TextFormat("%s texture %s", replacing ? "Updated" : "Added", id.c_str());
     CloseAddMapTextureModal(assets);
     return true;
 }
 
-bool SectorEditor::PointInSectorPolygon(Vector2 mapPoint, const SectorDefinition& sector) const
+bool SectorEditor::PointInTopologyLoop(Vector2 mapPoint, const SectorTopologyLoop& loop) const
 {
+    std::vector<SectorPoint> points;
+    points.reserve(loop.vertexIds.size());
+    for (int vertexId : loop.vertexIds) {
+        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+        if (vertex == nullptr) {
+            return false;
+        }
+        points.push_back(Vector2ToSectorPoint(SectorTopologyVertexToMap(*vertex)));
+    }
     const SectorPoint point = Vector2ToSectorPoint(mapPoint);
-    if (!StrictPointInPolygon(point, sector.points)
-            && !PointOnPolygonBoundary(point, sector.points)) {
+    return StrictPointInPolygon(point, points) || PointOnPolygonBoundary(point, points);
+}
+
+bool SectorEditor::PointInTopologySector(Vector2 mapPoint, const SectorTopologySector& sector) const
+{
+    SectorTopologyLoopSet loops;
+    std::vector<SectorTopologyValidationIssue> loopIssues;
+    if (!ExtractSectorTopologyLoops(state.topologyMap, sector.id, loops, &loopIssues)) {
         return false;
     }
-    for (const std::vector<SectorPoint>& hole : sector.holes) {
-        if (StrictPointInPolygon(point, hole) || PointOnPolygonBoundary(point, hole)) {
+    if (!PointInTopologyLoop(mapPoint, loops.outer)) {
+        return false;
+    }
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        if (PointInTopologyLoop(mapPoint, hole)) {
             return false;
         }
     }
     return true;
 }
 
-int SectorEditor::FindSectorAt(Vector2 mapPoint) const
+int SectorEditor::FindTopologySectorAt(Vector2 mapPoint, bool* outMultipleMatches) const
 {
-    // Later editor passes can replace this with explicit front/back ordering if sectors overlap.
-    for (int i = static_cast<int>(state.map.sectors.size()) - 1; i >= 0; --i) {
-        if (PointInSectorPolygon(mapPoint, state.map.sectors[static_cast<size_t>(i)])) {
-            return i;
+    if (outMultipleMatches != nullptr) {
+        *outMultipleMatches = false;
+    }
+
+    int selectedId = -1;
+    int matchCount = 0;
+    for (const SectorTopologySector& sector : state.topologyMap.sectors) {
+        if (!PointInTopologySector(mapPoint, sector)) {
+            continue;
+        }
+        ++matchCount;
+        if (selectedId < 0 || sector.id < selectedId) {
+            selectedId = sector.id;
         }
     }
-    // TODO: Add FindVertexAt.
-    return -1;
+
+    if (outMultipleMatches != nullptr) {
+        *outMultipleMatches = matchCount > 1;
+    }
+    return selectedId;
 }
 
-int SectorEditor::FindLightNearScreenPoint(Vector2 screenPoint) const
+int SectorEditor::FindTopologyLightNearScreenPoint(Vector2 screenPoint) const
 {
     float bestDistance2 = ScreenLightPickPixels * ScreenLightPickPixels;
-    int bestIndex = -1;
-    for (size_t i = 0; i < state.map.staticLights.size(); ++i) {
-        const SectorStaticPointLight& light = state.map.staticLights[i];
+    int bestId = -1;
+    for (const SectorTopologyStaticPointLight& light : state.topologyMap.staticLights) {
         const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
         const float dx = center.x - screenPoint.x;
         const float dy = center.y - screenPoint.y;
         const float distance2 = dx * dx + dy * dy;
-        if (distance2 <= bestDistance2) {
+        if (distance2 < bestDistance2 - 0.001f
+                || (std::fabs(distance2 - bestDistance2) <= 0.001f
+                        && (bestId < 0 || light.id < bestId))) {
             bestDistance2 = distance2;
-            bestIndex = static_cast<int>(i);
+            bestId = light.id;
         }
     }
-    return bestIndex;
+    return bestId;
 }
 
-bool SectorEditor::FindEdgeNearScreenPoint(Vector2 screenPoint, SectorEdgeRef& outEdge) const
+bool SectorEditor::FindTopologyLineNearScreenPoint(
+        Vector2 screenPoint,
+        Vector2 mapPoint,
+        int& outLineDefId,
+        int& outSideDefId,
+        SectorTopologySideKind& outSide,
+        bool& outPreferredMissing) const
 {
-    return ResolveEdgeHit(screenPoint, ScreenToMap(screenPoint), outEdge);
-}
+    outLineDefId = -1;
+    outSideDefId = -1;
+    outSide = SectorTopologySideKind::Front;
+    outPreferredMissing = false;
 
-std::vector<SectorEdgeHitCandidate> SectorEditor::FindEdgeHitCandidates(Vector2 screenPoint) const
-{
-    std::vector<SectorEdgeHitCandidate> candidates;
+    float bestDistance = ScreenEdgePickPixels;
+    const SectorTopologyLineDef* bestLine = nullptr;
+    Vector2 bestStart{};
+    Vector2 bestEnd{};
 
-    for (size_t sectorIndex = 0; sectorIndex < state.map.sectors.size(); ++sectorIndex) {
-        const SectorDefinition& sector = state.map.sectors[sectorIndex];
-        const size_t ringCount = 1 + sector.holes.size();
-        for (size_t ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
-            const std::vector<SectorPoint>& ring = ringIndex == 0
-                    ? sector.points : sector.holes[ringIndex - 1];
-            for (size_t edgeIndex = 0; edgeIndex < ring.size(); ++edgeIndex) {
-                const Vector2 a = MapToScreen(SectorPointToVector2(ring[edgeIndex]));
-                const Vector2 b = MapToScreen(SectorPointToVector2(ring[(edgeIndex + 1) % ring.size()]));
-                const float distance = DistancePointToSegment(screenPoint, a, b);
-                if (distance <= ScreenEdgePickPixels) {
-                    candidates.push_back(SectorEdgeHitCandidate{
-                            SectorEdgeRef{
-                                    static_cast<int>(sectorIndex),
-                                    ringIndex == 0 ? SectorBoundaryRingKind::Outer : SectorBoundaryRingKind::Hole,
-                                    ringIndex == 0 ? -1 : static_cast<int>(ringIndex - 1),
-                                    static_cast<int>(edgeIndex)},
-                            distance
-                    });
-                }
-            }
+    for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
+        const SectorTopologyVertex* start = nullptr;
+        const SectorTopologyVertex* end = nullptr;
+        if (!GetSectorTopologyLineVertices(state.topologyMap, lineDef, start, end)) {
+            continue;
         }
+
+        const Vector2 screenStart = MapToScreen(SectorTopologyVertexToMap(*start));
+        const Vector2 screenEnd = MapToScreen(SectorTopologyVertexToMap(*end));
+        const float distance = DistancePointToSegment(screenPoint, screenStart, screenEnd);
+        if (distance > ScreenEdgePickPixels) {
+            continue;
+        }
+        if (bestLine != nullptr
+                && (distance > bestDistance + 0.001f
+                        || (std::fabs(distance - bestDistance) <= 0.001f
+                                && lineDef.id >= bestLine->id))) {
+            continue;
+        }
+
+        bestDistance = distance;
+        bestLine = &lineDef;
+        bestStart = SectorTopologyVertexToMap(*start);
+        bestEnd = SectorTopologyVertexToMap(*end);
     }
 
-    return candidates;
-}
-
-bool SectorEditor::ResolveEdgeHit(Vector2 screenPoint, Vector2 rawMapPoint, SectorEdgeRef& outEdge) const
-{
-    std::vector<SectorEdgeHitCandidate> candidates = FindEdgeHitCandidates(screenPoint);
-    if (candidates.empty()) {
+    if (bestLine == nullptr) {
         return false;
     }
 
-    std::sort(
-            candidates.begin(),
-            candidates.end(),
-            [](const SectorEdgeHitCandidate& a, const SectorEdgeHitCandidate& b) {
-                if (std::fabs(a.screenDistance - b.screenDistance) > 0.001f) {
-                    return a.screenDistance < b.screenDistance;
-                }
-                if (a.edge.sectorIndex != b.edge.sectorIndex) {
-                    return a.edge.sectorIndex < b.edge.sectorIndex;
-                }
-                if (a.edge.ringKind != b.edge.ringKind) {
-                    return a.edge.ringKind == SectorBoundaryRingKind::Outer;
-                }
-                if (a.edge.holeIndex != b.edge.holeIndex) {
-                    return a.edge.holeIndex < b.edge.holeIndex;
-                }
-                return a.edge.edgeIndex < b.edge.edgeIndex;
-            }
-    );
+    const bool hasFront = bestLine->frontSideDefId >= 0
+            && FindSectorTopologySideDef(state.topologyMap, bestLine->frontSideDefId) != nullptr;
+    const bool hasBack = bestLine->backSideDefId >= 0
+            && FindSectorTopologySideDef(state.topologyMap, bestLine->backSideDefId) != nullptr;
 
-    const SectorEdgeHitCandidate nearest = candidates.front();
-    SectorPoint nearestA{};
-    SectorPoint nearestB{};
-    GetSectorBoundaryEdge(
-            state.map,
-            SectorBoundaryEdgeRef{nearest.edge.sectorIndex, nearest.edge.ringKind, nearest.edge.holeIndex, nearest.edge.edgeIndex},
-            nearestA,
-            nearestB);
-
-    for (const SectorEdgeHitCandidate& candidate : candidates) {
-        const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(candidate.edge.sectorIndex)];
-        SectorPoint a{};
-        SectorPoint b{};
-        if (!GetSectorBoundaryEdge(
-                    state.map,
-                    SectorBoundaryEdgeRef{candidate.edge.sectorIndex, candidate.edge.ringKind, candidate.edge.holeIndex, candidate.edge.edgeIndex},
-                    a,
-                    b)) {
-            continue;
-        }
-        if (!SameUndirectedSegment(nearestA, nearestB, a, b)) {
-            continue;
-        }
-
-        if (PointInSectorPolygon(rawMapPoint, sector)) {
-            outEdge = candidate.edge;
-            return true;
-        }
+    SectorTopologySideKind preferredSide = SectorTopologySideKind::Front;
+    const float sideCross = Cross(bestStart, bestEnd, mapPoint);
+    if (sideCross > GeometryEpsilon) {
+        preferredSide = SectorTopologySideKind::Front;
+    } else if (sideCross < -GeometryEpsilon) {
+        preferredSide = SectorTopologySideKind::Back;
+    } else if (!hasFront && hasBack) {
+        preferredSide = SectorTopologySideKind::Back;
     }
 
-    outEdge = nearest.edge;
+    const int preferredSideDefId = preferredSide == SectorTopologySideKind::Front
+            ? bestLine->frontSideDefId
+            : bestLine->backSideDefId;
+    const int oppositeSideDefId = preferredSide == SectorTopologySideKind::Front
+            ? bestLine->backSideDefId
+            : bestLine->frontSideDefId;
+    const bool preferredExists = preferredSide == SectorTopologySideKind::Front ? hasFront : hasBack;
+    const bool oppositeExists = preferredSide == SectorTopologySideKind::Front ? hasBack : hasFront;
+
+    outLineDefId = bestLine->id;
+    if (preferredExists) {
+        outSide = preferredSide;
+        outSideDefId = preferredSideDefId;
+    } else if (oppositeExists) {
+        outSide = OppositeSectorTopologySideKind(preferredSide);
+        outSideDefId = oppositeSideDefId;
+        outPreferredMissing = true;
+    } else {
+        outSide = preferredSide;
+        outSideDefId = -1;
+    }
     return true;
 }
 
-void SectorEditor::SelectSector(int sectorIndex)
+void SectorEditor::SelectTopologySector(int sectorId)
 {
-    state.selectedSectorIndex = sectorIndex;
-    state.selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
-    state.selectedEdgeHoleIndex = -1;
-    state.selectedEdgeIndex = -1;
-    state.selectedLightIndex = -1;
-    uiState.idBufferLightIndex = -1;
-    uiState.inspectorScroll.offset = Vector2{};
-    uiState.ambientIntensityInput = engine::UIFloatInputState{};
-    uiState.ambientRedInput = engine::UIIntInputState{};
-    uiState.ambientGreenInput = engine::UIIntInputState{};
-    uiState.ambientBlueInput = engine::UIIntInputState{};
-    SyncSelectedSectorIdBuffer();
-}
+    if (FindSectorTopologySector(state.topologyMap, sectorId) == nullptr) {
+        ClearSelection();
+        return;
+    }
 
-void SectorEditor::SelectEdge(
-        int sectorIndex,
-        int edgeIndex,
-        SectorBoundaryRingKind ringKind,
-        int holeIndex)
-{
-    state.selectedSectorIndex = sectorIndex;
-    state.selectedEdgeRingKind = ringKind;
-    state.selectedEdgeHoleIndex = holeIndex;
-    state.selectedEdgeIndex = edgeIndex;
-    state.selectedLightIndex = -1;
-    uiState.idBufferLightIndex = -1;
-    uiState.inspectorScroll.offset = Vector2{};
-    uiState.ambientIntensityInput = engine::UIFloatInputState{};
-    uiState.ambientRedInput = engine::UIIntInputState{};
-    uiState.ambientGreenInput = engine::UIIntInputState{};
-    uiState.ambientBlueInput = engine::UIIntInputState{};
-    SyncSelectedSectorIdBuffer();
-}
-
-void SectorEditor::SelectLight(int lightIndex)
-{
-    state.selectedLightIndex = lightIndex;
-    state.selectedSectorIndex = -1;
-    state.selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
-    state.selectedEdgeHoleIndex = -1;
-    state.selectedEdgeIndex = -1;
+    state.topologySelectionKind = TopologySelectionKind::Sector;
+    state.selectedTopologySectorId = sectorId;
+    state.selectedTopologySideDefId = -1;
+    state.selectedTopologyLineDefId = -1;
+    state.selectedTopologyLightId = -1;
+    state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    uiState.idBufferLightIndex = -1;
+    uiState.inspectorScroll.offset = Vector2{};
+    uiState.floorInput = engine::UIFloatInputState{};
+    uiState.ceilingInput = engine::UIFloatInputState{};
+    uiState.ambientIntensityInput = engine::UIFloatInputState{};
+    uiState.ambientRedInput = engine::UIIntInputState{};
+    uiState.ambientGreenInput = engine::UIIntInputState{};
+    uiState.ambientBlueInput = engine::UIIntInputState{};
+    for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+    SyncSelectedSectorIdBuffer();
+    SyncSelectedLightIdBuffer();
+}
+
+void SectorEditor::SelectTopologySideDef(int sideDefId, TopologyWallPart wallPart)
+{
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, sideDefId);
+    if (sideDef == nullptr) {
+        ClearSelection();
+        return;
+    }
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, sideDef->lineDefId);
+    if (lineDef == nullptr) {
+        ClearSelection();
+        return;
+    }
+
+    state.topologySelectionKind = TopologySelectionKind::SideDef;
+    state.selectedTopologySectorId = -1;
+    state.selectedTopologySideDefId = sideDef->id;
+    state.selectedTopologyLineDefId = lineDef->id;
+    state.selectedTopologyLightId = -1;
+    state.selectedTopologySideKind = sideDef->side;
+    state.selectedTopologyWallPart = wallPart;
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    uiState.idBufferLightIndex = -1;
+    uiState.inspectorScroll.offset = Vector2{};
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+    SyncSelectedSectorIdBuffer();
+    SyncSelectedLightIdBuffer();
+}
+
+void SectorEditor::SelectTopologyLineDef(
+        int lineDefId,
+        SectorTopologySideKind side,
+        TopologyWallPart wallPart)
+{
+    if (FindSectorTopologyLineDef(state.topologyMap, lineDefId) == nullptr) {
+        ClearSelection();
+        return;
+    }
+
+    state.topologySelectionKind = TopologySelectionKind::LineDef;
+    state.selectedTopologySectorId = -1;
+    state.selectedTopologySideDefId = -1;
+    state.selectedTopologyLineDefId = lineDefId;
+    state.selectedTopologyLightId = -1;
+    state.selectedTopologySideKind = side;
+    state.selectedTopologyWallPart = wallPart;
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    uiState.idBufferLightIndex = -1;
+    uiState.inspectorScroll.offset = Vector2{};
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+    SyncSelectedSectorIdBuffer();
+    SyncSelectedLightIdBuffer();
+}
+
+void SectorEditor::SelectTopologyLight(int topologyLightId)
+{
+    if (FindSectorTopologyStaticLight(state.topologyMap, topologyLightId) == nullptr) {
+        ClearSelection();
+        return;
+    }
+
+    state.selectedTopologyLightId = topologyLightId;
+    state.topologySelectionKind = TopologySelectionKind::Light;
+    state.selectedTopologySectorId = -1;
+    state.selectedTopologySideDefId = -1;
+    state.selectedTopologyLineDefId = -1;
+    state.selectedTopologySideKind = SectorTopologySideKind::Front;
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
     uiState.inspectorScroll.offset = Vector2{};
     uiState.lightXInput = engine::UIFloatInputState{};
@@ -5951,50 +5967,85 @@ void SectorEditor::SelectLight(int lightIndex)
 
 void SectorEditor::SelectSurface3D(SectorSurfaceRef surface)
 {
-    if (!IsValidSurfaceRef(surface)) {
+    const TopologySurfaceEditTarget target = TopologyEditTargetForSurface(surface);
+    if (!IsValidSurfaceRef(surface) || !IsValidTopologySurfaceEditTarget(target)) {
         state.selectedSurface3D = SectorSurfaceRef{};
+        state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
         return;
     }
 
     if (!SameSurfaceRef(state.selectedSurface3D, surface)) {
         ResetSurface3DUiState();
     }
-    state.selectedSurface3D = surface;
 
     if (IsWallSurface(surface.kind)) {
-        SelectEdge(surface.sectorIndex, surface.edgeIndex, surface.ringKind, surface.holeIndex);
-        state.selectedEdgeUvPart = SurfaceKindToEdgeUvPart(surface.kind);
+        SelectTopologySideDef(
+                surface.topologySideDefId,
+                SurfaceKindToTopologyWallPart(surface.kind));
     } else {
-        SelectSector(surface.sectorIndex);
+        SelectTopologySector(surface.topologySectorId);
     }
+    state.selectedSurface3D = surface;
+    state.selectedTopologySurface3D = target;
 }
 
 bool SectorEditor::IsValidSurfaceRef(SectorSurfaceRef surface) const
 {
-    if (surface.kind == SectorSurfaceKind::None
-            || surface.sectorIndex < 0
-            || surface.sectorIndex >= static_cast<int>(state.map.sectors.size())) {
+    if (surface.kind == SectorSurfaceKind::None) {
         return false;
     }
 
-    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
     if (IsWallSurface(surface.kind)) {
-        const std::vector<SectorPoint>* ring = GetSectorBoundaryRing(
-                state.map,
-                SectorBoundaryEdgeRef{surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex});
-        return ring != nullptr && surface.edgeIndex >= 0
-                && surface.edgeIndex < static_cast<int>(ring->size());
+        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
+                state.topologyMap,
+                surface.topologySideDefId);
+        return sideDef != nullptr
+                && sideDef->lineDefId == surface.topologyLineDefId
+                && sideDef->side == surface.topologySide;
     }
-    return surface.edgeIndex < 0;
+    return FindSectorTopologySector(state.topologyMap, surface.topologySectorId) != nullptr;
 }
 
 bool SectorEditor::SameSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b) const
 {
     return a.kind == b.kind
-            && a.sectorIndex == b.sectorIndex
-            && a.ringKind == b.ringKind
-            && a.holeIndex == b.holeIndex
-            && a.edgeIndex == b.edgeIndex;
+            && a.topologySectorId == b.topologySectorId
+            && a.topologyLineDefId == b.topologyLineDefId
+            && a.topologySideDefId == b.topologySideDefId
+            && a.topologySide == b.topologySide;
+}
+
+TopologySurfaceEditTarget SectorEditor::TopologyEditTargetForSurface(SectorSurfaceRef surface) const
+{
+    TopologySurfaceEditTarget target;
+    target.kind = SurfaceKindToTopologyEditTargetKind(surface.kind);
+    target.sectorId = surface.topologySectorId;
+    target.lineDefId = surface.topologyLineDefId;
+    target.sideDefId = surface.topologySideDefId;
+    target.side = surface.topologySide;
+    return target;
+}
+
+bool SectorEditor::IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget target) const
+{
+    switch (target.kind) {
+        case TopologySurfaceEditTargetKind::SectorFloor:
+        case TopologySurfaceEditTargetKind::SectorCeiling:
+            return FindSectorTopologySector(state.topologyMap, target.sectorId) != nullptr;
+        case TopologySurfaceEditTargetKind::SideDefWall:
+        case TopologySurfaceEditTargetKind::SideDefLower:
+        case TopologySurfaceEditTargetKind::SideDefUpper: {
+            const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
+                    state.topologyMap,
+                    target.sideDefId);
+            return sideDef != nullptr
+                    && sideDef->lineDefId == target.lineDefId
+                    && sideDef->side == target.side;
+        }
+        case TopologySurfaceEditTargetKind::None:
+            break;
+    }
+    return false;
 }
 
 void SectorEditor::ResetSurface3DUiState()
@@ -6007,12 +6058,13 @@ void SectorEditor::ResetSurface3DUiState()
 
 void SectorEditor::ClearSelection()
 {
-    state.selectedSectorIndex = -1;
-    state.selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
-    state.selectedEdgeHoleIndex = -1;
-    state.selectedEdgeIndex = -1;
-    state.selectedLightIndex = -1;
+    state.topologySelectionKind = TopologySelectionKind::None;
+    state.selectedTopologySectorId = -1;
+    state.selectedTopologySideDefId = -1;
+    state.selectedTopologyLineDefId = -1;
+    state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
     uiState.ambientIntensityInput = engine::UIFloatInputState{};
     uiState.ambientRedInput = engine::UIIntInputState{};
@@ -6023,238 +6075,130 @@ void SectorEditor::ClearSelection()
     SyncSelectedLightIdBuffer();
 }
 
-SectorEdgeOverride* SectorEditor::FindMutableEdgeOverride(SectorBoundaryEdgeRef edge)
+std::string SectorEditor::CurrentTextureForSurface(TopologySurfaceEditTarget target) const
 {
-    if (edge.sectorIndex < 0 || edge.sectorIndex >= static_cast<int>(state.map.sectors.size())) {
-        return nullptr;
-    }
-    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(edge.sectorIndex)];
-    for (SectorEdgeOverride& edgeOverride : sector.edgeOverrides) {
-        if (edgeOverride.ringKind == edge.ringKind
-                && edgeOverride.holeIndex == (edge.ringKind == SectorBoundaryRingKind::Hole ? edge.holeIndex : -1)
-                && edgeOverride.edgeIndex == edge.edgeIndex) {
-            return &edgeOverride;
-        }
-    }
-    return nullptr;
-}
-
-const SectorEdgeOverride* SectorEditor::FindEdgeOverride(SectorBoundaryEdgeRef edge) const
-{
-    if (edge.sectorIndex < 0 || edge.sectorIndex >= static_cast<int>(state.map.sectors.size())) {
-        return nullptr;
-    }
-    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(edge.sectorIndex)];
-    for (const SectorEdgeOverride& edgeOverride : sector.edgeOverrides) {
-        if (edgeOverride.ringKind == edge.ringKind
-                && edgeOverride.holeIndex == (edge.ringKind == SectorBoundaryRingKind::Hole ? edge.holeIndex : -1)
-                && edgeOverride.edgeIndex == edge.edgeIndex) {
-            return &edgeOverride;
-        }
-    }
-    return nullptr;
-}
-
-SectorEdgeOverride& SectorEditor::EnsureEdgeOverride(SectorBoundaryEdgeRef edge)
-{
-    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(edge.sectorIndex)];
-    if (SectorEdgeOverride* existing = FindMutableEdgeOverride(edge)) {
-        return *existing;
-    }
-
-    SectorEdgeOverride edgeOverride;
-    edgeOverride.ringKind = edge.ringKind;
-    edgeOverride.holeIndex = edge.ringKind == SectorBoundaryRingKind::Hole ? edge.holeIndex : -1;
-    edgeOverride.edgeIndex = edge.edgeIndex;
-    sector.edgeOverrides.push_back(std::move(edgeOverride));
-    return sector.edgeOverrides.back();
-}
-
-void SectorEditor::RemoveEdgeOverrideIfEmpty(SectorBoundaryEdgeRef edge)
-{
-    if (edge.sectorIndex < 0 || edge.sectorIndex >= static_cast<int>(state.map.sectors.size())) {
-        return;
-    }
-    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(edge.sectorIndex)];
-    sector.edgeOverrides.erase(
-            std::remove_if(
-                    sector.edgeOverrides.begin(),
-                    sector.edgeOverrides.end(),
-                    [edge](const SectorEdgeOverride& edgeOverride) {
-                        return edgeOverride.ringKind == edge.ringKind
-                                && edgeOverride.holeIndex == (edge.ringKind == SectorBoundaryRingKind::Hole ? edge.holeIndex : -1)
-                                && edgeOverride.edgeIndex == edge.edgeIndex
-                                && IsEmptyEdgeOverride(edgeOverride);
-                    }
-            ),
-            sector.edgeOverrides.end()
-    );
-}
-
-bool SectorEditor::TargetAllowsSectorDefault(TexturePickerTargetKind target) const
-{
-    return target == TexturePickerTargetKind::EdgeWall
-            || target == TexturePickerTargetKind::EdgeLowerWall
-            || target == TexturePickerTargetKind::EdgeUpperWall;
-}
-
-std::string SectorEditor::CurrentTextureForTarget(TexturePickerTargetKind target, SectorBoundaryEdgeRef edge) const
-{
-    if (edge.sectorIndex < 0 || edge.sectorIndex >= static_cast<int>(state.map.sectors.size())) {
-        return std::string{};
-    }
-
-    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(edge.sectorIndex)];
-    const SectorEdgeOverride* edgeOverride = FindEdgeOverride(edge);
-    switch (target) {
-        case TexturePickerTargetKind::SectorFloor: return sector.floorTextureId;
-        case TexturePickerTargetKind::SectorCeiling: return sector.ceilingTextureId;
-        case TexturePickerTargetKind::SectorWall: return sector.wallTextureId;
-        case TexturePickerTargetKind::SectorLowerWall: return sector.lowerWallTextureId;
-        case TexturePickerTargetKind::SectorUpperWall: return sector.upperWallTextureId;
-        case TexturePickerTargetKind::EdgeWall:
-            return edgeOverride != nullptr && edgeOverride->hasWallTexture ? edgeOverride->wallTextureId : sector.wallTextureId;
-        case TexturePickerTargetKind::EdgeLowerWall:
-            return edgeOverride != nullptr && edgeOverride->hasLowerWallTexture ? edgeOverride->lowerWallTextureId : sector.lowerWallTextureId;
-        case TexturePickerTargetKind::EdgeUpperWall:
-            return edgeOverride != nullptr && edgeOverride->hasUpperWallTexture ? edgeOverride->upperWallTextureId : sector.upperWallTextureId;
-        case TexturePickerTargetKind::None:
-            break;
-    }
-    return std::string{};
-}
-
-std::string SectorEditor::CurrentTextureForSurface(SectorSurfaceRef surface) const
-{
-    if (!IsValidSurfaceRef(surface)) {
+    if (!IsValidTopologySurfaceEditTarget(target)) {
         return std::string{"<none>"};
     }
 
-    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
-    switch (surface.kind) {
-        case SectorSurfaceKind::Floor:
-            return sector.floorTextureId;
-        case SectorSurfaceKind::Ceiling:
-            return sector.ceilingTextureId;
-        case SectorSurfaceKind::Wall:
-            return GetEffectiveEdgeSettings(state.map, SectorBoundaryEdgeRef{
-                    surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex}).wall.textureId;
-        case SectorSurfaceKind::LowerWall:
-            return GetEffectiveEdgeSettings(state.map, SectorBoundaryEdgeRef{
-                    surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex}).lower.textureId;
-        case SectorSurfaceKind::UpperWall:
-            return GetEffectiveEdgeSettings(state.map, SectorBoundaryEdgeRef{
-                    surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex}).upper.textureId;
-        case SectorSurfaceKind::None:
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            return std::string{};
+        }
+        return target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? sector->floorTextureId
+                : sector->ceilingTextureId;
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (sideDef == nullptr) {
+        return std::string{};
+    }
+    switch (target.kind) {
+        case TopologySurfaceEditTargetKind::SideDefWall:
+            return sideDef->wall.textureId;
+        case TopologySurfaceEditTargetKind::SideDefLower:
+            return sideDef->lower.textureId;
+        case TopologySurfaceEditTargetKind::SideDefUpper:
+            return sideDef->upper.textureId;
+        case TopologySurfaceEditTargetKind::SectorFloor:
+        case TopologySurfaceEditTargetKind::SectorCeiling:
+        case TopologySurfaceEditTargetKind::None:
             break;
     }
     return std::string{"<none>"};
 }
 
-TexturePickerTargetKind SectorEditor::TexturePickerTargetForSurface(SectorSurfaceRef surface) const
+bool SectorEditor::ApplySurface3DUvValue(TopologySurfaceEditTarget target, int component, float value, engine::AssetManager& assets)
 {
-    switch (surface.kind) {
-        case SectorSurfaceKind::Floor:
-            return TexturePickerTargetKind::SectorFloor;
-        case SectorSurfaceKind::Ceiling:
-            return TexturePickerTargetKind::SectorCeiling;
-        case SectorSurfaceKind::Wall:
-            return TexturePickerTargetKind::EdgeWall;
-        case SectorSurfaceKind::LowerWall:
-            return TexturePickerTargetKind::EdgeLowerWall;
-        case SectorSurfaceKind::UpperWall:
-            return TexturePickerTargetKind::EdgeUpperWall;
-        case SectorSurfaceKind::None:
-            break;
-    }
-    return TexturePickerTargetKind::None;
-}
-
-bool SectorEditor::ApplySurface3DUvValue(SectorSurfaceRef surface, int component, float value, engine::AssetManager& assets)
-{
-    if (!IsValidSurfaceRef(surface)) {
+    if (!IsValidTopologySurfaceEditTarget(target) || !std::isfinite(value)) {
         return false;
     }
 
     auto applyComponent = [component, value](auto& uv) {
         switch (component) {
             case 0:
-                uv.uvScale.x = value;
-                uv.hasUvScale = true;
+                uv.scale.x = value;
                 return true;
             case 1:
-                uv.uvScale.y = value;
-                uv.hasUvScale = true;
+                uv.scale.y = value;
                 return true;
             case 2:
-                uv.uvOffset.x = value;
-                uv.hasUvOffset = true;
+                uv.offset.x = value;
                 return true;
             case 3:
-                uv.uvOffset.y = value;
-                uv.hasUvOffset = true;
+                uv.offset.y = value;
                 return true;
             default:
                 return false;
         }
     };
 
-    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
     bool changed = false;
-    if (surface.kind == SectorSurfaceKind::Floor) {
-        changed = applyComponent(sector.floorUv);
-    } else if (surface.kind == SectorSurfaceKind::Ceiling) {
-        changed = applyComponent(sector.ceilingUv);
-    } else {
-        SectorEdgeOverride& edgeOverride = EnsureEdgeOverride(SectorBoundaryEdgeRef{
-                surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex});
-        SectorEdgePartUvOverride* uv = &edgeOverride.wallUv;
-        if (surface.kind == SectorSurfaceKind::LowerWall) {
-            uv = &edgeOverride.lowerUv;
-        } else if (surface.kind == SectorSurfaceKind::UpperWall) {
-            uv = &edgeOverride.upperUv;
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            return false;
         }
-        changed = applyComponent(*uv);
+        SectorTopologyUvSettings& uv = target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? sector->floorUv
+                : sector->ceilingUv;
+        changed = applyComponent(uv);
+    } else {
+        SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+        if (sideDef == nullptr) {
+            return false;
+        }
+        changed = applyComponent(TopologyWallPartSettingsFor(
+                *sideDef,
+                TopologyEditTargetWallPart(target.kind)).uv);
     }
 
     if (!changed) {
         return false;
     }
 
-    state.hasUnsavedChanges = true;
-    statusText = TextFormat("Updated 3D %s UV", SurfaceKindName(surface.kind));
+    MarkTopologyDocumentEdited(TextFormat("Updated 3D %s UV", SurfaceKindName(state.selectedSurface3D.kind)));
     return RebuildPreviewMeshesPreservingView(assets);
 }
 
-bool SectorEditor::ResetSurface3DUv(SectorSurfaceRef surface, engine::AssetManager& assets)
+bool SectorEditor::ResetSurface3DUv(TopologySurfaceEditTarget target, engine::AssetManager& assets)
 {
-    if (!IsValidSurfaceRef(surface)) {
+    if (!IsValidTopologySurfaceEditTarget(target)) {
         return false;
     }
 
+    auto resetUv = [](SectorTopologyUvSettings& uv) {
+        const bool changed = uv.scale.x != 1.0f
+                || uv.scale.y != 1.0f
+                || uv.offset.x != 0.0f
+                || uv.offset.y != 0.0f;
+        uv.scale = Vector2{1.0f, 1.0f};
+        uv.offset = Vector2{0.0f, 0.0f};
+        return changed;
+    };
+
     bool changed = false;
-    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
-    if (surface.kind == SectorSurfaceKind::Floor) {
-        changed = sector.floorUv.hasUvScale || sector.floorUv.hasUvOffset;
-        sector.floorUv = SectorSurfaceUvOverride{};
-    } else if (surface.kind == SectorSurfaceKind::Ceiling) {
-        changed = sector.ceilingUv.hasUvScale || sector.ceilingUv.hasUvOffset;
-        sector.ceilingUv = SectorSurfaceUvOverride{};
-    } else {
-        const SectorBoundaryEdgeRef edge{
-                surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex};
-        SectorEdgeOverride* edgeOverride = FindMutableEdgeOverride(edge);
-        if (edgeOverride != nullptr) {
-            SectorEdgePartUvOverride* uv = &edgeOverride->wallUv;
-            if (surface.kind == SectorSurfaceKind::LowerWall) {
-                uv = &edgeOverride->lowerUv;
-            } else if (surface.kind == SectorSurfaceKind::UpperWall) {
-                uv = &edgeOverride->upperUv;
-            }
-            changed = uv->hasUvScale || uv->hasUvOffset;
-            *uv = SectorEdgePartUvOverride{};
-            RemoveEdgeOverrideIfEmpty(edge);
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            return false;
         }
+        changed = target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? resetUv(sector->floorUv)
+                : resetUv(sector->ceilingUv);
+    } else {
+        SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+        if (sideDef == nullptr) {
+            return false;
+        }
+        changed = resetUv(TopologyWallPartSettingsFor(
+                *sideDef,
+                TopologyEditTargetWallPart(target.kind)).uv);
     }
 
     if (!changed) {
@@ -6262,69 +6206,8 @@ bool SectorEditor::ResetSurface3DUv(SectorSurfaceRef surface, engine::AssetManag
     }
 
     ResetSurface3DUiState();
-    state.hasUnsavedChanges = true;
-    statusText = TextFormat("Reset 3D %s UV", SurfaceKindName(surface.kind));
+    MarkTopologyDocumentEdited(TextFormat("Reset 3D %s UV", SurfaceKindName(state.selectedSurface3D.kind)));
     return RebuildPreviewMeshesPreservingView(assets);
-}
-
-bool SectorEditor::SplitSelectedEdge(engine::AssetManager& assets)
-{
-    const int sectorIndex = state.selectedSectorIndex;
-    const int edgeIndex = state.selectedEdgeIndex;
-    const SectorBoundaryEdgeRef selectedEdge{
-            sectorIndex,
-            state.selectedEdgeRingKind,
-            state.selectedEdgeHoleIndex,
-            edgeIndex};
-    const SectorSurfaceRef previousSurface = state.selectedSurface3D;
-    const EdgeNeighborInfo neighbor = FindReverseEdgeNeighbor(state.map, selectedEdge);
-
-    int newEdgeIndex = -1;
-    std::string error;
-    if (!SplitSectorEdge(state.map, selectedEdge, newEdgeIndex, error)) {
-        statusText = error.empty() ? "Cannot split edge" : error;
-        return false;
-    }
-
-    state.hoveredSectorIndex = -1;
-    state.hoveredEdgeSectorIndex = -1;
-    state.hoveredEdgeRingKind = SectorBoundaryRingKind::Outer;
-    state.hoveredEdgeHoleIndex = -1;
-    state.hoveredEdgeIndex = -1;
-    state.hasHoveredVertex = false;
-    state.hoveredVertexPoint = SectorPoint{};
-    state.hoveredVertexRefs.clear();
-    state.hoveredSurface3D = SectorSurfaceHit{};
-    uiState.edgeUvScaleUInput = engine::UIFloatInputState{};
-    uiState.edgeUvScaleVInput = engine::UIFloatInputState{};
-    uiState.edgeUvOffsetUInput = engine::UIFloatInputState{};
-    uiState.edgeUvOffsetVInput = engine::UIFloatInputState{};
-    ResetSurface3DUiState();
-
-    SelectEdge(sectorIndex, newEdgeIndex, selectedEdge.ringKind, selectedEdge.holeIndex);
-    if (state.mode == SectorEditorMode::Preview3D
-            && IsWallSurface(previousSurface.kind)
-            && previousSurface.sectorIndex == sectorIndex
-            && previousSurface.ringKind == selectedEdge.ringKind
-            && previousSurface.holeIndex == selectedEdge.holeIndex
-            && previousSurface.edgeIndex == edgeIndex) {
-        state.selectedSurface3D = SectorSurfaceRef{
-                previousSurface.kind,
-                sectorIndex,
-                selectedEdge.ringKind,
-                selectedEdge.holeIndex,
-                newEdgeIndex};
-    }
-
-    state.hasUnsavedChanges = true;
-    statusText = neighbor.hasNeighbor
-            ? TextFormat("Split shared edge %d; selected edge %d", edgeIndex, newEdgeIndex)
-            : TextFormat("Split edge %d; selected edge %d", edgeIndex, newEdgeIndex);
-
-    if (state.mode == SectorEditorMode::Preview3D) {
-        return RebuildPreviewMeshesPreservingView(assets);
-    }
-    return true;
 }
 
 bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& assets)
@@ -6336,9 +6219,10 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
     const SectorMeshPreviewPose pose = preview.Pose();
     const bool mouseLook = preview.IsMouseLookEnabled();
     const SectorSurfaceRef selected = state.selectedSurface3D;
+    const TopologySurfaceEditTarget selectedTarget = state.selectedTopologySurface3D;
 
     std::string error;
-    if (!preview.Rebuild(assets, state.map, "sector_editor_preview", error)) {
+    if (!preview.Rebuild(assets, state.topologyMap, "sector_editor_preview", error)) {
         if (StartsWith(error, "Preview failed:")) {
             statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
         } else {
@@ -6350,49 +6234,161 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
 
     preview.ApplyPose(pose);
     preview.SetMouseLookEnabled(mouseLook);
-    state.selectedSurface3D = IsValidSurfaceRef(selected) ? selected : SectorSurfaceRef{};
+    const bool selectedStillValid = IsValidSurfaceRef(selected);
+    state.selectedSurface3D = selectedStillValid ? selected : SectorSurfaceRef{};
+    state.selectedTopologySurface3D = selectedStillValid && IsValidTopologySurfaceEditTarget(selectedTarget)
+            ? selectedTarget
+            : TopologySurfaceEditTarget{};
     return true;
 }
 
-void SectorEditor::OpenTexturePicker(TexturePickerTargetKind target, SectorBoundaryEdgeRef edge)
+bool SectorEditor::SplitSelectedTopologyLineDef()
+{
+    const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
+    if (lineDef == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology linedef before splitting.";
+        return false;
+    }
+
+    const int originalLineDefId = lineDef->id;
+    const TopologySelectionKind previousSelectionKind = state.topologySelectionKind;
+    const SectorTopologySideKind previousSide = state.selectedTopologySideKind;
+    const TopologyWallPart previousWallPart = state.selectedTopologyWallPart;
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    if (!SplitSectorTopologyLineDef(state.topologyMap, originalLineDefId, &split, &error)) {
+        statusText = error.empty() ? "Cannot split topology linedef" : error;
+        return false;
+    }
+
+    state.hasHoveredVertex = false;
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+
+    if (previousSelectionKind == TopologySelectionKind::SideDef) {
+        const int secondSideDefId = previousSide == SectorTopologySideKind::Front
+                ? split.secondFrontSideDefId
+                : split.secondBackSideDefId;
+        if (FindSectorTopologySideDef(state.topologyMap, secondSideDefId) != nullptr) {
+            SelectTopologySideDef(secondSideDefId, previousWallPart);
+        } else {
+            SelectTopologyLineDef(split.secondLineDefId, previousSide, previousWallPart);
+        }
+    } else {
+        SelectTopologyLineDef(split.secondLineDefId, previousSide, previousWallPart);
+    }
+
+    state.topologyDocumentDirty = true;
+    state.topologyRenderWarning.clear();
+    state.hasUnsavedChanges = true;
+    statusText = TextFormat(
+            "Split topology linedef %d; selected linedef %d",
+            originalLineDefId,
+            split.secondLineDefId);
+    return true;
+}
+
+std::string SectorEditor::CurrentTextureForPickerTarget() const
+{
+    if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef) {
+        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
+                state.topologyMap,
+                state.texturePicker.topologySideDefId);
+        if (sideDef == nullptr) {
+            return std::string{};
+        }
+        return TopologyWallPartSettingsFor(*sideDef, state.texturePicker.topologyWallPart).textureId;
+    }
+
+    const SectorTopologySector* sector = FindSectorTopologySector(
+            state.topologyMap,
+            state.texturePicker.topologySectorId);
+    if (sector == nullptr) {
+        return std::string{};
+    }
+
+    switch (state.texturePicker.topologyField) {
+        case TopologySectorTextureField::Floor: return sector->floorTextureId;
+        case TopologySectorTextureField::Ceiling: return sector->ceilingTextureId;
+        case TopologySectorTextureField::DefaultWall: return sector->defaultWall.textureId;
+        case TopologySectorTextureField::DefaultLower: return sector->defaultLower.textureId;
+        case TopologySectorTextureField::DefaultUpper: return sector->defaultUpper.textureId;
+        case TopologySectorTextureField::None: break;
+    }
+    return std::string{};
+}
+
+void SectorEditor::OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field)
 {
     TexturePickerState& picker = state.texturePicker;
+    if (FindSectorTopologySector(state.topologyMap, sectorId) == nullptr
+            || field == TopologySectorTextureField::None) {
+        picker = TexturePickerState{};
+        statusText = "No topology sector texture target";
+        return;
+    }
+
     picker.open = true;
-    picker.target = target;
-    picker.sectorIndex = edge.sectorIndex;
-    picker.ringKind = edge.ringKind;
-    picker.holeIndex = edge.ringKind == SectorBoundaryRingKind::Hole ? edge.holeIndex : -1;
-    picker.edgeIndex = edge.edgeIndex;
+    picker.rebuildPreviewOnApply = false;
+    picker.topologyTargetKind = TopologyTexturePickerTargetKind::Sector;
+    picker.topologySectorId = sectorId;
+    picker.topologyField = field;
+    picker.topologySideDefId = -1;
+    picker.topologyWallPart = TopologyWallPart::Wall;
     picker.selectedTextureIndex = 0;
     picker.scroll = engine::UIScrollState{};
     picker.textureIds.clear();
     picker.optionLabels.clear();
 
-    if (TargetAllowsSectorDefault(target)) {
-        picker.textureIds.push_back(std::string{});
-    }
-
-    const std::vector<std::string> textureIds = SortedSectorTextureIds(state.map);
+    const std::vector<std::string> textureIds = SortedSectorTopologyTextureIds(state.topologyMap);
     picker.textureIds.insert(picker.textureIds.end(), textureIds.begin(), textureIds.end());
 
-    const std::string currentTexture = CurrentTextureForTarget(target, edge);
-    const SectorEdgeOverride* edgeOverride = FindEdgeOverride(edge);
-    const bool inheritedEdgeTexture =
-            (target == TexturePickerTargetKind::EdgeWall && (edgeOverride == nullptr || !edgeOverride->hasWallTexture))
-            || (target == TexturePickerTargetKind::EdgeLowerWall && (edgeOverride == nullptr || !edgeOverride->hasLowerWallTexture))
-            || (target == TexturePickerTargetKind::EdgeUpperWall && (edgeOverride == nullptr || !edgeOverride->hasUpperWallTexture));
-
+    const std::string currentTexture = CurrentTextureForPickerTarget();
     for (size_t i = 0; i < picker.textureIds.size(); ++i) {
-        if (picker.textureIds[i].empty()) {
-            picker.optionLabels.push_back("<sector default>");
-            if (inheritedEdgeTexture) {
-                picker.selectedTextureIndex = static_cast<int>(i);
-            }
-            continue;
-        }
-
         picker.optionLabels.push_back(picker.textureIds[i].c_str());
-        if (!inheritedEdgeTexture && picker.textureIds[i] == currentTexture) {
+        if (picker.textureIds[i] == currentTexture) {
+            picker.selectedTextureIndex = static_cast<int>(i);
+        }
+    }
+}
+
+void SectorEditor::OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart)
+{
+    TexturePickerState& picker = state.texturePicker;
+    if (FindSectorTopologySideDef(state.topologyMap, sideDefId) == nullptr) {
+        picker = TexturePickerState{};
+        statusText = "No topology sidedef texture target";
+        return;
+    }
+
+    picker.open = true;
+    picker.rebuildPreviewOnApply = false;
+    picker.topologyTargetKind = TopologyTexturePickerTargetKind::SideDef;
+    picker.topologySectorId = -1;
+    picker.topologyField = TopologySectorTextureField::None;
+    picker.topologySideDefId = sideDefId;
+    picker.topologyWallPart = wallPart;
+    picker.selectedTextureIndex = 0;
+    picker.scroll = engine::UIScrollState{};
+    picker.textureIds.clear();
+    picker.optionLabels.clear();
+
+    const std::vector<std::string> textureIds = SortedSectorTopologyTextureIds(state.topologyMap);
+    picker.textureIds.insert(picker.textureIds.end(), textureIds.begin(), textureIds.end());
+
+    const std::string currentTexture = CurrentTextureForPickerTarget();
+    for (size_t i = 0; i < picker.textureIds.size(); ++i) {
+        picker.optionLabels.push_back(picker.textureIds[i].c_str());
+        if (picker.textureIds[i] == currentTexture) {
             picker.selectedTextureIndex = static_cast<int>(i);
         }
     }
@@ -6402,89 +6398,68 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
 {
     TexturePickerState& picker = state.texturePicker;
     if (!picker.open
-            || picker.sectorIndex < 0
-            || picker.sectorIndex >= static_cast<int>(state.map.sectors.size())
+            || picker.topologyTargetKind == TopologyTexturePickerTargetKind::None
             || picker.selectedTextureIndex < 0
             || picker.selectedTextureIndex >= static_cast<int>(picker.textureIds.size())) {
         picker = TexturePickerState{};
         return;
     }
 
-    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(picker.sectorIndex)];
-    const SectorBoundaryEdgeRef edge{
-            picker.sectorIndex, picker.ringKind, picker.holeIndex, picker.edgeIndex};
     const std::string selectedTexture = picker.textureIds[static_cast<size_t>(picker.selectedTextureIndex)];
+    const bool rebuildPreviewOnApply = picker.rebuildPreviewOnApply;
     bool changed = false;
 
-    auto assignSectorTexture = [&](std::string& field) {
-        if (!selectedTexture.empty() && field != selectedTexture) {
+    auto assignTexture = [&](std::string& field) {
+        if (field != selectedTexture) {
             field = selectedTexture;
             changed = true;
         }
     };
 
-    switch (picker.target) {
-        case TexturePickerTargetKind::SectorFloor:
-            assignSectorTexture(sector.floorTextureId);
-            break;
-        case TexturePickerTargetKind::SectorCeiling:
-            assignSectorTexture(sector.ceilingTextureId);
-            break;
-        case TexturePickerTargetKind::SectorWall:
-            assignSectorTexture(sector.wallTextureId);
-            break;
-        case TexturePickerTargetKind::SectorLowerWall:
-            assignSectorTexture(sector.lowerWallTextureId);
-            break;
-        case TexturePickerTargetKind::SectorUpperWall:
-            assignSectorTexture(sector.upperWallTextureId);
-            break;
-        case TexturePickerTargetKind::EdgeWall:
-        case TexturePickerTargetKind::EdgeLowerWall:
-        case TexturePickerTargetKind::EdgeUpperWall: {
-            const std::vector<SectorPoint>* ring = GetSectorBoundaryRing(state.map, edge);
-            if (ring == nullptr || picker.edgeIndex < 0
-                    || picker.edgeIndex >= static_cast<int>(ring->size())) {
-                break;
-            }
-
-            SectorEdgeOverride& edgeOverride = EnsureEdgeOverride(edge);
-            bool* hasTexture = nullptr;
-            std::string* textureId = nullptr;
-            if (picker.target == TexturePickerTargetKind::EdgeWall) {
-                hasTexture = &edgeOverride.hasWallTexture;
-                textureId = &edgeOverride.wallTextureId;
-            } else if (picker.target == TexturePickerTargetKind::EdgeLowerWall) {
-                hasTexture = &edgeOverride.hasLowerWallTexture;
-                textureId = &edgeOverride.lowerWallTextureId;
-            } else {
-                hasTexture = &edgeOverride.hasUpperWallTexture;
-                textureId = &edgeOverride.upperWallTextureId;
-            }
-
-            if (selectedTexture.empty()) {
-                if (*hasTexture) {
-                    *hasTexture = false;
-                    textureId->clear();
-                    changed = true;
-                }
-            } else if (!*hasTexture || *textureId != selectedTexture) {
-                *hasTexture = true;
-                *textureId = selectedTexture;
-                changed = true;
-            }
-
-            RemoveEdgeOverrideIfEmpty(edge);
-            break;
+    std::string status;
+    if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::Sector) {
+        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, picker.topologySectorId);
+        if (sector == nullptr) {
+            picker = TexturePickerState{};
+            return;
         }
-        case TexturePickerTargetKind::None:
-            break;
+
+        switch (picker.topologyField) {
+            case TopologySectorTextureField::Floor:
+                assignTexture(sector->floorTextureId);
+                break;
+            case TopologySectorTextureField::Ceiling:
+                assignTexture(sector->ceilingTextureId);
+                break;
+            case TopologySectorTextureField::DefaultWall:
+                assignTexture(sector->defaultWall.textureId);
+                break;
+            case TopologySectorTextureField::DefaultLower:
+                assignTexture(sector->defaultLower.textureId);
+                break;
+            case TopologySectorTextureField::DefaultUpper:
+                assignTexture(sector->defaultUpper.textureId);
+                break;
+            case TopologySectorTextureField::None:
+                break;
+        }
+        status = TextFormat("Changed %s", TopologySectorTextureFieldLabel(picker.topologyField));
+    } else if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef) {
+        SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, picker.topologySideDefId);
+        if (sideDef == nullptr) {
+            picker = TexturePickerState{};
+            return;
+        }
+        assignTexture(TopologyWallPartSettingsFor(*sideDef, picker.topologyWallPart).textureId);
+        status = TextFormat(
+                "Changed topology sidedef %d %s texture",
+                sideDef->id,
+                TopologyWallPartStatusName(picker.topologyWallPart));
     }
 
     if (changed) {
-        state.hasUnsavedChanges = true;
-        statusText = TextFormat("Changed %s", TextureTargetLabel(picker.target));
-        if (state.mode == SectorEditorMode::Preview3D) {
+        MarkTopologyDocumentEdited(status.c_str());
+        if (rebuildPreviewOnApply && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
             RebuildPreviewMeshesPreservingView(assets);
         }
     }

@@ -3,7 +3,10 @@
 #include "engine/ui/UI.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshPreview.h"
-#include "sector_demo/SectorTypes.h"
+#include "sector_demo/SectorPointTypes.h"
+#include "sector_demo/SectorTextureTypes.h"
+#include "sector_demo/SectorTopologyCreation.h"
+#include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
 
@@ -41,48 +44,38 @@ struct PendingSectorDraw {
     std::vector<SectorPoint> points;
     bool active = false;
     PendingSectorDrawKind kind = PendingSectorDrawKind::NewSector;
-    int parentSectorIndex = -1;
-    std::string parentSectorId;
-    std::vector<SectorPoint> parentOuterSnapshot;
-    std::vector<std::vector<SectorPoint>> parentHolesSnapshot;
+    int parentTopologySectorId = -1;
+    std::string parentSectorLabel;
     std::string errorMessage;
 };
 
-struct SectorVertexRef {
-    int sectorIndex = -1;
-    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
-    int holeIndex = -1;
-    int pointIndex = -1;
-};
-
-struct SectorEdgeRef {
-    int sectorIndex = -1;
-    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
-    int holeIndex = -1;
-    int edgeIndex = -1;
-};
-
-struct SectorEdgeHitCandidate {
-    SectorEdgeRef edge;
-    float screenDistance = 0.0f;
-};
-
-enum class TexturePickerTargetKind {
+enum class TopologyTexturePickerTargetKind {
     None,
-    SectorFloor,
-    SectorCeiling,
-    SectorWall,
-    SectorLowerWall,
-    SectorUpperWall,
-    EdgeWall,
-    EdgeLowerWall,
-    EdgeUpperWall
+    Sector,
+    SideDef
 };
 
-enum class EdgeUvPart {
+enum class TopologySelectionKind {
+    None,
+    Sector,
+    SideDef,
+    LineDef,
+    Light
+};
+
+enum class TopologyWallPart {
     Wall,
     Lower,
     Upper
+};
+
+enum class TopologySectorTextureField {
+    None,
+    Floor,
+    Ceiling,
+    DefaultWall,
+    DefaultLower,
+    DefaultUpper
 };
 
 enum class SectorSurfaceKind {
@@ -96,10 +89,10 @@ enum class SectorSurfaceKind {
 
 struct SectorSurfaceRef {
     SectorSurfaceKind kind = SectorSurfaceKind::None;
-    int sectorIndex = -1;
-    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
-    int holeIndex = -1;
-    int edgeIndex = -1;
+    int topologySectorId = -1;
+    int topologyLineDefId = -1;
+    int topologySideDefId = -1;
+    SectorTopologySideKind topologySide = SectorTopologySideKind::Front;
 };
 
 struct SectorSurfaceHit {
@@ -109,13 +102,31 @@ struct SectorSurfaceHit {
     float distance = 0.0f;
 };
 
+enum class TopologySurfaceEditTargetKind {
+    None,
+    SectorFloor,
+    SectorCeiling,
+    SideDefWall,
+    SideDefLower,
+    SideDefUpper
+};
+
+struct TopologySurfaceEditTarget {
+    TopologySurfaceEditTargetKind kind = TopologySurfaceEditTargetKind::None;
+    int sectorId = -1;
+    int lineDefId = -1;
+    int sideDefId = -1;
+    SectorTopologySideKind side = SectorTopologySideKind::Front;
+};
+
 struct TexturePickerState {
     bool open = false;
-    TexturePickerTargetKind target = TexturePickerTargetKind::None;
-    int sectorIndex = -1;
-    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
-    int holeIndex = -1;
-    int edgeIndex = -1;
+    bool rebuildPreviewOnApply = false;
+    TopologyTexturePickerTargetKind topologyTargetKind = TopologyTexturePickerTargetKind::None;
+    TopologySectorTextureField topologyField = TopologySectorTextureField::None;
+    int topologySectorId = -1;
+    int topologySideDefId = -1;
+    TopologyWallPart topologyWallPart = TopologyWallPart::Wall;
     int selectedTextureIndex = -1;
     engine::UIScrollState scroll;
     std::vector<std::string> textureIds;
@@ -168,22 +179,29 @@ struct ConfirmationModalState {
 
 struct VertexDragState {
     bool active = false;
-    SectorPoint originalPoint = {};
-    SectorPoint currentPoint = {};
-    SectorPoint snappedPoint = {};
-    std::vector<SectorVertexRef> affectedVertices;
+    int topologyVertexId = -1;
+    SectorTopologyCoordPoint originalPoint = {};
+    SectorTopologyCoordPoint previewPoint = {};
+    SectorTopologyCoordPoint lastValidatedPoint = {};
+    bool hasPreviewPoint = false;
+    bool hasValidatedPreview = false;
+    bool lastPreviewValid = true;
     std::string errorMessage;
 };
 
 struct LightDragState {
     bool active = false;
-    int lightIndex = -1;
+    int topologyLightId = -1;
     Vector3 originalPosition = {};
     Vector3 snappedPosition = {};
 };
 
 struct SectorEditorState {
-    SectorMap map;
+    SectorTopologyMap topologyMap;
+    bool topologyDocumentInitialized = false;
+    bool topologyDocumentDirty = false;
+    std::string topologyDocumentStatus;
+    std::string topologyRenderWarning;
 
     SectorEditorTool currentTool = SectorEditorTool::Select;
     SectorEditorMode mode = SectorEditorMode::Edit2D;
@@ -192,21 +210,17 @@ struct SectorEditorState {
     float viewZoom = 48.0f;
     int gridSize = 8;
 
-    int selectedSectorIndex = -1;
-    SectorBoundaryRingKind selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
-    int selectedEdgeHoleIndex = -1;
-    int selectedEdgeIndex = -1;
-    int selectedLightIndex = -1;
-    EdgeUvPart selectedEdgeUvPart = EdgeUvPart::Wall;
-    int hoveredSectorIndex = -1;
-    int hoveredEdgeSectorIndex = -1;
-    SectorBoundaryRingKind hoveredEdgeRingKind = SectorBoundaryRingKind::Outer;
-    int hoveredEdgeHoleIndex = -1;
-    int hoveredEdgeIndex = -1;
-    int hoveredLightIndex = -1;
+    TopologySelectionKind topologySelectionKind = TopologySelectionKind::None;
+    int selectedTopologySectorId = -1;
+    int selectedTopologySideDefId = -1;
+    int selectedTopologyLineDefId = -1;
+    SectorTopologySideKind selectedTopologySideKind = SectorTopologySideKind::Front;
+    TopologyWallPart selectedTopologyWallPart = TopologyWallPart::Wall;
+    int selectedTopologyLightId = -1;
+    int hoveredTopologyLightId = -1;
     bool hasHoveredVertex = false;
-    SectorPoint hoveredVertexPoint = {};
-    std::vector<SectorVertexRef> hoveredVertexRefs;
+    int hoveredTopologyVertexId = -1;
+    SectorTopologyCoordPoint hoveredTopologyVertexPoint = {};
 
     Vector2 snappedMouseMap = {0.0f, 0.0f};
     Vector2 rawMouseMap = {0.0f, 0.0f};
@@ -234,6 +248,7 @@ struct SectorEditorState {
     SectorMeshPreviewPose lastPreviewPose = {};
     SectorSurfaceHit hoveredSurface3D;
     SectorSurfaceRef selectedSurface3D;
+    TopologySurfaceEditTarget selectedTopologySurface3D;
 
     engine::AssetScopeHandle editorTextureScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;
@@ -266,14 +281,12 @@ struct SectorEditorUiState {
     engine::UIIntInputState lightRedInput;
     engine::UIIntInputState lightGreenInput;
     engine::UIIntInputState lightBlueInput;
-    engine::UIFloatInputState edgeUvScaleUInput;
-    engine::UIFloatInputState edgeUvScaleVInput;
-    engine::UIFloatInputState edgeUvOffsetUInput;
-    engine::UIFloatInputState edgeUvOffsetVInput;
     engine::UIFloatInputState surface3DUvScaleUInput;
     engine::UIFloatInputState surface3DUvScaleVInput;
     engine::UIFloatInputState surface3DUvOffsetUInput;
     engine::UIFloatInputState surface3DUvOffsetVInput;
+    engine::UIFloatInputState topologySectorUvInputs[20];
+    engine::UIFloatInputState topologySideDefUvInputs[4];
     engine::UIScrollState toolsScroll;
     engine::UIScrollState inspectorScroll;
     char selectedSectorIdBuffer[64] = {};

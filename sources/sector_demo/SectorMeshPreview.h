@@ -2,7 +2,8 @@
 
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
-#include "sector_demo/SectorTypes.h"
+#include "sector_demo/SectorGeneratedGeometry.h"
+#include "sector_demo/SectorMeshTypes.h"
 
 #include <raylib.h>
 
@@ -10,6 +11,8 @@
 #include <unordered_map>
 
 namespace game {
+
+struct SectorTopologyMap;
 
 struct SectorMeshPreviewPose {
     Vector3 position = {};
@@ -21,7 +24,7 @@ class SectorMeshPreview {
 public:
     bool Rebuild(
             engine::AssetManager& assets,
-            const SectorMap& map,
+            const SectorTopologyMap& map,
             const char* scopeName,
             std::string& error);
     void Shutdown(engine::AssetManager& assets);
@@ -42,6 +45,7 @@ public:
     size_t SectorCount() const { return sectorCount; }
     size_t BatchCount() const { return meshes.batches.size(); }
     int TriangleCount() const { return meshes.triangleCount; }
+    const SectorGeneratedGeometry& GeneratedGeometry() const { return generatedGeometry; }
     float AssetProgress(engine::AssetManager& assets) const;
     const char* LightmapStatusText() const;
 
@@ -51,6 +55,7 @@ private:
     void UpdateCamera();
 
     SectorMeshBuildResult meshes;
+    SectorGeneratedGeometry generatedGeometry;
     std::unordered_map<std::string, engine::TextureHandle> textureHandlesById;
     engine::TextureHandle lightmapTexture = engine::NullTextureHandle();
     engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();
