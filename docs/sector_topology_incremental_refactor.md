@@ -223,3 +223,25 @@ emit no wall mesh and intentionally produce no lightmap chart.
 The old polygon lightmap APIs and polygon model remain in place for later
 cleanup. The editor document workflow no longer uses the old polygon lightmap
 path.
+
+## Phase 17.5: topology 3D surface texture and UV panel
+
+The existing compact 3D-mode surface texture/UV panel now works with topology
+preview selections. The panel uses the generated 3D pick surface ref to keep an
+explicit topology edit target, so floor and ceiling selections edit the selected
+topology sector's `floorTextureId`/`floorUv` or `ceilingTextureId`/`ceilingUv`,
+while wall, lower, and upper selections edit the selected topology sidedef's
+concrete `wall`, `lower`, or `upper` texture and UV settings.
+
+The 3D Texture button reuses the topology texture picker and draws choices from
+`topologyMap.texturesById`. Texture picks opened from the 3D panel update only
+the selected surface target and rebuild the 3D preview while preserving the
+preview pose and F11 mouse-look state. UV numeric edits follow the existing UI
+commit behavior: raw keystrokes stay local to the input field, and topology data
+plus preview meshes update only after a valid committed value. Reset UV restores
+scale to `(1, 1)` and offset to `(0, 0)`, preserves the texture ID, and affects
+only the selected target.
+
+Equal-height two-sided portals remain 2D-only for material editing because they
+emit no 3D wall surface to pick. The old polygon 3D edit and split-edge workflow
+remains deferred and unused for topology documents until final cleanup.

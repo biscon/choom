@@ -145,8 +145,26 @@ struct SectorSurfaceHit {
     float distance = 0.0f;
 };
 
+enum class TopologySurfaceEditTargetKind {
+    None,
+    SectorFloor,
+    SectorCeiling,
+    SideDefWall,
+    SideDefLower,
+    SideDefUpper
+};
+
+struct TopologySurfaceEditTarget {
+    TopologySurfaceEditTargetKind kind = TopologySurfaceEditTargetKind::None;
+    int sectorId = -1;
+    int lineDefId = -1;
+    int sideDefId = -1;
+    SectorTopologySideKind side = SectorTopologySideKind::Front;
+};
+
 struct TexturePickerState {
     bool open = false;
+    bool rebuildPreviewOnApply = false;
     TopologyTexturePickerTargetKind topologyTargetKind = TopologyTexturePickerTargetKind::None;
     TopologySectorTextureField topologyField = TopologySectorTextureField::None;
     int topologySectorId = -1;
@@ -286,6 +304,7 @@ struct SectorEditorState {
     SectorMeshPreviewPose lastPreviewPose = {};
     SectorSurfaceHit hoveredSurface3D;
     SectorSurfaceRef selectedSurface3D;
+    TopologySurfaceEditTarget selectedTopologySurface3D;
 
     engine::AssetScopeHandle editorTextureScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;

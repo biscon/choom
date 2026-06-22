@@ -609,6 +609,47 @@ TopologyWallPart SurfaceKindToTopologyWallPart(SectorSurfaceKind kind)
     return TopologyWallPart::Wall;
 }
 
+TopologySurfaceEditTargetKind SurfaceKindToTopologyEditTargetKind(SectorSurfaceKind kind)
+{
+    switch (kind) {
+        case SectorSurfaceKind::Floor: return TopologySurfaceEditTargetKind::SectorFloor;
+        case SectorSurfaceKind::Ceiling: return TopologySurfaceEditTargetKind::SectorCeiling;
+        case SectorSurfaceKind::Wall: return TopologySurfaceEditTargetKind::SideDefWall;
+        case SectorSurfaceKind::LowerWall: return TopologySurfaceEditTargetKind::SideDefLower;
+        case SectorSurfaceKind::UpperWall: return TopologySurfaceEditTargetKind::SideDefUpper;
+        case SectorSurfaceKind::None: break;
+    }
+    return TopologySurfaceEditTargetKind::None;
+}
+
+TopologyWallPart TopologyEditTargetWallPart(TopologySurfaceEditTargetKind kind)
+{
+    switch (kind) {
+        case TopologySurfaceEditTargetKind::SideDefLower: return TopologyWallPart::Lower;
+        case TopologySurfaceEditTargetKind::SideDefUpper: return TopologyWallPart::Upper;
+        case TopologySurfaceEditTargetKind::SideDefWall:
+        case TopologySurfaceEditTargetKind::SectorFloor:
+        case TopologySurfaceEditTargetKind::SectorCeiling:
+        case TopologySurfaceEditTargetKind::None:
+            break;
+    }
+    return TopologyWallPart::Wall;
+}
+
+TopologySectorTextureField TopologyEditTargetSectorTextureField(TopologySurfaceEditTargetKind kind)
+{
+    switch (kind) {
+        case TopologySurfaceEditTargetKind::SectorFloor: return TopologySectorTextureField::Floor;
+        case TopologySurfaceEditTargetKind::SectorCeiling: return TopologySectorTextureField::Ceiling;
+        case TopologySurfaceEditTargetKind::SideDefWall:
+        case TopologySurfaceEditTargetKind::SideDefLower:
+        case TopologySurfaceEditTargetKind::SideDefUpper:
+        case TopologySurfaceEditTargetKind::None:
+            break;
+    }
+    return TopologySectorTextureField::None;
+}
+
 SectorSurfaceRef ToEditorSurfaceRef(const SectorGeneratedSurfaceRef& ref)
 {
     SectorSurfaceRef surface;
@@ -1209,10 +1250,9 @@ void SectorEditor::RenderUI(
             return;
         }
         DrawPreviewOverlay(config, assets, font);
-        ui.hotId = 0;
-        ui.activeId = 0;
-        ui.openOptionId = 0;
-        ui.focusedId = 0;
+        if (!state.texturePicker.open) {
+            DrawPreviewUvPanel(ui, config, input, assets, font);
+        }
         DrawTexturePickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = ui.focusedId != 0;
         if (state.texturePicker.open) {
@@ -1811,6 +1851,7 @@ void SectorEditor::FinishVertexDrag()
     state.topologyRenderWarning.clear();
     state.hasUnsavedChanges = true;
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     state.vertexDrag = VertexDragState{};
     statusText = TextFormat(
             "Moved topology vertex %d %.2f,%.2f -> %.2f,%.2f",
@@ -1955,7 +1996,8 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
 
     const Rectangle viewport{0.0f, 0.0f, EditorWidth, EditorHeight};
     const Vector2 mouse = input.MousePosition();
-    const bool overPanel = false;
+    const bool overPanel = IsValidTopologySurfaceEditTarget(state.selectedTopologySurface3D)
+            && Contains(BuildPreviewUvPanelRect(), mouse);
     state.hoveredSurface3D = overPanel
             ? SectorSurfaceHit{}
             : PickSectorSurface3D(mouse, viewport);
@@ -2099,6 +2141,7 @@ void SectorEditor::FinalizePendingSector()
     state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     SelectTopologySector(createdSectorId);
     state.topologyDocumentDirty = true;
     state.topologyRenderWarning.clear();
@@ -2621,6 +2664,7 @@ bool SectorEditor::DeleteSelectedTopologySectorConfirmed(int sectorId)
     state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
     for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
         inputState = engine::UIFloatInputState{};
@@ -3558,49 +3602,59 @@ void SectorEditor::DrawPreviewUvPanel(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
-    if (!IsValidSurfaceRef(state.selectedSurface3D)) {
-        state.selectedSurface3D = SectorSurfaceRef{};
+    if (preview.IsMouseLookEnabled()) {
         return;
     }
 
+    if (!IsValidSurfaceRef(state.selectedSurface3D)
+            || !IsValidTopologySurfaceEditTarget(state.selectedTopologySurface3D)) {
+        state.selectedSurface3D = SectorSurfaceRef{};
+        state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+        return;
+    }
+
+    const TopologySurfaceEditTarget target = state.selectedTopologySurface3D;
     const Rectangle panel = BuildPreviewUvPanelRect();
     DrawRectangleRec(panel, Color{12, 15, 20, 230});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
-    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(state.selectedSurface3D.sectorIndex)];
     Vector2 uvScale{1.0f, 1.0f};
     Vector2 uvOffset{0.0f, 0.0f};
+    std::string targetLabel;
 
-    if (state.selectedSurface3D.kind == SectorSurfaceKind::Floor) {
-        if (sector.floorUv.hasUvScale) {
-            uvScale = sector.floorUv.uvScale;
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            state.selectedSurface3D = SectorSurfaceRef{};
+            state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+            return;
         }
-        if (sector.floorUv.hasUvOffset) {
-            uvOffset = sector.floorUv.uvOffset;
-        }
-    } else if (state.selectedSurface3D.kind == SectorSurfaceKind::Ceiling) {
-        if (sector.ceilingUv.hasUvScale) {
-            uvScale = sector.ceilingUv.uvScale;
-        }
-        if (sector.ceilingUv.hasUvOffset) {
-            uvOffset = sector.ceilingUv.uvOffset;
-        }
+        const SectorTopologyUvSettings& uv = target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? sector->floorUv
+                : sector->ceilingUv;
+        uvScale = uv.scale;
+        uvOffset = uv.offset;
+        targetLabel = TextFormat(
+                "%s | sector %d",
+                target.kind == TopologySurfaceEditTargetKind::SectorFloor ? "Floor" : "Ceiling",
+                sector->id);
     } else {
-        const EffectiveEdgeSettings effective = GetEffectiveEdgeSettings(
-                state.map,
-                SectorBoundaryEdgeRef{
-                        state.selectedSurface3D.sectorIndex,
-                        state.selectedSurface3D.ringKind,
-                        state.selectedSurface3D.holeIndex,
-                        state.selectedSurface3D.edgeIndex});
-        const EffectiveEdgePartSettings* part = &effective.wall;
-        if (state.selectedSurface3D.kind == SectorSurfaceKind::LowerWall) {
-            part = &effective.lower;
-        } else if (state.selectedSurface3D.kind == SectorSurfaceKind::UpperWall) {
-            part = &effective.upper;
+        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+        if (sideDef == nullptr) {
+            state.selectedSurface3D = SectorSurfaceRef{};
+            state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+            return;
         }
-        uvScale = part->uvScale;
-        uvOffset = part->uvOffset;
+        const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+        const SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(*sideDef, wallPart);
+        uvScale = part.uv.scale;
+        uvOffset = part.uv.offset;
+        targetLabel = TextFormat(
+                "%s | sideDef %d line %d",
+                SurfaceKindName(state.selectedSurface3D.kind),
+                sideDef->id,
+                sideDef->lineDefId);
     }
 
     const float margin = 18.0f;
@@ -3610,35 +3664,28 @@ void SectorEditor::DrawPreviewUvPanel(
     const float gap = 14.0f;
     const float startX = panel.x + 390.0f;
 
-    const std::string edgeLabel = !IsWallSurface(state.selectedSurface3D.kind)
-            ? std::string{}
-            : state.selectedSurface3D.ringKind == SectorBoundaryRingKind::Hole
-                    ? TextFormat(" | hole %d edge %d", state.selectedSurface3D.holeIndex, state.selectedSurface3D.edgeIndex)
-                    : TextFormat(" | outer edge %d", state.selectedSurface3D.edgeIndex);
     engine::Text(
             ui,
             config,
             assets,
             Rectangle{panel.x + margin, top, 350.0f, 34.0f},
             font,
-            TextFormat(
-                    "%s | sector %s%s",
-                    SurfaceKindName(state.selectedSurface3D.kind),
-                    sector.id.c_str(),
-                    edgeLabel.c_str()
-            ),
+            targetLabel.c_str(),
             engine::UITextJustify::Left,
             config.textColor
     );
+    const std::string currentTexture = CurrentTextureForSurface(target);
+    const bool missingTexture = !currentTexture.empty()
+            && FindSectorTopologyTexture(state.topologyMap, currentTexture) == nullptr;
     engine::Text(
             ui,
             config,
             assets,
             Rectangle{panel.x + margin, top + 38.0f, 350.0f, 30.0f},
             font,
-            TextFormat("texture %s", CurrentTextureForSurface(state.selectedSurface3D).c_str()),
+            TextFormat("texture %s", currentTexture.empty() ? "<none>" : currentTexture.c_str()),
             engine::UITextJustify::Left,
-            config.mutedTextColor
+            missingTexture ? config.invalidColor : config.mutedTextColor
     );
 
     auto drawFloat = [&](const char* id, const char* label, float value, engine::UIFloatInputState& inputState, int component, float minValue, float maxValue, float x) {
@@ -3667,8 +3714,8 @@ void SectorEditor::DrawPreviewUvPanel(
                 maxValue,
                 3
         );
-        if (result.changed && edited != value) {
-            ApplySurface3DUvValue(state.selectedSurface3D, component, edited, assets);
+        if (result.changed && edited != value && std::isfinite(edited)) {
+            ApplySurface3DUvValue(target, component, edited, assets);
         }
     };
 
@@ -3686,7 +3733,15 @@ void SectorEditor::DrawPreviewUvPanel(
             Rectangle{panel.x + panel.width - 172.0f, panel.y + 38.0f, 146.0f, 38.0f},
             font,
             "Texture")) {
-        statusText = "Topology 3D texture editing is not migrated yet.";
+        if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+            OpenTopologyTexturePicker(target.sectorId, TopologyEditTargetSectorTextureField(target.kind));
+        } else {
+            OpenTopologySideDefTexturePicker(target.sideDefId, TopologyEditTargetWallPart(target.kind));
+        }
+        if (state.texturePicker.open) {
+            state.texturePicker.rebuildPreviewOnApply = true;
+        }
     }
 
     if (engine::Button(
@@ -3698,7 +3753,7 @@ void SectorEditor::DrawPreviewUvPanel(
             Rectangle{panel.x + panel.width - 172.0f, panel.y + 86.0f, 146.0f, 38.0f},
             font,
             "Reset UV")) {
-        ResetSurface3DUv(state.selectedSurface3D, assets);
+        ResetSurface3DUv(target, assets);
     }
 
     input.ForEachEvent(
@@ -6827,6 +6882,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     state.mode = SectorEditorMode::Preview3D;
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
     statusText = TextFormat(
             "3D mode rebuilt: %zu batches, %d triangles",
@@ -7378,6 +7434,7 @@ void SectorEditor::SelectTopologySector(int sectorId)
     state.selectedEdgeHoleIndex = -1;
     state.selectedEdgeIndex = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
     uiState.idBufferLightIndex = -1;
     uiState.inspectorScroll.offset = Vector2{};
@@ -7423,6 +7480,7 @@ void SectorEditor::SelectTopologySideDef(int sideDefId, TopologyWallPart wallPar
     state.selectedEdgeHoleIndex = -1;
     state.selectedEdgeIndex = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
     uiState.idBufferLightIndex = -1;
     uiState.inspectorScroll.offset = Vector2{};
@@ -7459,6 +7517,7 @@ void SectorEditor::SelectTopologyLineDef(
     state.selectedEdgeHoleIndex = -1;
     state.selectedEdgeIndex = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
     uiState.idBufferLightIndex = -1;
     uiState.inspectorScroll.offset = Vector2{};
@@ -7512,6 +7571,7 @@ void SectorEditor::SelectTopologyLight(int topologyLightId)
     state.selectedEdgeHoleIndex = -1;
     state.selectedEdgeIndex = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
     uiState.inspectorScroll.offset = Vector2{};
     uiState.lightXInput = engine::UIFloatInputState{};
@@ -7529,8 +7589,10 @@ void SectorEditor::SelectTopologyLight(int topologyLightId)
 
 void SectorEditor::SelectSurface3D(SectorSurfaceRef surface)
 {
-    if (!IsValidSurfaceRef(surface)) {
+    const TopologySurfaceEditTarget target = TopologyEditTargetForSurface(surface);
+    if (!IsValidSurfaceRef(surface) || !IsValidTopologySurfaceEditTarget(target)) {
         state.selectedSurface3D = SectorSurfaceRef{};
+        state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
         return;
     }
 
@@ -7546,6 +7608,7 @@ void SectorEditor::SelectSurface3D(SectorSurfaceRef surface)
         SelectTopologySector(surface.topologySectorId);
     }
     state.selectedSurface3D = surface;
+    state.selectedTopologySurface3D = target;
 }
 
 bool SectorEditor::IsValidSurfaceRef(SectorSurfaceRef surface) const
@@ -7578,6 +7641,39 @@ bool SectorEditor::SameSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b) const
             && a.topologySide == b.topologySide;
 }
 
+TopologySurfaceEditTarget SectorEditor::TopologyEditTargetForSurface(SectorSurfaceRef surface) const
+{
+    TopologySurfaceEditTarget target;
+    target.kind = SurfaceKindToTopologyEditTargetKind(surface.kind);
+    target.sectorId = surface.topologySectorId;
+    target.lineDefId = surface.topologyLineDefId;
+    target.sideDefId = surface.topologySideDefId;
+    target.side = surface.topologySide;
+    return target;
+}
+
+bool SectorEditor::IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget target) const
+{
+    switch (target.kind) {
+        case TopologySurfaceEditTargetKind::SectorFloor:
+        case TopologySurfaceEditTargetKind::SectorCeiling:
+            return FindSectorTopologySector(state.topologyMap, target.sectorId) != nullptr;
+        case TopologySurfaceEditTargetKind::SideDefWall:
+        case TopologySurfaceEditTargetKind::SideDefLower:
+        case TopologySurfaceEditTargetKind::SideDefUpper: {
+            const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
+                    state.topologyMap,
+                    target.sideDefId);
+            return sideDef != nullptr
+                    && sideDef->lineDefId == target.lineDefId
+                    && sideDef->side == target.side;
+        }
+        case TopologySurfaceEditTargetKind::None:
+            break;
+    }
+    return false;
+}
+
 void SectorEditor::ResetSurface3DUiState()
 {
     uiState.surface3DUvScaleUInput = engine::UIFloatInputState{};
@@ -7598,6 +7694,7 @@ void SectorEditor::ClearSelection()
     state.selectedEdgeHoleIndex = -1;
     state.selectedEdgeIndex = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
     uiState.ambientIntensityInput = engine::UIFloatInputState{};
     uiState.ambientRedInput = engine::UIIntInputState{};
@@ -7676,28 +7773,37 @@ void SectorEditor::RemoveEdgeOverrideIfEmpty(SectorBoundaryEdgeRef edge)
     );
 }
 
-std::string SectorEditor::CurrentTextureForSurface(SectorSurfaceRef surface) const
+std::string SectorEditor::CurrentTextureForSurface(TopologySurfaceEditTarget target) const
 {
-    if (!IsValidSurfaceRef(surface)) {
+    if (!IsValidTopologySurfaceEditTarget(target)) {
         return std::string{"<none>"};
     }
 
-    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
-    switch (surface.kind) {
-        case SectorSurfaceKind::Floor:
-            return sector.floorTextureId;
-        case SectorSurfaceKind::Ceiling:
-            return sector.ceilingTextureId;
-        case SectorSurfaceKind::Wall:
-            return GetEffectiveEdgeSettings(state.map, SectorBoundaryEdgeRef{
-                    surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex}).wall.textureId;
-        case SectorSurfaceKind::LowerWall:
-            return GetEffectiveEdgeSettings(state.map, SectorBoundaryEdgeRef{
-                    surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex}).lower.textureId;
-        case SectorSurfaceKind::UpperWall:
-            return GetEffectiveEdgeSettings(state.map, SectorBoundaryEdgeRef{
-                    surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex}).upper.textureId;
-        case SectorSurfaceKind::None:
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            return std::string{};
+        }
+        return target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? sector->floorTextureId
+                : sector->ceilingTextureId;
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (sideDef == nullptr) {
+        return std::string{};
+    }
+    switch (target.kind) {
+        case TopologySurfaceEditTargetKind::SideDefWall:
+            return sideDef->wall.textureId;
+        case TopologySurfaceEditTargetKind::SideDefLower:
+            return sideDef->lower.textureId;
+        case TopologySurfaceEditTargetKind::SideDefUpper:
+            return sideDef->upper.textureId;
+        case TopologySurfaceEditTargetKind::SectorFloor:
+        case TopologySurfaceEditTargetKind::SectorCeiling:
+        case TopologySurfaceEditTargetKind::None:
             break;
     }
     return std::string{"<none>"};
@@ -7722,91 +7828,94 @@ TexturePickerTargetKind SectorEditor::TexturePickerTargetForSurface(SectorSurfac
     return TexturePickerTargetKind::None;
 }
 
-bool SectorEditor::ApplySurface3DUvValue(SectorSurfaceRef surface, int component, float value, engine::AssetManager& assets)
+bool SectorEditor::ApplySurface3DUvValue(TopologySurfaceEditTarget target, int component, float value, engine::AssetManager& assets)
 {
-    if (!IsValidSurfaceRef(surface)) {
+    if (!IsValidTopologySurfaceEditTarget(target) || !std::isfinite(value)) {
         return false;
     }
 
     auto applyComponent = [component, value](auto& uv) {
         switch (component) {
             case 0:
-                uv.uvScale.x = value;
-                uv.hasUvScale = true;
+                uv.scale.x = value;
                 return true;
             case 1:
-                uv.uvScale.y = value;
-                uv.hasUvScale = true;
+                uv.scale.y = value;
                 return true;
             case 2:
-                uv.uvOffset.x = value;
-                uv.hasUvOffset = true;
+                uv.offset.x = value;
                 return true;
             case 3:
-                uv.uvOffset.y = value;
-                uv.hasUvOffset = true;
+                uv.offset.y = value;
                 return true;
             default:
                 return false;
         }
     };
 
-    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
     bool changed = false;
-    if (surface.kind == SectorSurfaceKind::Floor) {
-        changed = applyComponent(sector.floorUv);
-    } else if (surface.kind == SectorSurfaceKind::Ceiling) {
-        changed = applyComponent(sector.ceilingUv);
-    } else {
-        SectorEdgeOverride& edgeOverride = EnsureEdgeOverride(SectorBoundaryEdgeRef{
-                surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex});
-        SectorEdgePartUvOverride* uv = &edgeOverride.wallUv;
-        if (surface.kind == SectorSurfaceKind::LowerWall) {
-            uv = &edgeOverride.lowerUv;
-        } else if (surface.kind == SectorSurfaceKind::UpperWall) {
-            uv = &edgeOverride.upperUv;
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            return false;
         }
-        changed = applyComponent(*uv);
+        SectorTopologyUvSettings& uv = target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? sector->floorUv
+                : sector->ceilingUv;
+        changed = applyComponent(uv);
+    } else {
+        SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+        if (sideDef == nullptr) {
+            return false;
+        }
+        changed = applyComponent(TopologyWallPartSettingsFor(
+                *sideDef,
+                TopologyEditTargetWallPart(target.kind)).uv);
     }
 
     if (!changed) {
         return false;
     }
 
-    state.hasUnsavedChanges = true;
-    statusText = TextFormat("Updated 3D %s UV", SurfaceKindName(surface.kind));
+    MarkTopologyDocumentEdited(TextFormat("Updated 3D %s UV", SurfaceKindName(state.selectedSurface3D.kind)));
     return RebuildPreviewMeshesPreservingView(assets);
 }
 
-bool SectorEditor::ResetSurface3DUv(SectorSurfaceRef surface, engine::AssetManager& assets)
+bool SectorEditor::ResetSurface3DUv(TopologySurfaceEditTarget target, engine::AssetManager& assets)
 {
-    if (!IsValidSurfaceRef(surface)) {
+    if (!IsValidTopologySurfaceEditTarget(target)) {
         return false;
     }
 
+    auto resetUv = [](SectorTopologyUvSettings& uv) {
+        const bool changed = uv.scale.x != 1.0f
+                || uv.scale.y != 1.0f
+                || uv.offset.x != 0.0f
+                || uv.offset.y != 0.0f;
+        uv.scale = Vector2{1.0f, 1.0f};
+        uv.offset = Vector2{0.0f, 0.0f};
+        return changed;
+    };
+
     bool changed = false;
-    SectorDefinition& sector = state.map.sectors[static_cast<size_t>(surface.sectorIndex)];
-    if (surface.kind == SectorSurfaceKind::Floor) {
-        changed = sector.floorUv.hasUvScale || sector.floorUv.hasUvOffset;
-        sector.floorUv = SectorSurfaceUvOverride{};
-    } else if (surface.kind == SectorSurfaceKind::Ceiling) {
-        changed = sector.ceilingUv.hasUvScale || sector.ceilingUv.hasUvOffset;
-        sector.ceilingUv = SectorSurfaceUvOverride{};
-    } else {
-        const SectorBoundaryEdgeRef edge{
-                surface.sectorIndex, surface.ringKind, surface.holeIndex, surface.edgeIndex};
-        SectorEdgeOverride* edgeOverride = FindMutableEdgeOverride(edge);
-        if (edgeOverride != nullptr) {
-            SectorEdgePartUvOverride* uv = &edgeOverride->wallUv;
-            if (surface.kind == SectorSurfaceKind::LowerWall) {
-                uv = &edgeOverride->lowerUv;
-            } else if (surface.kind == SectorSurfaceKind::UpperWall) {
-                uv = &edgeOverride->upperUv;
-            }
-            changed = uv->hasUvScale || uv->hasUvOffset;
-            *uv = SectorEdgePartUvOverride{};
-            RemoveEdgeOverrideIfEmpty(edge);
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            return false;
         }
+        changed = target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? resetUv(sector->floorUv)
+                : resetUv(sector->ceilingUv);
+    } else {
+        SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+        if (sideDef == nullptr) {
+            return false;
+        }
+        changed = resetUv(TopologyWallPartSettingsFor(
+                *sideDef,
+                TopologyEditTargetWallPart(target.kind)).uv);
     }
 
     if (!changed) {
@@ -7814,8 +7923,7 @@ bool SectorEditor::ResetSurface3DUv(SectorSurfaceRef surface, engine::AssetManag
     }
 
     ResetSurface3DUiState();
-    state.hasUnsavedChanges = true;
-    statusText = TextFormat("Reset 3D %s UV", SurfaceKindName(surface.kind));
+    MarkTopologyDocumentEdited(TextFormat("Reset 3D %s UV", SurfaceKindName(state.selectedSurface3D.kind)));
     return RebuildPreviewMeshesPreservingView(assets);
 }
 
@@ -7890,6 +7998,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
     const SectorMeshPreviewPose pose = preview.Pose();
     const bool mouseLook = preview.IsMouseLookEnabled();
     const SectorSurfaceRef selected = state.selectedSurface3D;
+    const TopologySurfaceEditTarget selectedTarget = state.selectedTopologySurface3D;
 
     std::string error;
     if (!preview.Rebuild(assets, state.topologyMap, "sector_editor_preview", error)) {
@@ -7904,7 +8013,11 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
 
     preview.ApplyPose(pose);
     preview.SetMouseLookEnabled(mouseLook);
-    state.selectedSurface3D = IsValidSurfaceRef(selected) ? selected : SectorSurfaceRef{};
+    const bool selectedStillValid = IsValidSurfaceRef(selected);
+    state.selectedSurface3D = selectedStillValid ? selected : SectorSurfaceRef{};
+    state.selectedTopologySurface3D = selectedStillValid && IsValidTopologySurfaceEditTarget(selectedTarget)
+            ? selectedTarget
+            : TopologySurfaceEditTarget{};
     return true;
 }
 
@@ -7940,6 +8053,7 @@ bool SectorEditor::SplitSelectedTopologyLineDef()
     state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
     for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
         inputState = engine::UIFloatInputState{};
@@ -8009,6 +8123,7 @@ void SectorEditor::OpenTopologyTexturePicker(int sectorId, TopologySectorTexture
     }
 
     picker.open = true;
+    picker.rebuildPreviewOnApply = false;
     picker.topologyTargetKind = TopologyTexturePickerTargetKind::Sector;
     picker.topologySectorId = sectorId;
     picker.topologyField = field;
@@ -8041,6 +8156,7 @@ void SectorEditor::OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallP
     }
 
     picker.open = true;
+    picker.rebuildPreviewOnApply = false;
     picker.topologyTargetKind = TopologyTexturePickerTargetKind::SideDef;
     picker.topologySectorId = -1;
     picker.topologyField = TopologySectorTextureField::None;
@@ -8065,7 +8181,6 @@ void SectorEditor::OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallP
 
 void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
 {
-    (void)assets;
     TexturePickerState& picker = state.texturePicker;
     if (!picker.open
             || picker.topologyTargetKind == TopologyTexturePickerTargetKind::None
@@ -8076,6 +8191,7 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
     }
 
     const std::string selectedTexture = picker.textureIds[static_cast<size_t>(picker.selectedTextureIndex)];
+    const bool rebuildPreviewOnApply = picker.rebuildPreviewOnApply;
     bool changed = false;
 
     auto assignTexture = [&](std::string& field) {
@@ -8128,6 +8244,9 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
 
     if (changed) {
         MarkTopologyDocumentEdited(status.c_str());
+        if (rebuildPreviewOnApply && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+            RebuildPreviewMeshesPreservingView(assets);
+        }
     }
 
     picker = TexturePickerState{};

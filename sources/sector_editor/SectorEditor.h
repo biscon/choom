@@ -242,12 +242,14 @@ private:
     void SelectSurface3D(SectorSurfaceRef surface);
     bool IsValidSurfaceRef(SectorSurfaceRef surface) const;
     bool SameSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b) const;
+    TopologySurfaceEditTarget TopologyEditTargetForSurface(SectorSurfaceRef surface) const;
+    bool IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget target) const;
     void ResetSurface3DUiState();
     Rectangle BuildPreviewUvPanelRect() const;
-    std::string CurrentTextureForSurface(SectorSurfaceRef surface) const;
+    std::string CurrentTextureForSurface(TopologySurfaceEditTarget target) const;
     TexturePickerTargetKind TexturePickerTargetForSurface(SectorSurfaceRef surface) const;
-    bool ApplySurface3DUvValue(SectorSurfaceRef surface, int component, float value, engine::AssetManager& assets);
-    bool ResetSurface3DUv(SectorSurfaceRef surface, engine::AssetManager& assets);
+    bool ApplySurface3DUvValue(TopologySurfaceEditTarget target, int component, float value, engine::AssetManager& assets);
+    bool ResetSurface3DUv(TopologySurfaceEditTarget target, engine::AssetManager& assets);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     bool SplitSelectedTopologyLineDef();
     bool SplitSelectedEdge(engine::AssetManager& assets);
