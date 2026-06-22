@@ -18,6 +18,7 @@ using game::SectorTopologyLineDef;
 using game::SectorTopologyLoop;
 using game::SectorTopologyLoopSet;
 using game::SectorTopologyMap;
+using game::SectorTopologyDissolveVertexResult;
 using game::SectorTopologyMergeVerticesResult;
 using game::SectorTopologySideDef;
 using game::SectorTopologySideKind;
@@ -938,6 +939,261 @@ void TestSplitAtPointGeneratedGeometryBuilds()
           "generated geometry builds after point split");
 }
 
+void ExpectDissolveRejected(
+        const SectorTopologyMap& input,
+        int vertexId,
+        const char* expectedErrorText,
+        const char* description)
+{
+    SectorTopologyMap map = input;
+    const SectorTopologyMap before = map;
+    std::string error;
+    Check(!game::DissolveSectorTopologyVertex(map, vertexId, nullptr, &error),
+          description);
+    Check(!error.empty(), "rejected dissolve reports an error");
+    if (expectedErrorText != nullptr) {
+        Check(error.find(expectedErrorText) != std::string::npos,
+              "rejected dissolve reports expected error text");
+    }
+    CheckUnchanged(before, map, "rejected dissolve leaves map unchanged");
+}
+
+void TestDissolveOneSidedSplitWall()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "dissolve one-sided square creation succeeds");
+    const SectorTopologyLineDef originalLine = map.lineDefs.front();
+    SectorTopologySideDef* originalSide = FindSideDef(map, originalLine.frontSideDefId);
+    Check(originalSide != nullptr, "dissolve one-sided finds original side");
+    if (originalSide == nullptr) {
+        return;
+    }
+    SetDistinctSideSettings(*originalSide, "dissolve_outer");
+    const SectorTopologySideDef expectedSide = *originalSide;
+    const size_t vertexCount = map.vertices.size();
+    const size_t lineCount = map.lineDefs.size();
+    const size_t sideCount = map.sideDefs.size();
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, originalLine.id, {16, 0}, &split, &error),
+          "dissolve one-sided split setup succeeds");
+
+    SectorTopologyDissolveVertexResult dissolve;
+    Check(game::DissolveSectorTopologyVertex(map, split.newVertexId, &dissolve, &error),
+          "dissolve one-sided split vertex succeeds");
+    Check(error.empty(), "successful one-sided dissolve clears error");
+    Check(dissolve.removedVertexId == split.newVertexId,
+          "dissolve one-sided reports removed vertex");
+    Check(game::FindSectorTopologyVertex(map, split.newVertexId) == nullptr,
+          "dissolve one-sided removes split vertex");
+    Check(map.vertices.size() == vertexCount
+                  && map.lineDefs.size() == lineCount
+                  && map.sideDefs.size() == sideCount,
+          "dissolve one-sided restores original counts");
+
+    const SectorTopologyLineDef* replacement = FindLineById(map, dissolve.replacementLineDefId);
+    Check(replacement != nullptr, "dissolve one-sided replacement line exists");
+    if (replacement != nullptr) {
+        Check(replacement->startVertexId == originalLine.startVertexId
+                      && replacement->endVertexId == originalLine.endVertexId,
+              "dissolve one-sided replacement reconnects original endpoints");
+        Check(replacement->frontSideDefId == dissolve.replacementFrontSideDefId
+                      && replacement->backSideDefId == -1,
+              "dissolve one-sided replacement remains one-sided front line");
+    }
+
+    const SectorTopologySideDef* replacementSide = FindSideDef(map, dissolve.replacementFrontSideDefId);
+    Check(replacementSide != nullptr && SameSideDefSettings(*replacementSide, expectedSide),
+          "dissolve one-sided preserves sidedef material and UV settings");
+
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, sectorId, loops), "dissolve one-sided validates and extracts");
+    Check(!LoopContainsVertex(loops.outer, split.newVertexId),
+          "dissolve one-sided sector loop removes dissolved vertex");
+
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "generated geometry builds after one-sided dissolve");
+}
+
+void TestDissolveTwoSidedSharedPortal()
+{
+    SectorTopologyMap map;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "dissolve shared first adjacent square succeeds");
+    Check(Create(map, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "dissolve shared second adjacent square succeeds");
+    const SectorTopologyLineDef* shared = FindLine(map, 2, 3);
+    Check(shared != nullptr, "dissolve shared finds shared line");
+    if (shared == nullptr) {
+        return;
+    }
+    SectorTopologySideDef* front = FindSideDef(map, shared->frontSideDefId);
+    SectorTopologySideDef* back = FindSideDef(map, shared->backSideDefId);
+    Check(front != nullptr && back != nullptr, "dissolve shared finds both sides");
+    if (front == nullptr || back == nullptr) {
+        return;
+    }
+    SetDistinctSideSettings(*front, "dissolve_front");
+    SetDistinctSideSettings(*back, "dissolve_back");
+    const SectorTopologySideDef expectedFront = *front;
+    const SectorTopologySideDef expectedBack = *back;
+    const int originalStart = shared->startVertexId;
+    const int originalEnd = shared->endVertexId;
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, shared->id, {64, 16}, &split, &error),
+          "dissolve shared split setup succeeds");
+
+    SectorTopologyDissolveVertexResult dissolve;
+    Check(game::DissolveSectorTopologyVertex(map, split.newVertexId, &dissolve, &error),
+          "dissolve shared split vertex succeeds");
+    Check(error.empty(), "successful shared dissolve clears error");
+
+    const SectorTopologyLineDef* replacement = FindLineById(map, dissolve.replacementLineDefId);
+    Check(replacement != nullptr, "dissolve shared replacement line exists");
+    if (replacement != nullptr) {
+        Check(replacement->startVertexId == originalStart
+                      && replacement->endVertexId == originalEnd,
+              "dissolve shared replacement reconnects original endpoints");
+        Check(replacement->frontSideDefId == dissolve.replacementFrontSideDefId
+                      && replacement->backSideDefId == dissolve.replacementBackSideDefId,
+              "dissolve shared replacement is two-sided");
+    }
+
+    const SectorTopologySideDef* replacementFront = FindSideDef(map, dissolve.replacementFrontSideDefId);
+    const SectorTopologySideDef* replacementBack = FindSideDef(map, dissolve.replacementBackSideDefId);
+    Check(replacementFront != nullptr && SameSideDefSettings(*replacementFront, expectedFront),
+          "dissolve shared preserves front sidedef material and UV settings");
+    Check(replacementBack != nullptr && SameSideDefSettings(*replacementBack, expectedBack),
+          "dissolve shared preserves back sidedef material and UV settings");
+
+    SectorTopologyLoopSet leftLoops;
+    SectorTopologyLoopSet rightLoops;
+    Check(ValidateAndExtract(map, leftId, leftLoops), "dissolve shared left sector extracts");
+    Check(ValidateAndExtract(map, rightId, rightLoops), "dissolve shared right sector extracts");
+    Check(!LoopContainsVertex(leftLoops.outer, split.newVertexId)
+                  && !LoopContainsVertex(rightLoops.outer, split.newVertexId),
+          "dissolve shared sector loops remove dissolved vertex");
+
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "generated geometry builds after shared dissolve");
+}
+
+void TestRejectInvalidDissolveInputs()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "invalid dissolve square creation succeeds");
+    ExpectDissolveRejected(map, 999, "not found",
+                           "dissolve missing vertex fails");
+}
+
+void TestRejectDissolveDegreeOneAndCollapsed()
+{
+    SectorTopologyMap degreeOne;
+    degreeOne.vertices.push_back(game::SectorTopologyVertex{1, 0, 0});
+    degreeOne.vertices.push_back(game::SectorTopologyVertex{2, 64, 0});
+    degreeOne.lineDefs.push_back(SectorTopologyLineDef{1, 1, 2, -1, -1});
+    ExpectDissolveRejected(degreeOne, 1, "exactly two",
+                           "dissolve degree-one vertex fails");
+
+    SectorTopologyMap collapsed;
+    collapsed.vertices.push_back(game::SectorTopologyVertex{1, 0, 0});
+    collapsed.vertices.push_back(game::SectorTopologyVertex{2, 64, 0});
+    collapsed.lineDefs.push_back(SectorTopologyLineDef{1, 1, 2, -1, -1});
+    collapsed.lineDefs.push_back(SectorTopologyLineDef{2, 2, 1, -1, -1});
+    ExpectDissolveRejected(collapsed, 1, "collapse",
+                           "dissolve replacement collapsed endpoint fails");
+}
+
+void TestRejectDissolveBranchingAndDuplicate()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "branching dissolve square creation succeeds");
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, map.lineDefs.front().id, {16, 0}, &split, &error),
+          "branching dissolve split setup succeeds");
+
+    const int extraVertexId = game::AllocateSectorTopologyVertexId(map);
+    map.vertices.push_back(game::SectorTopologyVertex{extraVertexId, 16, 24});
+    const int extraLineId = game::AllocateSectorTopologyLineDefId(map);
+    map.lineDefs.push_back(SectorTopologyLineDef{extraLineId, split.newVertexId, extraVertexId, -1, -1});
+    ExpectDissolveRejected(map, split.newVertexId, "branching",
+                           "dissolve degree-three branching vertex fails");
+
+    SectorTopologyMap duplicate;
+    Check(Create(duplicate, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "duplicate dissolve square creation succeeds");
+    const SectorTopologyLineDef duplicateOriginal = duplicate.lineDefs.front();
+    Check(game::SplitSectorTopologyLineDefAtPoint(
+                  duplicate,
+                  duplicateOriginal.id,
+                  {16, 0},
+                  &split,
+                  &error),
+          "duplicate dissolve split setup succeeds");
+    const int duplicateLineId = game::AllocateSectorTopologyLineDefId(duplicate);
+    duplicate.lineDefs.push_back(SectorTopologyLineDef{
+            duplicateLineId,
+            duplicateOriginal.startVertexId,
+            duplicateOriginal.endVertexId,
+            -1,
+            -1
+    });
+    ExpectDissolveRejected(duplicate, split.newVertexId, "duplicate physical linedefs",
+                           "dissolve duplicate replacement line fails");
+}
+
+void TestRejectDissolveMaterialMismatch()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "material mismatch dissolve square creation succeeds");
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, map.lineDefs.front().id, {16, 0}, &split, &error),
+          "material mismatch dissolve split setup succeeds");
+    SectorTopologySideDef* secondSide = FindSideDef(map, split.secondFrontSideDefId);
+    Check(secondSide != nullptr, "material mismatch finds second side");
+    if (secondSide == nullptr) {
+        return;
+    }
+    secondSide->wall.textureId = "changed_wall";
+    ExpectDissolveRejected(map, split.newVertexId, "different sector, material, or UV",
+                           "dissolve material mismatch fails");
+}
+
+void TestRejectDissolveCandidateValidationFailure()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "validation failure dissolve square creation succeeds");
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, map.lineDefs.front().id, {16, 0}, &split, &error),
+          "validation failure dissolve split setup succeeds");
+    SectorTopologySideDef* firstSide = FindSideDef(map, split.firstFrontSideDefId);
+    SectorTopologySideDef* secondSide = FindSideDef(map, split.secondFrontSideDefId);
+    Check(firstSide != nullptr && secondSide != nullptr, "validation failure finds split sides");
+    if (firstSide == nullptr || secondSide == nullptr) {
+        return;
+    }
+    firstSide->sectorId = 999999;
+    secondSide->sectorId = 999999;
+    ExpectDissolveRejected(map, split.newVertexId, nullptr,
+                           "dissolve candidate validation failure is transactional");
+}
+
 void TestSplitOneSidedWall()
 {
     SectorTopologyMap map;
@@ -1723,6 +1979,13 @@ int main()
     TestSplitDiagonalLineAtPoint();
     TestRejectInvalidSplitAtPoint();
     TestSplitAtPointGeneratedGeometryBuilds();
+    TestDissolveOneSidedSplitWall();
+    TestDissolveTwoSidedSharedPortal();
+    TestRejectInvalidDissolveInputs();
+    TestRejectDissolveDegreeOneAndCollapsed();
+    TestRejectDissolveBranchingAndDuplicate();
+    TestRejectDissolveMaterialMismatch();
+    TestRejectDissolveCandidateValidationFailure();
     TestDeleteStandaloneSector();
     TestDeleteAdjacentSector();
     TestDeleteInsertedChildSector();

@@ -1121,7 +1121,7 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
         return;
     }
 
-    if (state.currentTool == SectorEditorTool::Move) {
+    if (state.currentTool == SectorEditorTool::Move || state.currentTool == SectorEditorTool::Select) {
         const int lightId = FindTopologyLightNearScreenPoint(input.MousePosition());
         if (lightId >= 0) {
             state.hoveredTopologyLightId = lightId;
@@ -1193,6 +1193,9 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     } else if (state.topologySelectionKind == TopologySelectionKind::Sector
                             && state.selectedTopologySectorId >= 0) {
                         OpenDeleteSelectedTopologySectorConfirmation();
+                    } else if (state.topologySelectionKind == TopologySelectionKind::Vertex
+                            && state.selectedTopologyVertexId >= 0) {
+                        statusText = "Standalone vertex deletion is not available; use Dissolve Vertex for simple degree-2 vertices.";
                     } else if (state.topologySelectionKind == TopologySelectionKind::SideDef
                             || state.topologySelectionKind == TopologySelectionKind::LineDef) {
                         statusText = "Direct linedef/sidedef deletion is not available yet.";
@@ -1424,6 +1427,18 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         return;
                     }
 
+                    int vertexId = -1;
+                    SectorTopologyCoordPoint vertexPoint;
+                    if (FindTopologyVertexNearScreenPoint(
+                                event.mouseClick.releasePosition,
+                                vertexId,
+                                vertexPoint)) {
+                        SelectTopologyVertex(vertexId);
+                        statusText = TextFormat("Selected topology vertex %d", vertexId);
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+
                     int lineDefId = -1;
                     int sideDefId = -1;
                     SectorTopologySideKind side = SectorTopologySideKind::Front;
@@ -1525,6 +1540,7 @@ void SectorEditor::StartVertexDrag(int vertexId, SectorTopologyCoordPoint point)
         return;
     }
 
+    SelectTopologyVertex(vertexId);
     state.vertexDrag.active = true;
     state.vertexDrag.topologyVertexId = vertexId;
     state.vertexDrag.originalPoint = point;
@@ -1650,6 +1666,7 @@ void SectorEditor::FinishVertexDrag()
         }
 
         ClearTransientTopologyEditStateAfterGeometryChange();
+        SelectTopologyVertex(merge.mergedVertexId);
         state.inspectedTopologyVertexId = merge.mergedVertexId;
         state.hasHoveredVertex = true;
         state.hoveredTopologyVertexId = merge.mergedVertexId;
@@ -1675,6 +1692,7 @@ void SectorEditor::FinishVertexDrag()
     }
 
     ClearTransientTopologyEditStateAfterGeometryChange();
+    SelectTopologyVertex(vertexId);
     state.vertexDrag = VertexDragState{};
     MarkTopologyDocumentEdited(TextFormat(
             "Moved topology vertex %d %.2f,%.2f -> %.2f,%.2f",
@@ -1880,6 +1898,7 @@ void SectorEditor::CommitPendingTopologyVertexMerge()
 
     ClearTransientTopologyEditStateAfterGeometryChange();
     state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+    SelectTopologyVertex(merge.mergedVertexId);
     state.inspectedTopologyVertexId = merge.mergedVertexId;
     state.hasHoveredVertex = true;
     state.hoveredTopologyVertexId = merge.mergedVertexId;
@@ -2455,6 +2474,22 @@ const SectorTopologySector* SectorEditor::SelectedTopologySector() const
     return FindSectorTopologySector(state.topologyMap, state.selectedTopologySectorId);
 }
 
+SectorTopologyVertex* SectorEditor::SelectedTopologyVertex()
+{
+    if (state.topologySelectionKind != TopologySelectionKind::Vertex) {
+        return nullptr;
+    }
+    return FindSectorTopologyVertex(state.topologyMap, state.selectedTopologyVertexId);
+}
+
+const SectorTopologyVertex* SectorEditor::SelectedTopologyVertex() const
+{
+    if (state.topologySelectionKind != TopologySelectionKind::Vertex) {
+        return nullptr;
+    }
+    return FindSectorTopologyVertex(state.topologyMap, state.selectedTopologyVertexId);
+}
+
 SectorTopologySideDef* SectorEditor::SelectedTopologySideDef()
 {
     if (state.topologySelectionKind != TopologySelectionKind::SideDef) {
@@ -2511,6 +2546,9 @@ void SectorEditor::ClearStaleTopologySelection()
     if (state.topologySelectionKind == TopologySelectionKind::Sector) {
         stale = state.selectedTopologySectorId < 0
                 || FindSectorTopologySector(state.topologyMap, state.selectedTopologySectorId) == nullptr;
+    } else if (state.topologySelectionKind == TopologySelectionKind::Vertex) {
+        stale = state.selectedTopologyVertexId < 0
+                || FindSectorTopologyVertex(state.topologyMap, state.selectedTopologyVertexId) == nullptr;
     } else if (state.topologySelectionKind == TopologySelectionKind::SideDef) {
         const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
                 state.topologyMap,
@@ -2540,6 +2578,7 @@ void SectorEditor::ClearStaleTopologySelection()
         }
         state.topologySelectionKind = TopologySelectionKind::None;
         state.selectedTopologySectorId = -1;
+        state.selectedTopologyVertexId = -1;
         state.selectedTopologySideDefId = -1;
         state.selectedTopologyLineDefId = -1;
         state.selectedTopologyLightId = -1;
@@ -3828,8 +3867,29 @@ void SectorEditor::DrawTopologyVertices() const
 {
     const Color pointColor = Color{245, 226, 154, 255};
     const Color outlineColor = Color{20, 24, 32, 255};
+    const Color selectedFill = Color{72, 220, 128, 92};
+    const Color selectedOutline = Color{86, 232, 142, 245};
+    const Color hoverOutline = Color{122, 220, 244, 245};
     for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
         const Vector2 screen = MapToScreen(SectorTopologyVertexToMap(vertex));
+        const bool selected = state.topologySelectionKind == TopologySelectionKind::Vertex
+                && vertex.id == state.selectedTopologyVertexId;
+        const bool hovered = state.hasHoveredVertex && vertex.id == state.hoveredTopologyVertexId;
+        if (selected) {
+            DrawCircleV(screen, 12.0f, selectedFill);
+            DrawCircleLines(
+                    static_cast<int>(std::round(screen.x)),
+                    static_cast<int>(std::round(screen.y)),
+                    13.0f,
+                    selectedOutline);
+        }
+        if (hovered && !selected) {
+            DrawCircleLines(
+                    static_cast<int>(std::round(screen.x)),
+                    static_cast<int>(std::round(screen.y)),
+                    11.0f,
+                    hoverOutline);
+        }
         DrawCircleV(screen, 4.5f, pointColor);
         DrawCircleLines(static_cast<int>(std::round(screen.x)), static_cast<int>(std::round(screen.y)), 7.0f, outlineColor);
     }
@@ -4419,6 +4479,7 @@ void SectorEditor::DrawSectorsPanel(
     SyncSelectedLightIdBuffer();
 
     const bool hasSelectedTopologySector = SelectedTopologySector() != nullptr;
+    const bool hasSelectedTopologyVertex = SelectedTopologyVertex() != nullptr;
     const bool hasSelectedTopologySideDef = SelectedTopologySideDef() != nullptr;
     const bool hasSelectedTopologyLineDef = state.topologySelectionKind == TopologySelectionKind::LineDef
             && SelectedTopologyLineDef() != nullptr;
@@ -4427,6 +4488,7 @@ void SectorEditor::DrawSectorsPanel(
             state.topologyMap,
             state.inspectedTopologyVertexId);
     const bool hasInspectedVertex = !hasSelectedTopologySector
+            && !hasSelectedTopologyVertex
             && !hasSelectedTopologySideDef
             && !hasSelectedTopologyLineDef
             && !hasSelectedLight
@@ -4452,6 +4514,9 @@ void SectorEditor::DrawSectorsPanel(
         }
         if (hasSelectedTopologySector) {
             return 1700.0f;
+        }
+        if (hasSelectedTopologyVertex) {
+            return 280.0f;
         }
         if (hasSelectedTopologySideDef) {
             return 668.0f;
@@ -4617,12 +4682,18 @@ void SectorEditor::DrawSectorsPanel(
         return;
     }
 
-    if (hasInspectedVertex || state.pendingTopologyVertexMerge.active) {
+    if (hasSelectedTopologyVertex || hasInspectedVertex || state.pendingTopologyVertexMerge.active) {
         const int vertexId = state.pendingTopologyVertexMerge.active
                 ? state.pendingTopologyVertexMerge.sourceVertexId
-                : inspectedVertex->id;
+                : (hasSelectedTopologyVertex ? state.selectedTopologyVertexId : inspectedVertex->id);
         const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
         if (vertex != nullptr) {
+            int incidentLineCount = 0;
+            for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
+                if (lineDef.startVertexId == vertex->id || lineDef.endVertexId == vertex->id) {
+                    ++incidentLineCount;
+                }
+            }
             engine::Text(
                     ui,
                     config,
@@ -4639,10 +4710,30 @@ void SectorEditor::DrawSectorsPanel(
                     assets,
                     Rectangle{0.0f, y, contentW, 30.0f},
                     font,
+                    TextFormat("ID: %d", vertex->id),
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
+            y += 30.0f;
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 30.0f},
+                    font,
                     TextFormat(
-                            "Position %.2f, %.2f",
+                            "Position: %.2f, %.2f",
                             SectorCoordToVisibleAuthoring(vertex->x),
                             SectorCoordToVisibleAuthoring(vertex->y)),
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
+            y += 34.0f;
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 30.0f},
+                    font,
+                    TextFormat("Incident linedefs: %d", incidentLineCount),
                     engine::UITextJustify::Left,
                     config.mutedTextColor);
             y += 34.0f;
@@ -4671,6 +4762,30 @@ void SectorEditor::DrawSectorsPanel(
                             "Cancel Merge")) {
                     CancelPendingTopologyVertexMerge("Cancelled vertex merge");
                 }
+            } else if (hasSelectedTopologyVertex) {
+                if (engine::Button(
+                            ui,
+                            config,
+                            input,
+                            assets,
+                            "sector_editor_dissolve_vertex",
+                            Rectangle{0.0f, y, contentW, rowH},
+                            font,
+                            "Dissolve Vertex")) {
+                    DissolveSelectedTopologyVertex();
+                }
+                y += rowH + gap;
+                if (engine::Button(
+                            ui,
+                            config,
+                            input,
+                            assets,
+                            "sector_editor_merge_vertex_into",
+                            Rectangle{0.0f, y, contentW, rowH},
+                            font,
+                            "Merge Into...")) {
+                    StartPendingTopologyVertexMerge(vertex->id);
+                }
             } else if (engine::Button(
                         ui,
                         config,
@@ -4684,6 +4799,9 @@ void SectorEditor::DrawSectorsPanel(
             }
         } else {
             state.inspectedTopologyVertexId = -1;
+            if (hasSelectedTopologyVertex) {
+                ClearStaleTopologySelection();
+            }
         }
 
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
@@ -6539,6 +6657,7 @@ void SectorEditor::SelectTopologySector(int sectorId)
 
     state.topologySelectionKind = TopologySelectionKind::Sector;
     state.selectedTopologySectorId = sectorId;
+    state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
     state.selectedTopologyLightId = -1;
@@ -6562,6 +6681,31 @@ void SectorEditor::SelectTopologySector(int sectorId)
     SyncSelectedLightIdBuffer();
 }
 
+void SectorEditor::SelectTopologyVertex(int vertexId)
+{
+    const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+    if (vertex == nullptr) {
+        ClearSelection();
+        return;
+    }
+
+    state.topologySelectionKind = TopologySelectionKind::Vertex;
+    state.selectedTopologySectorId = -1;
+    state.selectedTopologyVertexId = vertex->id;
+    state.selectedTopologySideDefId = -1;
+    state.selectedTopologyLineDefId = -1;
+    state.selectedTopologyLightId = -1;
+    state.selectedTopologySideKind = SectorTopologySideKind::Front;
+    state.inspectedTopologyVertexId = vertex->id;
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    uiState.idBufferLightIndex = -1;
+    uiState.inspectorScroll.offset = Vector2{};
+    SyncSelectedSectorIdBuffer();
+    SyncSelectedLightIdBuffer();
+}
+
 void SectorEditor::SelectTopologySideDef(int sideDefId, TopologyWallPart wallPart)
 {
     const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, sideDefId);
@@ -6577,6 +6721,7 @@ void SectorEditor::SelectTopologySideDef(int sideDefId, TopologyWallPart wallPar
 
     state.topologySelectionKind = TopologySelectionKind::SideDef;
     state.selectedTopologySectorId = -1;
+    state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = sideDef->id;
     state.selectedTopologyLineDefId = lineDef->id;
     state.selectedTopologyLightId = -1;
@@ -6607,6 +6752,7 @@ void SectorEditor::SelectTopologyLineDef(
 
     state.topologySelectionKind = TopologySelectionKind::LineDef;
     state.selectedTopologySectorId = -1;
+    state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = lineDefId;
     state.selectedTopologyLightId = -1;
@@ -6635,6 +6781,7 @@ void SectorEditor::SelectTopologyLight(int topologyLightId)
     state.selectedTopologyLightId = topologyLightId;
     state.topologySelectionKind = TopologySelectionKind::Light;
     state.selectedTopologySectorId = -1;
+    state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
@@ -6753,8 +6900,10 @@ void SectorEditor::ClearSelection()
     state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
     state.topologySelectionKind = TopologySelectionKind::None;
     state.selectedTopologySectorId = -1;
+    state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
+    state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
@@ -6989,6 +7138,51 @@ bool SectorEditor::SplitSelectedTopologyLineDef()
             "Split topology linedef %d; selected linedef %d",
             originalLineDefId,
             split.secondLineDefId);
+    return true;
+}
+
+bool SectorEditor::DissolveSelectedTopologyVertex()
+{
+    const SectorTopologyVertex* vertex = SelectedTopologyVertex();
+    if (vertex == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology vertex before dissolving.";
+        return false;
+    }
+
+    const int vertexId = vertex->id;
+    SectorTopologyDissolveVertexResult dissolve;
+    std::string error;
+    if (!DissolveSectorTopologyVertex(state.topologyMap, vertexId, &dissolve, &error)) {
+        statusText = error.empty() ? "Cannot dissolve topology vertex" : error;
+        return false;
+    }
+
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+    state.hasHoveredVertex = false;
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
+    state.inspectedTopologyVertexId = -1;
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+
+    SelectTopologyLineDef(
+            dissolve.replacementLineDefId,
+            SectorTopologySideKind::Front,
+            state.selectedTopologyWallPart);
+    state.topologyDocumentDirty = true;
+    state.topologyRenderWarning.clear();
+    state.hasUnsavedChanges = true;
+    statusText = TextFormat(
+            "Dissolved topology vertex %d; selected linedef %d",
+            dissolve.removedVertexId,
+            dissolve.replacementLineDefId);
     return true;
 }
 

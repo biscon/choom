@@ -224,6 +224,8 @@ private:
     bool AddSelectedMapTexture(engine::AssetManager& assets);
     SectorTopologySector* SelectedTopologySector();
     const SectorTopologySector* SelectedTopologySector() const;
+    SectorTopologyVertex* SelectedTopologyVertex();
+    const SectorTopologyVertex* SelectedTopologyVertex() const;
     SectorTopologySideDef* SelectedTopologySideDef();
     const SectorTopologySideDef* SelectedTopologySideDef() const;
     SectorTopologyLineDef* SelectedTopologyLineDef();
@@ -234,6 +236,7 @@ private:
     void SyncSelectedSectorIdBuffer();
     void SyncSelectedLightIdBuffer();
     void SelectTopologySector(int sectorId);
+    void SelectTopologyVertex(int vertexId);
     void SelectTopologySideDef(int sideDefId, TopologyWallPart wallPart);
     void SelectTopologyLineDef(int lineDefId, SectorTopologySideKind side, TopologyWallPart wallPart);
     void SelectTopologyLight(int topologyLightId);
@@ -249,6 +252,7 @@ private:
     bool ResetSurface3DUv(TopologySurfaceEditTarget target, engine::AssetManager& assets);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     bool SplitSelectedTopologyLineDef();
+    bool DissolveSelectedTopologyVertex();
     void ClearTransientTopologyEditStateAfterGeometryChange();
     void OpenDeleteSelectedTopologySectorConfirmation();
     void OpenDeleteTopologySectorConfirmation(int sectorId);

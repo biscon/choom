@@ -58,6 +58,7 @@ enum class TopologyTexturePickerTargetKind {
 enum class TopologySelectionKind {
     None,
     Sector,
+    Vertex,
     SideDef,
     LineDef,
     Light
@@ -234,6 +235,7 @@ struct SectorEditorState {
 
     TopologySelectionKind topologySelectionKind = TopologySelectionKind::None;
     int selectedTopologySectorId = -1;
+    int selectedTopologyVertexId = -1;
     int selectedTopologySideDefId = -1;
     int selectedTopologyLineDefId = -1;
     SectorTopologySideKind selectedTopologySideKind = SectorTopologySideKind::Front;

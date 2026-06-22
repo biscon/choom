@@ -154,6 +154,36 @@ to cancel. The clicked point must be strictly inside the linedef segment; endpoi
 points and coordinates already occupied by an existing topology vertex are
 rejected without changing the map.
 
+## Topology Vertex Inspector
+
+Topology vertices can be selected directly in the 2D editor. Vertex picking uses
+the same small screen-space marker hit test as vertex movement and takes
+priority over linedef/sidedef and sector picking when the click is on the vertex
+marker. Selected vertices draw with a translucent green fill and stronger green
+outline under the normal vertex marker.
+
+The vertex inspector shows:
+
+- stable topology vertex ID
+- read-only X/Y coordinate in visible authoring units
+- incident linedef count
+- `Dissolve Vertex`
+- `Merge Into...`
+
+`Dissolve Vertex` removes a simple degree-2 topology vertex by replacing its two
+incident linedefs with one replacement linedef. The edit is transactional:
+topology is copied, edited, validated, sector loops are extracted, and the live
+map is changed only on success. On success the replacement linedef is selected.
+On failure the vertex remains selected and the status message explains the
+rejection.
+
+Dissolve is conservative. It rejects missing vertices, isolated or degree-1
+vertices, branching degree-3+ vertices, collapsed replacements, duplicate
+replacement physical linedefs, invalid/crossing/overlapping candidate topology,
+and ambiguous sidedef transfer. Sidedefs are only merged when the two directed
+segments belong to the same sector and have identical wall/lower/upper texture
+IDs and UV settings.
+
 ## Insert Sector Inside
 
 With a parent sector selected, `Insert Sector Inside` starts a contained-sector
@@ -242,10 +272,10 @@ Moving a light edits only its X/Z position during the drag. Y remains unchanged.
 Splitting is inspector-driven. It always splits at the exact stored-coordinate
 midpoint and fails if that midpoint is not representable on the integer grid.
 
-Sector deletion, vertex movement, and conservative vertex merge use
-copy/validate/commit style topology edits. Direct linedef deletion, direct
-sidedef deletion, standalone vertex deletion, and undo/redo are not available
-yet.
+Sector deletion, vertex movement, conservative vertex merge, and conservative
+vertex dissolve use copy/validate/commit style topology edits. Direct linedef
+deletion, direct sidedef deletion, standalone vertex deletion, and undo/redo are
+not available yet.
 
 ## 3D Mode
 
@@ -322,4 +352,5 @@ chart.
 - No 3D geometry editing beyond texture and UV edits on generated surfaces.
 - No direct linedef or sidedef deletion.
 - No standalone vertex deletion.
+- No automatic duplicate linedef or sidedef merge.
 - No arbitrary line cutting or automatic overlap splitting.

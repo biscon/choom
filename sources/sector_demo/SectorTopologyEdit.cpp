@@ -158,6 +158,203 @@ void AddSideDefSectorId(
     }
 }
 
+bool SameUvSettings(SectorTopologyUvSettings a, SectorTopologyUvSettings b)
+{
+    return a.scale.x == b.scale.x
+            && a.scale.y == b.scale.y
+            && a.offset.x == b.offset.x
+            && a.offset.y == b.offset.y;
+}
+
+bool SameWallPartSettings(
+        const SectorTopologyWallPartSettings& a,
+        const SectorTopologyWallPartSettings& b)
+{
+    return a.textureId == b.textureId && SameUvSettings(a.uv, b.uv);
+}
+
+bool SameSideDefMergeSettings(
+        const SectorTopologySideDef& a,
+        const SectorTopologySideDef& b)
+{
+    return a.sectorId == b.sectorId
+            && SameWallPartSettings(a.wall, b.wall)
+            && SameWallPartSettings(a.lower, b.lower)
+            && SameWallPartSettings(a.upper, b.upper);
+}
+
+struct DirectedSideDefCopy {
+    SectorTopologySideDef sideDef;
+    int fromVertexId = -1;
+    int toVertexId = -1;
+};
+
+bool AddDirectedSideDefCopy(
+        const SectorTopologyMap& map,
+        const SectorTopologyLineDef& lineDef,
+        int sideDefId,
+        SectorTopologySideKind expectedSide,
+        std::vector<DirectedSideDefCopy>& sides,
+        std::string* outError)
+{
+    if (sideDefId == -1) {
+        return true;
+    }
+
+    SectorTopologySideDef sideDef;
+    if (!FindSideDefCopy(map, sideDefId, expectedSide, sideDef, outError)) {
+        return false;
+    }
+    if (sideDef.lineDefId != lineDef.id) {
+        SetError(outError, "Topology linedef references a sidedef owned by another linedef");
+        return false;
+    }
+
+    DirectedSideDefCopy directed;
+    directed.sideDef = sideDef;
+    if (expectedSide == SectorTopologySideKind::Front) {
+        directed.fromVertexId = lineDef.startVertexId;
+        directed.toVertexId = lineDef.endVertexId;
+    } else {
+        directed.fromVertexId = lineDef.endVertexId;
+        directed.toVertexId = lineDef.startVertexId;
+    }
+    sides.push_back(std::move(directed));
+    return true;
+}
+
+const DirectedSideDefCopy* FindDirectedSide(
+        const std::vector<DirectedSideDefCopy>& sides,
+        const std::vector<bool>& used,
+        int fromVertexId,
+        int toVertexId)
+{
+    const DirectedSideDefCopy* found = nullptr;
+    for (size_t i = 0; i < sides.size(); ++i) {
+        if (used[i]
+                || sides[i].fromVertexId != fromVertexId
+                || sides[i].toVertexId != toVertexId) {
+            continue;
+        }
+        if (found != nullptr) {
+            return nullptr;
+        }
+        found = &sides[i];
+    }
+    return found;
+}
+
+int FindDirectedSideIndex(
+        const std::vector<DirectedSideDefCopy>& sides,
+        const DirectedSideDefCopy* side)
+{
+    if (side == nullptr) {
+        return -1;
+    }
+    for (size_t i = 0; i < sides.size(); ++i) {
+        if (&sides[i] == side) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+struct DissolveReplacementPlan {
+    int startVertexId = -1;
+    int endVertexId = -1;
+    bool hasFront = false;
+    bool hasBack = false;
+    SectorTopologySideDef frontSideDef;
+    SectorTopologySideDef backSideDef;
+};
+
+bool TryBuildDissolveReplacementPlan(
+        const std::vector<DirectedSideDefCopy>& sides,
+        int removedVertexId,
+        int startVertexId,
+        int endVertexId,
+        DissolveReplacementPlan& outPlan,
+        std::string* outError)
+{
+    if (outError != nullptr) {
+        outError->clear();
+    }
+    std::vector<bool> used(sides.size(), false);
+    outPlan = DissolveReplacementPlan{};
+    outPlan.startVertexId = startVertexId;
+    outPlan.endVertexId = endVertexId;
+
+    auto mergeChain = [&](
+            int firstFrom,
+            int firstTo,
+            int secondFrom,
+            int secondTo,
+            SectorTopologySideDef& outSideDef) {
+        const DirectedSideDefCopy* first = FindDirectedSide(sides, used, firstFrom, firstTo);
+        if (first == nullptr) {
+            return false;
+        }
+        const int firstIndex = FindDirectedSideIndex(sides, first);
+        if (firstIndex < 0) {
+            return false;
+        }
+        used[static_cast<size_t>(firstIndex)] = true;
+
+        const DirectedSideDefCopy* second = FindDirectedSide(sides, used, secondFrom, secondTo);
+        if (second == nullptr) {
+            used[static_cast<size_t>(firstIndex)] = false;
+            return false;
+        }
+        const int secondIndex = FindDirectedSideIndex(sides, second);
+        if (secondIndex < 0) {
+            used[static_cast<size_t>(firstIndex)] = false;
+            return false;
+        }
+
+        if (!SameSideDefMergeSettings(first->sideDef, second->sideDef)) {
+            used[static_cast<size_t>(firstIndex)] = false;
+            SetError(outError, "Dissolve would merge sidedefs with different sector, material, or UV settings.");
+            return false;
+        }
+
+        used[static_cast<size_t>(secondIndex)] = true;
+        outSideDef = first->sideDef;
+        return true;
+    };
+
+    std::string mergeError;
+    if (mergeChain(startVertexId, removedVertexId, removedVertexId, endVertexId, outPlan.frontSideDef)) {
+        outPlan.hasFront = true;
+    } else if (outError != nullptr && !outError->empty()) {
+        mergeError = *outError;
+        outError->clear();
+    }
+
+    if (mergeChain(endVertexId, removedVertexId, removedVertexId, startVertexId, outPlan.backSideDef)) {
+        outPlan.hasBack = true;
+    } else if (outError != nullptr && !outError->empty()) {
+        mergeError = *outError;
+        outError->clear();
+    }
+
+    for (bool wasUsed : used) {
+        if (!wasUsed) {
+            if (!mergeError.empty()) {
+                SetError(outError, mergeError);
+            } else {
+                SetError(outError, "Dissolve sidedef transfer is ambiguous.");
+            }
+            return false;
+        }
+    }
+
+    if (!outPlan.hasFront && !outPlan.hasBack) {
+        SetError(outError, "Dissolve vertex has no sidedef chain to preserve.");
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 bool MoveSectorTopologyVertex(
@@ -303,6 +500,206 @@ bool MergeSectorTopologyVertices(
     if (outResult != nullptr) {
         outResult->mergedVertexId = targetVertexId;
         outResult->removedVertexId = sourceVertexId;
+    }
+    return true;
+}
+
+bool DissolveSectorTopologyVertex(
+        SectorTopologyMap& map,
+        int vertexId,
+        SectorTopologyDissolveVertexResult* outResult,
+        std::string* outError)
+{
+    if (outResult != nullptr) {
+        *outResult = SectorTopologyDissolveVertexResult{};
+    }
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    if (!IsValidSectorTopologyId(vertexId)) {
+        SetError(outError, "Invalid topology vertex ID");
+        return false;
+    }
+    if (FindSectorTopologyVertex(map, vertexId) == nullptr) {
+        SetError(outError, "Topology vertex not found");
+        return false;
+    }
+
+    std::vector<SectorTopologyLineDef> incidentLines;
+    incidentLines.reserve(2);
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        if (lineDef.startVertexId == vertexId || lineDef.endVertexId == vertexId) {
+            incidentLines.push_back(lineDef);
+        }
+    }
+
+    if (incidentLines.size() < 2) {
+        SetError(outError, "Dissolve requires exactly two incident topology linedefs.");
+        return false;
+    }
+    if (incidentLines.size() > 2) {
+        SetError(outError, "Cannot dissolve a branching topology vertex.");
+        return false;
+    }
+
+    const SectorTopologyLineDef& firstLine = incidentLines[0];
+    const SectorTopologyLineDef& secondLine = incidentLines[1];
+    const int firstOtherVertexId = firstLine.startVertexId == vertexId
+            ? firstLine.endVertexId
+            : firstLine.startVertexId;
+    const int secondOtherVertexId = secondLine.startVertexId == vertexId
+            ? secondLine.endVertexId
+            : secondLine.startVertexId;
+    if (firstOtherVertexId == vertexId || secondOtherVertexId == vertexId) {
+        SetError(outError, "Dissolve would collapse an incident topology linedef.");
+        return false;
+    }
+    if (firstOtherVertexId == secondOtherVertexId) {
+        SetError(outError, "Dissolve replacement linedef would collapse.");
+        return false;
+    }
+    if (FindSectorTopologyVertex(map, firstOtherVertexId) == nullptr
+            || FindSectorTopologyVertex(map, secondOtherVertexId) == nullptr) {
+        SetError(outError, "Dissolve incident linedef endpoint is missing.");
+        return false;
+    }
+
+    const LineEndpointPair replacementPair{
+            std::min(firstOtherVertexId, secondOtherVertexId),
+            std::max(firstOtherVertexId, secondOtherVertexId)
+    };
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        if (lineDef.id == firstLine.id || lineDef.id == secondLine.id) {
+            continue;
+        }
+        if (MakeLineEndpointPair(lineDef) == replacementPair) {
+            SetError(outError, "Dissolve would create duplicate physical linedefs.");
+            return false;
+        }
+    }
+
+    std::vector<DirectedSideDefCopy> sides;
+    sides.reserve(4);
+    if (!AddDirectedSideDefCopy(map, firstLine, firstLine.frontSideDefId, SectorTopologySideKind::Front, sides, outError)
+            || !AddDirectedSideDefCopy(map, firstLine, firstLine.backSideDefId, SectorTopologySideKind::Back, sides, outError)
+            || !AddDirectedSideDefCopy(map, secondLine, secondLine.frontSideDefId, SectorTopologySideKind::Front, sides, outError)
+            || !AddDirectedSideDefCopy(map, secondLine, secondLine.backSideDefId, SectorTopologySideKind::Back, sides, outError)) {
+        return false;
+    }
+
+    std::unordered_set<int> affectedSectorIds;
+    for (const DirectedSideDefCopy& side : sides) {
+        if (IsValidSectorTopologyId(side.sideDef.sectorId)) {
+            affectedSectorIds.insert(side.sideDef.sectorId);
+        }
+    }
+
+    const int preferredStart = firstLine.id <= secondLine.id ? firstOtherVertexId : secondOtherVertexId;
+    const int preferredEnd = firstLine.id <= secondLine.id ? secondOtherVertexId : firstOtherVertexId;
+    DissolveReplacementPlan plan;
+    std::string planError;
+    if (!TryBuildDissolveReplacementPlan(sides, vertexId, preferredStart, preferredEnd, plan, &planError)
+            && !TryBuildDissolveReplacementPlan(sides, vertexId, preferredEnd, preferredStart, plan, &planError)) {
+        SetError(outError, planError.empty() ? "Dissolve sidedef transfer is ambiguous." : planError);
+        return false;
+    }
+
+    SectorTopologyMap candidate = map;
+    SectorTopologyDissolveVertexResult result;
+    result.removedVertexId = vertexId;
+    result.replacementLineDefId = AllocateSectorTopologyLineDefId(candidate);
+    if (!RequireAllocatedId(result.replacementLineDefId, "linedef", outError)) {
+        return false;
+    }
+
+    candidate.lineDefs.push_back(SectorTopologyLineDef{
+            result.replacementLineDefId,
+            plan.startVertexId,
+            plan.endVertexId,
+            -1,
+            -1
+    });
+    SectorTopologyLineDef* replacementLine =
+            FindSectorTopologyLineDef(candidate, result.replacementLineDefId);
+    if (replacementLine == nullptr) {
+        SetError(outError, "Could not resolve replacement topology linedef");
+        return false;
+    }
+
+    if (plan.hasFront) {
+        result.replacementFrontSideDefId = AllocateSectorTopologySideDefId(candidate);
+        if (!RequireAllocatedId(result.replacementFrontSideDefId, "sidedef", outError)) {
+            return false;
+        }
+        SectorTopologySideDef replacement = DuplicateSideDef(
+                plan.frontSideDef,
+                result.replacementFrontSideDefId,
+                result.replacementLineDefId);
+        replacement.side = SectorTopologySideKind::Front;
+        candidate.sideDefs.push_back(std::move(replacement));
+        replacementLine->frontSideDefId = result.replacementFrontSideDefId;
+    }
+
+    if (plan.hasBack) {
+        result.replacementBackSideDefId = AllocateSectorTopologySideDefId(candidate);
+        if (!RequireAllocatedId(result.replacementBackSideDefId, "sidedef", outError)) {
+            return false;
+        }
+        SectorTopologySideDef replacement = DuplicateSideDef(
+                plan.backSideDef,
+                result.replacementBackSideDefId,
+                result.replacementLineDefId);
+        replacement.side = SectorTopologySideKind::Back;
+        candidate.sideDefs.push_back(std::move(replacement));
+        replacementLine->backSideDefId = result.replacementBackSideDefId;
+    }
+
+    for (const DirectedSideDefCopy& side : sides) {
+        RemoveSideDefById(candidate, side.sideDef.id);
+    }
+    candidate.lineDefs.erase(
+            std::remove_if(
+                    candidate.lineDefs.begin(),
+                    candidate.lineDefs.end(),
+                    [&firstLine, &secondLine](const SectorTopologyLineDef& lineDef) {
+                        return lineDef.id == firstLine.id || lineDef.id == secondLine.id;
+                    }),
+            candidate.lineDefs.end());
+    candidate.vertices.erase(
+            std::remove_if(
+                    candidate.vertices.begin(),
+                    candidate.vertices.end(),
+                    [vertexId](const SectorTopologyVertex& vertex) {
+                        return vertex.id == vertexId;
+                    }),
+            candidate.vertices.end());
+
+    if (!ValidateNoCollapsedLineDefs(candidate, outError)) {
+        return false;
+    }
+    if (!ValidateNoDuplicatePhysicalLineDefs(candidate, outError)) {
+        return false;
+    }
+
+    const std::vector<SectorTopologyValidationIssue> issues = ValidateSectorTopologyMap(candidate);
+    if (HasSectorTopologyValidationErrors(issues)) {
+        SetError(outError, FirstValidationError(issues));
+        return false;
+    }
+
+    for (int sectorId : affectedSectorIds) {
+        SectorTopologyLoopSet loops;
+        std::vector<SectorTopologyValidationIssue> loopIssues;
+        if (!ExtractSectorTopologyLoops(candidate, sectorId, loops, &loopIssues)) {
+            SetError(outError, FirstValidationError(loopIssues));
+            return false;
+        }
+    }
+
+    map = std::move(candidate);
+    if (outResult != nullptr) {
+        *outResult = result;
     }
     return true;
 }
