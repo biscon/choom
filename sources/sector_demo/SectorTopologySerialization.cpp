@@ -163,6 +163,17 @@ Vector3 ReadVector3(const Json& value, const std::string& context)
     return Vector3{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)};
 }
 
+Vector3 ReadUnitVector3(const Json& value, const std::string& context)
+{
+    const Vector3 vector = ReadVector3(value, context);
+    if (vector.x < 0.0f || vector.x > 1.0f
+            || vector.y < 0.0f || vector.y > 1.0f
+            || vector.z < 0.0f || vector.z > 1.0f) {
+        Fail(context + " values must be between 0 and 1");
+    }
+    return vector;
+}
+
 SectorTopologyUvSettings ReadUv(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -199,6 +210,17 @@ SectorTopologyDecalLayer ReadDecal(const Json& value, const std::string& context
             Fail(context + ".opacity must be a finite float between 0 and 1");
         }
         decal.opacity = static_cast<float>(opacity);
+    }
+    const auto emissiveIt = value.find("emissive");
+    if (emissiveIt != value.end()) {
+        if (!emissiveIt->is_boolean()) {
+            Fail(context + ".emissive must be a boolean");
+        }
+        decal.emissive = emissiveIt->get<bool>();
+    }
+    const auto tintIt = value.find("tint");
+    if (tintIt != value.end()) {
+        decal.tint = ReadUnitVector3(*tintIt, context + ".tint");
     }
     return decal;
 }
@@ -358,10 +380,18 @@ Json WriteDecal(const SectorTopologyDecalLayer& decal, const std::string& contex
             || decal.opacity > 1.0f) {
         Fail(context + ".opacity must be a finite float between 0 and 1");
     }
+    if (!std::isfinite(decal.tint.x) || !std::isfinite(decal.tint.y) || !std::isfinite(decal.tint.z)
+            || decal.tint.x < 0.0f || decal.tint.x > 1.0f
+            || decal.tint.y < 0.0f || decal.tint.y > 1.0f
+            || decal.tint.z < 0.0f || decal.tint.z > 1.0f) {
+        Fail(context + ".tint must contain finite values between 0 and 1");
+    }
     return Json{
             {"textureId", decal.textureId},
             {"uv", WriteUv(decal.uv, context + ".uv")},
-            {"opacity", decal.opacity}
+            {"opacity", decal.opacity},
+            {"emissive", decal.emissive},
+            {"tint", WriteVector3(decal.tint, context + ".tint")}
     };
 }
 

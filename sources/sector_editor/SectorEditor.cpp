@@ -703,11 +703,51 @@ bool IsDefaultTopologyUv(SectorTopologyUvSettings uv)
             && uv.offset.y == 0.0f;
 }
 
+bool IsWhiteTint(Vector3 tint)
+{
+    return tint.x == 1.0f && tint.y == 1.0f && tint.z == 1.0f;
+}
+
+bool IsValidDecalTint(Vector3 tint)
+{
+    return std::isfinite(tint.x) && std::isfinite(tint.y) && std::isfinite(tint.z)
+            && tint.x >= 0.0f && tint.x <= 1.0f
+            && tint.y >= 0.0f && tint.y <= 1.0f
+            && tint.z >= 0.0f && tint.z <= 1.0f;
+}
+
+Vector3 ClampDecalTint(Vector3 tint)
+{
+    return Vector3{
+            std::clamp(std::isfinite(tint.x) ? tint.x : 1.0f, 0.0f, 1.0f),
+            std::clamp(std::isfinite(tint.y) ? tint.y : 1.0f, 0.0f, 1.0f),
+            std::clamp(std::isfinite(tint.z) ? tint.z : 1.0f, 0.0f, 1.0f)
+    };
+}
+
+bool SameTint(Vector3 a, Vector3 b)
+{
+    return a.x == b.x && a.y == b.y && a.z == b.z;
+}
+
+Color DecalTintPreviewColor(Vector3 tint)
+{
+    const Vector3 clamped = ClampDecalTint(tint);
+    return Color{
+            static_cast<unsigned char>(std::lround(clamped.x * 255.0f)),
+            static_cast<unsigned char>(std::lround(clamped.y * 255.0f)),
+            static_cast<unsigned char>(std::lround(clamped.z * 255.0f)),
+            255
+    };
+}
+
 bool IsDefaultDecalLayer(const SectorTopologyDecalLayer& decal)
 {
     return decal.textureId.empty()
             && IsDefaultTopologyUv(decal.uv)
-            && decal.opacity == 1.0f;
+            && decal.opacity == 1.0f
+            && !decal.emissive
+            && IsWhiteTint(decal.tint);
 }
 
 void ResetDecalLayer(SectorTopologyDecalLayer& decal)
@@ -715,6 +755,8 @@ void ResetDecalLayer(SectorTopologyDecalLayer& decal)
     decal.textureId.clear();
     ResetTopologyUv(decal.uv);
     decal.opacity = 1.0f;
+    decal.emissive = false;
+    decal.tint = Vector3{1.0f, 1.0f, 1.0f};
 }
 
 TopologySectorTextureField TopologyEditTargetSectorTextureField(TopologySurfaceEditTargetKind kind)
@@ -1201,6 +1243,9 @@ void SectorEditor::Update(engine::Input& input, float dt)
     }
 
     if (state.mode == SectorEditorMode::Preview3D) {
+        if (state.texturePicker.open || HasDocumentModalOpen()) {
+            return;
+        }
         UpdatePreview3D(input, dt);
         return;
     }
@@ -1263,12 +1308,15 @@ void SectorEditor::RenderUI(
             return;
         }
         DrawPreviewOverlay(config, assets, font);
-        if (!state.texturePicker.open) {
+        if (!state.texturePicker.open && !state.decalTintModal.open) {
             DrawPreviewUvPanel(ui, config, input, assets, font);
+        }
+        if (state.decalTintModal.open) {
+            DrawDecalTintModal(ui, config, input, assets, font);
         }
         DrawTexturePickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = ui.focusedId != 0;
-        if (state.texturePicker.open) {
+        if (state.texturePicker.open || state.decalTintModal.open) {
             uiState.keyboardCaptured = true;
         }
         engine::EndUI(ui, config, input, assets);
@@ -1296,6 +1344,12 @@ void SectorEditor::RenderUI(
     }
     if (state.loadLevelModal.open) {
         DrawLoadLevelModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (state.decalTintModal.open) {
+        DrawDecalTintModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -4301,9 +4355,38 @@ void SectorEditor::DrawPreviewUvPanel(
             if (result.changed && opacity != decal->opacity && std::isfinite(opacity)) {
                 ApplySurfaceDecalOpacity(target, opacity, &assets);
             }
+            bool emissive = decal->emissive;
+            if (engine::Checkbox(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_3d_decal_emissive",
+                        Rectangle{startX + (colW + gap) * 4.0f, inputTop + 50.0f, colW, 34.0f},
+                        font,
+                        "Emissive",
+                        emissive)) {
+                ApplySurfaceDecalEmissive(target, emissive, &assets);
+            }
+            const Rectangle label{startX + (colW + gap) * 4.0f, inputTop + 94.0f, 48.0f, 32.0f};
+            engine::Text(ui, config, assets, label, font, "Tint:", engine::UITextJustify::Left, config.mutedTextColor);
+            const Rectangle swatch{label.x + label.width + 8.0f, label.y, 58.0f, 32.0f};
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_3d_decal_tint",
+                        swatch,
+                        font,
+                        "")) {
+                OpenDecalTintModal(target);
+            }
+            DrawRectangleRec(swatch, DecalTintPreviewColor(decal->tint));
+            DrawRectangleLinesEx(swatch, config.borderThickness, config.borderColor);
         }
         if (engine::Button(
-                    ui,
+                ui,
                     config,
                     input,
                     assets,
@@ -6014,6 +6097,43 @@ bool SectorEditor::DrawTopologySectorInspector(
             ApplySurfaceDecalOpacity(target, opacity, nullptr);
         }
         y += rowH + gap;
+        bool emissive = decal.emissive;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("%s_decal_emissive", uvPrefix),
+                    Rectangle{0.0f, y, contentW, 36.0f},
+                    font,
+                    "Emissive",
+                    emissive)) {
+            ApplySurfaceDecalEmissive(target, emissive, nullptr);
+        }
+        y += 36.0f + gap;
+
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Tint:", engine::UITextJustify::Left, config.mutedTextColor);
+        const Rectangle swatchLocal{82.0f, y + 3.0f, 56.0f, rowH - 6.0f};
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("%s_decal_tint", uvPrefix),
+                    swatchLocal,
+                    font,
+                    "")) {
+            OpenDecalTintModal(target);
+        }
+        const Rectangle swatchScreen{
+                scroll.viewport.x + swatchLocal.x,
+                scroll.viewport.y - uiState.inspectorScroll.offset.y + swatchLocal.y,
+                swatchLocal.width,
+                swatchLocal.height};
+        DrawRectangleRec(swatchScreen, DecalTintPreviewColor(decal.tint));
+        DrawRectangleLinesEx(swatchScreen, config.borderThickness, config.borderColor);
+        y += rowH + gap;
+
         if (engine::Button(
                     ui,
                     config,
@@ -6465,6 +6585,43 @@ bool SectorEditor::DrawTopologySideDefInspector(
         if (opacityResult.changed && opacity != selectedPart.decal.opacity && std::isfinite(opacity)) {
             ApplySurfaceDecalOpacity(selectedMaterialTarget, opacity, &assets);
         }
+        y += rowH + gap;
+
+        bool emissive = selectedPart.decal.emissive;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_sidedef_decal_emissive",
+                    Rectangle{0.0f, y, contentW, 36.0f},
+                    font,
+                    "Emissive",
+                    emissive)) {
+            ApplySurfaceDecalEmissive(selectedMaterialTarget, emissive, &assets);
+        }
+        y += 36.0f + gap;
+
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Tint:", engine::UITextJustify::Left, config.mutedTextColor);
+        const Rectangle swatchLocal{82.0f, y + 3.0f, 56.0f, rowH - 6.0f};
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_sidedef_decal_tint",
+                    swatchLocal,
+                    font,
+                    "")) {
+            OpenDecalTintModal(selectedMaterialTarget);
+        }
+        const Rectangle swatchScreen{
+                scroll.viewport.x + swatchLocal.x,
+                scroll.viewport.y - uiState.inspectorScroll.offset.y + swatchLocal.y,
+                swatchLocal.width,
+                swatchLocal.height};
+        DrawRectangleRec(swatchScreen, DecalTintPreviewColor(selectedPart.decal.tint));
+        DrawRectangleLinesEx(swatchScreen, config.borderThickness, config.borderColor);
         y += rowH + gap;
 
         if (engine::Button(
@@ -7113,6 +7270,159 @@ void SectorEditor::DrawConfirmationModal(
     }
 }
 
+void SectorEditor::DrawDecalTintModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    DecalTintModalState& modalState = state.decalTintModal;
+    if (!modalState.open) {
+        return;
+    }
+
+    bool okayRequested = false;
+    bool cancelRequested = false;
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [&okayRequested, &cancelRequested](engine::InputEvent& event) {
+                if (event.key.key == KEY_ESCAPE) {
+                    cancelRequested = true;
+                    engine::ConsumeEvent(event);
+                } else if (event.key.key == KEY_ENTER || event.key.key == KEY_KP_ENTER) {
+                    okayRequested = true;
+                    engine::ConsumeEvent(event);
+                }
+            }
+    );
+
+    DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
+    const Rectangle modal{
+            (EditorWidth - 560.0f) * 0.5f,
+            (EditorHeight - 390.0f) * 0.5f,
+            560.0f,
+            390.0f
+    };
+    DrawRectangleRec(modal, Color{20, 24, 32, 248});
+    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
+
+    float y = modal.y + 22.0f;
+    engine::Text(config, assets, Rectangle{modal.x + 26.0f, y, modal.width - 52.0f, 42.0f}, font, "Decal Tint");
+    y += 58.0f;
+
+    const float labelW = 72.0f;
+    const float inputW = 120.0f;
+    const float inputH = 38.0f;
+    const float gap = 12.0f;
+    auto drawFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{modal.x + 28.0f, y, labelW, inputH},
+                font,
+                label,
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        const engine::UINumericInputResult result = engine::FloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                id,
+                Rectangle{modal.x + 28.0f + labelW, y, inputW, inputH},
+                font,
+                value,
+                inputState,
+                0.0f,
+                1.0f,
+                3);
+        if (result.changed) {
+            if (!std::isfinite(value)) {
+                modalState.errorMessage = "Tint values must be finite.";
+            } else {
+                value = std::clamp(value, 0.0f, 1.0f);
+                modalState.errorMessage.clear();
+            }
+        }
+        y += inputH + gap;
+    };
+
+    drawFloat("sector_editor_decal_tint_r", "R", modalState.tint.x, modalState.redInput);
+    drawFloat("sector_editor_decal_tint_g", "G", modalState.tint.y, modalState.greenInput);
+    drawFloat("sector_editor_decal_tint_b", "B", modalState.tint.z, modalState.blueInput);
+
+    const Rectangle swatch{modal.x + 270.0f, modal.y + 88.0f, 210.0f, 124.0f};
+    DrawRectangleRec(swatch, DecalTintPreviewColor(modalState.tint));
+    DrawRectangleLinesEx(swatch, config.borderThickness, config.borderColor);
+    engine::Text(
+            config,
+            assets,
+            Rectangle{swatch.x, swatch.y + swatch.height + 10.0f, swatch.width, 26.0f},
+            font,
+            "Preview",
+            engine::UITextJustify::Center,
+            config.mutedTextColor);
+
+    if (!modalState.errorMessage.empty()) {
+        engine::Text(
+                config,
+                assets,
+                Rectangle{modal.x + 28.0f, modal.y + 250.0f, modal.width - 56.0f, 34.0f},
+                font,
+                modalState.errorMessage.c_str(),
+                engine::UITextJustify::Left,
+                config.invalidColor);
+    }
+
+    const float buttonY = modal.y + modal.height - 66.0f;
+    const float buttonW = 124.0f;
+    if (engine::Button(ui, config, input, assets, "sector_editor_decal_tint_reset", Rectangle{modal.x + 28.0f, buttonY, buttonW, 44.0f}, font, "Reset White")) {
+        modalState.tint = Vector3{1.0f, 1.0f, 1.0f};
+        modalState.redInput = engine::UIFloatInputState{};
+        modalState.greenInput = engine::UIFloatInputState{};
+        modalState.blueInput = engine::UIFloatInputState{};
+        modalState.errorMessage.clear();
+    }
+    okayRequested = okayRequested || engine::Button(ui, config, input, assets, "sector_editor_decal_tint_ok", Rectangle{modal.x + modal.width - buttonW * 2.0f - 38.0f, buttonY, buttonW, 44.0f}, font, "OK");
+    cancelRequested = cancelRequested || engine::Button(ui, config, input, assets, "sector_editor_decal_tint_cancel", Rectangle{modal.x + modal.width - buttonW - 26.0f, buttonY, buttonW, 44.0f}, font, "Cancel");
+
+    input.ForEachEvent(engine::InputEventType::Any, true, [](engine::InputEvent& event) {
+        engine::ConsumeEvent(event);
+    });
+
+    if (cancelRequested) {
+        state.decalTintModal = DecalTintModalState{};
+        return;
+    }
+    if (!okayRequested) {
+        return;
+    }
+    if (!IsValidDecalTint(modalState.tint)) {
+        modalState.errorMessage = "Tint values must be between 0 and 1.";
+        statusText = modalState.errorMessage;
+        return;
+    }
+
+    const TopologySurfaceEditTarget target = modalState.target;
+    const SectorTopologyDecalLayer* decal = DecalForSurface(target);
+    if (!IsValidTopologySurfaceEditTarget(target) || decal == nullptr || decal->textureId.empty()) {
+        modalState.errorMessage = "Decal target is no longer valid.";
+        statusText = modalState.errorMessage;
+        return;
+    }
+
+    const Vector3 tint = modalState.tint;
+    const bool changed = !SameTint(decal->tint, tint);
+    if (changed && !ApplySurfaceDecalTint(target, tint, &assets)) {
+        modalState.errorMessage = statusText.empty() ? "Could not set decal tint." : statusText;
+        return;
+    }
+    state.decalTintModal = DecalTintModalState{};
+}
+
 void SectorEditor::DrawLightmapBakeModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -7333,6 +7643,7 @@ bool SectorEditor::LoadLevel(
     state.loadLevelModal = LoadLevelModalState{};
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
+    state.decalTintModal = DecalTintModalState{};
     ClearSelection();
     state.hoveredTopologyLightId = -1;
     state.hasHoveredVertex = false;
@@ -7465,6 +7776,7 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
     state.topologyDocumentStatus = TextFormat("Topology document: saved %s", paths.jsonAssetPath.c_str());
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
+    state.decalTintModal = DecalTintModalState{};
     statusText = TextFormat("Saved topology %s", paths.jsonAssetPath.c_str());
     return true;
 }
@@ -7473,7 +7785,8 @@ bool SectorEditor::HasDocumentModalOpen() const
 {
     return state.saveLevelModal.open
             || state.loadLevelModal.open
-            || state.confirmationModal.open;
+            || state.confirmationModal.open
+            || state.decalTintModal.open;
 }
 
 bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UIContext& ui)
@@ -8514,6 +8827,84 @@ bool SectorEditor::ApplySurfaceDecalOpacity(
     return true;
 }
 
+bool SectorEditor::ApplySurfaceDecalEmissive(
+        TopologySurfaceEditTarget target,
+        bool emissive,
+        engine::AssetManager* assets)
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+    SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
+    if (decal == nullptr || decal->textureId.empty()) {
+        statusText = "No decal assigned.";
+        return false;
+    }
+    if (decal->emissive == emissive) {
+        return false;
+    }
+
+    decal->emissive = emissive;
+    state.topologyRenderWarning.clear();
+    MarkTopologyDocumentEdited(TextFormat("Set %s decal emissive.", TopologyMaterialKindName(target.kind)));
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
+}
+
+bool SectorEditor::ApplySurfaceDecalTint(
+        TopologySurfaceEditTarget target,
+        Vector3 tint,
+        engine::AssetManager* assets)
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+    if (!IsValidDecalTint(tint)) {
+        statusText = "Invalid decal tint.";
+        return false;
+    }
+    SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
+    if (decal == nullptr || decal->textureId.empty()) {
+        statusText = "No decal assigned.";
+        return false;
+    }
+    if (SameTint(decal->tint, tint)) {
+        return false;
+    }
+
+    decal->tint = tint;
+    state.topologyRenderWarning.clear();
+    MarkTopologyDocumentEdited(TextFormat("Set %s decal tint.", TopologyMaterialKindName(target.kind)));
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
+}
+
+bool SectorEditor::OpenDecalTintModal(TopologySurfaceEditTarget target)
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+    const SectorTopologyDecalLayer* decal = DecalForSurface(target);
+    if (decal == nullptr || decal->textureId.empty()) {
+        statusText = "No decal assigned.";
+        return false;
+    }
+
+    DecalTintModalState modal;
+    modal.open = true;
+    modal.target = target;
+    modal.tint = ClampDecalTint(decal->tint);
+    state.decalTintModal = modal;
+    return true;
+}
+
 bool SectorEditor::ClearSurfaceDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
@@ -8542,6 +8933,7 @@ bool SectorEditor::ClearSurfaceDecal(
     }
     uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
     uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
+    state.decalTintModal = DecalTintModalState{};
     MarkTopologyDocumentEdited(TextFormat("Cleared %s decal.", TopologyMaterialKindName(target.kind)));
     if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
         return RebuildPreviewMeshesPreservingView(*assets);
@@ -9429,6 +9821,8 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
         if (decal.textureId.empty()) {
             ResetTopologyUv(decal.uv);
             decal.opacity = 1.0f;
+            decal.emissive = false;
+            decal.tint = Vector3{1.0f, 1.0f, 1.0f};
         }
         assignTexture(decal.textureId);
     };

@@ -203,6 +203,16 @@ struct ConfirmationModalState {
     std::function<void()> onOkay;
 };
 
+struct DecalTintModalState {
+    bool open = false;
+    TopologySurfaceEditTarget target;
+    Vector3 tint = {1.0f, 1.0f, 1.0f};
+    engine::UIFloatInputState redInput;
+    engine::UIFloatInputState greenInput;
+    engine::UIFloatInputState blueInput;
+    std::string errorMessage;
+};
+
 struct VertexDragState {
     bool active = false;
     int topologyVertexId = -1;
@@ -329,6 +339,7 @@ struct SectorEditorState {
     SaveLevelModalState saveLevelModal;
     LoadLevelModalState loadLevelModal;
     ConfirmationModalState confirmationModal;
+    DecalTintModalState decalTintModal;
 };
 
 struct SectorEditorUiState {

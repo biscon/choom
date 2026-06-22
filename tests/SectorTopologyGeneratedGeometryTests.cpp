@@ -28,6 +28,13 @@ bool Near(Vector2 actual, Vector2 expected, float epsilon = 0.00001f)
     return Near(actual.x, expected.x, epsilon) && Near(actual.y, expected.y, epsilon);
 }
 
+bool Near(Vector3 actual, Vector3 expected, float epsilon = 0.00001f)
+{
+    return Near(actual.x, expected.x, epsilon)
+            && Near(actual.y, expected.y, epsilon)
+            && Near(actual.z, expected.z, epsilon);
+}
+
 Vector2 ApplyTestUv(Vector2 baseUv, Vector2 scale, Vector2 offset)
 {
     return Vector2{baseUv.x * scale.x + offset.x, baseUv.y * scale.y + offset.y};
@@ -44,13 +51,17 @@ game::SectorTopologyDecalLayer Decal(
         const char* textureId,
         Vector2 scale,
         Vector2 offset,
-        float opacity)
+        float opacity,
+        bool emissive = false,
+        Vector3 tint = {1.0f, 1.0f, 1.0f})
 {
     game::SectorTopologyDecalLayer decal;
     decal.textureId = textureId;
     decal.uv.scale = scale;
     decal.uv.offset = offset;
     decal.opacity = opacity;
+    decal.emissive = emissive;
+    decal.tint = tint;
     return decal;
 }
 
@@ -324,17 +335,17 @@ void TestDecalsPropagateWithoutChangingBaseUvs()
     game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 8.0f, 16.0f);
     game::SectorTopologyMap baseline = map;
 
-    map.sectors[0].floorDecal = Decal("floor-mark", Vector2{2.0f, 3.0f}, Vector2{0.25f, 0.5f}, 0.6f);
-    map.sectors[0].ceilingDecal = Decal("ceiling-grime", Vector2{4.0f, 5.0f}, Vector2{0.75f, 1.25f}, 0.7f);
+    map.sectors[0].floorDecal = Decal("floor-mark", Vector2{2.0f, 3.0f}, Vector2{0.25f, 0.5f}, 0.6f, true, Vector3{1.0f, 0.25f, 0.5f});
+    map.sectors[0].ceilingDecal = Decal("ceiling-grime", Vector2{4.0f, 5.0f}, Vector2{0.75f, 1.25f}, 0.7f, false, Vector3{0.4f, 0.5f, 0.6f});
     game::SectorTopologySideDef* outerSide = game::FindSectorTopologySideDef(map, 1);
     game::SectorTopologySideDef* sharedSide = game::FindSectorTopologySideDef(map, 2);
     Check(outerSide != nullptr && sharedSide != nullptr, "decal test topology sidedefs exist");
     if (outerSide != nullptr) {
-        outerSide->wall.decal = Decal("wall-poster", Vector2{1.5f, 2.0f}, Vector2{0.1f, 0.2f}, 0.8f);
+        outerSide->wall.decal = Decal("wall-poster", Vector2{1.5f, 2.0f}, Vector2{0.1f, 0.2f}, 0.8f, true, Vector3{0.2f, 1.0f, 0.3f});
     }
     if (sharedSide != nullptr) {
-        sharedSide->lower.decal = Decal("lower-sign", Vector2{2.5f, 3.5f}, Vector2{0.3f, 0.4f}, 0.55f);
-        sharedSide->upper.decal = Decal("upper-text", Vector2{3.5f, 4.5f}, Vector2{0.5f, 0.6f}, 0.45f);
+        sharedSide->lower.decal = Decal("lower-sign", Vector2{2.5f, 3.5f}, Vector2{0.3f, 0.4f}, 0.55f, false, Vector3{0.3f, 0.4f, 1.0f});
+        sharedSide->upper.decal = Decal("upper-text", Vector2{3.5f, 4.5f}, Vector2{0.5f, 0.6f}, 0.45f, true, Vector3{0.9f, 0.8f, 0.7f});
     }
 
     game::SectorGeneratedGeometry geometry;
@@ -353,16 +364,28 @@ void TestDecalsPropagateWithoutChangingBaseUvs()
 
     Check(floor != nullptr && floor->decalTextureId == "floor-mark" && Near(floor->decalOpacity, 0.6f),
           "floor decal texture and opacity propagate");
+    Check(floor != nullptr && floor->decalEmissive && Near(floor->decalTint, Vector3{1.0f, 0.25f, 0.5f}),
+          "floor decal emissive and tint propagate");
     Check(ceiling != nullptr && ceiling->decalTextureId == "ceiling-grime" && Near(ceiling->decalOpacity, 0.7f),
           "ceiling decal texture and opacity propagate");
+    Check(ceiling != nullptr && !ceiling->decalEmissive && Near(ceiling->decalTint, Vector3{0.4f, 0.5f, 0.6f}),
+          "ceiling decal emissive and tint propagate");
     Check(wall != nullptr && wall->decalTextureId == "wall-poster" && Near(wall->decalOpacity, 0.8f),
           "wall decal texture and opacity propagate");
+    Check(wall != nullptr && wall->decalEmissive && Near(wall->decalTint, Vector3{0.2f, 1.0f, 0.3f}),
+          "wall decal emissive and tint propagate");
     Check(lower != nullptr && lower->decalTextureId == "lower-sign" && Near(lower->decalOpacity, 0.55f),
           "lower wall decal texture and opacity propagate");
+    Check(lower != nullptr && !lower->decalEmissive && Near(lower->decalTint, Vector3{0.3f, 0.4f, 1.0f}),
+          "lower wall decal emissive and tint propagate");
     Check(upper != nullptr && upper->decalTextureId == "upper-text" && Near(upper->decalOpacity, 0.45f),
           "upper wall decal texture and opacity propagate");
+    Check(upper != nullptr && upper->decalEmissive && Near(upper->decalTint, Vector3{0.9f, 0.8f, 0.7f}),
+          "upper wall decal emissive and tint propagate");
     Check(missing != nullptr && missing->decalTextureId.empty() && Near(missing->decalOpacity, 1.0f),
           "missing decal keeps empty texture and default opacity");
+    Check(missing != nullptr && !missing->decalEmissive && Near(missing->decalTint, Vector3{1.0f, 1.0f, 1.0f}),
+          "missing decal keeps default emissive and tint");
 
     if (floor != nullptr && baselineFloor != nullptr) {
         Check(floor->vertices.size() == baselineFloor->vertices.size(), "decal floor vertex count matches baseline");

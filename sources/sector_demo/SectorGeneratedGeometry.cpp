@@ -42,6 +42,24 @@ bool IsFinite(Vector2 value)
     return std::isfinite(value.x) && std::isfinite(value.y);
 }
 
+bool IsFinite(Vector3 value)
+{
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+bool IsUnitRgb(Vector3 value)
+{
+    return IsFinite(value)
+            && value.x >= 0.0f && value.x <= 1.0f
+            && value.y >= 0.0f && value.y <= 1.0f
+            && value.z >= 0.0f && value.z <= 1.0f;
+}
+
+bool IsUnitFloat(float value)
+{
+    return std::isfinite(value) && value >= 0.0f && value <= 1.0f;
+}
+
 Color MakeTopologySectorVertexColor(const SectorTopologySector& sector)
 {
     const float intensity = std::clamp(sector.ambientIntensity, 0.0f, 1.0f);
@@ -76,9 +94,11 @@ bool ValidateTopologyGeometryValues(
             || !IsFinite(sector.floorUv.scale) || !IsFinite(sector.floorUv.offset)
             || !IsFinite(sector.ceilingUv.scale) || !IsFinite(sector.ceilingUv.offset)
             || !IsFinite(sector.floorDecal.uv.scale) || !IsFinite(sector.floorDecal.uv.offset)
-            || !std::isfinite(sector.floorDecal.opacity)
+            || !IsUnitFloat(sector.floorDecal.opacity)
+            || !IsUnitRgb(sector.floorDecal.tint)
             || !IsFinite(sector.ceilingDecal.uv.scale) || !IsFinite(sector.ceilingDecal.uv.offset)
-            || !std::isfinite(sector.ceilingDecal.opacity)) {
+            || !IsUnitFloat(sector.ceilingDecal.opacity)
+            || !IsUnitRgb(sector.ceilingDecal.tint)) {
             return SetTopologyError(
                     outGeometry,
                     outError,
@@ -100,7 +120,8 @@ bool ValidateTopologyGeometryValues(
         for (const SectorTopologyWallPartSettings* part : parts) {
             if (!IsFinite(part->uv.scale) || !IsFinite(part->uv.offset)
                 || !IsFinite(part->decal.uv.scale) || !IsFinite(part->decal.uv.offset)
-                || !std::isfinite(part->decal.opacity)) {
+                || !IsUnitFloat(part->decal.opacity)
+                || !IsUnitRgb(part->decal.tint)) {
                 return SetTopologyError(
                         outGeometry,
                         outError,
@@ -186,6 +207,8 @@ bool BuildTopologyFlatSurface(
     surface.textureId = textureId;
     surface.decalTextureId = decal.textureId;
     surface.decalOpacity = decal.textureId.empty() ? 1.0f : decal.opacity;
+    surface.decalEmissive = !decal.textureId.empty() && decal.emissive;
+    surface.decalTint = decal.textureId.empty() ? Vector3{1.0f, 1.0f, 1.0f} : decal.tint;
     surface.normal = normal;
     surface.chartWidth = std::max(maxX - minX, EdgeEpsilon);
     surface.chartHeight = std::max(maxZ - minZ, EdgeEpsilon);
@@ -296,6 +319,10 @@ bool BuildTopologyWallSurface(
     surface.textureId = settings.textureId;
     surface.decalTextureId = settings.decal.textureId;
     surface.decalOpacity = settings.decal.textureId.empty() ? 1.0f : settings.decal.opacity;
+    surface.decalEmissive = !settings.decal.textureId.empty() && settings.decal.emissive;
+    surface.decalTint = settings.decal.textureId.empty()
+            ? Vector3{1.0f, 1.0f, 1.0f}
+            : settings.decal.tint;
     surface.normal = normal;
     surface.chartWidth = length;
     surface.chartHeight = height;

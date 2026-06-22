@@ -64,6 +64,8 @@ uniform float useLightmap;
 uniform float useBakedAmbientOcclusion;
 uniform int hasDecal;
 uniform float decalOpacity;
+uniform int decalEmissive;
+uniform vec3 decalTint;
 
 out vec4 finalColor;
 
@@ -71,6 +73,8 @@ void main()
 {
     vec4 baseColor = texture(texture0, fragTexCoord);
     vec3 surfaceRgb = baseColor.rgb;
+    vec3 emissiveDecalRgb = vec3(0.0);
+    float emissiveDecalAlpha = 0.0;
     if (hasDecal != 0) {
         float decalMask =
             fragDecalUv.x >= 0.0 && fragDecalUv.x <= 1.0 &&
@@ -79,14 +83,21 @@ void main()
                 : 0.0;
         vec4 decalColor = texture(decalTexture, fragDecalUv);
         float decalAlpha = decalColor.a * decalOpacity * decalMask;
-        surfaceRgb = mix(baseColor.rgb, decalColor.rgb, decalAlpha);
+        vec3 decalRgb = decalColor.rgb * decalTint;
+        if (decalEmissive != 0) {
+            emissiveDecalRgb = decalRgb;
+            emissiveDecalAlpha = decalAlpha;
+        } else {
+            surfaceRgb = mix(baseColor.rgb, decalRgb, decalAlpha);
+        }
     }
     vec4 bakedSample = (useLightmap > 0.5) ? texture(texture1, fragTexCoord2) : vec4(0.0, 0.0, 0.0, 1.0);
     float aoFactor = (useBakedAmbientOcclusion > 0.5) ? bakedSample.a : 1.0;
     vec3 ambient = fragColor.rgb * aoFactor;
     vec3 bakedDirect = bakedSample.rgb;
     vec3 lighting = clamp(ambient + bakedDirect, 0.0, 1.0);
-    finalColor = vec4(surfaceRgb * lighting, baseColor.a * fragColor.a);
+    vec3 litRgb = surfaceRgb * lighting;
+    finalColor = vec4(mix(litRgb, emissiveDecalRgb, emissiveDecalAlpha), baseColor.a * fragColor.a);
 }
 )";
 
@@ -115,6 +126,8 @@ bool LoadPreviewMaterial(
         int& useBakedAmbientOcclusionLoc,
         int& hasDecalLoc,
         int& decalOpacityLoc,
+        int& decalEmissiveLoc,
+        int& decalTintLoc,
         std::string& error)
 {
     material = LoadMaterialDefault();
@@ -134,6 +147,8 @@ bool LoadPreviewMaterial(
     useBakedAmbientOcclusionLoc = GetShaderLocation(material.shader, "useBakedAmbientOcclusion");
     hasDecalLoc = GetShaderLocation(material.shader, "hasDecal");
     decalOpacityLoc = GetShaderLocation(material.shader, "decalOpacity");
+    decalEmissiveLoc = GetShaderLocation(material.shader, "decalEmissive");
+    decalTintLoc = GetShaderLocation(material.shader, "decalTint");
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
     return true;
@@ -253,6 +268,8 @@ bool SectorMeshPreview::Rebuild(
                 useBakedAmbientOcclusionLoc,
                 hasDecalLoc,
                 decalOpacityLoc,
+                decalEmissiveLoc,
+                decalTintLoc,
                 error)) {
         Shutdown(assets);
         return false;
@@ -433,6 +450,8 @@ void SectorMeshPreview::Render(engine::AssetManager& assets, bool useBakedAmbien
 
         const int hasDecal = decalTexture != nullptr ? 1 : 0;
         const float decalOpacity = batch.decalOpacity;
+        const int decalEmissive = hasDecal != 0 && batch.decalEmissive ? 1 : 0;
+        const Vector3 decalTint = hasDecal != 0 ? batch.decalTint : Vector3{1.0f, 1.0f, 1.0f};
         material.maps[MATERIAL_MAP_NORMAL].texture = (decalTexture != nullptr)
                 ? *decalTexture
                 : Texture2D{};
@@ -441,6 +460,12 @@ void SectorMeshPreview::Render(engine::AssetManager& assets, bool useBakedAmbien
         }
         if (decalOpacityLoc >= 0) {
             SetShaderValue(material.shader, decalOpacityLoc, &decalOpacity, SHADER_UNIFORM_FLOAT);
+        }
+        if (decalEmissiveLoc >= 0) {
+            SetShaderValue(material.shader, decalEmissiveLoc, &decalEmissive, SHADER_UNIFORM_INT);
+        }
+        if (decalTintLoc >= 0) {
+            SetShaderValue(material.shader, decalTintLoc, &decalTint, SHADER_UNIFORM_VEC3);
         }
         DrawMesh(batch.mesh, material, MatrixIdentity());
     }

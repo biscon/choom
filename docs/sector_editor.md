@@ -203,12 +203,17 @@ The sidedef/linedef inspector supports:
 Topology JSON can also store one optional decal layer for each floor, ceiling,
 wall, lower, and upper surface material. Surface material panels expose
 `Layer: Base | Decal`. Base edits the normal texture and UV settings. Decal
-edits the optional overlay texture, UV, and opacity for the selected surface.
-`Clear Decal` removes the selected surface decal. Decal assignment uses the
+edits the optional overlay texture, UV, opacity, emissive mode, and tint for
+the selected surface. `Clear Decal` removes the selected surface decal and
+resets texture, UV, opacity, emissive, and tint. Decal assignment uses the
 normal topology texture table and texture picker; decal textures are ordinary
 texture IDs, not a separate texture category. Decal UVs are masked outside
-`0..1`, so decals do not tile across the whole surface. Decals are composited
-over the base texture first, then lit like the base surface.
+`0..1`, so decals do not tile across the whole surface. Non-emissive decals
+are composited over the base texture first, then lit like the base surface.
+Emissive decals render unlit over the already-lit base surface, but do not cast
+light or affect lightmap baking. Tint multiplies decal RGB and is edited with a
+compact swatch that opens a modal color dialog rather than direct inspector RGB
+fields. The single optional decal layer limitation remains.
 
 For manual decal verification, load `decal_test` from the `Load` dialog. The
 sample level lives at `assets/levels/decal_test/decal_test.json` and uses
@@ -408,9 +413,9 @@ texture picker. `Layer: Base | Decal` chooses whether Texture, UV, Reset UV,
 Fit, and Align controls edit the base material or the optional decal layer.
 When Decal is active and no decal texture is assigned, the panel shows
 `No decal assigned` and only the Texture picker remains available. Assigned
-decals expose UV, opacity, and `Clear Decal`. Reset UV resets only the selected
-surface target, Fit Width / Fit Height / Fit Both fit only selected wall-like
-targets, Align Vertical shifts only selected wall-like V offsets to line up by
+decals expose UV, opacity, emissive, tint, and `Clear Decal`. Reset UV resets
+only the selected surface target, Fit Width / Fit Height / Fit Both fit only
+selected wall-like targets, Align Vertical shifts only selected wall-like V offsets to line up by
 world height, Align U Prev / Align U Next shift only selected wall-like U
 offsets to continue from the previous or next visible compatible
 wall/lower/upper surface in the same sector loop, skipping edges where that wall

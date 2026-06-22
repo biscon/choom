@@ -177,6 +177,12 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawDecalTintModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
     void DrawStatusPanel(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -266,6 +272,9 @@ private:
     bool PasteTopologyMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets);
     bool ApplySurface3DUvValue(TopologySurfaceEditTarget target, TopologyMaterialLayer layer, int component, float value, engine::AssetManager& assets);
     bool ApplySurfaceDecalOpacity(TopologySurfaceEditTarget target, float opacity, engine::AssetManager* assets);
+    bool ApplySurfaceDecalEmissive(TopologySurfaceEditTarget target, bool emissive, engine::AssetManager* assets);
+    bool ApplySurfaceDecalTint(TopologySurfaceEditTarget target, Vector3 tint, engine::AssetManager* assets);
+    bool OpenDecalTintModal(TopologySurfaceEditTarget target);
     bool ClearSurfaceDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool ResetSurface3DUv(TopologySurfaceEditTarget target, TopologyMaterialLayer layer, engine::AssetManager& assets);
     bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets, TopologyMaterialLayer layer);

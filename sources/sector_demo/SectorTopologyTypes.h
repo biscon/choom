@@ -31,6 +31,8 @@ struct SectorTopologyDecalLayer {
     std::string textureId;
     SectorTopologyUvSettings uv;
     float opacity = 1.0f;
+    bool emissive = false;
+    Vector3 tint = {1.0f, 1.0f, 1.0f};
 };
 
 struct SectorTopologyWallPartSettings {

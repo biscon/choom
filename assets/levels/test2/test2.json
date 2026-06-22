@@ -15,6 +15,14 @@
       "path": "assets/images/floor.png",
       "filter": "bilinear"
     },
+    "metal": {
+      "path": "assets/images/test/metal.png",
+      "filter": "bilinear"
+    },
+    "square_ceiling_light": {
+      "path": "assets/images/decals/square_ceiling_light.png",
+      "filter": "point"
+    },
     "step_wall": {
       "path": "assets/images/wall.png",
       "filter": "bilinear"
@@ -363,6 +371,26 @@
       "id": 67,
       "x": 1920,
       "y": 384
+    },
+    {
+      "id": 68,
+      "x": 2304,
+      "y": -192
+    },
+    {
+      "id": 69,
+      "x": 2432,
+      "y": -192
+    },
+    {
+      "id": 70,
+      "x": 2432,
+      "y": -64
+    },
+    {
+      "id": 71,
+      "x": 2304,
+      "y": -64
     }
   ],
   "linedefs": [
@@ -918,6 +946,34 @@
       "endVertexId": 57,
       "frontSideDefId": 140,
       "backSideDefId": 141
+    },
+    {
+      "id": 98,
+      "startVertexId": 68,
+      "endVertexId": 69,
+      "frontSideDefId": 142,
+      "backSideDefId": 143
+    },
+    {
+      "id": 99,
+      "startVertexId": 69,
+      "endVertexId": 70,
+      "frontSideDefId": 144,
+      "backSideDefId": 145
+    },
+    {
+      "id": 100,
+      "startVertexId": 70,
+      "endVertexId": 71,
+      "frontSideDefId": 146,
+      "backSideDefId": 147
+    },
+    {
+      "id": 101,
+      "startVertexId": 71,
+      "endVertexId": 68,
+      "frontSideDefId": 148,
+      "backSideDefId": 149
     }
   ],
   "sidedefs": [
@@ -1535,7 +1591,13 @@
               -0.6000000238418579
             ]
           },
-          "opacity": 0.800000011920929
+          "opacity": 0.800000011920929,
+          "emissive": false,
+          "tint": [
+            1.0,
+            1.0,
+            1.0
+          ]
         }
       },
       "lower": {
@@ -3124,7 +3186,13 @@
               0.0
             ]
           },
-          "opacity": 0.800000011920929
+          "opacity": 0.800000011920929,
+          "emissive": false,
+          "tint": [
+            1.0,
+            1.0,
+            1.0
+          ]
         }
       },
       "lower": {
@@ -5028,7 +5096,13 @@
               0.0
             ]
           },
-          "opacity": 0.75
+          "opacity": 0.75,
+          "emissive": false,
+          "tint": [
+            1.0,
+            1.0,
+            1.0
+          ]
         }
       },
       "lower": {
@@ -6167,7 +6241,13 @@
               -0.15000000596046448
             ]
           },
-          "opacity": 0.75
+          "opacity": 0.75,
+          "emissive": false,
+          "tint": [
+            1.0,
+            1.0,
+            1.0
+          ]
         }
       },
       "lower": {
@@ -6418,6 +6498,366 @@
           "offset": [
             0.0,
             0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 142,
+      "lineDefId": 98,
+      "side": "front",
+      "sectorId": 18,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 143,
+      "lineDefId": 98,
+      "side": "back",
+      "sectorId": 15,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "metal",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.5,
+            -1.875
+          ]
+        }
+      }
+    },
+    {
+      "id": 144,
+      "lineDefId": 99,
+      "side": "front",
+      "sectorId": 18,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 145,
+      "lineDefId": 99,
+      "side": "back",
+      "sectorId": 15,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "metal",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.5,
+            -1.875
+          ]
+        }
+      }
+    },
+    {
+      "id": 146,
+      "lineDefId": 100,
+      "side": "front",
+      "sectorId": 18,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 147,
+      "lineDefId": 100,
+      "side": "back",
+      "sectorId": 15,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "metal",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.5,
+            -1.875
+          ]
+        }
+      }
+    },
+    {
+      "id": 148,
+      "lineDefId": 101,
+      "side": "front",
+      "sectorId": 18,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 149,
+      "lineDefId": 101,
+      "side": "back",
+      "sectorId": 15,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "metal",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            1.0,
+            -1.875
           ]
         }
       }
@@ -7681,6 +8121,120 @@
           ]
         }
       }
+    },
+    {
+      "id": 18,
+      "name": "sector_018",
+      "floorZ": 5.0,
+      "ceilingZ": 29.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "metal",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.20000000298023224,
+      "defaultWall": {
+        "textureId": "metal",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "metal",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "metal",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "floorDecal": {
+        "textureId": "square_ceiling_light",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "opacity": 1.0,
+        "emissive": true,
+        "tint": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "ceilingDecal": {
+        "textureId": "square_ceiling_light",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "opacity": 1.0,
+        "emissive": true,
+        "tint": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
     }
   ],
   "staticLights": [
@@ -7755,13 +8309,13 @@
     {
       "id": 5,
       "position": [
-        184.0,
-        19.399999618530273,
+        148.0,
+        28.0,
         -8.0
       ],
-      "radius": 80.0,
-      "sourceRadius": 6.0,
-      "intensity": 3.0,
+      "radius": 64.0,
+      "sourceRadius": 2.0,
+      "intensity": 2.0,
       "color": {
         "r": 255,
         "g": 255,
@@ -7797,6 +8351,6 @@
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "8dcbad936597442f"
+    "sourceHash": "afe76dc77e904d8d"
   }
 }
