@@ -236,6 +236,32 @@ const SectorTopologySideDef* FindSelectedSectorSideDefForEdge(
     return sideDef;
 }
 
+bool IsOneSidedSelectedSectorBoundaryLineDef(
+        const SectorTopologyMap& map,
+        int lineDefId,
+        int sectorId)
+{
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, lineDefId);
+    if (lineDef == nullptr) {
+        return false;
+    }
+
+    const SectorTopologySideDef* front = FindSectorTopologySideDef(map, lineDef->frontSideDefId);
+    const SectorTopologySideDef* back = FindSectorTopologySideDef(map, lineDef->backSideDefId);
+    const bool hasFront = front != nullptr;
+    const bool hasBack = back != nullptr;
+    if (hasFront == hasBack) {
+        return false;
+    }
+
+    const SectorTopologySideDef* sideDef = hasFront ? front : back;
+    const SectorTopologySideKind expectedSide =
+            hasFront ? SectorTopologySideKind::Front : SectorTopologySideKind::Back;
+    return sideDef->lineDefId == lineDef->id
+           && sideDef->side == expectedSide
+           && sideDef->sectorId == sectorId;
+}
+
 struct ResolvedBoundaryCutPoint {
     SectorTopologyCoordPoint point;
     int sourceVertexId = -1;
@@ -312,6 +338,83 @@ bool ResolveBoundaryCutPointOnOuterLoop(
 
     outResolved.sourceLineDefId = point.lineDefId;
     outResolved.requiresSplit = true;
+    return true;
+}
+
+bool ValidateResolvedBoundaryCutPointEndpoint(
+        const SectorTopologyMap& map,
+        const SectorTopologyLoop& outer,
+        int sectorId,
+        const ResolvedBoundaryCutPoint& point,
+        std::string* outError)
+{
+    if (!IsValidSectorTopologyId(point.sourceVertexId)) {
+        if (!IsOneSidedSelectedSectorBoundaryLineDef(map, point.sourceLineDefId, sectorId)) {
+            SetError(
+                    outError,
+                    "Cut endpoint is on a shared portal boundary. First-version sector cuts only support solid outer boundaries.");
+            return false;
+        }
+        return true;
+    }
+
+    int vertexIndex = -1;
+    for (size_t i = 0; i < outer.vertexIds.size(); ++i) {
+        if (outer.vertexIds[i] == point.sourceVertexId) {
+            vertexIndex = static_cast<int>(i);
+            break;
+        }
+    }
+    if (vertexIndex < 0 || outer.edges.empty()) {
+        SetError(outError, "Cut endpoint vertex is not on the selected sector outer boundary.");
+        return false;
+    }
+
+    const int edgeCount = static_cast<int>(outer.edges.size());
+    if (edgeCount < 2 || static_cast<size_t>(edgeCount) != outer.vertexIds.size()) {
+        SetError(outError, "Could not resolve selected sector boundary.");
+        return false;
+    }
+
+    const SectorTopologyLoopEdge& previousEdge =
+            outer.edges[static_cast<size_t>((vertexIndex + edgeCount - 1) % edgeCount)];
+    const SectorTopologyLoopEdge& nextEdge =
+            outer.edges[static_cast<size_t>(vertexIndex)];
+    std::unordered_set<int> expectedLineDefIds;
+    expectedLineDefIds.reserve(2);
+    expectedLineDefIds.insert(previousEdge.lineDefId);
+    expectedLineDefIds.insert(nextEdge.lineDefId);
+
+    std::unordered_set<int> incidentLineDefIds;
+    incidentLineDefIds.reserve(4);
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        if (lineDef.startVertexId == point.sourceVertexId
+                || lineDef.endVertexId == point.sourceVertexId) {
+            incidentLineDefIds.insert(lineDef.id);
+            if (expectedLineDefIds.find(lineDef.id) == expectedLineDefIds.end()) {
+                SetError(
+                        outError,
+                        "Cut endpoint is a complex sector junction. Pick a simple boundary point instead.");
+                return false;
+            }
+        }
+    }
+
+    if (incidentLineDefIds != expectedLineDefIds) {
+        SetError(
+                outError,
+                "Cut endpoint is a complex sector junction. Pick a simple boundary point instead.");
+        return false;
+    }
+
+    if (!IsOneSidedSelectedSectorBoundaryLineDef(map, previousEdge.lineDefId, sectorId)
+            || !IsOneSidedSelectedSectorBoundaryLineDef(map, nextEdge.lineDefId, sectorId)) {
+        SetError(
+                outError,
+                "Cut endpoint is on a shared portal boundary. First-version sector cuts only support solid outer boundaries.");
+        return false;
+    }
+
     return true;
 }
 
@@ -1516,6 +1619,39 @@ bool DeleteSectorTopologySector(
     return true;
 }
 
+bool ValidateSectorTopologySectorBoundaryCutPoint(
+        const SectorTopologyMap& map,
+        int sectorId,
+        SectorTopologyBoundaryCutPoint point,
+        std::string* outError)
+{
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    if (!IsValidSectorTopologyId(sectorId)) {
+        SetError(outError, "Invalid topology sector ID");
+        return false;
+    }
+    if (FindSectorTopologySector(map, sectorId) == nullptr) {
+        SetError(outError, "Topology sector not found");
+        return false;
+    }
+
+    SectorTopologyLoopSet loops;
+    std::vector<SectorTopologyValidationIssue> loopIssues;
+    if (!ExtractSectorTopologyLoops(map, sectorId, loops, &loopIssues)) {
+        SetError(outError, FirstValidationError(loopIssues));
+        return false;
+    }
+
+    ResolvedBoundaryCutPoint resolved;
+    if (!ResolveBoundaryCutPointOnOuterLoop(map, loops.outer, sectorId, point, resolved, outError)) {
+        return false;
+    }
+    return ValidateResolvedBoundaryCutPointEndpoint(map, loops.outer, sectorId, resolved, outError);
+}
+
 bool CutSectorTopologySectorBetweenBoundaryPoints(
         SectorTopologyMap& map,
         int sectorId,
@@ -1558,6 +1694,10 @@ bool CutSectorTopologySectorBetweenBoundaryPoints(
     ResolvedBoundaryCutPoint secondResolved;
     if (!ResolveBoundaryCutPointOnOuterLoop(map, originalLoops.outer, sectorId, firstPoint, firstResolved, outError)
             || !ResolveBoundaryCutPointOnOuterLoop(map, originalLoops.outer, sectorId, secondPoint, secondResolved, outError)) {
+        return false;
+    }
+    if (!ValidateResolvedBoundaryCutPointEndpoint(map, originalLoops.outer, sectorId, firstResolved, outError)
+            || !ValidateResolvedBoundaryCutPointEndpoint(map, originalLoops.outer, sectorId, secondResolved, outError)) {
         return false;
     }
     if (SamePoint(firstResolved.point, secondResolved.point)) {

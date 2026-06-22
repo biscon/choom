@@ -2231,6 +2231,19 @@ void SectorEditor::UpdatePendingTopologySectorCut(engine::Input& input)
     pending.candidatePoint = candidate;
     pending.hasCandidatePoint = true;
 
+    std::string endpointError;
+    if (!ValidateSectorTopologySectorBoundaryCutPoint(
+                state.topologyMap,
+                pending.sectorId,
+                pending.candidatePoint,
+                &endpointError)) {
+        pending.hasValidCandidate = false;
+        pending.cacheHasFirstPoint = false;
+        pending.message = endpointError.empty() ? "Sector cut endpoint rejected." : endpointError;
+        statusText = pending.message;
+        return;
+    }
+
     if (!pending.hasFirstPoint) {
         pending.hasValidCandidate = true;
         pending.message = "Click to place first cut point.";
@@ -4549,16 +4562,16 @@ void SectorEditor::DrawPendingTopologySectorCut() const
 
     const Color color = pending.hasFirstPoint
             ? (pending.hasValidCandidate ? Color{120, 230, 154, 255} : Color{230, 82, 82, 245})
-            : Color{236, 196, 92, 255};
+            : (pending.hasValidCandidate ? Color{236, 196, 92, 255} : Color{230, 82, 82, 245});
     if (pending.hasFirstPoint) {
         DrawLineEx(firstScreen, candidateScreen, 3.0f, WithAlpha(color, 210));
     }
     DrawCircleLines(
             static_cast<int>(std::round(candidateScreen.x)),
             static_cast<int>(std::round(candidateScreen.y)),
-            pending.hasValidCandidate || !pending.hasFirstPoint ? 13.0f : 11.0f,
+            pending.hasValidCandidate ? 13.0f : 11.0f,
             color);
-    DrawCircleV(candidateScreen, pending.hasValidCandidate || !pending.hasFirstPoint ? 5.0f : 4.0f, color);
+    DrawCircleV(candidateScreen, pending.hasValidCandidate ? 5.0f : 4.0f, color);
 }
 
 void SectorEditor::DrawStaticLights() const

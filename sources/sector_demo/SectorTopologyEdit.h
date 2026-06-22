@@ -93,6 +93,12 @@ bool DeleteSectorTopologySector(
         SectorTopologyDeleteSectorResult* outResult = nullptr,
         std::string* outError = nullptr);
 
+bool ValidateSectorTopologySectorBoundaryCutPoint(
+        const SectorTopologyMap& map,
+        int sectorId,
+        SectorTopologyBoundaryCutPoint point,
+        std::string* outError = nullptr);
+
 bool CutSectorTopologySectorBetweenBoundaryPoints(
         SectorTopologyMap& map,
         int sectorId,

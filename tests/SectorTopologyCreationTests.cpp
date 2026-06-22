@@ -1865,6 +1865,37 @@ void TestCutAssignsContainedHoleToOneResult()
           "hole cut keeps child sector");
 }
 
+void TestRejectCutAtComplexPortalJunctionVertex()
+{
+    SectorTopologyMap map;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "complex cut left sector setup succeeds");
+    Check(Create(map, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "complex cut right sector setup succeeds");
+    Check(game::FindSectorTopologySector(map, leftId) != nullptr
+                  && game::FindSectorTopologySector(map, rightId) != nullptr,
+          "complex cut setup keeps adjacent sectors");
+    Check(CountLinesReferencingVertex(map, 2) > 2,
+          "complex cut setup has extra incident topology at shared endpoint");
+
+    const SectorTopologyMap before = map;
+    SectorTopologyCutSectorResult result;
+    std::string error;
+    Check(!game::CutSectorTopologySectorBetweenBoundaryPoints(
+                  map,
+                  leftId,
+                  CutVertex(2),
+                  CutVertex(4),
+                  &result,
+                  &error),
+          "cut using complex portal junction endpoint is rejected");
+    Check(error.find("complex sector junction") != std::string::npos,
+          "complex portal junction rejection reports endpoint limitation");
+    CheckUnchanged(before, map, "complex portal junction rejection leaves map unchanged");
+}
+
 void ExpectCutRejected(
         const SectorTopologyMap& input,
         int sectorId,
@@ -1890,6 +1921,91 @@ void ExpectCutRejected(
                   && result.cutLineDefId == -1,
           "rejected cut leaves result default");
     CheckUnchanged(before, map, "rejected cut leaves map unchanged");
+}
+
+void ExpectCutRejectedWithPortalError(
+        const SectorTopologyMap& input,
+        int sectorId,
+        SectorTopologyBoundaryCutPoint first,
+        SectorTopologyBoundaryCutPoint second,
+        const char* description)
+{
+    SectorTopologyMap map = input;
+    const SectorTopologyMap before = map;
+    SectorTopologyCutSectorResult result;
+    std::string error;
+    Check(!game::CutSectorTopologySectorBetweenBoundaryPoints(
+                  map,
+                  sectorId,
+                  first,
+                  second,
+                  &result,
+                  &error),
+          description);
+    Check(error.find("portal") != std::string::npos
+                  || error.find("shared") != std::string::npos,
+          "portal boundary rejection reports shared or portal limitation");
+    Check(result.originalSectorId == -1
+                  && result.newSectorId == -1
+                  && result.cutLineDefId == -1,
+          "portal boundary rejection leaves result default");
+    CheckUnchanged(before, map, "portal boundary rejection leaves map unchanged");
+}
+
+void TestRejectCutEndpointsOnPortalBoundaries()
+{
+    SectorTopologyMap adjacent;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(adjacent, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "portal cut adjacent left setup succeeds");
+    Check(Create(adjacent, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "portal cut adjacent right setup succeeds");
+    const SectorTopologyLineDef* shared = FindLine(adjacent, 2, 3);
+    Check(shared != nullptr
+                  && game::IsValidSectorTopologyId(shared->frontSideDefId)
+                  && game::IsValidSectorTopologyId(shared->backSideDefId),
+          "portal cut adjacent setup has shared linedef");
+    if (shared != nullptr) {
+        ExpectCutRejectedWithPortalError(
+                adjacent,
+                leftId,
+                CutLinePoint(shared->id, {64, 32}),
+                CutVertex(4),
+                "cut endpoint strictly inside portal linedef is rejected");
+        ExpectCutRejectedWithPortalError(
+                adjacent,
+                leftId,
+                CutLinePoint(3, {32, 64}),
+                CutLinePoint(shared->id, {64, 32}),
+                "cut starting on one-sided boundary and ending on portal boundary is rejected");
+        ExpectCutRejectedWithPortalError(
+                adjacent,
+                leftId,
+                CutLinePoint(shared->id, {64, 32}),
+                CutVertex(4),
+                "cut starting on portal boundary and ending on one-sided boundary is rejected");
+    }
+
+    SectorTopologyMap inserted;
+    int parentId = -1;
+    int childId = -1;
+    Check(Create(inserted, {{0, 0}, {160, 0}, {160, 160}, {0, 160}}, &parentId),
+          "portal cut inserted parent setup succeeds");
+    Check(Insert(inserted, parentId, {{64, 64}, {96, 64}, {96, 96}, {64, 96}}, &childId),
+          "portal cut inserted child setup succeeds");
+    const std::vector<const SectorTopologyLineDef*> childBoundary =
+            InsertedBoundaryLines(inserted, parentId, childId);
+    Check(!childBoundary.empty(), "portal cut inserted setup has shared child boundary");
+    if (!childBoundary.empty()) {
+        const int portalVertexId = childBoundary.front()->startVertexId;
+        ExpectCutRejectedWithPortalError(
+                inserted,
+                childId,
+                CutVertex(portalVertexId),
+                CutVertex(childBoundary.front()->endVertexId),
+                "cut endpoint at simple vertex adjacent to portal linedef is rejected");
+    }
 }
 
 void TestRejectInvalidSectorCutsTransactionally()
@@ -2334,6 +2450,8 @@ int main()
     TestCutCopiesSectorFieldsAndPreservesBoundarySideDefs();
     TestCutConcaveSectorAndBuildOutputs();
     TestCutAssignsContainedHoleToOneResult();
+    TestRejectCutAtComplexPortalJunctionVertex();
+    TestRejectCutEndpointsOnPortalBoundaries();
     TestRejectInvalidSectorCutsTransactionally();
     TestMoveOuterVertex();
     TestMoveSharedAdjacentVertex();

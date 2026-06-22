@@ -145,6 +145,10 @@ vertices, duplicate physical linedefs, crossing/touching/overlapping existing
 topology, concave cuts outside the sector, hole crossings/touches, ambiguous
 hole assignment, and any candidate that fails topology validation.
 
+For now, cut endpoints must be simple one-sided boundary points on the selected
+sector. Endpoints on shared portal boundaries, including equal-height portals,
+are rejected; pick a solid outer boundary point instead.
+
 Existing boundary sidedefs inherited by each result keep their concrete
 wall/lower/upper texture IDs and UV settings. Existing holes are not cut: each
 hole boundary must lie strictly inside exactly one result sector, or the cut is
