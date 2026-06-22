@@ -1,7 +1,11 @@
 #include "sector_demo/SectorTopologyEdit.h"
 
+#include "sector_demo/SectorTopologyGeometry.h"
+
 #include <algorithm>
+#include <cstdio>
 #include <limits>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -86,6 +90,996 @@ SectorTopologySideDef DuplicateSideDef(
     return duplicate;
 }
 
+bool ExistingSectorName(const SectorTopologyMap& map, const std::string& name)
+{
+    return std::any_of(map.sectors.begin(), map.sectors.end(), [&name](const SectorTopologySector& sector) {
+        return sector.name == name;
+    });
+}
+
+std::string GenerateSectorName(const SectorTopologyMap& map)
+{
+    for (int id = 1; id < 10000; ++id) {
+        char candidate[32];
+        std::snprintf(candidate, sizeof(candidate), "sector_%03d", id);
+        if (!ExistingSectorName(map, candidate)) {
+            return candidate;
+        }
+    }
+    return "sector_" + std::to_string(map.sectors.size() + 1);
+}
+
+SectorTopologySideDef MakeSideDefFromSectorDefaults(
+        int sideDefId,
+        int lineDefId,
+        SectorTopologySideKind side,
+        int sectorId,
+        const SectorTopologySector& sector)
+{
+    SectorTopologySideDef sideDef;
+    sideDef.id = sideDefId;
+    sideDef.lineDefId = lineDefId;
+    sideDef.side = side;
+    sideDef.sectorId = sectorId;
+    sideDef.wall = sector.defaultWall;
+    sideDef.lower = sector.defaultLower;
+    sideDef.upper = sector.defaultUpper;
+    return sideDef;
+}
+
+struct LineEndpointPair {
+    int a = -1;
+    int b = -1;
+
+    bool operator==(const LineEndpointPair& other) const
+    {
+        return a == other.a && b == other.b;
+    }
+};
+
+struct LineEndpointPairHash {
+    size_t operator()(const LineEndpointPair& pair) const
+    {
+        return (static_cast<size_t>(pair.a) << 32U) ^ static_cast<size_t>(pair.b);
+    }
+};
+
+LineEndpointPair MakeLineEndpointPair(const SectorTopologyLineDef& lineDef)
+{
+    return LineEndpointPair{
+            std::min(lineDef.startVertexId, lineDef.endVertexId),
+            std::max(lineDef.startVertexId, lineDef.endVertexId)
+    };
+}
+
+struct SharedSectorBoundaryLine {
+    int lineDefId = -1;
+    int winnerSideDefId = -1;
+    int otherSideDefId = -1;
+    int startVertexId = -1;
+    int endVertexId = -1;
+};
+
+bool ValidateNoCollapsedLineDefs(const SectorTopologyMap& map, std::string* outError)
+{
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        if (lineDef.startVertexId == lineDef.endVertexId) {
+            SetError(
+                    outError,
+                    "Merge would collapse topology linedef " + std::to_string(lineDef.id)
+                            + " to a single vertex.");
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ValidateNoDuplicatePhysicalLineDefs(const SectorTopologyMap& map, std::string* outError)
+{
+    std::unordered_map<LineEndpointPair, int, LineEndpointPairHash> lineIdByEndpointPair;
+    lineIdByEndpointPair.reserve(map.lineDefs.size());
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        const LineEndpointPair pair = MakeLineEndpointPair(lineDef);
+        const auto inserted = lineIdByEndpointPair.emplace(pair, lineDef.id);
+        if (!inserted.second) {
+            SetError(
+                    outError,
+                    "Merge would create duplicate physical linedefs "
+                            + std::to_string(inserted.first->second)
+                            + " and " + std::to_string(lineDef.id) + ".");
+            return false;
+        }
+    }
+    return true;
+}
+
+bool GetLineDefSlotSideDef(
+        const SectorTopologyMap& map,
+        const SectorTopologyLineDef& lineDef,
+        SectorTopologySideKind side,
+        const SectorTopologySideDef*& outSideDef,
+        std::string* outError)
+{
+    outSideDef = nullptr;
+    const int sideDefId = side == SectorTopologySideKind::Front
+            ? lineDef.frontSideDefId
+            : lineDef.backSideDefId;
+    if (sideDefId == -1) {
+        return true;
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, sideDefId);
+    if (sideDef == nullptr) {
+        SetError(outError, "Shared boundary linedef references a missing sidedef.");
+        return false;
+    }
+    if (sideDef->lineDefId != lineDef.id || sideDef->side != side) {
+        SetError(outError, "Shared boundary linedef has an inconsistent sidedef slot.");
+        return false;
+    }
+    outSideDef = sideDef;
+    return true;
+}
+
+bool CollectSharedSectorBoundaryLines(
+        const SectorTopologyMap& map,
+        int winnerSectorId,
+        int otherSectorId,
+        std::vector<SharedSectorBoundaryLine>& outSharedLines,
+        std::string* outError)
+{
+    outSharedLines.clear();
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        const SectorTopologySideDef* front = nullptr;
+        const SectorTopologySideDef* back = nullptr;
+        if (!GetLineDefSlotSideDef(map, lineDef, SectorTopologySideKind::Front, front, outError)
+                || !GetLineDefSlotSideDef(map, lineDef, SectorTopologySideKind::Back, back, outError)) {
+            return false;
+        }
+        if (front == nullptr || back == nullptr) {
+            continue;
+        }
+
+        if (front->sectorId == winnerSectorId && back->sectorId == otherSectorId) {
+            outSharedLines.push_back(SharedSectorBoundaryLine{
+                    lineDef.id,
+                    front->id,
+                    back->id,
+                    lineDef.startVertexId,
+                    lineDef.endVertexId
+            });
+        } else if (front->sectorId == otherSectorId && back->sectorId == winnerSectorId) {
+            outSharedLines.push_back(SharedSectorBoundaryLine{
+                    lineDef.id,
+                    back->id,
+                    front->id,
+                    lineDef.startVertexId,
+                    lineDef.endVertexId
+            });
+        }
+    }
+
+    if (outSharedLines.empty()) {
+        SetError(outError, "Topology sectors are not adjacent through a shared two-sided boundary.");
+        return false;
+    }
+    return true;
+}
+
+bool ValidateSingleSharedBoundaryChain(
+        const std::vector<SharedSectorBoundaryLine>& sharedLines,
+        std::string* outError)
+{
+    std::unordered_map<int, std::vector<size_t>> lineIndicesByVertexId;
+    lineIndicesByVertexId.reserve(sharedLines.size() * 2);
+    for (size_t i = 0; i < sharedLines.size(); ++i) {
+        if (sharedLines[i].startVertexId == sharedLines[i].endVertexId) {
+            SetError(outError, "Shared boundary contains a collapsed linedef.");
+            return false;
+        }
+        lineIndicesByVertexId[sharedLines[i].startVertexId].push_back(i);
+        lineIndicesByVertexId[sharedLines[i].endVertexId].push_back(i);
+    }
+
+    size_t endpointCount = 0;
+    int startVertexId = -1;
+    for (const auto& entry : lineIndicesByVertexId) {
+        const size_t degree = entry.second.size();
+        if (degree == 1) {
+            ++endpointCount;
+            startVertexId = entry.first;
+        } else if (degree != 2) {
+            SetError(outError, "Shared boundary is branched or ambiguous.");
+            return false;
+        }
+    }
+
+    if (endpointCount == 0) {
+        SetError(outError, "Shared boundary is a closed loop; first-version join only supports a simple chain.");
+        return false;
+    }
+    if (endpointCount != 2) {
+        SetError(outError, "Shared boundary is disconnected or ambiguous.");
+        return false;
+    }
+
+    std::vector<bool> visited(sharedLines.size(), false);
+    int currentVertexId = startVertexId;
+    for (size_t visitedCount = 0; visitedCount < sharedLines.size(); ++visitedCount) {
+        const auto found = lineIndicesByVertexId.find(currentVertexId);
+        if (found == lineIndicesByVertexId.end()) {
+            SetError(outError, "Shared boundary is disconnected.");
+            return false;
+        }
+
+        size_t nextLineIndex = sharedLines.size();
+        for (size_t lineIndex : found->second) {
+            if (!visited[lineIndex]) {
+                nextLineIndex = lineIndex;
+                break;
+            }
+        }
+        if (nextLineIndex == sharedLines.size()) {
+            SetError(outError, "Shared boundary is disconnected.");
+            return false;
+        }
+
+        visited[nextLineIndex] = true;
+        const SharedSectorBoundaryLine& line = sharedLines[nextLineIndex];
+        currentVertexId = line.startVertexId == currentVertexId
+                ? line.endVertexId
+                : line.startVertexId;
+    }
+
+    if (!std::all_of(visited.begin(), visited.end(), [](bool value) { return value; })) {
+        SetError(outError, "Shared boundary has multiple disconnected chains.");
+        return false;
+    }
+    return true;
+}
+
+void RemoveOrphanTopologyVertices(SectorTopologyMap& map)
+{
+    std::unordered_set<int> referencedVertexIds;
+    referencedVertexIds.reserve(map.lineDefs.size() * 2);
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        referencedVertexIds.insert(lineDef.startVertexId);
+        referencedVertexIds.insert(lineDef.endVertexId);
+    }
+    map.vertices.erase(
+            std::remove_if(
+                    map.vertices.begin(),
+                    map.vertices.end(),
+                    [&referencedVertexIds](const SectorTopologyVertex& vertex) {
+                        return referencedVertexIds.find(vertex.id) == referencedVertexIds.end();
+                    }),
+            map.vertices.end());
+}
+
+bool SamePoint(SectorTopologyCoordPoint a, SectorTopologyCoordPoint b)
+{
+    return a.x == b.x && a.y == b.y;
+}
+
+SectorTopologyCoordPoint VertexPoint(const SectorTopologyVertex& vertex)
+{
+    return SectorTopologyCoordPoint{vertex.x, vertex.y};
+}
+
+int FindVertexAtPoint(const SectorTopologyMap& map, SectorTopologyCoordPoint point)
+{
+    for (const SectorTopologyVertex& vertex : map.vertices) {
+        if (vertex.x == point.x && vertex.y == point.y) {
+            return vertex.id;
+        }
+    }
+    return -1;
+}
+
+bool LoopPoints(
+        const SectorTopologyMap& map,
+        const SectorTopologyLoop& loop,
+        std::vector<SectorTopologyCoordPoint>& outPoints,
+        std::string* outError)
+{
+    outPoints.clear();
+    outPoints.reserve(loop.vertexIds.size());
+    for (int vertexId : loop.vertexIds) {
+        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(map, vertexId);
+        if (vertex == nullptr) {
+            SetError(outError, "Could not resolve topology loop vertex " + std::to_string(vertexId));
+            return false;
+        }
+        outPoints.push_back(VertexPoint(*vertex));
+    }
+    return true;
+}
+
+const SectorTopologySideDef* FindSelectedSectorSideDefForEdge(
+        const SectorTopologyMap& map,
+        const SectorTopologyLoopEdge& edge,
+        int sectorId)
+{
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, edge.sideDefId);
+    if (sideDef == nullptr || sideDef->sectorId != sectorId) {
+        return nullptr;
+    }
+    return sideDef;
+}
+
+bool IsOneSidedSelectedSectorBoundaryLineDef(
+        const SectorTopologyMap& map,
+        int lineDefId,
+        int sectorId)
+{
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, lineDefId);
+    if (lineDef == nullptr) {
+        return false;
+    }
+
+    const SectorTopologySideDef* front = FindSectorTopologySideDef(map, lineDef->frontSideDefId);
+    const SectorTopologySideDef* back = FindSectorTopologySideDef(map, lineDef->backSideDefId);
+    const bool hasFront = front != nullptr;
+    const bool hasBack = back != nullptr;
+    if (hasFront == hasBack) {
+        return false;
+    }
+
+    const SectorTopologySideDef* sideDef = hasFront ? front : back;
+    const SectorTopologySideKind expectedSide =
+            hasFront ? SectorTopologySideKind::Front : SectorTopologySideKind::Back;
+    return sideDef->lineDefId == lineDef->id
+           && sideDef->side == expectedSide
+           && sideDef->sectorId == sectorId;
+}
+
+struct ResolvedBoundaryCutPoint {
+    SectorTopologyCoordPoint point;
+    int sourceVertexId = -1;
+    int sourceLineDefId = -1;
+    bool requiresSplit = false;
+};
+
+bool ResolveBoundaryCutPointOnOuterLoop(
+        const SectorTopologyMap& map,
+        const SectorTopologyLoop& outer,
+        int sectorId,
+        const SectorTopologyBoundaryCutPoint& point,
+        ResolvedBoundaryCutPoint& outResolved,
+        std::string* outError)
+{
+    outResolved = {};
+    outResolved.point = point.point;
+
+    if (IsValidSectorTopologyId(point.vertexId)) {
+        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(map, point.vertexId);
+        if (vertex == nullptr) {
+            SetError(outError, "Cut endpoint vertex not found.");
+            return false;
+        }
+        const bool belongsToOuter = std::find(
+                outer.vertexIds.begin(),
+                outer.vertexIds.end(),
+                point.vertexId) != outer.vertexIds.end();
+        if (!belongsToOuter) {
+            SetError(outError, "Cut endpoint vertex is not on the selected sector outer boundary.");
+            return false;
+        }
+        outResolved.point = VertexPoint(*vertex);
+        outResolved.sourceVertexId = point.vertexId;
+        return true;
+    }
+
+    if (!IsValidSectorTopologyId(point.lineDefId)) {
+        SetError(outError, "Cut endpoint must identify a boundary vertex or linedef.");
+        return false;
+    }
+
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, point.lineDefId);
+    if (lineDef == nullptr) {
+        SetError(outError, "Cut endpoint linedef not found.");
+        return false;
+    }
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(map, *lineDef, start, end)) {
+        SetError(outError, "Cut endpoint linedef has invalid endpoints.");
+        return false;
+    }
+
+    const bool belongsToOuter = std::any_of(
+            outer.edges.begin(),
+            outer.edges.end(),
+            [&](const SectorTopologyLoopEdge& edge) {
+                return edge.lineDefId == point.lineDefId
+                       && FindSelectedSectorSideDefForEdge(map, edge, sectorId) != nullptr;
+            });
+    if (!belongsToOuter) {
+        SetError(outError, "Cut endpoint linedef is not on the selected sector outer boundary.");
+        return false;
+    }
+
+    if (!SectorTopologyPointStrictlyInsideSegment(
+                point.point,
+                VertexPoint(*start),
+                VertexPoint(*end))) {
+        SetError(outError, "Cut endpoint must be a boundary vertex or a strict interior point on an outer linedef.");
+        return false;
+    }
+
+    outResolved.sourceLineDefId = point.lineDefId;
+    outResolved.requiresSplit = true;
+    return true;
+}
+
+bool ValidateResolvedBoundaryCutPointEndpoint(
+        const SectorTopologyMap& map,
+        const SectorTopologyLoop& outer,
+        int sectorId,
+        const ResolvedBoundaryCutPoint& point,
+        std::string* outError)
+{
+    if (!IsValidSectorTopologyId(point.sourceVertexId)) {
+        if (!IsOneSidedSelectedSectorBoundaryLineDef(map, point.sourceLineDefId, sectorId)) {
+            SetError(
+                    outError,
+                    "Cut endpoint is on a shared portal boundary. First-version sector cuts only support solid outer boundaries.");
+            return false;
+        }
+        return true;
+    }
+
+    int vertexIndex = -1;
+    for (size_t i = 0; i < outer.vertexIds.size(); ++i) {
+        if (outer.vertexIds[i] == point.sourceVertexId) {
+            vertexIndex = static_cast<int>(i);
+            break;
+        }
+    }
+    if (vertexIndex < 0 || outer.edges.empty()) {
+        SetError(outError, "Cut endpoint vertex is not on the selected sector outer boundary.");
+        return false;
+    }
+
+    const int edgeCount = static_cast<int>(outer.edges.size());
+    if (edgeCount < 2 || static_cast<size_t>(edgeCount) != outer.vertexIds.size()) {
+        SetError(outError, "Could not resolve selected sector boundary.");
+        return false;
+    }
+
+    const SectorTopologyLoopEdge& previousEdge =
+            outer.edges[static_cast<size_t>((vertexIndex + edgeCount - 1) % edgeCount)];
+    const SectorTopologyLoopEdge& nextEdge =
+            outer.edges[static_cast<size_t>(vertexIndex)];
+    std::unordered_set<int> expectedLineDefIds;
+    expectedLineDefIds.reserve(2);
+    expectedLineDefIds.insert(previousEdge.lineDefId);
+    expectedLineDefIds.insert(nextEdge.lineDefId);
+
+    std::unordered_set<int> incidentLineDefIds;
+    incidentLineDefIds.reserve(4);
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        if (lineDef.startVertexId == point.sourceVertexId
+                || lineDef.endVertexId == point.sourceVertexId) {
+            incidentLineDefIds.insert(lineDef.id);
+            if (expectedLineDefIds.find(lineDef.id) == expectedLineDefIds.end()) {
+                SetError(
+                        outError,
+                        "Cut endpoint is a complex sector junction. Pick a simple boundary point instead.");
+                return false;
+            }
+        }
+    }
+
+    if (incidentLineDefIds != expectedLineDefIds) {
+        SetError(
+                outError,
+                "Cut endpoint is a complex sector junction. Pick a simple boundary point instead.");
+        return false;
+    }
+
+    if (!IsOneSidedSelectedSectorBoundaryLineDef(map, previousEdge.lineDefId, sectorId)
+            || !IsOneSidedSelectedSectorBoundaryLineDef(map, nextEdge.lineDefId, sectorId)) {
+        SetError(
+                outError,
+                "Cut endpoint is on a shared portal boundary. First-version sector cuts only support solid outer boundaries.");
+        return false;
+    }
+
+    return true;
+}
+
+bool ResolveEndpointVertexAfterSplits(
+        const SectorTopologyMap& map,
+        SectorTopologyCoordPoint point,
+        int& outVertexId,
+        std::string* outError)
+{
+    outVertexId = FindVertexAtPoint(map, point);
+    if (!IsValidSectorTopologyId(outVertexId)) {
+        SetError(outError, "Could not resolve cut endpoint vertex after splitting boundary.");
+        return false;
+    }
+    return true;
+}
+
+bool SplitBoundaryEndpointIfNeeded(
+        SectorTopologyMap& candidate,
+        const ResolvedBoundaryCutPoint& point,
+        int& outVertexId,
+        std::string* outError)
+{
+    outVertexId = -1;
+    if (!point.requiresSplit) {
+        outVertexId = point.sourceVertexId;
+        return true;
+    }
+
+    SectorTopologySplitLineResult split;
+    if (!SplitSectorTopologyLineDefAtPoint(candidate, point.sourceLineDefId, point.point, &split, outError)) {
+        return false;
+    }
+    outVertexId = split.newVertexId;
+    return true;
+}
+
+int FindVertexIndexInLoop(const SectorTopologyLoop& loop, int vertexId)
+{
+    const auto found = std::find(loop.vertexIds.begin(), loop.vertexIds.end(), vertexId);
+    if (found == loop.vertexIds.end()) {
+        return -1;
+    }
+    return static_cast<int>(std::distance(loop.vertexIds.begin(), found));
+}
+
+std::vector<int> BuildLoopVertexPath(const SectorTopologyLoop& loop, int startIndex, int endIndex)
+{
+    std::vector<int> path;
+    if (loop.vertexIds.empty() || startIndex < 0 || endIndex < 0) {
+        return path;
+    }
+    const int count = static_cast<int>(loop.vertexIds.size());
+    int index = startIndex;
+    while (true) {
+        path.push_back(loop.vertexIds[static_cast<size_t>(index)]);
+        if (index == endIndex) {
+            break;
+        }
+        index = (index + 1) % count;
+        if (index == startIndex) {
+            path.clear();
+            break;
+        }
+    }
+    return path;
+}
+
+const SectorTopologyLoopEdge* FindDirectedLoopEdge(
+        const SectorTopologyLoop& loop,
+        int startVertexId,
+        int endVertexId)
+{
+    const SectorTopologyLoopEdge* found = nullptr;
+    for (const SectorTopologyLoopEdge& edge : loop.edges) {
+        if (edge.startVertexId == startVertexId && edge.endVertexId == endVertexId) {
+            if (found != nullptr) {
+                return nullptr;
+            }
+            found = &edge;
+        }
+    }
+    return found;
+}
+
+bool AssignPathSideDefsToSector(
+        SectorTopologyMap& map,
+        const SectorTopologyLoop& outer,
+        const std::vector<int>& path,
+        int sourceSectorId,
+        int targetSectorId,
+        std::string* outError)
+{
+    for (size_t i = 0; i + 1 < path.size(); ++i) {
+        const SectorTopologyLoopEdge* edge = FindDirectedLoopEdge(outer, path[i], path[i + 1]);
+        if (edge == nullptr) {
+            SetError(outError, "Cut boundary sidedef transfer is ambiguous.");
+            return false;
+        }
+        SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, edge->sideDefId);
+        if (sideDef == nullptr || sideDef->sectorId != sourceSectorId) {
+            SetError(outError, "Cut boundary sidedef transfer is ambiguous.");
+            return false;
+        }
+        sideDef->sectorId = targetSectorId;
+    }
+    return true;
+}
+
+bool ValidateCutSegmentAgainstExistingTopology(
+        const SectorTopologyMap& map,
+        int firstVertexId,
+        int secondVertexId,
+        std::string* outError)
+{
+    const SectorTopologyVertex* first = FindSectorTopologyVertex(map, firstVertexId);
+    const SectorTopologyVertex* second = FindSectorTopologyVertex(map, secondVertexId);
+    if (first == nullptr || second == nullptr) {
+        SetError(outError, "Cut endpoints are invalid.");
+        return false;
+    }
+    const SectorTopologyCoordPoint a = VertexPoint(*first);
+    const SectorTopologyCoordPoint b = VertexPoint(*second);
+
+    for (const SectorTopologyVertex& vertex : map.vertices) {
+        if (vertex.id == firstVertexId || vertex.id == secondVertexId) {
+            continue;
+        }
+        if (SectorTopologyPointOnSegment(VertexPoint(vertex), a, b)) {
+            SetError(outError, "Cut must not pass through an unrelated topology vertex.");
+            return false;
+        }
+    }
+
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        const SectorTopologyVertex* lineStart = nullptr;
+        const SectorTopologyVertex* lineEnd = nullptr;
+        if (!GetSectorTopologyLineVertices(map, lineDef, lineStart, lineEnd)) {
+            SetError(outError, "Could not resolve existing topology linedef.");
+            return false;
+        }
+        const SectorTopologySegmentIntersectionKind intersection =
+                SectorTopologySegmentIntersection(a, b, VertexPoint(*lineStart), VertexPoint(*lineEnd));
+        if (intersection == SectorTopologySegmentIntersectionKind::None) {
+            continue;
+        }
+        if (intersection == SectorTopologySegmentIntersectionKind::CollinearOverlap) {
+            SetError(outError, "Cut must not align with existing topology.");
+            return false;
+        }
+        if (intersection == SectorTopologySegmentIntersectionKind::Proper) {
+            SetError(outError, "Cut must not cross existing topology.");
+            return false;
+        }
+        const bool touchesAtCutEndpoint =
+                lineDef.startVertexId == firstVertexId
+                || lineDef.endVertexId == firstVertexId
+                || lineDef.startVertexId == secondVertexId
+                || lineDef.endVertexId == secondVertexId;
+        if (!touchesAtCutEndpoint) {
+            SetError(outError, "Cut must not touch existing topology away from its endpoints.");
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ValidateCutInteriorInsideSelectedSector(
+        const SectorTopologyMap& map,
+        const SectorTopologyLoopSet& loops,
+        SectorTopologyCoordPoint first,
+        SectorTopologyCoordPoint second,
+        std::string* outError)
+{
+    const int64_t midpointXSum = static_cast<int64_t>(first.x) + static_cast<int64_t>(second.x);
+    const int64_t midpointYSum = static_cast<int64_t>(first.y) + static_cast<int64_t>(second.y);
+    if ((midpointXSum % 2) != 0 || (midpointYSum % 2) != 0) {
+        return true;
+    }
+
+    const SectorTopologyCoordPoint midpoint{
+            static_cast<SectorCoord>(midpointXSum / 2),
+            static_cast<SectorCoord>(midpointYSum / 2)
+    };
+
+    std::vector<SectorTopologyCoordPoint> outerPoints;
+    if (!LoopPoints(map, loops.outer, outerPoints, outError)) {
+        return false;
+    }
+    if (SectorTopologyClassifyPointInPolygon(outerPoints, midpoint)
+            != SectorTopologyPointContainment::Inside) {
+        SetError(outError, "Cut must stay inside the selected sector.");
+        return false;
+    }
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        std::vector<SectorTopologyCoordPoint> holePoints;
+        if (!LoopPoints(map, hole, holePoints, outError)) {
+            return false;
+        }
+        if (SectorTopologyClassifyPointInPolygon(holePoints, midpoint)
+                != SectorTopologyPointContainment::Outside) {
+            SetError(outError, "Cut must not enter a selected sector hole.");
+            return false;
+        }
+    }
+    return true;
+}
+
+bool BuildPathPoints(
+        const SectorTopologyMap& map,
+        const std::vector<int>& path,
+        std::vector<SectorTopologyCoordPoint>& outPoints,
+        std::string* outError)
+{
+    outPoints.clear();
+    outPoints.reserve(path.size());
+    for (int vertexId : path) {
+        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(map, vertexId);
+        if (vertex == nullptr) {
+            SetError(outError, "Could not resolve cut output vertex.");
+            return false;
+        }
+        outPoints.push_back(VertexPoint(*vertex));
+    }
+    return true;
+}
+
+bool AssignHoleLoopToResultSector(
+        SectorTopologyMap& map,
+        const SectorTopologyLoop& hole,
+        const std::vector<SectorTopologyCoordPoint>& firstPolygon,
+        const std::vector<SectorTopologyCoordPoint>& secondPolygon,
+        SectorTopologyCoordPoint cutA,
+        SectorTopologyCoordPoint cutB,
+        int firstSectorId,
+        int secondSectorId,
+        std::string* outError)
+{
+    std::vector<SectorTopologyCoordPoint> holePoints;
+    if (!LoopPoints(map, hole, holePoints, outError)) {
+        return false;
+    }
+
+    for (size_t i = 0; i < holePoints.size(); ++i) {
+        const SectorTopologyCoordPoint a = holePoints[i];
+        const SectorTopologyCoordPoint b = holePoints[(i + 1) % holePoints.size()];
+        if (SectorTopologySegmentIntersection(a, b, cutA, cutB)
+                != SectorTopologySegmentIntersectionKind::None) {
+            SetError(outError, "Cut must not touch or cross a hole boundary.");
+            return false;
+        }
+    }
+
+    bool allInFirst = true;
+    bool allInSecond = true;
+    for (SectorTopologyCoordPoint point : holePoints) {
+        const SectorTopologyPointContainment firstContainment =
+                SectorTopologyClassifyPointInPolygon(firstPolygon, point);
+        const SectorTopologyPointContainment secondContainment =
+                SectorTopologyClassifyPointInPolygon(secondPolygon, point);
+        if (firstContainment == SectorTopologyPointContainment::Boundary
+                || secondContainment == SectorTopologyPointContainment::Boundary) {
+            SetError(outError, "Cut leaves a hole ambiguously on a result boundary.");
+            return false;
+        }
+        allInFirst = allInFirst && firstContainment == SectorTopologyPointContainment::Inside;
+        allInSecond = allInSecond && secondContainment == SectorTopologyPointContainment::Inside;
+    }
+
+    if (allInFirst == allInSecond) {
+        SetError(outError, "Cut cannot assign a hole unambiguously to one result sector.");
+        return false;
+    }
+
+    const int targetSectorId = allInFirst ? firstSectorId : secondSectorId;
+    for (const SectorTopologyLoopEdge& edge : hole.edges) {
+        SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, edge.sideDefId);
+        if (sideDef == nullptr || sideDef->sectorId != firstSectorId) {
+            SetError(outError, "Cut hole sidedef transfer is ambiguous.");
+            return false;
+        }
+        sideDef->sectorId = targetSectorId;
+    }
+    return true;
+}
+
+void AddSideDefSectorId(
+        const SectorTopologyMap& map,
+        int sideDefId,
+        std::unordered_set<int>& sectorIds)
+{
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, sideDefId);
+    if (sideDef != nullptr && IsValidSectorTopologyId(sideDef->sectorId)) {
+        sectorIds.insert(sideDef->sectorId);
+    }
+}
+
+bool SameUvSettings(SectorTopologyUvSettings a, SectorTopologyUvSettings b)
+{
+    return a.scale.x == b.scale.x
+            && a.scale.y == b.scale.y
+            && a.offset.x == b.offset.x
+            && a.offset.y == b.offset.y;
+}
+
+bool SameWallPartSettings(
+        const SectorTopologyWallPartSettings& a,
+        const SectorTopologyWallPartSettings& b)
+{
+    return a.textureId == b.textureId && SameUvSettings(a.uv, b.uv);
+}
+
+bool SameSideDefMergeSettings(
+        const SectorTopologySideDef& a,
+        const SectorTopologySideDef& b)
+{
+    return a.sectorId == b.sectorId
+            && SameWallPartSettings(a.wall, b.wall)
+            && SameWallPartSettings(a.lower, b.lower)
+            && SameWallPartSettings(a.upper, b.upper);
+}
+
+struct DirectedSideDefCopy {
+    SectorTopologySideDef sideDef;
+    int fromVertexId = -1;
+    int toVertexId = -1;
+};
+
+bool AddDirectedSideDefCopy(
+        const SectorTopologyMap& map,
+        const SectorTopologyLineDef& lineDef,
+        int sideDefId,
+        SectorTopologySideKind expectedSide,
+        std::vector<DirectedSideDefCopy>& sides,
+        std::string* outError)
+{
+    if (sideDefId == -1) {
+        return true;
+    }
+
+    SectorTopologySideDef sideDef;
+    if (!FindSideDefCopy(map, sideDefId, expectedSide, sideDef, outError)) {
+        return false;
+    }
+    if (sideDef.lineDefId != lineDef.id) {
+        SetError(outError, "Topology linedef references a sidedef owned by another linedef");
+        return false;
+    }
+
+    DirectedSideDefCopy directed;
+    directed.sideDef = sideDef;
+    if (expectedSide == SectorTopologySideKind::Front) {
+        directed.fromVertexId = lineDef.startVertexId;
+        directed.toVertexId = lineDef.endVertexId;
+    } else {
+        directed.fromVertexId = lineDef.endVertexId;
+        directed.toVertexId = lineDef.startVertexId;
+    }
+    sides.push_back(std::move(directed));
+    return true;
+}
+
+const DirectedSideDefCopy* FindDirectedSide(
+        const std::vector<DirectedSideDefCopy>& sides,
+        const std::vector<bool>& used,
+        int fromVertexId,
+        int toVertexId)
+{
+    const DirectedSideDefCopy* found = nullptr;
+    for (size_t i = 0; i < sides.size(); ++i) {
+        if (used[i]
+                || sides[i].fromVertexId != fromVertexId
+                || sides[i].toVertexId != toVertexId) {
+            continue;
+        }
+        if (found != nullptr) {
+            return nullptr;
+        }
+        found = &sides[i];
+    }
+    return found;
+}
+
+int FindDirectedSideIndex(
+        const std::vector<DirectedSideDefCopy>& sides,
+        const DirectedSideDefCopy* side)
+{
+    if (side == nullptr) {
+        return -1;
+    }
+    for (size_t i = 0; i < sides.size(); ++i) {
+        if (&sides[i] == side) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+struct DissolveReplacementPlan {
+    int startVertexId = -1;
+    int endVertexId = -1;
+    bool hasFront = false;
+    bool hasBack = false;
+    SectorTopologySideDef frontSideDef;
+    SectorTopologySideDef backSideDef;
+};
+
+bool TryBuildDissolveReplacementPlan(
+        const std::vector<DirectedSideDefCopy>& sides,
+        int removedVertexId,
+        int startVertexId,
+        int endVertexId,
+        DissolveReplacementPlan& outPlan,
+        std::string* outError)
+{
+    if (outError != nullptr) {
+        outError->clear();
+    }
+    std::vector<bool> used(sides.size(), false);
+    outPlan = DissolveReplacementPlan{};
+    outPlan.startVertexId = startVertexId;
+    outPlan.endVertexId = endVertexId;
+
+    auto mergeChain = [&](
+            int firstFrom,
+            int firstTo,
+            int secondFrom,
+            int secondTo,
+            SectorTopologySideDef& outSideDef) {
+        const DirectedSideDefCopy* first = FindDirectedSide(sides, used, firstFrom, firstTo);
+        if (first == nullptr) {
+            return false;
+        }
+        const int firstIndex = FindDirectedSideIndex(sides, first);
+        if (firstIndex < 0) {
+            return false;
+        }
+        used[static_cast<size_t>(firstIndex)] = true;
+
+        const DirectedSideDefCopy* second = FindDirectedSide(sides, used, secondFrom, secondTo);
+        if (second == nullptr) {
+            used[static_cast<size_t>(firstIndex)] = false;
+            return false;
+        }
+        const int secondIndex = FindDirectedSideIndex(sides, second);
+        if (secondIndex < 0) {
+            used[static_cast<size_t>(firstIndex)] = false;
+            return false;
+        }
+
+        if (!SameSideDefMergeSettings(first->sideDef, second->sideDef)) {
+            used[static_cast<size_t>(firstIndex)] = false;
+            SetError(outError, "Dissolve would merge sidedefs with different sector, material, or UV settings.");
+            return false;
+        }
+
+        used[static_cast<size_t>(secondIndex)] = true;
+        outSideDef = first->sideDef;
+        return true;
+    };
+
+    std::string mergeError;
+    if (mergeChain(startVertexId, removedVertexId, removedVertexId, endVertexId, outPlan.frontSideDef)) {
+        outPlan.hasFront = true;
+    } else if (outError != nullptr && !outError->empty()) {
+        mergeError = *outError;
+        outError->clear();
+    }
+
+    if (mergeChain(endVertexId, removedVertexId, removedVertexId, startVertexId, outPlan.backSideDef)) {
+        outPlan.hasBack = true;
+    } else if (outError != nullptr && !outError->empty()) {
+        mergeError = *outError;
+        outError->clear();
+    }
+
+    for (bool wasUsed : used) {
+        if (!wasUsed) {
+            if (!mergeError.empty()) {
+                SetError(outError, mergeError);
+            } else {
+                SetError(outError, "Dissolve sidedef transfer is ambiguous.");
+            }
+            return false;
+        }
+    }
+
+    if (!outPlan.hasFront && !outPlan.hasBack) {
+        SetError(outError, "Dissolve vertex has no sidedef chain to preserve.");
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 bool MoveSectorTopologyVertex(
@@ -142,6 +1136,299 @@ bool MoveSectorTopologyVertex(
     return true;
 }
 
+bool MergeSectorTopologyVertices(
+        SectorTopologyMap& map,
+        int sourceVertexId,
+        int targetVertexId,
+        SectorTopologyMergeVerticesResult* outResult,
+        std::string* outError)
+{
+    if (outResult != nullptr) {
+        *outResult = SectorTopologyMergeVerticesResult{};
+    }
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    if (!IsValidSectorTopologyId(sourceVertexId)) {
+        SetError(outError, "Invalid source topology vertex ID");
+        return false;
+    }
+    if (!IsValidSectorTopologyId(targetVertexId)) {
+        SetError(outError, "Invalid target topology vertex ID");
+        return false;
+    }
+    if (sourceVertexId == targetVertexId) {
+        SetError(outError, "Cannot merge topology vertex into itself.");
+        return false;
+    }
+
+    if (FindSectorTopologyVertex(map, sourceVertexId) == nullptr) {
+        SetError(outError, "Source topology vertex not found");
+        return false;
+    }
+    if (FindSectorTopologyVertex(map, targetVertexId) == nullptr) {
+        SetError(outError, "Target topology vertex not found");
+        return false;
+    }
+
+    std::unordered_set<int> affectedSectorIds;
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        if (lineDef.startVertexId == sourceVertexId || lineDef.endVertexId == sourceVertexId) {
+            AddSideDefSectorId(map, lineDef.frontSideDefId, affectedSectorIds);
+            AddSideDefSectorId(map, lineDef.backSideDefId, affectedSectorIds);
+        }
+    }
+
+    SectorTopologyMap candidate = map;
+    for (SectorTopologyLineDef& lineDef : candidate.lineDefs) {
+        if (lineDef.startVertexId == sourceVertexId) {
+            lineDef.startVertexId = targetVertexId;
+        }
+        if (lineDef.endVertexId == sourceVertexId) {
+            lineDef.endVertexId = targetVertexId;
+        }
+    }
+
+    candidate.vertices.erase(
+            std::remove_if(
+                    candidate.vertices.begin(),
+                    candidate.vertices.end(),
+                    [sourceVertexId](const SectorTopologyVertex& vertex) {
+                        return vertex.id == sourceVertexId;
+                    }),
+            candidate.vertices.end());
+
+    if (!ValidateNoCollapsedLineDefs(candidate, outError)) {
+        return false;
+    }
+    if (!ValidateNoDuplicatePhysicalLineDefs(candidate, outError)) {
+        return false;
+    }
+
+    const std::vector<SectorTopologyValidationIssue> issues = ValidateSectorTopologyMap(candidate);
+    if (HasSectorTopologyValidationErrors(issues)) {
+        SetError(outError, FirstValidationError(issues));
+        return false;
+    }
+
+    for (int sectorId : affectedSectorIds) {
+        SectorTopologyLoopSet loops;
+        std::vector<SectorTopologyValidationIssue> loopIssues;
+        if (!ExtractSectorTopologyLoops(candidate, sectorId, loops, &loopIssues)) {
+            SetError(outError, FirstValidationError(loopIssues));
+            return false;
+        }
+    }
+
+    map = std::move(candidate);
+    if (outResult != nullptr) {
+        outResult->mergedVertexId = targetVertexId;
+        outResult->removedVertexId = sourceVertexId;
+    }
+    return true;
+}
+
+bool DissolveSectorTopologyVertex(
+        SectorTopologyMap& map,
+        int vertexId,
+        SectorTopologyDissolveVertexResult* outResult,
+        std::string* outError)
+{
+    if (outResult != nullptr) {
+        *outResult = SectorTopologyDissolveVertexResult{};
+    }
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    if (!IsValidSectorTopologyId(vertexId)) {
+        SetError(outError, "Invalid topology vertex ID");
+        return false;
+    }
+    if (FindSectorTopologyVertex(map, vertexId) == nullptr) {
+        SetError(outError, "Topology vertex not found");
+        return false;
+    }
+
+    std::vector<SectorTopologyLineDef> incidentLines;
+    incidentLines.reserve(2);
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        if (lineDef.startVertexId == vertexId || lineDef.endVertexId == vertexId) {
+            incidentLines.push_back(lineDef);
+        }
+    }
+
+    if (incidentLines.size() < 2) {
+        SetError(outError, "Dissolve requires exactly two incident topology linedefs.");
+        return false;
+    }
+    if (incidentLines.size() > 2) {
+        SetError(outError, "Cannot dissolve a branching topology vertex.");
+        return false;
+    }
+
+    const SectorTopologyLineDef& firstLine = incidentLines[0];
+    const SectorTopologyLineDef& secondLine = incidentLines[1];
+    const int firstOtherVertexId = firstLine.startVertexId == vertexId
+            ? firstLine.endVertexId
+            : firstLine.startVertexId;
+    const int secondOtherVertexId = secondLine.startVertexId == vertexId
+            ? secondLine.endVertexId
+            : secondLine.startVertexId;
+    if (firstOtherVertexId == vertexId || secondOtherVertexId == vertexId) {
+        SetError(outError, "Dissolve would collapse an incident topology linedef.");
+        return false;
+    }
+    if (firstOtherVertexId == secondOtherVertexId) {
+        SetError(outError, "Dissolve replacement linedef would collapse.");
+        return false;
+    }
+    if (FindSectorTopologyVertex(map, firstOtherVertexId) == nullptr
+            || FindSectorTopologyVertex(map, secondOtherVertexId) == nullptr) {
+        SetError(outError, "Dissolve incident linedef endpoint is missing.");
+        return false;
+    }
+
+    const LineEndpointPair replacementPair{
+            std::min(firstOtherVertexId, secondOtherVertexId),
+            std::max(firstOtherVertexId, secondOtherVertexId)
+    };
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        if (lineDef.id == firstLine.id || lineDef.id == secondLine.id) {
+            continue;
+        }
+        if (MakeLineEndpointPair(lineDef) == replacementPair) {
+            SetError(outError, "Dissolve would create duplicate physical linedefs.");
+            return false;
+        }
+    }
+
+    std::vector<DirectedSideDefCopy> sides;
+    sides.reserve(4);
+    if (!AddDirectedSideDefCopy(map, firstLine, firstLine.frontSideDefId, SectorTopologySideKind::Front, sides, outError)
+            || !AddDirectedSideDefCopy(map, firstLine, firstLine.backSideDefId, SectorTopologySideKind::Back, sides, outError)
+            || !AddDirectedSideDefCopy(map, secondLine, secondLine.frontSideDefId, SectorTopologySideKind::Front, sides, outError)
+            || !AddDirectedSideDefCopy(map, secondLine, secondLine.backSideDefId, SectorTopologySideKind::Back, sides, outError)) {
+        return false;
+    }
+
+    std::unordered_set<int> affectedSectorIds;
+    for (const DirectedSideDefCopy& side : sides) {
+        if (IsValidSectorTopologyId(side.sideDef.sectorId)) {
+            affectedSectorIds.insert(side.sideDef.sectorId);
+        }
+    }
+
+    const int preferredStart = firstLine.id <= secondLine.id ? firstOtherVertexId : secondOtherVertexId;
+    const int preferredEnd = firstLine.id <= secondLine.id ? secondOtherVertexId : firstOtherVertexId;
+    DissolveReplacementPlan plan;
+    std::string planError;
+    if (!TryBuildDissolveReplacementPlan(sides, vertexId, preferredStart, preferredEnd, plan, &planError)
+            && !TryBuildDissolveReplacementPlan(sides, vertexId, preferredEnd, preferredStart, plan, &planError)) {
+        SetError(outError, planError.empty() ? "Dissolve sidedef transfer is ambiguous." : planError);
+        return false;
+    }
+
+    SectorTopologyMap candidate = map;
+    SectorTopologyDissolveVertexResult result;
+    result.removedVertexId = vertexId;
+    result.replacementLineDefId = AllocateSectorTopologyLineDefId(candidate);
+    if (!RequireAllocatedId(result.replacementLineDefId, "linedef", outError)) {
+        return false;
+    }
+
+    candidate.lineDefs.push_back(SectorTopologyLineDef{
+            result.replacementLineDefId,
+            plan.startVertexId,
+            plan.endVertexId,
+            -1,
+            -1
+    });
+    SectorTopologyLineDef* replacementLine =
+            FindSectorTopologyLineDef(candidate, result.replacementLineDefId);
+    if (replacementLine == nullptr) {
+        SetError(outError, "Could not resolve replacement topology linedef");
+        return false;
+    }
+
+    if (plan.hasFront) {
+        result.replacementFrontSideDefId = AllocateSectorTopologySideDefId(candidate);
+        if (!RequireAllocatedId(result.replacementFrontSideDefId, "sidedef", outError)) {
+            return false;
+        }
+        SectorTopologySideDef replacement = DuplicateSideDef(
+                plan.frontSideDef,
+                result.replacementFrontSideDefId,
+                result.replacementLineDefId);
+        replacement.side = SectorTopologySideKind::Front;
+        candidate.sideDefs.push_back(std::move(replacement));
+        replacementLine->frontSideDefId = result.replacementFrontSideDefId;
+    }
+
+    if (plan.hasBack) {
+        result.replacementBackSideDefId = AllocateSectorTopologySideDefId(candidate);
+        if (!RequireAllocatedId(result.replacementBackSideDefId, "sidedef", outError)) {
+            return false;
+        }
+        SectorTopologySideDef replacement = DuplicateSideDef(
+                plan.backSideDef,
+                result.replacementBackSideDefId,
+                result.replacementLineDefId);
+        replacement.side = SectorTopologySideKind::Back;
+        candidate.sideDefs.push_back(std::move(replacement));
+        replacementLine->backSideDefId = result.replacementBackSideDefId;
+    }
+
+    for (const DirectedSideDefCopy& side : sides) {
+        RemoveSideDefById(candidate, side.sideDef.id);
+    }
+    candidate.lineDefs.erase(
+            std::remove_if(
+                    candidate.lineDefs.begin(),
+                    candidate.lineDefs.end(),
+                    [&firstLine, &secondLine](const SectorTopologyLineDef& lineDef) {
+                        return lineDef.id == firstLine.id || lineDef.id == secondLine.id;
+                    }),
+            candidate.lineDefs.end());
+    candidate.vertices.erase(
+            std::remove_if(
+                    candidate.vertices.begin(),
+                    candidate.vertices.end(),
+                    [vertexId](const SectorTopologyVertex& vertex) {
+                        return vertex.id == vertexId;
+                    }),
+            candidate.vertices.end());
+
+    if (!ValidateNoCollapsedLineDefs(candidate, outError)) {
+        return false;
+    }
+    if (!ValidateNoDuplicatePhysicalLineDefs(candidate, outError)) {
+        return false;
+    }
+
+    const std::vector<SectorTopologyValidationIssue> issues = ValidateSectorTopologyMap(candidate);
+    if (HasSectorTopologyValidationErrors(issues)) {
+        SetError(outError, FirstValidationError(issues));
+        return false;
+    }
+
+    for (int sectorId : affectedSectorIds) {
+        SectorTopologyLoopSet loops;
+        std::vector<SectorTopologyValidationIssue> loopIssues;
+        if (!ExtractSectorTopologyLoops(candidate, sectorId, loops, &loopIssues)) {
+            SetError(outError, FirstValidationError(loopIssues));
+            return false;
+        }
+    }
+
+    map = std::move(candidate);
+    if (outResult != nullptr) {
+        *outResult = result;
+    }
+    return true;
+}
+
 bool SplitSectorTopologyLineDef(
         SectorTopologyMap& map,
         int lineDefId,
@@ -190,11 +1477,71 @@ bool SplitSectorTopologyLineDef(
         return false;
     }
 
+    const SectorTopologyCoordPoint midpoint{
+            static_cast<SectorCoord>(midpointX),
+            static_cast<SectorCoord>(midpointY)
+    };
+    return SplitSectorTopologyLineDefAtPoint(map, lineDefId, midpoint, outResult, outError);
+}
+
+bool SplitSectorTopologyLineDefAtPoint(
+        SectorTopologyMap& map,
+        int lineDefId,
+        SectorTopologyCoordPoint point,
+        SectorTopologySplitLineResult* outResult,
+        std::string* outError)
+{
+    if (outResult != nullptr) {
+        *outResult = SectorTopologySplitLineResult{};
+    }
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    if (!IsValidSectorTopologyId(lineDefId)) {
+        SetError(outError, "Invalid topology linedef ID");
+        return false;
+    }
+
+    const SectorTopologyLineDef* existing = FindSectorTopologyLineDef(map, lineDefId);
+    if (existing == nullptr) {
+        SetError(outError, "Topology linedef not found");
+        return false;
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(map, *existing, start, end)) {
+        SetError(outError, "Topology linedef endpoints are invalid");
+        return false;
+    }
+
+    const SectorTopologyCoordPoint startPoint{start->x, start->y};
+    const SectorTopologyCoordPoint endPoint{end->x, end->y};
+    if (!SectorTopologyPointOnSegment(point, startPoint, endPoint)) {
+        SetError(outError, "Split point must lie exactly on the topology linedef.");
+        return false;
+    }
+    if (!SectorTopologyPointStrictlyInsideSegment(point, startPoint, endPoint)) {
+        SetError(outError, "Split point cannot be a linedef endpoint.");
+        return false;
+    }
+
+    for (const SectorTopologyVertex& vertex : map.vertices) {
+        if (vertex.x == point.x && vertex.y == point.y) {
+            SetError(outError, "Split point is already occupied by a topology vertex.");
+            return false;
+        }
+    }
+
+    SectorTopologyMap candidate = map;
+    SectorTopologySplitLineResult result;
+
     SectorTopologySideDef originalFront;
     SectorTopologySideDef originalBack;
     std::string error;
     const bool hasFront = FindSideDefCopy(
-            map,
+            candidate,
             existing->frontSideDefId,
             SectorTopologySideKind::Front,
             originalFront,
@@ -204,7 +1551,7 @@ bool SplitSectorTopologyLineDef(
         return false;
     }
     const bool hasBack = FindSideDefCopy(
-            map,
+            candidate,
             existing->backSideDefId,
             SectorTopologySideKind::Back,
             originalBack,
@@ -214,17 +1561,15 @@ bool SplitSectorTopologyLineDef(
         return false;
     }
 
-    SectorTopologyMap candidate = map;
-    SectorTopologySplitLineResult result;
-
-    result.midpointVertexId = AllocateSectorTopologyVertexId(candidate);
-    if (!RequireAllocatedId(result.midpointVertexId, "vertex", outError)) {
+    result.newVertexId = AllocateSectorTopologyVertexId(candidate);
+    if (!RequireAllocatedId(result.newVertexId, "vertex", outError)) {
         return false;
     }
+    result.midpointVertexId = result.newVertexId;
     candidate.vertices.push_back(SectorTopologyVertex{
-            result.midpointVertexId,
-            static_cast<SectorCoord>(midpointX),
-            static_cast<SectorCoord>(midpointY)
+            result.newVertexId,
+            point.x,
+            point.y
     });
 
     result.firstLineDefId = AllocateSectorTopologyLineDefId(candidate);
@@ -234,7 +1579,7 @@ bool SplitSectorTopologyLineDef(
     candidate.lineDefs.push_back(SectorTopologyLineDef{
             result.firstLineDefId,
             existing->startVertexId,
-            result.midpointVertexId,
+            result.newVertexId,
             -1,
             -1
     });
@@ -245,7 +1590,7 @@ bool SplitSectorTopologyLineDef(
     }
     candidate.lineDefs.push_back(SectorTopologyLineDef{
             result.secondLineDefId,
-            result.midpointVertexId,
+            result.newVertexId,
             existing->endVertexId,
             -1,
             -1
@@ -441,6 +1786,415 @@ bool DeleteSectorTopologySector(
     map = std::move(candidate);
     if (outResult != nullptr) {
         *outResult = result;
+    }
+    return true;
+}
+
+bool JoinSectorTopologySectors(
+        SectorTopologyMap& map,
+        int winnerSectorId,
+        int otherSectorId,
+        SectorTopologyJoinSectorsResult* outResult,
+        std::string* outError)
+{
+    if (outResult != nullptr) {
+        *outResult = SectorTopologyJoinSectorsResult{};
+    }
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    if (!IsValidSectorTopologyId(winnerSectorId)) {
+        SetError(outError, "Invalid winning topology sector ID");
+        return false;
+    }
+    if (!IsValidSectorTopologyId(otherSectorId)) {
+        SetError(outError, "Invalid other topology sector ID");
+        return false;
+    }
+    if (winnerSectorId == otherSectorId) {
+        SetError(outError, "Cannot join a topology sector with itself.");
+        return false;
+    }
+    if (FindSectorTopologySector(map, winnerSectorId) == nullptr) {
+        SetError(outError, "Winning topology sector not found");
+        return false;
+    }
+    if (FindSectorTopologySector(map, otherSectorId) == nullptr) {
+        SetError(outError, "Other topology sector not found");
+        return false;
+    }
+
+    const std::vector<SectorTopologyValidationIssue> initialIssues = ValidateSectorTopologyMap(map);
+    if (HasSectorTopologyValidationErrors(initialIssues)) {
+        SetError(outError, FirstValidationError(initialIssues));
+        return false;
+    }
+
+    std::vector<SharedSectorBoundaryLine> sharedLines;
+    if (!CollectSharedSectorBoundaryLines(
+                map,
+                winnerSectorId,
+                otherSectorId,
+                sharedLines,
+                outError)
+            || !ValidateSingleSharedBoundaryChain(sharedLines, outError)) {
+        return false;
+    }
+
+    std::unordered_set<int> sharedLineDefIds;
+    std::unordered_set<int> removedSideDefIds;
+    sharedLineDefIds.reserve(sharedLines.size());
+    removedSideDefIds.reserve(sharedLines.size() * 2);
+    for (const SharedSectorBoundaryLine& shared : sharedLines) {
+        sharedLineDefIds.insert(shared.lineDefId);
+        removedSideDefIds.insert(shared.winnerSideDefId);
+        removedSideDefIds.insert(shared.otherSideDefId);
+    }
+
+    SectorTopologyMap candidate = map;
+    for (SectorTopologyLineDef& lineDef : candidate.lineDefs) {
+        if (removedSideDefIds.find(lineDef.frontSideDefId) != removedSideDefIds.end()) {
+            lineDef.frontSideDefId = -1;
+        }
+        if (removedSideDefIds.find(lineDef.backSideDefId) != removedSideDefIds.end()) {
+            lineDef.backSideDefId = -1;
+        }
+    }
+
+    candidate.sideDefs.erase(
+            std::remove_if(
+                    candidate.sideDefs.begin(),
+                    candidate.sideDefs.end(),
+                    [&removedSideDefIds](const SectorTopologySideDef& sideDef) {
+                        return removedSideDefIds.find(sideDef.id) != removedSideDefIds.end();
+                    }),
+            candidate.sideDefs.end());
+
+    for (SectorTopologySideDef& sideDef : candidate.sideDefs) {
+        if (sideDef.sectorId == otherSectorId) {
+            sideDef.sectorId = winnerSectorId;
+        }
+    }
+
+    candidate.sectors.erase(
+            std::remove_if(
+                    candidate.sectors.begin(),
+                    candidate.sectors.end(),
+                    [otherSectorId](const SectorTopologySector& sector) {
+                        return sector.id == otherSectorId;
+                    }),
+            candidate.sectors.end());
+
+    candidate.lineDefs.erase(
+            std::remove_if(
+                    candidate.lineDefs.begin(),
+                    candidate.lineDefs.end(),
+                    [&sharedLineDefIds](const SectorTopologyLineDef& lineDef) {
+                        return sharedLineDefIds.find(lineDef.id) != sharedLineDefIds.end()
+                               && lineDef.frontSideDefId == -1
+                               && lineDef.backSideDefId == -1;
+                    }),
+            candidate.lineDefs.end());
+
+    RemoveOrphanTopologyVertices(candidate);
+
+    if (!ValidateNoDuplicatePhysicalLineDefs(candidate, outError)) {
+        return false;
+    }
+
+    const std::vector<SectorTopologyValidationIssue> issues = ValidateSectorTopologyMap(candidate);
+    if (HasSectorTopologyValidationErrors(issues)) {
+        SetError(outError, FirstValidationError(issues));
+        return false;
+    }
+
+    SectorTopologyLoopSet loops;
+    std::vector<SectorTopologyValidationIssue> loopIssues;
+    if (!ExtractSectorTopologyLoops(candidate, winnerSectorId, loops, &loopIssues)) {
+        SetError(outError, FirstValidationError(loopIssues));
+        return false;
+    }
+
+    SectorTopologyJoinSectorsResult result;
+    result.survivingSectorId = winnerSectorId;
+    result.removedSectorId = otherSectorId;
+
+    map = std::move(candidate);
+    if (outResult != nullptr) {
+        *outResult = result;
+    }
+    if (outError != nullptr) {
+        outError->clear();
+    }
+    return true;
+}
+
+bool ValidateSectorTopologySectorBoundaryCutPoint(
+        const SectorTopologyMap& map,
+        int sectorId,
+        SectorTopologyBoundaryCutPoint point,
+        std::string* outError)
+{
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    if (!IsValidSectorTopologyId(sectorId)) {
+        SetError(outError, "Invalid topology sector ID");
+        return false;
+    }
+    if (FindSectorTopologySector(map, sectorId) == nullptr) {
+        SetError(outError, "Topology sector not found");
+        return false;
+    }
+
+    SectorTopologyLoopSet loops;
+    std::vector<SectorTopologyValidationIssue> loopIssues;
+    if (!ExtractSectorTopologyLoops(map, sectorId, loops, &loopIssues)) {
+        SetError(outError, FirstValidationError(loopIssues));
+        return false;
+    }
+
+    ResolvedBoundaryCutPoint resolved;
+    if (!ResolveBoundaryCutPointOnOuterLoop(map, loops.outer, sectorId, point, resolved, outError)) {
+        return false;
+    }
+    return ValidateResolvedBoundaryCutPointEndpoint(map, loops.outer, sectorId, resolved, outError);
+}
+
+bool CutSectorTopologySectorBetweenBoundaryPoints(
+        SectorTopologyMap& map,
+        int sectorId,
+        SectorTopologyBoundaryCutPoint firstPoint,
+        SectorTopologyBoundaryCutPoint secondPoint,
+        SectorTopologyCutSectorResult* outResult,
+        std::string* outError)
+{
+    if (outResult != nullptr) {
+        *outResult = SectorTopologyCutSectorResult{};
+    }
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    if (!IsValidSectorTopologyId(sectorId)) {
+        SetError(outError, "Invalid topology sector ID");
+        return false;
+    }
+    const SectorTopologySector* originalSector = FindSectorTopologySector(map, sectorId);
+    if (originalSector == nullptr) {
+        SetError(outError, "Topology sector not found");
+        return false;
+    }
+
+    const std::vector<SectorTopologyValidationIssue> initialIssues = ValidateSectorTopologyMap(map);
+    if (HasSectorTopologyValidationErrors(initialIssues)) {
+        SetError(outError, FirstValidationError(initialIssues));
+        return false;
+    }
+
+    SectorTopologyLoopSet originalLoops;
+    std::vector<SectorTopologyValidationIssue> originalLoopIssues;
+    if (!ExtractSectorTopologyLoops(map, sectorId, originalLoops, &originalLoopIssues)) {
+        SetError(outError, FirstValidationError(originalLoopIssues));
+        return false;
+    }
+
+    ResolvedBoundaryCutPoint firstResolved;
+    ResolvedBoundaryCutPoint secondResolved;
+    if (!ResolveBoundaryCutPointOnOuterLoop(map, originalLoops.outer, sectorId, firstPoint, firstResolved, outError)
+            || !ResolveBoundaryCutPointOnOuterLoop(map, originalLoops.outer, sectorId, secondPoint, secondResolved, outError)) {
+        return false;
+    }
+    if (!ValidateResolvedBoundaryCutPointEndpoint(map, originalLoops.outer, sectorId, firstResolved, outError)
+            || !ValidateResolvedBoundaryCutPointEndpoint(map, originalLoops.outer, sectorId, secondResolved, outError)) {
+        return false;
+    }
+    if (SamePoint(firstResolved.point, secondResolved.point)) {
+        SetError(outError, "Cut endpoints must be different.");
+        return false;
+    }
+    if (firstResolved.requiresSplit
+            && secondResolved.requiresSplit
+            && firstResolved.sourceLineDefId == secondResolved.sourceLineDefId) {
+        SetError(outError, "Cut endpoints must not be on the same boundary edge.");
+        return false;
+    }
+
+    SectorTopologyMap candidate = map;
+    int firstEndpointVertexId = -1;
+    int secondEndpointVertexId = -1;
+    if (!SplitBoundaryEndpointIfNeeded(candidate, firstResolved, firstEndpointVertexId, outError)
+            || !SplitBoundaryEndpointIfNeeded(candidate, secondResolved, secondEndpointVertexId, outError)) {
+        return false;
+    }
+    if (!ResolveEndpointVertexAfterSplits(candidate, firstResolved.point, firstEndpointVertexId, outError)
+            || !ResolveEndpointVertexAfterSplits(candidate, secondResolved.point, secondEndpointVertexId, outError)) {
+        return false;
+    }
+    if (firstEndpointVertexId == secondEndpointVertexId) {
+        SetError(outError, "Cut endpoints must resolve to different vertices.");
+        return false;
+    }
+
+    SectorTopologyLoopSet splitLoops;
+    std::vector<SectorTopologyValidationIssue> splitLoopIssues;
+    if (!ExtractSectorTopologyLoops(candidate, sectorId, splitLoops, &splitLoopIssues)) {
+        SetError(outError, FirstValidationError(splitLoopIssues));
+        return false;
+    }
+
+    const int firstIndex = FindVertexIndexInLoop(splitLoops.outer, firstEndpointVertexId);
+    const int secondIndex = FindVertexIndexInLoop(splitLoops.outer, secondEndpointVertexId);
+    if (firstIndex < 0 || secondIndex < 0) {
+        SetError(outError, "Cut endpoints must lie on the selected sector outer boundary.");
+        return false;
+    }
+
+    const std::vector<int> firstPath = BuildLoopVertexPath(splitLoops.outer, firstIndex, secondIndex);
+    const std::vector<int> secondPath = BuildLoopVertexPath(splitLoops.outer, secondIndex, firstIndex);
+    if (firstPath.size() < 3 || secondPath.size() < 3) {
+        SetError(outError, "Cut would create a sector with fewer than 3 vertices.");
+        return false;
+    }
+
+    if (!ValidateCutSegmentAgainstExistingTopology(
+                candidate,
+                firstEndpointVertexId,
+                secondEndpointVertexId,
+                outError)) {
+        return false;
+    }
+    if (!ValidateCutInteriorInsideSelectedSector(
+                candidate,
+                splitLoops,
+                firstResolved.point,
+                secondResolved.point,
+                outError)) {
+        return false;
+    }
+
+    std::vector<SectorTopologyCoordPoint> firstPolygon;
+    std::vector<SectorTopologyCoordPoint> secondPolygon;
+    if (!BuildPathPoints(candidate, firstPath, firstPolygon, outError)
+            || !BuildPathPoints(candidate, secondPath, secondPolygon, outError)) {
+        return false;
+    }
+
+    const int newSectorId = AllocateSectorTopologySectorId(candidate);
+    if (!RequireAllocatedId(newSectorId, "sector", outError)) {
+        return false;
+    }
+    const SectorTopologySector* candidateOriginalSector =
+            FindSectorTopologySector(candidate, sectorId);
+    if (candidateOriginalSector == nullptr) {
+        SetError(outError, "Could not resolve selected sector data.");
+        return false;
+    }
+
+    SectorTopologySector newSector = *candidateOriginalSector;
+    newSector.id = newSectorId;
+    newSector.name = GenerateSectorName(candidate);
+    candidate.sectors.push_back(newSector);
+    candidateOriginalSector = FindSectorTopologySector(candidate, sectorId);
+    const SectorTopologySector* candidateNewSector =
+            FindSectorTopologySector(candidate, newSectorId);
+    if (candidateOriginalSector == nullptr || candidateNewSector == nullptr) {
+        SetError(outError, "Could not resolve cut sector data.");
+        return false;
+    }
+
+    if (!AssignPathSideDefsToSector(candidate, splitLoops.outer, firstPath, sectorId, sectorId, outError)
+            || !AssignPathSideDefsToSector(candidate, splitLoops.outer, secondPath, sectorId, newSectorId, outError)) {
+        return false;
+    }
+
+    const SectorTopologyCoordPoint cutA = firstResolved.point;
+    const SectorTopologyCoordPoint cutB = secondResolved.point;
+    for (const SectorTopologyLoop& hole : splitLoops.holes) {
+        if (!AssignHoleLoopToResultSector(
+                    candidate,
+                    hole,
+                    firstPolygon,
+                    secondPolygon,
+                    cutA,
+                    cutB,
+                    sectorId,
+                    newSectorId,
+                    outError)) {
+            return false;
+        }
+    }
+
+    SectorTopologyCutSectorResult result;
+    result.originalSectorId = sectorId;
+    result.newSectorId = newSectorId;
+    result.firstEndpointVertexId = firstEndpointVertexId;
+    result.secondEndpointVertexId = secondEndpointVertexId;
+
+    result.cutLineDefId = AllocateSectorTopologyLineDefId(candidate);
+    if (!RequireAllocatedId(result.cutLineDefId, "linedef", outError)) {
+        return false;
+    }
+    result.originalSectorSideDefId = AllocateSectorTopologySideDefId(candidate);
+    if (!RequireAllocatedId(result.originalSectorSideDefId, "sidedef", outError)) {
+        return false;
+    }
+    candidate.sideDefs.push_back(MakeSideDefFromSectorDefaults(
+            result.originalSectorSideDefId,
+            result.cutLineDefId,
+            SectorTopologySideKind::Front,
+            sectorId,
+            *candidateOriginalSector));
+
+    result.newSectorSideDefId = AllocateSectorTopologySideDefId(candidate);
+    if (!RequireAllocatedId(result.newSectorSideDefId, "sidedef", outError)) {
+        return false;
+    }
+    candidate.sideDefs.push_back(MakeSideDefFromSectorDefaults(
+            result.newSectorSideDefId,
+            result.cutLineDefId,
+            SectorTopologySideKind::Back,
+            newSectorId,
+            *candidateNewSector));
+    candidate.lineDefs.push_back(SectorTopologyLineDef{
+            result.cutLineDefId,
+            secondEndpointVertexId,
+            firstEndpointVertexId,
+            result.originalSectorSideDefId,
+            result.newSectorSideDefId
+    });
+
+    if (!ValidateNoDuplicatePhysicalLineDefs(candidate, outError)) {
+        return false;
+    }
+
+    const std::vector<SectorTopologyValidationIssue> issues = ValidateSectorTopologyMap(candidate);
+    if (HasSectorTopologyValidationErrors(issues)) {
+        SetError(outError, FirstValidationError(issues));
+        return false;
+    }
+
+    SectorTopologyLoopSet firstResultLoops;
+    std::vector<SectorTopologyValidationIssue> firstLoopIssues;
+    if (!ExtractSectorTopologyLoops(candidate, sectorId, firstResultLoops, &firstLoopIssues)) {
+        SetError(outError, FirstValidationError(firstLoopIssues));
+        return false;
+    }
+    SectorTopologyLoopSet secondResultLoops;
+    std::vector<SectorTopologyValidationIssue> secondLoopIssues;
+    if (!ExtractSectorTopologyLoops(candidate, newSectorId, secondResultLoops, &secondLoopIssues)) {
+        SetError(outError, FirstValidationError(secondLoopIssues));
+        return false;
+    }
+
+    map = std::move(candidate);
+    if (outResult != nullptr) {
+        *outResult = result;
+    }
+    if (outError != nullptr) {
+        outError->clear();
     }
     return true;
 }

@@ -51,6 +51,20 @@ private:
     void UpdateLightDrag(engine::Input& input);
     void FinishLightDrag();
     void CancelLightDrag(const char* message);
+    void StartPendingTopologyVertexMerge(int sourceVertexId);
+    void CancelPendingTopologyVertexMerge(const char* message);
+    void UpdatePendingTopologyVertexMerge(engine::Input& input);
+    void CommitPendingTopologyVertexMerge();
+    void StartPendingTopologyLineSplitAtPoint();
+    void CancelPendingTopologyLineSplitAtPoint(const char* message);
+    bool ValidatePendingTopologyLineSplitAtPointTarget(const char* staleMessage);
+    void UpdatePendingTopologyLineSplitAtPoint(engine::Input& input);
+    void CommitPendingTopologyLineSplitAtPoint();
+    void StartPendingTopologySectorCut();
+    void CancelPendingTopologySectorCut(const char* message);
+    bool ValidatePendingTopologySectorCutTarget(const char* staleMessage);
+    void UpdatePendingTopologySectorCut(engine::Input& input);
+    void CommitPendingTopologySectorCut();
     void UpdatePreview3D(engine::Input& input, float dt);
     void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingSector(const char* message);
@@ -77,7 +91,10 @@ private:
     void DrawStaticLights() const;
     void DrawPendingSector() const;
     void DrawVertexMoveOverlay() const;
+    void DrawPendingTopologyVertexMerge() const;
     void DrawLightMoveOverlay() const;
+    void DrawPendingTopologyLineSplitAtPoint() const;
+    void DrawPendingTopologySectorCut() const;
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
     void RenderPreview3D(engine::AssetManager& assets);
     void DrawPreviewSurfaceHighlights() const;
@@ -182,6 +199,12 @@ private:
             Vector2 screenPoint,
             int& outVertexId,
             SectorTopologyCoordPoint& outPoint) const;
+    bool FindSelectedSectorBoundaryCutPointNearScreenPoint(
+            Vector2 screenPoint,
+            SectorTopologyBoundaryCutPoint& outPoint) const;
+    int FindTopologyVertexAtCoordPoint(
+            SectorTopologyCoordPoint point,
+            int excludedVertexId = -1) const;
     bool SnapTopologyVertexMoveTarget(
             Vector2 mapPoint,
             SectorTopologyCoordPoint& outPoint,
@@ -210,6 +233,8 @@ private:
     bool AddSelectedMapTexture(engine::AssetManager& assets);
     SectorTopologySector* SelectedTopologySector();
     const SectorTopologySector* SelectedTopologySector() const;
+    SectorTopologyVertex* SelectedTopologyVertex();
+    const SectorTopologyVertex* SelectedTopologyVertex() const;
     SectorTopologySideDef* SelectedTopologySideDef();
     const SectorTopologySideDef* SelectedTopologySideDef() const;
     SectorTopologyLineDef* SelectedTopologyLineDef();
@@ -220,6 +245,7 @@ private:
     void SyncSelectedSectorIdBuffer();
     void SyncSelectedLightIdBuffer();
     void SelectTopologySector(int sectorId);
+    void SelectTopologyVertex(int vertexId);
     void SelectTopologySideDef(int sideDefId, TopologyWallPart wallPart);
     void SelectTopologyLineDef(int lineDefId, SectorTopologySideKind side, TopologyWallPart wallPart);
     void SelectTopologyLight(int topologyLightId);
@@ -231,10 +257,18 @@ private:
     void ResetSurface3DUiState();
     Rectangle BuildPreviewUvPanelRect() const;
     std::string CurrentTextureForSurface(TopologySurfaceEditTarget target) const;
+    bool CopyTopologyMaterial(TopologySurfaceEditTarget target);
+    bool PasteTopologyMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets);
     bool ApplySurface3DUvValue(TopologySurfaceEditTarget target, int component, float value, engine::AssetManager& assets);
     bool ResetSurface3DUv(TopologySurfaceEditTarget target, engine::AssetManager& assets);
+    bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets);
+    bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets);
+    bool AlignSelectedWallMaterialU(TopologySurfaceEditTarget target, TopologyUAlignDirection direction, engine::AssetManager* assets);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     bool SplitSelectedTopologyLineDef();
+    bool DissolveSelectedTopologyVertex();
+    bool JoinSelectedTopologySectors();
+    void ClearTransientTopologyEditStateAfterGeometryChange();
     void OpenDeleteSelectedTopologySectorConfirmation();
     void OpenDeleteTopologySectorConfirmation(int sectorId);
     bool DeleteSelectedTopologySectorConfirmed(int sectorId);

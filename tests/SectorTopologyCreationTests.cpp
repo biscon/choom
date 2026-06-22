@@ -1,6 +1,8 @@
 #include "sector_demo/SectorTopologyCreation.h"
 #include "sector_demo/SectorTopologyEdit.h"
+#include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
+#include "sector_demo/SectorLightmap.h"
 
 #include <algorithm>
 #include <cmath>
@@ -17,6 +19,11 @@ using game::SectorTopologyLineDef;
 using game::SectorTopologyLoop;
 using game::SectorTopologyLoopSet;
 using game::SectorTopologyMap;
+using game::SectorTopologyBoundaryCutPoint;
+using game::SectorTopologyCutSectorResult;
+using game::SectorTopologyDissolveVertexResult;
+using game::SectorTopologyJoinSectorsResult;
+using game::SectorTopologyMergeVerticesResult;
 using game::SectorTopologySideDef;
 using game::SectorTopologySideKind;
 using game::SectorTopologyDeleteSectorResult;
@@ -29,6 +36,13 @@ void Check(bool condition, const char* description)
     if (!condition) {
         std::cerr << "FAILED: " << description << '\n';
         ++failures;
+    }
+}
+
+void PrintErrorIfAny(const std::string& error)
+{
+    if (!error.empty()) {
+        std::cerr << "  error: " << error << '\n';
     }
 }
 
@@ -248,6 +262,28 @@ bool SameSideDefSettings(const SectorTopologySideDef& a, const SectorTopologySid
            && SameWallPart(a.upper, b.upper);
 }
 
+bool SameSideDefMaterials(const SectorTopologySideDef& a, const SectorTopologySideDef& b)
+{
+    return SameWallPart(a.wall, b.wall)
+           && SameWallPart(a.lower, b.lower)
+           && SameWallPart(a.upper, b.upper);
+}
+
+bool SameAllSideDefSettings(const SectorTopologyMap& before, const SectorTopologyMap& after)
+{
+    if (before.sideDefs.size() != after.sideDefs.size()) {
+        return false;
+    }
+    for (const SectorTopologySideDef& beforeSideDef : before.sideDefs) {
+        const SectorTopologySideDef* afterSideDef =
+                game::FindSectorTopologySideDef(after, beforeSideDef.id);
+        if (afterSideDef == nullptr || !SameSideDefSettings(beforeSideDef, *afterSideDef)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void SetDistinctSideSettings(SectorTopologySideDef& sideDef, const char* prefix)
 {
     sideDef.wall.textureId = std::string{prefix} + "_wall";
@@ -270,6 +306,21 @@ int CountSideDefsForSector(const SectorTopologyMap& map, int sectorId)
         }
     }
     return count;
+}
+
+SectorTopologyBoundaryCutPoint CutVertex(int vertexId)
+{
+    SectorTopologyBoundaryCutPoint point;
+    point.vertexId = vertexId;
+    return point;
+}
+
+SectorTopologyBoundaryCutPoint CutLinePoint(int lineDefId, SectorTopologyCoordPoint point)
+{
+    SectorTopologyBoundaryCutPoint cutPoint;
+    cutPoint.lineDefId = lineDefId;
+    cutPoint.point = point;
+    return cutPoint;
 }
 
 int CountOneSidedLinesForSector(const SectorTopologyMap& map, int sectorId)
@@ -682,6 +733,508 @@ void TestChangingSectorDefaultsDoesNotRewriteExistingSideDefs()
     }
 }
 
+void TestTopologyGeometryHelpers()
+{
+    Check(game::SectorTopologyPointOnSegment({32, 0}, {0, 0}, {64, 0}),
+          "geometry helper accepts horizontal point");
+    Check(game::SectorTopologyPointOnSegment({0, 32}, {0, 0}, {0, 64}),
+          "geometry helper accepts vertical point");
+    Check(game::SectorTopologyPointOnSegment({32, 32}, {0, 0}, {64, 64}),
+          "geometry helper accepts diagonal point");
+    Check(game::SectorTopologyPointStrictlyInsideSegment({32, 32}, {0, 0}, {64, 64}),
+          "geometry helper accepts strict diagonal interior point");
+    Check(!game::SectorTopologyPointStrictlyInsideSegment({0, 0}, {0, 0}, {64, 64}),
+          "geometry helper strict inside rejects start endpoint");
+    Check(!game::SectorTopologyPointStrictlyInsideSegment({64, 64}, {0, 0}, {64, 64}),
+          "geometry helper strict inside rejects end endpoint");
+    Check(!game::SectorTopologyPointOnSegment({96, 0}, {0, 0}, {64, 0}),
+          "geometry helper rejects off-segment collinear point");
+    Check(!game::SectorTopologyPointOnSegment({32, 16}, {0, 0}, {64, 0}),
+          "geometry helper rejects non-collinear point");
+    Check(game::SectorTopologySegmentIntersection({0, 0}, {64, 64}, {0, 64}, {64, 0})
+                  == game::SectorTopologySegmentIntersectionKind::Proper,
+          "geometry helper detects proper segment intersection");
+    Check(game::SectorTopologyClassifyPointInPolygon(
+                  std::vector<SectorTopologyCoordPoint>{{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+                  {32, 32})
+                  == game::SectorTopologyPointContainment::Inside,
+          "geometry helper classifies point inside polygon");
+}
+
+void TestSplitOneSidedWallAtPoint()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "split at point one-sided square creation succeeds");
+    const SectorTopologyLineDef originalLine = map.lineDefs.front();
+    SectorTopologySideDef* originalSide = FindSideDef(map, originalLine.frontSideDefId);
+    Check(originalSide != nullptr, "split at point one-sided finds original side");
+    if (originalSide == nullptr) {
+        return;
+    }
+    SetDistinctSideSettings(*originalSide, "point_outer");
+    const SectorTopologySideDef expectedSide = *originalSide;
+    const size_t vertexCount = map.vertices.size();
+    const size_t lineCount = map.lineDefs.size();
+    const size_t sideCount = map.sideDefs.size();
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, originalLine.id, {16, 0}, &split, &error),
+          "split at point one-sided wall succeeds");
+    Check(error.empty(), "successful one-sided point split clears error");
+    Check(split.newVertexId == split.midpointVertexId, "point split reports new vertex in midpoint-compatible field");
+    Check(map.vertices.size() == vertexCount + 1, "point split one-sided adds vertex");
+    Check(map.lineDefs.size() == lineCount + 1, "point split one-sided replaces one line with two");
+    Check(map.sideDefs.size() == sideCount + 1, "point split one-sided replaces one sidedef with two");
+    const game::SectorTopologyVertex* splitVertex = game::FindSectorTopologyVertex(map, split.newVertexId);
+    Check(splitVertex != nullptr && splitVertex->x == 16 && splitVertex->y == 0,
+          "point split one-sided creates vertex at requested point");
+    Check(FindLineById(map, originalLine.id) == nullptr, "point split one-sided removes original line");
+    Check(FindSideDef(map, expectedSide.id) == nullptr, "point split one-sided removes original sidedef");
+
+    const SectorTopologyLineDef* first = FindLineById(map, split.firstLineDefId);
+    const SectorTopologyLineDef* second = FindLineById(map, split.secondLineDefId);
+    Check(first != nullptr && second != nullptr, "point split one-sided replacement lines exist");
+    if (first != nullptr && second != nullptr) {
+        Check(first->startVertexId == originalLine.startVertexId
+                      && first->endVertexId == split.newVertexId,
+              "point split one-sided first line is A to split point");
+        Check(second->startVertexId == split.newVertexId
+                      && second->endVertexId == originalLine.endVertexId,
+              "point split one-sided second line is split point to B");
+    }
+
+    const SectorTopologySideDef* firstSide = FindSideDef(map, split.firstFrontSideDefId);
+    const SectorTopologySideDef* secondSide = FindSideDef(map, split.secondFrontSideDefId);
+    Check(firstSide != nullptr && secondSide != nullptr, "point split one-sided duplicated sidedefs exist");
+    if (firstSide != nullptr && secondSide != nullptr) {
+        Check(SameSideDefSettings(*firstSide, expectedSide),
+              "point split one-sided first side preserves settings");
+        Check(SameSideDefSettings(*secondSide, expectedSide),
+              "point split one-sided second side preserves settings");
+    }
+
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, sectorId, loops), "point split one-sided validates and extracts");
+    Check(LoopContainsVertex(loops.outer, split.newVertexId),
+          "point split one-sided sector loop includes split vertex");
+}
+
+void TestSplitTwoSidedSharedLineAtPoint()
+{
+    SectorTopologyMap map;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "point split shared first adjacent square succeeds");
+    Check(Create(map, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "point split shared second adjacent square succeeds");
+    const SectorTopologyLineDef* shared = FindLine(map, 2, 3);
+    Check(shared != nullptr, "point split shared finds shared linedef");
+    if (shared == nullptr) {
+        return;
+    }
+    SectorTopologySideDef* front = FindSideDef(map, shared->frontSideDefId);
+    SectorTopologySideDef* back = FindSideDef(map, shared->backSideDefId);
+    Check(front != nullptr && back != nullptr, "point split shared finds front and back");
+    if (front == nullptr || back == nullptr) {
+        return;
+    }
+    SetDistinctSideSettings(*front, "point_front");
+    SetDistinctSideSettings(*back, "point_back");
+    const SectorTopologySideDef expectedFront = *front;
+    const SectorTopologySideDef expectedBack = *back;
+    const int sharedLineId = shared->id;
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, sharedLineId, {64, 16}, &split, &error),
+          "point split shared two-sided line succeeds");
+    Check(error.empty(), "successful shared point split clears error");
+
+    const SectorTopologySideDef* firstFront = FindSideDef(map, split.firstFrontSideDefId);
+    const SectorTopologySideDef* secondFront = FindSideDef(map, split.secondFrontSideDefId);
+    const SectorTopologySideDef* firstBack = FindSideDef(map, split.firstBackSideDefId);
+    const SectorTopologySideDef* secondBack = FindSideDef(map, split.secondBackSideDefId);
+    Check(firstFront != nullptr && secondFront != nullptr && firstBack != nullptr && secondBack != nullptr,
+          "point split shared duplicated sidedefs exist");
+    if (firstFront != nullptr && secondFront != nullptr && firstBack != nullptr && secondBack != nullptr) {
+        Check(SameSideDefSettings(*firstFront, expectedFront)
+                      && SameSideDefSettings(*secondFront, expectedFront),
+              "point split shared preserves front settings on both halves");
+        Check(SameSideDefSettings(*firstBack, expectedBack)
+                      && SameSideDefSettings(*secondBack, expectedBack),
+              "point split shared preserves back settings on both halves");
+        Check(firstFront->sectorId == leftId
+                      && secondFront->sectorId == leftId
+                      && firstBack->sectorId == rightId
+                      && secondBack->sectorId == rightId,
+              "point split shared preserves front/back sector ownership");
+    }
+    Check(FindLineById(map, sharedLineId) == nullptr, "point split shared removes original line");
+
+    SectorTopologyLoopSet leftLoops;
+    SectorTopologyLoopSet rightLoops;
+    Check(ValidateAndExtract(map, leftId, leftLoops), "point split shared left sector extracts");
+    Check(ValidateAndExtract(map, rightId, rightLoops), "point split shared right sector extracts");
+    Check(LoopContainsVertex(leftLoops.outer, split.newVertexId)
+                  && LoopContainsVertex(rightLoops.outer, split.newVertexId),
+          "point split shared vertex belongs to both sector loops");
+}
+
+void TestSplitDiagonalLineAtPoint()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "diagonal point split triangle creation succeeds");
+    const SectorTopologyLineDef originalLine = map.lineDefs.front();
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, originalLine.id, {32, 32}, &split, &error),
+          "diagonal point split succeeds");
+    const game::SectorTopologyVertex* splitVertex = game::FindSectorTopologyVertex(map, split.newVertexId);
+    Check(splitVertex != nullptr && splitVertex->x == 32 && splitVertex->y == 32,
+          "diagonal point split creates exact integer vertex");
+
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, sectorId, loops), "diagonal point split validates and extracts");
+}
+
+void TestRejectInvalidSplitAtPoint()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "invalid point split square creation succeeds");
+    const int lineId = map.lineDefs.front().id;
+
+    {
+        SectorTopologyMap candidate = map;
+        const SectorTopologyMap before = candidate;
+        std::string error;
+        Check(!game::SplitSectorTopologyLineDefAtPoint(candidate, 999999, {16, 0}, nullptr, &error),
+              "point split rejects missing line ID");
+        Check(!error.empty(), "missing line point split reports error");
+        CheckUnchanged(before, candidate, "missing line point split leaves map unchanged");
+    }
+    {
+        SectorTopologyMap candidate = map;
+        const SectorTopologyMap before = candidate;
+        std::string error;
+        Check(!game::SplitSectorTopologyLineDefAtPoint(candidate, lineId, {16, 8}, nullptr, &error),
+              "point split rejects point not on segment");
+        Check(!error.empty(), "off-line point split reports error");
+        CheckUnchanged(before, candidate, "off-line point split leaves map unchanged");
+    }
+    {
+        SectorTopologyMap candidate = map;
+        const SectorTopologyMap before = candidate;
+        std::string error;
+        Check(!game::SplitSectorTopologyLineDefAtPoint(candidate, lineId, {0, 0}, nullptr, &error),
+              "point split rejects endpoint");
+        Check(!error.empty(), "endpoint point split reports error");
+        CheckUnchanged(before, candidate, "endpoint point split leaves map unchanged");
+    }
+    {
+        SectorTopologyMap candidate = map;
+        candidate.vertices.push_back(game::SectorTopologyVertex{999, 32, 0});
+        const SectorTopologyMap before = candidate;
+        std::string error;
+        Check(!game::SplitSectorTopologyLineDefAtPoint(candidate, lineId, {32, 0}, nullptr, &error),
+              "point split rejects existing vertex coordinate");
+        Check(!error.empty(), "existing vertex point split reports error");
+        CheckUnchanged(before, candidate, "existing vertex point split leaves map unchanged");
+    }
+    {
+        SectorTopologyMap candidate = map;
+        Check(!candidate.sideDefs.empty(), "transaction failure setup has sideDefs");
+        if (candidate.sideDefs.empty()) {
+            return;
+        }
+        candidate.sideDefs.back().sectorId = 999999;
+        const SectorTopologyMap before = candidate;
+        std::string error;
+        Check(!game::SplitSectorTopologyLineDefAtPoint(candidate, lineId, {16, 0}, nullptr, &error),
+              "point split transactional validation failure rejects");
+        Check(!error.empty(), "transactional point split failure reports error");
+        CheckUnchanged(before, candidate, "transactional point split failure leaves map unchanged");
+    }
+}
+
+void TestSplitAtPointGeneratedGeometryBuilds()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "point split geometry square creation succeeds");
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, map.lineDefs.front().id, {16, 0}, &split, &error),
+          "point split geometry line succeeds");
+
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "generated geometry builds after point split");
+}
+
+void ExpectDissolveRejected(
+        const SectorTopologyMap& input,
+        int vertexId,
+        const char* expectedErrorText,
+        const char* description)
+{
+    SectorTopologyMap map = input;
+    const SectorTopologyMap before = map;
+    std::string error;
+    Check(!game::DissolveSectorTopologyVertex(map, vertexId, nullptr, &error),
+          description);
+    Check(!error.empty(), "rejected dissolve reports an error");
+    if (expectedErrorText != nullptr) {
+        Check(error.find(expectedErrorText) != std::string::npos,
+              "rejected dissolve reports expected error text");
+    }
+    CheckUnchanged(before, map, "rejected dissolve leaves map unchanged");
+}
+
+void TestDissolveOneSidedSplitWall()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "dissolve one-sided square creation succeeds");
+    const SectorTopologyLineDef originalLine = map.lineDefs.front();
+    SectorTopologySideDef* originalSide = FindSideDef(map, originalLine.frontSideDefId);
+    Check(originalSide != nullptr, "dissolve one-sided finds original side");
+    if (originalSide == nullptr) {
+        return;
+    }
+    SetDistinctSideSettings(*originalSide, "dissolve_outer");
+    const SectorTopologySideDef expectedSide = *originalSide;
+    const size_t vertexCount = map.vertices.size();
+    const size_t lineCount = map.lineDefs.size();
+    const size_t sideCount = map.sideDefs.size();
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, originalLine.id, {16, 0}, &split, &error),
+          "dissolve one-sided split setup succeeds");
+
+    SectorTopologyDissolveVertexResult dissolve;
+    Check(game::DissolveSectorTopologyVertex(map, split.newVertexId, &dissolve, &error),
+          "dissolve one-sided split vertex succeeds");
+    Check(error.empty(), "successful one-sided dissolve clears error");
+    Check(dissolve.removedVertexId == split.newVertexId,
+          "dissolve one-sided reports removed vertex");
+    Check(game::FindSectorTopologyVertex(map, split.newVertexId) == nullptr,
+          "dissolve one-sided removes split vertex");
+    Check(map.vertices.size() == vertexCount
+                  && map.lineDefs.size() == lineCount
+                  && map.sideDefs.size() == sideCount,
+          "dissolve one-sided restores original counts");
+
+    const SectorTopologyLineDef* replacement = FindLineById(map, dissolve.replacementLineDefId);
+    Check(replacement != nullptr, "dissolve one-sided replacement line exists");
+    if (replacement != nullptr) {
+        Check(replacement->startVertexId == originalLine.startVertexId
+                      && replacement->endVertexId == originalLine.endVertexId,
+              "dissolve one-sided replacement reconnects original endpoints");
+        Check(replacement->frontSideDefId == dissolve.replacementFrontSideDefId
+                      && replacement->backSideDefId == -1,
+              "dissolve one-sided replacement remains one-sided front line");
+    }
+
+    const SectorTopologySideDef* replacementSide = FindSideDef(map, dissolve.replacementFrontSideDefId);
+    Check(replacementSide != nullptr && SameSideDefSettings(*replacementSide, expectedSide),
+          "dissolve one-sided preserves sidedef material and UV settings");
+
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, sectorId, loops), "dissolve one-sided validates and extracts");
+    Check(!LoopContainsVertex(loops.outer, split.newVertexId),
+          "dissolve one-sided sector loop removes dissolved vertex");
+
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "generated geometry builds after one-sided dissolve");
+}
+
+void TestDissolveTwoSidedSharedPortal()
+{
+    SectorTopologyMap map;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "dissolve shared first adjacent square succeeds");
+    Check(Create(map, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "dissolve shared second adjacent square succeeds");
+    const SectorTopologyLineDef* shared = FindLine(map, 2, 3);
+    Check(shared != nullptr, "dissolve shared finds shared line");
+    if (shared == nullptr) {
+        return;
+    }
+    SectorTopologySideDef* front = FindSideDef(map, shared->frontSideDefId);
+    SectorTopologySideDef* back = FindSideDef(map, shared->backSideDefId);
+    Check(front != nullptr && back != nullptr, "dissolve shared finds both sides");
+    if (front == nullptr || back == nullptr) {
+        return;
+    }
+    SetDistinctSideSettings(*front, "dissolve_front");
+    SetDistinctSideSettings(*back, "dissolve_back");
+    const SectorTopologySideDef expectedFront = *front;
+    const SectorTopologySideDef expectedBack = *back;
+    const int originalStart = shared->startVertexId;
+    const int originalEnd = shared->endVertexId;
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, shared->id, {64, 16}, &split, &error),
+          "dissolve shared split setup succeeds");
+
+    SectorTopologyDissolveVertexResult dissolve;
+    Check(game::DissolveSectorTopologyVertex(map, split.newVertexId, &dissolve, &error),
+          "dissolve shared split vertex succeeds");
+    Check(error.empty(), "successful shared dissolve clears error");
+
+    const SectorTopologyLineDef* replacement = FindLineById(map, dissolve.replacementLineDefId);
+    Check(replacement != nullptr, "dissolve shared replacement line exists");
+    if (replacement != nullptr) {
+        Check(replacement->startVertexId == originalStart
+                      && replacement->endVertexId == originalEnd,
+              "dissolve shared replacement reconnects original endpoints");
+        Check(replacement->frontSideDefId == dissolve.replacementFrontSideDefId
+                      && replacement->backSideDefId == dissolve.replacementBackSideDefId,
+              "dissolve shared replacement is two-sided");
+    }
+
+    const SectorTopologySideDef* replacementFront = FindSideDef(map, dissolve.replacementFrontSideDefId);
+    const SectorTopologySideDef* replacementBack = FindSideDef(map, dissolve.replacementBackSideDefId);
+    Check(replacementFront != nullptr && SameSideDefSettings(*replacementFront, expectedFront),
+          "dissolve shared preserves front sidedef material and UV settings");
+    Check(replacementBack != nullptr && SameSideDefSettings(*replacementBack, expectedBack),
+          "dissolve shared preserves back sidedef material and UV settings");
+
+    SectorTopologyLoopSet leftLoops;
+    SectorTopologyLoopSet rightLoops;
+    Check(ValidateAndExtract(map, leftId, leftLoops), "dissolve shared left sector extracts");
+    Check(ValidateAndExtract(map, rightId, rightLoops), "dissolve shared right sector extracts");
+    Check(!LoopContainsVertex(leftLoops.outer, split.newVertexId)
+                  && !LoopContainsVertex(rightLoops.outer, split.newVertexId),
+          "dissolve shared sector loops remove dissolved vertex");
+
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "generated geometry builds after shared dissolve");
+}
+
+void TestRejectInvalidDissolveInputs()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "invalid dissolve square creation succeeds");
+    ExpectDissolveRejected(map, 999, "not found",
+                           "dissolve missing vertex fails");
+}
+
+void TestRejectDissolveDegreeOneAndCollapsed()
+{
+    SectorTopologyMap degreeOne;
+    degreeOne.vertices.push_back(game::SectorTopologyVertex{1, 0, 0});
+    degreeOne.vertices.push_back(game::SectorTopologyVertex{2, 64, 0});
+    degreeOne.lineDefs.push_back(SectorTopologyLineDef{1, 1, 2, -1, -1});
+    ExpectDissolveRejected(degreeOne, 1, "exactly two",
+                           "dissolve degree-one vertex fails");
+
+    SectorTopologyMap collapsed;
+    collapsed.vertices.push_back(game::SectorTopologyVertex{1, 0, 0});
+    collapsed.vertices.push_back(game::SectorTopologyVertex{2, 64, 0});
+    collapsed.lineDefs.push_back(SectorTopologyLineDef{1, 1, 2, -1, -1});
+    collapsed.lineDefs.push_back(SectorTopologyLineDef{2, 2, 1, -1, -1});
+    ExpectDissolveRejected(collapsed, 1, "collapse",
+                           "dissolve replacement collapsed endpoint fails");
+}
+
+void TestRejectDissolveBranchingAndDuplicate()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "branching dissolve square creation succeeds");
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, map.lineDefs.front().id, {16, 0}, &split, &error),
+          "branching dissolve split setup succeeds");
+
+    const int extraVertexId = game::AllocateSectorTopologyVertexId(map);
+    map.vertices.push_back(game::SectorTopologyVertex{extraVertexId, 16, 24});
+    const int extraLineId = game::AllocateSectorTopologyLineDefId(map);
+    map.lineDefs.push_back(SectorTopologyLineDef{extraLineId, split.newVertexId, extraVertexId, -1, -1});
+    ExpectDissolveRejected(map, split.newVertexId, "branching",
+                           "dissolve degree-three branching vertex fails");
+
+    SectorTopologyMap duplicate;
+    Check(Create(duplicate, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "duplicate dissolve square creation succeeds");
+    const SectorTopologyLineDef duplicateOriginal = duplicate.lineDefs.front();
+    Check(game::SplitSectorTopologyLineDefAtPoint(
+                  duplicate,
+                  duplicateOriginal.id,
+                  {16, 0},
+                  &split,
+                  &error),
+          "duplicate dissolve split setup succeeds");
+    const int duplicateLineId = game::AllocateSectorTopologyLineDefId(duplicate);
+    duplicate.lineDefs.push_back(SectorTopologyLineDef{
+            duplicateLineId,
+            duplicateOriginal.startVertexId,
+            duplicateOriginal.endVertexId,
+            -1,
+            -1
+    });
+    ExpectDissolveRejected(duplicate, split.newVertexId, "duplicate physical linedefs",
+                           "dissolve duplicate replacement line fails");
+}
+
+void TestRejectDissolveMaterialMismatch()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "material mismatch dissolve square creation succeeds");
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, map.lineDefs.front().id, {16, 0}, &split, &error),
+          "material mismatch dissolve split setup succeeds");
+    SectorTopologySideDef* secondSide = FindSideDef(map, split.secondFrontSideDefId);
+    Check(secondSide != nullptr, "material mismatch finds second side");
+    if (secondSide == nullptr) {
+        return;
+    }
+    secondSide->wall.textureId = "changed_wall";
+    ExpectDissolveRejected(map, split.newVertexId, "different sector, material, or UV",
+                           "dissolve material mismatch fails");
+}
+
+void TestRejectDissolveCandidateValidationFailure()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "validation failure dissolve square creation succeeds");
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, map.lineDefs.front().id, {16, 0}, &split, &error),
+          "validation failure dissolve split setup succeeds");
+    SectorTopologySideDef* firstSide = FindSideDef(map, split.firstFrontSideDefId);
+    SectorTopologySideDef* secondSide = FindSideDef(map, split.secondFrontSideDefId);
+    Check(firstSide != nullptr && secondSide != nullptr, "validation failure finds split sides");
+    if (firstSide == nullptr || secondSide == nullptr) {
+        return;
+    }
+    firstSide->sectorId = 999999;
+    secondSide->sectorId = 999999;
+    ExpectDissolveRejected(map, split.newVertexId, nullptr,
+                           "dissolve candidate validation failure is transactional");
+}
+
 void TestSplitOneSidedWall()
 {
     SectorTopologyMap map;
@@ -1091,6 +1644,685 @@ void TestSplitGeneratedGeometryBuilds()
           "generated geometry builds after split");
 }
 
+void TestCutRectangleBetweenBoundaryVertices()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "cut rectangle vertex setup succeeds");
+    SectorTopologyCutSectorResult result;
+    std::string error;
+    Check(game::CutSectorTopologySectorBetweenBoundaryPoints(
+                  map,
+                  sectorId,
+                  CutVertex(1),
+                  CutVertex(3),
+                  &result,
+                  &error),
+          "rectangle cut between opposite vertices succeeds");
+    PrintErrorIfAny(error);
+    Check(error.empty(), "successful vertex cut clears error");
+    Check(result.originalSectorId == sectorId
+                  && result.newSectorId > 0
+                  && result.newSectorId != sectorId,
+          "vertex cut preserves original sector and reports new sector");
+    Check(game::FindSectorTopologySector(map, sectorId) != nullptr
+                  && game::FindSectorTopologySector(map, result.newSectorId) != nullptr,
+          "vertex cut leaves both sectors present");
+
+    SectorTopologyLoopSet firstLoops;
+    SectorTopologyLoopSet secondLoops;
+    Check(ValidateAndExtract(map, sectorId, firstLoops), "vertex cut original sector extracts");
+    Check(ValidateAndExtract(map, result.newSectorId, secondLoops), "vertex cut new sector extracts");
+    Check(firstLoops.outer.vertexIds.size() == 3
+                  && secondLoops.outer.vertexIds.size() == 3,
+          "vertex cut creates two triangular outer loops");
+
+    const SectorTopologyLineDef* cutLine = FindLineById(map, result.cutLineDefId);
+    const SectorTopologySideDef* originalCutSide = FindSideDef(map, result.originalSectorSideDefId);
+    const SectorTopologySideDef* newCutSide = FindSideDef(map, result.newSectorSideDefId);
+    Check(cutLine != nullptr && originalCutSide != nullptr && newCutSide != nullptr,
+          "vertex cut creates a two-sided cut linedef");
+    if (cutLine != nullptr && originalCutSide != nullptr && newCutSide != nullptr) {
+        Check(cutLine->frontSideDefId == originalCutSide->id
+                      && cutLine->backSideDefId == newCutSide->id
+                      && originalCutSide->sectorId == sectorId
+                      && newCutSide->sectorId == result.newSectorId,
+              "vertex cut cut linedef has independent result sidedefs");
+    }
+}
+
+void TestCutRectangleBetweenInteriorBoundaryPoints()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "cut interior endpoint setup succeeds");
+    const size_t vertexCount = map.vertices.size();
+    const size_t lineCount = map.lineDefs.size();
+
+    SectorTopologyCutSectorResult result;
+    std::string error;
+    Check(game::CutSectorTopologySectorBetweenBoundaryPoints(
+                  map,
+                  sectorId,
+                  CutLinePoint(1, {32, 0}),
+                  CutLinePoint(3, {32, 64}),
+                  &result,
+                  &error),
+          "rectangle cut between interior boundary points succeeds");
+    PrintErrorIfAny(error);
+    Check(map.vertices.size() == vertexCount + 2,
+          "interior endpoint cut splits both boundary linedefs");
+    Check(map.lineDefs.size() == lineCount + 3,
+          "interior endpoint cut replaces two boundary lines and adds one cut line");
+    const game::SectorTopologyVertex* first = game::FindSectorTopologyVertex(map, result.firstEndpointVertexId);
+    const game::SectorTopologyVertex* second = game::FindSectorTopologyVertex(map, result.secondEndpointVertexId);
+    Check(first != nullptr && first->x == 32 && first->y == 0,
+          "interior endpoint cut creates first endpoint vertex");
+    Check(second != nullptr && second->x == 32 && second->y == 64,
+          "interior endpoint cut creates second endpoint vertex");
+
+    SectorTopologyLoopSet firstLoops;
+    SectorTopologyLoopSet secondLoops;
+    Check(ValidateAndExtract(map, sectorId, firstLoops), "interior cut original extracts");
+    Check(ValidateAndExtract(map, result.newSectorId, secondLoops), "interior cut new extracts");
+    Check(LoopContainsVertex(firstLoops.outer, result.firstEndpointVertexId)
+                  && LoopContainsVertex(secondLoops.outer, result.firstEndpointVertexId),
+          "interior cut endpoints appear in both result loops");
+}
+
+void TestCutCopiesSectorFieldsAndPreservesBoundarySideDefs()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "cut copy fields setup succeeds");
+    game::SectorTopologySector* sector = game::FindSectorTopologySector(map, sectorId);
+    Check(sector != nullptr, "cut copy finds sector");
+    if (sector == nullptr) {
+        return;
+    }
+    sector->name = "kept";
+    sector->floorZ = -4.0f;
+    sector->ceilingZ = 40.0f;
+    sector->floorTextureId = "cut_floor";
+    sector->ceilingTextureId = "cut_ceiling";
+    sector->ambientColor = Color{5, 6, 7, 255};
+    sector->ambientIntensity = 0.25f;
+    sector->defaultWall.textureId = "cut_default_wall";
+    sector->defaultLower.textureId = "cut_default_lower";
+    sector->defaultUpper.textureId = "cut_default_upper";
+    for (SectorTopologySideDef& sideDef : map.sideDefs) {
+        SetDistinctSideSettings(sideDef, TextFormat("cut_side_%d", sideDef.id));
+    }
+    const std::vector<SectorTopologySideDef> beforeSides = map.sideDefs;
+
+    SectorTopologyCutSectorResult result;
+    std::string error;
+    Check(game::CutSectorTopologySectorBetweenBoundaryPoints(
+                  map,
+                  sectorId,
+                  CutVertex(1),
+                  CutVertex(3),
+                  &result,
+                  &error),
+          "cut copy fields succeeds");
+    PrintErrorIfAny(error);
+
+    const game::SectorTopologySector* preserved = game::FindSectorTopologySector(map, sectorId);
+    const game::SectorTopologySector* created = game::FindSectorTopologySector(map, result.newSectorId);
+    Check(preserved != nullptr && created != nullptr, "cut copy finds both result sectors");
+    if (preserved != nullptr && created != nullptr) {
+        Check(preserved->name == "kept" && created->name != preserved->name,
+              "cut preserves original sector name and generates unique new name");
+        Check(created->floorZ == preserved->floorZ
+                      && created->ceilingZ == preserved->ceilingZ
+                      && created->floorTextureId == preserved->floorTextureId
+                      && created->ceilingTextureId == preserved->ceilingTextureId
+                      && created->ambientColor.r == preserved->ambientColor.r
+                      && created->ambientIntensity == preserved->ambientIntensity,
+              "cut copies sector fields to new sector");
+    }
+
+    for (const SectorTopologySideDef& beforeSide : beforeSides) {
+        const SectorTopologySideDef* afterSide = FindSideDef(map, beforeSide.id);
+        Check(afterSide != nullptr && SameSideDefMaterials(beforeSide, *afterSide),
+              "cut preserves inherited boundary sidedef material and UV data");
+    }
+
+    const SectorTopologySideDef* originalCutSide = FindSideDef(map, result.originalSectorSideDefId);
+    const SectorTopologySideDef* newCutSide = FindSideDef(map, result.newSectorSideDefId);
+    Check(originalCutSide != nullptr && newCutSide != nullptr,
+          "cut default sidedefs exist");
+    if (originalCutSide != nullptr && newCutSide != nullptr && preserved != nullptr && created != nullptr) {
+        Check(originalCutSide->id != newCutSide->id
+                      && originalCutSide->wall.textureId == preserved->defaultWall.textureId
+                      && newCutSide->wall.textureId == created->defaultWall.textureId,
+              "cut linedef sides are independent and initialized from sector defaults");
+    }
+}
+
+void TestCutConcaveSectorAndBuildOutputs()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {96, 0}, {96, 32}, {32, 32}, {32, 96}, {0, 96}}, &sectorId),
+          "cut concave setup succeeds");
+    SectorTopologyCutSectorResult result;
+    std::string error;
+    Check(game::CutSectorTopologySectorBetweenBoundaryPoints(
+                  map,
+                  sectorId,
+                  CutVertex(1),
+                  CutVertex(4),
+                  &result,
+                  &error),
+          "valid concave sector cut succeeds");
+    PrintErrorIfAny(error);
+
+    SectorTopologyLoopSet firstLoops;
+    SectorTopologyLoopSet secondLoops;
+    Check(ValidateAndExtract(map, sectorId, firstLoops), "concave cut original extracts");
+    Check(ValidateAndExtract(map, result.newSectorId, secondLoops), "concave cut new extracts");
+
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "generated geometry builds after sector cut");
+    game::SectorLightmapLayout layout;
+    Check(game::BuildSectorLightmapLayout(map, layout, error) && !layout.charts.empty(),
+          "lightmap layout builds after sector cut");
+}
+
+void TestCutAssignsContainedHoleToOneResult()
+{
+    SectorTopologyMap map;
+    int parentId = -1;
+    int childId = -1;
+    Check(Create(map, {{0, 0}, {160, 0}, {160, 160}, {0, 160}}, &parentId),
+          "cut hole parent setup succeeds");
+    Check(Insert(map, parentId, {{96, 48}, {128, 48}, {128, 80}, {96, 80}}, &childId),
+          "cut hole child setup succeeds");
+
+    SectorTopologyCutSectorResult result;
+    std::string error;
+    Check(game::CutSectorTopologySectorBetweenBoundaryPoints(
+                  map,
+                  parentId,
+                  CutLinePoint(1, {80, 0}),
+                  CutLinePoint(3, {80, 160}),
+                  &result,
+                  &error),
+          "cut assigns contained hole succeeds");
+    PrintErrorIfAny(error);
+
+    SectorTopologyLoopSet parentLoops;
+    SectorTopologyLoopSet newLoops;
+    Check(ValidateAndExtract(map, parentId, parentLoops), "hole cut original extracts");
+    Check(ValidateAndExtract(map, result.newSectorId, newLoops), "hole cut new extracts");
+    Check(parentLoops.holes.size() + newLoops.holes.size() == 1,
+          "hole cut assigns existing hole to exactly one result");
+    Check(game::FindSectorTopologySector(map, childId) != nullptr,
+          "hole cut keeps child sector");
+}
+
+void TestRejectCutAtComplexPortalJunctionVertex()
+{
+    SectorTopologyMap map;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "complex cut left sector setup succeeds");
+    Check(Create(map, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "complex cut right sector setup succeeds");
+    Check(game::FindSectorTopologySector(map, leftId) != nullptr
+                  && game::FindSectorTopologySector(map, rightId) != nullptr,
+          "complex cut setup keeps adjacent sectors");
+    Check(CountLinesReferencingVertex(map, 2) > 2,
+          "complex cut setup has extra incident topology at shared endpoint");
+
+    const SectorTopologyMap before = map;
+    SectorTopologyCutSectorResult result;
+    std::string error;
+    Check(!game::CutSectorTopologySectorBetweenBoundaryPoints(
+                  map,
+                  leftId,
+                  CutVertex(2),
+                  CutVertex(4),
+                  &result,
+                  &error),
+          "cut using complex portal junction endpoint is rejected");
+    Check(error.find("complex sector junction") != std::string::npos,
+          "complex portal junction rejection reports endpoint limitation");
+    CheckUnchanged(before, map, "complex portal junction rejection leaves map unchanged");
+}
+
+void ExpectCutRejected(
+        const SectorTopologyMap& input,
+        int sectorId,
+        SectorTopologyBoundaryCutPoint first,
+        SectorTopologyBoundaryCutPoint second,
+        const char* description)
+{
+    SectorTopologyMap map = input;
+    const SectorTopologyMap before = map;
+    SectorTopologyCutSectorResult result;
+    std::string error;
+    Check(!game::CutSectorTopologySectorBetweenBoundaryPoints(
+                  map,
+                  sectorId,
+                  first,
+                  second,
+                  &result,
+                  &error),
+          description);
+    Check(!error.empty(), "rejected cut reports an error");
+    Check(result.originalSectorId == -1
+                  && result.newSectorId == -1
+                  && result.cutLineDefId == -1,
+          "rejected cut leaves result default");
+    CheckUnchanged(before, map, "rejected cut leaves map unchanged");
+}
+
+void ExpectCutRejectedWithPortalError(
+        const SectorTopologyMap& input,
+        int sectorId,
+        SectorTopologyBoundaryCutPoint first,
+        SectorTopologyBoundaryCutPoint second,
+        const char* description)
+{
+    SectorTopologyMap map = input;
+    const SectorTopologyMap before = map;
+    SectorTopologyCutSectorResult result;
+    std::string error;
+    Check(!game::CutSectorTopologySectorBetweenBoundaryPoints(
+                  map,
+                  sectorId,
+                  first,
+                  second,
+                  &result,
+                  &error),
+          description);
+    Check(error.find("portal") != std::string::npos
+                  || error.find("shared") != std::string::npos,
+          "portal boundary rejection reports shared or portal limitation");
+    Check(result.originalSectorId == -1
+                  && result.newSectorId == -1
+                  && result.cutLineDefId == -1,
+          "portal boundary rejection leaves result default");
+    CheckUnchanged(before, map, "portal boundary rejection leaves map unchanged");
+}
+
+void TestRejectCutEndpointsOnPortalBoundaries()
+{
+    SectorTopologyMap adjacent;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(adjacent, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "portal cut adjacent left setup succeeds");
+    Check(Create(adjacent, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "portal cut adjacent right setup succeeds");
+    const SectorTopologyLineDef* shared = FindLine(adjacent, 2, 3);
+    Check(shared != nullptr
+                  && game::IsValidSectorTopologyId(shared->frontSideDefId)
+                  && game::IsValidSectorTopologyId(shared->backSideDefId),
+          "portal cut adjacent setup has shared linedef");
+    if (shared != nullptr) {
+        ExpectCutRejectedWithPortalError(
+                adjacent,
+                leftId,
+                CutLinePoint(shared->id, {64, 32}),
+                CutVertex(4),
+                "cut endpoint strictly inside portal linedef is rejected");
+        ExpectCutRejectedWithPortalError(
+                adjacent,
+                leftId,
+                CutLinePoint(3, {32, 64}),
+                CutLinePoint(shared->id, {64, 32}),
+                "cut starting on one-sided boundary and ending on portal boundary is rejected");
+        ExpectCutRejectedWithPortalError(
+                adjacent,
+                leftId,
+                CutLinePoint(shared->id, {64, 32}),
+                CutVertex(4),
+                "cut starting on portal boundary and ending on one-sided boundary is rejected");
+    }
+
+    SectorTopologyMap inserted;
+    int parentId = -1;
+    int childId = -1;
+    Check(Create(inserted, {{0, 0}, {160, 0}, {160, 160}, {0, 160}}, &parentId),
+          "portal cut inserted parent setup succeeds");
+    Check(Insert(inserted, parentId, {{64, 64}, {96, 64}, {96, 96}, {64, 96}}, &childId),
+          "portal cut inserted child setup succeeds");
+    const std::vector<const SectorTopologyLineDef*> childBoundary =
+            InsertedBoundaryLines(inserted, parentId, childId);
+    Check(!childBoundary.empty(), "portal cut inserted setup has shared child boundary");
+    if (!childBoundary.empty()) {
+        const int portalVertexId = childBoundary.front()->startVertexId;
+        ExpectCutRejectedWithPortalError(
+                inserted,
+                childId,
+                CutVertex(portalVertexId),
+                CutVertex(childBoundary.front()->endVertexId),
+                "cut endpoint at simple vertex adjacent to portal linedef is rejected");
+    }
+}
+
+void TestRejectInvalidSectorCutsTransactionally()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {96, 0}, {96, 96}, {0, 96}}, &sectorId),
+          "invalid cuts base setup succeeds");
+
+    ExpectCutRejected(map, 9999, CutVertex(1), CutVertex(3), "cut missing sector fails");
+    ExpectCutRejected(map, sectorId, CutVertex(1), CutVertex(1), "cut same endpoint fails");
+    ExpectCutRejected(map, sectorId, CutLinePoint(1, {24, 0}), CutLinePoint(1, {72, 0}),
+                      "cut same source boundary edge fails");
+    ExpectCutRejected(map, sectorId, CutVertex(1), CutVertex(2), "cut boundary-aligned edge fails");
+
+    SectorTopologyMap unrelated = map;
+    int otherId = -1;
+    Check(Create(unrelated, {{128, 0}, {160, 0}, {160, 32}, {128, 32}}, &otherId),
+          "invalid cuts unrelated setup succeeds");
+    ExpectCutRejected(unrelated, sectorId, CutLinePoint(5, {144, 0}), CutVertex(3),
+                      "cut endpoint on unrelated linedef fails");
+
+    SectorTopologyMap concave;
+    int concaveId = -1;
+    Check(Create(concave, {{0, 0}, {96, 0}, {96, 32}, {32, 32}, {32, 96}, {0, 96}}, &concaveId),
+          "outside concave cut setup succeeds");
+    ExpectCutRejected(concave, concaveId, CutVertex(3), CutVertex(5),
+                      "concave cut outside sector fails");
+
+    SectorTopologyMap passThrough = map;
+    const int centerVertexId = game::AllocateSectorTopologyVertexId(passThrough);
+    passThrough.vertices.push_back(game::SectorTopologyVertex{centerVertexId, 48, 48});
+    ExpectCutRejected(passThrough, sectorId, CutVertex(1), CutVertex(3),
+                      "cut through unrelated vertex fails");
+
+    SectorTopologyMap holeMap;
+    int parentId = -1;
+    int childId = -1;
+    Check(Create(holeMap, {{0, 0}, {160, 0}, {160, 160}, {0, 160}}, &parentId),
+          "invalid hole cut parent setup succeeds");
+    Check(Insert(holeMap, parentId, {{64, 64}, {96, 64}, {96, 96}, {64, 96}}, &childId),
+          "invalid hole cut child setup succeeds");
+    ExpectCutRejected(holeMap, parentId, CutLinePoint(1, {80, 0}), CutLinePoint(3, {80, 160}),
+                      "cut crossing hole boundary fails");
+}
+
+const SectorTopologyLineDef* FindSharedLineBetweenSectors(
+        const SectorTopologyMap& map,
+        int firstSectorId,
+        int secondSectorId)
+{
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        const SectorTopologySideDef* front = FindSideDef(map, lineDef.frontSideDefId);
+        const SectorTopologySideDef* back = FindSideDef(map, lineDef.backSideDefId);
+        if (front == nullptr || back == nullptr) {
+            continue;
+        }
+        if ((front->sectorId == firstSectorId && back->sectorId == secondSectorId)
+                || (front->sectorId == secondSectorId && back->sectorId == firstSectorId)) {
+            return &lineDef;
+        }
+    }
+    return nullptr;
+}
+
+int CountSharedLinesBetweenSectors(
+        const SectorTopologyMap& map,
+        int firstSectorId,
+        int secondSectorId)
+{
+    int count = 0;
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        const SectorTopologySideDef* front = FindSideDef(map, lineDef.frontSideDefId);
+        const SectorTopologySideDef* back = FindSideDef(map, lineDef.backSideDefId);
+        if (front == nullptr || back == nullptr) {
+            continue;
+        }
+        if ((front->sectorId == firstSectorId && back->sectorId == secondSectorId)
+                || (front->sectorId == secondSectorId && back->sectorId == firstSectorId)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+void ExpectJoinRejected(
+        const SectorTopologyMap& input,
+        int winnerSectorId,
+        int otherSectorId,
+        const char* description)
+{
+    SectorTopologyMap map = input;
+    const SectorTopologyMap before = map;
+    SectorTopologyJoinSectorsResult result;
+    std::string error;
+    Check(!game::JoinSectorTopologySectors(
+                  map,
+                  winnerSectorId,
+                  otherSectorId,
+                  &result,
+                  &error),
+          description);
+    Check(!error.empty(), "rejected join reports an error");
+    Check(result.survivingSectorId == -1 && result.removedSectorId == -1,
+          "rejected join leaves result default");
+    CheckUnchanged(before, map, "rejected join leaves map unchanged");
+}
+
+void TestJoinAdjacentRectanglesPreservesWinnerAndSides()
+{
+    SectorTopologyMap map;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "join adjacent left setup succeeds");
+    Check(Create(map, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "join adjacent right setup succeeds");
+
+    game::SectorTopologySector* left = game::FindSectorTopologySector(map, leftId);
+    game::SectorTopologySector* right = game::FindSectorTopologySector(map, rightId);
+    Check(left != nullptr && right != nullptr, "join adjacent finds sectors");
+    if (left == nullptr || right == nullptr) {
+        return;
+    }
+    left->name = "winner";
+    left->floorZ = -8.0f;
+    left->ceilingZ = 56.0f;
+    left->floorTextureId = "winner_floor";
+    left->ceilingTextureId = "winner_ceiling";
+    left->ambientColor = Color{10, 20, 30, 255};
+    left->ambientIntensity = 0.35f;
+    left->defaultWall.textureId = "winner_default_wall";
+    right->name = "removed";
+    right->floorZ = 7.0f;
+    right->ceilingZ = 80.0f;
+    right->floorTextureId = "removed_floor";
+
+    const SectorTopologyLineDef* shared = FindSharedLineBetweenSectors(map, leftId, rightId);
+    Check(shared != nullptr, "join adjacent finds shared portal");
+    if (shared == nullptr) {
+        return;
+    }
+    const int sharedLineId = shared->id;
+
+    int preservedRightSideDefId = -1;
+    SectorTopologySideDef expectedSide;
+    for (SectorTopologySideDef& sideDef : map.sideDefs) {
+        if (sideDef.sectorId == rightId && sideDef.lineDefId != sharedLineId) {
+            SetDistinctSideSettings(sideDef, "join_preserved_right");
+            expectedSide = sideDef;
+            preservedRightSideDefId = sideDef.id;
+            break;
+        }
+    }
+    Check(preservedRightSideDefId >= 0, "join adjacent finds right exterior side");
+
+    SectorTopologyJoinSectorsResult result;
+    std::string error;
+    Check(game::JoinSectorTopologySectors(map, leftId, rightId, &result, &error),
+          "join adjacent sectors succeeds");
+    PrintErrorIfAny(error);
+    Check(error.empty(), "successful join clears error");
+    Check(result.survivingSectorId == leftId && result.removedSectorId == rightId,
+          "join reports surviving and removed sectors");
+    Check(game::FindSectorTopologySector(map, rightId) == nullptr,
+          "join removes other sector");
+    const game::SectorTopologySector* winner = game::FindSectorTopologySector(map, leftId);
+    Check(winner != nullptr, "join keeps winner sector");
+    if (winner != nullptr) {
+        Check(winner->name == "winner"
+                      && winner->floorZ == -8.0f
+                      && winner->ceilingZ == 56.0f
+                      && winner->floorTextureId == "winner_floor"
+                      && winner->ceilingTextureId == "winner_ceiling"
+                      && winner->ambientColor.g == 20
+                      && winner->ambientIntensity == 0.35f
+                      && winner->defaultWall.textureId == "winner_default_wall",
+              "join preserves winner sector properties");
+    }
+    Check(FindLineById(map, sharedLineId) == nullptr,
+          "join removes shared internal linedef");
+    Check(CountSideDefsForSector(map, rightId) == 0,
+          "join reassigns all other sector sidedefs");
+    const SectorTopologySideDef* preserved = FindSideDef(map, preservedRightSideDefId);
+    Check(preserved != nullptr
+                  && preserved->sectorId == leftId
+                  && SameSideDefMaterials(*preserved, expectedSide),
+          "join preserves reassigned exterior sidedef material and UV data");
+
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, leftId, loops), "joined adjacent sector extracts");
+    Check(loops.outer.vertexIds.size() == 6 && loops.holes.empty(),
+          "joined adjacent sector has one outer loop");
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "generated geometry builds after adjacent join");
+    game::SectorLightmapLayout layout;
+    Check(game::BuildSectorLightmapLayout(map, layout, error) && !layout.charts.empty(),
+          "lightmap layout builds after adjacent join");
+}
+
+void TestJoinCutRectangleRestoresSingleSector()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "join cut rectangle setup succeeds");
+    SectorTopologyCutSectorResult cut;
+    std::string error;
+    Check(game::CutSectorTopologySectorBetweenBoundaryPoints(
+                  map,
+                  sectorId,
+                  CutVertex(1),
+                  CutVertex(3),
+                  &cut,
+                  &error),
+          "join cut rectangle cut succeeds");
+    const int cutLineDefId = cut.cutLineDefId;
+
+    SectorTopologyJoinSectorsResult join;
+    Check(game::JoinSectorTopologySectors(map, sectorId, cut.newSectorId, &join, &error),
+          "join cut rectangle succeeds");
+    PrintErrorIfAny(error);
+    Check(map.sectors.size() == 1
+                  && game::FindSectorTopologySector(map, sectorId) != nullptr
+                  && game::FindSectorTopologySector(map, cut.newSectorId) == nullptr,
+          "join cut rectangle leaves one sector");
+    Check(FindLineById(map, cutLineDefId) == nullptr,
+          "join cut rectangle removes cut linedef");
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, sectorId, loops), "join cut rectangle extracts");
+    Check(loops.outer.vertexIds.size() == 4 && loops.holes.empty(),
+          "join cut rectangle restores four-corner outer loop");
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "generated geometry builds after cut join");
+    game::SectorLightmapLayout layout;
+    Check(game::BuildSectorLightmapLayout(map, layout, error) && !layout.charts.empty(),
+          "lightmap layout builds after cut join");
+}
+
+void TestJoinSplitSharedPortalChainPrunesOrphanVertex()
+{
+    SectorTopologyMap map;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "join split chain left setup succeeds");
+    Check(Create(map, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "join split chain right setup succeeds");
+    const SectorTopologyLineDef* shared = FindSharedLineBetweenSectors(map, leftId, rightId);
+    Check(shared != nullptr, "join split chain finds shared portal");
+    if (shared == nullptr) {
+        return;
+    }
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    Check(game::SplitSectorTopologyLineDefAtPoint(map, shared->id, {64, 32}, &split, &error),
+          "join split chain splits portal");
+    Check(CountSharedLinesBetweenSectors(map, leftId, rightId) == 2,
+          "join split chain creates two shared portal segments");
+    Check(game::FindSectorTopologyVertex(map, split.newVertexId) != nullptr,
+          "join split chain creates middle vertex");
+
+    SectorTopologyJoinSectorsResult join;
+    Check(game::JoinSectorTopologySectors(map, leftId, rightId, &join, &error),
+          "join split chain succeeds");
+    PrintErrorIfAny(error);
+    Check(game::FindSectorTopologyVertex(map, split.newVertexId) == nullptr,
+          "join split chain prunes orphan shared-boundary vertex");
+    Check(FindLineById(map, split.firstLineDefId) == nullptr
+                  && FindLineById(map, split.secondLineDefId) == nullptr,
+          "join split chain removes both shared portal segments");
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, leftId, loops), "join split chain extracts");
+}
+
+void TestRejectInvalidSectorJoinsTransactionally()
+{
+    SectorTopologyMap adjacent;
+    int leftId = -1;
+    int rightId = -1;
+    Check(Create(adjacent, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &leftId),
+          "join reject adjacent left setup succeeds");
+    Check(Create(adjacent, {{64, 0}, {128, 0}, {128, 64}, {64, 64}}, &rightId),
+          "join reject adjacent right setup succeeds");
+    ExpectJoinRejected(adjacent, 9999, rightId, "join missing winner fails");
+    ExpectJoinRejected(adjacent, leftId, 9999, "join missing other fails");
+    ExpectJoinRejected(adjacent, leftId, leftId, "join same sector fails");
+
+    SectorTopologyMap nonAdjacent = adjacent;
+    int farId = -1;
+    Check(Create(nonAdjacent, {{192, 0}, {224, 0}, {224, 32}, {192, 32}}, &farId),
+          "join reject non-adjacent setup succeeds");
+    ExpectJoinRejected(nonAdjacent, leftId, farId, "join non-adjacent sectors fails");
+
+    SectorTopologyMap touching;
+    int firstId = -1;
+    int secondId = -1;
+    Check(Create(touching, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &firstId),
+          "join reject touching first setup succeeds");
+    Check(Create(touching, {{64, 64}, {96, 64}, {96, 96}, {64, 96}}, &secondId),
+          "join reject touching second setup succeeds");
+    ExpectJoinRejected(touching, firstId, secondId, "join vertex-touching sectors fails");
+
+    SectorTopologyMap inserted;
+    int parentId = -1;
+    int childId = -1;
+    Check(Create(inserted, {{0, 0}, {160, 0}, {160, 160}, {0, 160}}, &parentId),
+          "join reject closed parent setup succeeds");
+    Check(Insert(inserted, parentId, {{64, 64}, {96, 64}, {96, 96}, {64, 96}}, &childId),
+          "join reject closed child setup succeeds");
+    ExpectJoinRejected(inserted, childId, parentId, "join closed shared boundary fails");
+}
+
 void TestMoveOuterVertex()
 {
     SectorTopologyMap map;
@@ -1229,6 +2461,148 @@ void TestRejectMovedCrossing()
     CheckUnchanged(before, map, "move creating crossing linedef leaves map unchanged");
 }
 
+void TestMergeVertexIntoUnreferencedTarget()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
+          "merge success square creation succeeds");
+    for (SectorTopologySideDef& sideDef : map.sideDefs) {
+        SetDistinctSideSettings(sideDef, TextFormat("merge_side_%d", sideDef.id));
+    }
+
+    const int sourceVertexId = 3;
+    const int targetVertexId = game::AllocateSectorTopologyVertexId(map);
+    map.vertices.push_back(game::SectorTopologyVertex{targetVertexId, 80, 64});
+    const SectorTopologyMap before = map;
+
+    SectorTopologyMergeVerticesResult result;
+    std::string error;
+    Check(game::MergeSectorTopologyVertices(map, sourceVertexId, targetVertexId, &result, &error),
+          "merge vertex into unreferenced target succeeds");
+    Check(error.empty(), "successful merge clears error");
+    Check(result.mergedVertexId == targetVertexId && result.removedVertexId == sourceVertexId,
+          "merge reports surviving and removed vertices");
+    Check(game::FindSectorTopologyVertex(map, sourceVertexId) == nullptr,
+          "merge removes source vertex");
+    Check(game::FindSectorTopologyVertex(map, targetVertexId) != nullptr,
+          "merge keeps target vertex");
+    Check(CountLinesReferencingVertex(map, sourceVertexId) == 0,
+          "merge rewires all source references");
+    Check(CountLinesReferencingVertex(map, targetVertexId) == 2,
+          "merge rewires incident linedefs to target");
+    Check(map.lineDefs.size() == before.lineDefs.size()
+                  && map.sideDefs.size() == before.sideDefs.size()
+                  && map.sectors.size() == before.sectors.size(),
+          "merge does not remove linedefs, sidedefs, or sectors");
+    Check(SameAllSideDefSettings(before, map),
+          "merge preserves sidedef wall/lower/upper materials and UVs");
+
+    SectorTopologyLoopSet loops;
+    Check(ValidateAndExtract(map, sectorId, loops), "merged sector validates and extracts");
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "generated geometry builds after merge");
+}
+
+void ExpectMergeRejected(
+        const SectorTopologyMap& input,
+        int sourceVertexId,
+        int targetVertexId,
+        const char* expectedErrorText,
+        const char* description)
+{
+    SectorTopologyMap map = input;
+    const SectorTopologyMap before = map;
+    std::string error;
+    Check(!game::MergeSectorTopologyVertices(map, sourceVertexId, targetVertexId, nullptr, &error),
+          description);
+    Check(!error.empty(), "rejected merge reports an error");
+    if (expectedErrorText != nullptr) {
+        Check(error.find(expectedErrorText) != std::string::npos,
+              "rejected merge reports expected error text");
+    }
+    CheckUnchanged(before, map, "rejected merge leaves map unchanged");
+}
+
+void TestRejectInvalidMergeInputs()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "invalid merge input square creation succeeds");
+
+    ExpectMergeRejected(map, 999, 1, "Source topology vertex not found",
+                        "merge missing source fails");
+    ExpectMergeRejected(map, 1, 999, "Target topology vertex not found",
+                        "merge missing target fails");
+    ExpectMergeRejected(map, 1, 1, "itself",
+                        "merge source into itself fails");
+}
+
+void TestRejectMergeCollapsedLineDef()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "collapsed merge square creation succeeds");
+    ExpectMergeRejected(map, 1, 2, "collapse",
+                        "merge that collapses a linedef fails");
+}
+
+void TestRejectMergeDuplicatePhysicalLineDef()
+{
+    SectorTopologyMap map;
+    int sectorId = -1;
+    Check(Create(map, {{0, 0}, {96, 0}, {96, 96}, {0, 96}}, &sectorId),
+          "duplicate merge base square creation succeeds");
+
+    const int sourceVertexId = game::AllocateSectorTopologyVertexId(map);
+    map.vertices.push_back(game::SectorTopologyVertex{sourceVertexId, 32, 32});
+
+    const int targetVertexId = game::AllocateSectorTopologyVertexId(map);
+    map.vertices.push_back(game::SectorTopologyVertex{targetVertexId, 64, 32});
+
+    const int firstSideDefId = game::AllocateSectorTopologySideDefId(map);
+    const int firstLineDefId = game::AllocateSectorTopologyLineDefId(map);
+    map.sideDefs.push_back(SectorTopologySideDef{
+            firstSideDefId,
+            firstLineDefId,
+            SectorTopologySideKind::Front,
+            sectorId,
+            game::SectorTopologyWallPartSettings{},
+            game::SectorTopologyWallPartSettings{},
+            game::SectorTopologyWallPartSettings{}
+    });
+    map.lineDefs.push_back(SectorTopologyLineDef{firstLineDefId, sourceVertexId, 1, firstSideDefId, -1});
+
+    const int secondSideDefId = game::AllocateSectorTopologySideDefId(map);
+    const int secondLineDefId = game::AllocateSectorTopologyLineDefId(map);
+    map.sideDefs.push_back(SectorTopologySideDef{
+            secondSideDefId,
+            secondLineDefId,
+            SectorTopologySideKind::Front,
+            sectorId,
+            game::SectorTopologyWallPartSettings{},
+            game::SectorTopologyWallPartSettings{},
+            game::SectorTopologyWallPartSettings{}
+    });
+    map.lineDefs.push_back(SectorTopologyLineDef{secondLineDefId, targetVertexId, 1, secondSideDefId, -1});
+
+    ExpectMergeRejected(map, sourceVertexId, targetVertexId, "duplicate physical linedefs",
+                        "merge creating duplicate physical linedef fails");
+}
+
+void TestRejectMergeInvalidTopology()
+{
+    SectorTopologyMap map;
+    Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}),
+          "invalid topology merge square creation succeeds");
+    const int targetVertexId = game::AllocateSectorTopologyVertexId(map);
+    map.vertices.push_back(game::SectorTopologyVertex{targetVertexId, 32, 0});
+
+    ExpectMergeRejected(map, 3, targetVertexId, nullptr,
+                        "merge creating invalid topology fails");
+}
+
 void TestRejectOccupiedSlot()
 {
     SectorTopologyMap map;
@@ -1319,6 +2693,19 @@ int main()
     TestInvalidInsertsRejectTransactionally();
     TestAdjacentSharesFullEdge();
     TestChangingSectorDefaultsDoesNotRewriteExistingSideDefs();
+    TestTopologyGeometryHelpers();
+    TestSplitOneSidedWallAtPoint();
+    TestSplitTwoSidedSharedLineAtPoint();
+    TestSplitDiagonalLineAtPoint();
+    TestRejectInvalidSplitAtPoint();
+    TestSplitAtPointGeneratedGeometryBuilds();
+    TestDissolveOneSidedSplitWall();
+    TestDissolveTwoSidedSharedPortal();
+    TestRejectInvalidDissolveInputs();
+    TestRejectDissolveDegreeOneAndCollapsed();
+    TestRejectDissolveBranchingAndDuplicate();
+    TestRejectDissolveMaterialMismatch();
+    TestRejectDissolveCandidateValidationFailure();
     TestDeleteStandaloneSector();
     TestDeleteAdjacentSector();
     TestDeleteInsertedChildSector();
@@ -1329,12 +2716,29 @@ int main()
     TestSplitInsertedPlatformBoundary();
     TestRejectNonRepresentableSplitMidpoint();
     TestSplitGeneratedGeometryBuilds();
+    TestCutRectangleBetweenBoundaryVertices();
+    TestCutRectangleBetweenInteriorBoundaryPoints();
+    TestCutCopiesSectorFieldsAndPreservesBoundarySideDefs();
+    TestCutConcaveSectorAndBuildOutputs();
+    TestCutAssignsContainedHoleToOneResult();
+    TestRejectCutAtComplexPortalJunctionVertex();
+    TestRejectCutEndpointsOnPortalBoundaries();
+    TestRejectInvalidSectorCutsTransactionally();
+    TestJoinAdjacentRectanglesPreservesWinnerAndSides();
+    TestJoinCutRectangleRestoresSingleSector();
+    TestJoinSplitSharedPortalChainPrunesOrphanVertex();
+    TestRejectInvalidSectorJoinsTransactionally();
     TestMoveOuterVertex();
     TestMoveSharedAdjacentVertex();
     TestMoveInsertedPlatformVertex();
     TestRejectMoveOntoExistingVertex();
     TestRejectInvalidMovedLoop();
     TestRejectMovedCrossing();
+    TestMergeVertexIntoUnreferencedTarget();
+    TestRejectInvalidMergeInputs();
+    TestRejectMergeCollapsedLineDef();
+    TestRejectMergeDuplicatePhysicalLineDef();
+    TestRejectMergeInvalidTopology();
     TestRejectOccupiedSlot();
     TestRejectPartialOverlap();
     TestRejectCrossing();

@@ -6,6 +6,7 @@
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyCreation.h"
+#include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorTopologySerialization.h"
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
@@ -38,6 +39,8 @@ constexpr float LeftPanelWidth = 360.0f;
 constexpr float RightPanelWidth = 384.0f;
 constexpr float BottomPanelHeight = 78.0f;
 constexpr float PanelGap = 10.0f;
+constexpr float TopologyUvScaleMin = 0.001f;
+constexpr float TopologyUvScaleMax = 64.0f;
 constexpr float MinZoom = 8.0f;
 constexpr float MaxZoom = 256.0f;
 constexpr float PanPixelsPerSecond = 720.0f;
@@ -111,6 +114,16 @@ SectorTopologyMap CreateEmptySectorTopologyDocument()
     SectorTopologyMap map;
     PopulateDefaultSectorTextures(map.texturesById);
     return map;
+}
+
+bool SameBoundaryCutPoint(
+        const SectorTopologyBoundaryCutPoint& a,
+        const SectorTopologyBoundaryCutPoint& b)
+{
+    return a.vertexId == b.vertexId
+            && a.lineDefId == b.lineDefId
+            && a.point.x == b.point.x
+            && a.point.y == b.point.y;
 }
 
 const SectorTextureDefinition* FindSectorTopologyTexture(
@@ -525,6 +538,16 @@ const char* TopologyWallPartStatusName(TopologyWallPart part)
     return "wall";
 }
 
+const char* TopologyWallPartSurfaceStatusName(TopologyWallPart part)
+{
+    switch (part) {
+        case TopologyWallPart::Wall: return "wall";
+        case TopologyWallPart::Lower: return "lower wall";
+        case TopologyWallPart::Upper: return "upper wall";
+    }
+    return "wall";
+}
+
 const char* SurfaceKindName(SectorSurfaceKind kind)
 {
     switch (kind) {
@@ -596,6 +619,56 @@ TopologyWallPart TopologyEditTargetWallPart(TopologySurfaceEditTargetKind kind)
             break;
     }
     return TopologyWallPart::Wall;
+}
+
+TopologySurfaceEditTargetKind TopologyWallPartEditTargetKind(TopologyWallPart part)
+{
+    switch (part) {
+        case TopologyWallPart::Wall: return TopologySurfaceEditTargetKind::SideDefWall;
+        case TopologyWallPart::Lower: return TopologySurfaceEditTargetKind::SideDefLower;
+        case TopologyWallPart::Upper: return TopologySurfaceEditTargetKind::SideDefUpper;
+    }
+    return TopologySurfaceEditTargetKind::SideDefWall;
+}
+
+const char* TopologyMaterialKindName(TopologySurfaceEditTargetKind kind)
+{
+    switch (kind) {
+        case TopologySurfaceEditTargetKind::SectorFloor: return "floor";
+        case TopologySurfaceEditTargetKind::SectorCeiling: return "ceiling";
+        case TopologySurfaceEditTargetKind::SideDefWall: return "wall";
+        case TopologySurfaceEditTargetKind::SideDefLower: return "lower";
+        case TopologySurfaceEditTargetKind::SideDefUpper: return "upper";
+        case TopologySurfaceEditTargetKind::None:
+            break;
+    }
+    return "none";
+}
+
+bool IsWallTopologyEditTarget(TopologySurfaceEditTargetKind kind)
+{
+    return kind == TopologySurfaceEditTargetKind::SideDefWall
+            || kind == TopologySurfaceEditTargetKind::SideDefLower
+            || kind == TopologySurfaceEditTargetKind::SideDefUpper;
+}
+
+const char* TopologyUvFitModeStatusName(TopologyUvFitMode mode)
+{
+    switch (mode) {
+        case TopologyUvFitMode::Width: return "width";
+        case TopologyUvFitMode::Height: return "height";
+        case TopologyUvFitMode::Both: return "width and height";
+    }
+    return "UV";
+}
+
+const char* TopologyUAlignDirectionStatusName(TopologyUAlignDirection direction)
+{
+    switch (direction) {
+        case TopologyUAlignDirection::Previous: return "previous";
+        case TopologyUAlignDirection::Next: return "next";
+    }
+    return "neighbor";
 }
 
 TopologySectorTextureField TopologyEditTargetSectorTextureField(TopologySurfaceEditTargetKind kind)
@@ -718,6 +791,178 @@ const SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
         case TopologyWallPart::Upper: return sideDef.upper;
     }
     return sideDef.wall;
+}
+
+bool SectorTopologyWallLengthWorld(
+        const SectorTopologyMap& map,
+        const SectorTopologyLineDef& lineDef,
+        float& outLengthWorld)
+{
+    outLengthWorld = 0.0f;
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(map, lineDef, start, end)
+            || start == nullptr || end == nullptr) {
+        return false;
+    }
+
+    const double dx = static_cast<double>(end->x) - static_cast<double>(start->x);
+    const double dy = static_cast<double>(end->y) - static_cast<double>(start->y);
+    const double coordLength = std::sqrt(dx * dx + dy * dy);
+    outLengthWorld = SectorCoordDistanceToWorldDistance(coordLength);
+    return outLengthWorld > 0.0f && std::isfinite(outLengthWorld);
+}
+
+bool FindSectorLoopEdgeForSideDef(
+        const SectorTopologyLoop& loop,
+        int sideDefId,
+        const SectorTopologyLoop*& outLoop,
+        size_t& outEdgeIndex)
+{
+    bool found = false;
+    for (size_t i = 0; i < loop.edges.size(); ++i) {
+        if (loop.edges[i].sideDefId != sideDefId) {
+            continue;
+        }
+        if (found) {
+            outLoop = nullptr;
+            outEdgeIndex = 0;
+            return false;
+        }
+        found = true;
+        outLoop = &loop;
+        outEdgeIndex = i;
+    }
+    return found;
+}
+
+bool FindUniqueSectorLoopEdgeForSideDef(
+        const SectorTopologyLoopSet& loops,
+        int sideDefId,
+        const SectorTopologyLoop*& outLoop,
+        size_t& outEdgeIndex)
+{
+    outLoop = nullptr;
+    outEdgeIndex = 0;
+    int foundCount = 0;
+
+    const auto visitLoop = [&](const SectorTopologyLoop& loop) {
+        const SectorTopologyLoop* foundLoop = nullptr;
+        size_t foundIndex = 0;
+        if (FindSectorLoopEdgeForSideDef(loop, sideDefId, foundLoop, foundIndex)) {
+            ++foundCount;
+            outLoop = foundLoop;
+            outEdgeIndex = foundIndex;
+        }
+    };
+
+    visitLoop(loops.outer);
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        visitLoop(hole);
+    }
+    return foundCount == 1 && outLoop != nullptr;
+}
+
+bool TopologyWallPartHasVisibleSpan(
+        const SectorTopologyMap& map,
+        const SectorTopologySideDef& sideDef,
+        TopologyWallPart wallPart)
+{
+    const SectorTopologySector* sector = FindSectorTopologySector(map, sideDef.sectorId);
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, sideDef.lineDefId);
+    if (sector == nullptr || lineDef == nullptr) {
+        return false;
+    }
+
+    const int oppositeSideDefId = sideDef.side == SectorTopologySideKind::Front
+            ? lineDef->backSideDefId
+            : lineDef->frontSideDefId;
+    const SectorTopologySideDef* opposite = FindOppositeSectorTopologySideDef(map, sideDef.id);
+    if (oppositeSideDefId != -1 && opposite == nullptr) {
+        return false;
+    }
+
+    const SectorTopologySector* oppositeSector = nullptr;
+    if (opposite != nullptr) {
+        oppositeSector = FindSectorTopologySector(map, opposite->sectorId);
+        if (oppositeSector == nullptr) {
+            return false;
+        }
+    }
+
+    switch (wallPart) {
+        case TopologyWallPart::Wall:
+            return opposite == nullptr
+                    && sector->ceilingZ > sector->floorZ
+                    && std::isfinite(sector->floorZ)
+                    && std::isfinite(sector->ceilingZ);
+        case TopologyWallPart::Lower:
+            return oppositeSector != nullptr
+                    && oppositeSector->floorZ > sector->floorZ
+                    && std::isfinite(sector->floorZ)
+                    && std::isfinite(oppositeSector->floorZ);
+        case TopologyWallPart::Upper:
+            return oppositeSector != nullptr
+                    && sector->ceilingZ > oppositeSector->ceilingZ
+                    && std::isfinite(sector->ceilingZ)
+                    && std::isfinite(oppositeSector->ceilingZ);
+    }
+    return false;
+}
+
+const SectorTopologyLoopEdge* FindVisibleTopologyWallPartNeighborEdge(
+        const SectorTopologyMap& map,
+        const SectorTopologyLoop& loop,
+        size_t selectedEdgeIndex,
+        int sectorId,
+        TopologyUAlignDirection direction,
+        TopologyWallPart wallPart,
+        std::string& outError)
+{
+    outError.clear();
+    const size_t edgeCount = loop.edges.size();
+    if (edgeCount < 2 || selectedEdgeIndex >= edgeCount) {
+        return nullptr;
+    }
+
+    for (size_t step = 1; step < edgeCount; ++step) {
+        const size_t edgeIndex = direction == TopologyUAlignDirection::Previous
+                ? (selectedEdgeIndex + edgeCount - step) % edgeCount
+                : (selectedEdgeIndex + step) % edgeCount;
+        const SectorTopologyLoopEdge& edge = loop.edges[edgeIndex];
+        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, edge.sideDefId);
+        if (sideDef == nullptr
+                || sideDef->lineDefId != edge.lineDefId
+                || sideDef->sectorId != sectorId
+                || sideDef->side != edge.side) {
+            outError = TextFormat(
+                    "%s sidedef is no longer valid.",
+                    direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
+            return nullptr;
+        }
+        const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, edge.lineDefId);
+        if (lineDef == nullptr) {
+            outError = TextFormat(
+                    "%s sidedef references a missing linedef.",
+                    direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
+            return nullptr;
+        }
+        const int expectedSideDefId = edge.side == SectorTopologySideKind::Front
+                ? lineDef->frontSideDefId
+                : lineDef->backSideDefId;
+        if (expectedSideDefId != sideDef->id) {
+            outError = TextFormat(
+                    "%s sidedef is no longer valid.",
+                    direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
+            return nullptr;
+        }
+        if (!TopologyWallPartHasVisibleSpan(map, *sideDef, wallPart)) {
+            continue;
+        }
+        return &edge;
+    }
+
+    return nullptr;
 }
 
 float PolygonArea2(const std::vector<SectorPoint>& points)
@@ -1120,10 +1365,13 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
         return;
     }
 
-    if (state.currentTool == SectorEditorTool::Move) {
+    if (state.currentTool == SectorEditorTool::Move || state.currentTool == SectorEditorTool::Select) {
         const int lightId = FindTopologyLightNearScreenPoint(input.MousePosition());
         if (lightId >= 0) {
             state.hoveredTopologyLightId = lightId;
+            if (!state.pendingTopologyVertexMerge.active) {
+                state.inspectedTopologyVertexId = -1;
+            }
         } else {
             int vertexId = -1;
             SectorTopologyCoordPoint point;
@@ -1131,6 +1379,9 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
                 state.hasHoveredVertex = true;
                 state.hoveredTopologyVertexId = vertexId;
                 state.hoveredTopologyVertexPoint = point;
+                state.inspectedTopologyVertexId = vertexId;
+            } else if (!state.pendingTopologyVertexMerge.active) {
+                state.inspectedTopologyVertexId = -1;
             }
         }
     }
@@ -1151,6 +1402,12 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         CancelVertexDrag("Cancelled vertex move");
                     } else if (state.lightDrag.active) {
                         CancelLightDrag("Cancelled light move");
+                    } else if (state.pendingTopologyVertexMerge.active) {
+                        CancelPendingTopologyVertexMerge("Cancelled vertex merge");
+                    } else if (state.pendingTopologyLineSplitAtPoint.active) {
+                        CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
+                    } else if (state.pendingTopologySectorCut.active) {
+                        CancelPendingTopologySectorCut("Cancelled sector cut");
                     } else if (state.pendingSector.active) {
                         CancelPendingSector("Cancelled sector");
                     } else if (state.selectedTopologyLightId >= 0
@@ -1182,6 +1439,9 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     } else if (state.topologySelectionKind == TopologySelectionKind::Sector
                             && state.selectedTopologySectorId >= 0) {
                         OpenDeleteSelectedTopologySectorConfirmation();
+                    } else if (state.topologySelectionKind == TopologySelectionKind::Vertex
+                            && state.selectedTopologyVertexId >= 0) {
+                        statusText = "Standalone vertex deletion is not available; use Dissolve Vertex for simple degree-2 vertices.";
                     } else if (state.topologySelectionKind == TopologySelectionKind::SideDef
                             || state.topologySelectionKind == TopologySelectionKind::LineDef) {
                         statusText = "Direct linedef/sidedef deletion is not available yet.";
@@ -1193,6 +1453,76 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
             }
     );
+
+    if (state.pendingTopologyVertexMerge.active) {
+        UpdatePendingTopologyVertexMerge(input);
+
+        input.ForEachEvent(
+                engine::InputEventType::MouseButtonPressed,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (event.mouseButton.button == MOUSE_RIGHT_BUTTON) {
+                        CancelPendingTopologyVertexMerge("Cancelled vertex merge");
+                        engine::ConsumeEvent(event);
+                    }
+                }
+        );
+
+        input.ForEachEvent(
+                engine::InputEventType::MouseClick,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (!Contains(canvasRect, event.mouseClick.releasePosition)) {
+                        return;
+                    }
+                    if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
+                        CancelPendingTopologyVertexMerge("Cancelled vertex merge");
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+                    if (event.mouseClick.button == MOUSE_LEFT_BUTTON) {
+                        CommitPendingTopologyVertexMerge();
+                        engine::ConsumeEvent(event);
+                    }
+                }
+        );
+        return;
+    }
+
+    if (state.pendingTopologySectorCut.active) {
+        UpdatePendingTopologySectorCut(input);
+
+        input.ForEachEvent(
+                engine::InputEventType::MouseButtonPressed,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (event.mouseButton.button == MOUSE_RIGHT_BUTTON) {
+                        CancelPendingTopologySectorCut("Cancelled sector cut");
+                        engine::ConsumeEvent(event);
+                    }
+                }
+        );
+
+        input.ForEachEvent(
+                engine::InputEventType::MouseClick,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (!Contains(canvasRect, event.mouseClick.releasePosition)) {
+                        return;
+                    }
+                    if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
+                        CancelPendingTopologySectorCut("Cancelled sector cut");
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+                    if (event.mouseClick.button == MOUSE_LEFT_BUTTON) {
+                        CommitPendingTopologySectorCut();
+                        engine::ConsumeEvent(event);
+                    }
+                }
+        );
+        return;
+    }
 
     if (state.vertexDrag.active || state.lightDrag.active) {
         if (state.vertexDrag.active) {
@@ -1244,6 +1574,40 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
         return;
     }
 
+    if (state.pendingTopologyLineSplitAtPoint.active) {
+        UpdatePendingTopologyLineSplitAtPoint(input);
+
+        input.ForEachEvent(
+                engine::InputEventType::MouseButtonPressed,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (event.mouseButton.button == MOUSE_RIGHT_BUTTON) {
+                        CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
+                        engine::ConsumeEvent(event);
+                    }
+                }
+        );
+
+        input.ForEachEvent(
+                engine::InputEventType::MouseClick,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (!Contains(canvasRect, event.mouseClick.releasePosition)) {
+                        return;
+                    }
+                    if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
+                        CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+                    if (event.mouseClick.button == MOUSE_LEFT_BUTTON) {
+                        CommitPendingTopologyLineSplitAtPoint();
+                        engine::ConsumeEvent(event);
+                    }
+                }
+        );
+    }
+
     if (!uiState.keyboardCaptured) {
         Vector2 pan{};
         if (input.IsKeyDown(KEY_A)) {
@@ -1270,6 +1634,10 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
     }
 
     if (!IsMouseOverCanvas(input)) {
+        return;
+    }
+
+    if (state.pendingTopologyLineSplitAtPoint.active || state.pendingTopologySectorCut.active) {
         return;
     }
 
@@ -1336,6 +1704,18 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     if (lightId >= 0) {
                         SelectTopologyLight(lightId);
                         statusText = TextFormat("Selected topology light %d", lightId);
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+
+                    int vertexId = -1;
+                    SectorTopologyCoordPoint vertexPoint;
+                    if (FindTopologyVertexNearScreenPoint(
+                                event.mouseClick.releasePosition,
+                                vertexId,
+                                vertexPoint)) {
+                        SelectTopologyVertex(vertexId);
+                        statusText = TextFormat("Selected topology vertex %d", vertexId);
                         engine::ConsumeEvent(event);
                         return;
                     }
@@ -1441,6 +1821,7 @@ void SectorEditor::StartVertexDrag(int vertexId, SectorTopologyCoordPoint point)
         return;
     }
 
+    SelectTopologyVertex(vertexId);
     state.vertexDrag.active = true;
     state.vertexDrag.topologyVertexId = vertexId;
     state.vertexDrag.originalPoint = point;
@@ -1474,21 +1855,41 @@ void SectorEditor::UpdateVertexDrag(engine::Input& input)
         state.vertexDrag.errorMessage = error;
         state.vertexDrag.hasPreviewPoint = false;
         state.vertexDrag.lastPreviewValid = false;
+        state.vertexDrag.hasMergeTarget = false;
+        state.vertexDrag.mergeTargetVertexId = -1;
         statusText = TextFormat("Move rejected: %s", error.c_str());
         return;
     }
 
     state.vertexDrag.previewPoint = snappedPoint;
     state.vertexDrag.hasPreviewPoint = true;
+    const int mergeTargetVertexId = FindTopologyVertexAtCoordPoint(
+            state.vertexDrag.previewPoint,
+            state.vertexDrag.topologyVertexId);
     if (SameTopologyPoint(state.vertexDrag.previewPoint, state.vertexDrag.originalPoint)) {
         state.vertexDrag.errorMessage.clear();
         state.vertexDrag.hasValidatedPreview = true;
         state.vertexDrag.lastValidatedPoint = state.vertexDrag.previewPoint;
         state.vertexDrag.lastPreviewValid = true;
+        state.vertexDrag.hasMergeTarget = false;
+        state.vertexDrag.mergeTargetVertexId = -1;
         statusText = "Moving vertex: original point";
         return;
     }
 
+    if (mergeTargetVertexId >= 0) {
+        state.vertexDrag.errorMessage.clear();
+        state.vertexDrag.lastPreviewValid = true;
+        state.vertexDrag.hasMergeTarget = true;
+        state.vertexDrag.mergeTargetVertexId = mergeTargetVertexId;
+        state.vertexDrag.hasValidatedPreview = true;
+        state.vertexDrag.lastValidatedPoint = state.vertexDrag.previewPoint;
+        statusText = TextFormat("Release to merge into vertex %d", mergeTargetVertexId);
+        return;
+    }
+
+    state.vertexDrag.hasMergeTarget = false;
+    state.vertexDrag.mergeTargetVertexId = -1;
     if (!state.vertexDrag.hasValidatedPreview
             || !SameTopologyPoint(state.vertexDrag.previewPoint, state.vertexDrag.lastValidatedPoint)) {
         SectorTopologyMap previewMap = state.topologyMap;
@@ -1535,6 +1936,35 @@ void SectorEditor::FinishVertexDrag()
         return;
     }
 
+    if (state.vertexDrag.hasMergeTarget) {
+        const int targetVertexId = state.vertexDrag.mergeTargetVertexId;
+        SectorTopologyMergeVerticesResult merge;
+        std::string error;
+        if (!MergeSectorTopologyVertices(state.topologyMap, vertexId, targetVertexId, &merge, &error)) {
+            state.vertexDrag = VertexDragState{};
+            statusText = TextFormat("Merge rejected: %s", error.c_str());
+            return;
+        }
+
+        ClearTransientTopologyEditStateAfterGeometryChange();
+        SelectTopologyVertex(merge.mergedVertexId);
+        state.inspectedTopologyVertexId = merge.mergedVertexId;
+        state.hasHoveredVertex = true;
+        state.hoveredTopologyVertexId = merge.mergedVertexId;
+        const SectorTopologyVertex* merged = FindSectorTopologyVertex(
+                state.topologyMap,
+                merge.mergedVertexId);
+        state.hoveredTopologyVertexPoint = merged != nullptr
+                ? SectorTopologyCoordPoint{merged->x, merged->y}
+                : SectorTopologyCoordPoint{};
+        state.vertexDrag = VertexDragState{};
+        MarkTopologyDocumentEdited(TextFormat(
+                "Merged vertex %d into vertex %d.",
+                merge.removedVertexId,
+                merge.mergedVertexId));
+        return;
+    }
+
     std::string error;
     if (!MoveSectorTopologyVertex(state.topologyMap, vertexId, target, &error)) {
         state.vertexDrag = VertexDragState{};
@@ -1542,21 +1972,17 @@ void SectorEditor::FinishVertexDrag()
         return;
     }
 
-    ClearStaleTopologySelection();
-    state.topologyDocumentDirty = true;
-    state.topologyRenderWarning.clear();
-    state.hasUnsavedChanges = true;
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ClearTransientTopologyEditStateAfterGeometryChange();
+    SelectTopologyVertex(vertexId);
     state.vertexDrag = VertexDragState{};
-    statusText = TextFormat(
+    MarkTopologyDocumentEdited(TextFormat(
             "Moved topology vertex %d %.2f,%.2f -> %.2f,%.2f",
             vertexId,
             SectorCoordToVisibleAuthoring(original.x),
             SectorCoordToVisibleAuthoring(original.y),
             SectorCoordToVisibleAuthoring(target.x),
             SectorCoordToVisibleAuthoring(target.y)
-    );
+    ));
 }
 
 void SectorEditor::CancelVertexDrag(const char* message)
@@ -1653,6 +2079,490 @@ void SectorEditor::CancelLightDrag(const char* message)
     if (message != nullptr && message[0] != '\0') {
         statusText = message;
     }
+}
+
+void SectorEditor::StartPendingTopologyVertexMerge(int sourceVertexId)
+{
+    const SectorTopologyVertex* source = FindSectorTopologyVertex(state.topologyMap, sourceVertexId);
+    if (source == nullptr) {
+        state.inspectedTopologyVertexId = -1;
+        statusText = "Select a topology vertex before merging.";
+        return;
+    }
+
+    CancelPendingSector(nullptr);
+    CancelVertexDrag(nullptr);
+    CancelLightDrag(nullptr);
+    CancelPendingTopologyLineSplitAtPoint(nullptr);
+    CancelPendingTopologySectorCut(nullptr);
+
+    PendingTopologyVertexMerge pending;
+    pending.active = true;
+    pending.sourceVertexId = sourceVertexId;
+    pending.message = "Click target vertex to merge, Escape/right click to cancel.";
+    state.pendingTopologyVertexMerge = pending;
+    state.currentTool = SectorEditorTool::Move;
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.inspectedTopologyVertexId = sourceVertexId;
+    statusText = pending.message;
+}
+
+void SectorEditor::CancelPendingTopologyVertexMerge(const char* message)
+{
+    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+    if (message != nullptr && message[0] != '\0') {
+        statusText = message;
+    }
+}
+
+void SectorEditor::UpdatePendingTopologyVertexMerge(engine::Input& input)
+{
+    PendingTopologyVertexMerge& pending = state.pendingTopologyVertexMerge;
+    if (!pending.active) {
+        return;
+    }
+
+    if (FindSectorTopologyVertex(state.topologyMap, pending.sourceVertexId) == nullptr) {
+        CancelPendingTopologyVertexMerge("Vertex merge cancelled: source vertex no longer exists.");
+        return;
+    }
+
+    pending.hoveredTargetVertexId = -1;
+    pending.hasValidTarget = false;
+    pending.message = "Click target vertex to merge, Escape/right click to cancel.";
+
+    if (!IsMouseOverCanvas(input)) {
+        statusText = pending.message;
+        return;
+    }
+
+    int targetVertexId = -1;
+    SectorTopologyCoordPoint point;
+    if (!FindTopologyVertexNearScreenPoint(input.MousePosition(), targetVertexId, point)) {
+        pending.message = "Click target vertex to merge, Escape/right click to cancel.";
+        statusText = pending.message;
+        return;
+    }
+
+    pending.hoveredTargetVertexId = targetVertexId;
+    pending.hasValidTarget = targetVertexId != pending.sourceVertexId;
+    pending.message = pending.hasValidTarget
+            ? TextFormat("Click to merge into vertex %d.", targetVertexId)
+            : "Choose a different target vertex.";
+    statusText = pending.message;
+}
+
+void SectorEditor::CommitPendingTopologyVertexMerge()
+{
+    if (!state.pendingTopologyVertexMerge.active) {
+        return;
+    }
+
+    const PendingTopologyVertexMerge pending = state.pendingTopologyVertexMerge;
+    if (!pending.hasValidTarget) {
+        statusText = pending.message.empty() ? "Choose a target vertex to merge into." : pending.message;
+        return;
+    }
+
+    SectorTopologyMergeVerticesResult merge;
+    std::string error;
+    if (!MergeSectorTopologyVertices(
+                state.topologyMap,
+                pending.sourceVertexId,
+                pending.hoveredTargetVertexId,
+                &merge,
+                &error)) {
+        state.pendingTopologyVertexMerge.message =
+                error.empty() ? "Merge rejected." : TextFormat("Merge rejected: %s", error.c_str());
+        statusText = state.pendingTopologyVertexMerge.message;
+        return;
+    }
+
+    ClearTransientTopologyEditStateAfterGeometryChange();
+    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+    SelectTopologyVertex(merge.mergedVertexId);
+    state.inspectedTopologyVertexId = merge.mergedVertexId;
+    state.hasHoveredVertex = true;
+    state.hoveredTopologyVertexId = merge.mergedVertexId;
+    const SectorTopologyVertex* merged = FindSectorTopologyVertex(state.topologyMap, merge.mergedVertexId);
+    state.hoveredTopologyVertexPoint = merged != nullptr
+            ? SectorTopologyCoordPoint{merged->x, merged->y}
+            : SectorTopologyCoordPoint{};
+    MarkTopologyDocumentEdited(TextFormat(
+            "Merged vertex %d into vertex %d.",
+            merge.removedVertexId,
+            merge.mergedVertexId));
+}
+
+void SectorEditor::StartPendingTopologyLineSplitAtPoint()
+{
+    const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
+    if (lineDef == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology linedef before splitting at point.";
+        return;
+    }
+
+    CancelPendingSector(nullptr);
+    CancelVertexDrag(nullptr);
+    CancelLightDrag(nullptr);
+    CancelPendingTopologyVertexMerge(nullptr);
+    CancelPendingTopologySectorCut(nullptr);
+
+    PendingTopologyLineSplitAtPoint pending;
+    pending.active = true;
+    pending.lineDefId = lineDef->id;
+    pending.sideDefId = state.topologySelectionKind == TopologySelectionKind::SideDef
+            ? state.selectedTopologySideDefId
+            : -1;
+    pending.side = state.selectedTopologySideKind;
+    pending.wallPart = state.selectedTopologyWallPart;
+    pending.message = "Click a snapped point on the selected linedef; Escape or right click cancels.";
+    state.pendingTopologyLineSplitAtPoint = pending;
+    state.currentTool = SectorEditorTool::Select;
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    statusText = pending.message;
+}
+
+void SectorEditor::CancelPendingTopologyLineSplitAtPoint(const char* message)
+{
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+    if (message != nullptr && message[0] != '\0') {
+        statusText = message;
+    }
+}
+
+bool SectorEditor::ValidatePendingTopologyLineSplitAtPointTarget(const char* staleMessage)
+{
+    if (!state.pendingTopologyLineSplitAtPoint.active) {
+        return false;
+    }
+
+    const PendingTopologyLineSplitAtPoint& pending = state.pendingTopologyLineSplitAtPoint;
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
+            state.topologyMap,
+            pending.lineDefId);
+    if (lineDef == nullptr) {
+        CancelPendingTopologyLineSplitAtPoint(staleMessage);
+        return false;
+    }
+
+    if (pending.sideDefId >= 0) {
+        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
+                state.topologyMap,
+                pending.sideDefId);
+        if (sideDef == nullptr || sideDef->lineDefId != lineDef->id) {
+            CancelPendingTopologyLineSplitAtPoint(staleMessage);
+            return false;
+        }
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
+        CancelPendingTopologyLineSplitAtPoint(staleMessage);
+        return false;
+    }
+    return true;
+}
+
+void SectorEditor::UpdatePendingTopologyLineSplitAtPoint(engine::Input& input)
+{
+    if (!ValidatePendingTopologyLineSplitAtPointTarget(
+                "Split at point cancelled: target linedef no longer exists.")) {
+        return;
+    }
+
+    PendingTopologyLineSplitAtPoint& pending = state.pendingTopologyLineSplitAtPoint;
+    pending.hasCandidatePoint = false;
+    pending.hasValidCandidate = false;
+
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
+            state.topologyMap,
+            pending.lineDefId);
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (lineDef == nullptr || !GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
+        CancelPendingTopologyLineSplitAtPoint("Split at point cancelled: target linedef no longer exists.");
+        return;
+    }
+
+    if (!Contains(canvasRect, input.MousePosition())) {
+        pending.message = "Move over the selected linedef to choose a split point.";
+        statusText = pending.message;
+        return;
+    }
+
+    SectorTopologyCoordPoint candidate;
+    std::string error;
+    if (!ToTopologyCoordPoint(Vector2ToSectorPoint(state.snappedMouseMap), candidate, error)) {
+        pending.message = error;
+        statusText = error;
+        return;
+    }
+
+    pending.candidatePoint = candidate;
+    pending.hasCandidatePoint = true;
+
+    const SectorTopologyCoordPoint startPoint{start->x, start->y};
+    const SectorTopologyCoordPoint endPoint{end->x, end->y};
+    if (!SectorTopologyPointStrictlyInsideSegment(candidate, startPoint, endPoint)) {
+        pending.message = "Split point must be inside the selected linedef.";
+        statusText = pending.message;
+        return;
+    }
+
+    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
+        if (vertex.x == candidate.x && vertex.y == candidate.y) {
+            pending.message = "Split point is already occupied by a topology vertex.";
+            statusText = pending.message;
+            return;
+        }
+    }
+
+    pending.hasValidCandidate = true;
+    pending.message = "Click to split selected linedef; Escape or right click cancels.";
+    statusText = pending.message;
+}
+
+void SectorEditor::CommitPendingTopologyLineSplitAtPoint()
+{
+    if (!ValidatePendingTopologyLineSplitAtPointTarget(
+                "Split at point cancelled: target linedef no longer exists.")) {
+        return;
+    }
+
+    const PendingTopologyLineSplitAtPoint pending = state.pendingTopologyLineSplitAtPoint;
+    if (!pending.hasCandidatePoint || !pending.hasValidCandidate) {
+        statusText = pending.message.empty()
+                ? "Choose a valid split point on the selected linedef."
+                : pending.message;
+        return;
+    }
+
+    SectorTopologySplitLineResult split;
+    std::string error;
+    if (!SplitSectorTopologyLineDefAtPoint(
+                state.topologyMap,
+                pending.lineDefId,
+                pending.candidatePoint,
+                &split,
+                &error)) {
+        statusText = error.empty() ? "Cannot split topology linedef at point" : error;
+        return;
+    }
+
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+    state.hasHoveredVertex = false;
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+
+    if (pending.sideDefId >= 0) {
+        const int secondSideDefId = pending.side == SectorTopologySideKind::Front
+                ? split.secondFrontSideDefId
+                : split.secondBackSideDefId;
+        if (FindSectorTopologySideDef(state.topologyMap, secondSideDefId) != nullptr) {
+            SelectTopologySideDef(secondSideDefId, pending.wallPart);
+        } else {
+            SelectTopologyLineDef(split.secondLineDefId, pending.side, pending.wallPart);
+        }
+    } else {
+        SelectTopologyLineDef(split.secondLineDefId, pending.side, pending.wallPart);
+    }
+
+    state.topologyDocumentDirty = true;
+    state.topologyRenderWarning.clear();
+    state.hasUnsavedChanges = true;
+    statusText = TextFormat(
+            "Split topology linedef %d at point; selected linedef %d",
+            pending.lineDefId,
+            split.secondLineDefId);
+}
+
+void SectorEditor::StartPendingTopologySectorCut()
+{
+    const SectorTopologySector* sector = SelectedTopologySector();
+    if (sector == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology sector before cutting it.";
+        return;
+    }
+
+    CancelPendingSector(nullptr);
+    CancelVertexDrag(nullptr);
+    CancelLightDrag(nullptr);
+    CancelPendingTopologyVertexMerge(nullptr);
+    CancelPendingTopologyLineSplitAtPoint(nullptr);
+
+    PendingTopologySectorCut pending;
+    pending.active = true;
+    pending.sectorId = sector->id;
+    pending.message = "Click first boundary point for sector cut; Escape or right click cancels.";
+    state.pendingTopologySectorCut = pending;
+    state.currentTool = SectorEditorTool::Select;
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    statusText = pending.message;
+}
+
+void SectorEditor::CancelPendingTopologySectorCut(const char* message)
+{
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
+    if (message != nullptr && message[0] != '\0') {
+        statusText = message;
+    }
+}
+
+bool SectorEditor::ValidatePendingTopologySectorCutTarget(const char* staleMessage)
+{
+    if (!state.pendingTopologySectorCut.active) {
+        return false;
+    }
+    if (FindSectorTopologySector(state.topologyMap, state.pendingTopologySectorCut.sectorId) == nullptr) {
+        CancelPendingTopologySectorCut(staleMessage);
+        return false;
+    }
+    return true;
+}
+
+void SectorEditor::UpdatePendingTopologySectorCut(engine::Input& input)
+{
+    if (!ValidatePendingTopologySectorCutTarget(
+                "Sector cut cancelled: selected sector no longer exists.")) {
+        return;
+    }
+
+    PendingTopologySectorCut& pending = state.pendingTopologySectorCut;
+    pending.hasCandidatePoint = false;
+    pending.hasValidCandidate = false;
+
+    if (!Contains(canvasRect, input.MousePosition())) {
+        pending.message = pending.hasFirstPoint
+                ? "Move over the selected sector boundary to choose the second cut point."
+                : "Move over the selected sector boundary to choose the first cut point.";
+        statusText = pending.message;
+        return;
+    }
+
+    SectorTopologyBoundaryCutPoint candidate;
+    if (!FindSelectedSectorBoundaryCutPointNearScreenPoint(input.MousePosition(), candidate)) {
+        pending.message = pending.hasFirstPoint
+                ? "Choose a second point on the selected sector outer boundary."
+                : "Choose a first point on the selected sector outer boundary.";
+        statusText = pending.message;
+        return;
+    }
+
+    pending.candidatePoint = candidate;
+    pending.hasCandidatePoint = true;
+
+    std::string endpointError;
+    if (!ValidateSectorTopologySectorBoundaryCutPoint(
+                state.topologyMap,
+                pending.sectorId,
+                pending.candidatePoint,
+                &endpointError)) {
+        pending.hasValidCandidate = false;
+        pending.cacheHasFirstPoint = false;
+        pending.message = endpointError.empty() ? "Sector cut endpoint rejected." : endpointError;
+        statusText = pending.message;
+        return;
+    }
+
+    if (!pending.hasFirstPoint) {
+        pending.hasValidCandidate = true;
+        pending.message = "Click to place first cut point.";
+        statusText = pending.message;
+        return;
+    }
+
+    const bool cacheMatches =
+            pending.cacheHasFirstPoint
+            && pending.cachedSectorId == pending.sectorId
+            && SameBoundaryCutPoint(pending.cachedFirstPoint, pending.firstPoint)
+            && SameBoundaryCutPoint(pending.cachedCandidatePoint, pending.candidatePoint);
+    if (!cacheMatches) {
+        SectorTopologyMap candidateMap = state.topologyMap;
+        SectorTopologyCutSectorResult previewResult;
+        std::string error;
+        pending.cachedValid = CutSectorTopologySectorBetweenBoundaryPoints(
+                candidateMap,
+                pending.sectorId,
+                pending.firstPoint,
+                pending.candidatePoint,
+                &previewResult,
+                &error);
+        pending.cachedError = pending.cachedValid ? std::string{} : error;
+        pending.cachedSectorId = pending.sectorId;
+        pending.cachedFirstPoint = pending.firstPoint;
+        pending.cachedCandidatePoint = pending.candidatePoint;
+        pending.cacheHasFirstPoint = true;
+    }
+
+    pending.hasValidCandidate = pending.cachedValid;
+    pending.message = pending.cachedValid
+            ? "Click to cut selected sector; Escape or right click cancels."
+            : (pending.cachedError.empty() ? "Sector cut rejected." : pending.cachedError);
+    statusText = pending.message;
+}
+
+void SectorEditor::CommitPendingTopologySectorCut()
+{
+    if (!ValidatePendingTopologySectorCutTarget(
+                "Sector cut cancelled: selected sector no longer exists.")) {
+        return;
+    }
+
+    PendingTopologySectorCut& pending = state.pendingTopologySectorCut;
+    if (!pending.hasCandidatePoint || !pending.hasValidCandidate) {
+        statusText = pending.message.empty()
+                ? "Choose a valid boundary point for sector cut."
+                : pending.message;
+        return;
+    }
+
+    if (!pending.hasFirstPoint) {
+        pending.firstPoint = pending.candidatePoint;
+        pending.hasFirstPoint = true;
+        pending.cacheHasFirstPoint = false;
+        pending.message = "Click second boundary point for sector cut; Escape or right click cancels.";
+        statusText = pending.message;
+        return;
+    }
+
+    const PendingTopologySectorCut committed = pending;
+    SectorTopologyCutSectorResult cut;
+    std::string error;
+    if (!CutSectorTopologySectorBetweenBoundaryPoints(
+                state.topologyMap,
+                committed.sectorId,
+                committed.firstPoint,
+                committed.candidatePoint,
+                &cut,
+                &error)) {
+        pending.cacheHasFirstPoint = false;
+        pending.hasValidCandidate = false;
+        pending.message = error.empty() ? "Sector cut rejected." : error;
+        statusText = pending.message;
+        return;
+    }
+
+    ClearTransientTopologyEditStateAfterGeometryChange();
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
+    SelectTopologySector(cut.originalSectorId);
+    MarkTopologyDocumentEdited(TextFormat(
+            "Cut topology sector %d; created sector %d.",
+            cut.originalSectorId,
+            cut.newSectorId));
 }
 
 void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
@@ -2026,6 +2936,22 @@ const SectorTopologySector* SectorEditor::SelectedTopologySector() const
     return FindSectorTopologySector(state.topologyMap, state.selectedTopologySectorId);
 }
 
+SectorTopologyVertex* SectorEditor::SelectedTopologyVertex()
+{
+    if (state.topologySelectionKind != TopologySelectionKind::Vertex) {
+        return nullptr;
+    }
+    return FindSectorTopologyVertex(state.topologyMap, state.selectedTopologyVertexId);
+}
+
+const SectorTopologyVertex* SectorEditor::SelectedTopologyVertex() const
+{
+    if (state.topologySelectionKind != TopologySelectionKind::Vertex) {
+        return nullptr;
+    }
+    return FindSectorTopologyVertex(state.topologyMap, state.selectedTopologyVertexId);
+}
+
 SectorTopologySideDef* SectorEditor::SelectedTopologySideDef()
 {
     if (state.topologySelectionKind != TopologySelectionKind::SideDef) {
@@ -2082,6 +3008,9 @@ void SectorEditor::ClearStaleTopologySelection()
     if (state.topologySelectionKind == TopologySelectionKind::Sector) {
         stale = state.selectedTopologySectorId < 0
                 || FindSectorTopologySector(state.topologyMap, state.selectedTopologySectorId) == nullptr;
+    } else if (state.topologySelectionKind == TopologySelectionKind::Vertex) {
+        stale = state.selectedTopologyVertexId < 0
+                || FindSectorTopologyVertex(state.topologyMap, state.selectedTopologyVertexId) == nullptr;
     } else if (state.topologySelectionKind == TopologySelectionKind::SideDef) {
         const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
                 state.topologyMap,
@@ -2101,8 +3030,17 @@ void SectorEditor::ClearStaleTopologySelection()
     }
 
     if (stale) {
+        if (state.pendingTopologyLineSplitAtPoint.active
+                && (state.pendingTopologyLineSplitAtPoint.lineDefId == state.selectedTopologyLineDefId
+                        || FindSectorTopologyLineDef(
+                                state.topologyMap,
+                                state.pendingTopologyLineSplitAtPoint.lineDefId) == nullptr)) {
+            CancelPendingTopologyLineSplitAtPoint(
+                    "Split at point cancelled: target linedef no longer exists.");
+        }
         state.topologySelectionKind = TopologySelectionKind::None;
         state.selectedTopologySectorId = -1;
+        state.selectedTopologyVertexId = -1;
         state.selectedTopologySideDefId = -1;
         state.selectedTopologyLineDefId = -1;
         state.selectedTopologyLightId = -1;
@@ -2121,6 +3059,17 @@ void SectorEditor::MarkTopologyDocumentEdited(const char* status)
     if (status != nullptr && status[0] != '\0') {
         statusText = status;
     }
+}
+
+void SectorEditor::ClearTransientTopologyEditStateAfterGeometryChange()
+{
+    ClearStaleTopologySelection();
+    state.topologyRenderWarning.clear();
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
 }
 
 void SectorEditor::SyncSelectedSectorIdBuffer()
@@ -2232,6 +3181,8 @@ void SectorEditor::OpenDeleteTopologySectorConfirmation(int sectorId)
 
 bool SectorEditor::DeleteSelectedTopologySectorConfirmed(int sectorId)
 {
+    const bool hadPendingSplit = state.pendingTopologyLineSplitAtPoint.active;
+    const int pendingSplitLineDefId = state.pendingTopologyLineSplitAtPoint.lineDefId;
     SectorTopologyDeleteSectorResult result;
     std::string error;
     if (!DeleteSectorTopologySector(state.topologyMap, sectorId, &result, &error)) {
@@ -2252,11 +3203,18 @@ bool SectorEditor::DeleteSelectedTopologySectorConfirmed(int sectorId)
     for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
         inputState = engine::UIFloatInputState{};
     }
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
     ClearStaleTopologySelection();
     state.topologyRenderWarning.clear();
     state.topologyDocumentDirty = true;
     state.hasUnsavedChanges = true;
-    statusText = TextFormat(
+    const bool pendingSplitTargetRemoved = hadPendingSplit
+            && FindSectorTopologyLineDef(state.topologyMap, pendingSplitLineDefId) == nullptr;
+    statusText = pendingSplitTargetRemoved
+            ? TextFormat(
+                    "Deleted topology sector %d; split at point cancelled",
+                    result.deletedSectorId)
+            : TextFormat(
             "Deleted topology sector %d; removed %d sidedefs, %d linedefs, %d vertices",
             result.deletedSectorId,
             result.removedSideDefCount,
@@ -2654,6 +3612,119 @@ bool SectorEditor::FindTopologyVertexNearScreenPoint(
     return true;
 }
 
+bool SectorEditor::FindSelectedSectorBoundaryCutPointNearScreenPoint(
+        Vector2 screenPoint,
+        SectorTopologyBoundaryCutPoint& outPoint) const
+{
+    outPoint = SectorTopologyBoundaryCutPoint{};
+    const SectorTopologySector* sector = SelectedTopologySector();
+    if (sector == nullptr) {
+        return false;
+    }
+
+    SectorTopologyLoopSet loops;
+    if (!ExtractSectorTopologyLoops(state.topologyMap, sector->id, loops)) {
+        return false;
+    }
+
+    float bestVertexDistance2 = ScreenVertexSnapPixels * ScreenVertexSnapPixels;
+    int bestVertexId = -1;
+    SectorTopologyCoordPoint bestVertexPoint{};
+    for (int vertexId : loops.outer.vertexIds) {
+        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+        if (vertex == nullptr) {
+            continue;
+        }
+        const Vector2 screenVertex = MapToScreen(SectorTopologyVertexToMap(*vertex));
+        const float dx = screenVertex.x - screenPoint.x;
+        const float dy = screenVertex.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 > bestVertexDistance2) {
+            continue;
+        }
+        if (bestVertexId >= 0
+                && std::fabs(distance2 - bestVertexDistance2) <= 0.001f
+                && vertex->id >= bestVertexId) {
+            continue;
+        }
+        bestVertexDistance2 = distance2;
+        bestVertexId = vertex->id;
+        bestVertexPoint = SectorTopologyCoordPoint{vertex->x, vertex->y};
+    }
+    if (bestVertexId >= 0) {
+        outPoint.vertexId = bestVertexId;
+        outPoint.point = bestVertexPoint;
+        return true;
+    }
+
+    SectorTopologyCoordPoint snappedPoint;
+    std::string error;
+    if (!ToTopologyCoordPoint(Vector2ToSectorPoint(state.snappedMouseMap), snappedPoint, error)) {
+        return false;
+    }
+
+    float bestLineDistance = ScreenEdgePickPixels;
+    int bestLineDefId = -1;
+    for (const SectorTopologyLoopEdge& edge : loops.outer.edges) {
+        const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, edge.lineDefId);
+        if (lineDef == nullptr) {
+            continue;
+        }
+        const SectorTopologyVertex* start = nullptr;
+        const SectorTopologyVertex* end = nullptr;
+        if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
+            continue;
+        }
+        const SectorTopologyCoordPoint startPoint{start->x, start->y};
+        const SectorTopologyCoordPoint endPoint{end->x, end->y};
+        if (!SectorTopologyPointStrictlyInsideSegment(snappedPoint, startPoint, endPoint)) {
+            continue;
+        }
+
+        const Vector2 screenStart = MapToScreen(SectorTopologyVertexToMap(*start));
+        const Vector2 screenEnd = MapToScreen(SectorTopologyVertexToMap(*end));
+        const float distance = DistancePointToSegment(screenPoint, screenStart, screenEnd);
+        if (distance > ScreenEdgePickPixels) {
+            continue;
+        }
+        if (bestLineDefId >= 0
+                && (distance > bestLineDistance + 0.001f
+                        || (std::fabs(distance - bestLineDistance) <= 0.001f
+                                && lineDef->id >= bestLineDefId))) {
+            continue;
+        }
+        bestLineDistance = distance;
+        bestLineDefId = lineDef->id;
+    }
+
+    if (bestLineDefId < 0) {
+        return false;
+    }
+
+    outPoint.lineDefId = bestLineDefId;
+    outPoint.point = snappedPoint;
+    return true;
+}
+
+int SectorEditor::FindTopologyVertexAtCoordPoint(
+        SectorTopologyCoordPoint point,
+        int excludedVertexId) const
+{
+    int bestVertexId = -1;
+    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
+        if (vertex.id == excludedVertexId) {
+            continue;
+        }
+        if (vertex.x != point.x || vertex.y != point.y) {
+            continue;
+        }
+        if (bestVertexId < 0 || vertex.id < bestVertexId) {
+            bestVertexId = vertex.id;
+        }
+    }
+    return bestVertexId;
+}
+
 bool SectorEditor::SnapTopologyVertexMoveTarget(
         Vector2 mapPoint,
         SectorTopologyCoordPoint& outPoint,
@@ -2986,8 +4057,8 @@ void SectorEditor::DrawPreviewUvPanel(
         }
     };
 
-    drawFloat("sector_editor_3d_uv_scale_u", "Scale U", uvScale.x, uiState.surface3DUvScaleUInput, 0, 0.01f, 64.0f, startX);
-    drawFloat("sector_editor_3d_uv_scale_v", "Scale V", uvScale.y, uiState.surface3DUvScaleVInput, 1, 0.01f, 64.0f, startX + (colW + gap));
+    drawFloat("sector_editor_3d_uv_scale_u", "Scale U", uvScale.x, uiState.surface3DUvScaleUInput, 0, TopologyUvScaleMin, TopologyUvScaleMax, startX);
+    drawFloat("sector_editor_3d_uv_scale_v", "Scale V", uvScale.y, uiState.surface3DUvScaleVInput, 1, TopologyUvScaleMin, TopologyUvScaleMax, startX + (colW + gap));
     drawFloat("sector_editor_3d_uv_offset_u", "Offset U", uvOffset.x, uiState.surface3DUvOffsetUInput, 2, -1024.0f, 1024.0f, startX + (colW + gap) * 2.0f);
     drawFloat("sector_editor_3d_uv_offset_v", "Offset V", uvOffset.y, uiState.surface3DUvOffsetVInput, 3, -1024.0f, 1024.0f, startX + (colW + gap) * 3.0f);
 
@@ -3021,6 +4092,102 @@ void SectorEditor::DrawPreviewUvPanel(
             font,
             "Reset UV")) {
         ResetSurface3DUv(target, assets);
+    }
+
+    if (IsWallTopologyEditTarget(target.kind)) {
+        const float fitButtonW = 118.0f;
+        const float fitTop = panel.y + 134.0f;
+        const float alignTop = panel.y + 174.0f;
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_fit_width",
+                    Rectangle{startX, fitTop, fitButtonW, 32.0f},
+                    font,
+                    "Fit Width")) {
+            FitSelectedWallMaterial(target, TopologyUvFitMode::Width, &assets);
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_fit_height",
+                    Rectangle{startX + fitButtonW + gap, fitTop, fitButtonW, 32.0f},
+                    font,
+                    "Fit Height")) {
+            FitSelectedWallMaterial(target, TopologyUvFitMode::Height, &assets);
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_fit_both",
+                    Rectangle{startX + (fitButtonW + gap) * 2.0f, fitTop, fitButtonW, 32.0f},
+                    font,
+                    "Fit Both")) {
+            FitSelectedWallMaterial(target, TopologyUvFitMode::Both, &assets);
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_align_vertical",
+                    Rectangle{startX, alignTop, fitButtonW, 32.0f},
+                    font,
+                    "Align Vertical")) {
+            AlignSelectedWallMaterialVertical(target, &assets);
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_align_u_prev",
+                    Rectangle{startX + fitButtonW + gap, alignTop, fitButtonW, 32.0f},
+                    font,
+                    "Align U Prev")) {
+            AlignSelectedWallMaterialU(target, TopologyUAlignDirection::Previous, &assets);
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_align_u_next",
+                    Rectangle{startX + (fitButtonW + gap) * 2.0f, alignTop, fitButtonW, 32.0f},
+                    font,
+                    "Align U Next")) {
+            AlignSelectedWallMaterialU(target, TopologyUAlignDirection::Next, &assets);
+        }
+    }
+
+    if (engine::Button(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_3d_copy_material",
+            Rectangle{panel.x + panel.width - 172.0f, panel.y + 134.0f, 146.0f, 32.0f},
+            font,
+            "Copy Material")) {
+        CopyTopologyMaterial(target);
+    }
+
+    if (engine::Button(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_3d_paste_material",
+            Rectangle{panel.x + panel.width - 172.0f, panel.y + 174.0f, 146.0f, 32.0f},
+            font,
+            "Paste Material")) {
+        PasteTopologyMaterial(target, assets);
     }
 
     input.ForEachEvent(
@@ -3105,6 +4272,9 @@ void SectorEditor::DrawTopologyDocument()
     DrawTopologyLineDefs();
     DrawTopologyVertices();
     DrawVertexMoveOverlay();
+    DrawPendingTopologyVertexMerge();
+    DrawPendingTopologyLineSplitAtPoint();
+    DrawPendingTopologySectorCut();
     DrawStaticLights();
     DrawLightMoveOverlay();
     DrawPendingSector();
@@ -3351,8 +4521,29 @@ void SectorEditor::DrawTopologyVertices() const
 {
     const Color pointColor = Color{245, 226, 154, 255};
     const Color outlineColor = Color{20, 24, 32, 255};
+    const Color selectedFill = Color{72, 220, 128, 92};
+    const Color selectedOutline = Color{86, 232, 142, 245};
+    const Color hoverOutline = Color{122, 220, 244, 245};
     for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
         const Vector2 screen = MapToScreen(SectorTopologyVertexToMap(vertex));
+        const bool selected = state.topologySelectionKind == TopologySelectionKind::Vertex
+                && vertex.id == state.selectedTopologyVertexId;
+        const bool hovered = state.hasHoveredVertex && vertex.id == state.hoveredTopologyVertexId;
+        if (selected) {
+            DrawCircleV(screen, 12.0f, selectedFill);
+            DrawCircleLines(
+                    static_cast<int>(std::round(screen.x)),
+                    static_cast<int>(std::round(screen.y)),
+                    13.0f,
+                    selectedOutline);
+        }
+        if (hovered && !selected) {
+            DrawCircleLines(
+                    static_cast<int>(std::round(screen.x)),
+                    static_cast<int>(std::round(screen.y)),
+                    11.0f,
+                    hoverOutline);
+        }
         DrawCircleV(screen, 4.5f, pointColor);
         DrawCircleLines(static_cast<int>(std::round(screen.x)), static_cast<int>(std::round(screen.y)), 7.0f, outlineColor);
     }
@@ -3515,8 +4706,61 @@ void SectorEditor::DrawVertexMoveOverlay() const
     const Vector2 target = MapToScreen(previewMap);
     DrawLineEx(original, target, 2.0f, WithAlpha(targetColor, 180));
     DrawCircleLines(static_cast<int>(std::round(original.x)), static_cast<int>(std::round(original.y)), 10.0f, originalColor);
-    DrawCircleLines(static_cast<int>(std::round(target.x)), static_cast<int>(std::round(target.y)), 13.0f, targetColor);
+    DrawCircleLines(static_cast<int>(std::round(target.x)), static_cast<int>(std::round(target.y)), state.vertexDrag.hasMergeTarget ? 17.0f : 13.0f, targetColor);
+    if (state.vertexDrag.hasMergeTarget) {
+        DrawCircleLines(static_cast<int>(std::round(target.x)), static_cast<int>(std::round(target.y)), 22.0f, Color{236, 196, 92, 235});
+    }
     DrawCircleV(target, 5.0f, targetColor);
+}
+
+void SectorEditor::DrawPendingTopologyVertexMerge() const
+{
+    if (!state.pendingTopologyVertexMerge.active) {
+        return;
+    }
+
+    const PendingTopologyVertexMerge& pending = state.pendingTopologyVertexMerge;
+    const SectorTopologyVertex* source = FindSectorTopologyVertex(
+            state.topologyMap,
+            pending.sourceVertexId);
+    if (source == nullptr) {
+        return;
+    }
+
+    const Vector2 sourceScreen = MapToScreen(SectorTopologyVertexToMap(*source));
+    DrawCircleLines(
+            static_cast<int>(std::round(sourceScreen.x)),
+            static_cast<int>(std::round(sourceScreen.y)),
+            17.0f,
+            Color{236, 196, 92, 255});
+    DrawCircleLines(
+            static_cast<int>(std::round(sourceScreen.x)),
+            static_cast<int>(std::round(sourceScreen.y)),
+            23.0f,
+            Color{236, 196, 92, 170});
+
+    if (pending.hoveredTargetVertexId < 0) {
+        return;
+    }
+
+    const SectorTopologyVertex* target = FindSectorTopologyVertex(
+            state.topologyMap,
+            pending.hoveredTargetVertexId);
+    if (target == nullptr) {
+        return;
+    }
+
+    const Color targetColor = pending.hasValidTarget
+            ? Color{120, 230, 154, 255}
+            : Color{230, 82, 82, 255};
+    const Vector2 targetScreen = MapToScreen(SectorTopologyVertexToMap(*target));
+    DrawLineEx(sourceScreen, targetScreen, 2.0f, WithAlpha(targetColor, 170));
+    DrawCircleLines(
+            static_cast<int>(std::round(targetScreen.x)),
+            static_cast<int>(std::round(targetScreen.y)),
+            18.0f,
+            targetColor);
+    DrawCircleV(targetScreen, 5.5f, targetColor);
 }
 
 void SectorEditor::DrawLightMoveOverlay() const
@@ -3557,6 +4801,107 @@ void SectorEditor::DrawLightMoveOverlay() const
 
     const Vector2 center = MapToScreen(Vector2{light->position.x, light->position.z});
     DrawCircleLines(static_cast<int>(std::round(center.x)), static_cast<int>(std::round(center.y)), 13.0f, Color{245, 226, 154, 255});
+}
+
+void SectorEditor::DrawPendingTopologyLineSplitAtPoint() const
+{
+    if (!state.pendingTopologyLineSplitAtPoint.active) {
+        return;
+    }
+
+    const PendingTopologyLineSplitAtPoint& pending = state.pendingTopologyLineSplitAtPoint;
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
+            state.topologyMap,
+            pending.lineDefId);
+    if (lineDef == nullptr) {
+        return;
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
+        return;
+    }
+
+    const Vector2 a = MapToScreen(SectorTopologyVertexToMap(*start));
+    const Vector2 b = MapToScreen(SectorTopologyVertexToMap(*end));
+    DrawLineEx(a, b, 13.0f, Color{236, 196, 92, 120});
+    DrawLineEx(a, b, 4.0f, Color{236, 196, 92, 245});
+
+    if (!pending.hasCandidatePoint) {
+        return;
+    }
+
+    const Vector2 candidate = MapToScreen(SectorPointToVector2(
+            SectorTopologyCoordPointToSectorPoint(pending.candidatePoint)));
+    const Color color = pending.hasValidCandidate
+            ? Color{120, 230, 154, 255}
+            : Color{230, 82, 82, 245};
+    DrawCircleLines(
+            static_cast<int>(std::round(candidate.x)),
+            static_cast<int>(std::round(candidate.y)),
+            pending.hasValidCandidate ? 13.0f : 11.0f,
+            color);
+    DrawCircleV(candidate, pending.hasValidCandidate ? 5.5f : 4.5f, color);
+}
+
+void SectorEditor::DrawPendingTopologySectorCut() const
+{
+    if (!state.pendingTopologySectorCut.active) {
+        return;
+    }
+
+    const PendingTopologySectorCut& pending = state.pendingTopologySectorCut;
+    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, pending.sectorId);
+    if (sector == nullptr) {
+        return;
+    }
+
+    auto pointToScreen = [this](const SectorTopologyBoundaryCutPoint& point, Vector2& outScreen) {
+        if (point.vertexId >= 0) {
+            const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, point.vertexId);
+            if (vertex == nullptr) {
+                return false;
+            }
+            outScreen = MapToScreen(SectorTopologyVertexToMap(*vertex));
+            return true;
+        }
+        outScreen = MapToScreen(SectorPointToVector2(
+                SectorTopologyCoordPointToSectorPoint(point.point)));
+        return true;
+    };
+
+    Vector2 firstScreen{};
+    if (pending.hasFirstPoint && pointToScreen(pending.firstPoint, firstScreen)) {
+        DrawCircleLines(
+                static_cast<int>(std::round(firstScreen.x)),
+                static_cast<int>(std::round(firstScreen.y)),
+                15.0f,
+                Color{236, 196, 92, 255});
+        DrawCircleV(firstScreen, 5.5f, Color{236, 196, 92, 255});
+    }
+
+    if (!pending.hasCandidatePoint) {
+        return;
+    }
+
+    Vector2 candidateScreen{};
+    if (!pointToScreen(pending.candidatePoint, candidateScreen)) {
+        return;
+    }
+
+    const Color color = pending.hasFirstPoint
+            ? (pending.hasValidCandidate ? Color{120, 230, 154, 255} : Color{230, 82, 82, 245})
+            : (pending.hasValidCandidate ? Color{236, 196, 92, 255} : Color{230, 82, 82, 245});
+    if (pending.hasFirstPoint) {
+        DrawLineEx(firstScreen, candidateScreen, 3.0f, WithAlpha(color, 210));
+    }
+    DrawCircleLines(
+            static_cast<int>(std::round(candidateScreen.x)),
+            static_cast<int>(std::round(candidateScreen.y)),
+            pending.hasValidCandidate ? 13.0f : 11.0f,
+            color);
+    DrawCircleV(candidateScreen, pending.hasValidCandidate ? 5.0f : 4.0f, color);
 }
 
 void SectorEditor::DrawStaticLights() const
@@ -3673,6 +5018,12 @@ void SectorEditor::DrawToolsPanel(
             }
             if (state.lightDrag.active && tool != SectorEditorTool::Move) {
                 CancelLightDrag("Cancelled light move");
+            }
+            if (state.pendingTopologyLineSplitAtPoint.active) {
+                CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
+            }
+            if (state.pendingTopologyVertexMerge.active) {
+                CancelPendingTopologyVertexMerge("Cancelled vertex merge");
             }
             state.currentTool = tool;
         }
@@ -3841,10 +5192,21 @@ void SectorEditor::DrawSectorsPanel(
     SyncSelectedLightIdBuffer();
 
     const bool hasSelectedTopologySector = SelectedTopologySector() != nullptr;
+    const bool hasSelectedTopologyVertex = SelectedTopologyVertex() != nullptr;
     const bool hasSelectedTopologySideDef = SelectedTopologySideDef() != nullptr;
     const bool hasSelectedTopologyLineDef = state.topologySelectionKind == TopologySelectionKind::LineDef
             && SelectedTopologyLineDef() != nullptr;
     const bool hasSelectedLight = SelectedTopologyLight() != nullptr;
+    const SectorTopologyVertex* inspectedVertex = FindSectorTopologyVertex(
+            state.topologyMap,
+            state.inspectedTopologyVertexId);
+    const bool hasInspectedVertex = !hasSelectedTopologySector
+            && !hasSelectedTopologyVertex
+            && !hasSelectedTopologySideDef
+            && !hasSelectedTopologyLineDef
+            && !hasSelectedLight
+            && state.currentTool == SectorEditorTool::Move
+            && inspectedVertex != nullptr;
 
     const float rowH = 40.0f;
     const float gap = 8.0f;
@@ -3864,13 +5226,38 @@ void SectorEditor::DrawSectorsPanel(
             return height;
         }
         if (hasSelectedTopologySector) {
-            return 1700.0f;
+            const float textureRowH = 36.0f + gap;
+            const float uvSettingsH = 2.0f * (62.0f + gap);
+            const float materialSurfaceSectionH = 18.0f + 30.0f + (36.0f + gap) + textureRowH + uvSettingsH;
+            const float defaultWallSectionH = 18.0f + 30.0f + textureRowH + uvSettingsH;
+
+            float height = 38.0f; // Sector title.
+            height += rowH + gap; // Name.
+            if (!uiState.idEditError.empty()) {
+                height += 36.0f;
+            }
+            height += 3.0f * (rowH + gap); // Delete/insert/cut.
+            height += 2.0f * (rowH + gap); // Floor/ceiling heights.
+            height += 18.0f + 30.0f; // Lighting separator/title.
+            height += rowH + gap; // Ambient intensity.
+            height += 3.0f * (rowH + gap); // RGB.
+            height += 36.0f + gap; // Ambient swatch.
+            height += 2.0f * materialSurfaceSectionH; // Floor/ceiling material sections.
+            height += 3.0f * defaultWallSectionH; // Default wall/lower/upper sections.
+            height += 32.0f; // Bottom breathing room for the last UV row.
+            return height;
+        }
+        if (hasSelectedTopologyVertex) {
+            return 280.0f;
         }
         if (hasSelectedTopologySideDef) {
-            return 668.0f;
+            return 752.0f;
         }
         if (hasSelectedTopologyLineDef) {
             return 218.0f;
+        }
+        if (hasInspectedVertex || state.pendingTopologyVertexMerge.active) {
+            return 170.0f;
         }
         return 42.0f;
     };
@@ -4027,6 +5414,133 @@ void SectorEditor::DrawSectorsPanel(
         return;
     }
 
+    if (hasSelectedTopologyVertex || hasInspectedVertex || state.pendingTopologyVertexMerge.active) {
+        const int vertexId = state.pendingTopologyVertexMerge.active
+                ? state.pendingTopologyVertexMerge.sourceVertexId
+                : (hasSelectedTopologyVertex ? state.selectedTopologyVertexId : inspectedVertex->id);
+        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+        if (vertex != nullptr) {
+            int incidentLineCount = 0;
+            for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
+                if (lineDef.startVertexId == vertex->id || lineDef.endVertexId == vertex->id) {
+                    ++incidentLineCount;
+                }
+            }
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 34.0f},
+                    font,
+                    TextFormat("Topology Vertex: %d", vertex->id),
+                    engine::UITextJustify::Left,
+                    config.textColor);
+            y += 38.0f;
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 30.0f},
+                    font,
+                    TextFormat("ID: %d", vertex->id),
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
+            y += 30.0f;
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 30.0f},
+                    font,
+                    TextFormat(
+                            "Position: %.2f, %.2f",
+                            SectorCoordToVisibleAuthoring(vertex->x),
+                            SectorCoordToVisibleAuthoring(vertex->y)),
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
+            y += 34.0f;
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 30.0f},
+                    font,
+                    TextFormat("Incident linedefs: %d", incidentLineCount),
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
+            y += 34.0f;
+
+            if (state.pendingTopologyVertexMerge.active) {
+                engine::Text(
+                        ui,
+                        config,
+                        assets,
+                        Rectangle{0.0f, y, contentW, 44.0f},
+                        font,
+                        state.pendingTopologyVertexMerge.message.c_str(),
+                        engine::UITextJustify::Left,
+                        state.pendingTopologyVertexMerge.hasValidTarget
+                                ? config.textColor
+                                : config.mutedTextColor);
+                y += 48.0f;
+                if (engine::Button(
+                            ui,
+                            config,
+                            input,
+                            assets,
+                            "sector_editor_cancel_vertex_merge",
+                            Rectangle{0.0f, y, contentW, rowH},
+                            font,
+                            "Cancel Merge")) {
+                    CancelPendingTopologyVertexMerge("Cancelled vertex merge");
+                }
+            } else if (hasSelectedTopologyVertex) {
+                if (engine::Button(
+                            ui,
+                            config,
+                            input,
+                            assets,
+                            "sector_editor_dissolve_vertex",
+                            Rectangle{0.0f, y, contentW, rowH},
+                            font,
+                            "Dissolve Vertex")) {
+                    DissolveSelectedTopologyVertex();
+                }
+                y += rowH + gap;
+                if (engine::Button(
+                            ui,
+                            config,
+                            input,
+                            assets,
+                            "sector_editor_merge_vertex_into",
+                            Rectangle{0.0f, y, contentW, rowH},
+                            font,
+                            "Merge Into...")) {
+                    StartPendingTopologyVertexMerge(vertex->id);
+                }
+            } else if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_merge_vertex_into",
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font,
+                        "Merge Into...")) {
+                StartPendingTopologyVertexMerge(vertex->id);
+            }
+        } else {
+            state.inspectedTopologyVertexId = -1;
+            if (hasSelectedTopologyVertex) {
+                ClearStaleTopologySelection();
+            }
+        }
+
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return;
+    }
+
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 42.0f}, font, "Selected: none", engine::UITextJustify::Left, config.mutedTextColor);
 
     // TODO: Add undo/redo.
@@ -4114,6 +5628,20 @@ bool SectorEditor::DrawTopologySectorInspector(
                 font,
                 "Insert Sector Inside")) {
         StartInsertSectorInside();
+    }
+    y += rowH + gap;
+
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_cut_sector",
+                Rectangle{0.0f, y, contentW, rowH},
+                font,
+                "Cut Sector")) {
+        StartPendingTopologySectorCut();
+        return true;
     }
     y += rowH + gap;
 
@@ -4226,25 +5754,50 @@ bool SectorEditor::DrawTopologySectorInspector(
             }
         };
 
-        drawFloat(0, "_scale_u", "Scale U", uv.scale.x, 0.01f, 64.0f, Rectangle{0.0f, y, uvColumnW, uvBlockH}, [&](float value) { uv.scale.x = value; });
-        drawFloat(1, "_scale_v", "Scale V", uv.scale.y, 0.01f, 64.0f, Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH}, [&](float value) { uv.scale.y = value; });
+        drawFloat(0, "_scale_u", "Scale U", uv.scale.x, TopologyUvScaleMin, TopologyUvScaleMax, Rectangle{0.0f, y, uvColumnW, uvBlockH}, [&](float value) { uv.scale.x = value; });
+        drawFloat(1, "_scale_v", "Scale V", uv.scale.y, TopologyUvScaleMin, TopologyUvScaleMax, Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH}, [&](float value) { uv.scale.y = value; });
         y += uvBlockH + gap;
         drawFloat(2, "_offset_u", "Offset U", uv.offset.x, -1024.0f, 1024.0f, Rectangle{0.0f, y, uvColumnW, uvBlockH}, [&](float value) { uv.offset.x = value; });
         drawFloat(3, "_offset_v", "Offset V", uv.offset.y, -1024.0f, 1024.0f, Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH}, [&](float value) { uv.offset.y = value; });
         y += uvBlockH + gap;
     };
 
-    auto drawSurfaceSection = [&](const char* title, const char* textureButtonId, const std::string& textureId, TopologySectorTextureField field, const char* uvPrefix, SectorTopologyUvSettings& uv, int stateOffset) {
+    auto drawSurfaceSection = [&](const char* title, const char* textureButtonId, const std::string& textureId, TopologySectorTextureField field, const char* uvPrefix, SectorTopologyUvSettings& uv, int stateOffset, TopologySurfaceEditTargetKind materialKind) {
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
         y += 18.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, title, engine::UITextJustify::Left, config.textColor);
         y += 30.0f;
+        const TopologySurfaceEditTarget target{materialKind, sector->id};
+        const float buttonW = (contentW - gap) * 0.5f;
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("%s_copy_material", uvPrefix),
+                    Rectangle{0.0f, y, buttonW, 36.0f},
+                    font,
+                    "Copy")) {
+            CopyTopologyMaterial(target);
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("%s_paste_material", uvPrefix),
+                    Rectangle{buttonW + gap, y, buttonW, 36.0f},
+                    font,
+                    "Paste")) {
+            PasteTopologyMaterial(target, assets);
+        }
+        y += 36.0f + gap;
         drawTextureRow(textureButtonId, "Texture:", textureId, field);
         drawUvSettings(uvPrefix, uv, stateOffset);
     };
 
-    drawSurfaceSection("Floor", "sector_editor_topology_pick_floor", sector->floorTextureId, TopologySectorTextureField::Floor, "sector_editor_topology_floor_uv", sector->floorUv, 0);
-    drawSurfaceSection("Ceiling", "sector_editor_topology_pick_ceiling", sector->ceilingTextureId, TopologySectorTextureField::Ceiling, "sector_editor_topology_ceiling_uv", sector->ceilingUv, 4);
+    drawSurfaceSection("Floor", "sector_editor_topology_pick_floor", sector->floorTextureId, TopologySectorTextureField::Floor, "sector_editor_topology_floor_uv", sector->floorUv, 0, TopologySurfaceEditTargetKind::SectorFloor);
+    drawSurfaceSection("Ceiling", "sector_editor_topology_pick_ceiling", sector->ceilingTextureId, TopologySectorTextureField::Ceiling, "sector_editor_topology_ceiling_uv", sector->ceilingUv, 4, TopologySurfaceEditTargetKind::SectorCeiling);
 
     auto drawWallDefaultSection = [&](const char* title, const char* textureButtonId, SectorTopologyWallPartSettings& part, TopologySectorTextureField field, const char* uvPrefix, int stateOffset) {
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
@@ -4332,14 +5885,56 @@ bool SectorEditor::DrawTopologySideDefInspector(
     }
     y += 38.0f + gap;
 
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_split_linedef_at_point",
+                Rectangle{0.0f, y, contentW, 38.0f},
+                font,
+                "Split At Point")) {
+        StartPendingTopologyLineSplitAtPoint();
+        return true;
+    }
+    y += 38.0f + gap;
+
     if (sideDef == nullptr) {
+        const int preferredSideDefId = state.selectedTopologySideKind == SectorTopologySideKind::Front
+                ? lineDef->frontSideDefId
+                : lineDef->backSideDefId;
+        const SectorTopologySideDef* preferredSideDef = FindSectorTopologySideDef(
+                state.topologyMap,
+                preferredSideDefId);
+        const SectorTopologySideDef* opposite = preferredSideDef != nullptr
+                ? FindOppositeSectorTopologySideDef(state.topologyMap, preferredSideDef->id)
+                : nullptr;
+        if (preferredSideDef != nullptr && opposite != nullptr
+                && preferredSideDef->sectorId != opposite->sectorId) {
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_topology_join_sectors",
+                        Rectangle{0.0f, y, contentW, 38.0f},
+                        font,
+                        "Join Sectors")) {
+                JoinSelectedTopologySectors();
+                return true;
+            }
+            y += 38.0f + gap;
+        }
+
         engine::Text(
                 ui,
                 config,
                 assets,
                 Rectangle{0.0f, y, contentW, 64.0f},
                 font,
-                "Line-only selection: this linedef has no sidedef to edit.",
+                preferredSideDef == nullptr
+                        ? "Line-only selection: this linedef has no sidedef to edit."
+                        : "Select a sidedef to edit wall settings.",
                 engine::UITextJustify::Left,
                 config.mutedTextColor);
         return true;
@@ -4360,6 +5955,33 @@ bool SectorEditor::DrawTopologySideDefInspector(
             state.topologyMap,
             sideDef->id);
     if (opposite != nullptr) {
+        if (opposite->sectorId != sideDef->sectorId) {
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_topology_join_sectors",
+                        Rectangle{0.0f, y, contentW, 38.0f},
+                        font,
+                        "Join Sectors")) {
+                JoinSelectedTopologySectors();
+                return true;
+            }
+            y += 38.0f + gap;
+        } else {
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 34.0f},
+                    font,
+                    "Join Sectors unavailable: both sides already belong to the same sector.",
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
+            y += 38.0f;
+        }
+
         if (engine::Button(
                     ui,
                     config,
@@ -4382,7 +6004,7 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 assets,
                 Rectangle{0.0f, y, contentW, 30.0f},
                 font,
-                "Opposite side: none",
+                "Join Sectors unavailable: opposite side is missing.",
                 engine::UITextJustify::Left,
                 config.mutedTextColor);
         y += 34.0f;
@@ -4437,6 +6059,38 @@ bool SectorEditor::DrawTopologySideDefInspector(
     }
     y += 38.0f + gap;
 
+    const TopologySurfaceEditTarget selectedMaterialTarget{
+            TopologyWallPartEditTargetKind(state.selectedTopologyWallPart),
+            sideDef->sectorId,
+            sideDef->lineDefId,
+            sideDef->id,
+            sideDef->side};
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_copy_material",
+                Rectangle{0.0f, y, contentW, 38.0f},
+                font,
+                TextFormat("Copy %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
+        CopyTopologyMaterial(selectedMaterialTarget);
+    }
+    y += 38.0f + gap;
+
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_paste_material",
+                Rectangle{0.0f, y, contentW, 38.0f},
+                font,
+                TextFormat("Paste %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
+        PasteTopologyMaterial(selectedMaterialTarget, assets);
+    }
+    y += 38.0f + gap;
+
     SectorTopologyWallPartSettings& selectedPart = TopologyWallPartSettingsFor(*sideDef, state.selectedTopologyWallPart);
     const float uvColumnW = (contentW - gap) * 0.5f;
     const float uvBlockH = 62.0f;
@@ -4474,8 +6128,8 @@ bool SectorEditor::DrawTopologySideDefInspector(
             "sector_editor_topology_sidedef_uv_scale_u",
             "Scale U",
             selectedPart.uv.scale.x,
-            0.01f,
-            64.0f,
+            TopologyUvScaleMin,
+            TopologyUvScaleMax,
             Rectangle{0.0f, y, uvColumnW, uvBlockH},
             [&](float value) { selectedPart.uv.scale.x = value; });
     drawUvInput(
@@ -4483,8 +6137,8 @@ bool SectorEditor::DrawTopologySideDefInspector(
             "sector_editor_topology_sidedef_uv_scale_v",
             "Scale V",
             selectedPart.uv.scale.y,
-            0.01f,
-            64.0f,
+            TopologyUvScaleMin,
+            TopologyUvScaleMax,
             Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH},
             [&](float value) { selectedPart.uv.scale.y = value; });
     y += uvBlockH + gap;
@@ -4526,6 +6180,80 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 "Reset topology sidedef %d %s UV",
                 sideDef->id,
                 TopologyWallPartStatusName(state.selectedTopologyWallPart)));
+    }
+    y += 38.0f + gap;
+
+    const float fitButtonW = (contentW - gap * 2.0f) / 3.0f;
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_fit_width",
+                Rectangle{0.0f, y, fitButtonW, 34.0f},
+                font,
+                "Fit Width")) {
+        FitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Width, &assets);
+    }
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_fit_height",
+                Rectangle{fitButtonW + gap, y, fitButtonW, 34.0f},
+                font,
+                "Fit Height")) {
+        FitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Height, &assets);
+    }
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_fit_both",
+                Rectangle{(fitButtonW + gap) * 2.0f, y, fitButtonW, 34.0f},
+                font,
+                "Fit Both")) {
+        FitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Both, &assets);
+    }
+    y += 34.0f + gap;
+
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_align_vertical",
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                "Align Vertical")) {
+        AlignSelectedWallMaterialVertical(selectedMaterialTarget, &assets);
+    }
+    y += 34.0f + gap;
+
+    const float alignButtonW = (contentW - gap) * 0.5f;
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_align_u_prev",
+                Rectangle{0.0f, y, alignButtonW, 34.0f},
+                font,
+                "Align U Prev")) {
+        AlignSelectedWallMaterialU(selectedMaterialTarget, TopologyUAlignDirection::Previous, &assets);
+    }
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_align_u_next",
+                Rectangle{alignButtonW + gap, y, alignButtonW, 34.0f},
+                font,
+                "Align U Next")) {
+        AlignSelectedWallMaterialU(selectedMaterialTarget, TopologyUAlignDirection::Next, &assets);
     }
 
     return true;
@@ -5188,6 +6916,8 @@ void SectorEditor::DrawStatusPanel(
     std::string pendingText;
     if (state.pendingSector.active) {
         pendingText = TextFormat(" | pending %zu pts", state.pendingSector.points.size());
+    } else if (state.pendingTopologyLineSplitAtPoint.active) {
+        pendingText = " | split at point";
     }
     const std::string shortMapPath = state.hasCurrentLevelPath
             ? state.currentLevelPath
@@ -5249,6 +6979,7 @@ bool SectorEditor::LoadLevel(
         const std::string& levelName,
         const std::string& jsonAssetPath)
 {
+    const bool hadPendingSplit = state.pendingTopologyLineSplitAtPoint.active;
     SectorTopologyMap loaded;
     std::string error;
     const std::string filePath = ResolveEditorAssetPath(jsonAssetPath);
@@ -5262,6 +6993,9 @@ bool SectorEditor::LoadLevel(
 
     preview.Shutdown(assets);
     CancelPendingSector(nullptr);
+    CancelPendingTopologyVertexMerge(nullptr);
+    CancelPendingTopologyLineSplitAtPoint(nullptr);
+    CancelPendingTopologySectorCut(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     state.topologyMap = std::move(loaded);
@@ -5289,7 +7023,9 @@ bool SectorEditor::LoadLevel(
     state.lightDrag = LightDragState{};
     RefreshDefaultTextures();
     RefreshEditorTextureAssets(assets);
-    statusText = TextFormat("Loaded topology %s", jsonAssetPath.c_str());
+    statusText = hadPendingSplit
+            ? TextFormat("Loaded topology %s; split at point cancelled", jsonAssetPath.c_str())
+            : TextFormat("Loaded topology %s", jsonAssetPath.c_str());
     return true;
 }
 
@@ -5428,6 +7164,9 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     }
 
     CancelPendingSector(nullptr);
+    CancelPendingTopologyVertexMerge(nullptr);
+    CancelPendingTopologyLineSplitAtPoint(nullptr);
+    CancelPendingTopologySectorCut(nullptr);
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     ui.hotId = 0;
@@ -5852,10 +7591,12 @@ void SectorEditor::SelectTopologySector(int sectorId)
 
     state.topologySelectionKind = TopologySelectionKind::Sector;
     state.selectedTopologySectorId = sectorId;
+    state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
     state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
+    state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
@@ -5870,6 +7611,31 @@ void SectorEditor::SelectTopologySector(int sectorId)
     for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
         inputState = engine::UIFloatInputState{};
     }
+    SyncSelectedSectorIdBuffer();
+    SyncSelectedLightIdBuffer();
+}
+
+void SectorEditor::SelectTopologyVertex(int vertexId)
+{
+    const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+    if (vertex == nullptr) {
+        ClearSelection();
+        return;
+    }
+
+    state.topologySelectionKind = TopologySelectionKind::Vertex;
+    state.selectedTopologySectorId = -1;
+    state.selectedTopologyVertexId = vertex->id;
+    state.selectedTopologySideDefId = -1;
+    state.selectedTopologyLineDefId = -1;
+    state.selectedTopologyLightId = -1;
+    state.selectedTopologySideKind = SectorTopologySideKind::Front;
+    state.inspectedTopologyVertexId = vertex->id;
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    uiState.idBufferLightIndex = -1;
+    uiState.inspectorScroll.offset = Vector2{};
     SyncSelectedSectorIdBuffer();
     SyncSelectedLightIdBuffer();
 }
@@ -5889,11 +7655,13 @@ void SectorEditor::SelectTopologySideDef(int sideDefId, TopologyWallPart wallPar
 
     state.topologySelectionKind = TopologySelectionKind::SideDef;
     state.selectedTopologySectorId = -1;
+    state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = sideDef->id;
     state.selectedTopologyLineDefId = lineDef->id;
     state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = sideDef->side;
     state.selectedTopologyWallPart = wallPart;
+    state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
@@ -5918,11 +7686,13 @@ void SectorEditor::SelectTopologyLineDef(
 
     state.topologySelectionKind = TopologySelectionKind::LineDef;
     state.selectedTopologySectorId = -1;
+    state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = lineDefId;
     state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = side;
     state.selectedTopologyWallPart = wallPart;
+    state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
@@ -5945,9 +7715,11 @@ void SectorEditor::SelectTopologyLight(int topologyLightId)
     state.selectedTopologyLightId = topologyLightId;
     state.topologySelectionKind = TopologySelectionKind::Light;
     state.selectedTopologySectorId = -1;
+    state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
+    state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
@@ -6058,11 +7830,17 @@ void SectorEditor::ResetSurface3DUiState()
 
 void SectorEditor::ClearSelection()
 {
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
     state.topologySelectionKind = TopologySelectionKind::None;
     state.selectedTopologySectorId = -1;
+    state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
+    state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
+    state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
@@ -6111,9 +7889,115 @@ std::string SectorEditor::CurrentTextureForSurface(TopologySurfaceEditTarget tar
     return std::string{"<none>"};
 }
 
+bool SectorEditor::CopyTopologyMaterial(TopologySurfaceEditTarget target)
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+
+    TopologyMaterialPayload payload;
+    payload.valid = true;
+    payload.kind = target.kind;
+
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            statusText = "Selected material target is no longer valid.";
+            return false;
+        }
+
+        if (target.kind == TopologySurfaceEditTargetKind::SectorFloor) {
+            payload.textureId = sector->floorTextureId;
+            payload.uv = sector->floorUv;
+        } else {
+            payload.textureId = sector->ceilingTextureId;
+            payload.uv = sector->ceilingUv;
+        }
+    } else {
+        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+        if (sideDef == nullptr) {
+            statusText = "Selected material target is no longer valid.";
+            return false;
+        }
+
+        const SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(
+                *sideDef,
+                TopologyEditTargetWallPart(target.kind));
+        payload.textureId = part.textureId;
+        payload.uv = part.uv;
+    }
+
+    state.copiedTopologyMaterial = payload;
+    statusText = TextFormat("Copied %s material.", TopologyMaterialKindName(payload.kind));
+    return true;
+}
+
+bool SectorEditor::PasteTopologyMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets)
+{
+    if (!state.copiedTopologyMaterial.valid) {
+        statusText = "No copied material.";
+        return false;
+    }
+
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+
+    if (state.copiedTopologyMaterial.kind != target.kind) {
+        statusText = TextFormat(
+                "Copied material is for %s; selected target is %s.",
+                TopologyMaterialKindName(state.copiedTopologyMaterial.kind),
+                TopologyMaterialKindName(target.kind));
+        return false;
+    }
+
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            statusText = "Selected material target is no longer valid.";
+            return false;
+        }
+
+        if (target.kind == TopologySurfaceEditTargetKind::SectorFloor) {
+            sector->floorTextureId = state.copiedTopologyMaterial.textureId;
+            sector->floorUv = state.copiedTopologyMaterial.uv;
+        } else {
+            sector->ceilingTextureId = state.copiedTopologyMaterial.textureId;
+            sector->ceilingUv = state.copiedTopologyMaterial.uv;
+        }
+    } else {
+        SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+        if (sideDef == nullptr) {
+            statusText = "Selected material target is no longer valid.";
+            return false;
+        }
+
+        SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(
+                *sideDef,
+                TopologyEditTargetWallPart(target.kind));
+        part.textureId = state.copiedTopologyMaterial.textureId;
+        part.uv = state.copiedTopologyMaterial.uv;
+    }
+
+    state.topologyRenderWarning.clear();
+    MarkTopologyDocumentEdited(TextFormat("Pasted %s material.", TopologyMaterialKindName(target.kind)));
+    if (state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        RebuildPreviewMeshesPreservingView(assets);
+    }
+    return true;
+}
+
 bool SectorEditor::ApplySurface3DUvValue(TopologySurfaceEditTarget target, int component, float value, engine::AssetManager& assets)
 {
     if (!IsValidTopologySurfaceEditTarget(target) || !std::isfinite(value)) {
+        return false;
+    }
+    if ((component == 0 || component == 1)
+            && (value < TopologyUvScaleMin || value > TopologyUvScaleMax)) {
         return false;
     }
 
@@ -6210,6 +8094,478 @@ bool SectorEditor::ResetSurface3DUv(TopologySurfaceEditTarget target, engine::As
     return RebuildPreviewMeshesPreservingView(assets);
 }
 
+bool SectorEditor::FitSelectedWallMaterial(
+        TopologySurfaceEditTarget target,
+        TopologyUvFitMode mode,
+        engine::AssetManager* assets)
+{
+    if (!IsWallTopologyEditTarget(target.kind) || !IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Select a wall, lower, or upper surface before fitting UVs.";
+        return false;
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (sideDef == nullptr
+            || sideDef->lineDefId != target.lineDefId
+            || sideDef->sectorId != target.sectorId
+            || sideDef->side != target.side) {
+        statusText = "Selected sidedef is no longer valid.";
+        return false;
+    }
+
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, sideDef->lineDefId);
+    if (lineDef == nullptr) {
+        statusText = "Selected sidedef references a missing linedef.";
+        return false;
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)
+            || start == nullptr || end == nullptr) {
+        statusText = "Selected linedef endpoints are missing.";
+        return false;
+    }
+
+    const double dx = static_cast<double>(end->x) - static_cast<double>(start->x);
+    const double dy = static_cast<double>(end->y) - static_cast<double>(start->y);
+    const double coordLength = std::sqrt(dx * dx + dy * dy);
+    const float wallLengthWorld = SectorCoordDistanceToWorldDistance(coordLength);
+    if (!(wallLengthWorld > 0.0f) || !std::isfinite(wallLengthWorld)) {
+        statusText = "Selected wall has invalid length.";
+        return false;
+    }
+
+    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sideDef->sectorId);
+    if (sector == nullptr) {
+        statusText = "Selected sidedef references a missing sector.";
+        return false;
+    }
+
+    const int oppositeSideDefId = sideDef->side == SectorTopologySideKind::Front
+            ? lineDef->backSideDefId
+            : lineDef->frontSideDefId;
+    const SectorTopologySideDef* opposite = FindOppositeSectorTopologySideDef(state.topologyMap, sideDef->id);
+    if (oppositeSideDefId != -1 && opposite == nullptr) {
+        statusText = "Selected sidedef's opposite side is no longer valid.";
+        return false;
+    }
+
+    const SectorTopologySector* oppositeSector = nullptr;
+    if (opposite != nullptr) {
+        oppositeSector = FindSectorTopologySector(state.topologyMap, opposite->sectorId);
+        if (oppositeSector == nullptr) {
+            statusText = "Selected sidedef's opposite sector is missing.";
+            return false;
+        }
+    }
+
+    const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+    float heightAuthoring = 0.0f;
+    switch (wallPart) {
+        case TopologyWallPart::Wall:
+            if (opposite != nullptr) {
+                statusText = "Selected wall part has no visible solid wall span.";
+                return false;
+            }
+            heightAuthoring = std::fabs(sector->ceilingZ - sector->floorZ);
+            break;
+        case TopologyWallPart::Lower:
+            if (oppositeSector == nullptr) {
+                statusText = "Lower wall fit needs an opposite sector.";
+                return false;
+            }
+            if (!(oppositeSector->floorZ > sector->floorZ)) {
+                statusText = "Selected lower wall has no visible height span.";
+                return false;
+            }
+            heightAuthoring = oppositeSector->floorZ - sector->floorZ;
+            break;
+        case TopologyWallPart::Upper:
+            if (oppositeSector == nullptr) {
+                statusText = "Upper wall fit needs an opposite sector.";
+                return false;
+            }
+            if (!(sector->ceilingZ > oppositeSector->ceilingZ)) {
+                statusText = "Selected upper wall has no visible height span.";
+                return false;
+            }
+            heightAuthoring = sector->ceilingZ - oppositeSector->ceilingZ;
+            break;
+    }
+
+    const float wallHeightWorld = SectorAuthoringToWorldDistance(std::fabs(heightAuthoring));
+    const bool fitWidth = mode == TopologyUvFitMode::Width || mode == TopologyUvFitMode::Both;
+    const bool fitHeight = mode == TopologyUvFitMode::Height || mode == TopologyUvFitMode::Both;
+    if (fitHeight && (!(wallHeightWorld > 0.0f) || !std::isfinite(wallHeightWorld))) {
+        statusText = "Selected wall has invalid height.";
+        return false;
+    }
+
+    const auto validateScale = [](float scale) {
+        return std::isfinite(scale)
+                && scale >= TopologyUvScaleMin
+                && scale <= TopologyUvScaleMax;
+    };
+    const float widthScale = kSectorGeneratedTextureWorldSize / wallLengthWorld;
+    const float heightScale = fitHeight
+            ? kSectorGeneratedTextureWorldSize / wallHeightWorld
+            : 1.0f;
+    if (fitWidth && !validateScale(widthScale)) {
+        statusText = "Fit width requires a UV scale outside the editable range.";
+        return false;
+    }
+    if (fitHeight && !validateScale(heightScale)) {
+        statusText = "Fit height requires a UV scale outside the editable range.";
+        return false;
+    }
+
+    SectorTopologySideDef* mutableSideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (mutableSideDef == nullptr) {
+        statusText = "Selected sidedef is no longer valid.";
+        return false;
+    }
+    SectorTopologyUvSettings& uv = TopologyWallPartSettingsFor(*mutableSideDef, wallPart).uv;
+    if (fitWidth) {
+        uv.scale.x = widthScale;
+        uv.offset.x = 0.0f;
+    }
+    if (fitHeight) {
+        uv.scale.y = heightScale;
+        uv.offset.y = 0.0f;
+    }
+
+    state.topologyRenderWarning.clear();
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+
+    MarkTopologyDocumentEdited(TextFormat(
+            "Fit %s material %s.",
+            TopologyWallPartStatusName(wallPart),
+            TopologyUvFitModeStatusName(mode)));
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
+}
+
+bool SectorEditor::AlignSelectedWallMaterialVertical(
+        TopologySurfaceEditTarget target,
+        engine::AssetManager* assets)
+{
+    if (!IsWallTopologyEditTarget(target.kind) || !IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Select a wall, lower, or upper surface before aligning UVs.";
+        return false;
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (sideDef == nullptr
+            || sideDef->lineDefId != target.lineDefId
+            || sideDef->sectorId != target.sectorId
+            || sideDef->side != target.side) {
+        statusText = "Selected sidedef is no longer valid.";
+        return false;
+    }
+
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, sideDef->lineDefId);
+    if (lineDef == nullptr) {
+        statusText = "Selected sidedef references a missing linedef.";
+        return false;
+    }
+
+    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sideDef->sectorId);
+    if (sector == nullptr) {
+        statusText = "Selected sidedef references a missing sector.";
+        return false;
+    }
+
+    const int oppositeSideDefId = sideDef->side == SectorTopologySideKind::Front
+            ? lineDef->backSideDefId
+            : lineDef->frontSideDefId;
+    const SectorTopologySideDef* opposite = FindOppositeSectorTopologySideDef(state.topologyMap, sideDef->id);
+    if (oppositeSideDefId != -1 && opposite == nullptr) {
+        statusText = "Selected sidedef's opposite side is no longer valid.";
+        return false;
+    }
+
+    const SectorTopologySector* oppositeSector = nullptr;
+    if (opposite != nullptr) {
+        oppositeSector = FindSectorTopologySector(state.topologyMap, opposite->sectorId);
+        if (oppositeSector == nullptr) {
+            statusText = "Selected sidedef's opposite sector is missing.";
+            return false;
+        }
+    }
+
+    const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+    float spanBottomAuthoring = 0.0f;
+    float spanTopAuthoring = 0.0f;
+    switch (wallPart) {
+        case TopologyWallPart::Wall:
+            if (opposite != nullptr) {
+                statusText = "Selected wall part has no visible solid wall span.";
+                return false;
+            }
+            spanBottomAuthoring = sector->floorZ;
+            spanTopAuthoring = sector->ceilingZ;
+            break;
+        case TopologyWallPart::Lower:
+            if (oppositeSector == nullptr) {
+                statusText = "Lower wall alignment needs an opposite sector.";
+                return false;
+            }
+            if (!(oppositeSector->floorZ > sector->floorZ)) {
+                statusText = "Selected lower wall has no visible height span.";
+                return false;
+            }
+            spanBottomAuthoring = sector->floorZ;
+            spanTopAuthoring = oppositeSector->floorZ;
+            break;
+        case TopologyWallPart::Upper:
+            if (oppositeSector == nullptr) {
+                statusText = "Upper wall alignment needs an opposite sector.";
+                return false;
+            }
+            if (!(sector->ceilingZ > oppositeSector->ceilingZ)) {
+                statusText = "Selected upper wall has no visible height span.";
+                return false;
+            }
+            spanBottomAuthoring = oppositeSector->ceilingZ;
+            spanTopAuthoring = sector->ceilingZ;
+            break;
+    }
+
+    const float spanBottomWorld = SectorAuthoringToWorldDistance(spanBottomAuthoring);
+    const float spanTopWorld = SectorAuthoringToWorldDistance(spanTopAuthoring);
+    const float spanHeightWorld = spanTopWorld - spanBottomWorld;
+    if (!(spanHeightWorld > 0.0f)
+            || !std::isfinite(spanBottomWorld)
+            || !std::isfinite(spanTopWorld)
+            || !std::isfinite(spanHeightWorld)) {
+        statusText = "Selected wall has invalid height.";
+        return false;
+    }
+
+    SectorTopologySideDef* mutableSideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (mutableSideDef == nullptr) {
+        statusText = "Selected sidedef is no longer valid.";
+        return false;
+    }
+
+    SectorTopologyUvSettings& uv = TopologyWallPartSettingsFor(*mutableSideDef, wallPart).uv;
+    if (!std::isfinite(uv.scale.y)) {
+        statusText = "Selected wall has invalid V scale.";
+        return false;
+    }
+
+    const float alignedOffsetY = -(spanTopWorld / kSectorGeneratedTextureWorldSize) * uv.scale.y;
+    if (!std::isfinite(alignedOffsetY)) {
+        statusText = "Aligned V offset is invalid.";
+        return false;
+    }
+
+    uv.offset.y = alignedOffsetY;
+    state.topologyRenderWarning.clear();
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+
+    MarkTopologyDocumentEdited(TextFormat(
+            "Aligned %s material vertically.",
+            TopologyWallPartStatusName(wallPart)));
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
+}
+
+bool SectorEditor::AlignSelectedWallMaterialU(
+        TopologySurfaceEditTarget target,
+        TopologyUAlignDirection direction,
+        engine::AssetManager* assets)
+{
+    if (!IsWallTopologyEditTarget(target.kind) || !IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Select a wall, lower, or upper surface before aligning U.";
+        return false;
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (sideDef == nullptr
+            || sideDef->lineDefId != target.lineDefId
+            || sideDef->sectorId != target.sectorId
+            || sideDef->side != target.side) {
+        statusText = "Selected sidedef is no longer valid.";
+        return false;
+    }
+
+    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sideDef->sectorId);
+    if (sector == nullptr) {
+        statusText = "Selected sidedef references a missing sector.";
+        return false;
+    }
+
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, sideDef->lineDefId);
+    if (lineDef == nullptr) {
+        statusText = "Selected sidedef references a missing linedef.";
+        return false;
+    }
+
+    float selectedLengthWorld = 0.0f;
+    if (!SectorTopologyWallLengthWorld(state.topologyMap, *lineDef, selectedLengthWorld)) {
+        statusText = "Selected wall has invalid length.";
+        return false;
+    }
+
+    SectorTopologyLoopSet loops;
+    if (!ExtractSectorTopologyLoops(state.topologyMap, sideDef->sectorId, loops)) {
+        statusText = "Could not extract selected sector boundary loop.";
+        return false;
+    }
+
+    const SectorTopologyLoop* selectedLoop = nullptr;
+    size_t selectedEdgeIndex = 0;
+    if (!FindUniqueSectorLoopEdgeForSideDef(loops, sideDef->id, selectedLoop, selectedEdgeIndex)
+            || selectedLoop == nullptr
+            || selectedLoop->edges.empty()) {
+        statusText = "Selected sidedef was not found in exactly one sector loop.";
+        return false;
+    }
+
+    const size_t edgeCount = selectedLoop->edges.size();
+    if (edgeCount < 2) {
+        statusText = "Selected sector loop has no neighboring wall segment.";
+        return false;
+    }
+
+    const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+    const SectorTopologyLoopEdge& selectedEdge = selectedLoop->edges[selectedEdgeIndex];
+
+    if (selectedEdge.sideDefId != sideDef->id
+            || selectedEdge.lineDefId != sideDef->lineDefId
+            || selectedEdge.side != sideDef->side) {
+        statusText = "Selected sidedef loop edge is stale.";
+        return false;
+    }
+
+    if (!TopologyWallPartHasVisibleSpan(state.topologyMap, *sideDef, wallPart)) {
+        switch (wallPart) {
+            case TopologyWallPart::Wall:
+                statusText = "Selected wall part has no visible solid wall span.";
+                break;
+            case TopologyWallPart::Lower:
+                statusText = "Selected lower wall has no visible height span.";
+                break;
+            case TopologyWallPart::Upper:
+                statusText = "Selected upper wall has no visible height span.";
+                break;
+        }
+        return false;
+    }
+
+    std::string neighborError;
+    const SectorTopologyLoopEdge* neighborEdge = FindVisibleTopologyWallPartNeighborEdge(
+            state.topologyMap,
+            *selectedLoop,
+            selectedEdgeIndex,
+            sideDef->sectorId,
+            direction,
+            wallPart,
+            neighborError);
+    if (neighborEdge == nullptr) {
+        if (!neighborError.empty()) {
+            statusText = neighborError;
+        } else {
+            statusText = TextFormat(
+                    "No %s visible %s in this sector loop.",
+                    TopologyUAlignDirectionStatusName(direction),
+                    TopologyWallPartSurfaceStatusName(wallPart));
+        }
+        return false;
+    }
+
+    const SectorTopologySideDef* neighborSideDef = FindSectorTopologySideDef(
+            state.topologyMap,
+            neighborEdge->sideDefId);
+    if (neighborSideDef == nullptr
+            || neighborSideDef->lineDefId != neighborEdge->lineDefId
+            || neighborSideDef->sectorId != sideDef->sectorId
+            || neighborSideDef->side != neighborEdge->side) {
+        statusText = TextFormat(
+                "%s sidedef is no longer valid.",
+                direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
+        return false;
+    }
+
+    const SectorTopologyLineDef* neighborLineDef = FindSectorTopologyLineDef(
+            state.topologyMap,
+            neighborSideDef->lineDefId);
+    if (neighborLineDef == nullptr) {
+        statusText = TextFormat(
+                "%s sidedef references a missing linedef.",
+                direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
+        return false;
+    }
+
+    float neighborLengthWorld = 0.0f;
+    if (!SectorTopologyWallLengthWorld(state.topologyMap, *neighborLineDef, neighborLengthWorld)) {
+        statusText = TextFormat(
+                "%s wall has invalid length.",
+                direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
+        return false;
+    }
+
+    const SectorTopologyWallPartSettings& neighborPart = TopologyWallPartSettingsFor(
+            *neighborSideDef,
+            wallPart);
+    SectorTopologySideDef* mutableSideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (mutableSideDef == nullptr) {
+        statusText = "Selected sidedef is no longer valid.";
+        return false;
+    }
+    SectorTopologyUvSettings& selectedUv = TopologyWallPartSettingsFor(*mutableSideDef, wallPart).uv;
+
+    if (!std::isfinite(selectedUv.scale.x)
+            || !std::isfinite(selectedUv.offset.x)
+            || !std::isfinite(neighborPart.uv.scale.x)
+            || !std::isfinite(neighborPart.uv.offset.x)) {
+        statusText = "Wall U alignment requires finite U scale and offset values.";
+        return false;
+    }
+
+    float alignedOffsetX = 0.0f;
+    if (direction == TopologyUAlignDirection::Previous) {
+        const float previousBaseEndU = neighborLengthWorld / kSectorGeneratedTextureWorldSize;
+        alignedOffsetX = previousBaseEndU * neighborPart.uv.scale.x + neighborPart.uv.offset.x;
+    } else {
+        const float selectedBaseEndU = selectedLengthWorld / kSectorGeneratedTextureWorldSize;
+        alignedOffsetX = neighborPart.uv.offset.x - selectedBaseEndU * selectedUv.scale.x;
+    }
+
+    if (!std::isfinite(alignedOffsetX)) {
+        statusText = "Aligned U offset is invalid.";
+        return false;
+    }
+
+    selectedUv.offset.x = alignedOffsetX;
+    state.topologyRenderWarning.clear();
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+
+    MarkTopologyDocumentEdited(TextFormat(
+            "Aligned %s U from %s.",
+            TopologyWallPartStatusName(wallPart),
+            TopologyUAlignDirectionStatusName(direction)));
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
+}
+
 bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& assets)
 {
     if (!preview.IsReady()) {
@@ -6263,6 +8619,8 @@ bool SectorEditor::SplitSelectedTopologyLineDef()
         return false;
     }
 
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
     state.hasHoveredVertex = false;
     state.hoveredTopologyVertexId = -1;
     state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
@@ -6294,6 +8652,117 @@ bool SectorEditor::SplitSelectedTopologyLineDef()
             "Split topology linedef %d; selected linedef %d",
             originalLineDefId,
             split.secondLineDefId);
+    return true;
+}
+
+bool SectorEditor::DissolveSelectedTopologyVertex()
+{
+    const SectorTopologyVertex* vertex = SelectedTopologyVertex();
+    if (vertex == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology vertex before dissolving.";
+        return false;
+    }
+
+    const int vertexId = vertex->id;
+    SectorTopologyDissolveVertexResult dissolve;
+    std::string error;
+    if (!DissolveSectorTopologyVertex(state.topologyMap, vertexId, &dissolve, &error)) {
+        statusText = error.empty() ? "Cannot dissolve topology vertex" : error;
+        return false;
+    }
+
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
+    state.hasHoveredVertex = false;
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
+    state.inspectedTopologyVertexId = -1;
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+
+    SelectTopologyLineDef(
+            dissolve.replacementLineDefId,
+            SectorTopologySideKind::Front,
+            state.selectedTopologyWallPart);
+    state.topologyDocumentDirty = true;
+    state.topologyRenderWarning.clear();
+    state.hasUnsavedChanges = true;
+    statusText = TextFormat(
+            "Dissolved topology vertex %d; selected linedef %d",
+            dissolve.removedVertexId,
+            dissolve.replacementLineDefId);
+    return true;
+}
+
+bool SectorEditor::JoinSelectedTopologySectors()
+{
+    const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
+    if (lineDef == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a two-sided topology portal before joining sectors.";
+        return false;
+    }
+
+    const SectorTopologySideDef* winnerSideDef = SelectedTopologySideDef();
+    if (winnerSideDef == nullptr) {
+        const int sideDefId = state.selectedTopologySideKind == SectorTopologySideKind::Front
+                ? lineDef->frontSideDefId
+                : lineDef->backSideDefId;
+        winnerSideDef = FindSectorTopologySideDef(state.topologyMap, sideDefId);
+    }
+    if (winnerSideDef == nullptr || winnerSideDef->lineDefId != lineDef->id) {
+        statusText = "Join Sectors requires a selected side of a two-sided topology portal.";
+        return false;
+    }
+
+    const SectorTopologySideDef* otherSideDef = FindOppositeSectorTopologySideDef(
+            state.topologyMap,
+            winnerSideDef->id);
+    if (otherSideDef == nullptr) {
+        statusText = "Join Sectors requires a two-sided topology portal.";
+        return false;
+    }
+    if (winnerSideDef->sectorId == otherSideDef->sectorId) {
+        statusText = "Join Sectors requires two different adjacent sectors.";
+        return false;
+    }
+
+    SectorTopologyJoinSectorsResult join;
+    std::string error;
+    if (!JoinSectorTopologySectors(
+                state.topologyMap,
+                winnerSideDef->sectorId,
+                otherSideDef->sectorId,
+                &join,
+                &error)) {
+        statusText = error.empty() ? "Join Sectors rejected." : error;
+        return false;
+    }
+
+    CancelPendingSector(nullptr);
+    CancelVertexDrag(nullptr);
+    CancelLightDrag(nullptr);
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
+    state.hasHoveredVertex = false;
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
+    state.hoveredTopologyLightId = -1;
+    ClearTransientTopologyEditStateAfterGeometryChange();
+    SelectTopologySector(join.survivingSectorId);
+    MarkTopologyDocumentEdited(TextFormat(
+            "Joined topology sectors %d and %d; kept sector %d.",
+            join.survivingSectorId,
+            join.removedSectorId,
+            join.survivingSectorId));
     return true;
 }
 

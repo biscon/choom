@@ -18,7 +18,6 @@ namespace game {
 
 namespace {
 
-constexpr float TextureWorldSize = 2.0f;
 constexpr float EdgeEpsilon = 0.001f;
 
 using EarcutPoint = std::array<double, 2>;
@@ -217,7 +216,7 @@ bool BuildTopologyFlatSurface(
                     SectorCoordToWorldPosition3(vertex.x, height, vertex.y),
                     normal,
                     ApplyUvSettings(
-                            Vector2{world.x / TextureWorldSize, world.y / TextureWorldSize},
+                            Vector2{world.x / kSectorGeneratedTextureWorldSize, world.y / kSectorGeneratedTextureWorldSize},
                             uvSettings.scale,
                             uvSettings.offset),
                     Vector2{world.x - minX, world.y - minZ},
@@ -270,8 +269,8 @@ bool BuildTopologyWallSurface(
             static_cast<float>(-dy / coordLength),
             0.0f,
             static_cast<float>(dx / coordLength)};
-    const float u1 = length / TextureWorldSize;
-    const float v0 = height / TextureWorldSize;
+    const float u1 = length / kSectorGeneratedTextureWorldSize;
+    const float v0 = height / kSectorGeneratedTextureWorldSize;
     const Color color = MakeTopologySectorVertexColor(sector);
     const Vector3 afPosition = SectorCoordToWorldPosition3(a.x, bottom, a.y);
     const Vector3 acPosition = SectorCoordToWorldPosition3(a.x, top, a.y);

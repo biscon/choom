@@ -64,8 +64,8 @@ views and maps to world Z for generated 3D geometry.
 - Sector tool: draw topology sectors. Finalized sectors reuse exact existing
   vertices and exact endpoint-pair linedefs when possible.
 - Light tool: place a topology static baked light inside the clicked sector.
-- Move tool: drag topology vertices by stable vertex ID or drag static lights by
-  X/Z.
+- Move tool: drag topology vertices by stable vertex ID, merge vertices by
+  dragging exactly onto an existing vertex, or drag static lights by X/Z.
 - Erase tool: click a sector to confirm deletion. Light deletion is available
   from selection/Delete.
 - Click the first pending point or press `Enter`: finalize the pending sector.
@@ -112,6 +112,7 @@ Selecting a topology sector opens the sector inspector. It edits:
 - ambient color and intensity
 - default wall, lower, and upper texture IDs and UV scale/offset
 - `Insert Sector Inside`
+- `Cut Sector`
 - `Delete Sector`
 
 Sector default wall/lower/upper settings initialize future sidedefs created for
@@ -122,6 +123,61 @@ clears those slots from linedefs, removes linedefs with no remaining side, prune
 unreferenced vertices, validates the candidate topology, and commits only if it
 is valid. Surviving opposite sides on shared linedefs keep their texture and UV
 settings and become one-sided boundaries.
+
+## Cut Sector
+
+`Cut Sector` starts a pending two-click canvas action for the selected topology
+sector. Click two points on the selected sector's outer boundary, or press
+Escape/right click to cancel. Picking prefers existing selected-boundary
+vertices near the cursor, then snapped points strictly inside selected outer
+linedefs. Holes and unrelated linedefs are not valid endpoints.
+
+The cut is topology-only and transactional. The original sector ID, name, and
+properties are preserved for one result. One new sector ID is allocated for the
+other result, copying the original sector fields and receiving a generated
+non-duplicate sector name. Preview validation runs against a copied map and does
+not mutate live topology.
+
+Accepted cuts must stay inside the selected sector and produce two valid outer
+loops with at least three vertices each. The editor/backend rejects same
+endpoints, same-edge cuts, boundary-aligned cuts, cuts through unrelated
+vertices, duplicate physical linedefs, crossing/touching/overlapping existing
+topology, concave cuts outside the sector, hole crossings/touches, ambiguous
+hole assignment, and any candidate that fails topology validation.
+
+For now, cut endpoints must be simple one-sided boundary points on the selected
+sector. Endpoints on shared portal boundaries, including equal-height portals,
+are rejected; pick a solid outer boundary point instead.
+
+Existing boundary sidedefs inherited by each result keep their concrete
+wall/lower/upper texture IDs and UV settings. Existing holes are not cut: each
+hole boundary must lie strictly inside exactly one result sector, or the cut is
+rejected. The new cut edge is one two-sided portal linedef with independent
+front/back sidedefs initialized from the two owning sectors' default wall,
+lower, and upper settings. Like other two-sided portals, it produces lower/upper
+3D wall surfaces only where adjacent sector heights differ.
+
+## Join Sectors
+
+Adjacent topology sectors can be joined through a selected two-sided portal.
+Select the sidedef/portal boundary, then use `Join Sectors` in the
+sidedef/linedef inspector. The selected side's sector is the winner: it keeps
+its sector ID, name, floor/ceiling heights, floor/ceiling textures and UVs,
+ambient settings, and default wall/lower/upper settings.
+
+Join is topology-only and transactional. It removes the shared internal portal
+boundary, reassigns surviving outside sidedefs from the removed sector to the
+winner, prunes orphan vertices, validates the candidate topology, extracts the
+surviving sector loops, and commits only if the result is valid. Surviving
+outside sidedefs keep their concrete wall/lower/upper texture IDs and UV
+settings; they are not reset to the winning sector defaults.
+
+The first version is conservative. It rejects non-adjacent sectors, one-sided
+boundaries, sectors that only touch at a vertex, disconnected or ambiguous
+shared boundaries, closed shared boundaries, and any join that would produce
+invalid resulting loops or invalid candidate topology. Sector-inspector
+`Join With...` picking is not implemented yet; joining is currently driven by a
+selected portal.
 
 ## Sidedef And Linedef Inspector
 
@@ -135,10 +191,13 @@ The sidedef/linedef inspector supports:
 
 - front/back sidedef selection
 - `Switch to opposite side` when the opposite sidedef exists
+- `Join Sectors` when the selected portal has two different adjacent sectors
 - wall, lower, and upper texture selection
 - wall, lower, and upper UV scale/offset editing
 - reset UV for the selected wall/lower/upper part
+- fit width, height, or both for the selected wall/lower/upper part
 - `Split Linedef`
+- `Split At Point`
 - line-only inspection and splitting when no sidedef is selected
 
 `Split Linedef` creates one exact midpoint vertex and replaces the selected line
@@ -146,6 +205,61 @@ with two new linedefs. Existing front/back sidedefs are duplicated onto both
 replacement lines with fresh stable IDs, preserving sector ownership, side kind,
 texture IDs, and UVs. Splitting fails if the midpoint cannot be represented
 exactly on the integer coordinate grid.
+
+Wall-like surfaces use distance-based generated base UVs. Wall, lower, and
+upper U spans are based on physical linedef length, and V spans are based on the
+visible wall height. Reset UV restores scale `(1, 1)` and offset `(0, 0)`, which
+restarts the selected wall span's local texture coordinates and tiles the texture
+every 2 world units. `Fit Width`, `Fit Height`, and `Fit Both` adjust only the
+selected wall/lower/upper part's UV scale and reset the fitted offset axis so
+that the selected texture spans once across the selected width and/or height.
+`Align Vertical` adjusts only the selected wall/lower/upper part's V offset so
+brick rows or wall courses line up by world height. Fit and Align Vertical
+preserve the selected part's texture ID and do not change other wall parts, the
+opposite sidedef, sector defaults, floors, or ceilings. Align Vertical also
+preserves the selected part's UV scale and U offset.
+`Align U Prev` and `Align U Next` adjust only the selected wall/lower/upper
+part's U offset so the texture continues from the previous or next visible
+compatible wall/lower/upper surface in the same sector loop, skipping edges
+where that wall part is not visible. They preserve texture ID, scale, V offset,
+other wall parts, and the opposite sidedef. They do not copy material, scale, or
+texture from the neighbor, and they are not full wall-chain alignment yet.
+
+`Split At Point` starts a pending canvas action for the selected linedef. Click a
+snapped point exactly on that linedef to split there, or press Escape/right click
+to cancel. The clicked point must be strictly inside the linedef segment; endpoint
+points and coordinates already occupied by an existing topology vertex are
+rejected without changing the map.
+
+## Topology Vertex Inspector
+
+Topology vertices can be selected directly in the 2D editor. Vertex picking uses
+the same small screen-space marker hit test as vertex movement and takes
+priority over linedef/sidedef and sector picking when the click is on the vertex
+marker. Selected vertices draw with a translucent green fill and stronger green
+outline under the normal vertex marker.
+
+The vertex inspector shows:
+
+- stable topology vertex ID
+- read-only X/Y coordinate in visible authoring units
+- incident linedef count
+- `Dissolve Vertex`
+- `Merge Into...`
+
+`Dissolve Vertex` removes a simple degree-2 topology vertex by replacing its two
+incident linedefs with one replacement linedef. The edit is transactional:
+topology is copied, edited, validated, sector loops are extracted, and the live
+map is changed only on success. On success the replacement linedef is selected.
+On failure the vertex remains selected and the status message explains the
+rejection.
+
+Dissolve is conservative. It rejects missing vertices, isolated or degree-1
+vertices, branching degree-3+ vertices, collapsed replacements, duplicate
+replacement physical linedefs, invalid/crossing/overlapping candidate topology,
+and ambiguous sidedef transfer. Sidedefs are only merged when the two directed
+segments belong to the same sector and have identical wall/lower/upper texture
+IDs and UV settings.
 
 ## Insert Sector Inside
 
@@ -209,6 +323,15 @@ Texture pickers are used for:
 - sidedef wall/lower/upper textures
 - 3D surface panel texture targets
 
+Surface materials can be copied and pasted between matching surface types from
+the 2D inspectors and the 3D surface panel. The copied material includes the
+texture ID and UV scale/offset only. Floor materials paste only to floors,
+ceiling materials paste only to ceilings, and wall/lower/upper materials paste
+only to the matching concrete sidedef wall part. Paste mutates only the selected
+target surface; it does not edit the opposite sidedef, sector defaults, ambient
+lighting, or geometry. Keyboard shortcuts are not implemented for this workflow
+yet, so use the inspector or 3D panel buttons.
+
 `Add Map Texture` scans `assets/images` recursively for PNG files. It can add or
 update a texture ID in the map texture table and choose point or bilinear
 filtering. It does not copy external files into the project.
@@ -218,17 +341,27 @@ filtering. It does not copy external files into the project.
 Moving a topology vertex edits exactly one stable vertex ID. Connected linedefs
 and all sector loops using that vertex update through the shared reference.
 Movement previews validate a candidate topology before committing on mouse
-release. Moving a vertex onto another existing vertex is rejected because vertex
-merge is not implemented.
+release.
+
+Topology vertices can be merged conservatively. With the Move tool, hover a
+vertex and use `Merge Into...`, then click the target vertex. Dragging a vertex
+so its snapped release point exactly matches another existing vertex also
+attempts the same merge. The target vertex survives, the source vertex is
+removed, and existing linedefs are rewired only if the candidate topology remains
+valid.
+
+Vertex merge rejects cases that would collapse a linedef, create duplicate
+physical linedefs, require automatic sidedef merging, or invalidate topology.
 
 Moving a light edits only its X/Z position during the drag. Y remains unchanged.
 
 Splitting is inspector-driven. It always splits at the exact stored-coordinate
 midpoint and fails if that midpoint is not representable on the integer grid.
 
-Sector deletion and vertex movement use copy/validate/commit style topology
-edits. Direct linedef deletion, direct sidedef deletion, standalone vertex
-deletion, vertex merge, and undo/redo are not available yet.
+Sector deletion, vertex movement, conservative vertex merge, and conservative
+vertex dissolve use copy/validate/commit style topology edits. Direct linedef
+deletion, direct sidedef deletion, standalone vertex deletion, and undo/redo are
+not available yet.
 
 ## 3D Mode
 
@@ -252,7 +385,17 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 The 3D surface panel edits only the selected surface target. Floor/ceiling
 targets edit sector texture and UV settings. Wall/lower/upper targets edit the
 selected sidedef's matching wall part. The Texture button opens the topology
-texture picker, and Reset UV resets only the selected surface target.
+texture picker, Reset UV resets only the selected surface target, Fit Width /
+Fit Height / Fit Both fit only selected wall-like targets, Align Vertical shifts
+only selected wall-like V offsets to line up by world height, Align U Prev /
+Align U Next shift only selected wall-like U offsets to continue from the
+previous or next visible compatible wall/lower/upper surface in the same sector
+loop, skipping edges where that wall part is not visible, and Copy/Paste Material
+copies texture ID plus UV scale/offset between matching selected surface kinds.
+Align Vertical preserves texture ID, scale, U offset, and other wall parts.
+Align U Prev / Align U Next preserve texture ID, scale, V offset, other wall
+parts, and the opposite sidedef; they do not copy material, scale, or texture
+from the neighbor and are not full wall-chain alignment yet.
 
 Equal-height portals have no generated 3D wall surface, so edit their sidedefs
 from the 2D linedef/sidedef inspector.
@@ -304,5 +447,6 @@ chart.
 - Single fixed-size lightmap atlas; no multi-atlas packing.
 - No 3D geometry editing beyond texture and UV edits on generated surfaces.
 - No direct linedef or sidedef deletion.
-- No standalone vertex deletion or vertex merge.
+- No standalone vertex deletion.
+- No automatic duplicate linedef or sidedef merge.
 - No arbitrary line cutting or automatic overlap splitting.

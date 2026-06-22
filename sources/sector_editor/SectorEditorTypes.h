@@ -6,6 +6,7 @@
 #include "sector_demo/SectorPointTypes.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyCreation.h"
+#include "sector_demo/SectorTopologyEdit.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
@@ -58,6 +59,7 @@ enum class TopologyTexturePickerTargetKind {
 enum class TopologySelectionKind {
     None,
     Sector,
+    Vertex,
     SideDef,
     LineDef,
     Light
@@ -67,6 +69,17 @@ enum class TopologyWallPart {
     Wall,
     Lower,
     Upper
+};
+
+enum class TopologyUvFitMode {
+    Width,
+    Height,
+    Both
+};
+
+enum class TopologyUAlignDirection {
+    Previous,
+    Next
 };
 
 enum class TopologySectorTextureField {
@@ -117,6 +130,13 @@ struct TopologySurfaceEditTarget {
     int lineDefId = -1;
     int sideDefId = -1;
     SectorTopologySideKind side = SectorTopologySideKind::Front;
+};
+
+struct TopologyMaterialPayload {
+    bool valid = false;
+    TopologySurfaceEditTargetKind kind = TopologySurfaceEditTargetKind::None;
+    std::string textureId;
+    SectorTopologyUvSettings uv;
 };
 
 struct TexturePickerState {
@@ -186,6 +206,8 @@ struct VertexDragState {
     bool hasPreviewPoint = false;
     bool hasValidatedPreview = false;
     bool lastPreviewValid = true;
+    bool hasMergeTarget = false;
+    int mergeTargetVertexId = -1;
     std::string errorMessage;
 };
 
@@ -194,6 +216,43 @@ struct LightDragState {
     int topologyLightId = -1;
     Vector3 originalPosition = {};
     Vector3 snappedPosition = {};
+};
+
+struct PendingTopologyLineSplitAtPoint {
+    bool active = false;
+    int lineDefId = -1;
+    int sideDefId = -1;
+    SectorTopologySideKind side = SectorTopologySideKind::Front;
+    TopologyWallPart wallPart = TopologyWallPart::Wall;
+    SectorTopologyCoordPoint candidatePoint = {};
+    bool hasCandidatePoint = false;
+    bool hasValidCandidate = false;
+    std::string message;
+};
+
+struct PendingTopologyVertexMerge {
+    bool active = false;
+    int sourceVertexId = -1;
+    int hoveredTargetVertexId = -1;
+    bool hasValidTarget = false;
+    std::string message;
+};
+
+struct PendingTopologySectorCut {
+    bool active = false;
+    int sectorId = -1;
+    bool hasFirstPoint = false;
+    SectorTopologyBoundaryCutPoint firstPoint;
+    SectorTopologyBoundaryCutPoint candidatePoint;
+    bool hasCandidatePoint = false;
+    bool hasValidCandidate = false;
+    bool cacheHasFirstPoint = false;
+    SectorTopologyBoundaryCutPoint cachedFirstPoint;
+    SectorTopologyBoundaryCutPoint cachedCandidatePoint;
+    int cachedSectorId = -1;
+    bool cachedValid = false;
+    std::string cachedError;
+    std::string message;
 };
 
 struct SectorEditorState {
@@ -212,6 +271,7 @@ struct SectorEditorState {
 
     TopologySelectionKind topologySelectionKind = TopologySelectionKind::None;
     int selectedTopologySectorId = -1;
+    int selectedTopologyVertexId = -1;
     int selectedTopologySideDefId = -1;
     int selectedTopologyLineDefId = -1;
     SectorTopologySideKind selectedTopologySideKind = SectorTopologySideKind::Front;
@@ -221,6 +281,7 @@ struct SectorEditorState {
     bool hasHoveredVertex = false;
     int hoveredTopologyVertexId = -1;
     SectorTopologyCoordPoint hoveredTopologyVertexPoint = {};
+    int inspectedTopologyVertexId = -1;
 
     Vector2 snappedMouseMap = {0.0f, 0.0f};
     Vector2 rawMouseMap = {0.0f, 0.0f};
@@ -228,6 +289,9 @@ struct SectorEditorState {
     PendingSectorDraw pendingSector;
     VertexDragState vertexDrag;
     LightDragState lightDrag;
+    PendingTopologyLineSplitAtPoint pendingTopologyLineSplitAtPoint;
+    PendingTopologyVertexMerge pendingTopologyVertexMerge;
+    PendingTopologySectorCut pendingTopologySectorCut;
     float defaultSectorFloorZ = 0.0f;
     float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);
     std::string defaultFloorTextureId;
@@ -249,6 +313,7 @@ struct SectorEditorState {
     SectorSurfaceHit hoveredSurface3D;
     SectorSurfaceRef selectedSurface3D;
     TopologySurfaceEditTarget selectedTopologySurface3D;
+    TopologyMaterialPayload copiedTopologyMaterial;
 
     engine::AssetScopeHandle editorTextureScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;
