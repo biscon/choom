@@ -465,3 +465,19 @@ The old polygon `LoadSectorMap()` and `SaveSectorMap()` public APIs were removed
 The old polygon JSON read/write helpers and file IO dependencies were removed with those functions. Topology v2 serialization remains the only active sector editor persistence path; no old polygon JSON fallback, compatibility loader, or old-polygon-to-topology conversion was added.
 
 `SectorMap`, `SectorDefinition`, and the old polygon generated geometry, mesh, preview, and lightmap overloads still remain intentionally for later cleanup. `SectorMap.cpp` also still remains because non-persistence old polygon helpers such as texture lookup, boundary/ring access, effective edge settings, neighbor lookup, and edge splitting are still compiled by old overloads.
+
+## Phase 18F note: old polygon runtime overload chain removal
+
+The old polygon generated geometry overload was removed. `BuildSectorGeneratedGeometry()` now exposes only the topology map entry point, and old polygon-only geometry helpers for `SectorMap`, `SectorDefinition`, old boundary refs, partial-edge warnings, old edge override UVs, and old polygon wall generation were removed.
+
+The old polygon mesh overload and preview overload were removed. `BuildSectorMeshes()` and `SectorMeshPreview::Rebuild()` now expose only topology map entry points; preview lightmap status/layout use the topology map path only.
+
+The old polygon lightmap overloads were removed, including `SectorLightmapBakeInput`, polygon lightmap layout/bake entry points, polygon source hashing, and polygon lightmap status. Shared topology bake internals, reports, status text, atlas layout, raycast/BVH code, progress/cancellation, PNG export/install helpers, and topology hashing were kept.
+
+Old `SectorMap.cpp` helper APIs were no longer referenced after the overload removal, so `SectorMap.h` and `SectorMap.cpp` were deleted. Topology test target source lists no longer include `SectorMap.cpp`.
+
+`SectorGeneratedSurfaceRef` no longer carries old polygon identity fields (`sectorIndex`, `ringKind`, `holeIndex`, `edgeIndex`). It keeps topology identity fields for sector, linedef, sidedef, and side.
+
+`SectorTypes.h` still contains deferred old polygon model declarations such as `SectorMap`, `SectorDefinition`, edge override structs, `SectorBoundaryRingKind`, and `SectorBoundaryEdgeRef`. Current searches show those names are not referenced by active editor/demo/test/topology code outside that declaration header, so final model declaration deletion is deferred to a later phase.
+
+Topology editor, preview, serialization, JSON format, and lightmap behavior were not intentionally changed in this phase beyond removing dead old polygon paths.

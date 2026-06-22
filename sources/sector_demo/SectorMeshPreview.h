@@ -12,7 +12,6 @@
 
 namespace game {
 
-struct SectorMap;
 struct SectorTopologyMap;
 
 struct SectorMeshPreviewPose {
@@ -23,11 +22,6 @@ struct SectorMeshPreviewPose {
 
 class SectorMeshPreview {
 public:
-    bool Rebuild(
-            engine::AssetManager& assets,
-            const SectorMap& map,
-            const char* scopeName,
-            std::string& error);
     bool Rebuild(
             engine::AssetManager& assets,
             const SectorTopologyMap& map,

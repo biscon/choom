@@ -3,7 +3,6 @@
 #include "engine/assets/TextureLoadFlags.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshBuilder.h"
-#include "sector_demo/SectorMap.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
@@ -142,98 +141,6 @@ bool ComputeGeometryBounds(const SectorGeneratedGeometry& geometry, Vector3& out
 }
 
 } // namespace
-
-bool SectorMeshPreview::Rebuild(
-        engine::AssetManager& assets,
-        const SectorMap& map,
-        const char* scopeName,
-        std::string& error)
-{
-    Shutdown(assets);
-    error.clear();
-
-    if (map.sectors.empty()) {
-        error = "Preview failed: no sectors";
-        return false;
-    }
-
-    if (map.texturesById.empty()) {
-        error = "Preview failed: missing texture table";
-        return false;
-    }
-
-    assetScope = assets.CreateScope(scopeName == nullptr ? "sector_mesh_preview" : scopeName);
-    if (engine::IsNull(assetScope)) {
-        error = "Preview failed: could not create asset scope";
-        return false;
-    }
-
-    for (const std::string& textureId : SortedSectorTextureIds(map)) {
-        const SectorTextureDefinition* texture = FindSectorTexture(map, textureId);
-        if (texture == nullptr) {
-            continue;
-        }
-
-        const std::string resolvedPath = ResolveAssetPath(texture->path);
-        engine::TextureHandle handle = assets.RequestTexture(
-                assetScope,
-                texture->id.c_str(),
-                resolvedPath.c_str(),
-                SectorTextureLoadFlags(texture->filter)
-        );
-        textureHandlesById.emplace(texture->id, handle);
-    }
-
-    SectorLightmapLayout lightmapLayout;
-    const SectorLightmapStatus status = GetSectorLightmapStatus(map);
-    lightmapStatus = static_cast<int>(status);
-    const bool useLightmapLayout = status == SectorLightmapStatus::Valid
-            && BuildSectorLightmapLayout(map, lightmapLayout, error);
-    if (status == SectorLightmapStatus::Valid && !useLightmapLayout) {
-        std::fprintf(stderr, "[SectorDemo WARNING] %s\n", error.c_str());
-        error.clear();
-    }
-
-    if (useLightmapLayout) {
-        const std::string resolvedPath = ResolveAssetPath(map.bakedLightmap.path);
-        lightmapTexture = assets.RequestTexture(
-                assetScope,
-                "sector_lightmap_atlas",
-                resolvedPath.c_str(),
-                engine::TextureLoad_BilinearFilter
-        );
-    }
-
-    meshes = BuildSectorMeshes(map, useLightmapLayout ? &lightmapLayout : nullptr);
-    if (meshes.batches.empty()) {
-        Shutdown(assets);
-        error = "Preview failed: mesh builder produced no batches";
-        return false;
-    }
-
-    if (!LoadPreviewMaterial(
-                material,
-                defaultMaterialTexture,
-                materialLoaded,
-                useLightmapLoc,
-                useBakedAmbientOcclusionLoc,
-                error)) {
-        return false;
-    }
-
-    sectorCount = map.sectors.size();
-    position = SectorAuthoringToWorldPosition(map.playerStartPosition);
-    yawRadians = map.playerStartYawRadians;
-    pitchRadians = 0.0f;
-    mouseLookEnabled = true;
-    camera.fovy = 75.0f;
-    camera.projection = CAMERA_PERSPECTIVE;
-    UpdateCamera();
-
-    initialized = true;
-    Enter();
-    return true;
-}
 
 bool SectorMeshPreview::Rebuild(
         engine::AssetManager& assets,

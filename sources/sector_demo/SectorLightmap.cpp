@@ -66,6 +66,14 @@ struct BakeTexel {
     Vector3 normal = {};
 };
 
+struct LightmapWorldPointLight {
+    Vector3 position = {};
+    Color color = WHITE;
+    float intensity = 1.0f;
+    float radius = 0.0f;
+    float sourceRadius = 0.0f;
+};
+
 struct BakeAabb {
     Vector3 min = {};
     Vector3 max = {};
@@ -482,11 +490,6 @@ bool IntersectRayAabb(const Ray& ray, const BakeAabb& bounds, float maxDistance,
     return outEntryDistance < maxDistance;
 }
 
-bool HasTopologyLightmapRef(const SectorGeneratedSurfaceRef& ref)
-{
-    return ref.topologySectorId >= 0;
-}
-
 bool IsExactSourceTriangle(const BakeTriangle& tri, int sourceSurfaceIndex, int sourceTriangleIndex)
 {
     return tri.sourceSurfaceIndex == sourceSurfaceIndex && tri.triangleIndex == sourceTriangleIndex;
@@ -807,7 +810,7 @@ Vector3 CosineHemisphereSample(Vector3 normal, int sampleIndex, int sampleCount)
 }
 
 Vector3 EvaluateDirectLightSample(
-        const SectorStaticPointLight& light,
+        const LightmapWorldPointLight& light,
         Vector3 lightPosition,
         const RasterHit& hit,
         const SectorGeneratedSurfaceRef& surfaceRef,
@@ -844,7 +847,7 @@ Vector3 EvaluateDirectLightSample(
 }
 
 Vector3 EvaluateDirectLight(
-        const SectorStaticPointLight& light,
+        const LightmapWorldPointLight& light,
         const RasterHit& hit,
         const SectorGeneratedSurfaceRef& surfaceRef,
         int surfaceIndex,
@@ -870,25 +873,15 @@ Vector3 EvaluateDirectLight(
     return Vector3Scale(direct, 1.0f / static_cast<float>(kDirectSoftShadowSampleCount));
 }
 
-SectorStaticPointLight MakeWorldSpaceLight(const SectorStaticPointLight& authoringLight)
+LightmapWorldPointLight MakeWorldSpaceLight(const SectorTopologyStaticPointLight& authoringLight)
 {
-    SectorStaticPointLight worldLight = authoringLight;
-    worldLight.position = SectorAuthoringToWorldPosition(authoringLight.position);
-    worldLight.radius = SectorAuthoringToWorldDistance(authoringLight.radius);
-    worldLight.sourceRadius = SectorAuthoringToWorldDistance(authoringLight.sourceRadius);
-    return worldLight;
-}
-
-SectorStaticPointLight MakeWorldSpaceLight(const SectorTopologyStaticPointLight& authoringLight)
-{
-    SectorStaticPointLight light;
-    light.id = std::to_string(authoringLight.id);
-    light.position = authoringLight.position;
+    LightmapWorldPointLight light;
+    light.position = SectorAuthoringToWorldPosition(authoringLight.position);
     light.color = authoringLight.color;
     light.intensity = authoringLight.intensity;
-    light.radius = authoringLight.radius;
-    light.sourceRadius = authoringLight.sourceRadius;
-    return MakeWorldSpaceLight(light);
+    light.radius = SectorAuthoringToWorldDistance(authoringLight.radius);
+    light.sourceRadius = SectorAuthoringToWorldDistance(authoringLight.sourceRadius);
+    return light;
 }
 
 float BakeAmbientOcclusion(
@@ -1205,18 +1198,6 @@ bool BuildSectorLightmapLayoutFromGeometry(
 }
 
 bool BuildLightmapGeneratedGeometryForBake(
-        const SectorMap& map,
-        SectorGeneratedGeometry& outGeometry,
-        std::string& outError)
-{
-    if (!BuildSectorGeneratedGeometry(map, outGeometry)) {
-        outError = "Bake failed: no generated sector surfaces";
-        return false;
-    }
-    return true;
-}
-
-bool BuildLightmapGeneratedGeometryForBake(
         const SectorTopologyMap& map,
         SectorGeneratedGeometry& outGeometry,
         std::string& outError)
@@ -1318,40 +1299,17 @@ bool IsSameLogicalSectorLightmapSurface(
         return false;
     }
 
-    if (HasTopologyLightmapRef(a) || HasTopologyLightmapRef(b)) {
-        if (!HasTopologyLightmapRef(a) || !HasTopologyLightmapRef(b)) {
-            return false;
-        }
-
-        switch (a.kind) {
-            case SectorGeneratedSurfaceKind::Floor:
-            case SectorGeneratedSurfaceKind::Ceiling:
-                return a.topologySectorId == b.topologySectorId;
-            case SectorGeneratedSurfaceKind::Wall:
-            case SectorGeneratedSurfaceKind::LowerWall:
-            case SectorGeneratedSurfaceKind::UpperWall:
-                return a.topologySectorId == b.topologySectorId
-                        && a.topologyLineDefId == b.topologyLineDefId
-                        && a.topologySideDefId == b.topologySideDefId
-                        && a.topologySide == b.topologySide;
-        }
-        return false;
-    }
-
-    if (a.sectorIndex != b.sectorIndex) {
-        return false;
-    }
-
     switch (a.kind) {
         case SectorGeneratedSurfaceKind::Floor:
         case SectorGeneratedSurfaceKind::Ceiling:
-            return true;
+            return a.topologySectorId == b.topologySectorId;
         case SectorGeneratedSurfaceKind::Wall:
         case SectorGeneratedSurfaceKind::LowerWall:
         case SectorGeneratedSurfaceKind::UpperWall:
-            return a.ringKind == b.ringKind
-                    && a.holeIndex == b.holeIndex
-                    && a.edgeIndex == b.edgeIndex;
+            return a.topologySectorId == b.topologySectorId
+                    && a.topologyLineDefId == b.topologyLineDefId
+                    && a.topologySideDefId == b.topologySideDefId
+                    && a.topologySide == b.topologySide;
     }
 
     return false;
@@ -1386,22 +1344,6 @@ std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath)
 }
 
 bool BuildSectorLightmapLayout(
-        const SectorMap& map,
-        SectorLightmapLayout& outLayout,
-        std::string& outError)
-{
-    outError.clear();
-
-    SectorGeneratedGeometry geometry;
-    if (!BuildSectorGeneratedGeometry(map, geometry)) {
-        outError = "Bake failed: no generated sector surfaces";
-        return false;
-    }
-
-    return BuildSectorLightmapLayoutFromGeometry(geometry, outLayout, outError);
-}
-
-bool BuildSectorLightmapLayout(
         const SectorTopologyMap& map,
         SectorLightmapLayout& outLayout,
         std::string& outError)
@@ -1419,17 +1361,6 @@ bool BuildSectorLightmapLayout(
     }
 
     return BuildSectorLightmapLayoutFromGeometry(geometry, outLayout, outError);
-}
-
-bool BakeSectorLightmap(
-        const SectorMap& map,
-        const SectorLightmapLayout& layout,
-        const char* outputPath,
-        SectorLightmapBakeResult& outResult,
-        std::string& outError)
-{
-    SectorLightmapBakeCallbacks callbacks;
-    return BakeSectorLightmap(map, layout, outputPath, callbacks, outResult, outError);
 }
 
 bool BakeSectorLightmap(
@@ -1508,7 +1439,7 @@ bool BakeSectorLightmapForMap(
             16.0f
     );
     const float indirectBounceStrength = std::clamp(map.lightmapSettings.indirectBounceStrength, 0.0f, 1.0f);
-    std::vector<SectorStaticPointLight> worldLights;
+    std::vector<LightmapWorldPointLight> worldLights;
     worldLights.reserve(map.staticLights.size());
     for (const auto& light : map.staticLights) {
         worldLights.push_back(MakeWorldSpaceLight(light));
@@ -1566,7 +1497,7 @@ bool BakeSectorLightmapForMap(
             hit.triangleIndex = texel.triangleIndex;
 
             Vector3 direct{};
-            for (const SectorStaticPointLight& light : worldLights) {
+            for (const LightmapWorldPointLight& light : worldLights) {
                 direct = Vector3Add(direct, EvaluateDirectLight(light, hit, texel.surfaceRef, texel.sourceSurfaceIndex, bvh, triangles, stats));
             }
             directLightingFloat[texel.pixelIndex] = direct;
@@ -1752,17 +1683,6 @@ bool BakeSectorLightmapForMap(
 }
 
 bool BakeSectorLightmap(
-        const SectorMap& map,
-        const SectorLightmapLayout& layout,
-        const char* outputPath,
-        const SectorLightmapBakeCallbacks& callbacks,
-        SectorLightmapBakeResult& outResult,
-        std::string& outError)
-{
-    return BakeSectorLightmapForMap(map, layout, outputPath, callbacks, outResult, outError);
-}
-
-bool BakeSectorLightmap(
         const SectorTopologyMap& map,
         const SectorLightmapLayout& layout,
         const char* outputPath,
@@ -1771,38 +1691,6 @@ bool BakeSectorLightmap(
         std::string& outError)
 {
     return BakeSectorLightmapForMap(map, layout, outputPath, callbacks, outResult, outError);
-}
-
-bool BakeSectorLightmap(
-        const SectorLightmapBakeInput& input,
-        const SectorLightmapBakeCallbacks& callbacks,
-        SectorLightmapBakeResult& outResult,
-        std::string& outError)
-{
-    using Clock = std::chrono::steady_clock;
-    const auto layoutStart = Clock::now();
-    ReportProgress(callbacks, SectorLightmapBakePhase::BuildingLayout, 0, 1);
-
-    SectorLightmapLayout layout;
-    if (!BuildSectorLightmapLayout(input.mapSnapshot, layout, outError)) {
-        return false;
-    }
-    ReportProgress(callbacks, SectorLightmapBakePhase::BuildingLayout, 1, 1);
-    if (CheckBakeCancelled(callbacks, outError)) {
-        return false;
-    }
-
-    const auto layoutEnd = Clock::now();
-    if (!BakeSectorLightmap(input.mapSnapshot, layout, input.temporaryOutputPath.c_str(), callbacks, outResult, outError)) {
-        return false;
-    }
-
-    outResult.layoutSeconds = std::chrono::duration<double>(layoutEnd - layoutStart).count();
-    outResult.totalBakeSeconds += outResult.layoutSeconds;
-    if (!input.expectedSourceHash.empty()) {
-        outResult.sourceHash = input.expectedSourceHash;
-    }
-    return true;
 }
 
 bool BakeSectorLightmap(
@@ -1927,61 +1815,6 @@ void PrintSectorLightmapBakeReport(const SectorLightmapBakeResult& result)
     }
 }
 
-std::string ComputeSectorLightmapSourceHash(const SectorMap& map)
-{
-    uint64_t hash = 14695981039346656037ull;
-    FnvAppendString(hash, "sector-lightmap");
-    FnvAppendInt(hash, kSectorLightmapBakeVersion);
-    FnvAppendInt(hash, SectorLightmapAtlasWidth);
-    FnvAppendInt(hash, SectorLightmapAtlasHeight);
-    FnvAppendInt(hash, SectorLightmapGutterTexels);
-    FnvAppendFloat(hash, SectorLightmapTexelsPerWorldUnit);
-    FnvAppendFloat(hash, kSectorWorldUnitsPerAuthoringUnit);
-    FnvAppendInt(hash, kDirectSoftShadowSampleCount);
-    FnvAppendInt(hash, kAmbientOcclusionSampleCount);
-    FnvAppendInt(hash, kIndirectBounceSampleCount);
-    FnvAppendFloat(hash, kNeutralBounceAlbedo);
-    FnvAppendFloat(hash, std::clamp(SectorAuthoringToWorldDistance(map.lightmapSettings.ambientOcclusionRadius), 0.05f, 16.0f));
-    FnvAppendFloat(hash, std::clamp(map.lightmapSettings.ambientOcclusionStrength, 0.0f, 1.0f));
-    FnvAppendFloat(hash, std::clamp(SectorAuthoringToWorldDistance(map.lightmapSettings.indirectBounceRadius), 0.05f, 16.0f));
-    FnvAppendFloat(hash, std::clamp(map.lightmapSettings.indirectBounceStrength, 0.0f, 1.0f));
-
-    FnvAppendInt(hash, static_cast<int>(map.sectors.size()));
-    for (const SectorDefinition& sector : map.sectors) {
-        FnvAppendInt(hash, static_cast<int>(sector.points.size()));
-        for (SectorPoint point : sector.points) {
-            FnvAppendFloat(hash, SectorAuthoringToWorldDistance(point.x));
-            FnvAppendFloat(hash, SectorAuthoringToWorldDistance(point.y));
-        }
-        FnvAppendInt(hash, static_cast<int>(sector.holes.size()));
-        for (const std::vector<SectorPoint>& hole : sector.holes) {
-            FnvAppendInt(hash, static_cast<int>(hole.size()));
-            for (SectorPoint point : hole) {
-                FnvAppendFloat(hash, SectorAuthoringToWorldDistance(point.x));
-                FnvAppendFloat(hash, SectorAuthoringToWorldDistance(point.y));
-            }
-        }
-        FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector.floorZ));
-        FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector.ceilingZ));
-    }
-
-    FnvAppendInt(hash, static_cast<int>(map.staticLights.size()));
-    for (const SectorStaticPointLight& light : map.staticLights) {
-        const SectorStaticPointLight worldLight = MakeWorldSpaceLight(light);
-        FnvAppendFloat(hash, worldLight.position.x);
-        FnvAppendFloat(hash, worldLight.position.y);
-        FnvAppendFloat(hash, worldLight.position.z);
-        FnvAppendInt(hash, static_cast<int>(light.color.r));
-        FnvAppendInt(hash, static_cast<int>(light.color.g));
-        FnvAppendInt(hash, static_cast<int>(light.color.b));
-        FnvAppendFloat(hash, light.intensity);
-        FnvAppendFloat(hash, worldLight.radius);
-        FnvAppendFloat(hash, std::min(std::clamp(worldLight.sourceRadius, 0.0f, 8.0f), worldLight.radius * 0.5f));
-    }
-
-    return HashToString(hash);
-}
-
 std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
 {
     uint64_t hash = 14695981039346656037ull;
@@ -2049,7 +1882,7 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
     const std::vector<const SectorTopologyStaticPointLight*> lights = SortedLightmapHashRecords(map.staticLights);
     FnvAppendInt(hash, static_cast<int>(lights.size()));
     for (const SectorTopologyStaticPointLight* light : lights) {
-        const SectorStaticPointLight worldLight = MakeWorldSpaceLight(*light);
+        const LightmapWorldPointLight worldLight = MakeWorldSpaceLight(*light);
         FnvAppendInt(hash, light->id);
         FnvAppendVector3(hash, worldLight.position);
         FnvAppendColor(hash, light->color);
@@ -2059,26 +1892,6 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
     }
 
     return HashToString(hash);
-}
-
-SectorLightmapStatus GetSectorLightmapStatus(const SectorMap& map)
-{
-    if (map.bakedLightmap.path.empty()
-            || map.bakedLightmap.width <= 0
-            || map.bakedLightmap.height <= 0
-            || map.bakedLightmap.sourceHash.empty()) {
-        return SectorLightmapStatus::None;
-    }
-
-    if (map.bakedLightmap.sourceHash != ComputeSectorLightmapSourceHash(map)) {
-        return SectorLightmapStatus::Stale;
-    }
-
-    if (!FileExistsResolved(ResolveSectorAssetPath(map.bakedLightmap.path))) {
-        return SectorLightmapStatus::Stale;
-    }
-
-    return SectorLightmapStatus::Valid;
 }
 
 SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map)

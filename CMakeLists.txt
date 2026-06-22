@@ -119,7 +119,6 @@ if(BUILD_TESTING)
     add_executable(sector_topology_generated_geometry_tests
             tests/SectorTopologyGeneratedGeometryTests.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
-            sources/sector_demo/SectorMap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
@@ -132,7 +131,6 @@ if(BUILD_TESTING)
     add_executable(sector_topology_mesh_builder_tests
             tests/SectorTopologyMeshBuilderTests.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
-            sources/sector_demo/SectorMap.cpp
             sources/sector_demo/SectorMeshBuilder.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -147,7 +145,6 @@ if(BUILD_TESTING)
             tests/SectorTopologyLightmapTests.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
-            sources/sector_demo/SectorMap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
@@ -161,7 +158,6 @@ if(BUILD_TESTING)
     add_executable(sector_topology_creation_tests
             tests/SectorTopologyCreationTests.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
-            sources/sector_demo/SectorMap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyCreation.cpp
             sources/sector_demo/SectorTopologyEdit.cpp

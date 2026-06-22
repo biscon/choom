@@ -1,7 +1,6 @@
 #pragma once
 
 #include "sector_demo/SectorTopologyMap.h"
-#include "sector_demo/SectorTypes.h"
 
 #include <raylib.h>
 
@@ -94,14 +93,6 @@ struct SectorLightmapBakeCallbacks {
     std::function<bool()> isCancellationRequested;
 };
 
-struct SectorLightmapBakeInput {
-    SectorMap mapSnapshot;
-    std::string expectedSourceHash;
-    std::string finalOutputPath;
-    std::string temporaryOutputPath;
-    uint64_t editorMapRevision = 0;
-};
-
 struct SectorTopologyLightmapBakeInput {
     SectorTopologyMap mapSnapshot;
     std::string expectedSourceHash;
@@ -129,34 +120,17 @@ constexpr int kIndirectBounceSampleCount = 8;
 constexpr float kNeutralBounceAlbedo = 0.55f;
 
 bool BuildSectorLightmapLayout(
-        const SectorMap& map,
-        SectorLightmapLayout& outLayout,
-        std::string& outError);
-bool BuildSectorLightmapLayout(
         const SectorTopologyMap& map,
         SectorLightmapLayout& outLayout,
         std::string& outError);
 
 bool BakeSectorLightmap(
-        const SectorMap& map,
-        const SectorLightmapLayout& layout,
-        const char* outputPath,
-        SectorLightmapBakeResult& outResult,
-        std::string& outError);
-bool BakeSectorLightmap(
         const SectorTopologyMap& map,
         const SectorLightmapLayout& layout,
         const char* outputPath,
         SectorLightmapBakeResult& outResult,
         std::string& outError);
 
-bool BakeSectorLightmap(
-        const SectorMap& map,
-        const SectorLightmapLayout& layout,
-        const char* outputPath,
-        const SectorLightmapBakeCallbacks& callbacks,
-        SectorLightmapBakeResult& outResult,
-        std::string& outError);
 bool BakeSectorLightmap(
         const SectorTopologyMap& map,
         const SectorLightmapLayout& layout,
@@ -165,11 +139,6 @@ bool BakeSectorLightmap(
         SectorLightmapBakeResult& outResult,
         std::string& outError);
 
-bool BakeSectorLightmap(
-        const SectorLightmapBakeInput& input,
-        const SectorLightmapBakeCallbacks& callbacks,
-        SectorLightmapBakeResult& outResult,
-        std::string& outError);
 bool BakeSectorLightmap(
         const SectorTopologyLightmapBakeInput& input,
         const SectorLightmapBakeCallbacks& callbacks,
@@ -178,9 +147,7 @@ bool BakeSectorLightmap(
 
 std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& result);
 void PrintSectorLightmapBakeReport(const SectorLightmapBakeResult& result);
-std::string ComputeSectorLightmapSourceHash(const SectorMap& map);
 std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map);
-SectorLightmapStatus GetSectorLightmapStatus(const SectorMap& map);
 SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map);
 const char* SectorLightmapStatusText(SectorLightmapStatus status);
 bool IsSameLogicalSectorLightmapSurface(

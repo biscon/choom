@@ -1,7 +1,6 @@
 #pragma once
 
 #include "sector_demo/SectorTopologyMap.h"
-#include "sector_demo/SectorTypes.h"
 
 #include <raylib.h>
 
@@ -20,11 +19,6 @@ enum class SectorGeneratedSurfaceKind {
 
 struct SectorGeneratedSurfaceRef {
     SectorGeneratedSurfaceKind kind = SectorGeneratedSurfaceKind::Floor;
-    int sectorIndex = -1;
-    SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer;
-    int holeIndex = -1;
-    int edgeIndex = -1;
-
     int topologySectorId = -1;
     int topologyLineDefId = -1;
     int topologySideDefId = -1;
@@ -59,7 +53,6 @@ struct SectorGeneratedSurfaceHit {
     float distance = 0.0f;
 };
 
-bool BuildSectorGeneratedGeometry(const SectorMap& map, SectorGeneratedGeometry& outGeometry);
 bool BuildSectorGeneratedGeometry(
         const SectorTopologyMap& map,
         SectorGeneratedGeometry& outGeometry,

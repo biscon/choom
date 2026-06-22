@@ -11,7 +11,6 @@ namespace game {
 
 struct SectorGeneratedGeometry;
 struct SectorLightmapLayout;
-struct SectorMap;
 struct SectorTopologyMap;
 
 struct SectorMeshBatchVertex {
@@ -39,7 +38,6 @@ SectorMeshBatchDataResult BuildSectorMeshBatchData(
         const SectorGeneratedGeometry& geometry,
         const SectorLightmapLayout* lightmapLayout = nullptr);
 
-SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map, const SectorLightmapLayout* lightmapLayout = nullptr);
 SectorMeshBuildResult BuildSectorMeshes(
         const SectorTopologyMap& map,
         const SectorLightmapLayout* lightmapLayout = nullptr,

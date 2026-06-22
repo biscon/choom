@@ -132,43 +132,6 @@ SectorMeshBatchDataResult BuildSectorMeshBatchData(
     return result;
 }
 
-SectorMeshBuildResult BuildSectorMeshes(const SectorMap& map, const SectorLightmapLayout* lightmapLayout)
-{
-    SectorMeshBuildResult result;
-    SectorGeneratedGeometry geometry;
-    if (!BuildSectorGeneratedGeometry(map, geometry)) {
-        return result;
-    }
-
-    const SectorMeshBatchDataResult batchData = BuildSectorMeshBatchData(geometry, lightmapLayout);
-
-    for (const SectorMeshBatchData& builder : batchData.batches) {
-        Mesh mesh = CreateMeshFromBatch(builder);
-        if (mesh.vertexCount <= 0) {
-            continue;
-        }
-
-        SectorMeshBatch batch;
-        batch.textureId = builder.textureId;
-        batch.mesh = mesh;
-        batch.vertexCount = mesh.vertexCount;
-        batch.triangleCount = mesh.triangleCount;
-        result.vertexCount += batch.vertexCount;
-        result.triangleCount += batch.triangleCount;
-        result.batches.push_back(batch);
-    }
-
-    std::fprintf(
-            stdout,
-            "[SectorDemo] Generated %d vertices, %d triangles, %zu mesh batches\n",
-            result.vertexCount,
-            result.triangleCount,
-            result.batches.size()
-    );
-
-    return result;
-}
-
 SectorMeshBuildResult BuildSectorMeshes(
         const SectorTopologyMap& map,
         const SectorLightmapLayout* lightmapLayout,
