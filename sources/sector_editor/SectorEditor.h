@@ -263,6 +263,7 @@ private:
     bool ResetSurface3DUv(TopologySurfaceEditTarget target, engine::AssetManager& assets);
     bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets);
     bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets);
+    bool AlignSelectedWallMaterialU(TopologySurfaceEditTarget target, TopologyUAlignDirection direction, engine::AssetManager* assets);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     bool SplitSelectedTopologyLineDef();
     bool DissolveSelectedTopologyVertex();

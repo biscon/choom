@@ -77,6 +77,11 @@ enum class TopologyUvFitMode {
     Both
 };
 
+enum class TopologyUAlignDirection {
+    Previous,
+    Next
+};
+
 enum class TopologySectorTextureField {
     None,
     Floor,

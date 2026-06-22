@@ -538,6 +538,16 @@ const char* TopologyWallPartStatusName(TopologyWallPart part)
     return "wall";
 }
 
+const char* TopologyWallPartSurfaceStatusName(TopologyWallPart part)
+{
+    switch (part) {
+        case TopologyWallPart::Wall: return "wall";
+        case TopologyWallPart::Lower: return "lower wall";
+        case TopologyWallPart::Upper: return "upper wall";
+    }
+    return "wall";
+}
+
 const char* SurfaceKindName(SectorSurfaceKind kind)
 {
     switch (kind) {
@@ -650,6 +660,15 @@ const char* TopologyUvFitModeStatusName(TopologyUvFitMode mode)
         case TopologyUvFitMode::Both: return "width and height";
     }
     return "UV";
+}
+
+const char* TopologyUAlignDirectionStatusName(TopologyUAlignDirection direction)
+{
+    switch (direction) {
+        case TopologyUAlignDirection::Previous: return "previous";
+        case TopologyUAlignDirection::Next: return "next";
+    }
+    return "neighbor";
 }
 
 TopologySectorTextureField TopologyEditTargetSectorTextureField(TopologySurfaceEditTargetKind kind)
@@ -772,6 +791,178 @@ const SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
         case TopologyWallPart::Upper: return sideDef.upper;
     }
     return sideDef.wall;
+}
+
+bool SectorTopologyWallLengthWorld(
+        const SectorTopologyMap& map,
+        const SectorTopologyLineDef& lineDef,
+        float& outLengthWorld)
+{
+    outLengthWorld = 0.0f;
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(map, lineDef, start, end)
+            || start == nullptr || end == nullptr) {
+        return false;
+    }
+
+    const double dx = static_cast<double>(end->x) - static_cast<double>(start->x);
+    const double dy = static_cast<double>(end->y) - static_cast<double>(start->y);
+    const double coordLength = std::sqrt(dx * dx + dy * dy);
+    outLengthWorld = SectorCoordDistanceToWorldDistance(coordLength);
+    return outLengthWorld > 0.0f && std::isfinite(outLengthWorld);
+}
+
+bool FindSectorLoopEdgeForSideDef(
+        const SectorTopologyLoop& loop,
+        int sideDefId,
+        const SectorTopologyLoop*& outLoop,
+        size_t& outEdgeIndex)
+{
+    bool found = false;
+    for (size_t i = 0; i < loop.edges.size(); ++i) {
+        if (loop.edges[i].sideDefId != sideDefId) {
+            continue;
+        }
+        if (found) {
+            outLoop = nullptr;
+            outEdgeIndex = 0;
+            return false;
+        }
+        found = true;
+        outLoop = &loop;
+        outEdgeIndex = i;
+    }
+    return found;
+}
+
+bool FindUniqueSectorLoopEdgeForSideDef(
+        const SectorTopologyLoopSet& loops,
+        int sideDefId,
+        const SectorTopologyLoop*& outLoop,
+        size_t& outEdgeIndex)
+{
+    outLoop = nullptr;
+    outEdgeIndex = 0;
+    int foundCount = 0;
+
+    const auto visitLoop = [&](const SectorTopologyLoop& loop) {
+        const SectorTopologyLoop* foundLoop = nullptr;
+        size_t foundIndex = 0;
+        if (FindSectorLoopEdgeForSideDef(loop, sideDefId, foundLoop, foundIndex)) {
+            ++foundCount;
+            outLoop = foundLoop;
+            outEdgeIndex = foundIndex;
+        }
+    };
+
+    visitLoop(loops.outer);
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        visitLoop(hole);
+    }
+    return foundCount == 1 && outLoop != nullptr;
+}
+
+bool TopologyWallPartHasVisibleSpan(
+        const SectorTopologyMap& map,
+        const SectorTopologySideDef& sideDef,
+        TopologyWallPart wallPart)
+{
+    const SectorTopologySector* sector = FindSectorTopologySector(map, sideDef.sectorId);
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, sideDef.lineDefId);
+    if (sector == nullptr || lineDef == nullptr) {
+        return false;
+    }
+
+    const int oppositeSideDefId = sideDef.side == SectorTopologySideKind::Front
+            ? lineDef->backSideDefId
+            : lineDef->frontSideDefId;
+    const SectorTopologySideDef* opposite = FindOppositeSectorTopologySideDef(map, sideDef.id);
+    if (oppositeSideDefId != -1 && opposite == nullptr) {
+        return false;
+    }
+
+    const SectorTopologySector* oppositeSector = nullptr;
+    if (opposite != nullptr) {
+        oppositeSector = FindSectorTopologySector(map, opposite->sectorId);
+        if (oppositeSector == nullptr) {
+            return false;
+        }
+    }
+
+    switch (wallPart) {
+        case TopologyWallPart::Wall:
+            return opposite == nullptr
+                    && sector->ceilingZ > sector->floorZ
+                    && std::isfinite(sector->floorZ)
+                    && std::isfinite(sector->ceilingZ);
+        case TopologyWallPart::Lower:
+            return oppositeSector != nullptr
+                    && oppositeSector->floorZ > sector->floorZ
+                    && std::isfinite(sector->floorZ)
+                    && std::isfinite(oppositeSector->floorZ);
+        case TopologyWallPart::Upper:
+            return oppositeSector != nullptr
+                    && sector->ceilingZ > oppositeSector->ceilingZ
+                    && std::isfinite(sector->ceilingZ)
+                    && std::isfinite(oppositeSector->ceilingZ);
+    }
+    return false;
+}
+
+const SectorTopologyLoopEdge* FindVisibleTopologyWallPartNeighborEdge(
+        const SectorTopologyMap& map,
+        const SectorTopologyLoop& loop,
+        size_t selectedEdgeIndex,
+        int sectorId,
+        TopologyUAlignDirection direction,
+        TopologyWallPart wallPart,
+        std::string& outError)
+{
+    outError.clear();
+    const size_t edgeCount = loop.edges.size();
+    if (edgeCount < 2 || selectedEdgeIndex >= edgeCount) {
+        return nullptr;
+    }
+
+    for (size_t step = 1; step < edgeCount; ++step) {
+        const size_t edgeIndex = direction == TopologyUAlignDirection::Previous
+                ? (selectedEdgeIndex + edgeCount - step) % edgeCount
+                : (selectedEdgeIndex + step) % edgeCount;
+        const SectorTopologyLoopEdge& edge = loop.edges[edgeIndex];
+        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, edge.sideDefId);
+        if (sideDef == nullptr
+                || sideDef->lineDefId != edge.lineDefId
+                || sideDef->sectorId != sectorId
+                || sideDef->side != edge.side) {
+            outError = TextFormat(
+                    "%s sidedef is no longer valid.",
+                    direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
+            return nullptr;
+        }
+        const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, edge.lineDefId);
+        if (lineDef == nullptr) {
+            outError = TextFormat(
+                    "%s sidedef references a missing linedef.",
+                    direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
+            return nullptr;
+        }
+        const int expectedSideDefId = edge.side == SectorTopologySideKind::Front
+                ? lineDef->frontSideDefId
+                : lineDef->backSideDefId;
+        if (expectedSideDefId != sideDef->id) {
+            outError = TextFormat(
+                    "%s sidedef is no longer valid.",
+                    direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
+            return nullptr;
+        }
+        if (!TopologyWallPartHasVisibleSpan(map, *sideDef, wallPart)) {
+            continue;
+        }
+        return &edge;
+    }
+
+    return nullptr;
 }
 
 float PolygonArea2(const std::vector<SectorPoint>& points)
@@ -3905,7 +4096,8 @@ void SectorEditor::DrawPreviewUvPanel(
 
     if (IsWallTopologyEditTarget(target.kind)) {
         const float fitButtonW = 118.0f;
-        const float fitTop = panel.y + 142.0f;
+        const float fitTop = panel.y + 134.0f;
+        const float alignTop = panel.y + 174.0f;
         if (engine::Button(
                     ui,
                     config,
@@ -3945,10 +4137,32 @@ void SectorEditor::DrawPreviewUvPanel(
                     input,
                     assets,
                     "sector_editor_3d_align_vertical",
-                    Rectangle{startX + (fitButtonW + gap) * 3.0f, fitTop, fitButtonW, 32.0f},
+                    Rectangle{startX, alignTop, fitButtonW, 32.0f},
                     font,
                     "Align Vertical")) {
             AlignSelectedWallMaterialVertical(target, &assets);
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_align_u_prev",
+                    Rectangle{startX + fitButtonW + gap, alignTop, fitButtonW, 32.0f},
+                    font,
+                    "Align U Prev")) {
+            AlignSelectedWallMaterialU(target, TopologyUAlignDirection::Previous, &assets);
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_align_u_next",
+                    Rectangle{startX + (fitButtonW + gap) * 2.0f, alignTop, fitButtonW, 32.0f},
+                    font,
+                    "Align U Next")) {
+            AlignSelectedWallMaterialU(target, TopologyUAlignDirection::Next, &assets);
         }
     }
 
@@ -5037,7 +5251,7 @@ void SectorEditor::DrawSectorsPanel(
             return 280.0f;
         }
         if (hasSelectedTopologySideDef) {
-            return 710.0f;
+            return 752.0f;
         }
         if (hasSelectedTopologyLineDef) {
             return 218.0f;
@@ -6015,6 +6229,31 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 font,
                 "Align Vertical")) {
         AlignSelectedWallMaterialVertical(selectedMaterialTarget, &assets);
+    }
+    y += 34.0f + gap;
+
+    const float alignButtonW = (contentW - gap) * 0.5f;
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_align_u_prev",
+                Rectangle{0.0f, y, alignButtonW, 34.0f},
+                font,
+                "Align U Prev")) {
+        AlignSelectedWallMaterialU(selectedMaterialTarget, TopologyUAlignDirection::Previous, &assets);
+    }
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_align_u_next",
+                Rectangle{alignButtonW + gap, y, alignButtonW, 34.0f},
+                font,
+                "Align U Next")) {
+        AlignSelectedWallMaterialU(selectedMaterialTarget, TopologyUAlignDirection::Next, &assets);
     }
 
     return true;
@@ -8137,6 +8376,190 @@ bool SectorEditor::AlignSelectedWallMaterialVertical(
     MarkTopologyDocumentEdited(TextFormat(
             "Aligned %s material vertically.",
             TopologyWallPartStatusName(wallPart)));
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
+}
+
+bool SectorEditor::AlignSelectedWallMaterialU(
+        TopologySurfaceEditTarget target,
+        TopologyUAlignDirection direction,
+        engine::AssetManager* assets)
+{
+    if (!IsWallTopologyEditTarget(target.kind) || !IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Select a wall, lower, or upper surface before aligning U.";
+        return false;
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (sideDef == nullptr
+            || sideDef->lineDefId != target.lineDefId
+            || sideDef->sectorId != target.sectorId
+            || sideDef->side != target.side) {
+        statusText = "Selected sidedef is no longer valid.";
+        return false;
+    }
+
+    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sideDef->sectorId);
+    if (sector == nullptr) {
+        statusText = "Selected sidedef references a missing sector.";
+        return false;
+    }
+
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, sideDef->lineDefId);
+    if (lineDef == nullptr) {
+        statusText = "Selected sidedef references a missing linedef.";
+        return false;
+    }
+
+    float selectedLengthWorld = 0.0f;
+    if (!SectorTopologyWallLengthWorld(state.topologyMap, *lineDef, selectedLengthWorld)) {
+        statusText = "Selected wall has invalid length.";
+        return false;
+    }
+
+    SectorTopologyLoopSet loops;
+    if (!ExtractSectorTopologyLoops(state.topologyMap, sideDef->sectorId, loops)) {
+        statusText = "Could not extract selected sector boundary loop.";
+        return false;
+    }
+
+    const SectorTopologyLoop* selectedLoop = nullptr;
+    size_t selectedEdgeIndex = 0;
+    if (!FindUniqueSectorLoopEdgeForSideDef(loops, sideDef->id, selectedLoop, selectedEdgeIndex)
+            || selectedLoop == nullptr
+            || selectedLoop->edges.empty()) {
+        statusText = "Selected sidedef was not found in exactly one sector loop.";
+        return false;
+    }
+
+    const size_t edgeCount = selectedLoop->edges.size();
+    if (edgeCount < 2) {
+        statusText = "Selected sector loop has no neighboring wall segment.";
+        return false;
+    }
+
+    const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+    const SectorTopologyLoopEdge& selectedEdge = selectedLoop->edges[selectedEdgeIndex];
+
+    if (selectedEdge.sideDefId != sideDef->id
+            || selectedEdge.lineDefId != sideDef->lineDefId
+            || selectedEdge.side != sideDef->side) {
+        statusText = "Selected sidedef loop edge is stale.";
+        return false;
+    }
+
+    if (!TopologyWallPartHasVisibleSpan(state.topologyMap, *sideDef, wallPart)) {
+        switch (wallPart) {
+            case TopologyWallPart::Wall:
+                statusText = "Selected wall part has no visible solid wall span.";
+                break;
+            case TopologyWallPart::Lower:
+                statusText = "Selected lower wall has no visible height span.";
+                break;
+            case TopologyWallPart::Upper:
+                statusText = "Selected upper wall has no visible height span.";
+                break;
+        }
+        return false;
+    }
+
+    std::string neighborError;
+    const SectorTopologyLoopEdge* neighborEdge = FindVisibleTopologyWallPartNeighborEdge(
+            state.topologyMap,
+            *selectedLoop,
+            selectedEdgeIndex,
+            sideDef->sectorId,
+            direction,
+            wallPart,
+            neighborError);
+    if (neighborEdge == nullptr) {
+        if (!neighborError.empty()) {
+            statusText = neighborError;
+        } else {
+            statusText = TextFormat(
+                    "No %s visible %s in this sector loop.",
+                    TopologyUAlignDirectionStatusName(direction),
+                    TopologyWallPartSurfaceStatusName(wallPart));
+        }
+        return false;
+    }
+
+    const SectorTopologySideDef* neighborSideDef = FindSectorTopologySideDef(
+            state.topologyMap,
+            neighborEdge->sideDefId);
+    if (neighborSideDef == nullptr
+            || neighborSideDef->lineDefId != neighborEdge->lineDefId
+            || neighborSideDef->sectorId != sideDef->sectorId
+            || neighborSideDef->side != neighborEdge->side) {
+        statusText = TextFormat(
+                "%s sidedef is no longer valid.",
+                direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
+        return false;
+    }
+
+    const SectorTopologyLineDef* neighborLineDef = FindSectorTopologyLineDef(
+            state.topologyMap,
+            neighborSideDef->lineDefId);
+    if (neighborLineDef == nullptr) {
+        statusText = TextFormat(
+                "%s sidedef references a missing linedef.",
+                direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
+        return false;
+    }
+
+    float neighborLengthWorld = 0.0f;
+    if (!SectorTopologyWallLengthWorld(state.topologyMap, *neighborLineDef, neighborLengthWorld)) {
+        statusText = TextFormat(
+                "%s wall has invalid length.",
+                direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
+        return false;
+    }
+
+    const SectorTopologyWallPartSettings& neighborPart = TopologyWallPartSettingsFor(
+            *neighborSideDef,
+            wallPart);
+    SectorTopologySideDef* mutableSideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (mutableSideDef == nullptr) {
+        statusText = "Selected sidedef is no longer valid.";
+        return false;
+    }
+    SectorTopologyUvSettings& selectedUv = TopologyWallPartSettingsFor(*mutableSideDef, wallPart).uv;
+
+    if (!std::isfinite(selectedUv.scale.x)
+            || !std::isfinite(selectedUv.offset.x)
+            || !std::isfinite(neighborPart.uv.scale.x)
+            || !std::isfinite(neighborPart.uv.offset.x)) {
+        statusText = "Wall U alignment requires finite U scale and offset values.";
+        return false;
+    }
+
+    float alignedOffsetX = 0.0f;
+    if (direction == TopologyUAlignDirection::Previous) {
+        const float previousBaseEndU = neighborLengthWorld / kSectorGeneratedTextureWorldSize;
+        alignedOffsetX = previousBaseEndU * neighborPart.uv.scale.x + neighborPart.uv.offset.x;
+    } else {
+        const float selectedBaseEndU = selectedLengthWorld / kSectorGeneratedTextureWorldSize;
+        alignedOffsetX = neighborPart.uv.offset.x - selectedBaseEndU * selectedUv.scale.x;
+    }
+
+    if (!std::isfinite(alignedOffsetX)) {
+        statusText = "Aligned U offset is invalid.";
+        return false;
+    }
+
+    selectedUv.offset.x = alignedOffsetX;
+    state.topologyRenderWarning.clear();
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+
+    MarkTopologyDocumentEdited(TextFormat(
+            "Aligned %s U from %s.",
+            TopologyWallPartStatusName(wallPart),
+            TopologyUAlignDirectionStatusName(direction)));
     if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
         return RebuildPreviewMeshesPreservingView(*assets);
     }

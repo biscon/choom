@@ -218,6 +218,12 @@ brick rows or wall courses line up by world height. Fit and Align Vertical
 preserve the selected part's texture ID and do not change other wall parts, the
 opposite sidedef, sector defaults, floors, or ceilings. Align Vertical also
 preserves the selected part's UV scale and U offset.
+`Align U Prev` and `Align U Next` adjust only the selected wall/lower/upper
+part's U offset so the texture continues from the previous or next visible
+compatible wall/lower/upper surface in the same sector loop, skipping edges
+where that wall part is not visible. They preserve texture ID, scale, V offset,
+other wall parts, and the opposite sidedef. They do not copy material, scale, or
+texture from the neighbor, and they are not full wall-chain alignment yet.
 
 `Split At Point` starts a pending canvas action for the selected linedef. Click a
 snapped point exactly on that linedef to split there, or press Escape/right click
@@ -381,10 +387,15 @@ targets edit sector texture and UV settings. Wall/lower/upper targets edit the
 selected sidedef's matching wall part. The Texture button opens the topology
 texture picker, Reset UV resets only the selected surface target, Fit Width /
 Fit Height / Fit Both fit only selected wall-like targets, Align Vertical shifts
-only selected wall-like V offsets to line up by world height, and Copy/Paste
-Material copies texture ID plus UV scale/offset between matching selected
-surface kinds. Align Vertical preserves texture ID, scale, U offset, and other
-wall parts.
+only selected wall-like V offsets to line up by world height, Align U Prev /
+Align U Next shift only selected wall-like U offsets to continue from the
+previous or next visible compatible wall/lower/upper surface in the same sector
+loop, skipping edges where that wall part is not visible, and Copy/Paste Material
+copies texture ID plus UV scale/offset between matching selected surface kinds.
+Align Vertical preserves texture ID, scale, U offset, and other wall parts.
+Align U Prev / Align U Next preserve texture ID, scale, V offset, other wall
+parts, and the opposite sidedef; they do not copy material, scale, or texture
+from the neighbor and are not full wall-chain alignment yet.
 
 Equal-height portals have no generated 3D wall surface, so edit their sidedefs
 from the 2D linedef/sidedef inspector.
