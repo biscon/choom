@@ -3,6 +3,10 @@
   "topology": "linedef",
   "coordSubdivisions": 16,
   "textures": {
+    "biker_chick": {
+      "path": "assets/images/biker_chick.png",
+      "filter": "point"
+    },
     "ceiling": {
       "path": "assets/images/ceiling.png",
       "filter": "bilinear"
@@ -1518,6 +1522,20 @@
             4.5,
             -2.125
           ]
+        },
+        "decal": {
+          "textureId": "biker_chick",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              -0.6000000238418579,
+              -0.6000000238418579
+            ]
+          },
+          "opacity": 0.800000011920929
         }
       },
       "lower": {
@@ -3093,6 +3111,20 @@
             5.0,
             -1.75
           ]
+        },
+        "decal": {
+          "textureId": "biker_chick",
+          "uv": {
+            "scale": [
+              0.5,
+              0.5
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "opacity": 0.800000011920929
         }
       },
       "lower": {
@@ -4983,6 +5015,20 @@
             3.605551242828369,
             -1.5
           ]
+        },
+        "decal": {
+          "textureId": "biker_chick",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              -0.4000000059604645,
+              0.0
+            ]
+          },
+          "opacity": 0.75
         }
       },
       "lower": {
@@ -6108,6 +6154,20 @@
             0.0,
             0.0
           ]
+        },
+        "decal": {
+          "textureId": "biker_chick",
+          "uv": {
+            "scale": [
+              0.6399999856948853,
+              0.6399999856948853
+            ],
+            "offset": [
+              -0.699999988079071,
+              -0.15000000596046448
+            ]
+          },
+          "opacity": 0.75
         }
       },
       "lower": {
@@ -7737,6 +7797,6 @@
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "416a8c262ed9a18d"
+    "sourceHash": "8dcbad936597442f"
   }
 }

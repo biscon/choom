@@ -71,6 +71,11 @@ enum class TopologyWallPart {
     Upper
 };
 
+enum class TopologyMaterialLayer {
+    Base,
+    Decal
+};
+
 enum class TopologyUvFitMode {
     Width,
     Height,
@@ -143,6 +148,7 @@ struct TexturePickerState {
     bool open = false;
     bool rebuildPreviewOnApply = false;
     TopologyTexturePickerTargetKind topologyTargetKind = TopologyTexturePickerTargetKind::None;
+    TopologyMaterialLayer topologyLayer = TopologyMaterialLayer::Base;
     TopologySectorTextureField topologyField = TopologySectorTextureField::None;
     int topologySectorId = -1;
     int topologySideDefId = -1;
@@ -276,6 +282,7 @@ struct SectorEditorState {
     int selectedTopologyLineDefId = -1;
     SectorTopologySideKind selectedTopologySideKind = SectorTopologySideKind::Front;
     TopologyWallPart selectedTopologyWallPart = TopologyWallPart::Wall;
+    TopologyMaterialLayer activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
     int selectedTopologyLightId = -1;
     int hoveredTopologyLightId = -1;
     bool hasHoveredVertex = false;
@@ -350,8 +357,11 @@ struct SectorEditorUiState {
     engine::UIFloatInputState surface3DUvScaleVInput;
     engine::UIFloatInputState surface3DUvOffsetUInput;
     engine::UIFloatInputState surface3DUvOffsetVInput;
+    engine::UIFloatInputState surface3DDecalOpacityInput;
     engine::UIFloatInputState topologySectorUvInputs[20];
+    engine::UIFloatInputState topologySectorDecalOpacityInputs[2];
     engine::UIFloatInputState topologySideDefUvInputs[4];
+    engine::UIFloatInputState topologySideDefDecalOpacityInput;
     engine::UIScrollState toolsScroll;
     engine::UIScrollState inspectorScroll;
     char selectedSectorIdBuffer[64] = {};

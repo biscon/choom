@@ -48,16 +48,14 @@
       "id": 4,
       "x": 0,
       "y": 1024
+    },
+    {
+      "id": 5,
+      "x": 512,
+      "y": 0
     }
   ],
   "linedefs": [
-    {
-      "id": 1,
-      "startVertexId": 1,
-      "endVertexId": 2,
-      "frontSideDefId": 1,
-      "backSideDefId": -1
-    },
     {
       "id": 2,
       "startVertexId": 2,
@@ -78,68 +76,23 @@
       "endVertexId": 1,
       "frontSideDefId": 4,
       "backSideDefId": -1
+    },
+    {
+      "id": 5,
+      "startVertexId": 1,
+      "endVertexId": 5,
+      "frontSideDefId": 5,
+      "backSideDefId": -1
+    },
+    {
+      "id": 6,
+      "startVertexId": 5,
+      "endVertexId": 2,
+      "frontSideDefId": 6,
+      "backSideDefId": -1
     }
   ],
   "sidedefs": [
-    {
-      "id": 1,
-      "lineDefId": 1,
-      "side": "front",
-      "sectorId": 10,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        },
-        "decal": {
-          "textureId": "biker_chick",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          },
-          "opacity": 0.5
-        }
-      },
-      "lower": {
-        "textureId": "step_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "upper_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
     {
       "id": 2,
       "lineDefId": 2,
@@ -153,8 +106,8 @@
             1.0
           ],
           "offset": [
-            0.0,
-            0.0
+            4.0,
+            -1.5
           ]
         }
       },
@@ -198,8 +151,8 @@
             1.0
           ],
           "offset": [
-            0.0,
-            0.0
+            4.0,
+            -1.5
           ]
         }
       },
@@ -243,9 +196,127 @@
             1.0
           ],
           "offset": [
+            -4.0,
+            -1.5
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
             0.0,
             0.0
           ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 5,
+      "lineDefId": 5,
+      "side": "front",
+      "sectorId": 10,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            -1.5
+          ]
+        },
+        "decal": {
+          "textureId": "biker_chick",
+          "uv": {
+            "scale": [
+              0.699999988079071,
+              0.6666666865348816
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "opacity": 0.75
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 6,
+      "lineDefId": 6,
+      "side": "front",
+      "sectorId": 10,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            -1.5
+          ]
+        },
+        "decal": {
+          "textureId": "biker_chick",
+          "uv": {
+            "scale": [
+              0.699999988079071,
+              0.6666666865348816
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "opacity": 0.5
         }
       },
       "lower": {
@@ -286,8 +357,8 @@
       "ceilingTextureId": "ceiling",
       "floorUv": {
         "scale": [
-          1.0,
-          1.0
+          2.0,
+          2.0
         ],
         "offset": [
           0.0,
@@ -296,27 +367,13 @@
       },
       "ceilingUv": {
         "scale": [
-          1.0,
-          1.0
+          1.5,
+          1.5
         ],
         "offset": [
           0.0,
           0.0
         ]
-      },
-      "floorDecal": {
-        "textureId": "biker_chick",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            -1.25,
-            -1.25
-          ]
-        },
-        "opacity": 0.85
       },
       "ambientColor": {
         "r": 210,
@@ -324,7 +381,7 @@
         "b": 170,
         "a": 255
       },
-      "ambientIntensity": 0.8,
+      "ambientIntensity": 0.800000011920929,
       "defaultWall": {
         "textureId": "wall",
         "uv": {
@@ -363,7 +420,28 @@
             0.0
           ]
         }
+      },
+      "ceilingDecal": {
+        "textureId": "biker_chick",
+        "uv": {
+          "scale": [
+            0.5,
+            0.5
+          ],
+          "offset": [
+            -0.5,
+            -0.5
+          ]
+        },
+        "opacity": 0.5
       }
     }
-  ]
+  ],
+  "staticLights": [],
+  "lightmapSettings": {
+    "ambientOcclusionRadius": 10.0,
+    "ambientOcclusionStrength": 0.550000011920929,
+    "indirectBounceRadius": 32.0,
+    "indirectBounceStrength": 0.20000000298023224
+  }
 }
