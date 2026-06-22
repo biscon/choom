@@ -247,11 +247,14 @@ bool BuildTopologyFlatSurface(
             const Vector2 baseSurfaceUv{
                     world.x / kSectorGeneratedTextureWorldSize,
                     world.y / kSectorGeneratedTextureWorldSize};
+            const Vector2 localSurfaceUv{
+                    (world.x - minX) / kSectorGeneratedTextureWorldSize,
+                    (world.y - minZ) / kSectorGeneratedTextureWorldSize};
             surface.vertices.push_back(SectorGeneratedVertex{
                     SectorCoordToWorldPosition3(vertex.x, height, vertex.y),
                     normal,
                     ApplyUvSettings(baseSurfaceUv, uvSettings.scale, uvSettings.offset),
-                    ApplyUvSettings(baseSurfaceUv, decal.uv.scale, decal.uv.offset),
+                    ApplyUvSettings(localSurfaceUv, decal.uv.scale, decal.uv.offset),
                     Vector2{world.x - minX, world.y - minZ},
                     color});
         };

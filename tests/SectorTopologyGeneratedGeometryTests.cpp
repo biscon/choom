@@ -397,11 +397,19 @@ void TestDecalsPropagateWithoutChangingBaseUvs()
 
     if (floor != nullptr && !floor->vertices.empty()) {
         const game::SectorGeneratedVertex& vertex = floor->vertices.front();
-        const Vector2 rawUv{
-                vertex.position.x / game::kSectorGeneratedTextureWorldSize,
-                vertex.position.z / game::kSectorGeneratedTextureWorldSize};
-        Check(Near(vertex.decalUv, ApplyTestUv(rawUv, Vector2{2.0f, 3.0f}, Vector2{0.25f, 0.5f})),
-              "floor decal UV uses raw surface UV with decal settings");
+        const Vector2 localUv{
+                vertex.chartUv.x / game::kSectorGeneratedTextureWorldSize,
+                vertex.chartUv.y / game::kSectorGeneratedTextureWorldSize};
+        Check(Near(vertex.decalUv, ApplyTestUv(localUv, Vector2{2.0f, 3.0f}, Vector2{0.25f, 0.5f})),
+              "floor decal UV uses local surface UV with decal settings");
+    }
+    if (ceiling != nullptr && !ceiling->vertices.empty()) {
+        const game::SectorGeneratedVertex& vertex = ceiling->vertices.front();
+        const Vector2 localUv{
+                vertex.chartUv.x / game::kSectorGeneratedTextureWorldSize,
+                vertex.chartUv.y / game::kSectorGeneratedTextureWorldSize};
+        Check(Near(vertex.decalUv, ApplyTestUv(localUv, Vector2{4.0f, 5.0f}, Vector2{0.75f, 1.25f})),
+              "ceiling decal UV uses local surface UV with decal settings");
     }
     if (wall != nullptr && !wall->vertices.empty()) {
         const game::SectorGeneratedVertex& vertex = wall->vertices.front();
@@ -418,6 +426,51 @@ void TestDecalsPropagateWithoutChangingBaseUvs()
         Check(Near(vertex.decalUv, ApplyTestUv(vertex.uv, Vector2{3.5f, 4.5f}, Vector2{0.5f, 0.6f})),
               "upper decal UV uses upper wall surface UV with decal settings");
     }
+}
+
+void TestTranslatedFlatDecalsUseLocalUvs()
+{
+    game::SectorTopologyMap map = MakeSquare();
+    for (game::SectorTopologyVertex& vertex : map.vertices) {
+        vertex.x += 2304;
+        vertex.y -= 192;
+    }
+    map.sectors[0].floorDecal = Decal("floor-mark", Vector2{1.0f, 1.0f}, Vector2{0.0f, 0.0f}, 1.0f);
+    map.sectors[0].ceilingDecal = Decal("ceiling-mark", Vector2{1.0f, 1.0f}, Vector2{0.0f, 0.0f}, 1.0f);
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "translated decal topology geometry builds");
+
+    const auto* floor = FindSurface(geometry, game::SectorGeneratedSurfaceKind::Floor, 10);
+    const auto* ceiling = FindSurface(geometry, game::SectorGeneratedSurfaceKind::Ceiling, 10);
+    Check(floor != nullptr && !floor->vertices.empty(), "translated floor decal surface exists");
+    Check(ceiling != nullptr && !ceiling->vertices.empty(), "translated ceiling decal surface exists");
+
+    auto checkFlatSurface = [](const game::SectorGeneratedSurface* surface, const char* label) {
+        if (surface == nullptr) {
+            return;
+        }
+        bool sawAbsoluteBaseUvOutsideMask = false;
+        for (const game::SectorGeneratedVertex& vertex : surface->vertices) {
+            sawAbsoluteBaseUvOutsideMask = sawAbsoluteBaseUvOutsideMask
+                    || vertex.uv.x < 0.0f || vertex.uv.x > 1.0f
+                    || vertex.uv.y < 0.0f || vertex.uv.y > 1.0f;
+            Check(vertex.decalUv.x >= 0.0f && vertex.decalUv.x <= 1.0f
+                          && vertex.decalUv.y >= 0.0f && vertex.decalUv.y <= 1.0f,
+                  TextFormat("%s translated default decal UV stays inside mask", label));
+            Check(Near(vertex.decalUv, Vector2{
+                    vertex.chartUv.x / game::kSectorGeneratedTextureWorldSize,
+                    vertex.chartUv.y / game::kSectorGeneratedTextureWorldSize}),
+                  TextFormat("%s translated decal UV is surface-local", label));
+        }
+        Check(sawAbsoluteBaseUvOutsideMask,
+              TextFormat("%s base UV remains absolute for material tiling", label));
+    };
+
+    checkFlatSurface(floor, "floor");
+    checkFlatSurface(ceiling, "ceiling");
 }
 
 void TestInvalidAndEmptyMaps()
@@ -451,6 +504,7 @@ int main()
     TestDiagonalLength();
     TestHeightEditsAffectTopologyGeometry();
     TestDecalsPropagateWithoutChangingBaseUvs();
+    TestTranslatedFlatDecalsUseLocalUvs();
     TestInvalidAndEmptyMaps();
     if (failures == 0) {
         std::puts("Sector topology generated geometry tests passed");
