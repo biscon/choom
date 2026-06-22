@@ -3,7 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
-#include "sector_demo/SectorTypes.h"
+#include "sector_demo/SectorMeshTypes.h"
 
 #include <raylib.h>
 
@@ -12,6 +12,7 @@
 
 namespace game {
 
+struct SectorMap;
 struct SectorTopologyMap;
 
 struct SectorMeshPreviewPose {

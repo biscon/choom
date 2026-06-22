@@ -1,6 +1,8 @@
 #pragma once
 
-#include "sector_demo/SectorTypes.h"
+#include "sector_demo/SectorMeshTypes.h"
+
+#include <raylib.h>
 
 #include <string>
 #include <vector>
@@ -9,6 +11,7 @@ namespace game {
 
 struct SectorGeneratedGeometry;
 struct SectorLightmapLayout;
+struct SectorMap;
 struct SectorTopologyMap;
 
 struct SectorMeshBatchVertex {

@@ -1,7 +1,8 @@
 #pragma once
 
+#include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorTopologyTypes.h"
-#include "sector_demo/SectorTypes.h"
+#include "sector_demo/SectorTextureTypes.h"
 
 #include <cstddef>
 #include <string>

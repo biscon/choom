@@ -1002,28 +1002,6 @@ std::vector<std::string> SortedSectorTextureIds(const SectorMap& map)
     return ids;
 }
 
-engine::TextureLoadFlags SectorTextureLoadFlags(SectorTextureFilter filter)
-{
-    switch (filter) {
-        case SectorTextureFilter::Point:
-            return engine::TextureLoad_PointFilter;
-        case SectorTextureFilter::Bilinear:
-            return engine::TextureLoad_BilinearFilter;
-    }
-    return engine::TextureLoad_BilinearFilter;
-}
-
-const char* SectorTextureFilterName(SectorTextureFilter filter)
-{
-    switch (filter) {
-        case SectorTextureFilter::Point:
-            return "point";
-        case SectorTextureFilter::Bilinear:
-            return "bilinear";
-    }
-    return "bilinear";
-}
-
 EffectiveEdgeSettings GetEffectiveEdgeSettings(const SectorDefinition& sector, int edgeIndex)
 {
     EffectiveEdgeSettings settings;

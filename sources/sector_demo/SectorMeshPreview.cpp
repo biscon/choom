@@ -4,6 +4,7 @@
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshBuilder.h"
 #include "sector_demo/SectorMap.h"
+#include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
 

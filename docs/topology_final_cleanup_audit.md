@@ -424,3 +424,20 @@ The intended audit change is this file only:
 ```text
 docs/topology_final_cleanup_audit.md
 ```
+
+## Phase 18A note: shared sector type extraction
+
+Shared, topology-safe definitions were moved out of the old polygon model header into neutral files:
+
+- `SectorPoint` moved to `sources/sector_demo/SectorPointTypes.h`.
+- `SectorTextureFilter`, `SectorTextureDefinition`, `SectorTextureBinding`, `SectorTextureLoadFlags()`, and `SectorTextureFilterName()` moved to `sources/sector_demo/SectorTextureTypes.h/.cpp`.
+- `SectorLightmapBakeSettings` and `SectorLightmapMetadata` moved to `sources/sector_demo/SectorLightmapTypes.h`.
+- `SectorMeshBatch` and `SectorMeshBuildResult` moved to `sources/sector_demo/SectorMeshTypes.h`.
+
+`SectorTextureLoadFlags()` and `SectorTextureFilterName()` no longer live in `SectorMap.cpp`; `SectorMap.cpp` still owns old polygon map helpers such as `FindSectorTexture()`, `SortedSectorTextureIds()`, boundary/ring helpers, load/save, and split-edge logic.
+
+`SectorTopologyMap.h` now includes the shared texture/lightmap headers directly instead of depending on `SectorTypes.h`. Mesh preview/builder headers now include the shared mesh types directly and forward-declare `SectorMap` where possible.
+
+The old polygon files and APIs still remain intentionally: `SectorTypes.h`, `SectorMap.h/.cpp`, `SectorMap`, `SectorDefinition`, old save/load, old generated geometry/mesh/preview/lightmap overloads, `SectorDemo`, and editor fallback state. Remaining `SectorTypes.h` / `SectorMap.h` includes are expected in files that still expose or compile old polygon overloads, legacy editor fallback fields, or `SectorDemo`.
+
+Topology test targets still compile `SectorMap.cpp` because mixed implementation files still compile old polygon overloads that reference polygon helpers. The new `SectorTextureTypes.cpp` is explicitly linked into those targets so shared texture helpers are no longer supplied by `SectorMap.cpp`.

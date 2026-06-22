@@ -37,8 +37,8 @@
     },
     {
       "id": 3,
-      "x": 512,
-      "y": 384
+      "x": 256,
+      "y": 640
     },
     {
       "id": 4,
@@ -3405,6 +3405,6 @@
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "e8fa9a737ac15add"
+    "sourceHash": "3c61abd856c9b7cd"
   }
 }

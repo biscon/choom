@@ -1,6 +1,9 @@
 #pragma once
 
-#include "engine/assets/AssetHandles.h"
+#include "sector_demo/SectorLightmapTypes.h"
+#include "sector_demo/SectorMeshTypes.h"
+#include "sector_demo/SectorPointTypes.h"
+#include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorUnits.h"
 
 #include <raylib.h>
@@ -10,11 +13,6 @@
 #include <vector>
 
 namespace game {
-
-struct SectorPoint {
-    float x = 0.0f;
-    float y = 0.0f;
-};
 
 enum class SectorBoundaryRingKind {
     Outer,
@@ -78,17 +76,6 @@ struct SectorDefinition {
     std::vector<SectorEdgeOverride> edgeOverrides;
 };
 
-enum class SectorTextureFilter {
-    Point,
-    Bilinear
-};
-
-struct SectorTextureDefinition {
-    std::string id;
-    std::string path;
-    SectorTextureFilter filter = SectorTextureFilter::Bilinear;
-};
-
 struct SectorStaticPointLight {
     std::string id;
     Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
@@ -96,20 +83,6 @@ struct SectorStaticPointLight {
     float intensity = 1.0f;
     float radius = SectorWorldToAuthoringDistance(8.0f);
     float sourceRadius = 0.0f;
-};
-
-struct SectorLightmapBakeSettings {
-    float ambientOcclusionRadius = SectorWorldToAuthoringDistance(1.25f);
-    float ambientOcclusionStrength = 0.55f;
-    float indirectBounceRadius = SectorWorldToAuthoringDistance(4.0f);
-    float indirectBounceStrength = 0.20f;
-};
-
-struct SectorLightmapMetadata {
-    std::string path;
-    int width = 0;
-    int height = 0;
-    std::string sourceHash;
 };
 
 struct SectorMap {
@@ -120,24 +93,6 @@ struct SectorMap {
     SectorLightmapMetadata bakedLightmap;
     Vector3 playerStartPosition = {0.0f, SectorWorldToAuthoringDistance(1.6f), 0.0f};
     float playerStartYawRadians = 0.0f;
-};
-
-struct SectorMeshBatch {
-    std::string textureId;
-    Mesh mesh = {};
-    int vertexCount = 0;
-    int triangleCount = 0;
-};
-
-struct SectorMeshBuildResult {
-    std::vector<SectorMeshBatch> batches;
-    int vertexCount = 0;
-    int triangleCount = 0;
-};
-
-struct SectorTextureBinding {
-    std::string textureId;
-    engine::TextureHandle handle = engine::NullTextureHandle();
 };
 
 struct EffectiveEdgePartSettings {
