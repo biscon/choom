@@ -457,3 +457,11 @@ The old polygon subsystem files and APIs still remain intentionally for later cl
 `SectorDemo` was ported in place to load `SectorTopologyMap` with `LoadSectorTopologyMap()` and rebuild the existing topology preview overload. It still receives its map path through `SectorDemo::Init()`; no topology map path is hardcoded. For future manual wiring, the existing topology v2 smoke map `assets/levels/topology_smoke/topology_smoke.json` is a suitable sample.
 
 `SectorDemo` no longer calls `LoadSectorMap()` or the polygon `SectorMeshPreview::Rebuild(const SectorMap&)` overload. The old polygon save/load APIs and old generated geometry, mesh, preview, and lightmap overloads still remain intentionally for later cleanup.
+
+## Phase 18D note: old polygon persistence removal
+
+The old polygon `LoadSectorMap()` and `SaveSectorMap()` public APIs were removed from `SectorMap.h`, and their old polygon JSON parser/writer implementations were removed from `SectorMap.cpp`.
+
+The old polygon JSON read/write helpers and file IO dependencies were removed with those functions. Topology v2 serialization remains the only active sector editor persistence path; no old polygon JSON fallback, compatibility loader, or old-polygon-to-topology conversion was added.
+
+`SectorMap`, `SectorDefinition`, and the old polygon generated geometry, mesh, preview, and lightmap overloads still remain intentionally for later cleanup. `SectorMap.cpp` also still remains because non-persistence old polygon helpers such as texture lookup, boundary/ring access, effective edge settings, neighbor lookup, and edge splitting are still compiled by old overloads.

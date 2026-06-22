@@ -6,8 +6,6 @@ namespace game {
 
 const SectorTextureDefinition* FindSectorTexture(const SectorMap& map, const std::string& id);
 std::vector<std::string> SortedSectorTextureIds(const SectorMap& map);
-bool LoadSectorMap(const char* path, SectorMap& outMap, std::string* outError = nullptr);
-bool SaveSectorMap(const char* path, const SectorMap& map);
 const std::vector<SectorPoint>* GetSectorBoundaryRing(
         const SectorMap& map,
         const SectorBoundaryEdgeRef& edge);
