@@ -449,3 +449,11 @@ Old polygon editor state was removed from the sector editor. `SectorEditorState:
 `SectorEditor.cpp` no longer contains the old polygon inspector, renderer, hit-test, split, delete, rename, or edge override editor branches. The editor document behavior now uses `state.topologyMap` only, including topology sector/sidedef/linedef/light selection, topology texture picker routing, 3D surface editing, and lightmap bake/status UI.
 
 The old polygon subsystem files and APIs still remain intentionally for later cleanup: `SectorMap`, `SectorDefinition`, old save/load, old generated geometry/mesh/preview/lightmap overloads, and `SectorDemo`.
+
+## Phase 18C note: SectorDemo topology port
+
+`SectorDemo` was inspected for reachability. It is compiled into the main executable because `CMakeLists.txt` glob-compiles `sources/*.cpp`, but it is not reachable from the running app: `sources/Main.cpp` constructs `SectorEditor` only, and no `SectorDemo` construction or `Init()` call exists in `sources`, `tests`, or `CMakeLists.txt`.
+
+`SectorDemo` was ported in place to load `SectorTopologyMap` with `LoadSectorTopologyMap()` and rebuild the existing topology preview overload. It still receives its map path through `SectorDemo::Init()`; no topology map path is hardcoded. For future manual wiring, the existing topology v2 smoke map `assets/levels/topology_smoke/topology_smoke.json` is a suitable sample.
+
+`SectorDemo` no longer calls `LoadSectorMap()` or the polygon `SectorMeshPreview::Rebuild(const SectorMap&)` overload. The old polygon save/load APIs and old generated geometry, mesh, preview, and lightmap overloads still remain intentionally for later cleanup.
