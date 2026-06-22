@@ -92,7 +92,8 @@ enum class TopologySelectionKind {
     None,
     Sector,
     SideDef,
-    LineDef
+    LineDef,
+    Light
 };
 
 enum class TopologyWallPart {
@@ -215,7 +216,7 @@ struct VertexDragState {
 
 struct LightDragState {
     bool active = false;
-    int lightIndex = -1;
+    int topologyLightId = -1;
     Vector3 originalPosition = {};
     Vector3 snappedPosition = {};
 };
@@ -245,14 +246,14 @@ struct SectorEditorState {
     SectorBoundaryRingKind selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
     int selectedEdgeHoleIndex = -1;
     int selectedEdgeIndex = -1;
-    int selectedLightIndex = -1;
+    int selectedTopologyLightId = -1;
     EdgeUvPart selectedEdgeUvPart = EdgeUvPart::Wall;
     int hoveredSectorIndex = -1;
     int hoveredEdgeSectorIndex = -1;
     SectorBoundaryRingKind hoveredEdgeRingKind = SectorBoundaryRingKind::Outer;
     int hoveredEdgeHoleIndex = -1;
     int hoveredEdgeIndex = -1;
-    int hoveredLightIndex = -1;
+    int hoveredTopologyLightId = -1;
     bool hasHoveredVertex = false;
     SectorPoint hoveredVertexPoint = {};
     std::vector<SectorVertexRef> hoveredVertexRefs;

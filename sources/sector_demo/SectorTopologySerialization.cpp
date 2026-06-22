@@ -145,6 +145,24 @@ Vector2 ReadVector2(const Json& value, const std::string& context)
     return Vector2{static_cast<float>(x), static_cast<float>(y)};
 }
 
+Vector3 ReadVector3(const Json& value, const std::string& context)
+{
+    if (!value.is_array() || value.size() != 3
+            || !value[0].is_number() || !value[1].is_number() || !value[2].is_number()) {
+        Fail(context + " must be an array of three numbers");
+    }
+    const double x = value[0].get<double>();
+    const double y = value[1].get<double>();
+    const double z = value[2].get<double>();
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)
+            || std::abs(x) > std::numeric_limits<float>::max()
+            || std::abs(y) > std::numeric_limits<float>::max()
+            || std::abs(z) > std::numeric_limits<float>::max()) {
+        Fail(context + " values must be finite floats");
+    }
+    return Vector3{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)};
+}
+
 SectorTopologyUvSettings ReadUv(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -217,6 +235,14 @@ Json WriteVector2(Vector2 value, const std::string& context)
         Fail(context + " contains a non-finite value");
     }
     return Json::array({value.x, value.y});
+}
+
+Json WriteVector3(Vector3 value, const std::string& context)
+{
+    if (!std::isfinite(value.x) || !std::isfinite(value.y) || !std::isfinite(value.z)) {
+        Fail(context + " contains a non-finite value");
+    }
+    return Json::array({value.x, value.y, value.z});
 }
 
 Json WriteUv(const SectorTopologyUvSettings& uv, const std::string& context)
@@ -396,6 +422,30 @@ SectorTopologyMap ParseMap(const Json& root)
         map.sectors.push_back(std::move(sector));
     }
 
+    const auto staticLightsIt = root.find("staticLights");
+    if (staticLightsIt != root.end()) {
+        if (!staticLightsIt->is_array()) {
+            Fail("root.staticLights must be an array");
+        }
+        const Json& staticLights = *staticLightsIt;
+        for (size_t i = 0; i < staticLights.size(); ++i) {
+            const std::string context = "root.staticLights[" + std::to_string(i) + "]";
+            const Json& value = staticLights[i];
+            if (!value.is_object()) {
+                Fail(context + " must be an object");
+            }
+
+            SectorTopologyStaticPointLight light;
+            light.id = ReadInt(value, "id", context);
+            light.position = ReadVector3(RequireField(value, "position", context), context + ".position");
+            light.radius = ReadFloat(value, "radius", context);
+            light.sourceRadius = ReadFloat(value, "sourceRadius", context);
+            light.intensity = ReadFloat(value, "intensity", context);
+            light.color = ReadColor(RequireField(value, "color", context), context + ".color");
+            map.staticLights.push_back(light);
+        }
+    }
+
     ValidateForSerialization(map);
     return map;
 }
@@ -487,6 +537,22 @@ Json SerializeMap(const SectorTopologyMap& map)
                 {"defaultWall", WriteWallPart(sector->defaultWall, context + ".defaultWall")},
                 {"defaultLower", WriteWallPart(sector->defaultLower, context + ".defaultLower")},
                 {"defaultUpper", WriteWallPart(sector->defaultUpper, context + ".defaultUpper")}
+        });
+    }
+
+    root["staticLights"] = Json::array();
+    for (const SectorTopologyStaticPointLight* light : SortedById(map.staticLights)) {
+        const std::string context = "static light " + std::to_string(light->id);
+        RequireFinite(light->intensity, context + ".intensity");
+        RequireFinite(light->radius, context + ".radius");
+        RequireFinite(light->sourceRadius, context + ".sourceRadius");
+        root["staticLights"].push_back(Json{
+                {"id", light->id},
+                {"position", WriteVector3(light->position, context + ".position")},
+                {"radius", light->radius},
+                {"sourceRadius", light->sourceRadius},
+                {"intensity", light->intensity},
+                {"color", WriteColor(light->color)}
         });
     }
 

@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <cmath>
 #include <string>
 
 namespace {
@@ -18,6 +19,7 @@ using game::SectorTopologyMap;
 using game::SectorTopologySector;
 using game::SectorTopologySideDef;
 using game::SectorTopologySideKind;
+using game::SectorTopologyStaticPointLight;
 using game::SectorTopologyVertex;
 using Json = nlohmann::ordered_json;
 
@@ -221,6 +223,65 @@ void TestRoundTrip()
           "round-tripped map extracts a CCW loop");
 }
 
+void TestStaticLightRoundTrip()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.staticLights.push_back(SectorTopologyStaticPointLight{
+            7,
+            Vector3{32.5f, 14.0f, -9.25f},
+            Color{255, 220, 180, 255},
+            2.5f,
+            64.0f,
+            2.0f
+    });
+    original.staticLights.push_back(SectorTopologyStaticPointLight{
+            3,
+            Vector3{-4.0f, 8.0f, 12.0f},
+            Color{40, 80, 120, 255},
+            0.75f,
+            16.0f,
+            0.0f
+    });
+
+    const std::string text = SaveText(original);
+    const Json saved = Json::parse(text);
+    Check(saved["staticLights"].is_array(), "static light array is written");
+    Check(saved["staticLights"][0]["id"].get<int>() == 3
+                  && saved["staticLights"][1]["id"].get<int>() == 7,
+          "static lights serialize sorted by stable ID");
+    Check(saved["staticLights"][1]["position"][0].get<float>() == 32.5f
+                  && saved["staticLights"][1]["position"][1].get<float>() == 14.0f
+                  && saved["staticLights"][1]["position"][2].get<float>() == -9.25f,
+          "static light position is saved in authoring coordinates");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "static light topology JSON loads");
+    Check(loaded.staticLights.size() == 2, "static lights round-trip");
+    const SectorTopologyStaticPointLight* light = game::FindSectorTopologyStaticLight(loaded, 7);
+    Check(light != nullptr, "round-tripped light can be found by stable ID");
+    if (light != nullptr) {
+        Check(std::fabs(light->position.x - 32.5f) <= 0.0001f
+                      && std::fabs(light->position.y - 14.0f) <= 0.0001f
+                      && std::fabs(light->position.z + 9.25f) <= 0.0001f,
+              "round-tripped light preserves authored position values");
+        Check(light->color.r == 255 && light->color.g == 220 && light->color.b == 180,
+              "round-tripped light preserves color");
+        Check(std::fabs(light->intensity - 2.5f) <= 0.0001f
+                      && std::fabs(light->radius - 64.0f) <= 0.0001f
+                      && std::fabs(light->sourceRadius - 2.0f) <= 0.0001f,
+              "round-tripped light preserves numeric properties");
+    }
+    Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(loaded)),
+          "topology with static lights validates");
+
+    Json withoutLights = saved;
+    withoutLights.erase("staticLights");
+    SectorTopologyMap oldStyle;
+    Check(LoadText(withoutLights.dump(), oldStyle, error), "omitted staticLights field is accepted");
+    Check(oldStyle.staticLights.empty(), "omitted staticLights field loads empty");
+}
+
 void TestHandAuthoredJson()
 {
     const std::string text = R"json({
@@ -326,6 +387,48 @@ void TestStrictValuesAndValidation()
     changed = valid;
     changed["vertices"][1]["id"] = 1;
     ExpectRejected(changed, "duplicate IDs are rejected");
+
+    changed = valid;
+    changed["staticLights"] = Json::array({
+            {
+                    {"id", 1},
+                    {"position", Json::array({1.0f, 2.0f, 3.0f})},
+                    {"radius", 8.0f},
+                    {"sourceRadius", 1.0f},
+                    {"intensity", 1.0f},
+                    {"color", {{"r", 255}, {"g", 220}, {"b", 180}, {"a", 255}}}
+            },
+            {
+                    {"id", 1},
+                    {"position", Json::array({4.0f, 5.0f, 6.0f})},
+                    {"radius", 8.0f},
+                    {"sourceRadius", 1.0f},
+                    {"intensity", 1.0f},
+                    {"color", {{"r", 255}, {"g", 220}, {"b", 180}, {"a", 255}}}
+            }
+    });
+    ExpectRejected(changed, "duplicate static light IDs are rejected");
+    changed["staticLights"][1]["id"] = 2;
+    changed["staticLights"][0].erase("position");
+    ExpectRejected(changed, "missing static light position is rejected");
+    changed = valid;
+    changed["staticLights"] = Json::array({
+            {
+                    {"id", 1},
+                    {"position", Json::array({1.0f, 2.0f, 3.0f})},
+                    {"radius", 0.0f},
+                    {"sourceRadius", 0.0f},
+                    {"intensity", 1.0f},
+                    {"color", {{"r", 255}, {"g", 220}, {"b", 180}, {"a", 255}}}
+            }
+    });
+    ExpectRejected(changed, "non-positive static light radius is rejected");
+    changed["staticLights"][0]["radius"] = 4.0f;
+    changed["staticLights"][0]["sourceRadius"] = 5.0f;
+    ExpectRejected(changed, "oversized static light source radius is rejected");
+    changed["staticLights"][0]["sourceRadius"] = 1.0f;
+    changed["staticLights"][0]["color"]["r"] = 300;
+    ExpectRejected(changed, "invalid static light color channel is rejected");
 }
 
 void TestTransactionalFailures()
@@ -348,6 +451,31 @@ void TestTransactionalFailures()
           "invalid map is rejected before save");
     Check(!error.empty(), "failed save reports an error");
     Check(jsonOutput == "sentinel", "failed save leaves JSON output unchanged");
+
+    Json invalidLight = Json::parse(SaveText(MakeSquare()));
+    invalidLight["staticLights"] = Json::array({
+            {
+                    {"id", 1},
+                    {"position", Json::array({1.0f, 2.0f, 3.0f})},
+                    {"radius", -1.0f},
+                    {"sourceRadius", 0.0f},
+                    {"intensity", 1.0f},
+                    {"color", {{"r", 255}, {"g", 255}, {"b", 255}, {"a", 255}}}
+            }
+    });
+    output = MakeSquare();
+    output.staticLights.push_back(SectorTopologyStaticPointLight{
+            42,
+            Vector3{9.0f, 8.0f, 7.0f},
+            WHITE,
+            1.0f,
+            12.0f,
+            0.0f
+    });
+    error.clear();
+    Check(!LoadText(invalidLight.dump(), output, error), "invalid static light load fails");
+    Check(output.staticLights.size() == 1 && output.staticLights.front().id == 42,
+          "failed static light load leaves output map unchanged");
 }
 
 void TestDeterministicOutput()
@@ -357,6 +485,12 @@ void TestDeterministicOutput()
     std::reverse(second.vertices.begin(), second.vertices.end());
     std::reverse(second.lineDefs.begin(), second.lineDefs.end());
     std::reverse(second.sideDefs.begin(), second.sideDefs.end());
+    first.staticLights.push_back(SectorTopologyStaticPointLight{
+            2, Vector3{2.0f, 3.0f, 4.0f}, WHITE, 1.0f, 8.0f, 0.0f});
+    first.staticLights.push_back(SectorTopologyStaticPointLight{
+            1, Vector3{1.0f, 2.0f, 3.0f}, Color{10, 20, 30, 255}, 2.0f, 16.0f, 1.0f});
+    second.staticLights = first.staticLights;
+    std::reverse(second.staticLights.begin(), second.staticLights.end());
     second.texturesById.clear();
     second.texturesById.emplace("ceiling", first.texturesById.at("ceiling"));
     second.texturesById.emplace("wall", first.texturesById.at("wall"));
@@ -364,6 +498,28 @@ void TestDeterministicOutput()
     Check(SaveText(first) == SaveText(second),
           "serialization is independent of vector and hash-map insertion order");
     Check(SaveText(first) == SaveText(first), "repeated serialization is identical");
+}
+
+void TestStaticLightHelpers()
+{
+    SectorTopologyMap map = MakeSquare();
+    Check(game::AllocateSectorTopologyStaticLightId(map) == 1,
+          "first topology static light ID is 1");
+    map.staticLights.push_back(SectorTopologyStaticPointLight{
+            4, Vector3{0.0f, 1.0f, 2.0f}, WHITE, 1.0f, 8.0f, 0.0f});
+    map.staticLights.push_back(SectorTopologyStaticPointLight{
+            2, Vector3{3.0f, 4.0f, 5.0f}, WHITE, 1.0f, 8.0f, 0.0f});
+    Check(game::AllocateSectorTopologyStaticLightId(map) == 5,
+          "topology static light allocation returns max plus one");
+    Check(game::FindSectorTopologyStaticLight(map, 2) != nullptr,
+          "topology static light lookup finds existing ID");
+    Check(game::RemoveSectorTopologyStaticLight(map, 2),
+          "topology static light delete succeeds for existing ID");
+    Check(game::FindSectorTopologyStaticLight(map, 2) == nullptr
+                  && game::FindSectorTopologyStaticLight(map, 4) != nullptr,
+          "topology static light delete preserves remaining lights");
+    Check(!game::RemoveSectorTopologyStaticLight(map, 99),
+          "topology static light delete fails for unknown ID");
 }
 
 void TestIndependentFrontBackSidedefEdits()
@@ -448,11 +604,13 @@ void TestFileApi()
 int main()
 {
     TestRoundTrip();
+    TestStaticLightRoundTrip();
     TestHandAuthoredJson();
     TestStrictMarkersAndShapes();
     TestStrictValuesAndValidation();
     TestTransactionalFailures();
     TestDeterministicOutput();
+    TestStaticLightHelpers();
     TestIndependentFrontBackSidedefEdits();
     TestOppositeSidedefLookup();
     TestFileApi();

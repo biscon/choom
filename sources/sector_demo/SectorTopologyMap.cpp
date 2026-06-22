@@ -1,5 +1,6 @@
 #include "sector_demo/SectorTopologyMap.h"
 
+#include <algorithm>
 #include <limits>
 
 namespace game {
@@ -123,6 +124,11 @@ int AllocateSectorTopologySectorId(const SectorTopologyMap& map)
     return AllocateNextId(map.sectors);
 }
 
+int AllocateSectorTopologyStaticLightId(const SectorTopologyMap& map)
+{
+    return AllocateNextId(map.staticLights);
+}
+
 const SectorTopologyVertex* FindSectorTopologyVertex(const SectorTopologyMap& map, int id)
 {
     return FindById(map.vertices, id);
@@ -161,6 +167,34 @@ const SectorTopologySector* FindSectorTopologySector(const SectorTopologyMap& ma
 SectorTopologySector* FindSectorTopologySector(SectorTopologyMap& map, int id)
 {
     return FindById(map.sectors, id);
+}
+
+const SectorTopologyStaticPointLight* FindSectorTopologyStaticLight(const SectorTopologyMap& map, int id)
+{
+    return FindById(map.staticLights, id);
+}
+
+SectorTopologyStaticPointLight* FindSectorTopologyStaticLight(SectorTopologyMap& map, int id)
+{
+    return FindById(map.staticLights, id);
+}
+
+bool RemoveSectorTopologyStaticLight(SectorTopologyMap& map, int id)
+{
+    if (!IsValidSectorTopologyId(id)) {
+        return false;
+    }
+
+    const auto found = std::find_if(
+            map.staticLights.begin(),
+            map.staticLights.end(),
+            [id](const SectorTopologyStaticPointLight& light) { return light.id == id; });
+    if (found == map.staticLights.end()) {
+        return false;
+    }
+
+    map.staticLights.erase(found);
+    return true;
 }
 
 const SectorTopologySideDef* FindOppositeSectorTopologySideDef(

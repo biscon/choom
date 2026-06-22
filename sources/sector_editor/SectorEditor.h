@@ -47,7 +47,7 @@ private:
     void UpdateVertexDrag(engine::Input& input);
     void FinishVertexDrag();
     void CancelVertexDrag(const char* message);
-    void StartLightDrag(int lightIndex);
+    void StartLightDrag(int topologyLightId);
     void UpdateLightDrag(engine::Input& input);
     void FinishLightDrag();
     void CancelLightDrag(const char* message);
@@ -182,7 +182,7 @@ private:
             SectorTopologySideKind& outSide,
             bool& outPreferredMissing) const;
     int FindSectorAt(Vector2 mapPoint) const;
-    int FindLightNearScreenPoint(Vector2 screenPoint) const;
+    int FindTopologyLightNearScreenPoint(Vector2 screenPoint) const;
     bool FindEdgeNearScreenPoint(Vector2 screenPoint, SectorEdgeRef& outEdge) const;
     std::vector<SectorEdgeHitCandidate> FindEdgeHitCandidates(Vector2 screenPoint) const;
     bool ResolveEdgeHit(Vector2 screenPoint, Vector2 rawMapPoint, SectorEdgeRef& outEdge) const;
@@ -224,6 +224,8 @@ private:
     const SectorTopologySideDef* SelectedTopologySideDef() const;
     SectorTopologyLineDef* SelectedTopologyLineDef();
     const SectorTopologyLineDef* SelectedTopologyLineDef() const;
+    SectorTopologyStaticPointLight* SelectedTopologyLight();
+    const SectorTopologyStaticPointLight* SelectedTopologyLight() const;
     void ClearStaleTopologySelection();
     void SyncSelectedSectorIdBuffer();
     void SyncSelectedLightIdBuffer();
@@ -236,7 +238,7 @@ private:
             int edgeIndex,
             SectorBoundaryRingKind ringKind = SectorBoundaryRingKind::Outer,
             int holeIndex = -1);
-    void SelectLight(int lightIndex);
+    void SelectTopologyLight(int topologyLightId);
     void SelectSurface3D(SectorSurfaceRef surface);
     bool IsValidSurfaceRef(SectorSurfaceRef surface) const;
     bool SameSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b) const;
@@ -268,9 +270,8 @@ private:
     bool DeleteSelectedSector();
     bool DeleteSectorAt(int sectorIndex);
     bool DeleteSelectedLight();
-    bool DeleteLightAt(int lightIndex);
+    bool DeleteLightById(int topologyLightId);
     void AddStaticLightAt(Vector2 mapPoint);
-    std::string GenerateUniqueLightId() const;
     bool BakeLightmaps();
     bool StartLightmapBake();
     void PollLightmapBakeResult(engine::AssetManager& assets);

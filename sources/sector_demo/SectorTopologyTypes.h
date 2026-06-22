@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sector_demo/SectorUnits.h"
 #include "sector_demo/SectorTopologyUnits.h"
 
 #include <raylib.h>
@@ -75,6 +76,15 @@ struct SectorTopologySector {
     SectorTopologyWallPartSettings defaultUpper;
 };
 
+struct SectorTopologyStaticPointLight {
+    int id = -1;
+    Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
+    Color color = WHITE;
+    float intensity = 1.0f;
+    float radius = SectorWorldToAuthoringDistance(8.0f);
+    float sourceRadius = 0.0f;
+};
+
 enum class SectorTopologyValidationSeverity {
     Warning,
     Error
@@ -85,7 +95,8 @@ enum class SectorTopologyObjectKind {
     Vertex,
     LineDef,
     SideDef,
-    Sector
+    Sector,
+    StaticLight
 };
 
 struct SectorTopologyValidationIssue {

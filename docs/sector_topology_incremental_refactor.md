@@ -161,3 +161,30 @@ The editor routes selected topology sector deletion through the existing confirm
 Surviving opposite sides on shared linedefs are preserved with their existing material and UV settings and become one-sided boundaries. Deleting an inserted child sector leaves the parent's former-hole boundary as one-sided topology rather than healing the hole back into a solid floor. Deleting a parent sector is non-cascading when the remaining child topology validates.
 
 Direct linedef deletion, direct sidedef deletion, standalone vertex deletion, vertex merge, Light placement, lightmap baking/topology lightmap layout, and broader Erase tool behavior remain deferred.
+
+## Phase 16.5: topology static light placement and persistence
+
+Topology documents now own static point lights directly on `SectorTopologyMap`.
+The old polygon map's static light list remains compatibility-only and is no
+longer used as editor document light data.
+
+The Light tool places topology static lights at the clicked snapped X/Z map
+position, using the clicked topology sector floor plus the existing old-editor
+default light height for Y. Topology light positions, radius, and source radius
+are stored and serialized in the same authoring-coordinate convention used by
+the old static light editor; topology v2 JSON does not mix in world-space
+converted values.
+
+The 2D viewport renders topology lights from the topology document, including
+the center marker, radius overlay, selected/hovered highlight, and source-radius
+overlay. The Select tool can pick topology lights before linedefs/sidedefs and
+sectors, and the Move tool can drag topology lights by X/Z while preserving Y.
+
+The existing inspector can edit selected topology light position, radius,
+source radius, intensity, and color. Topology v2 JSON persists lights in a
+deterministic `staticLights` array with stable positive integer IDs, and strict
+load validation rejects malformed or duplicate light records transactionally.
+
+Lightmap baking, topology lightmap layout, bake source hashing, and bake version
+changes remain deferred to Phase 17. Pressing Bake Lightmaps still reports that
+topology lightmap baking is not migrated yet.

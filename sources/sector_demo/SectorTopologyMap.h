@@ -16,6 +16,7 @@ struct SectorTopologyMap {
     std::vector<SectorTopologyLineDef> lineDefs;
     std::vector<SectorTopologySideDef> sideDefs;
     std::vector<SectorTopologySector> sectors;
+    std::vector<SectorTopologyStaticPointLight> staticLights;
 };
 
 // Transient lookup data. Index vectors intentionally retain duplicate IDs so
@@ -41,6 +42,7 @@ int AllocateSectorTopologyVertexId(const SectorTopologyMap& map);
 int AllocateSectorTopologyLineDefId(const SectorTopologyMap& map);
 int AllocateSectorTopologySideDefId(const SectorTopologyMap& map);
 int AllocateSectorTopologySectorId(const SectorTopologyMap& map);
+int AllocateSectorTopologyStaticLightId(const SectorTopologyMap& map);
 
 const SectorTopologyVertex* FindSectorTopologyVertex(const SectorTopologyMap& map, int id);
 SectorTopologyVertex* FindSectorTopologyVertex(SectorTopologyMap& map, int id);
@@ -53,6 +55,11 @@ SectorTopologySideDef* FindSectorTopologySideDef(SectorTopologyMap& map, int id)
 
 const SectorTopologySector* FindSectorTopologySector(const SectorTopologyMap& map, int id);
 SectorTopologySector* FindSectorTopologySector(SectorTopologyMap& map, int id);
+
+const SectorTopologyStaticPointLight* FindSectorTopologyStaticLight(const SectorTopologyMap& map, int id);
+SectorTopologyStaticPointLight* FindSectorTopologyStaticLight(SectorTopologyMap& map, int id);
+
+bool RemoveSectorTopologyStaticLight(SectorTopologyMap& map, int id);
 
 const SectorTopologySideDef* FindOppositeSectorTopologySideDef(
         const SectorTopologyMap& map,

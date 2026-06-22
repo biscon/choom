@@ -646,11 +646,11 @@ Vector3 SectorPointToWorld(SectorPoint point, float height)
 const char* ToolHelpText(SectorEditorTool tool)
 {
     switch (tool) {
-        case SectorEditorTool::Select: return "Select: click edges or sectors in canvas";
+        case SectorEditorTool::Select: return "Select: click lights, edges, or sectors in canvas";
         case SectorEditorTool::Sector: return "Sector: left click add, click first closes, right click/Esc cancels, Backspace removes";
         case SectorEditorTool::InsertSectorInside: return "Insert sector: draw inside selected parent; Enter closes, right click/Esc cancels";
         case SectorEditorTool::Light: return "Light: click inside a sector to place a baked static point light";
-        case SectorEditorTool::Move: return "Move: drag light or vertex";
+        case SectorEditorTool::Move: return "Move: drag topology light or vertex";
         case SectorEditorTool::Erase: return "Erase: click sector to delete";
     }
     return "";
@@ -1373,7 +1373,7 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
     state.hoveredEdgeRingKind = SectorBoundaryRingKind::Outer;
     state.hoveredEdgeHoleIndex = -1;
     state.hoveredEdgeIndex = -1;
-    state.hoveredLightIndex = -1;
+    state.hoveredTopologyLightId = -1;
     state.hoveredSectorIndex = -1;
     state.hoveredTopologyVertexId = -1;
     state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
@@ -1383,13 +1383,18 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
     }
 
     if (state.currentTool == SectorEditorTool::Move) {
-        int vertexId = -1;
-        SectorTopologyCoordPoint point;
-        if (FindTopologyVertexNearScreenPoint(input.MousePosition(), vertexId, point)) {
-            state.hasHoveredVertex = true;
-            state.hoveredTopologyVertexId = vertexId;
-            state.hoveredTopologyVertexPoint = point;
-            state.hoveredVertexPoint = SectorTopologyCoordPointToSectorPoint(point);
+        const int lightId = FindTopologyLightNearScreenPoint(input.MousePosition());
+        if (lightId >= 0) {
+            state.hoveredTopologyLightId = lightId;
+        } else {
+            int vertexId = -1;
+            SectorTopologyCoordPoint point;
+            if (FindTopologyVertexNearScreenPoint(input.MousePosition(), vertexId, point)) {
+                state.hasHoveredVertex = true;
+                state.hoveredTopologyVertexId = vertexId;
+                state.hoveredTopologyVertexPoint = point;
+                state.hoveredVertexPoint = SectorTopologyCoordPointToSectorPoint(point);
+            }
         }
     }
 }
@@ -1411,7 +1416,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         CancelLightDrag("Cancelled light move");
                     } else if (state.pendingSector.active) {
                         CancelPendingSector("Cancelled sector");
-                    } else if (state.selectedLightIndex >= 0
+                    } else if (state.selectedTopologyLightId >= 0
                             || state.selectedSectorIndex >= 0
                             || state.topologySelectionKind != TopologySelectionKind::None) {
                         ClearSelection();
@@ -1435,7 +1440,10 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (event.key.key == KEY_DELETE) {
-                    if (state.topologySelectionKind == TopologySelectionKind::Sector
+                    if (state.topologySelectionKind == TopologySelectionKind::Light
+                            && state.selectedTopologyLightId >= 0) {
+                        DeleteSelectedLight();
+                    } else if (state.topologySelectionKind == TopologySelectionKind::Sector
                             && state.selectedTopologySectorId >= 0) {
                         OpenDeleteSelectedTopologySectorConfirmation();
                     } else if (state.topologySelectionKind == TopologySelectionKind::SideDef
@@ -1539,12 +1547,17 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
-                int vertexId = -1;
-                SectorTopologyCoordPoint point;
-                if (FindTopologyVertexNearScreenPoint(event.mouseButton.position, vertexId, point)) {
-                    StartVertexDrag(vertexId, point);
+                const int lightId = FindTopologyLightNearScreenPoint(event.mouseButton.position);
+                if (lightId >= 0) {
+                    StartLightDrag(lightId);
                 } else {
-                    statusText = "Move: click a topology vertex";
+                    int vertexId = -1;
+                    SectorTopologyCoordPoint point;
+                    if (FindTopologyVertexNearScreenPoint(event.mouseButton.position, vertexId, point)) {
+                        StartVertexDrag(vertexId, point);
+                    } else {
+                        statusText = "Move: click a topology light or vertex";
+                    }
                 }
                 engine::ConsumeEvent(event);
             }
@@ -1583,6 +1596,14 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::Select) {
+                    const int lightId = FindTopologyLightNearScreenPoint(event.mouseClick.releasePosition);
+                    if (lightId >= 0) {
+                        SelectTopologyLight(lightId);
+                        statusText = TextFormat("Selected topology light %d", lightId);
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+
                     int lineDefId = -1;
                     int sideDefId = -1;
                     SectorTopologySideKind side = SectorTopologySideKind::Front;
@@ -1651,7 +1672,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::Light) {
-                    statusText = "Topology light placement is not migrated yet.";
+                    AddStaticLightAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -1670,7 +1691,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::Move) {
-                    statusText = "Move: click a topology vertex";
+                    statusText = "Move: click a topology light or vertex";
                     engine::ConsumeEvent(event);
                 }
             }
@@ -1809,36 +1830,42 @@ void SectorEditor::CancelVertexDrag(const char* message)
     }
 }
 
-void SectorEditor::StartLightDrag(int lightIndex)
+void SectorEditor::StartLightDrag(int topologyLightId)
 {
-    if (lightIndex < 0 || lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    const SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
+            state.topologyMap,
+            topologyLightId);
+    if (light == nullptr) {
         return;
     }
 
-    SelectLight(lightIndex);
-    const SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(lightIndex)];
+    SelectTopologyLight(topologyLightId);
     state.lightDrag.active = true;
-    state.lightDrag.lightIndex = lightIndex;
-    state.lightDrag.originalPosition = light.position;
-    state.lightDrag.snappedPosition = light.position;
-    statusText = TextFormat("Moving %s", light.id.c_str());
+    state.lightDrag.topologyLightId = topologyLightId;
+    state.lightDrag.originalPosition = light->position;
+    state.lightDrag.snappedPosition = light->position;
+    statusText = TextFormat("Moving topology light %d", light->id);
 }
 
 void SectorEditor::UpdateLightDrag(engine::Input& input)
 {
-    if (!state.lightDrag.active
-            || state.lightDrag.lightIndex < 0
-            || state.lightDrag.lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    if (!state.lightDrag.active) {
         return;
     }
 
-    SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.lightDrag.lightIndex)];
+    SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
+            state.topologyMap,
+            state.lightDrag.topologyLightId);
+    if (light == nullptr) {
+        return;
+    }
+
     const Vector2 snapped = SnapMapPoint(ScreenToMap(input.MousePosition()));
     state.lightDrag.snappedPosition = Vector3{snapped.x, state.lightDrag.originalPosition.y, snapped.y};
-    light.position.x = state.lightDrag.snappedPosition.x;
-    light.position.y = state.lightDrag.snappedPosition.y;
-    light.position.z = state.lightDrag.snappedPosition.z;
-    statusText = TextFormat("Moving %s", light.id.c_str());
+    light->position.x = state.lightDrag.snappedPosition.x;
+    light->position.y = state.lightDrag.originalPosition.y;
+    light->position.z = state.lightDrag.snappedPosition.z;
+    statusText = TextFormat("Moving topology light %d", light->id);
 }
 
 void SectorEditor::FinishLightDrag()
@@ -1847,38 +1874,42 @@ void SectorEditor::FinishLightDrag()
         return;
     }
 
-    const int lightIndex = state.lightDrag.lightIndex;
+    const int lightId = state.lightDrag.topologyLightId;
     const Vector3 original = state.lightDrag.originalPosition;
     state.lightDrag = LightDragState{};
-    if (lightIndex < 0 || lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(state.topologyMap, lightId);
+    if (light == nullptr) {
         return;
     }
 
-    SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(lightIndex)];
-    SelectLight(lightIndex);
-    if (std::fabs(light.position.x - original.x) <= GeometryEpsilon
-            && std::fabs(light.position.z - original.z) <= GeometryEpsilon) {
-        light.position = original;
+    SelectTopologyLight(lightId);
+    if (std::fabs(light->position.x - original.x) <= GeometryEpsilon
+            && std::fabs(light->position.z - original.z) <= GeometryEpsilon) {
+        light->position = original;
         statusText = "Light unchanged";
         return;
     }
 
+    state.topologyDocumentDirty = true;
     state.hasUnsavedChanges = true;
     statusText = TextFormat(
-            "Moved %s to X %.2f, Z %.2f",
-            light.id.c_str(),
-            light.position.x,
-            light.position.z
+            "Moved topology light %d to X %.2f, Z %.2f",
+            light->id,
+            light->position.x,
+            light->position.z
     );
 }
 
 void SectorEditor::CancelLightDrag(const char* message)
 {
-    if (state.lightDrag.active
-            && state.lightDrag.lightIndex >= 0
-            && state.lightDrag.lightIndex < static_cast<int>(state.map.staticLights.size())) {
-        state.map.staticLights[static_cast<size_t>(state.lightDrag.lightIndex)].position = state.lightDrag.originalPosition;
-        SelectLight(state.lightDrag.lightIndex);
+    if (state.lightDrag.active) {
+        SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
+                state.topologyMap,
+                state.lightDrag.topologyLightId);
+        if (light != nullptr) {
+            light->position = state.lightDrag.originalPosition;
+            SelectTopologyLight(light->id);
+        }
     }
 
     state.lightDrag = LightDragState{};
@@ -2314,6 +2345,22 @@ const SectorTopologyLineDef* SectorEditor::SelectedTopologyLineDef() const
     return FindSectorTopologyLineDef(state.topologyMap, state.selectedTopologyLineDefId);
 }
 
+SectorTopologyStaticPointLight* SectorEditor::SelectedTopologyLight()
+{
+    if (state.topologySelectionKind != TopologySelectionKind::Light) {
+        return nullptr;
+    }
+    return FindSectorTopologyStaticLight(state.topologyMap, state.selectedTopologyLightId);
+}
+
+const SectorTopologyStaticPointLight* SectorEditor::SelectedTopologyLight() const
+{
+    if (state.topologySelectionKind != TopologySelectionKind::Light) {
+        return nullptr;
+    }
+    return FindSectorTopologyStaticLight(state.topologyMap, state.selectedTopologyLightId);
+}
+
 void SectorEditor::ClearStaleTopologySelection()
 {
     bool stale = false;
@@ -2333,6 +2380,9 @@ void SectorEditor::ClearStaleTopologySelection()
     } else if (state.topologySelectionKind == TopologySelectionKind::LineDef) {
         stale = state.selectedTopologyLineDefId < 0
                 || FindSectorTopologyLineDef(state.topologyMap, state.selectedTopologyLineDefId) == nullptr;
+    } else if (state.topologySelectionKind == TopologySelectionKind::Light) {
+        stale = state.selectedTopologyLightId < 0
+                || FindSectorTopologyStaticLight(state.topologyMap, state.selectedTopologyLightId) == nullptr;
     }
 
     if (stale) {
@@ -2340,9 +2390,12 @@ void SectorEditor::ClearStaleTopologySelection()
         state.selectedTopologySectorId = -1;
         state.selectedTopologySideDefId = -1;
         state.selectedTopologyLineDefId = -1;
+        state.selectedTopologyLightId = -1;
         state.selectedTopologySideKind = SectorTopologySideKind::Front;
         uiState.idBufferSectorIndex = -1;
+        uiState.idBufferLightIndex = -1;
         SyncSelectedSectorIdBuffer();
+        SyncSelectedLightIdBuffer();
     }
 }
 
@@ -2398,8 +2451,8 @@ void SectorEditor::SyncSelectedSectorIdBuffer()
 
 void SectorEditor::SyncSelectedLightIdBuffer()
 {
-    if (state.selectedLightIndex < 0
-            || state.selectedLightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    const SectorTopologyStaticPointLight* light = SelectedTopologyLight();
+    if (light == nullptr) {
         uiState.selectedLightIdBuffer[0] = '\0';
         uiState.idBufferLightIndex = -1;
         if (state.selectedSectorIndex < 0 && state.topologySelectionKind == TopologySelectionKind::None) {
@@ -2408,13 +2461,12 @@ void SectorEditor::SyncSelectedLightIdBuffer()
         return;
     }
 
-    if (uiState.idBufferLightIndex == state.selectedLightIndex) {
+    if (uiState.idBufferLightIndex == light->id) {
         return;
     }
 
-    const std::string& id = state.map.staticLights[static_cast<size_t>(state.selectedLightIndex)].id;
-    std::snprintf(uiState.selectedLightIdBuffer, sizeof(uiState.selectedLightIdBuffer), "%s", id.c_str());
-    uiState.idBufferLightIndex = state.selectedLightIndex;
+    std::snprintf(uiState.selectedLightIdBuffer, sizeof(uiState.selectedLightIdBuffer), "%d", light->id);
+    uiState.idBufferLightIndex = light->id;
     uiState.idEditError.clear();
 }
 
@@ -2499,49 +2551,15 @@ bool SectorEditor::TryRenameSelectedTopologySector()
 
 bool SectorEditor::TryRenameSelectedLight()
 {
-    if (state.selectedLightIndex < 0
-            || state.selectedLightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    if (SelectedTopologyLight() == nullptr) {
         uiState.idEditError = "No light selected";
         statusText = uiState.idEditError;
         return false;
     }
 
-    SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.selectedLightIndex)];
-    const std::string newId = uiState.selectedLightIdBuffer;
-    if (newId == light.id) {
-        uiState.idEditError.clear();
-        return true;
-    }
-
-    if (newId.empty()) {
-        uiState.idEditError = "Light id cannot be empty";
-        statusText = uiState.idEditError;
-        return false;
-    }
-
-    for (char ch : newId) {
-        const unsigned char value = static_cast<unsigned char>(ch);
-        if (!(std::isalnum(value) || ch == '_' || ch == '-')) {
-            uiState.idEditError = "Use letters, digits, underscore, or dash";
-            statusText = uiState.idEditError;
-            return false;
-        }
-    }
-
-    for (size_t i = 0; i < state.map.staticLights.size(); ++i) {
-        if (static_cast<int>(i) != state.selectedLightIndex
-                && state.map.staticLights[i].id == newId) {
-            uiState.idEditError = "Light id already exists";
-            statusText = uiState.idEditError;
-            return false;
-        }
-    }
-
-    light.id = newId;
-    state.hasUnsavedChanges = true;
-    uiState.idEditError.clear();
-    statusText = TextFormat("Renamed light to %s", light.id.c_str());
-    return true;
+    uiState.idEditError = "Topology light IDs are stable";
+    statusText = uiState.idEditError;
+    return false;
 }
 
 bool SectorEditor::DeleteSelectedSector()
@@ -2666,67 +2684,75 @@ bool SectorEditor::DeleteSectorAt(int sectorIndex)
 
 bool SectorEditor::DeleteSelectedLight()
 {
-    return DeleteLightAt(state.selectedLightIndex);
-}
-
-bool SectorEditor::DeleteLightAt(int lightIndex)
-{
-    if (lightIndex < 0 || lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    const SectorTopologyStaticPointLight* light = SelectedTopologyLight();
+    if (light == nullptr) {
         return false;
     }
 
-    const std::string deletedId = state.map.staticLights[static_cast<size_t>(lightIndex)].id;
-    state.map.staticLights.erase(state.map.staticLights.begin() + lightIndex);
-    if (state.selectedLightIndex == lightIndex) {
-        ClearSelection();
-    } else if (state.selectedLightIndex > lightIndex) {
-        --state.selectedLightIndex;
-    }
-    state.hoveredLightIndex = -1;
-    state.hasUnsavedChanges = true;
-    statusText = TextFormat("Deleted light %s", deletedId.c_str());
+    const int lightId = light->id;
+    OpenConfirmation(
+            "Delete Light",
+            TextFormat("Delete topology light %d?", lightId),
+            [this, lightId]() { DeleteLightById(lightId); });
     return true;
 }
 
-std::string SectorEditor::GenerateUniqueLightId() const
+bool SectorEditor::DeleteLightById(int topologyLightId)
 {
-    for (int id = 1; id < 10000; ++id) {
-        char candidate[32];
-        std::snprintf(candidate, sizeof(candidate), "light_%03d", id);
-        const bool used = std::any_of(
-                state.map.staticLights.begin(),
-                state.map.staticLights.end(),
-                [candidate](const SectorStaticPointLight& light) { return light.id == candidate; }
-        );
-        if (!used) {
-            return candidate;
-        }
+    if (FindSectorTopologyStaticLight(state.topologyMap, topologyLightId) == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a topology light to delete.";
+        return false;
     }
 
-    return TextFormat("light_%zu", state.map.staticLights.size() + 1);
+    if (!RemoveSectorTopologyStaticLight(state.topologyMap, topologyLightId)) {
+        statusText = "Failed to delete topology light.";
+        return false;
+    }
+
+    if (state.selectedTopologyLightId == topologyLightId) {
+        ClearSelection();
+    }
+    if (state.hoveredTopologyLightId == topologyLightId) {
+        state.hoveredTopologyLightId = -1;
+    }
+    if (state.lightDrag.topologyLightId == topologyLightId) {
+        state.lightDrag = LightDragState{};
+    }
+    state.topologyDocumentDirty = true;
+    state.hasUnsavedChanges = true;
+    statusText = TextFormat("Deleted topology light %d", topologyLightId);
+    return true;
 }
 
 void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
 {
-    const int sectorIndex = FindSectorAt(mapPoint);
-    if (sectorIndex < 0 || sectorIndex >= static_cast<int>(state.map.sectors.size())) {
+    const int sectorId = FindTopologySectorAt(mapPoint);
+    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sectorId);
+    if (sector == nullptr) {
         statusText = "Light placement failed: click inside a sector";
         return;
     }
 
-    const SectorDefinition& sector = state.map.sectors[static_cast<size_t>(sectorIndex)];
-    SectorStaticPointLight light;
-    light.id = GenerateUniqueLightId();
-    light.position = Vector3{mapPoint.x, sector.floorZ + SectorWorldToAuthoringDistance(1.8f), mapPoint.y};
+    const int lightId = AllocateSectorTopologyStaticLightId(state.topologyMap);
+    if (!IsValidSectorTopologyId(lightId)) {
+        statusText = "Light placement failed: no topology light IDs available";
+        return;
+    }
+
+    SectorTopologyStaticPointLight light;
+    light.id = lightId;
+    light.position = Vector3{mapPoint.x, sector->floorZ + SectorWorldToAuthoringDistance(1.8f), mapPoint.y};
     light.color = WHITE;
     light.intensity = 1.0f;
     light.radius = SectorWorldToAuthoringDistance(8.0f);
     light.sourceRadius = SectorWorldToAuthoringDistance(0.25f);
 
-    state.map.staticLights.push_back(std::move(light));
-    SelectLight(static_cast<int>(state.map.staticLights.size()) - 1);
+    state.topologyMap.staticLights.push_back(light);
+    SelectTopologyLight(lightId);
+    state.topologyDocumentDirty = true;
     state.hasUnsavedChanges = true;
-    statusText = TextFormat("Added static light %s", state.map.staticLights.back().id.c_str());
+    statusText = TextFormat("Added topology light %d", lightId);
 }
 
 bool SectorEditor::BakeLightmaps()
@@ -3757,6 +3783,8 @@ void SectorEditor::DrawTopologyDocument()
     DrawTopologyLineDefs();
     DrawTopologyVertices();
     DrawVertexMoveOverlay();
+    DrawStaticLights();
+    DrawLightMoveOverlay();
     DrawPendingSector();
     DrawTopologySnapCrosshair();
 
@@ -4193,15 +4221,16 @@ void SectorEditor::DrawLightMoveOverlay() const
     }
 
     if (state.lightDrag.active) {
-        if (state.lightDrag.lightIndex < 0
-                || state.lightDrag.lightIndex >= static_cast<int>(state.map.staticLights.size())) {
+        const SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
+                state.topologyMap,
+                state.lightDrag.topologyLightId);
+        if (light == nullptr) {
             return;
         }
 
-        const SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.lightDrag.lightIndex)];
-        const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
-        const float radiusPixels = SectorAuthoringToWorldDistance(light.radius) * state.viewZoom;
-        Color color = light.color;
+        const Vector2 center = MapToScreen(Vector2{light->position.x, light->position.z});
+        const float radiusPixels = SectorAuthoringToWorldDistance(light->radius) * state.viewZoom;
+        Color color = light->color;
         color.a = 245;
         DrawCircleLines(
                 static_cast<int>(std::round(center.x)),
@@ -4214,12 +4243,14 @@ void SectorEditor::DrawLightMoveOverlay() const
         return;
     }
 
-    if (state.hoveredLightIndex < 0 || state.hoveredLightIndex >= static_cast<int>(state.map.staticLights.size())) {
+    const SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
+            state.topologyMap,
+            state.hoveredTopologyLightId);
+    if (light == nullptr) {
         return;
     }
 
-    const SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.hoveredLightIndex)];
-    const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
+    const Vector2 center = MapToScreen(Vector2{light->position.x, light->position.z});
     DrawCircleLines(static_cast<int>(std::round(center.x)), static_cast<int>(std::round(center.y)), 13.0f, Color{245, 226, 154, 255});
 }
 
@@ -4342,11 +4373,11 @@ void SectorEditor::DrawSector(const SectorDefinition& sector, int sectorIndex) c
 
 void SectorEditor::DrawStaticLights() const
 {
-    for (size_t i = 0; i < state.map.staticLights.size(); ++i) {
-        const SectorStaticPointLight& light = state.map.staticLights[i];
+    for (const SectorTopologyStaticPointLight& light : state.topologyMap.staticLights) {
         const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
-        const bool selected = static_cast<int>(i) == state.selectedLightIndex;
-        const bool hovered = static_cast<int>(i) == state.hoveredLightIndex;
+        const bool selected = state.topologySelectionKind == TopologySelectionKind::Light
+                && light.id == state.selectedTopologyLightId;
+        const bool hovered = light.id == state.hoveredTopologyLightId;
         Color color = light.color;
         color.a = selected ? 255 : hovered ? 235 : 205;
         const float radiusPixels = SectorAuthoringToWorldDistance(light.radius) * state.viewZoom;
@@ -4670,8 +4701,7 @@ void SectorEditor::DrawSectorsPanel(
             && SelectedTopologyLineDef() != nullptr;
     const bool hasSelectedSector = state.selectedSectorIndex >= 0
             && state.selectedSectorIndex < static_cast<int>(state.map.sectors.size());
-    const bool hasSelectedLight = state.selectedLightIndex >= 0
-            && state.selectedLightIndex < static_cast<int>(state.map.staticLights.size());
+    const bool hasSelectedLight = SelectedTopologyLight() != nullptr;
     if (hasSelectedSector) {
         const SectorDefinition& selectedSector = state.map.sectors[static_cast<size_t>(state.selectedSectorIndex)];
         const std::vector<SectorPoint>* selectedRing = GetSectorBoundaryRing(
@@ -4801,29 +4831,13 @@ void SectorEditor::DrawSectorsPanel(
     }
 
     if (hasSelectedLight) {
-        SectorStaticPointLight& light = state.map.staticLights[static_cast<size_t>(state.selectedLightIndex)];
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Static Light: %s", light.id.c_str()), engine::UITextJustify::Left, config.textColor);
+        SectorTopologyStaticPointLight& light = *SelectedTopologyLight();
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Static Light: %d", light.id), engine::UITextJustify::Left, config.textColor);
         y += 38.0f;
 
         const float labelW = 88.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, "Id", engine::UITextJustify::Left, config.mutedTextColor);
-        const engine::UITextInputResult idResult = engine::TextInput(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_selected_light_id",
-                Rectangle{labelW, y, contentW - labelW, rowH},
-                font,
-                uiState.selectedLightIdBuffer,
-                sizeof(uiState.selectedLightIdBuffer),
-                0,
-                sizeof(uiState.selectedLightIdBuffer) - 1,
-                engine::UITextJustify::Left
-        );
-        if (idResult.submitted) {
-            TryRenameSelectedLight();
-        }
+        engine::Text(ui, config, assets, Rectangle{labelW, y, contentW - labelW, rowH}, font, TextFormat("%d", light.id), engine::UITextJustify::Left, config.textColor);
         y += rowH + gap;
 
         if (!uiState.idEditError.empty()) {
@@ -4847,8 +4861,9 @@ void SectorEditor::DrawSectorsPanel(
             const engine::UINumericInputResult result = engine::FloatInput(ui, config, input, assets, id, Rectangle{numberLabelW, y, numberFieldW, rowH}, font, edited, inputState, minValue, maxValue, decimals);
             if (result.changed && edited != value) {
                 value = edited;
+                state.topologyDocumentDirty = true;
                 state.hasUnsavedChanges = true;
-                statusText = TextFormat("Updated light %s", light.id.c_str());
+                statusText = TextFormat("Updated topology light %d", light.id);
             }
             y += rowH + gap;
         };
@@ -4881,6 +4896,7 @@ void SectorEditor::DrawSectorsPanel(
             edited = ClampLightSourceRadius(edited, light.radius);
             if (result.changed && edited != light.sourceRadius) {
                 light.sourceRadius = edited;
+                state.topologyDocumentDirty = true;
                 state.hasUnsavedChanges = true;
                 statusText = "Updated light source radius";
             }
@@ -4907,8 +4923,9 @@ void SectorEditor::DrawSectorsPanel(
             if (result.changed && value != static_cast<int>(channel)) {
                 channel = static_cast<unsigned char>(ClampAmbientChannel(value));
                 light.color.a = 255;
+                state.topologyDocumentDirty = true;
                 state.hasUnsavedChanges = true;
-                statusText = TextFormat("Updated light %s color", light.id.c_str());
+                statusText = TextFormat("Updated topology light %d color", light.id);
             }
             y += rowH + gap;
         };
@@ -6486,9 +6503,8 @@ void SectorEditor::DrawStatusPanel(
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
     std::string selectedLabel = "none";
-    if (state.selectedLightIndex >= 0
-            && state.selectedLightIndex < static_cast<int>(state.map.staticLights.size())) {
-        selectedLabel = state.map.staticLights[static_cast<size_t>(state.selectedLightIndex)].id;
+    if (const SectorTopologyStaticPointLight* light = SelectedTopologyLight()) {
+        selectedLabel = TextFormat("topology light %d", light->id);
     } else if (const SectorTopologySector* topologySector = SelectedTopologySector()) {
         selectedLabel = topologySector->name.empty()
                 ? TextFormat("topology sector %d", topologySector->id)
@@ -6635,7 +6651,7 @@ bool SectorEditor::LoadLevel(
     state.hoveredEdgeRingKind = SectorBoundaryRingKind::Outer;
     state.hoveredEdgeHoleIndex = -1;
     state.hoveredEdgeIndex = -1;
-    state.hoveredLightIndex = -1;
+    state.hoveredTopologyLightId = -1;
     state.hasHoveredVertex = false;
     state.hoveredVertexRefs.clear();
     state.hoveredTopologyVertexId = -1;
@@ -7119,22 +7135,23 @@ int SectorEditor::FindSectorAt(Vector2 mapPoint) const
     return -1;
 }
 
-int SectorEditor::FindLightNearScreenPoint(Vector2 screenPoint) const
+int SectorEditor::FindTopologyLightNearScreenPoint(Vector2 screenPoint) const
 {
     float bestDistance2 = ScreenLightPickPixels * ScreenLightPickPixels;
-    int bestIndex = -1;
-    for (size_t i = 0; i < state.map.staticLights.size(); ++i) {
-        const SectorStaticPointLight& light = state.map.staticLights[i];
+    int bestId = -1;
+    for (const SectorTopologyStaticPointLight& light : state.topologyMap.staticLights) {
         const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
         const float dx = center.x - screenPoint.x;
         const float dy = center.y - screenPoint.y;
         const float distance2 = dx * dx + dy * dy;
-        if (distance2 <= bestDistance2) {
+        if (distance2 < bestDistance2 - 0.001f
+                || (std::fabs(distance2 - bestDistance2) <= 0.001f
+                        && (bestId < 0 || light.id < bestId))) {
             bestDistance2 = distance2;
-            bestIndex = static_cast<int>(i);
+            bestId = light.id;
         }
     }
-    return bestIndex;
+    return bestId;
 }
 
 bool SectorEditor::FindTopologyLineNearScreenPoint(
@@ -7328,11 +7345,11 @@ void SectorEditor::SelectSector(int sectorIndex)
     state.selectedTopologySectorId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
+    state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
     state.selectedEdgeHoleIndex = -1;
     state.selectedEdgeIndex = -1;
-    state.selectedLightIndex = -1;
     uiState.idBufferLightIndex = -1;
     uiState.inspectorScroll.offset = Vector2{};
     uiState.ambientIntensityInput = engine::UIFloatInputState{};
@@ -7353,12 +7370,12 @@ void SectorEditor::SelectTopologySector(int sectorId)
     state.selectedTopologySectorId = sectorId;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
+    state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.selectedSectorIndex = -1;
     state.selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
     state.selectedEdgeHoleIndex = -1;
     state.selectedEdgeIndex = -1;
-    state.selectedLightIndex = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     ResetSurface3DUiState();
     uiState.idBufferLightIndex = -1;
@@ -7397,13 +7414,13 @@ void SectorEditor::SelectTopologySideDef(int sideDefId, TopologyWallPart wallPar
     state.selectedTopologySectorId = -1;
     state.selectedTopologySideDefId = sideDef->id;
     state.selectedTopologyLineDefId = lineDef->id;
+    state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = sideDef->side;
     state.selectedTopologyWallPart = wallPart;
     state.selectedSectorIndex = -1;
     state.selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
     state.selectedEdgeHoleIndex = -1;
     state.selectedEdgeIndex = -1;
-    state.selectedLightIndex = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     ResetSurface3DUiState();
     uiState.idBufferLightIndex = -1;
@@ -7433,13 +7450,13 @@ void SectorEditor::SelectTopologyLineDef(
     state.selectedTopologySectorId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = lineDefId;
+    state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = side;
     state.selectedTopologyWallPart = wallPart;
     state.selectedSectorIndex = -1;
     state.selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
     state.selectedEdgeHoleIndex = -1;
     state.selectedEdgeIndex = -1;
-    state.selectedLightIndex = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     ResetSurface3DUiState();
     uiState.idBufferLightIndex = -1;
@@ -7462,11 +7479,11 @@ void SectorEditor::SelectEdge(
     state.selectedTopologySectorId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
+    state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.selectedEdgeRingKind = ringKind;
     state.selectedEdgeHoleIndex = holeIndex;
     state.selectedEdgeIndex = edgeIndex;
-    state.selectedLightIndex = -1;
     uiState.idBufferLightIndex = -1;
     uiState.inspectorScroll.offset = Vector2{};
     uiState.ambientIntensityInput = engine::UIFloatInputState{};
@@ -7476,10 +7493,15 @@ void SectorEditor::SelectEdge(
     SyncSelectedSectorIdBuffer();
 }
 
-void SectorEditor::SelectLight(int lightIndex)
+void SectorEditor::SelectTopologyLight(int topologyLightId)
 {
-    state.selectedLightIndex = lightIndex;
-    state.topologySelectionKind = TopologySelectionKind::None;
+    if (FindSectorTopologyStaticLight(state.topologyMap, topologyLightId) == nullptr) {
+        ClearSelection();
+        return;
+    }
+
+    state.selectedTopologyLightId = topologyLightId;
+    state.topologySelectionKind = TopologySelectionKind::Light;
     state.selectedTopologySectorId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
@@ -7574,7 +7596,6 @@ void SectorEditor::ClearSelection()
     state.selectedEdgeRingKind = SectorBoundaryRingKind::Outer;
     state.selectedEdgeHoleIndex = -1;
     state.selectedEdgeIndex = -1;
-    state.selectedLightIndex = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     ResetSurface3DUiState();
     uiState.ambientIntensityInput = engine::UIFloatInputState{};

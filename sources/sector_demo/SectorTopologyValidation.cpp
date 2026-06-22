@@ -1,6 +1,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <sstream>
 #include <tuple>
@@ -580,6 +581,31 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
     ValidateIds(map.lineDefs, SectorTopologyObjectKind::LineDef, issues);
     ValidateIds(map.sideDefs, SectorTopologyObjectKind::SideDef, issues);
     ValidateIds(map.sectors, SectorTopologyObjectKind::Sector, issues);
+    ValidateIds(map.staticLights, SectorTopologyObjectKind::StaticLight, issues);
+
+    for (const SectorTopologyStaticPointLight& light : map.staticLights) {
+        if (!std::isfinite(light.position.x)
+                || !std::isfinite(light.position.y)
+                || !std::isfinite(light.position.z)) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "position values must be finite");
+        }
+        if (!std::isfinite(light.intensity)) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "intensity must be finite");
+        }
+        if (!std::isfinite(light.radius) || light.radius <= 0.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "radius must be finite and positive");
+        }
+        if (!std::isfinite(light.sourceRadius) || light.sourceRadius < 0.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "source radius must be finite and non-negative");
+        } else if (std::isfinite(light.radius) && light.sourceRadius > light.radius) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "source radius must not exceed radius");
+        }
+    }
 
     std::unordered_set<uint64_t> endpointPairs;
     for (size_t lineIndex = 0; lineIndex < map.lineDefs.size(); ++lineIndex) {
@@ -767,6 +793,9 @@ std::string FormatSectorTopologyValidationIssue(
             break;
         case SectorTopologyObjectKind::Sector:
             objectName = "Sector";
+            break;
+        case SectorTopologyObjectKind::StaticLight:
+            objectName = "StaticLight";
             break;
     }
 
