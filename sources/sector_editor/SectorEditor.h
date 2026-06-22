@@ -262,6 +262,7 @@ private:
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     bool SplitSelectedTopologyLineDef();
     bool DissolveSelectedTopologyVertex();
+    bool JoinSelectedTopologySectors();
     void ClearTransientTopologyEditStateAfterGeometryChange();
     void OpenDeleteSelectedTopologySectorConfirmation();
     void OpenDeleteTopologySectorConfirmation(int sectorId);

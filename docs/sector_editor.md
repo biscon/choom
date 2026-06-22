@@ -157,6 +157,28 @@ front/back sidedefs initialized from the two owning sectors' default wall,
 lower, and upper settings. Like other two-sided portals, it produces lower/upper
 3D wall surfaces only where adjacent sector heights differ.
 
+## Join Sectors
+
+Adjacent topology sectors can be joined through a selected two-sided portal.
+Select the sidedef/portal boundary, then use `Join Sectors` in the
+sidedef/linedef inspector. The selected side's sector is the winner: it keeps
+its sector ID, name, floor/ceiling heights, floor/ceiling textures and UVs,
+ambient settings, and default wall/lower/upper settings.
+
+Join is topology-only and transactional. It removes the shared internal portal
+boundary, reassigns surviving outside sidedefs from the removed sector to the
+winner, prunes orphan vertices, validates the candidate topology, extracts the
+surviving sector loops, and commits only if the result is valid. Surviving
+outside sidedefs keep their concrete wall/lower/upper texture IDs and UV
+settings; they are not reset to the winning sector defaults.
+
+The first version is conservative. It rejects non-adjacent sectors, one-sided
+boundaries, sectors that only touch at a vertex, disconnected or ambiguous
+shared boundaries, closed shared boundaries, and any join that would produce
+invalid resulting loops or invalid candidate topology. Sector-inspector
+`Join With...` picking is not implemented yet; joining is currently driven by a
+selected portal.
+
 ## Sidedef And Linedef Inspector
 
 Selecting near a linedef in 2D selects the clicked side when that side has a
@@ -169,6 +191,7 @@ The sidedef/linedef inspector supports:
 
 - front/back sidedef selection
 - `Switch to opposite side` when the opposite sidedef exists
+- `Join Sectors` when the selected portal has two different adjacent sectors
 - wall, lower, and upper texture selection
 - wall, lower, and upper UV scale/offset editing
 - reset UV for the selected wall/lower/upper part

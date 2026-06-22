@@ -55,6 +55,11 @@ struct SectorTopologyCutSectorResult {
     int newSectorSideDefId = -1;
 };
 
+struct SectorTopologyJoinSectorsResult {
+    int survivingSectorId = -1;
+    int removedSectorId = -1;
+};
+
 bool MoveSectorTopologyVertex(
         SectorTopologyMap& map,
         int vertexId,
@@ -105,6 +110,13 @@ bool CutSectorTopologySectorBetweenBoundaryPoints(
         SectorTopologyBoundaryCutPoint firstPoint,
         SectorTopologyBoundaryCutPoint secondPoint,
         SectorTopologyCutSectorResult* outResult = nullptr,
+        std::string* outError = nullptr);
+
+bool JoinSectorTopologySectors(
+        SectorTopologyMap& map,
+        int winnerSectorId,
+        int otherSectorId,
+        SectorTopologyJoinSectorsResult* outResult = nullptr,
         std::string* outError = nullptr);
 
 } // namespace game

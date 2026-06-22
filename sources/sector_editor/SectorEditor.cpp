@@ -5526,13 +5526,41 @@ bool SectorEditor::DrawTopologySideDefInspector(
     y += 38.0f + gap;
 
     if (sideDef == nullptr) {
+        const int preferredSideDefId = state.selectedTopologySideKind == SectorTopologySideKind::Front
+                ? lineDef->frontSideDefId
+                : lineDef->backSideDefId;
+        const SectorTopologySideDef* preferredSideDef = FindSectorTopologySideDef(
+                state.topologyMap,
+                preferredSideDefId);
+        const SectorTopologySideDef* opposite = preferredSideDef != nullptr
+                ? FindOppositeSectorTopologySideDef(state.topologyMap, preferredSideDef->id)
+                : nullptr;
+        if (preferredSideDef != nullptr && opposite != nullptr
+                && preferredSideDef->sectorId != opposite->sectorId) {
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_topology_join_sectors",
+                        Rectangle{0.0f, y, contentW, 38.0f},
+                        font,
+                        "Join Sectors")) {
+                JoinSelectedTopologySectors();
+                return true;
+            }
+            y += 38.0f + gap;
+        }
+
         engine::Text(
                 ui,
                 config,
                 assets,
                 Rectangle{0.0f, y, contentW, 64.0f},
                 font,
-                "Line-only selection: this linedef has no sidedef to edit.",
+                preferredSideDef == nullptr
+                        ? "Line-only selection: this linedef has no sidedef to edit."
+                        : "Select a sidedef to edit wall settings.",
                 engine::UITextJustify::Left,
                 config.mutedTextColor);
         return true;
@@ -5553,6 +5581,33 @@ bool SectorEditor::DrawTopologySideDefInspector(
             state.topologyMap,
             sideDef->id);
     if (opposite != nullptr) {
+        if (opposite->sectorId != sideDef->sectorId) {
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_topology_join_sectors",
+                        Rectangle{0.0f, y, contentW, 38.0f},
+                        font,
+                        "Join Sectors")) {
+                JoinSelectedTopologySectors();
+                return true;
+            }
+            y += 38.0f + gap;
+        } else {
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 34.0f},
+                    font,
+                    "Join Sectors unavailable: both sides already belong to the same sector.",
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
+            y += 38.0f;
+        }
+
         if (engine::Button(
                     ui,
                     config,
@@ -5575,7 +5630,7 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 assets,
                 Rectangle{0.0f, y, contentW, 30.0f},
                 font,
-                "Opposite side: none",
+                "Join Sectors unavailable: opposite side is missing.",
                 engine::UITextJustify::Left,
                 config.mutedTextColor);
         y += 34.0f;
@@ -7585,6 +7640,71 @@ bool SectorEditor::DissolveSelectedTopologyVertex()
             "Dissolved topology vertex %d; selected linedef %d",
             dissolve.removedVertexId,
             dissolve.replacementLineDefId);
+    return true;
+}
+
+bool SectorEditor::JoinSelectedTopologySectors()
+{
+    const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
+    if (lineDef == nullptr) {
+        ClearStaleTopologySelection();
+        statusText = "Select a two-sided topology portal before joining sectors.";
+        return false;
+    }
+
+    const SectorTopologySideDef* winnerSideDef = SelectedTopologySideDef();
+    if (winnerSideDef == nullptr) {
+        const int sideDefId = state.selectedTopologySideKind == SectorTopologySideKind::Front
+                ? lineDef->frontSideDefId
+                : lineDef->backSideDefId;
+        winnerSideDef = FindSectorTopologySideDef(state.topologyMap, sideDefId);
+    }
+    if (winnerSideDef == nullptr || winnerSideDef->lineDefId != lineDef->id) {
+        statusText = "Join Sectors requires a selected side of a two-sided topology portal.";
+        return false;
+    }
+
+    const SectorTopologySideDef* otherSideDef = FindOppositeSectorTopologySideDef(
+            state.topologyMap,
+            winnerSideDef->id);
+    if (otherSideDef == nullptr) {
+        statusText = "Join Sectors requires a two-sided topology portal.";
+        return false;
+    }
+    if (winnerSideDef->sectorId == otherSideDef->sectorId) {
+        statusText = "Join Sectors requires two different adjacent sectors.";
+        return false;
+    }
+
+    SectorTopologyJoinSectorsResult join;
+    std::string error;
+    if (!JoinSectorTopologySectors(
+                state.topologyMap,
+                winnerSideDef->sectorId,
+                otherSideDef->sectorId,
+                &join,
+                &error)) {
+        statusText = error.empty() ? "Join Sectors rejected." : error;
+        return false;
+    }
+
+    CancelPendingSector(nullptr);
+    CancelVertexDrag(nullptr);
+    CancelLightDrag(nullptr);
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
+    state.hasHoveredVertex = false;
+    state.hoveredTopologyVertexId = -1;
+    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
+    state.hoveredTopologyLightId = -1;
+    ClearTransientTopologyEditStateAfterGeometryChange();
+    SelectTopologySector(join.survivingSectorId);
+    MarkTopologyDocumentEdited(TextFormat(
+            "Joined topology sectors %d and %d; kept sector %d.",
+            join.survivingSectorId,
+            join.removedSectorId,
+            join.survivingSectorId));
     return true;
 }
 
