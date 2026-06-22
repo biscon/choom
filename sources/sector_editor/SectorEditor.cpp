@@ -4944,7 +4944,26 @@ void SectorEditor::DrawSectorsPanel(
             return height;
         }
         if (hasSelectedTopologySector) {
-            return 1748.0f;
+            const float textureRowH = 36.0f + gap;
+            const float uvSettingsH = 2.0f * (62.0f + gap);
+            const float materialSurfaceSectionH = 18.0f + 30.0f + (36.0f + gap) + textureRowH + uvSettingsH;
+            const float defaultWallSectionH = 18.0f + 30.0f + textureRowH + uvSettingsH;
+
+            float height = 38.0f; // Sector title.
+            height += rowH + gap; // Name.
+            if (!uiState.idEditError.empty()) {
+                height += 36.0f;
+            }
+            height += 3.0f * (rowH + gap); // Delete/insert/cut.
+            height += 2.0f * (rowH + gap); // Floor/ceiling heights.
+            height += 18.0f + 30.0f; // Lighting separator/title.
+            height += rowH + gap; // Ambient intensity.
+            height += 3.0f * (rowH + gap); // RGB.
+            height += 36.0f + gap; // Ambient swatch.
+            height += 2.0f * materialSurfaceSectionH; // Floor/ceiling material sections.
+            height += 3.0f * defaultWallSectionH; // Default wall/lower/upper sections.
+            height += 32.0f; // Bottom breathing room for the last UV row.
+            return height;
         }
         if (hasSelectedTopologyVertex) {
             return 280.0f;
