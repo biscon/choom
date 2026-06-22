@@ -262,6 +262,7 @@ private:
     bool ApplySurface3DUvValue(TopologySurfaceEditTarget target, int component, float value, engine::AssetManager& assets);
     bool ResetSurface3DUv(TopologySurfaceEditTarget target, engine::AssetManager& assets);
     bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets);
+    bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     bool SplitSelectedTopologyLineDef();
     bool DissolveSelectedTopologyVertex();

@@ -209,11 +209,15 @@ exactly on the integer coordinate grid.
 Wall-like surfaces use distance-based generated base UVs. Wall, lower, and
 upper U spans are based on physical linedef length, and V spans are based on the
 visible wall height. Reset UV restores scale `(1, 1)` and offset `(0, 0)`, which
-tiles the texture every 2 world units. `Fit Width`, `Fit Height`, and `Fit Both`
-adjust only the selected wall/lower/upper part's UV scale and reset the fitted
-offset axis so that the selected texture spans once across the selected width
-and/or height. Fit preserves the selected part's texture ID and does not change
-other wall parts, the opposite sidedef, sector defaults, floors, or ceilings.
+restarts the selected wall span's local texture coordinates and tiles the texture
+every 2 world units. `Fit Width`, `Fit Height`, and `Fit Both` adjust only the
+selected wall/lower/upper part's UV scale and reset the fitted offset axis so
+that the selected texture spans once across the selected width and/or height.
+`Align Vertical` adjusts only the selected wall/lower/upper part's V offset so
+brick rows or wall courses line up by world height. Fit and Align Vertical
+preserve the selected part's texture ID and do not change other wall parts, the
+opposite sidedef, sector defaults, floors, or ceilings. Align Vertical also
+preserves the selected part's UV scale and U offset.
 
 `Split At Point` starts a pending canvas action for the selected linedef. Click a
 snapped point exactly on that linedef to split there, or press Escape/right click
@@ -376,9 +380,11 @@ The 3D surface panel edits only the selected surface target. Floor/ceiling
 targets edit sector texture and UV settings. Wall/lower/upper targets edit the
 selected sidedef's matching wall part. The Texture button opens the topology
 texture picker, Reset UV resets only the selected surface target, Fit Width /
-Fit Height / Fit Both fit only selected wall-like targets, and Copy/Paste
+Fit Height / Fit Both fit only selected wall-like targets, Align Vertical shifts
+only selected wall-like V offsets to line up by world height, and Copy/Paste
 Material copies texture ID plus UV scale/offset between matching selected
-surface kinds.
+surface kinds. Align Vertical preserves texture ID, scale, U offset, and other
+wall parts.
 
 Equal-height portals have no generated 3D wall surface, so edit their sidedefs
 from the 2D linedef/sidedef inspector.
