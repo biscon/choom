@@ -43,11 +43,23 @@ struct SectorFpsVerticalContext {
     float ceilingZ = 0.0f;
 };
 
+enum class SectorFpsVerticalTransition {
+    None,
+    StayedGrounded,
+    SteppedUp,
+    SnappedDown,
+    StartedDrop,
+    Landed,
+    BlockedStep,
+    CannotFit
+};
+
 struct SectorFpsVerticalResult {
     bool hasSector = false;
     bool cannotFit = false;
     float floorZ = 0.0f;
     float ceilingZ = 0.0f;
+    SectorFpsVerticalTransition transition = SectorFpsVerticalTransition::None;
 };
 
 SectorFpsControllerConfig DefaultSectorFpsControllerConfig();

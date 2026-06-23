@@ -1,5 +1,6 @@
 #include "sector_demo/SectorCollisionWorld.h"
 
+#include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
 
@@ -198,6 +199,93 @@ void TestPortalStepAndCeilingRules()
           "portal with insufficient ceiling clearance blocks");
 }
 
+void TestDownwardPortalVerticalTransitions()
+{
+    const Vector2 start = game::SectorCoordToWorldPosition2(Coord(60), Coord(32));
+
+    game::SectorCollisionWorld world = BuildWorld(MakeAdjacent(4.0f, 2.0f));
+    game::SectorCollisionMoveResult moveResult = Move(
+            world,
+            start,
+            Vector2{2.0f, 0.0f},
+            10,
+            true,
+            game::SectorAuthoringToWorldDistance(4.0f));
+    Check(moveResult.currentSectorId == 20, "small downward portal is horizontally passable");
+
+    game::SectorCollisionHeights heights;
+    Check(world.GetSectorFloorCeiling(moveResult.currentSectorId, &heights),
+          "small downward portal destination heights are available");
+    game::SectorFpsControllerState fpsState;
+    fpsState.feetPosition = Vector3{
+            moveResult.positionXZ.x,
+            game::SectorAuthoringToWorldDistance(4.0f),
+            moveResult.positionXZ.y};
+    fpsState.currentSectorId = moveResult.currentSectorId;
+    fpsState.grounded = true;
+    fpsState.verticalVelocity = -5.0f;
+    game::SectorFpsControllerConfig fpsConfig;
+    game::SectorFpsVerticalResult verticalResult =
+            game::UpdateSectorFpsVerticalPhysics(
+                    fpsState,
+                    fpsConfig,
+                    game::SectorFpsVerticalContext{true, heights.floorZ, heights.ceilingZ},
+                    0.0f);
+    Check(verticalResult.transition == game::SectorFpsVerticalTransition::SnappedDown,
+          "small downward portal snaps down after movement");
+    Check(Near(fpsState.feetPosition.y, game::SectorAuthoringToWorldDistance(2.0f)),
+          "small downward portal places feet on lower floor");
+    Check(fpsState.grounded, "small downward portal remains grounded");
+
+    world = BuildWorld(MakeAdjacent(4.0f, 0.0f));
+    moveResult = Move(
+            world,
+            start,
+            Vector2{2.0f, 0.0f},
+            10,
+            true,
+            game::SectorAuthoringToWorldDistance(4.0f));
+    Check(moveResult.currentSectorId == 20, "large downward portal is horizontally passable");
+    Check(world.GetSectorFloorCeiling(moveResult.currentSectorId, &heights),
+          "large downward portal destination heights are available");
+    fpsState.feetPosition = Vector3{
+            moveResult.positionXZ.x,
+            game::SectorAuthoringToWorldDistance(4.0f),
+            moveResult.positionXZ.y};
+    fpsState.currentSectorId = moveResult.currentSectorId;
+    fpsState.grounded = true;
+    fpsState.verticalVelocity = -5.0f;
+    verticalResult = game::UpdateSectorFpsVerticalPhysics(
+            fpsState,
+            fpsConfig,
+            game::SectorFpsVerticalContext{true, heights.floorZ, heights.ceilingZ},
+            0.0f);
+    Check(verticalResult.transition == game::SectorFpsVerticalTransition::StartedDrop,
+          "large downward portal starts drop after movement");
+    Check(Near(fpsState.feetPosition.y, game::SectorAuthoringToWorldDistance(4.0f)),
+          "large downward portal preserves feet height initially");
+    Check(!fpsState.grounded, "large downward portal starts falling");
+    Check(Near(fpsState.verticalVelocity, 0.0f),
+          "large downward portal starts falling with deterministic zero velocity");
+
+    world = BuildWorld(MakeAdjacent(0.0f, 0.0f));
+    moveResult = Move(world, start, Vector2{2.0f, 0.0f}, 10, true, 0.0f);
+    Check(moveResult.currentSectorId == 20, "same-height portal is horizontally passable");
+    Check(world.GetSectorFloorCeiling(moveResult.currentSectorId, &heights),
+          "same-height portal destination heights are available");
+    fpsState.feetPosition = Vector3{moveResult.positionXZ.x, 0.0f, moveResult.positionXZ.y};
+    fpsState.currentSectorId = moveResult.currentSectorId;
+    fpsState.grounded = true;
+    verticalResult = game::UpdateSectorFpsVerticalPhysics(
+            fpsState,
+            fpsConfig,
+            game::SectorFpsVerticalContext{true, heights.floorZ, heights.ceilingZ},
+            0.0f);
+    Check(verticalResult.transition == game::SectorFpsVerticalTransition::StayedGrounded,
+          "same-height portal stays grounded without drop");
+    Check(fpsState.grounded, "same-height portal remains grounded");
+}
+
 void TestAirbornePortalRules()
 {
     const Vector2 start = game::SectorCoordToWorldPosition2(Coord(60), Coord(32));
@@ -230,6 +318,7 @@ int main()
 {
     TestBlockingWallStopsAndSlides();
     TestPortalStepAndCeilingRules();
+    TestDownwardPortalVerticalTransitions();
     TestAirbornePortalRules();
     TestSectorFallbackAndBoundary();
     if (failures == 0) {

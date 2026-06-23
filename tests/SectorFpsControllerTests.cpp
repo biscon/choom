@@ -144,23 +144,77 @@ void TestConfigNormalization()
           "default step height is 0.25 world units");
 }
 
-void TestGroundedPlayerSnapsToFloor()
+void TestGroundedFloorTransitions()
 {
     game::SectorFpsControllerState state;
-    state.feetPosition = Vector3{1.0f, 9.0f, 2.0f};
+    state.feetPosition = Vector3{1.0f, 4.0f, 2.0f};
     state.grounded = true;
     state.verticalVelocity = -3.0f;
     game::SectorFpsControllerConfig config;
     game::SectorFpsVerticalContext context{true, 4.0f, 20.0f};
 
-    game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
-    Check(Near(state.feetPosition.y, 4.0f), "grounded player snaps to current floor");
-    Check(state.grounded, "grounded player stays grounded");
-    Check(Near(state.verticalVelocity, 0.0f), "grounded snap clears vertical velocity");
+    game::SectorFpsVerticalResult result =
+            game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
+    Check(result.transition == game::SectorFpsVerticalTransition::StayedGrounded,
+          "same-floor grounded transition reports stayed grounded");
+    Check(Near(state.feetPosition.y, 4.0f), "same-floor transition keeps feet on floor");
+    Check(state.grounded, "same-floor transition stays grounded");
+    Check(Near(state.verticalVelocity, 0.0f), "same-floor transition clears vertical velocity");
 
-    context.floorZ = 8.0f;
-    game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
-    Check(Near(state.feetPosition.y, 8.0f), "grounded player follows changed sector floor");
+    state.feetPosition.y = 4.0f;
+    state.grounded = true;
+    state.verticalVelocity = -2.0f;
+    context.floorZ = 4.2f;
+    result = game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
+    Check(result.transition == game::SectorFpsVerticalTransition::SteppedUp,
+          "small upward floor transition reports stepped up");
+    Check(Near(state.feetPosition.y, 4.2f), "small upward floor transition snaps up");
+    Check(state.grounded, "small upward floor transition stays grounded");
+    Check(Near(state.verticalVelocity, 0.0f), "small upward floor transition clears vertical velocity");
+
+    state.feetPosition.y = 4.0f;
+    state.grounded = true;
+    state.verticalVelocity = -2.0f;
+    context.floorZ = 4.5f;
+    result = game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
+    Check(result.transition == game::SectorFpsVerticalTransition::BlockedStep,
+          "large upward floor transition reports blocked step");
+    Check(Near(state.feetPosition.y, 4.0f), "large upward floor transition does not snap up");
+    Check(state.grounded, "large upward floor transition preserves grounded state for caller recovery");
+    Check(Near(state.verticalVelocity, 0.0f), "large upward floor transition clears vertical velocity");
+
+    state.feetPosition.y = 4.0f;
+    state.grounded = true;
+    state.verticalVelocity = -2.0f;
+    context.floorZ = 3.8f;
+    result = game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
+    Check(result.transition == game::SectorFpsVerticalTransition::SnappedDown,
+          "small downward floor transition reports snapped down");
+    Check(Near(state.feetPosition.y, 3.8f), "small downward floor transition snaps down");
+    Check(state.grounded, "small downward floor transition stays grounded");
+    Check(Near(state.verticalVelocity, 0.0f), "small downward floor transition clears vertical velocity");
+
+    state.feetPosition.y = 4.0f;
+    state.grounded = true;
+    state.verticalVelocity = -2.0f;
+    context.floorZ = 3.0f;
+    result = game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
+    Check(result.transition == game::SectorFpsVerticalTransition::StartedDrop,
+          "large downward floor transition reports started drop");
+    Check(Near(state.feetPosition.y, 4.0f), "large downward floor transition preserves feet height initially");
+    Check(!state.grounded, "large downward floor transition starts falling");
+    Check(Near(state.verticalVelocity, 0.0f), "large downward floor transition starts with deterministic zero velocity");
+
+    result = game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.1f);
+    Check(state.verticalVelocity < 0.0f, "gravity begins after started drop on the next update");
+    Check(!state.grounded, "falling after started drop remains airborne while above floor");
+
+    result = game::UpdateSectorFpsVerticalPhysics(state, config, context, 1.0f);
+    Check(result.transition == game::SectorFpsVerticalTransition::Landed,
+          "falling after started drop reports landed");
+    Check(Near(state.feetPosition.y, 3.0f), "falling after started drop lands on lower floor");
+    Check(state.grounded, "landing after started drop sets grounded");
+    Check(Near(state.verticalVelocity, 0.0f), "landing after started drop clears vertical velocity");
 }
 
 void TestFallingAndLanding()
@@ -177,7 +231,10 @@ void TestFallingAndLanding()
     Check(Near(state.feetPosition.y, 7.5f), "falling integrates feet height");
     Check(!state.grounded, "airborne player remains falling above floor");
 
-    game::UpdateSectorFpsVerticalPhysics(state, config, context, 2.0f);
+    const game::SectorFpsVerticalResult result =
+            game::UpdateSectorFpsVerticalPhysics(state, config, context, 2.0f);
+    Check(result.transition == game::SectorFpsVerticalTransition::Landed,
+          "falling player landing reports landed");
     Check(Near(state.feetPosition.y, 0.0f), "falling player lands on floor");
     Check(state.grounded, "landing sets grounded true");
     Check(Near(state.verticalVelocity, 0.0f), "landing clears vertical velocity");
@@ -231,6 +288,8 @@ void TestCannotFitClampsToFloor()
     const game::SectorFpsVerticalResult result =
             game::UpdateSectorFpsVerticalPhysics(state, config, context, 1.0f);
     Check(result.cannotFit, "cannot-fit vertical result is reported");
+    Check(result.transition == game::SectorFpsVerticalTransition::CannotFit,
+          "cannot-fit vertical result reports cannot fit transition");
     Check(Near(state.feetPosition.y, 10.0f), "cannot-fit case leaves feet on floor");
     Check(state.feetPosition.y >= context.floorZ, "cannot-fit case never places feet below floor");
     Check(state.grounded, "cannot-fit case sets grounded true");
@@ -263,7 +322,7 @@ int main()
     TestRunAndWalkSpeeds();
     TestMouseLookRawDeltaAndPitchClamp();
     TestConfigNormalization();
-    TestGroundedPlayerSnapsToFloor();
+    TestGroundedFloorTransitions();
     TestFallingAndLanding();
     TestZeroGravityDoesNotMoveVertically();
     TestCeilingClamp();

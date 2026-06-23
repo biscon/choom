@@ -11,6 +11,7 @@ namespace {
 
 constexpr float MouseRadiansPerPixel = 0.0030f;
 constexpr float PitchLimitRadians = 1.55334306f;
+constexpr float FloorTransitionEpsilon = 0.001f;
 
 float ClampFinite(float value, float fallback, float minValue, float maxValue)
 {
@@ -185,12 +186,42 @@ SectorFpsVerticalResult UpdateSectorFpsVerticalPhysics(
         state.grounded = true;
         state.verticalVelocity = 0.0f;
         result.cannotFit = true;
+        result.transition = SectorFpsVerticalTransition::CannotFit;
         return result;
     }
 
     if (state.grounded) {
-        state.feetPosition.y = context.floorZ;
+        const float floorDelta = context.floorZ - state.feetPosition.y;
+        if (std::fabs(floorDelta) <= FloorTransitionEpsilon) {
+            state.feetPosition.y = context.floorZ;
+            state.verticalVelocity = 0.0f;
+            result.transition = SectorFpsVerticalTransition::StayedGrounded;
+            return result;
+        }
+        if (floorDelta > 0.0f) {
+            if (floorDelta <= normalized.stepHeight + FloorTransitionEpsilon) {
+                state.feetPosition.y = context.floorZ;
+                state.verticalVelocity = 0.0f;
+                result.transition = SectorFpsVerticalTransition::SteppedUp;
+                return result;
+            }
+            state.verticalVelocity = 0.0f;
+            result.transition = SectorFpsVerticalTransition::BlockedStep;
+            return result;
+        }
+
+        const float drop = -floorDelta;
+        if (drop <= normalized.stepHeight + FloorTransitionEpsilon) {
+            state.feetPosition.y = context.floorZ;
+            state.verticalVelocity = 0.0f;
+            result.transition = SectorFpsVerticalTransition::SnappedDown;
+            return result;
+        }
+
+        state.grounded = false;
         state.verticalVelocity = 0.0f;
+        result.transition = SectorFpsVerticalTransition::StartedDrop;
+        return result;
     } else if (normalized.gravity > 0.0f && dt > 0.0f) {
         state.verticalVelocity -= normalized.gravity * dt;
         state.feetPosition.y += state.verticalVelocity * dt;
@@ -200,6 +231,7 @@ SectorFpsVerticalResult UpdateSectorFpsVerticalPhysics(
         state.feetPosition.y = context.floorZ;
         state.grounded = true;
         state.verticalVelocity = 0.0f;
+        result.transition = SectorFpsVerticalTransition::Landed;
     }
 
     if (state.feetPosition.y > maxFeetY) {

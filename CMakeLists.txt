@@ -186,6 +186,7 @@ if(BUILD_TESTING)
     add_executable(sector_collision_movement_tests
             tests/SectorCollisionMovementTests.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp

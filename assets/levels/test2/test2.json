@@ -7257,7 +7257,7 @@
     {
       "id": 1,
       "name": "sector_001",
-      "floorZ": -4.0,
+      "floorZ": -14.0,
       "ceilingZ": 28.0,
       "floorTextureId": "floor",
       "ceilingTextureId": "ceiling",
@@ -8806,6 +8806,6 @@
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "a051ded2cc085ac7"
+    "sourceHash": "dbc186d189f07176"
   }
 }

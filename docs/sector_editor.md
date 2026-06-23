@@ -121,8 +121,8 @@ point-in-sector lookup, classifies one-sided edges as blocking walls, and
 classifies two-sided edges as portals with neighbor sector IDs.
 
 Gameplay preview uses this query layer for current-sector floor/ceiling lookup,
-horizontal player-cylinder collision, simple gravity, landing, floor following,
-and ceiling clamp. Topology sector heights remain authored JSON values, but
+horizontal player-cylinder collision, simple gravity, landing, step/drop floor
+transitions, and ceiling clamp. Topology sector heights remain authored JSON values, but
 collision floor/ceiling heights are converted to the same runtime world-space Y
 units as rendered geometry.
 
@@ -130,9 +130,10 @@ Gameplay horizontal collision is based on 2D topology plus sector
 floor/ceiling heights, not generated render meshes. One-sided edges block
 movement. Two-sided portal edges are passable only when the destination sector
 allows the current cylinder height and grounded upward steps are within the
-configured step height. Downward grounded portal movement is currently allowed
-and snaps/follows the lower floor. Middle textures do not block movement and do
-not add collision.
+configured step height. Small upward and downward floor differences within step
+height snap immediately; larger downward drops start falling under gravity
+instead of teleporting to the lower floor. Middle textures do not block movement
+and do not add collision.
 
 ## Sector Inspector
 
@@ -465,12 +466,14 @@ used for ceiling clearance. Player height is normalized to at least eye height.
 Step height defaults to `0.25` world units. Gravity uses a positive magnitude;
 `0` disables falling.
 
-Grounded Gameplay movement snaps feet to the current sector floor. Same-floor
-and small upward portals within step height are passable, too-high upward
-portals block, low-ceiling portals block, and downward portals are passable for
-now. The Gameplay overlay reports collision state, current sector,
-grounded/falling state, recent wall/step/ceiling blocks, radius, step height,
-floor, feet, velocity, and gravity in runtime world-space values.
+Grounded Gameplay movement snaps feet to same-height floors and small up/down
+floor changes within step height. Larger drops start falling under gravity;
+jumping remains deferred. Same-floor and small upward portals within step height
+are passable, too-high upward portals block, low-ceiling portals block, and
+downward portals are passable for now. The Gameplay overlay reports collision
+state, current sector, grounded/falling state, recent vertical transition,
+recent wall/step/ceiling blocks, radius, step height, floor, feet, velocity, and
+gravity in runtime world-space values.
 
 3D picking maps generated surfaces back to topology:
 

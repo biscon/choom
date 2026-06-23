@@ -193,6 +193,29 @@ const char* PreviewControlModeName(SectorPreviewControlMode mode)
     return "Unknown";
 }
 
+const char* VerticalTransitionName(SectorFpsVerticalTransition transition)
+{
+    switch (transition) {
+        case SectorFpsVerticalTransition::None:
+            return "none";
+        case SectorFpsVerticalTransition::StayedGrounded:
+            return "ground";
+        case SectorFpsVerticalTransition::SteppedUp:
+            return "step up";
+        case SectorFpsVerticalTransition::SnappedDown:
+            return "snap down";
+        case SectorFpsVerticalTransition::StartedDrop:
+            return "drop";
+        case SectorFpsVerticalTransition::Landed:
+            return "landed";
+        case SectorFpsVerticalTransition::BlockedStep:
+            return "blocked step";
+        case SectorFpsVerticalTransition::CannotFit:
+            return "cannot fit";
+    }
+    return "unknown";
+}
+
 std::vector<LevelListEntry> ScanLevels(std::string& error)
 {
     std::vector<LevelListEntry> levels;
@@ -2909,11 +2932,14 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                     state.fpsControllerState.currentSectorId =
                             state.sectorCollisionWorld.FindSectorContainingPoint(feetXZ);
                 }
+                const int previousSectorId = state.fpsControllerState.currentSectorId;
+                const float previousFeetY = state.fpsControllerState.feetPosition.y;
+                const bool wasGrounded = state.fpsControllerState.grounded;
 
                 if (state.fpsControllerState.currentSectorId != 0) {
                     const SectorFpsControllerConfig normalizedConfig =
                             NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
-                    const SectorCollisionMoveResult moveResult =
+                    SectorCollisionMoveResult moveResult =
                             state.sectorCollisionWorld.ResolveMovement(
                                     SectorCollisionMoveState{
                                             feetXZ,
@@ -2926,6 +2952,18 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                                             normalizedConfig.playerHeight,
                                             normalizedConfig.stepHeight,
                                             4});
+                    SectorCollisionHeights movedHeights;
+                    if (wasGrounded
+                            && moveResult.currentSectorId != previousSectorId
+                            && state.sectorCollisionWorld.GetSectorFloorCeiling(
+                                    moveResult.currentSectorId,
+                                    &movedHeights)
+                            && movedHeights.floorZ - previousFeetY
+                                    > normalizedConfig.stepHeight + GameplayFloorSnapEpsilon) {
+                        moveResult.positionXZ = feetXZ;
+                        moveResult.currentSectorId = previousSectorId;
+                        moveResult.blockedByStep = true;
+                    }
                     state.previewMoveResult = moveResult;
                     state.fpsControllerState.feetPosition.x = moveResult.positionXZ.x;
                     state.fpsControllerState.feetPosition.z = moveResult.positionXZ.y;
@@ -4334,12 +4372,13 @@ void SectorEditor::DrawPreviewOverlay(
                     blockText = " clear";
                 }
                 collisionStatus = TextFormat(
-                        " | collision on | sector %d | %s%s |%s | r %.2f step %.2f | floor %.2f | feet %.2f | vel %.2f | gravity %.1f",
+                        " | collision on | sector %d | %s%s | v:%s |%s | r %.2f step %.2f | floor %.2f | feet %.2f | vel %.2f | gravity %.1f",
                         state.fpsControllerState.currentSectorId,
                         state.previewVerticalResult.cannotFit
                                 ? "cannot fit"
                                 : (state.fpsControllerState.grounded ? "grounded" : "falling"),
                         state.previewVerticalResult.cannotFit ? " grounded" : "",
+                        VerticalTransitionName(state.previewVerticalResult.transition),
                         blockText.c_str(),
                         state.fpsControllerConfig.playerRadius,
                         state.fpsControllerConfig.stepHeight,
