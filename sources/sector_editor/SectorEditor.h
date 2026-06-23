@@ -27,6 +27,7 @@ public:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    bool IsPreview3DActive() const;
 
     Vector2 MapToScreen(Vector2 map) const;
     Vector2 ScreenToMap(Vector2 screen) const;

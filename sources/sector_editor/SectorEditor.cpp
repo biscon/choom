@@ -1386,6 +1386,11 @@ void SectorEditor::RenderUI(
     engine::EndUI(ui, config, input, assets);
 }
 
+bool SectorEditor::IsPreview3DActive() const
+{
+    return state.mode == SectorEditorMode::Preview3D;
+}
+
 Vector2 SectorEditor::MapToScreen(Vector2 map) const
 {
     return CanvasWorldToScreen(SectorAuthoringToWorldPosition(map));

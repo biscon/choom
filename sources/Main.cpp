@@ -2,12 +2,17 @@
 
 #include "engine/EngineContext.h"
 #include "engine/assets/FontLoadFlags.h"
+#include "engine/render/FxaaShader.h"
 #include "sector_editor/SectorEditor.h"
 
 #include <cmath>
 
 static constexpr int INTERNAL_WIDTH = 1920;
 static constexpr int INTERNAL_HEIGHT = 1080;
+static constexpr float WORLD_RENDER_SCALE = 1.5f;
+static constexpr bool ENABLE_WORLD_FXAA = true;
+static constexpr int WORLD_TARGET_WIDTH = static_cast<int>((INTERNAL_WIDTH * WORLD_RENDER_SCALE) + 0.5f);
+static constexpr int WORLD_TARGET_HEIGHT = static_cast<int>((INTERNAL_HEIGHT * WORLD_RENDER_SCALE) + 0.5f);
 
 #if defined(__APPLE__)
 static constexpr int STARTUP_WINDOW_WIDTH = 1600;
@@ -61,19 +66,38 @@ int main()
 
     SetExitKey(0);
 
-    RenderTexture2D worldTarget = LoadRenderTexture(INTERNAL_WIDTH, INTERNAL_HEIGHT);
+    RenderTexture2D worldTarget = LoadRenderTexture(WORLD_TARGET_WIDTH, WORLD_TARGET_HEIGHT);
     SetTextureFilter(worldTarget.texture, TEXTURE_FILTER_BILINEAR);
+
+    RenderTexture2D editorTarget = LoadRenderTexture(INTERNAL_WIDTH, INTERNAL_HEIGHT);
+    SetTextureFilter(editorTarget.texture, TEXTURE_FILTER_BILINEAR);
 
     RenderTexture2D uiTarget = LoadRenderTexture(INTERNAL_WIDTH, INTERNAL_HEIGHT);
     SetTextureFilter(uiTarget.texture, TEXTURE_FILTER_BILINEAR);
+
+    Shader fxaaShader{};
+    int fxaaTexelSizeLoc = -1;
+    if (ENABLE_WORLD_FXAA) {
+        fxaaShader = LoadShaderFromMemory(nullptr, engine::FxaaFragmentShader);
+        fxaaTexelSizeLoc = GetShaderLocation(fxaaShader, "texelSize");
+    }
+    const bool useWorldFxaa = ENABLE_WORLD_FXAA && IsShaderValid(fxaaShader);
+
+    const auto unloadRenderResources = [&]() {
+        if (IsShaderValid(fxaaShader)) {
+            UnloadShader(fxaaShader);
+        }
+        UnloadRenderTexture(worldTarget);
+        UnloadRenderTexture(editorTarget);
+        UnloadRenderTexture(uiTarget);
+    };
 
     engine::EngineContext context;
     context.input.Initialize();
     context.input.ReserveEvents(256);
 
     if (!context.assets.Initialize()) {
-        UnloadRenderTexture(worldTarget);
-        UnloadRenderTexture(uiTarget);
+        unloadRenderResources();
         CloseWindow();
         return 1;
     }
@@ -99,8 +123,7 @@ int main()
     }
 
     if (WindowShouldClose()) {
-        UnloadRenderTexture(worldTarget);
-        UnloadRenderTexture(uiTarget);
+        unloadRenderResources();
         context.assets.Shutdown();
         CloseWindow();
         return 0;
@@ -151,17 +174,41 @@ int main()
 
         sectorEditor.Update(context.input, dt);
 
-        BeginTextureMode(worldTarget);
-        ClearBackground(Color{8, 10, 14, 255});
-        sectorEditor.Render(assets);
-        EndTextureMode();
+        const bool renderPreview3D = sectorEditor.IsPreview3DActive();
+        if (renderPreview3D) {
+            BeginTextureMode(worldTarget);
+            ClearBackground(Color{8, 10, 14, 255});
+            sectorEditor.Render(assets);
+            EndTextureMode();
+        } else {
+            BeginTextureMode(editorTarget);
+            ClearBackground(Color{8, 10, 14, 255});
+            sectorEditor.Render(assets);
+            EndTextureMode();
+        }
 
         // draw world and ui to screen
         BeginDrawing();
         {
             ClearBackground(BLACK);
-            Rectangle worldSrc = GetFullscreenSrcRect(worldTarget.texture);
-            DrawTexturePro(worldTarget.texture, worldSrc, dst, {0,0}, 0.0f, WHITE);
+            if (renderPreview3D) {
+                Rectangle worldSrc = GetFullscreenSrcRect(worldTarget.texture);
+                if (useWorldFxaa) {
+                    Vector2 texelSize{
+                            1.0f / static_cast<float>(worldTarget.texture.width),
+                            1.0f / static_cast<float>(worldTarget.texture.height)
+                    };
+                    SetShaderValue(fxaaShader, fxaaTexelSizeLoc, &texelSize, SHADER_UNIFORM_VEC2);
+                    BeginShaderMode(fxaaShader);
+                    DrawTexturePro(worldTarget.texture, worldSrc, dst, {0,0}, 0.0f, WHITE);
+                    EndShaderMode();
+                } else {
+                    DrawTexturePro(worldTarget.texture, worldSrc, dst, {0,0}, 0.0f, WHITE);
+                }
+            } else {
+                Rectangle editorSrc = GetFullscreenSrcRect(editorTarget.texture);
+                DrawTexturePro(editorTarget.texture, editorSrc, dst, {0,0}, 0.0f, WHITE);
+            }
             Rectangle uiSrc = GetFullscreenSrcRect(uiTarget.texture);
             DrawTexturePro(uiTarget.texture, uiSrc, dst, {0,0}, 0.0f, WHITE);
             DrawFPS(10, 10);
@@ -170,8 +217,7 @@ int main()
     }
 
     sectorEditor.Shutdown(assets);
-    UnloadRenderTexture(worldTarget);
-    UnloadRenderTexture(uiTarget);
+    unloadRenderResources();
     context.assets.Shutdown();
     //ShowCursor();
     CloseWindow();

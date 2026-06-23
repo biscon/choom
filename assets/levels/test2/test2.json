@@ -11,6 +11,10 @@
       "path": "assets/images/ceiling.png",
       "filter": "anisotropic8x"
     },
+    "concrete_floor1": {
+      "path": "assets/images/floors/concrete_floor1.png",
+      "filter": "anisotropic8x"
+    },
     "floor": {
       "path": "assets/images/floor.png",
       "filter": "anisotropic8x"
@@ -39,6 +43,14 @@
       "path": "assets/images/test/metal.png",
       "filter": "anisotropic8x"
     },
+    "riser_01": {
+      "path": "assets/images/riser_01.png",
+      "filter": "anisotropic8x"
+    },
+    "riser_01_512": {
+      "path": "assets/images/riser_01_512.png",
+      "filter": "anisotropic8x"
+    },
     "square_ceiling_light": {
       "path": "assets/images/decals/square_ceiling_light.png",
       "filter": "point"
@@ -49,6 +61,10 @@
     },
     "square_ceiling_light_001": {
       "path": "assets/images/decals/square_ceiling_light.png",
+      "filter": "anisotropic8x"
+    },
+    "step_01": {
+      "path": "assets/images/step_01.png",
       "filter": "anisotropic8x"
     },
     "step_wall": {
@@ -2947,11 +2963,11 @@
         }
       },
       "upper": {
-        "textureId": "upper_wall",
+        "textureId": "riser_01_512",
         "uv": {
           "scale": [
             1.0,
-            1.0
+            4.0
           ],
           "offset": [
             0.0,
@@ -4966,7 +4982,7 @@
       "side": "front",
       "sectorId": 12,
       "wall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -5011,7 +5027,7 @@
       "side": "front",
       "sectorId": 17,
       "wall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -5101,7 +5117,7 @@
       "side": "front",
       "sectorId": 17,
       "wall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -5166,7 +5182,7 @@
       "side": "front",
       "sectorId": 12,
       "wall": {
-        "textureId": "wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -6124,11 +6140,11 @@
         }
       },
       "lower": {
-        "textureId": "step_wall",
+        "textureId": "step_01",
         "uv": {
           "scale": [
-            1.0,
-            1.0
+            2.0,
+            8.0
           ],
           "offset": [
             0.0,
@@ -6382,11 +6398,11 @@
         }
       },
       "upper": {
-        "textureId": "industrial_wall_01",
+        "textureId": "riser_01_512",
         "uv": {
           "scale": [
             1.0,
-            1.0
+            3.200000047683716
           ],
           "offset": [
             0.0,
@@ -6459,7 +6475,7 @@
         }
       },
       "lower": {
-        "textureId": "step_wall",
+        "textureId": "industrial_wall_01",
         "uv": {
           "scale": [
             1.0,
@@ -7415,7 +7431,7 @@
       "name": "sector_008",
       "floorZ": 7.0,
       "ceilingZ": 30.0,
-      "floorTextureId": "floor",
+      "floorTextureId": "concrete_floor1",
       "ceilingTextureId": "industrial_ceiling_1_b",
       "floorUv": {
         "scale": [
@@ -7711,8 +7727,8 @@
       "name": "sector_012",
       "floorZ": 0.0,
       "ceilingZ": 24.0,
-      "floorTextureId": "floor",
-      "ceilingTextureId": "ceiling",
+      "floorTextureId": "concrete_floor1",
+      "ceilingTextureId": "industrial_ceiling_1_b",
       "floorUv": {
         "scale": [
           1.0,
@@ -8081,8 +8097,8 @@
       "name": "sector_017",
       "floorZ": 10.0,
       "ceilingZ": 24.0,
-      "floorTextureId": "floor",
-      "ceilingTextureId": "ceiling",
+      "floorTextureId": "industrial_floor1",
+      "ceilingTextureId": "industrial_ceiling_1_b",
       "floorUv": {
         "scale": [
           1.0,
@@ -8321,9 +8337,9 @@
         27.0,
         -8.0
       ],
-      "radius": 44.0,
-      "sourceRadius": 2.0,
-      "intensity": 4.0,
+      "radius": 64.0,
+      "sourceRadius": 4.0,
+      "intensity": 3.0,
       "color": {
         "r": 255,
         "g": 246,
@@ -8359,6 +8375,6 @@
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "a679a39242208c72"
+    "sourceHash": "63dd6ea729e38144"
   }
 }
