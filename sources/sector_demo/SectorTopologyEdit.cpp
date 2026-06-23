@@ -1582,7 +1582,8 @@ bool SplitSectorTopologyLineDefAtPoint(
             existing->startVertexId,
             result.newVertexId,
             -1,
-            -1
+            -1,
+            existing->flags
     });
 
     result.secondLineDefId = AllocateSectorTopologyLineDefId(candidate);
@@ -1594,7 +1595,8 @@ bool SplitSectorTopologyLineDefAtPoint(
             result.newVertexId,
             existing->endVertexId,
             -1,
-            -1
+            -1,
+            existing->flags
     });
 
     SectorTopologyLineDef* firstLine = FindSectorTopologyLineDef(candidate, result.firstLineDefId);

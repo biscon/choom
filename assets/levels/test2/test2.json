@@ -1048,7 +1048,10 @@
       "startVertexId": 73,
       "endVertexId": 72,
       "frontSideDefId": 154,
-      "backSideDefId": 155
+      "backSideDefId": 155,
+      "flags": {
+        "blocksPlayer": true
+      }
     },
     {
       "id": 107,
@@ -8796,10 +8799,10 @@
     "walkSpeed": 3.0,
     "runSpeed": 6.0,
     "mouseSensitivity": 0.5,
-    "eyeHeight": 1.399999976158142,
+    "eyeHeight": 1.600000023841858,
     "gravity": 25.0,
     "playerRadius": 0.25,
-    "playerHeight": 1.5499999523162842,
+    "playerHeight": 1.75,
     "stepHeight": 0.4000000059604645,
     "jumpHeight": 1.0
   },

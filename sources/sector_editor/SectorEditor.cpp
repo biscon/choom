@@ -3506,6 +3506,29 @@ bool SectorEditor::FinishTopologyMaterialMutation(const char* status, engine::As
     return true;
 }
 
+bool SectorEditor::SetLineDefBlocksPlayer(int lineDefId, bool blocksPlayer)
+{
+    SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, lineDefId);
+    if (lineDef == nullptr) {
+        statusText = "Selected linedef is no longer valid.";
+        return false;
+    }
+    if (lineDef->frontSideDefId == -1 || lineDef->backSideDefId == -1) {
+        statusText = "Blocks Player is only editable on two-sided portals.";
+        return false;
+    }
+    if (lineDef->flags.blocksPlayer == blocksPlayer) {
+        return true;
+    }
+
+    lineDef->flags.blocksPlayer = blocksPlayer;
+    MarkTopologyDocumentEdited(blocksPlayer
+            ? "Enabled player blocking on portal."
+            : "Disabled player blocking on portal.");
+    RebuildSectorCollisionWorld();
+    return true;
+}
+
 void SectorEditor::ClearTransientTopologyEditStateAfterGeometryChange()
 {
     ClearStaleTopologySelection();
@@ -4517,6 +4540,8 @@ void SectorEditor::DrawPreviewUvPanel(
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
     std::string targetLabel;
+    int portalLineDefId = -1;
+    bool portalBlocksPlayer = false;
 
     if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
             || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
@@ -4539,6 +4564,15 @@ void SectorEditor::DrawPreviewUvPanel(
         }
         const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
         (void)wallPart;
+        const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
+                state.topologyMap,
+                sideDef->lineDefId);
+        if (lineDef != nullptr
+                && lineDef->frontSideDefId != -1
+                && lineDef->backSideDefId != -1) {
+            portalLineDefId = lineDef->id;
+            portalBlocksPlayer = lineDef->flags.blocksPlayer;
+        }
         targetLabel = TextFormat(
                 "%s | sideDef %d line %d",
                 SurfaceKindName(state.selectedSurface3D.kind),
@@ -4702,6 +4736,23 @@ void SectorEditor::DrawPreviewUvPanel(
         openTexturePicker();
     }
     actionX += smallActionW + gap;
+
+    if (portalLineDefId != -1) {
+        bool blocksPlayer = portalBlocksPlayer;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_linedef_blocks_player",
+                    Rectangle{actionX, actionTop, 146.0f, actionH},
+                    font,
+                    "Blocks Player",
+                    blocksPlayer)) {
+            SetLineDefBlocksPlayer(portalLineDefId, blocksPlayer);
+        }
+        actionX += 146.0f + gap;
+    }
 
     if (decalAssigned) {
         if (engine::Button(
@@ -6930,6 +6981,24 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 engine::UITextJustify::Left,
                 config.mutedTextColor);
         y += 34.0f;
+    }
+
+    if (lineDef->frontSideDefId != -1 && lineDef->backSideDefId != -1) {
+        bool blocksPlayer = lineDef->flags.blocksPlayer;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_linedef_blocks_player",
+                    Rectangle{0.0f, y, contentW, 36.0f},
+                    font,
+                    "Blocks Player",
+                    blocksPlayer)) {
+            SetLineDefBlocksPlayer(lineDef->id, blocksPlayer);
+            return true;
+        }
+        y += 36.0f + gap;
     }
 
     auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologyWallPart wallPart, TopologyMaterialLayer layer) {

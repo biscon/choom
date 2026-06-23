@@ -159,6 +159,7 @@ void TestBuildBasics()
         if (edge != nullptr) {
             Check(edge->kind == game::SectorCollisionEdgeKind::BlockingWall,
                   "one-sided edge is blocking");
+            Check(!edge->blocksPlayer, "one-sided edge defaults blocksPlayer false");
             Check(edge->neighborSectorId == 0, "blocking edge has no neighbor");
             Check(Near(edge->a, game::SectorCoordToWorldPosition2(0, 0))
                           && Near(edge->b, game::SectorCoordToWorldPosition2(64, 0)),
@@ -200,11 +201,13 @@ void TestPortalExtraction()
         if (leftPortal != nullptr && rightPortal != nullptr) {
             Check(leftPortal->kind == game::SectorCollisionEdgeKind::Portal
                           && leftPortal->neighborSectorId == 20
-                          && leftPortal->sideDefId == 2,
+                          && leftPortal->sideDefId == 2
+                          && !leftPortal->blocksPlayer,
                   "left portal references right sector and preserves sidedef ID");
             Check(rightPortal->kind == game::SectorCollisionEdgeKind::Portal
                           && rightPortal->neighborSectorId == 10
-                          && rightPortal->sideDefId == 8,
+                          && rightPortal->sideDefId == 8
+                          && !rightPortal->blocksPlayer,
                   "right portal references left sector and preserves sidedef ID");
         }
     }
@@ -212,6 +215,44 @@ void TestPortalExtraction()
     const std::vector<int>* leftNeighbors = world.GetPortalNeighbors(10);
     Check(leftNeighbors != nullptr && leftNeighbors->size() == 1 && leftNeighbors->front() == 20,
           "portal neighbor list is exposed");
+}
+
+void TestBlocksPlayerFlagExtraction()
+{
+    SectorTopologyMap map = MakeAdjacent();
+    map.lineDefs[1].flags.blocksPlayer = true;
+    game::SectorCollisionWorld world;
+    std::string error;
+    Check(world.BuildFromTopology(map, &error), "blocksPlayer portal world builds");
+
+    const std::vector<game::SectorCollisionEdge>* leftEdges = world.GetSectorEdges(10);
+    const std::vector<game::SectorCollisionEdge>* rightEdges = world.GetSectorEdges(20);
+    Check(leftEdges != nullptr && rightEdges != nullptr, "flagged portal sector edges are available");
+    if (leftEdges != nullptr && rightEdges != nullptr) {
+        const game::SectorCollisionEdge* leftPortal = FindEdge(*leftEdges, 2);
+        const game::SectorCollisionEdge* rightPortal = FindEdge(*rightEdges, 2);
+        Check(leftPortal != nullptr
+                      && leftPortal->kind == game::SectorCollisionEdgeKind::Portal
+                      && leftPortal->blocksPlayer,
+              "flagged left portal carries blocksPlayer");
+        Check(rightPortal != nullptr
+                      && rightPortal->kind == game::SectorCollisionEdgeKind::Portal
+                      && rightPortal->blocksPlayer,
+              "flagged right portal carries blocksPlayer");
+    }
+
+    map = MakeSquare();
+    map.lineDefs[0].flags.blocksPlayer = true;
+    Check(world.BuildFromTopology(map, &error), "flagged one-sided wall world builds");
+    const std::vector<game::SectorCollisionEdge>* edges = world.GetSectorEdges(10);
+    Check(edges != nullptr, "flagged one-sided wall edges are available");
+    if (edges != nullptr) {
+        const game::SectorCollisionEdge* edge = FindEdge(*edges, 1);
+        Check(edge != nullptr
+                      && edge->kind == game::SectorCollisionEdgeKind::BlockingWall
+                      && edge->blocksPlayer,
+              "one-sided wall remains blocking and carries authored flag");
+    }
 }
 
 void TestPointLookup()
@@ -306,6 +347,7 @@ int main()
     TestBuildBasics();
     TestHeightsUseRenderedWorldUnits();
     TestPortalExtraction();
+    TestBlocksPlayerFlagExtraction();
     TestPointLookup();
     TestHoles();
     TestRobustness();

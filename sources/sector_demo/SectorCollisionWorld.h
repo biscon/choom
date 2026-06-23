@@ -29,6 +29,7 @@ struct SectorCollisionEdge {
     int sectorId = 0;
     int neighborSectorId = 0;
     SectorCollisionEdgeKind kind = SectorCollisionEdgeKind::BlockingWall;
+    bool blocksPlayer = false;
 };
 
 struct SectorCollisionLoop {

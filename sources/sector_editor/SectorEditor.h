@@ -299,6 +299,7 @@ private:
     bool OpenDecalTintModal(TopologySurfaceEditTarget target);
     bool ClearSurfaceDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool ClearMiddleTexture(TopologySurfaceEditTarget target, engine::AssetManager* assets);
+    bool SetLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
     bool ResetSurface3DUv(TopologySurfaceEditTarget target, TopologyMaterialLayer layer, engine::AssetManager& assets);
     bool FitSelectedDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool FitSelectedFlatDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);

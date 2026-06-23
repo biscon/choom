@@ -105,8 +105,9 @@ Topology sidedefs can also store optional middle texture data for Doom-style
 masked portal surfaces. A sidedef middle texture renders only on a two-sided
 portal linedef, fills the visible opening from the higher floor to the lower
 ceiling, and uses alpha testing: transparent pixels are discarded rather than
-alpha-blended. Middle texture collision/blocking flags and translucent glass
-rendering are deferred.
+alpha-blended. Middle textures do not block by themselves; use the linedef
+`Blocks Player` flag when a see-through grate, bars, or window should block
+Gameplay movement.
 
 ## Sector Collision Query Layer
 
@@ -132,8 +133,12 @@ movement. Two-sided portal edges are passable only when the destination sector
 allows the current cylinder height and grounded upward steps are within the
 configured step height. Small upward and downward floor differences within step
 height snap immediately; larger downward drops start falling under gravity
-instead of teleporting to the lower floor. Middle textures do not block movement
-and do not add collision.
+instead of teleporting to the lower floor. A two-sided portal linedef with
+`Blocks Player` enabled behaves like a blocking wall for Gameplay movement,
+regardless of portal height passability. Middle textures do not independently
+block movement or add collision; middle texture plus `Blocks Player` is the
+intended grate/window/barrier workflow. One-sided walls already block. Projectile,
+sight, and monster blocking flags remain deferred.
 
 ## Sector Inspector
 
@@ -225,6 +230,7 @@ The sidedef/linedef inspector supports:
 - front/back sidedef selection
 - `Switch to opposite side` when the opposite sidedef exists
 - `Join Sectors` when the selected portal has two different adjacent sectors
+- `Blocks Player` on two-sided portal linedefs
 - wall, lower, upper, and eligible two-sided middle texture selection
 - wall, lower, upper, and middle UV scale/offset editing
 - reset UV for the selected wall/lower/upper/middle part
@@ -451,8 +457,9 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
   `Space` jumps, mouse looks, and `Shift` uses run speed. Gameplay mode follows
   the current sector floor, applies gravity while airborne, lands on floors,
   clamps against ceilings, and resolves horizontal cylinder collision against
-  topology walls and height-valid portals. Crouching, slopes, collision flags,
-  and polished drop behavior are still deferred.
+  topology walls, height-valid portals, and portals marked `Blocks Player`.
+  Crouching, slopes, projectile/sight/monster collision flags, and polished drop
+  behavior are still deferred.
 - In visible-cursor mode: click generated surfaces to select/edit them.
 
 The left tools pane `Settings` button opens editor-session preview settings.
@@ -493,7 +500,8 @@ sidedef's middle texture as a Base-only material. The Texture button opens the t
 texture picker. `Layer: Base | Decal` chooses whether Texture, UV, Reset UV,
 Fit, and Align controls edit the base material or the optional decal layer.
 Middle targets hide the layer toggle and expose only Texture, UV scale/offset,
-Reset UV, Fit Width, Fit Height, Fit Both, and Clear Middle.
+Reset UV, Fit Width, Fit Height, Fit Both, Clear Middle, and `Blocks Player`
+when the selected surface belongs to a two-sided portal linedef.
 When Decal is active and no decal texture is assigned, the panel shows
 `No decal assigned` and only the Texture picker remains available. Assigned
 decals expose UV, opacity, emissive, tint, and `Clear Decal`. Reset UV resets
@@ -512,7 +520,9 @@ from the neighbor and are not full wall-chain alignment yet.
 Equal-height portals with an assigned middle texture still generate a middle
 portal-plane surface for 3D picking. Equal-height portals without middle texture
 data have no generated 3D wall surface, so edit their sidedefs from the 2D
-linedef/sidedef inspector.
+linedef/sidedef inspector. `Blocks Player` is available in the selected
+sidedef/linedef inspector for two-sided portals even when no middle texture is
+assigned.
 
 ## Baked Lightmaps
 
@@ -564,12 +574,13 @@ deferred.
 - No player-start editing in the sector editor.
 - Gameplay preview mode has topology-based horizontal cylinder collision,
   portal height checks, floor following, gravity, landing, ceiling clamp, and
-  grounded-only jumping. Crouching, slopes, collision flags, middle-texture
-  blocking, polished drop behavior, and NPC navigation are deferred.
+  grounded-only jumping. Two-sided portal linedefs can opt into player blocking.
+  Crouching, slopes, projectile/sight/monster collision flags, polished drop
+  behavior, and NPC navigation are deferred.
 - No dynamic runtime lights or dynamic shadows.
-- No middle collision/blocking flags, translucent glass, depth sorting, middle
-  texture decals, middle emissive/tint/bloom controls, or middle Copy/Paste
-  Material controls.
+- No alpha-based middle texture collision, translucent glass, depth sorting,
+  middle texture decals, middle emissive/tint/bloom controls, or middle
+  Copy/Paste Material controls.
 - No normal maps, material maps, PBR material editing, or texture search UI.
 - Single fixed-size lightmap atlas; no multi-atlas packing.
 - No 3D geometry editing beyond texture and UV edits on generated surfaces.

@@ -265,6 +265,37 @@ SectorTopologyWallPartSettings ReadWallPart(const Json& value, const std::string
     return part;
 }
 
+SectorTopologyLineDefFlags ReadLineDefFlags(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorTopologyLineDefFlags flags;
+    const auto blocksPlayerIt = value.find("blocksPlayer");
+    if (blocksPlayerIt != value.end()) {
+        if (!blocksPlayerIt->is_boolean()) {
+            Fail(context + ".blocksPlayer must be a boolean");
+        }
+        flags.blocksPlayer = blocksPlayerIt->get<bool>();
+    }
+    return flags;
+}
+
+void ReadOptionalLineDefFlags(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        SectorTopologyLineDefFlags& outFlags)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        outFlags = {};
+        return;
+    }
+    outFlags = ReadLineDefFlags(*it, context + "." + field);
+}
+
 void ReadOptionalWallPart(
         const Json& object,
         const char* field,
@@ -472,6 +503,20 @@ bool HasNonDefaultWallPart(const SectorTopologyWallPartSettings& part)
             || HasDecal(part.decal);
 }
 
+bool HasNonDefaultLineDefFlags(const SectorTopologyLineDefFlags& flags)
+{
+    return flags.blocksPlayer;
+}
+
+Json WriteLineDefFlags(const SectorTopologyLineDefFlags& flags)
+{
+    Json value = Json::object();
+    if (flags.blocksPlayer) {
+        value["blocksPlayer"] = true;
+    }
+    return value;
+}
+
 Json WriteDecal(const SectorTopologyDecalLayer& decal, const std::string& context)
 {
     if (!std::isfinite(decal.opacity)
@@ -660,13 +705,14 @@ SectorTopologyMap ParseMap(const Json& root)
         if (!lineDefs[i].is_object()) {
             Fail(context + " must be an object");
         }
-        map.lineDefs.push_back(SectorTopologyLineDef{
-                ReadInt(lineDefs[i], "id", context),
-                ReadInt(lineDefs[i], "startVertexId", context),
-                ReadInt(lineDefs[i], "endVertexId", context),
-                ReadInt(lineDefs[i], "frontSideDefId", context),
-                ReadInt(lineDefs[i], "backSideDefId", context)
-        });
+        SectorTopologyLineDef lineDef;
+        lineDef.id = ReadInt(lineDefs[i], "id", context);
+        lineDef.startVertexId = ReadInt(lineDefs[i], "startVertexId", context);
+        lineDef.endVertexId = ReadInt(lineDefs[i], "endVertexId", context);
+        lineDef.frontSideDefId = ReadInt(lineDefs[i], "frontSideDefId", context);
+        lineDef.backSideDefId = ReadInt(lineDefs[i], "backSideDefId", context);
+        ReadOptionalLineDefFlags(lineDefs[i], "flags", context, lineDef.flags);
+        map.lineDefs.push_back(lineDef);
     }
 
     const Json& sideDefs = RequireArrayField(root, "sidedefs", "root");
@@ -806,13 +852,17 @@ Json SerializeMap(const SectorTopologyMap& map)
 
     root["linedefs"] = Json::array();
     for (const SectorTopologyLineDef* lineDef : SortedById(map.lineDefs)) {
-        root["linedefs"].push_back(Json{
+        Json lineDefJson{
                 {"id", lineDef->id},
                 {"startVertexId", lineDef->startVertexId},
                 {"endVertexId", lineDef->endVertexId},
                 {"frontSideDefId", lineDef->frontSideDefId},
                 {"backSideDefId", lineDef->backSideDefId}
-        });
+        };
+        if (HasNonDefaultLineDefFlags(lineDef->flags)) {
+            lineDefJson["flags"] = WriteLineDefFlags(lineDef->flags);
+        }
+        root["linedefs"].push_back(std::move(lineDefJson));
     }
 
     root["sidedefs"] = Json::array();

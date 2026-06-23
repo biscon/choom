@@ -42,6 +42,10 @@ struct SectorTopologyWallPartSettings {
     SectorTopologyDecalLayer decal;
 };
 
+struct SectorTopologyLineDefFlags {
+    bool blocksPlayer = false;
+};
+
 // A linedef is directed from its start vertex to its end vertex.
 // The front side follows start -> end, and the back side follows end -> start.
 // The sector owning either directed side lies to the left of that side.
@@ -51,6 +55,7 @@ struct SectorTopologyLineDef {
     int endVertexId = -1;
     int frontSideDefId = -1;
     int backSideDefId = -1;
+    SectorTopologyLineDefFlags flags;
 };
 
 struct SectorTopologySideDef {

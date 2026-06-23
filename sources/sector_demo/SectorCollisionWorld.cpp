@@ -224,6 +224,7 @@ bool AddEdgeFromLoopEdge(
     edge.lineDefId = lineDef->id;
     edge.sideDefId = sideDef->id;
     edge.sectorId = sectorId;
+    edge.blocksPlayer = lineDef->flags.blocksPlayer;
     if (!IsFinite(edge.a) || !IsFinite(edge.b)
         || DistanceSquared(edge.a, edge.b) <= CollisionPointEpsilon * CollisionPointEpsilon) {
         return SetError(
@@ -298,6 +299,7 @@ SectorCollisionMoveConfig NormalizeMoveConfig(SectorCollisionMoveConfig config)
 
 enum class PortalBlockReason {
     None,
+    PlayerFlag,
     Step,
     Ceiling
 };
@@ -311,6 +313,9 @@ PortalBlockReason PortalBlockReasonForMove(
 {
     if (edge.kind == SectorCollisionEdgeKind::BlockingWall) {
         return PortalBlockReason::None;
+    }
+    if (edge.blocksPlayer) {
+        return PortalBlockReason::PlayerFlag;
     }
 
     SectorCollisionHeights currentHeights;
@@ -607,7 +612,9 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
                 if (intoWall < 0.0f) {
                     remaining = Subtract(remaining, Scale(normal, intoWall));
                 }
-                result.hitWall = result.hitWall || edge.kind == SectorCollisionEdgeKind::BlockingWall;
+                result.hitWall = result.hitWall
+                        || edge.kind == SectorCollisionEdgeKind::BlockingWall
+                        || portalReason == PortalBlockReason::PlayerFlag;
                 result.blockedByStep = result.blockedByStep || portalReason == PortalBlockReason::Step;
                 result.blockedByCeiling =
                         result.blockedByCeiling || portalReason == PortalBlockReason::Ceiling;

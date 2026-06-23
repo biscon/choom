@@ -13,6 +13,8 @@
 namespace {
 
 using game::SectorCoord;
+using game::SectorTextureDefinition;
+using game::SectorTextureFilter;
 using game::SectorTopologyLineDef;
 using game::SectorTopologyMap;
 using game::SectorTopologySector;
@@ -199,6 +201,58 @@ void TestPortalStepAndCeilingRules()
           "portal with insufficient ceiling clearance blocks");
 }
 
+void TestBlocksPlayerPortalMovement()
+{
+    const Vector2 start = game::SectorCoordToWorldPosition2(Coord(60), Coord(32));
+
+    SectorTopologyMap map = MakeAdjacent(0.0f, 0.0f);
+    game::SectorCollisionWorld world = BuildWorld(map);
+    game::SectorCollisionMoveResult result = Move(world, start, Vector2{2.0f, 0.0f}, 10, true);
+    Check(result.currentSectorId == 20 && !result.hitWall,
+          "same-height portal without blocksPlayer is passable");
+
+    map.lineDefs[1].flags.blocksPlayer = true;
+    world = BuildWorld(map);
+    result = Move(world, start, Vector2{2.0f, 0.0f}, 10, true);
+    Check(result.currentSectorId == 10 && result.hitWall,
+          "same-height portal with blocksPlayer blocks movement");
+    Check(!result.blockedByStep && !result.blockedByCeiling,
+          "blocksPlayer portal reports wall contact instead of step or ceiling block");
+
+    map.lineDefs[1].flags.blocksPlayer = false;
+    world = BuildWorld(map);
+    result = Move(world, start, Vector2{2.0f, 0.0f}, 10, true);
+    Check(result.currentSectorId == 20 && !result.hitWall,
+          "disabling blocksPlayer restores portal passability");
+}
+
+void TestMiddleTexturePortalMovement()
+{
+    const Vector2 start = game::SectorCoordToWorldPosition2(Coord(60), Coord(32));
+    SectorTopologyMap map = MakeAdjacent(0.0f, 0.0f);
+    map.texturesById.emplace("bars", SectorTextureDefinition{
+            "bars", "textures/bars.png", SectorTextureFilter::Point});
+    map.sideDefs[1].middle.textureId = "bars";
+
+    game::SectorCollisionWorld world = BuildWorld(map);
+    game::SectorCollisionMoveResult result = Move(world, start, Vector2{2.0f, 0.0f}, 10, true);
+    Check(result.currentSectorId == 20 && !result.hitWall,
+          "middle-texture portal without blocksPlayer remains passable");
+
+    map.lineDefs[1].flags.blocksPlayer = true;
+    world = BuildWorld(map);
+    result = Move(world, start, Vector2{2.0f, 0.0f}, 10, true);
+    Check(result.currentSectorId == 10 && result.hitWall,
+          "middle-texture portal with blocksPlayer blocks movement");
+
+    const game::SectorCollisionMoveResult slide =
+            Move(world, start, Vector2{2.0f, 1.0f}, 10, true);
+    Check(slide.currentSectorId == 10 && slide.hitWall,
+          "diagonal movement into blocked middle-texture portal reports wall contact");
+    Check(slide.positionXZ.y > start.y + 0.5f,
+          "diagonal blocked middle-texture portal preserves tangential slide");
+}
+
 void TestDownwardPortalVerticalTransitions()
 {
     const Vector2 start = game::SectorCoordToWorldPosition2(Coord(60), Coord(32));
@@ -358,6 +412,8 @@ int main()
 {
     TestBlockingWallStopsAndSlides();
     TestPortalStepAndCeilingRules();
+    TestBlocksPlayerPortalMovement();
+    TestMiddleTexturePortalMovement();
     TestDownwardPortalVerticalTransitions();
     TestAirbornePortalRules();
     TestJumpingPlayerCannotAutoStepThroughPortal();

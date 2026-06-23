@@ -69,7 +69,10 @@
       "startVertexId": 2,
       "endVertexId": 3,
       "frontSideDefId": 2,
-      "backSideDefId": 8
+      "backSideDefId": 8,
+      "flags": {
+        "blocksPlayer": true
+      }
     },
     {
       "id": 3,

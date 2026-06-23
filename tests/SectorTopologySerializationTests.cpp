@@ -678,6 +678,53 @@ void TestMiddleRoundTrip()
           "middle texture settings round-trip");
 }
 
+void TestLineDefFlagsRoundTripAndDefaults()
+{
+    SectorTopologyMap original = MakeAdjacentSquares();
+    original.lineDefs[1].flags.blocksPlayer = true;
+
+    const std::string text = SaveText(original);
+    const Json saved = Json::parse(text);
+    Check(!saved["linedefs"][0].contains("flags"),
+          "default linedef flags are omitted");
+    Check(saved["linedefs"][1]["flags"]["blocksPlayer"].get<bool>(),
+          "blocksPlayer true is saved under linedef flags");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "topology with linedef flags loads");
+    Check(!loaded.lineDefs[0].flags.blocksPlayer,
+          "missing linedef flags load blocksPlayer false");
+    Check(loaded.lineDefs[1].flags.blocksPlayer,
+          "blocksPlayer true round-trips");
+
+    Json withoutBlocksPlayer = saved;
+    withoutBlocksPlayer["linedefs"][1]["flags"].erase("blocksPlayer");
+    Check(LoadText(withoutBlocksPlayer.dump(), loaded, error),
+          "linedef flags without blocksPlayer load");
+    Check(!loaded.lineDefs[1].flags.blocksPlayer,
+          "missing blocksPlayer defaults false");
+}
+
+void TestStrictLineDefFlagsValidation()
+{
+    const Json valid = Json::parse(SaveText(MakeAdjacentSquares()));
+    Json changed = valid;
+    changed["linedefs"][1]["flags"] = "not an object";
+    ExpectRejected(changed, "linedef flags wrong type is rejected");
+
+    changed = valid;
+    changed["linedefs"][1]["flags"] = Json{{"blocksPlayer", "yes"}};
+    ExpectRejected(changed, "blocksPlayer wrong type is rejected");
+
+    SectorTopologyMap output = MakeAdjacentSquares();
+    output.lineDefs[1].flags.blocksPlayer = true;
+    std::string error;
+    Check(!LoadText(changed.dump(), output, error), "invalid linedef flags load fails");
+    Check(output.lineDefs[1].flags.blocksPlayer,
+          "failed linedef flags load leaves output map unchanged");
+}
+
 void TestDecalRoundTrip()
 {
     SectorTopologyMap original = MakeSquare();
@@ -1268,6 +1315,8 @@ int main()
     TestDecalDefaultsAndOmission();
     TestMiddleDefaultsAndOmission();
     TestMiddleRoundTrip();
+    TestLineDefFlagsRoundTripAndDefaults();
+    TestStrictLineDefFlagsValidation();
     TestDecalRoundTrip();
     TestStrictDecalValidation();
     TestStrictMiddleValidation();
