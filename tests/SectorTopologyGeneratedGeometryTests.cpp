@@ -197,6 +197,21 @@ const game::SectorGeneratedSurface* FindMiddleSurface(
     return nullptr;
 }
 
+const game::SectorGeneratedSurface* FindMiddleSurfaceFacing(
+        const game::SectorGeneratedGeometry& geometry,
+        int lineDefId,
+        Vector3 normal)
+{
+    for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (surface.ref.kind == game::SectorGeneratedSurfaceKind::Middle
+                && surface.ref.topologyLineDefId == lineDefId
+                && Near(surface.normal, normal)) {
+            return &surface;
+        }
+    }
+    return nullptr;
+}
+
 double TriangleAreaXZ(const game::SectorGeneratedSurface& surface)
 {
     double area = 0.0;
@@ -304,19 +319,45 @@ void TestSingleAssignedMiddleTextureGeneratesBothFacings()
     Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "single middle texture portal builds");
     Check(CountSurfacesForLine(geometry, game::SectorGeneratedSurfaceKind::Middle, 2) == 2,
           "one assigned middle texture emits two middle surfaces");
-    const auto* front = FindMiddleSurface(geometry, 2, game::SectorTopologySideKind::Front);
-    const auto* back = FindMiddleSurface(geometry, 2, game::SectorTopologySideKind::Back);
+    const auto* front = FindMiddleSurfaceFacing(geometry, 2, Vector3{-1.0f, 0.0f, 0.0f});
+    const auto* back = FindMiddleSurfaceFacing(geometry, 2, Vector3{1.0f, 0.0f, 0.0f});
     Check(front != nullptr && back != nullptr, "single middle texture has front and back facings");
     Check(front != nullptr && front->textureId == "bars" && front->ref.topologySideDefId == 2,
-          "front middle surface uses assigned texture and front sidedef ref");
-    Check(back != nullptr && back->textureId == "bars" && back->ref.topologySideDefId == 8,
-          "back middle surface uses assigned texture and back sidedef ref");
+          "front middle surface uses assigned texture and owner sidedef ref");
+    Check(front != nullptr && front->ref.topologySide == game::SectorTopologySideKind::Front,
+          "front middle surface owner side is front");
+    Check(back != nullptr && back->textureId == "bars" && back->ref.topologySideDefId == 2,
+          "back middle surface uses assigned texture and owner sidedef ref");
+    Check(back != nullptr && back->ref.topologySide == game::SectorTopologySideKind::Front,
+          "back middle surface owner side is front");
     Check(front != nullptr && back != nullptr
                   && Near(front->normal, Vector3{-1.0f, 0.0f, 0.0f})
                   && Near(back->normal, Vector3{1.0f, 0.0f, 0.0f}),
           "middle surfaces face opposite portal sides");
     Check(front != nullptr && front->alphaTest && !front->receivesLightmap,
           "middle surface is alpha-tested and unlightmapped");
+}
+
+void TestBackAssignedMiddleTextureGeneratesOwnerRefs()
+{
+    game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::FindSectorTopologySideDef(map, 8)->middle = Part("bars");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "back middle texture portal builds");
+    Check(CountSurfacesForLine(geometry, game::SectorGeneratedSurfaceKind::Middle, 2) == 2,
+          "back assigned middle texture emits two middle surfaces");
+    const auto* front = FindMiddleSurfaceFacing(geometry, 2, Vector3{-1.0f, 0.0f, 0.0f});
+    const auto* back = FindMiddleSurfaceFacing(geometry, 2, Vector3{1.0f, 0.0f, 0.0f});
+    Check(front != nullptr && front->textureId == "bars" && front->ref.topologySideDefId == 8,
+          "front-facing surface uses back owner sidedef ref");
+    Check(front != nullptr && front->ref.topologySide == game::SectorTopologySideKind::Back,
+          "front-facing surface owner side is back");
+    Check(back != nullptr && back->textureId == "bars" && back->ref.topologySideDefId == 8,
+          "back-facing surface uses back owner sidedef ref");
+    Check(back != nullptr && back->ref.topologySide == game::SectorTopologySideKind::Back,
+          "back-facing surface owner side is back");
 }
 
 void TestBothAssignedMiddleTexturesGenerateOneFacingEach()
@@ -336,6 +377,10 @@ void TestBothAssignedMiddleTexturesGenerateOneFacingEach()
           "front middle facing preserves front middle texture");
     Check(back != nullptr && back->textureId == "back-bars",
           "back middle facing preserves back middle texture");
+    Check(front != nullptr && front->ref.topologySideDefId == 2,
+          "front middle facing refs front sidedef");
+    Check(back != nullptr && back->ref.topologySideDefId == 8,
+          "back middle facing refs back sidedef");
 }
 
 void TestMiddleTextureSpanAndSkipRules()
@@ -652,6 +697,7 @@ int main()
     TestNoMiddleTextureGeneratesNoMiddleSurfaces();
     TestOneSidedMiddleTextureIsIgnored();
     TestSingleAssignedMiddleTextureGeneratesBothFacings();
+    TestBackAssignedMiddleTextureGeneratesOwnerRefs();
     TestBothAssignedMiddleTexturesGenerateOneFacingEach();
     TestMiddleTextureSpanAndSkipRules();
     TestMiddleTextureUvsUseWallConvention();

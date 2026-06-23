@@ -643,6 +643,63 @@ void TestGeneratedGeometryPickingKeepsTopologyRefs()
     Check(upperHit.ref.topologySideDefId == 2, "upper wall ray preserves topology sidedef id");
 }
 
+void TestGeneratedGeometryPickingResolvesMiddleFacingRefs()
+{
+    game::SectorTopologyMap bothAssigned = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::FindSectorTopologySideDef(bothAssigned, 2)->middle = Part("front-bars");
+    game::FindSectorTopologySideDef(bothAssigned, 8)->middle = Part("back-bars");
+    const game::SectorGeneratedGeometry bothGeometry =
+            BuildGeometryOrFail(bothAssigned, "pick both-assigned middle geometry builds");
+
+    const game::SectorGeneratedSurfaceHit bothFrontHit = game::PickSectorGeneratedGeometry(
+            bothGeometry,
+            MakeRay(Vector3{0.25f, 1.0f, 0.25f}, Vector3{1.0f, 0.0f, 0.0f}));
+    Check(bothFrontHit.hit, "front ray hits both-assigned middle texture");
+    Check(bothFrontHit.ref.kind == game::SectorGeneratedSurfaceKind::Middle,
+          "front ray returns middle kind");
+    Check(bothFrontHit.ref.topologySideDefId == 2,
+          "front ray picks front middle sidedef");
+
+    const game::SectorGeneratedSurfaceHit bothBackHit = game::PickSectorGeneratedGeometry(
+            bothGeometry,
+            MakeRay(Vector3{1.0f, 1.0f, 0.25f}, Vector3{-1.0f, 0.0f, 0.0f}));
+    Check(bothBackHit.hit, "back ray hits both-assigned middle texture");
+    Check(bothBackHit.ref.kind == game::SectorGeneratedSurfaceKind::Middle,
+          "back ray returns middle kind");
+    Check(bothBackHit.ref.topologySideDefId == 8,
+          "back ray picks back middle sidedef");
+
+    game::SectorTopologyMap frontAssigned = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::FindSectorTopologySideDef(frontAssigned, 2)->middle = Part("bars");
+    const game::SectorGeneratedGeometry frontGeometry =
+            BuildGeometryOrFail(frontAssigned, "pick front-assigned middle geometry builds");
+    const game::SectorGeneratedSurfaceHit frontOwnerHit = game::PickSectorGeneratedGeometry(
+            frontGeometry,
+            MakeRay(Vector3{0.25f, 1.0f, 0.25f}, Vector3{1.0f, 0.0f, 0.0f}));
+    const game::SectorGeneratedSurfaceHit frontOwnerBackHit = game::PickSectorGeneratedGeometry(
+            frontGeometry,
+            MakeRay(Vector3{1.0f, 1.0f, 0.25f}, Vector3{-1.0f, 0.0f, 0.0f}));
+    Check(frontOwnerHit.hit && frontOwnerHit.ref.topologySideDefId == 2,
+          "front-side ray picks front owner for single-assigned middle texture");
+    Check(frontOwnerBackHit.hit && frontOwnerBackHit.ref.topologySideDefId == 2,
+          "back-side ray picks front owner for single-assigned middle texture");
+
+    game::SectorTopologyMap backAssigned = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::FindSectorTopologySideDef(backAssigned, 8)->middle = Part("bars");
+    const game::SectorGeneratedGeometry backGeometry =
+            BuildGeometryOrFail(backAssigned, "pick back-assigned middle geometry builds");
+    const game::SectorGeneratedSurfaceHit backOwnerFrontHit = game::PickSectorGeneratedGeometry(
+            backGeometry,
+            MakeRay(Vector3{0.25f, 1.0f, 0.25f}, Vector3{1.0f, 0.0f, 0.0f}));
+    const game::SectorGeneratedSurfaceHit backOwnerHit = game::PickSectorGeneratedGeometry(
+            backGeometry,
+            MakeRay(Vector3{1.0f, 1.0f, 0.25f}, Vector3{-1.0f, 0.0f, 0.0f}));
+    Check(backOwnerFrontHit.hit && backOwnerFrontHit.ref.topologySideDefId == 8,
+          "front-side ray picks back owner for back-assigned middle texture");
+    Check(backOwnerHit.hit && backOwnerHit.ref.topologySideDefId == 8,
+          "back-side ray picks back owner for back-assigned middle texture");
+}
+
 } // namespace
 
 int main()
@@ -657,6 +714,7 @@ int main()
     TestTriangleWindingAgainstNormals();
     TestInvalidTopologyMeshBuilder();
     TestGeneratedGeometryPickingKeepsTopologyRefs();
+    TestGeneratedGeometryPickingResolvesMiddleFacingRefs();
     if (failures == 0) {
         std::puts("Sector topology mesh builder tests passed");
     }

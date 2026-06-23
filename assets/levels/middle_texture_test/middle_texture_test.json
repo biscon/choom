@@ -198,11 +198,11 @@
         }
       },
       "middle": {
-        "textureId": "biker_chick",
+        "textureId": "metal_bars_01",
         "uv": {
           "scale": [
             1.0,
-            1.0
+            0.6666666865348816
           ],
           "offset": [
             0.0,
@@ -479,19 +479,6 @@
             0.0
           ]
         }
-      },
-      "middle": {
-        "textureId": "metal_bars_01",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
       }
     }
   ],
@@ -529,7 +516,7 @@
         "b": 160,
         "a": 255
       },
-      "ambientIntensity": 0.75,
+      "ambientIntensity": 0.20000000298023224,
       "defaultWall": {
         "textureId": "wall",
         "uv": {
@@ -603,7 +590,7 @@
         "b": 220,
         "a": 255
       },
-      "ambientIntensity": 0.75,
+      "ambientIntensity": 0.20000000298023224,
       "defaultWall": {
         "textureId": "wall",
         "uv": {
@@ -645,11 +632,35 @@
       }
     }
   ],
-  "staticLights": [],
+  "staticLights": [
+    {
+      "id": 1,
+      "position": [
+        48.0,
+        14.399999618530273,
+        32.0
+      ],
+      "radius": 64.0,
+      "sourceRadius": 2.0,
+      "intensity": 3.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    }
+  ],
   "lightmapSettings": {
     "ambientOcclusionRadius": 8.0,
     "ambientOcclusionStrength": 0.0,
     "indirectBounceRadius": 12.0,
     "indirectBounceStrength": 0.0
+  },
+  "bakedLightmap": {
+    "path": "assets/levels/middle_texture_test/middle_texture_test.lightmap.png",
+    "width": 2048,
+    "height": 2048,
+    "sourceHash": "3c888feeaa4e44a7"
   }
 }
