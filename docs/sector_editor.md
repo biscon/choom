@@ -108,6 +108,23 @@ ceiling, and uses alpha testing: transparent pixels are discarded rather than
 alpha-blended. Middle texture collision/blocking flags and translucent glass
 rendering are deferred.
 
+## Sector Collision Query Layer
+
+Gameplay/collision work now has a reusable `SectorCollisionWorld` query layer
+built from the topology map. It derives collision data from 2D sector loops,
+one-sided boundaries, two-sided portal adjacency, and sector floor/ceiling
+heights.
+
+The collision query layer does not use generated render triangles and does not
+use Recast/Detour. It stores sector boundary loops in world X/Z coordinates for
+point-in-sector lookup, classifies one-sided edges as blocking walls, and
+classifies two-sided edges as portals with neighbor sector IDs.
+
+This is data/query support only. Gameplay preview movement remains noclip:
+movement collision, gravity, floor following, floor snapping, stepping, portal
+crossing rules, and jumping are deferred. Middle textures do not block movement
+and do not add collision.
+
 ## Sector Inspector
 
 Selecting a topology sector opens the sector inspector. It edits:

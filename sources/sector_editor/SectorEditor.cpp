@@ -2893,6 +2893,16 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                     state.fpsControllerConfig,
                     controllerInput,
                     dt);
+            if (state.sectorCollisionWorldValid) {
+                state.previewCollisionSectorId =
+                        state.sectorCollisionWorld.FindSectorContainingPointPreferCurrent(
+                                Vector2{
+                                        state.fpsControllerState.feetPosition.x,
+                                        state.fpsControllerState.feetPosition.z},
+                                state.previewCollisionSectorId);
+            } else {
+                state.previewCollisionSectorId = 0;
+            }
             ApplyGameplayPoseToPreview();
         }
         UpdatePreview3DSelection(input);
@@ -4258,23 +4268,38 @@ void SectorEditor::DrawPreviewOverlay(
             engine::UITextJustify::Left,
             config.mutedTextColor
     );
+    std::string collisionStatus;
+    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        if (state.sectorCollisionWorldValid) {
+            collisionStatus = state.previewCollisionSectorId == 0
+                    ? " | collision sector none"
+                    : " | collision sector " + std::to_string(state.previewCollisionSectorId);
+        } else {
+            collisionStatus = " | collision unavailable";
+        }
+    }
     engine::Text(
             config,
             assets,
             Rectangle{panel.x + 18.0f, panel.y + 92.0f, panel.width - 36.0f, 30.0f},
             font,
             TextFormat(
-                    "pos %.2f %.2f %.2f | sectors %zu | batches %zu | triangles %d",
+                    "pos %.2f %.2f %.2f | sectors %zu | batches %zu | triangles %d%s",
                     position.x,
                     position.y,
                     position.z,
                     preview.SectorCount(),
                     preview.BatchCount(),
-                    preview.TriangleCount()
+                    preview.TriangleCount(),
+                    collisionStatus.c_str()
             ),
             engine::UITextJustify::Left,
             config.mutedTextColor
     );
+    const char* previewStatusText = statusText.empty() ? "Ready" : statusText.c_str();
+    const char* collisionWarningText = state.sectorCollisionWorldWarning.empty()
+            ? previewStatusText
+            : state.sectorCollisionWorldWarning.c_str();
     engine::Text(
             config,
             assets,
@@ -4289,14 +4314,14 @@ void SectorEditor::DrawPreviewOverlay(
                             state.fpsControllerConfig.walkSpeed,
                             state.fpsControllerConfig.runSpeed,
                             state.fpsControllerConfig.eyeHeight,
-                            statusText.empty() ? "Ready" : statusText.c_str(),
+                            collisionWarningText,
                             state.topologyDocumentDirty ? " | unsaved changes" : "")
                     : TextFormat(
                             "assets %.0f%% | Lightmap: %s | AO: %s | %s%s",
                             preview.AssetProgress(assets) * 100.0f,
                             preview.LightmapStatusText(),
                             state.useBakedAmbientOcclusion ? "on" : "off",
-                            statusText.empty() ? "Ready" : statusText.c_str(),
+                            collisionWarningText,
                             state.topologyDocumentDirty ? " | unsaved changes" : ""),
             engine::UITextJustify::Left,
             state.topologyDocumentDirty ? Color{236, 196, 92, 255} : config.mutedTextColor
@@ -8465,6 +8490,9 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
 
     std::string error;
     if (!preview.Rebuild(assets, state.topologyMap, "sector_editor_preview", error)) {
+        state.sectorCollisionWorldValid = false;
+        state.sectorCollisionWorldWarning.clear();
+        state.previewCollisionSectorId = 0;
         state.mode = SectorEditorMode::Edit2D;
         if (StartsWith(error, "Preview failed:")) {
             statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
@@ -8486,6 +8514,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
+    RebuildSectorCollisionWorld();
     statusText = TextFormat(
             "3D mode rebuilt: %zu batches, %d triangles",
             preview.BatchCount(),
@@ -8534,11 +8563,49 @@ void SectorEditor::TogglePreviewControlMode()
                 preview.Pose(),
                 state.fpsControllerConfig);
         state.previewControlMode = SectorPreviewControlMode::Gameplay;
+        if (state.sectorCollisionWorldValid) {
+            state.previewCollisionSectorId =
+                    state.sectorCollisionWorld.FindSectorContainingPointPreferCurrent(
+                            Vector2{
+                                    state.fpsControllerState.feetPosition.x,
+                                    state.fpsControllerState.feetPosition.z},
+                            state.previewCollisionSectorId);
+        } else {
+            state.previewCollisionSectorId = 0;
+        }
     } else {
         ApplyGameplayPoseToPreview();
         state.previewControlMode = SectorPreviewControlMode::FreeFly;
+        state.previewCollisionSectorId = 0;
     }
     statusText = TextFormat("3D control mode: %s", PreviewControlModeName(state.previewControlMode));
+}
+
+bool SectorEditor::RebuildSectorCollisionWorld()
+{
+    std::string error;
+    if (!state.sectorCollisionWorld.BuildFromTopology(state.topologyMap, &error)) {
+        state.sectorCollisionWorldValid = false;
+        state.previewCollisionSectorId = 0;
+        state.sectorCollisionWorldWarning = error.empty()
+                ? "Collision world build failed"
+                : "Collision world build failed: " + error;
+        return false;
+    }
+
+    state.sectorCollisionWorldValid = true;
+    state.sectorCollisionWorldWarning.clear();
+    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        state.previewCollisionSectorId =
+                state.sectorCollisionWorld.FindSectorContainingPointPreferCurrent(
+                        Vector2{
+                                state.fpsControllerState.feetPosition.x,
+                                state.fpsControllerState.feetPosition.z},
+                        state.previewCollisionSectorId);
+    } else {
+        state.previewCollisionSectorId = 0;
+    }
+    return true;
 }
 
 void SectorEditor::OpenPreviewSettingsModal()
@@ -10476,6 +10543,9 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
 
     std::string error;
     if (!preview.Rebuild(assets, state.topologyMap, "sector_editor_preview", error)) {
+        state.sectorCollisionWorldValid = false;
+        state.sectorCollisionWorldWarning.clear();
+        state.previewCollisionSectorId = 0;
         if (StartsWith(error, "Preview failed:")) {
             statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
         } else {
@@ -10492,6 +10562,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
     state.selectedTopologySurface3D = selectedStillValid && IsValidTopologySurfaceEditTarget(selectedTarget)
             ? selectedTarget
             : TopologySurfaceEditTarget{};
+    RebuildSectorCollisionWorld();
     return true;
 }
 

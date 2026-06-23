@@ -242,6 +242,7 @@ private:
     SectorMeshPreviewPose ActivePreviewPose() const;
     void ApplyGameplayPoseToPreview();
     void TogglePreviewControlMode();
+    bool RebuildSectorCollisionWorld();
     void OpenPreviewSettingsModal();
     void ApplyPreviewSettingsModal();
     void RefreshDefaultTextures();

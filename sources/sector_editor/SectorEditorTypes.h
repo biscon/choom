@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/ui/UI.h"
+#include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshPreview.h"
@@ -348,6 +349,10 @@ struct SectorEditorState {
     SectorPreviewControlMode previewControlMode = SectorPreviewControlMode::FreeFly;
     SectorFpsControllerConfig fpsControllerConfig;
     SectorFpsControllerState fpsControllerState;
+    SectorCollisionWorld sectorCollisionWorld;
+    bool sectorCollisionWorldValid = false;
+    std::string sectorCollisionWorldWarning;
+    int previewCollisionSectorId = 0;
     bool hasPreviewPose = false;
     SectorMeshPreviewPose lastPreviewPose = {};
     SectorSurfaceHit hoveredSurface3D;
