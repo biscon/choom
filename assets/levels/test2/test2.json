@@ -8796,7 +8796,11 @@
     "walkSpeed": 3.0,
     "runSpeed": 6.0,
     "mouseSensitivity": 0.5,
-    "eyeHeight": 5.0
+    "eyeHeight": 1.399999976158142,
+    "gravity": 25.0,
+    "playerRadius": 0.25,
+    "playerHeight": 1.5499999523162842,
+    "stepHeight": 0.4000000059604645
   },
   "bakedLightmap": {
     "path": "assets/levels/test2/test2.lightmap.png",

@@ -46,6 +46,30 @@ struct SectorCollisionSector {
     std::vector<int> portalNeighbors;
 };
 
+struct SectorCollisionMoveConfig {
+    float radius = 0.25f;
+    float playerHeight = 1.6f;
+    float stepHeight = 0.25f;
+    int maxIterations = 4;
+};
+
+struct SectorCollisionMoveState {
+    Vector2 positionXZ = {};
+    float feetY = 0.0f;
+    int currentSectorId = 0;
+    bool grounded = false;
+};
+
+struct SectorCollisionMoveResult {
+    Vector2 positionXZ = {};
+    int currentSectorId = 0;
+    bool hitWall = false;
+    bool blockedByStep = false;
+    bool blockedByCeiling = false;
+};
+
+Vector2 GetSectorCollisionEdgeInwardNormal(const SectorCollisionEdge& edge);
+
 class SectorCollisionWorld {
 public:
     bool BuildFromTopology(const SectorTopologyMap& map, std::string* errorMessage = nullptr);
@@ -57,6 +81,10 @@ public:
 
     int FindSectorContainingPoint(Vector2 xz) const;
     int FindSectorContainingPointPreferCurrent(Vector2 xz, int currentSectorId) const;
+    SectorCollisionMoveResult ResolveMovement(
+            const SectorCollisionMoveState& moveState,
+            Vector2 desiredDelta,
+            const SectorCollisionMoveConfig& config) const;
 
 private:
     bool SectorContainsPoint(const SectorCollisionSector& sector, Vector2 xz) const;

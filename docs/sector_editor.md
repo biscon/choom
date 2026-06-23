@@ -121,12 +121,18 @@ point-in-sector lookup, classifies one-sided edges as blocking walls, and
 classifies two-sided edges as portals with neighbor sector IDs.
 
 Gameplay preview uses this query layer for current-sector floor/ceiling lookup,
-simple gravity, landing, floor following, and ceiling clamp. Topology sector
-heights remain authored JSON values, but collision floor/ceiling heights are
-converted to the same runtime world-space Y units as rendered geometry.
-Horizontal movement is still noclip: wall collision, portal crossing rules,
-stepping, and jumping are deferred. Middle textures do not block movement and
-do not add collision.
+horizontal player-cylinder collision, simple gravity, landing, floor following,
+and ceiling clamp. Topology sector heights remain authored JSON values, but
+collision floor/ceiling heights are converted to the same runtime world-space Y
+units as rendered geometry.
+
+Gameplay horizontal collision is based on 2D topology plus sector
+floor/ceiling heights, not generated render meshes. One-sided edges block
+movement. Two-sided portal edges are passable only when the destination sector
+allows the current cylinder height and grounded upward steps are within the
+configured step height. Downward grounded portal movement is currently allowed
+and snaps/follows the lower floor. Middle textures do not block movement and do
+not add collision.
 
 ## Sector Inspector
 
@@ -441,26 +447,30 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 - In `FreeFly` mouse-look mode: `WASD` move, mouse looks, `Space` moves up,
   `Ctrl` moves down.
 - In `Gameplay` mouse-look mode: `WASD` moves horizontally relative to yaw,
-  mouse looks, and `Shift` uses run speed. Gameplay mode has vertical-only
-  physics: it follows the current sector floor, applies gravity while airborne,
-  lands on floors, and clamps the camera height against ceilings. Horizontal
-  wall collision, portal blocking, stepping, and jumping are still deferred.
+  mouse looks, and `Shift` uses run speed. Gameplay mode follows the current
+  sector floor, applies gravity while airborne, lands on floors, clamps against
+  ceilings, and resolves horizontal cylinder collision against topology walls
+  and height-valid portals. Jumping, crouching, slopes, collision flags, and
+  polished drop behavior are still deferred.
 - In visible-cursor mode: click generated surfaces to select/edit them.
 
 The left tools pane `Settings` button opens editor-session preview settings.
 The same settings are available from the 3D preview overlay while its UI is
 visible. The modal edits walk speed, run speed, mouse sensitivity, camera eye
-height, and gravity. The gameplay controller stores a feet/body position; the
-camera eye is computed by adding the configured eye height. Changing eye height
-while in Gameplay keeps the feet/body position fixed unless the current sector
-cannot fit the configured eye height. Gravity uses a positive magnitude; `0`
-disables falling.
+height, gravity, player radius, player height, and step height. Gameplay
+Preview Settings use runtime/world units, not authored units. The gameplay
+controller stores a feet/body position; the camera eye is computed by adding
+the configured eye height, while player height is the collision cylinder height
+used for ceiling clearance. Player height is normalized to at least eye height.
+Step height defaults to `0.25` world units. Gravity uses a positive magnitude;
+`0` disables falling.
 
-Grounded Gameplay movement snaps feet to the current sector floor. Because
-horizontal collision and stepping are not implemented yet, noclip movement can
-cross walls or portals and then snap to the newly queried sector floor.
-The Gameplay overlay reports floor, feet, velocity, and gravity in runtime
-world-space values.
+Grounded Gameplay movement snaps feet to the current sector floor. Same-floor
+and small upward portals within step height are passable, too-high upward
+portals block, low-ceiling portals block, and downward portals are passable for
+now. The Gameplay overlay reports collision state, current sector,
+grounded/falling state, recent wall/step/ceiling blocks, radius, step height,
+floor, feet, velocity, and gravity in runtime world-space values.
 
 3D picking maps generated surfaces back to topology:
 
@@ -543,9 +553,10 @@ deferred.
 - No external texture import/copy; texture files must already exist under
   `assets/images`.
 - No player-start editing in the sector editor.
-- Gameplay preview mode has vertical floor following and gravity only;
-  horizontal collision, portal blocking, stepping, jumping, crouching, slopes,
-  and player-radius/cylinder collision are deferred.
+- Gameplay preview mode has topology-based horizontal cylinder collision,
+  portal height checks, floor following, and gravity. Jumping, crouching,
+  slopes, collision flags, middle-texture blocking, polished drop behavior, and
+  NPC navigation are deferred.
 - No dynamic runtime lights or dynamic shadows.
 - No middle collision/blocking flags, translucent glass, depth sorting, middle
   texture decals, middle emissive/tint/bloom controls, or middle Copy/Paste

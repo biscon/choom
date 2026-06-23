@@ -14,9 +14,15 @@ constexpr float PreviewRunSpeedMax = 200.0f;
 constexpr float PreviewMouseSensitivityMin = 0.01f;
 constexpr float PreviewMouseSensitivityMax = 20.0f;
 constexpr float PreviewEyeHeightMin = 0.1f;
-constexpr float PreviewEyeHeightMax = 20.0f;
+constexpr float PreviewEyeHeightMax = 3.0f;
 constexpr float PreviewGravityMin = 0.0f;
 constexpr float PreviewGravityMax = 200.0f;
+constexpr float PreviewPlayerRadiusMin = 0.05f;
+constexpr float PreviewPlayerRadiusMax = 2.0f;
+constexpr float PreviewPlayerHeightMin = 0.5f;
+constexpr float PreviewPlayerHeightMax = 3.0f;
+constexpr float PreviewStepHeightMin = 0.0f;
+constexpr float PreviewStepHeightMax = 2.0f;
 
 float ClampFinite(float value, float fallback, float minValue, float maxValue)
 {
@@ -107,6 +113,22 @@ SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings setti
             defaults.gravity,
             PreviewGravityMin,
             PreviewGravityMax);
+    settings.playerRadius = ClampFinite(
+            settings.playerRadius,
+            defaults.playerRadius,
+            PreviewPlayerRadiusMin,
+            PreviewPlayerRadiusMax);
+    settings.playerHeight = ClampFinite(
+            settings.playerHeight,
+            defaults.playerHeight,
+            PreviewPlayerHeightMin,
+            PreviewPlayerHeightMax);
+    settings.playerHeight = std::max(settings.playerHeight, settings.eyeHeight);
+    settings.stepHeight = ClampFinite(
+            settings.stepHeight,
+            defaults.stepHeight,
+            PreviewStepHeightMin,
+            PreviewStepHeightMax);
     return settings;
 }
 

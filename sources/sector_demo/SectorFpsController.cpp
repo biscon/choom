@@ -44,6 +44,9 @@ SectorFpsControllerConfig SectorFpsControllerConfigFromPreviewSettings(
     config.mouseSensitivity = settings.mouseSensitivity;
     config.eyeHeight = settings.eyeHeight;
     config.gravity = settings.gravity;
+    config.playerRadius = settings.playerRadius;
+    config.playerHeight = settings.playerHeight;
+    config.stepHeight = settings.stepHeight;
     return config;
 }
 
@@ -56,6 +59,9 @@ SectorPreviewSettings SectorPreviewSettingsFromFpsControllerConfig(
     settings.mouseSensitivity = config.mouseSensitivity;
     settings.eyeHeight = config.eyeHeight;
     settings.gravity = config.gravity;
+    settings.playerRadius = config.playerRadius;
+    settings.playerHeight = config.playerHeight;
+    settings.stepHeight = config.stepHeight;
     return NormalizeSectorPreviewSettings(settings);
 }
 
@@ -98,11 +104,10 @@ SectorFpsControllerState SectorFpsControllerStateFromCameraPose(
     };
 }
 
-void UpdateSectorFpsController(
+void UpdateSectorFpsMouseLook(
         SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
-        const SectorFpsControllerInput& input,
-        float dt)
+        const SectorFpsControllerInput& input)
 {
     const SectorFpsControllerConfig normalized = NormalizeSectorFpsControllerConfig(config);
     if (input.mouseLookEnabled) {
@@ -110,7 +115,15 @@ void UpdateSectorFpsController(
         state.pitchRadians -= input.mouseDelta.y * MouseRadiansPerPixel * normalized.mouseSensitivity;
         state.pitchRadians = ClampSectorFpsPitch(state.pitchRadians);
     }
+}
 
+Vector2 ComputeSectorFpsHorizontalMovementDelta(
+        const SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        const SectorFpsControllerInput& input,
+        float dt)
+{
+    const SectorFpsControllerConfig normalized = NormalizeSectorFpsControllerConfig(config);
     Vector3 forward{std::cos(state.yawRadians), 0.0f, std::sin(state.yawRadians)};
     Vector3 right{-forward.z, 0.0f, forward.x};
     Vector3 movement{};
@@ -130,8 +143,22 @@ void UpdateSectorFpsController(
     if (Vector3LengthSqr(movement) > 0.0001f && dt > 0.0f) {
         movement = Vector3Normalize(movement);
         const float speed = input.run ? normalized.runSpeed : normalized.walkSpeed;
-        state.feetPosition = Vector3Add(state.feetPosition, Vector3Scale(movement, speed * dt));
+        movement = Vector3Scale(movement, speed * dt);
+        return Vector2{movement.x, movement.z};
     }
+    return Vector2{};
+}
+
+void UpdateSectorFpsController(
+        SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        const SectorFpsControllerInput& input,
+        float dt)
+{
+    UpdateSectorFpsMouseLook(state, config, input);
+    const Vector2 movement = ComputeSectorFpsHorizontalMovementDelta(state, config, input, dt);
+    state.feetPosition.x += movement.x;
+    state.feetPosition.z += movement.y;
 }
 
 SectorFpsVerticalResult UpdateSectorFpsVerticalPhysics(
@@ -151,7 +178,7 @@ SectorFpsVerticalResult UpdateSectorFpsVerticalPhysics(
         return result;
     }
 
-    const float maxFeetY = context.ceilingZ - normalized.eyeHeight;
+    const float maxFeetY = context.ceilingZ - normalized.playerHeight;
     const bool canFit = maxFeetY >= context.floorZ;
     if (!canFit) {
         state.feetPosition.y = context.floorZ;

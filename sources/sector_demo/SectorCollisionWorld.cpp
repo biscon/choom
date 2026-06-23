@@ -13,6 +13,7 @@ namespace game {
 namespace {
 
 constexpr float CollisionPointEpsilon = 0.001f;
+constexpr float CollisionMoveEpsilon = 0.0001f;
 
 enum class PointLoopContainment {
     Outside,
@@ -38,6 +39,59 @@ float DistanceSquared(Vector2 a, Vector2 b)
     const float dx = b.x - a.x;
     const float dy = b.y - a.y;
     return dx * dx + dy * dy;
+}
+
+float Dot(Vector2 a, Vector2 b)
+{
+    return a.x * b.x + a.y * b.y;
+}
+
+float LengthSquared(Vector2 value)
+{
+    return Dot(value, value);
+}
+
+float Length(Vector2 value)
+{
+    return std::sqrt(LengthSquared(value));
+}
+
+Vector2 Add(Vector2 a, Vector2 b)
+{
+    return Vector2{a.x + b.x, a.y + b.y};
+}
+
+Vector2 Subtract(Vector2 a, Vector2 b)
+{
+    return Vector2{a.x - b.x, a.y - b.y};
+}
+
+Vector2 Scale(Vector2 value, float scale)
+{
+    return Vector2{value.x * scale, value.y * scale};
+}
+
+Vector2 NormalizeOrZero(Vector2 value)
+{
+    const float length = Length(value);
+    if (!(length > CollisionMoveEpsilon) || !std::isfinite(length)) {
+        return Vector2{};
+    }
+    return Scale(value, 1.0f / length);
+}
+
+Vector2 ClosestPointOnSegment(Vector2 point, Vector2 a, Vector2 b)
+{
+    const float lengthSquared = DistanceSquared(a, b);
+    if (!(lengthSquared > 0.0f) || !std::isfinite(lengthSquared)) {
+        return a;
+    }
+
+    const float t = std::clamp(
+            Dot(Subtract(point, a), Subtract(b, a)) / lengthSquared,
+            0.0f,
+            1.0f);
+    return Add(a, Scale(Subtract(b, a), t));
 }
 
 bool PointNearSegment(Vector2 point, Vector2 a, Vector2 b, float epsilon)
@@ -224,7 +278,77 @@ bool AddEdgesFromLoop(
     return true;
 }
 
+SectorCollisionMoveConfig NormalizeMoveConfig(SectorCollisionMoveConfig config)
+{
+    if (!std::isfinite(config.radius)) {
+        config.radius = 0.25f;
+    }
+    if (!std::isfinite(config.playerHeight)) {
+        config.playerHeight = 1.6f;
+    }
+    if (!std::isfinite(config.stepHeight)) {
+        config.stepHeight = 0.25f;
+    }
+    config.radius = std::clamp(config.radius, 0.001f, 64.0f);
+    config.playerHeight = std::clamp(config.playerHeight, 0.001f, 64.0f);
+    config.stepHeight = std::clamp(config.stepHeight, 0.0f, 64.0f);
+    config.maxIterations = std::clamp(config.maxIterations, 1, 16);
+    return config;
+}
+
+enum class PortalBlockReason {
+    None,
+    Step,
+    Ceiling
+};
+
+PortalBlockReason PortalBlockReasonForMove(
+        const SectorCollisionWorld& world,
+        int currentSectorId,
+        const SectorCollisionEdge& edge,
+        const SectorCollisionMoveState& moveState,
+        const SectorCollisionMoveConfig& config)
+{
+    if (edge.kind == SectorCollisionEdgeKind::BlockingWall) {
+        return PortalBlockReason::None;
+    }
+
+    SectorCollisionHeights currentHeights;
+    SectorCollisionHeights neighborHeights;
+    if (!world.GetSectorFloorCeiling(currentSectorId, &currentHeights)
+        || !world.GetSectorFloorCeiling(edge.neighborSectorId, &neighborHeights)) {
+        return PortalBlockReason::Ceiling;
+    }
+
+    if (moveState.grounded) {
+        const float floorDelta = neighborHeights.floorZ - currentHeights.floorZ;
+        if (floorDelta > config.stepHeight + CollisionMoveEpsilon) {
+            return PortalBlockReason::Step;
+        }
+        if (neighborHeights.floorZ + config.playerHeight
+            > neighborHeights.ceilingZ + CollisionMoveEpsilon) {
+            return PortalBlockReason::Ceiling;
+        }
+        return PortalBlockReason::None;
+    }
+
+    if (moveState.feetY + CollisionMoveEpsilon < neighborHeights.floorZ) {
+        return PortalBlockReason::Step;
+    }
+    if (moveState.feetY + config.playerHeight
+        > neighborHeights.ceilingZ + CollisionMoveEpsilon) {
+        return PortalBlockReason::Ceiling;
+    }
+    return PortalBlockReason::None;
+}
+
 } // namespace
+
+Vector2 GetSectorCollisionEdgeInwardNormal(const SectorCollisionEdge& edge)
+{
+    const Vector2 d = Subtract(edge.b, edge.a);
+    return NormalizeOrZero(Vector2{-d.y, d.x});
+}
 
 bool SectorCollisionWorld::BuildFromTopology(
         const SectorTopologyMap& map,
@@ -392,6 +516,123 @@ int SectorCollisionWorld::FindSectorContainingPointPreferCurrent(
     }
 
     return FindSectorContainingPoint(xz);
+}
+
+SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
+        const SectorCollisionMoveState& moveState,
+        Vector2 desiredDelta,
+        const SectorCollisionMoveConfig& moveConfig) const
+{
+    const SectorCollisionMoveConfig config = NormalizeMoveConfig(moveConfig);
+    SectorCollisionMoveResult result;
+    result.positionXZ = moveState.positionXZ;
+    result.currentSectorId = moveState.currentSectorId;
+
+    if (!IsFinite(moveState.positionXZ) || !IsFinite(desiredDelta)) {
+        return result;
+    }
+
+    if (FindSector(result.currentSectorId) == nullptr) {
+        result.currentSectorId = FindSectorContainingPoint(moveState.positionXZ);
+    }
+    if (result.currentSectorId == 0) {
+        return result;
+    }
+
+    const float desiredLength = Length(desiredDelta);
+    if (!(desiredLength > CollisionMoveEpsilon)) {
+        return result;
+    }
+
+    const float maxSubstep = std::max(config.radius * 0.5f, 0.05f);
+    const int substeps = std::clamp(
+            static_cast<int>(std::ceil(desiredLength / maxSubstep)),
+            1,
+            64);
+    const Vector2 substepDelta = Scale(desiredDelta, 1.0f / static_cast<float>(substeps));
+
+    for (int substep = 0; substep < substeps; ++substep) {
+        const Vector2 previousPosition = result.positionXZ;
+        const int previousSectorId = result.currentSectorId;
+        Vector2 candidate = Add(result.positionXZ, substepDelta);
+        Vector2 remaining = substepDelta;
+
+        for (int iteration = 0; iteration < config.maxIterations; ++iteration) {
+            const std::vector<SectorCollisionEdge>* edges = GetSectorEdges(result.currentSectorId);
+            if (edges == nullptr) {
+                break;
+            }
+
+            bool changed = false;
+            for (const SectorCollisionEdge& edge : *edges) {
+                PortalBlockReason portalReason = PortalBlockReason::None;
+                bool blocking = edge.kind == SectorCollisionEdgeKind::BlockingWall;
+                if (!blocking) {
+                    portalReason = PortalBlockReasonForMove(
+                            *this,
+                            result.currentSectorId,
+                            edge,
+                            moveState,
+                            config);
+                    blocking = portalReason != PortalBlockReason::None;
+                }
+                if (!blocking) {
+                    continue;
+                }
+
+                const Vector2 closest = ClosestPointOnSegment(candidate, edge.a, edge.b);
+                const Vector2 separation = Subtract(candidate, closest);
+                const float distanceSquared = LengthSquared(separation);
+                const float radiusSquared = config.radius * config.radius;
+                if (distanceSquared >= radiusSquared - CollisionMoveEpsilon) {
+                    continue;
+                }
+
+                Vector2 normal = NormalizeOrZero(separation);
+                const Vector2 inward = GetSectorCollisionEdgeInwardNormal(edge);
+                if (Dot(normal, inward) < 0.0f) {
+                    normal = inward;
+                }
+                if (LengthSquared(normal) <= CollisionMoveEpsilon) {
+                    normal = inward;
+                }
+                if (LengthSquared(normal) <= CollisionMoveEpsilon) {
+                    continue;
+                }
+
+                const float distance = std::sqrt(std::max(distanceSquared, 0.0f));
+                const float penetration = config.radius - distance + CollisionMoveEpsilon;
+                candidate = Add(candidate, Scale(normal, penetration));
+                const float intoWall = Dot(remaining, normal);
+                if (intoWall < 0.0f) {
+                    remaining = Subtract(remaining, Scale(normal, intoWall));
+                }
+                result.hitWall = result.hitWall || edge.kind == SectorCollisionEdgeKind::BlockingWall;
+                result.blockedByStep = result.blockedByStep || portalReason == PortalBlockReason::Step;
+                result.blockedByCeiling =
+                        result.blockedByCeiling || portalReason == PortalBlockReason::Ceiling;
+                changed = true;
+            }
+
+            if (!changed) {
+                break;
+            }
+        }
+
+        const int resolvedSectorId =
+                FindSectorContainingPointPreferCurrent(candidate, result.currentSectorId);
+        if (resolvedSectorId == 0) {
+            result.positionXZ = previousPosition;
+            result.currentSectorId = previousSectorId;
+            result.hitWall = true;
+            break;
+        }
+
+        result.positionXZ = candidate;
+        result.currentSectorId = resolvedSectorId;
+    }
+
+    return result;
 }
 
 bool SectorCollisionWorld::SectorContainsPoint(

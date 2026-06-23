@@ -332,6 +332,18 @@ SectorPreviewSettings ReadPreviewSettings(const Json& value, const std::string& 
     if (gravityIt != value.end()) {
         settings.gravity = ReadFloat(value, "gravity", context);
     }
+    const auto playerRadiusIt = value.find("playerRadius");
+    if (playerRadiusIt != value.end()) {
+        settings.playerRadius = ReadFloat(value, "playerRadius", context);
+    }
+    const auto playerHeightIt = value.find("playerHeight");
+    if (playerHeightIt != value.end()) {
+        settings.playerHeight = ReadFloat(value, "playerHeight", context);
+    }
+    const auto stepHeightIt = value.find("stepHeight");
+    if (stepHeightIt != value.end()) {
+        settings.stepHeight = ReadFloat(value, "stepHeight", context);
+    }
     return NormalizeSectorPreviewSettings(settings);
 }
 
@@ -526,13 +538,19 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
     RequireFinite(settings.mouseSensitivity, "previewSettings.mouseSensitivity");
     RequireFinite(settings.eyeHeight, "previewSettings.eyeHeight");
     RequireFinite(settings.gravity, "previewSettings.gravity");
+    RequireFinite(settings.playerRadius, "previewSettings.playerRadius");
+    RequireFinite(settings.playerHeight, "previewSettings.playerHeight");
+    RequireFinite(settings.stepHeight, "previewSettings.stepHeight");
     const SectorPreviewSettings normalized = NormalizeSectorPreviewSettings(settings);
     return Json{
             {"walkSpeed", normalized.walkSpeed},
             {"runSpeed", normalized.runSpeed},
             {"mouseSensitivity", normalized.mouseSensitivity},
             {"eyeHeight", normalized.eyeHeight},
-            {"gravity", normalized.gravity}
+            {"gravity", normalized.gravity},
+            {"playerRadius", normalized.playerRadius},
+            {"playerHeight", normalized.playerHeight},
+            {"stepHeight", normalized.stepHeight}
     };
 }
 

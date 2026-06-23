@@ -34,19 +34,19 @@ void TestEyePositionUsesFeetAndEyeHeight()
     game::SectorFpsControllerState state;
     state.feetPosition = Vector3{1.0f, 2.0f, 3.0f};
     game::SectorFpsControllerConfig config;
-    config.eyeHeight = 5.0f;
-    Check(Near(game::SectorFpsControllerEyePosition(state, config), Vector3{1.0f, 7.0f, 3.0f}),
+    config.eyeHeight = 1.5f;
+    Check(Near(game::SectorFpsControllerEyePosition(state, config), Vector3{1.0f, 3.5f, 3.0f}),
             "eye position adds eye height to feet position");
 }
 
 void TestPoseConversions()
 {
     game::SectorFpsControllerConfig config;
-    config.eyeHeight = 4.5f;
-    game::SectorMeshPreviewPose cameraPose{Vector3{10.0f, 9.0f, 3.0f}, 0.25f, -0.5f};
+    config.eyeHeight = 1.2f;
+    game::SectorMeshPreviewPose cameraPose{Vector3{10.0f, 2.2f, 3.0f}, 0.25f, -0.5f};
     const game::SectorFpsControllerState state =
             game::SectorFpsControllerStateFromCameraPose(cameraPose, config);
-    Check(Near(state.feetPosition, Vector3{10.0f, 4.5f, 3.0f}),
+    Check(Near(state.feetPosition, Vector3{10.0f, 1.0f, 3.0f}),
             "camera pose to fps state subtracts eye height");
     Check(Near(state.yawRadians, 0.25f) && Near(state.pitchRadians, -0.5f),
             "camera pose to fps state preserves yaw and pitch");
@@ -111,22 +111,37 @@ void TestConfigNormalization()
     config.mouseSensitivity = INFINITY;
     config.eyeHeight = NAN;
     config.gravity = 500.0f;
+    config.playerRadius = -1.0f;
+    config.playerHeight = NAN;
+    config.stepHeight = 99.0f;
     config = game::NormalizeSectorFpsControllerConfig(config);
     Check(Near(config.walkSpeed, 0.1f), "walk speed clamps low");
     Check(Near(config.runSpeed, 200.0f), "run speed clamps high");
     Check(Near(config.mouseSensitivity, 1.0f), "non-finite mouse sensitivity uses default");
-    Check(Near(config.eyeHeight, 5.0f), "non-finite eye height uses default");
+    Check(Near(config.eyeHeight, 1.2f), "non-finite eye height uses default");
     Check(Near(config.gravity, 200.0f), "gravity clamps high");
+    Check(Near(config.playerRadius, 0.05f), "player radius clamps low");
+    Check(Near(config.playerHeight, 1.6f), "non-finite player height uses default");
+    Check(Near(config.stepHeight, 2.0f), "step height clamps high");
 
     config.gravity = -5.0f;
     config = game::NormalizeSectorFpsControllerConfig(config);
     Check(Near(config.gravity, 0.0f), "gravity clamps low");
 
     config.gravity = INFINITY;
+    config.eyeHeight = 2.2f;
+    config.playerHeight = 1.0f;
     config = game::NormalizeSectorFpsControllerConfig(config);
     Check(Near(config.gravity, 25.0f), "non-finite gravity uses default");
+    Check(Near(config.playerHeight, 2.2f), "player height is at least eye height");
     Check(Near(game::DefaultSectorFpsControllerConfig().gravity, 25.0f),
           "default gravity is 25");
+    Check(Near(game::DefaultSectorFpsControllerConfig().eyeHeight, 1.2f),
+          "default eye height is 1.2 world units");
+    Check(Near(game::DefaultSectorFpsControllerConfig().playerHeight, 1.6f),
+          "default player height is 1.6 world units");
+    Check(Near(game::DefaultSectorFpsControllerConfig().stepHeight, 0.25f),
+          "default step height is 0.25 world units");
 }
 
 void TestGroundedPlayerSnapsToFloor()
@@ -191,12 +206,13 @@ void TestCeilingClamp()
     state.grounded = false;
     state.verticalVelocity = 6.0f;
     game::SectorFpsControllerConfig config;
-    config.eyeHeight = 5.0f;
+    config.eyeHeight = 1.2f;
+    config.playerHeight = 5.0f;
     config.gravity = 0.0f;
     game::SectorFpsVerticalContext context{true, 0.0f, 20.0f};
 
     game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
-    Check(Near(state.feetPosition.y, 15.0f), "ceiling clamp moves feet to maximum allowed height");
+    Check(Near(state.feetPosition.y, 17.0f), "ceiling clamp uses player height for maximum allowed feet height");
     Check(Near(state.verticalVelocity, 0.0f), "ceiling clamp clears upward velocity");
     Check(!state.grounded, "ceiling clamp does not mark airborne player grounded");
 }
@@ -208,8 +224,9 @@ void TestCannotFitClampsToFloor()
     state.grounded = false;
     state.verticalVelocity = 9.0f;
     game::SectorFpsControllerConfig config;
-    config.eyeHeight = 6.0f;
-    game::SectorFpsVerticalContext context{true, 10.0f, 14.0f};
+    config.eyeHeight = 1.2f;
+    config.playerHeight = 3.0f;
+    game::SectorFpsVerticalContext context{true, 10.0f, 12.0f};
 
     const game::SectorFpsVerticalResult result =
             game::UpdateSectorFpsVerticalPhysics(state, config, context, 1.0f);

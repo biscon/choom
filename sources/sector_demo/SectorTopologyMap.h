@@ -15,8 +15,11 @@ struct SectorPreviewSettings {
     float walkSpeed = 6.0f;
     float runSpeed = 12.0f;
     float mouseSensitivity = 1.0f;
-    float eyeHeight = 5.0f;
+    float eyeHeight = 1.2f;
     float gravity = 25.0f;
+    float playerRadius = 0.25f;
+    float playerHeight = 1.6f;
+    float stepHeight = 0.25f;
 };
 
 struct SectorTopologyMap {
