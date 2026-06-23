@@ -20,6 +20,9 @@ struct SectorMeshBatchVertex {
     Vector2 decalUv = {};
     Vector2 lightmapUv = {};
     float decalOpacity = 1.0f;
+    bool decalEmissive = false;
+    Vector3 decalTint = {1.0f, 1.0f, 1.0f};
+    float decalBloomIntensity = 1.0f;
     Color color = WHITE;
 };
 
@@ -29,6 +32,7 @@ struct SectorMeshBatchData {
     float decalOpacity = 1.0f;
     bool decalEmissive = false;
     Vector3 decalTint = {1.0f, 1.0f, 1.0f};
+    float decalBloomIntensity = 1.0f;
     std::vector<SectorMeshBatchVertex> vertices;
     int vertexCount = 0;
     int triangleCount = 0;

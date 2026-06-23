@@ -24,6 +24,11 @@ constexpr float MouseSensitivity = 0.0030f;
 constexpr float MoveSpeed = 5.0f;
 constexpr float PitchLimit = 1.45f;
 constexpr int MouseLookWarmupFrames = 2;
+constexpr bool BloomEnabled = true;
+constexpr float BloomStrength = 0.5f;
+constexpr float BloomLdrIntensityScale = 10.0f;
+constexpr int BloomIterations = 3;
+constexpr int BloomDownsample = 4;
 
 const char* SectorLightmapVs = R"(
 #version 330
@@ -101,6 +106,108 @@ void main()
 }
 )";
 
+const char* SectorBloomSourceFs = R"(
+#version 330
+in vec2 fragTexCoord;
+in vec2 fragTexCoord2;
+in vec2 fragDecalUv;
+in vec4 fragColor;
+
+uniform sampler2D texture0;
+uniform sampler2D texture1;
+uniform sampler2D decalTexture;
+uniform int hasDecal;
+uniform float decalOpacity;
+uniform int decalEmissive;
+uniform vec3 decalTint;
+uniform float decalBloomIntensity;
+
+out vec4 finalColor;
+
+void main()
+{
+    if (hasDecal == 0 || decalEmissive == 0) {
+        finalColor = vec4(0.0);
+        return;
+    }
+
+    float decalMask =
+        fragDecalUv.x >= 0.0 && fragDecalUv.x <= 1.0 &&
+        fragDecalUv.y >= 0.0 && fragDecalUv.y <= 1.0
+            ? 1.0
+            : 0.0;
+    vec4 decalColor = texture(decalTexture, fragDecalUv);
+    float alpha = decalColor.a * decalOpacity * decalMask;
+    if (alpha <= 0.0) {
+        discard;
+    }
+    vec3 rgb = decalColor.rgb * decalTint * alpha * (decalBloomIntensity / 10.0);
+    finalColor = vec4(rgb, 1.0);
+}
+)";
+
+const char* BloomBlurFs = R"(
+#version 330
+in vec2 fragTexCoord;
+in vec4 fragColor;
+
+uniform sampler2D texture0;
+uniform vec2 texelSize;
+uniform vec2 direction;
+
+out vec4 finalColor;
+
+void main()
+{
+    vec2 offset = direction * texelSize;
+    vec4 color = texture(texture0, fragTexCoord) * 0.227027;
+    color += texture(texture0, fragTexCoord + offset * 1.384615) * 0.316216;
+    color += texture(texture0, fragTexCoord - offset * 1.384615) * 0.316216;
+    color += texture(texture0, fragTexCoord + offset * 3.230769) * 0.070270;
+    color += texture(texture0, fragTexCoord - offset * 3.230769) * 0.070270;
+    finalColor = color * fragColor;
+}
+)";
+
+const char* BloomCompositeFs = R"(
+#version 330
+in vec2 fragTexCoord;
+in vec4 fragColor;
+
+uniform sampler2D texture0;
+uniform sampler2D bloomTexture;
+uniform float bloomStrength;
+
+out vec4 finalColor;
+
+void main()
+{
+    vec4 scene = texture(texture0, fragTexCoord);
+    vec3 bloom = texture(bloomTexture, fragTexCoord).rgb;
+    finalColor = vec4(clamp(scene.rgb + bloom * bloomStrength, 0.0, 1.0), scene.a) * fragColor;
+}
+)";
+
+Rectangle FullTextureSrcRect(const Texture2D& texture)
+{
+    return Rectangle{
+            0.5f,
+            0.5f,
+            static_cast<float>(texture.width) - 1.0f,
+            -static_cast<float>(texture.height) + 1.0f
+    };
+}
+
+Rectangle FullTextureDstRect(const Texture2D& texture)
+{
+    return Rectangle{
+            0.0f,
+            0.0f,
+            static_cast<float>(texture.width),
+            static_cast<float>(texture.height)
+    };
+}
+
 bool StartsWith(const std::string& value, const char* prefix)
 {
     const std::string prefixString(prefix);
@@ -149,6 +256,38 @@ bool LoadPreviewMaterial(
     decalOpacityLoc = GetShaderLocation(material.shader, "decalOpacity");
     decalEmissiveLoc = GetShaderLocation(material.shader, "decalEmissive");
     decalTintLoc = GetShaderLocation(material.shader, "decalTint");
+    defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
+    materialLoaded = true;
+    return true;
+}
+
+bool LoadBloomSourceMaterial(
+        Material& material,
+        Texture2D& defaultMaterialTexture,
+        bool& materialLoaded,
+        int& hasDecalLoc,
+        int& decalOpacityLoc,
+        int& decalEmissiveLoc,
+        int& decalTintLoc,
+        int& decalBloomIntensityLoc)
+{
+    material = LoadMaterialDefault();
+    Shader shader = LoadShaderFromMemory(SectorLightmapVs, SectorBloomSourceFs);
+    if (shader.id == 0) {
+        UnloadMaterial(material);
+        material = Material{};
+        return false;
+    }
+    material.shader = shader;
+    material.shader.locs[SHADER_LOC_VERTEX_TANGENT] = GetShaderLocationAttrib(material.shader, "vertexTangent");
+    material.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(material.shader, "texture0");
+    material.shader.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(material.shader, "texture1");
+    material.shader.locs[SHADER_LOC_MAP_NORMAL] = GetShaderLocation(material.shader, "decalTexture");
+    hasDecalLoc = GetShaderLocation(material.shader, "hasDecal");
+    decalOpacityLoc = GetShaderLocation(material.shader, "decalOpacity");
+    decalEmissiveLoc = GetShaderLocation(material.shader, "decalEmissive");
+    decalTintLoc = GetShaderLocation(material.shader, "decalTint");
+    decalBloomIntensityLoc = GetShaderLocation(material.shader, "decalBloomIntensity");
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
     return true;
@@ -309,6 +448,7 @@ void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
     }
 
     Leave();
+    UnloadBloomResources();
     UnloadSectorMeshes(meshes);
     textureHandlesById.clear();
     lightmapTexture = engine::NullTextureHandle();
@@ -470,6 +610,248 @@ void SectorMeshPreview::Render(engine::AssetManager& assets, bool useBakedAmbien
         DrawMesh(batch.mesh, material, MatrixIdentity());
     }
     EndMode3D();
+}
+
+bool SectorMeshPreview::EnsureBloomResources(int sceneWidth, int sceneHeight)
+{
+    if (sceneWidth <= 0 || sceneHeight <= 0) {
+        return false;
+    }
+
+    const int bloomWidth = std::max(1, static_cast<int>(std::round(static_cast<float>(sceneWidth) / static_cast<float>(BloomDownsample))));
+    const int bloomHeight = std::max(1, static_cast<int>(std::round(static_cast<float>(sceneHeight) / static_cast<float>(BloomDownsample))));
+    const bool dimensionsChanged = bloomSceneWidth != sceneWidth
+            || bloomSceneHeight != sceneHeight
+            || bloomTargetWidth != bloomWidth
+            || bloomTargetHeight != bloomHeight;
+    if (dimensionsChanged) {
+        UnloadBloomResources();
+    }
+
+    if (!bloomSourceMaterialLoaded) {
+        if (!LoadBloomSourceMaterial(
+                    bloomSourceMaterial,
+                    bloomDefaultMaterialTexture,
+                    bloomSourceMaterialLoaded,
+                    bloomHasDecalLoc,
+                    bloomDecalOpacityLoc,
+                    bloomDecalEmissiveLoc,
+                    bloomDecalTintLoc,
+                    bloomDecalIntensityLoc)) {
+            return false;
+        }
+    }
+
+    if (!IsShaderValid(blurShader)) {
+        blurShader = LoadShaderFromMemory(nullptr, BloomBlurFs);
+        if (!IsShaderValid(blurShader)) {
+            return false;
+        }
+        blurTexelSizeLoc = GetShaderLocation(blurShader, "texelSize");
+        blurDirectionLoc = GetShaderLocation(blurShader, "direction");
+    }
+
+    if (!IsShaderValid(compositeShader)) {
+        compositeShader = LoadShaderFromMemory(nullptr, BloomCompositeFs);
+        if (!IsShaderValid(compositeShader)) {
+            return false;
+        }
+        compositeStrengthLoc = GetShaderLocation(compositeShader, "bloomStrength");
+        compositeBloomTextureLoc = GetShaderLocation(compositeShader, "bloomTexture");
+    }
+
+    if (bloomSceneCopy.texture.id == 0) {
+        bloomSceneCopy = LoadRenderTexture(sceneWidth, sceneHeight);
+        SetTextureFilter(bloomSceneCopy.texture, TEXTURE_FILTER_BILINEAR);
+        bloomSource = LoadRenderTexture(bloomWidth, bloomHeight);
+        bloomBlurA = LoadRenderTexture(bloomWidth, bloomHeight);
+        bloomBlurB = LoadRenderTexture(bloomWidth, bloomHeight);
+        SetTextureFilter(bloomSource.texture, TEXTURE_FILTER_BILINEAR);
+        SetTextureFilter(bloomBlurA.texture, TEXTURE_FILTER_BILINEAR);
+        SetTextureFilter(bloomBlurB.texture, TEXTURE_FILTER_BILINEAR);
+        bloomSceneWidth = sceneWidth;
+        bloomSceneHeight = sceneHeight;
+        bloomTargetWidth = bloomWidth;
+        bloomTargetHeight = bloomHeight;
+    }
+
+    return bloomSceneCopy.texture.id != 0
+            && bloomSource.texture.id != 0
+            && bloomBlurA.texture.id != 0
+            && bloomBlurB.texture.id != 0;
+}
+
+void SectorMeshPreview::UnloadBloomResources()
+{
+    if (bloomSourceMaterialLoaded) {
+        bloomSourceMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = bloomDefaultMaterialTexture;
+        bloomSourceMaterial.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
+        bloomSourceMaterial.maps[MATERIAL_MAP_NORMAL].texture = Texture2D{};
+        UnloadMaterial(bloomSourceMaterial);
+        bloomSourceMaterial = Material{};
+        bloomDefaultMaterialTexture = Texture2D{};
+        bloomSourceMaterialLoaded = false;
+    }
+    if (IsShaderValid(blurShader)) {
+        UnloadShader(blurShader);
+        blurShader = Shader{};
+    }
+    if (IsShaderValid(compositeShader)) {
+        UnloadShader(compositeShader);
+        compositeShader = Shader{};
+    }
+    blurTexelSizeLoc = -1;
+    blurDirectionLoc = -1;
+    compositeStrengthLoc = -1;
+    compositeBloomTextureLoc = -1;
+    if (bloomSceneCopy.texture.id != 0) {
+        UnloadRenderTexture(bloomSceneCopy);
+        bloomSceneCopy = RenderTexture2D{};
+    }
+    if (bloomSource.texture.id != 0) {
+        UnloadRenderTexture(bloomSource);
+        bloomSource = RenderTexture2D{};
+    }
+    if (bloomBlurA.texture.id != 0) {
+        UnloadRenderTexture(bloomBlurA);
+        bloomBlurA = RenderTexture2D{};
+    }
+    if (bloomBlurB.texture.id != 0) {
+        UnloadRenderTexture(bloomBlurB);
+        bloomBlurB = RenderTexture2D{};
+    }
+    bloomSceneWidth = 0;
+    bloomSceneHeight = 0;
+    bloomTargetWidth = 0;
+    bloomTargetHeight = 0;
+}
+
+void SectorMeshPreview::RenderBloomSource(engine::AssetManager& assets)
+{
+    BeginMode3D(camera);
+    bloomSourceMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = bloomDefaultMaterialTexture;
+    bloomSourceMaterial.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
+
+    for (const SectorMeshBatch& batch : meshes.batches) {
+        const Texture2D* decalTexture = nullptr;
+        if (!batch.decalTextureId.empty()) {
+            decalTexture = assets.GetTexture(TextureForId(batch.decalTextureId));
+        }
+        if (decalTexture == nullptr || !batch.decalEmissive) {
+            continue;
+        }
+
+        const int hasDecal = 1;
+        const float decalOpacity = batch.decalOpacity;
+        const int decalEmissive = 1;
+        const Vector3 decalTint = batch.decalTint;
+        const float decalBloomIntensity = batch.decalBloomIntensity;
+        bloomSourceMaterial.maps[MATERIAL_MAP_NORMAL].texture = *decalTexture;
+        if (bloomHasDecalLoc >= 0) {
+            SetShaderValue(bloomSourceMaterial.shader, bloomHasDecalLoc, &hasDecal, SHADER_UNIFORM_INT);
+        }
+        if (bloomDecalOpacityLoc >= 0) {
+            SetShaderValue(bloomSourceMaterial.shader, bloomDecalOpacityLoc, &decalOpacity, SHADER_UNIFORM_FLOAT);
+        }
+        if (bloomDecalEmissiveLoc >= 0) {
+            SetShaderValue(bloomSourceMaterial.shader, bloomDecalEmissiveLoc, &decalEmissive, SHADER_UNIFORM_INT);
+        }
+        if (bloomDecalTintLoc >= 0) {
+            SetShaderValue(bloomSourceMaterial.shader, bloomDecalTintLoc, &decalTint, SHADER_UNIFORM_VEC3);
+        }
+        if (bloomDecalIntensityLoc >= 0) {
+            SetShaderValue(bloomSourceMaterial.shader, bloomDecalIntensityLoc, &decalBloomIntensity, SHADER_UNIFORM_FLOAT);
+        }
+        DrawMesh(batch.mesh, bloomSourceMaterial, MatrixIdentity());
+    }
+    EndMode3D();
+}
+
+void SectorMeshPreview::ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
+{
+    if (!initialized || !BloomEnabled || sceneTarget.texture.id == 0) {
+        return;
+    }
+    if (!EnsureBloomResources(sceneTarget.texture.width, sceneTarget.texture.height)) {
+        return;
+    }
+
+    BeginTextureMode(bloomSceneCopy);
+    ClearBackground(BLANK);
+    DrawTexturePro(
+            sceneTarget.texture,
+            FullTextureSrcRect(sceneTarget.texture),
+            FullTextureDstRect(bloomSceneCopy.texture),
+            Vector2{0.0f, 0.0f},
+            0.0f,
+            WHITE);
+    EndTextureMode();
+
+    BeginTextureMode(bloomSource);
+    ClearBackground(BLANK);
+    RenderBloomSource(assets);
+    EndTextureMode();
+
+    RenderTexture2D* input = &bloomSource;
+    RenderTexture2D* output = &bloomBlurA;
+    for (int i = 0; i < BloomIterations; ++i) {
+        const Vector2 texelSize{
+                1.0f / static_cast<float>(input->texture.width),
+                1.0f / static_cast<float>(input->texture.height)
+        };
+        Vector2 direction{1.0f, 0.0f};
+        BeginTextureMode(*output);
+        ClearBackground(BLANK);
+        SetShaderValue(blurShader, blurTexelSizeLoc, &texelSize, SHADER_UNIFORM_VEC2);
+        SetShaderValue(blurShader, blurDirectionLoc, &direction, SHADER_UNIFORM_VEC2);
+        BeginShaderMode(blurShader);
+        DrawTexturePro(
+                input->texture,
+                FullTextureSrcRect(input->texture),
+                FullTextureDstRect(output->texture),
+                Vector2{0.0f, 0.0f},
+                0.0f,
+                WHITE);
+        EndShaderMode();
+        EndTextureMode();
+
+        input = output;
+        output = (output == &bloomBlurA) ? &bloomBlurB : &bloomBlurA;
+        direction = Vector2{0.0f, 1.0f};
+        BeginTextureMode(*output);
+        ClearBackground(BLANK);
+        SetShaderValue(blurShader, blurTexelSizeLoc, &texelSize, SHADER_UNIFORM_VEC2);
+        SetShaderValue(blurShader, blurDirectionLoc, &direction, SHADER_UNIFORM_VEC2);
+        BeginShaderMode(blurShader);
+        DrawTexturePro(
+                input->texture,
+                FullTextureSrcRect(input->texture),
+                FullTextureDstRect(output->texture),
+                Vector2{0.0f, 0.0f},
+                0.0f,
+                WHITE);
+        EndShaderMode();
+        EndTextureMode();
+
+        input = output;
+        output = (output == &bloomBlurA) ? &bloomBlurB : &bloomBlurA;
+    }
+
+    BeginTextureMode(sceneTarget);
+    ClearBackground(BLANK);
+    const float compositeStrength = BloomStrength * BloomLdrIntensityScale;
+    SetShaderValue(compositeShader, compositeStrengthLoc, &compositeStrength, SHADER_UNIFORM_FLOAT);
+    BeginShaderMode(compositeShader);
+    SetShaderValueTexture(compositeShader, compositeBloomTextureLoc, input->texture);
+    DrawTexturePro(
+            bloomSceneCopy.texture,
+            FullTextureSrcRect(bloomSceneCopy.texture),
+            FullTextureDstRect(sceneTarget.texture),
+            Vector2{0.0f, 0.0f},
+            0.0f,
+            WHITE);
+    EndShaderMode();
+    EndTextureMode();
 }
 
 SectorMeshPreviewPose SectorMeshPreview::Pose() const

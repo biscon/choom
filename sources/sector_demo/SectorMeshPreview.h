@@ -34,6 +34,7 @@ public:
 
     void Update(engine::Input& input, float dt);
     void Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
+    void ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
 
     bool IsReady() const { return initialized; }
     bool IsMouseLookEnabled() const { return mouseLookEnabled; }
@@ -53,6 +54,9 @@ private:
     static std::string ResolveAssetPath(const std::string& path);
     engine::TextureHandle TextureForId(const std::string& textureId) const;
     void UpdateCamera();
+    bool EnsureBloomResources(int sceneWidth, int sceneHeight);
+    void UnloadBloomResources();
+    void RenderBloomSource(engine::AssetManager& assets);
 
     SectorMeshBuildResult meshes;
     SectorGeneratedGeometry generatedGeometry;
@@ -68,6 +72,28 @@ private:
     int decalOpacityLoc = -1;
     int decalEmissiveLoc = -1;
     int decalTintLoc = -1;
+    Material bloomSourceMaterial = {};
+    Texture2D bloomDefaultMaterialTexture = {};
+    bool bloomSourceMaterialLoaded = false;
+    int bloomHasDecalLoc = -1;
+    int bloomDecalOpacityLoc = -1;
+    int bloomDecalEmissiveLoc = -1;
+    int bloomDecalTintLoc = -1;
+    int bloomDecalIntensityLoc = -1;
+    Shader blurShader = {};
+    Shader compositeShader = {};
+    int blurTexelSizeLoc = -1;
+    int blurDirectionLoc = -1;
+    int compositeStrengthLoc = -1;
+    int compositeBloomTextureLoc = -1;
+    RenderTexture2D bloomSceneCopy = {};
+    RenderTexture2D bloomSource = {};
+    RenderTexture2D bloomBlurA = {};
+    RenderTexture2D bloomBlurB = {};
+    int bloomSceneWidth = 0;
+    int bloomSceneHeight = 0;
+    int bloomTargetWidth = 0;
+    int bloomTargetHeight = 0;
     int lightmapStatus = 0;
     bool initialized = false;
     bool mouseLookEnabled = true;

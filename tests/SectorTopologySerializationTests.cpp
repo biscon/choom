@@ -56,7 +56,8 @@ game::SectorTopologyDecalLayer MakeDecal(
         float offsetY,
         float opacity,
         bool emissive = false,
-        Vector3 tint = {1.0f, 1.0f, 1.0f})
+        Vector3 tint = {1.0f, 1.0f, 1.0f},
+        float bloomIntensity = 1.0f)
 {
     game::SectorTopologyDecalLayer decal;
     decal.textureId = textureId;
@@ -65,6 +66,7 @@ game::SectorTopologyDecalLayer MakeDecal(
     decal.opacity = opacity;
     decal.emissive = emissive;
     decal.tint = tint;
+    decal.bloomIntensity = bloomIntensity;
     return decal;
 }
 
@@ -423,13 +425,15 @@ void TestDecalDefaultsAndOmission()
                   && loaded.sectors[0].floorDecal.uv.offset.y == 0.0f
                   && loaded.sectors[0].floorDecal.opacity == 1.0f
                   && !loaded.sectors[0].floorDecal.emissive
-                  && Near(loaded.sectors[0].floorDecal.tint, Vector3{1.0f, 1.0f, 1.0f}),
+                  && Near(loaded.sectors[0].floorDecal.tint, Vector3{1.0f, 1.0f, 1.0f})
+                  && Near(loaded.sectors[0].floorDecal.bloomIntensity, 1.0f),
           "omitted floor decal loads default no-decal state");
     Check(loaded.sideDefs[0].wall.decal.textureId.empty()
                   && loaded.sideDefs[0].wall.decal.uv.scale.y == 1.0f
                   && loaded.sideDefs[0].wall.decal.opacity == 1.0f
                   && !loaded.sideDefs[0].wall.decal.emissive
-                  && Near(loaded.sideDefs[0].wall.decal.tint, Vector3{1.0f, 1.0f, 1.0f}),
+                  && Near(loaded.sideDefs[0].wall.decal.tint, Vector3{1.0f, 1.0f, 1.0f})
+                  && Near(loaded.sideDefs[0].wall.decal.bloomIntensity, 1.0f),
           "omitted sidedef decal loads default no-decal state");
 
     map.sectors[0].floorDecal.uv.scale = {2.0f, 3.0f};
@@ -437,10 +441,12 @@ void TestDecalDefaultsAndOmission()
     map.sectors[0].floorDecal.opacity = 0.25f;
     map.sectors[0].floorDecal.emissive = true;
     map.sectors[0].floorDecal.tint = Vector3{0.5f, 0.25f, 0.75f};
+    map.sectors[0].floorDecal.bloomIntensity = 4.0f;
     map.sideDefs[0].wall.decal.uv.scale = {6.0f, 7.0f};
     map.sideDefs[0].wall.decal.opacity = 0.5f;
     map.sideDefs[0].wall.decal.emissive = true;
     map.sideDefs[0].wall.decal.tint = Vector3{0.25f, 0.5f, 0.75f};
+    map.sideDefs[0].wall.decal.bloomIntensity = 6.0f;
     const Json normalized = Json::parse(SaveText(map));
     Check(!normalized["sectors"][0].contains("floorDecal"),
           "empty texture sector decal with stray data is omitted");
@@ -451,9 +457,9 @@ void TestDecalDefaultsAndOmission()
 void TestDecalRoundTrip()
 {
     SectorTopologyMap original = MakeSquare();
-    original.sectors[0].floorDecal = MakeDecal("floor_arrow", 0.5f, 0.75f, 0.125f, 0.25f, 0.8f, true, Vector3{1.0f, 0.25f, 0.5f});
+    original.sectors[0].floorDecal = MakeDecal("floor_arrow", 0.5f, 0.75f, 0.125f, 0.25f, 0.8f, true, Vector3{1.0f, 0.25f, 0.5f}, 2.5f);
     original.sectors[0].ceilingDecal = MakeDecal("ceiling_grime", 2.0f, 3.0f, 4.0f, 5.0f, 0.35f, false, Vector3{0.2f, 0.3f, 0.4f});
-    original.sideDefs[0].wall.decal = MakeDecal("painting_01", 0.25f, 0.5f, 0.75f, 1.0f, 1.0f, true, Vector3{0.5f, 0.6f, 0.7f});
+    original.sideDefs[0].wall.decal = MakeDecal("painting_01", 0.25f, 0.5f, 0.75f, 1.0f, 1.0f, true, Vector3{0.5f, 0.6f, 0.7f}, 7.0f);
     original.sideDefs[0].lower.decal = MakeDecal("lower_sign", 1.25f, 1.5f, 1.75f, 2.0f, 0.65f);
     original.sideDefs[0].upper.decal = MakeDecal("upper_text", 2.25f, 2.5f, 2.75f, 3.0f, 0.9f);
 
@@ -469,6 +475,8 @@ void TestDecalRoundTrip()
           "floor decal emissive flag is saved");
     Check(saved["sectors"][0]["floorDecal"]["tint"][1].get<float>() == 0.25f,
           "floor decal tint is saved");
+    Check(saved["sectors"][0]["floorDecal"]["bloomIntensity"].get<float>() == 2.5f,
+          "floor decal bloom intensity is saved");
     Check(saved["sidedefs"][0]["wall"]["decal"]["textureId"].get<std::string>() == "painting_01",
           "wall decal texture ID is saved");
     Check(saved["sidedefs"][0]["lower"]["decal"]["uv"]["offset"][1].get<float>() == 2.0f,
@@ -484,7 +492,8 @@ void TestDecalRoundTrip()
                   && loaded.sectors[0].floorDecal.uv.offset.y == 0.25f
                   && loaded.sectors[0].floorDecal.opacity == 0.8f
                   && loaded.sectors[0].floorDecal.emissive
-                  && Near(loaded.sectors[0].floorDecal.tint, Vector3{1.0f, 0.25f, 0.5f}),
+                  && Near(loaded.sectors[0].floorDecal.tint, Vector3{1.0f, 0.25f, 0.5f})
+                  && Near(loaded.sectors[0].floorDecal.bloomIntensity, 2.5f),
           "floor decal round-trips");
     Check(loaded.sectors[0].ceilingDecal.textureId == "ceiling_grime"
                   && loaded.sectors[0].ceilingDecal.uv.scale.y == 3.0f
@@ -497,7 +506,8 @@ void TestDecalRoundTrip()
                   && loaded.sideDefs[0].wall.decal.uv.offset.x == 0.75f
                   && loaded.sideDefs[0].wall.decal.opacity == 1.0f
                   && loaded.sideDefs[0].wall.decal.emissive
-                  && Near(loaded.sideDefs[0].wall.decal.tint, Vector3{0.5f, 0.6f, 0.7f}),
+                  && Near(loaded.sideDefs[0].wall.decal.tint, Vector3{0.5f, 0.6f, 0.7f})
+                  && Near(loaded.sideDefs[0].wall.decal.bloomIntensity, 7.0f),
           "wall decal round-trips");
     Check(loaded.sideDefs[0].lower.decal.textureId == "lower_sign"
                   && loaded.sideDefs[0].lower.decal.uv.scale.x == 1.25f
@@ -514,13 +524,21 @@ void TestDecalRoundTrip()
     Check(loaded.sideDefs[0].wall.decal.opacity == 1.0f,
           "omitted decal opacity defaults to 1");
 
+    Json withoutBloomIntensity = saved;
+    withoutBloomIntensity["sidedefs"][0]["wall"]["decal"].erase("bloomIntensity");
+    Check(LoadText(withoutBloomIntensity.dump(), loaded, error), "decal bloom intensity is optional on load");
+    Check(loaded.sideDefs[0].wall.decal.bloomIntensity == 1.0f,
+          "omitted decal bloom intensity defaults to 1");
+
     Json oldDecal = saved;
     oldDecal["sectors"][0]["floorDecal"].erase("emissive");
     oldDecal["sectors"][0]["floorDecal"].erase("tint");
+    oldDecal["sectors"][0]["floorDecal"].erase("bloomIntensity");
     Check(LoadText(oldDecal.dump(), loaded, error), "old decal JSON without emissive and tint loads");
     Check(!loaded.sectors[0].floorDecal.emissive
-                  && Near(loaded.sectors[0].floorDecal.tint, Vector3{1.0f, 1.0f, 1.0f}),
-          "old decal JSON defaults emissive and tint");
+                  && Near(loaded.sectors[0].floorDecal.tint, Vector3{1.0f, 1.0f, 1.0f})
+                  && Near(loaded.sectors[0].floorDecal.bloomIntensity, 1.0f),
+          "old decal JSON defaults emissive tint and bloom intensity");
 }
 
 void TestStrictDecalValidation()
@@ -582,6 +600,13 @@ void TestStrictDecalValidation()
     ExpectRejected(changed, "oversized decal tint is rejected");
     changed["sidedefs"][0]["wall"]["decal"]["tint"] = Json::array({-0.01f, 0.5f, 0.5f});
     ExpectRejected(changed, "negative decal tint is rejected");
+    changed["sidedefs"][0]["wall"]["decal"]["tint"] = Json::array({1.0f, 0.5f, 0.5f});
+    changed["sidedefs"][0]["wall"]["decal"]["bloomIntensity"] = "bright";
+    ExpectRejected(changed, "decal bloom intensity wrong type is rejected");
+    changed["sidedefs"][0]["wall"]["decal"]["bloomIntensity"] = -0.01f;
+    ExpectRejected(changed, "negative decal bloom intensity is rejected");
+    changed["sidedefs"][0]["wall"]["decal"]["bloomIntensity"] = 10.01f;
+    ExpectRejected(changed, "oversized decal bloom intensity is rejected");
 
     SectorTopologyMap invalid = MakeSquare();
     invalid.sideDefs[0].wall.decal = MakeDecal("painting", 1.0f, 1.0f, 0.0f, 0.0f, 1.0f);
@@ -614,6 +639,14 @@ void TestStrictDecalValidation()
     Check(!game::SaveSectorTopologyMapToJsonString(invalid, jsonOutput, &error),
           "non-finite decal tint is rejected on save");
     Check(jsonOutput == "sentinel", "failed non-finite tint save leaves JSON output unchanged");
+
+    invalid = MakeSquare();
+    invalid.sectors[0].floorDecal = MakeDecal("arrow", 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, true, Vector3{1.0f, 1.0f, 1.0f}, 10.5f);
+    jsonOutput = "sentinel";
+    error.clear();
+    Check(!game::SaveSectorTopologyMapToJsonString(invalid, jsonOutput, &error),
+          "invalid decal bloom intensity is rejected on save");
+    Check(jsonOutput == "sentinel", "failed invalid bloom intensity save leaves JSON output unchanged");
 
     SectorTopologyMap output = MakeSquare();
     output.sectors[0].floorDecal = MakeDecal("existing", 2.0f, 2.0f, 3.0f, 3.0f, 0.5f);

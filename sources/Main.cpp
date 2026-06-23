@@ -178,7 +178,13 @@ int main()
         if (renderPreview3D) {
             BeginTextureMode(worldTarget);
             ClearBackground(Color{8, 10, 14, 255});
-            sectorEditor.Render(assets);
+            sectorEditor.RenderPreview3DScene(assets);
+            EndTextureMode();
+
+            sectorEditor.ApplyPreview3DBloom(assets, worldTarget);
+
+            BeginTextureMode(worldTarget);
+            sectorEditor.RenderPreview3DOverlays();
             EndTextureMode();
         } else {
             BeginTextureMode(editorTarget);

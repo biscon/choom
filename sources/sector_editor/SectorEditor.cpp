@@ -725,6 +725,14 @@ Vector3 ClampDecalTint(Vector3 tint)
     };
 }
 
+float ClampDecalBloomIntensity(float value)
+{
+    if (!std::isfinite(value)) {
+        return 1.0f;
+    }
+    return std::clamp(value, 0.0f, 10.0f);
+}
+
 bool SameTint(Vector3 a, Vector3 b)
 {
     return a.x == b.x && a.y == b.y && a.z == b.z;
@@ -747,7 +755,8 @@ bool IsDefaultDecalLayer(const SectorTopologyDecalLayer& decal)
             && IsDefaultTopologyUv(decal.uv)
             && decal.opacity == 1.0f
             && !decal.emissive
-            && IsWhiteTint(decal.tint);
+            && IsWhiteTint(decal.tint)
+            && decal.bloomIntensity == 1.0f;
 }
 
 void ResetDecalLayer(SectorTopologyDecalLayer& decal)
@@ -757,6 +766,7 @@ void ResetDecalLayer(SectorTopologyDecalLayer& decal)
     decal.opacity = 1.0f;
     decal.emissive = false;
     decal.tint = Vector3{1.0f, 1.0f, 1.0f};
+    decal.bloomIntensity = 1.0f;
 }
 
 TopologySectorTextureField TopologyEditTargetSectorTextureField(TopologySurfaceEditTargetKind kind)
@@ -3932,7 +3942,25 @@ bool SectorEditor::SnapTopologyVertexMoveTarget(
 
 void SectorEditor::RenderPreview3D(engine::AssetManager& assets)
 {
+    RenderPreview3DScene(assets);
+    RenderPreview3DOverlays();
+}
+
+void SectorEditor::RenderPreview3DScene(engine::AssetManager& assets)
+{
     preview.Render(assets, state.useBakedAmbientOcclusion);
+}
+
+void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
+{
+    if (state.mode != SectorEditorMode::Preview3D) {
+        return;
+    }
+    preview.ApplyEmissiveDecalBloom(assets, sceneTarget);
+}
+
+void SectorEditor::RenderPreview3DOverlays()
+{
     if (!state.previewUiHidden) {
         DrawPreviewSurfaceHighlights();
     }
@@ -4421,6 +4449,26 @@ void SectorEditor::DrawPreviewUvPanel(
                     3);
             if (result.changed && opacity != decal->opacity && std::isfinite(opacity)) {
                 ApplySurfaceDecalOpacity(target, opacity, &assets);
+            }
+            if (decal->emissive) {
+                engine::Text(ui, config, assets, Rectangle{startX + (colW + gap) * 5.0f, inputTop - 28.0f, colW, 24.0f}, font, "Bloom", engine::UITextJustify::Left, config.mutedTextColor);
+                float bloomIntensity = decal->bloomIntensity;
+                const engine::UINumericInputResult bloomResult = engine::FloatInput(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_3d_decal_bloom_intensity",
+                        Rectangle{startX + (colW + gap) * 5.0f, inputTop, colW, 38.0f},
+                        font,
+                        bloomIntensity,
+                        uiState.surface3DDecalBloomIntensityInput,
+                        0.0f,
+                        10.0f,
+                        3);
+                if (bloomResult.changed && bloomIntensity != decal->bloomIntensity) {
+                    ApplySurfaceDecalBloomIntensity(target, bloomIntensity, &assets);
+                }
             }
             bool emissive = decal->emissive;
             if (engine::Checkbox(
@@ -5524,6 +5572,7 @@ void SectorEditor::DrawSectorsPanel(
                     + uvSettingsH
                     + rowH + gap // Opacity.
                     + 36.0f + gap // Emissive.
+                    + rowH + gap // Bloom intensity for emissive decals.
                     + rowH + gap // Tint.
                     + 36.0f + gap; // Fit/Clear decal action row.
             const float defaultWallSectionH = 18.0f + 30.0f + textureRowH + uvSettingsH;
@@ -6177,6 +6226,28 @@ bool SectorEditor::DrawTopologySectorInspector(
         }
         y += 36.0f + gap;
 
+        if (decal.emissive) {
+            engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Bloom:", engine::UITextJustify::Left, config.mutedTextColor);
+            float bloomIntensity = decal.bloomIntensity;
+            const engine::UINumericInputResult bloomResult = engine::FloatInput(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("%s_decal_bloom_intensity", uvPrefix),
+                    Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                    font,
+                    bloomIntensity,
+                    uiState.topologySectorDecalBloomIntensityInputs[opacityStateIndex],
+                    0.0f,
+                    10.0f,
+                    3);
+            if (bloomResult.changed && bloomIntensity != decal.bloomIntensity) {
+                ApplySurfaceDecalBloomIntensity(target, bloomIntensity, nullptr);
+            }
+            y += rowH + gap;
+        }
+
         engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Tint:", engine::UITextJustify::Left, config.mutedTextColor);
         const Rectangle swatchLocal{82.0f, y + 3.0f, 56.0f, rowH - 6.0f};
         if (engine::Button(
@@ -6508,6 +6579,7 @@ bool SectorEditor::DrawTopologySideDefInspector(
             inputState = engine::UIFloatInputState{};
         }
         uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
+        uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
     }
     if (engine::ToolButton(
                 ui,
@@ -6524,6 +6596,7 @@ bool SectorEditor::DrawTopologySideDefInspector(
             inputState = engine::UIFloatInputState{};
         }
         uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
+        uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
     }
     y += 36.0f + gap;
 
@@ -6678,6 +6751,28 @@ bool SectorEditor::DrawTopologySideDefInspector(
             ApplySurfaceDecalEmissive(selectedMaterialTarget, emissive, &assets);
         }
         y += 36.0f + gap;
+
+        if (selectedPart.decal.emissive) {
+            engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Bloom:", engine::UITextJustify::Left, config.mutedTextColor);
+            float bloomIntensity = selectedPart.decal.bloomIntensity;
+            const engine::UINumericInputResult bloomResult = engine::FloatInput(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_sidedef_decal_bloom_intensity",
+                    Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                    font,
+                    bloomIntensity,
+                    uiState.topologySideDefDecalBloomIntensityInput,
+                    0.0f,
+                    10.0f,
+                    3);
+            if (bloomResult.changed && bloomIntensity != selectedPart.decal.bloomIntensity) {
+                ApplySurfaceDecalBloomIntensity(selectedMaterialTarget, bloomIntensity, &assets);
+            }
+            y += rowH + gap;
+        }
 
         engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Tint:", engine::UITextJustify::Left, config.mutedTextColor);
         const Rectangle swatchLocal{82.0f, y + 3.0f, 56.0f, rowH - 6.0f};
@@ -8557,6 +8652,7 @@ void SectorEditor::ResetSurface3DUiState()
     uiState.surface3DUvOffsetUInput = engine::UIFloatInputState{};
     uiState.surface3DUvOffsetVInput = engine::UIFloatInputState{};
     uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
+    uiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
 }
 
 void SectorEditor::ClearSelection()
@@ -8982,6 +9078,34 @@ bool SectorEditor::ApplySurfaceDecalTint(
     return true;
 }
 
+bool SectorEditor::ApplySurfaceDecalBloomIntensity(
+        TopologySurfaceEditTarget target,
+        float bloomIntensity,
+        engine::AssetManager* assets)
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+    bloomIntensity = ClampDecalBloomIntensity(bloomIntensity);
+    SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
+    if (decal == nullptr || decal->textureId.empty()) {
+        statusText = "No decal assigned.";
+        return false;
+    }
+    if (decal->bloomIntensity == bloomIntensity) {
+        return false;
+    }
+
+    decal->bloomIntensity = bloomIntensity;
+    state.topologyRenderWarning.clear();
+    MarkTopologyDocumentEdited(TextFormat("Set %s decal bloom intensity.", TopologyMaterialKindName(target.kind)));
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
+}
+
 bool SectorEditor::OpenDecalTintModal(TopologySurfaceEditTarget target)
 {
     if (!IsValidTopologySurfaceEditTarget(target)) {
@@ -9028,8 +9152,13 @@ bool SectorEditor::ClearSurfaceDecal(
     for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalOpacityInputs) {
         inputState = engine::UIFloatInputState{};
     }
+    for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalBloomIntensityInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
     uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
+    uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
     uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
+    uiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
     state.decalTintModal = DecalTintModalState{};
     MarkTopologyDocumentEdited(TextFormat("Cleared %s decal.", TopologyMaterialKindName(target.kind)));
     if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
@@ -10062,6 +10191,7 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
             decal.opacity = 1.0f;
             decal.emissive = false;
             decal.tint = Vector3{1.0f, 1.0f, 1.0f};
+            decal.bloomIntensity = 1.0f;
         }
         assignTexture(decal.textureId);
     };

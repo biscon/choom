@@ -24,6 +24,7 @@ struct SectorMeshBatchKey {
     float decalOpacity = 1.0f;
     bool decalEmissive = false;
     Vector3 decalTint = {1.0f, 1.0f, 1.0f};
+    float decalBloomIntensity = 1.0f;
 
     bool operator==(const SectorMeshBatchKey& other) const
     {
@@ -33,7 +34,8 @@ struct SectorMeshBatchKey {
                 && decalEmissive == other.decalEmissive
                 && decalTint.x == other.decalTint.x
                 && decalTint.y == other.decalTint.y
-                && decalTint.z == other.decalTint.z;
+                && decalTint.z == other.decalTint.z
+                && decalBloomIntensity == other.decalBloomIntensity;
     }
 };
 
@@ -47,12 +49,14 @@ struct SectorMeshBatchKeyHash {
         const size_t tintXHash = std::hash<float>{}(key.decalTint.x);
         const size_t tintYHash = std::hash<float>{}(key.decalTint.y);
         const size_t tintZHash = std::hash<float>{}(key.decalTint.z);
+        const size_t bloomIntensityHash = std::hash<float>{}(key.decalBloomIntensity);
         size_t hash = textureHash ^ (decalHash + 0x9e3779b9u + (textureHash << 6u) + (textureHash >> 2u));
         hash ^= opacityHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= emissiveHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= tintXHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= tintYHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= tintZHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
+        hash ^= bloomIntensityHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         return hash;
     }
 };
@@ -74,6 +78,14 @@ Vector3 UnitRgbOrWhite(Vector3 value)
     };
 }
 
+float DecalBloomIntensityOrDefault(float value)
+{
+    if (!std::isfinite(value)) {
+        return 1.0f;
+    }
+    return std::clamp(value, 0.0f, 10.0f);
+}
+
 SectorMeshBatchData& BatchForKey(
         std::unordered_map<SectorMeshBatchKey, size_t, SectorMeshBatchKeyHash>& batchIndexByKey,
         std::vector<SectorMeshBatchData>& batches,
@@ -81,7 +93,8 @@ SectorMeshBatchData& BatchForKey(
         const std::string& decalTextureId,
         float decalOpacity,
         bool decalEmissive,
-        Vector3 decalTint)
+        Vector3 decalTint,
+        float decalBloomIntensity)
 {
     const bool hasDecal = !decalTextureId.empty();
     const SectorMeshBatchKey key{
@@ -89,7 +102,8 @@ SectorMeshBatchData& BatchForKey(
             decalTextureId,
             hasDecal ? UnitOrDefault(decalOpacity, 1.0f) : 1.0f,
             hasDecal && decalEmissive,
-            hasDecal ? UnitRgbOrWhite(decalTint) : Vector3{1.0f, 1.0f, 1.0f}};
+            hasDecal ? UnitRgbOrWhite(decalTint) : Vector3{1.0f, 1.0f, 1.0f},
+            hasDecal ? DecalBloomIntensityOrDefault(decalBloomIntensity) : 1.0f};
     const auto existing = batchIndexByKey.find(key);
     if (existing != batchIndexByKey.end()) {
         return batches[existing->second];
@@ -101,6 +115,7 @@ SectorMeshBatchData& BatchForKey(
     batch.decalOpacity = key.decalOpacity;
     batch.decalEmissive = key.decalEmissive;
     batch.decalTint = key.decalTint;
+    batch.decalBloomIntensity = key.decalBloomIntensity;
     batches.push_back(std::move(batch));
     const size_t index = batches.size() - 1;
     batchIndexByKey.emplace(key, index);
@@ -193,7 +208,8 @@ SectorMeshBatchDataResult BuildSectorMeshBatchData(
                 surface.decalTextureId,
                 surface.decalOpacity,
                 surface.decalEmissive,
-                surface.decalTint);
+                surface.decalTint,
+                surface.decalBloomIntensity);
         batch.vertices.reserve(batch.vertices.size() + surface.vertices.size());
         for (size_t vertexIndex = 0; vertexIndex < surface.vertices.size(); ++vertexIndex) {
             const SectorGeneratedVertex& vertex = surface.vertices[vertexIndex];
@@ -204,6 +220,9 @@ SectorMeshBatchDataResult BuildSectorMeshBatchData(
                     vertex.decalUv,
                     ResolveLightmapUv(lightmapLayout, surfaceIndex, vertexIndex),
                     batch.decalOpacity,
+                    batch.decalEmissive,
+                    batch.decalTint,
+                    batch.decalBloomIntensity,
                     vertex.color
             });
         }
@@ -248,6 +267,7 @@ SectorMeshBuildResult BuildSectorMeshes(
         batch.decalOpacity = builder.decalOpacity;
         batch.decalEmissive = builder.decalEmissive;
         batch.decalTint = builder.decalTint;
+        batch.decalBloomIntensity = builder.decalBloomIntensity;
         batch.mesh = mesh;
         batch.vertexCount = mesh.vertexCount;
         batch.triangleCount = mesh.triangleCount;

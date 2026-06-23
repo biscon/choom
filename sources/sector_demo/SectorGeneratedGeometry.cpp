@@ -24,6 +24,14 @@ using EarcutPoint = std::array<double, 2>;
 using EarcutRing = std::vector<EarcutPoint>;
 using EarcutPolygon = std::vector<EarcutRing>;
 
+float DecalBloomIntensityOrDefault(float value)
+{
+    if (!std::isfinite(value)) {
+        return 1.0f;
+    }
+    return std::clamp(value, 0.0f, 10.0f);
+}
+
 Vector2 ApplyUvSettings(Vector2 baseUv, Vector2 uvScale, Vector2 uvOffset)
 {
     return Vector2{
@@ -209,6 +217,9 @@ bool BuildTopologyFlatSurface(
     surface.decalOpacity = decal.textureId.empty() ? 1.0f : decal.opacity;
     surface.decalEmissive = !decal.textureId.empty() && decal.emissive;
     surface.decalTint = decal.textureId.empty() ? Vector3{1.0f, 1.0f, 1.0f} : decal.tint;
+    surface.decalBloomIntensity = decal.textureId.empty()
+            ? 1.0f
+            : DecalBloomIntensityOrDefault(decal.bloomIntensity);
     surface.normal = normal;
     surface.chartWidth = std::max(maxX - minX, EdgeEpsilon);
     surface.chartHeight = std::max(maxZ - minZ, EdgeEpsilon);
@@ -326,6 +337,9 @@ bool BuildTopologyWallSurface(
     surface.decalTint = settings.decal.textureId.empty()
             ? Vector3{1.0f, 1.0f, 1.0f}
             : settings.decal.tint;
+    surface.decalBloomIntensity = settings.decal.textureId.empty()
+            ? 1.0f
+            : DecalBloomIntensityOrDefault(settings.decal.bloomIntensity);
     surface.normal = normal;
     surface.chartWidth = length;
     surface.chartHeight = height;
