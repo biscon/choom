@@ -222,6 +222,20 @@ SectorTopologyDecalLayer ReadDecal(const Json& value, const std::string& context
     if (tintIt != value.end()) {
         decal.tint = ReadUnitVector3(*tintIt, context + ".tint");
     }
+    const auto bloomIntensityIt = value.find("bloomIntensity");
+    if (bloomIntensityIt != value.end()) {
+        if (!bloomIntensityIt->is_number()) {
+            Fail(context + ".bloomIntensity must be a number");
+        }
+        const double bloomIntensity = bloomIntensityIt->get<double>();
+        if (!std::isfinite(bloomIntensity)
+                || bloomIntensity < 0.0
+                || bloomIntensity > 10.0
+                || bloomIntensity > std::numeric_limits<float>::max()) {
+            Fail(context + ".bloomIntensity must be a finite float between 0 and 10");
+        }
+        decal.bloomIntensity = static_cast<float>(bloomIntensity);
+    }
     return decal;
 }
 
@@ -396,12 +410,18 @@ Json WriteDecal(const SectorTopologyDecalLayer& decal, const std::string& contex
             || decal.tint.z < 0.0f || decal.tint.z > 1.0f) {
         Fail(context + ".tint must contain finite values between 0 and 1");
     }
+    if (!std::isfinite(decal.bloomIntensity)
+            || decal.bloomIntensity < 0.0f
+            || decal.bloomIntensity > 10.0f) {
+        Fail(context + ".bloomIntensity must be a finite float between 0 and 10");
+    }
     return Json{
             {"textureId", decal.textureId},
             {"uv", WriteUv(decal.uv, context + ".uv")},
             {"opacity", decal.opacity},
             {"emissive", decal.emissive},
-            {"tint", WriteVector3(decal.tint, context + ".tint")}
+            {"tint", WriteVector3(decal.tint, context + ".tint")},
+            {"bloomIntensity", decal.bloomIntensity}
     };
 }
 

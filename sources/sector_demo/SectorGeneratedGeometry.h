@@ -43,6 +43,7 @@ struct SectorGeneratedSurface {
     float decalOpacity = 1.0f;
     bool decalEmissive = false;
     Vector3 decalTint = {1.0f, 1.0f, 1.0f};
+    float decalBloomIntensity = 1.0f;
     Vector3 normal = {};
     std::vector<SectorGeneratedVertex> vertices;
     float chartWidth = 0.0f;

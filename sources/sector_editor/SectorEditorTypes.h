@@ -370,10 +370,13 @@ struct SectorEditorUiState {
     engine::UIFloatInputState surface3DUvOffsetUInput;
     engine::UIFloatInputState surface3DUvOffsetVInput;
     engine::UIFloatInputState surface3DDecalOpacityInput;
+    engine::UIFloatInputState surface3DDecalBloomIntensityInput;
     engine::UIFloatInputState topologySectorUvInputs[20];
     engine::UIFloatInputState topologySectorDecalOpacityInputs[2];
+    engine::UIFloatInputState topologySectorDecalBloomIntensityInputs[2];
     engine::UIFloatInputState topologySideDefUvInputs[4];
     engine::UIFloatInputState topologySideDefDecalOpacityInput;
+    engine::UIFloatInputState topologySideDefDecalBloomIntensityInput;
     engine::UIScrollState toolsScroll;
     engine::UIScrollState inspectorScroll;
     char selectedSectorIdBuffer[64] = {};

@@ -169,14 +169,16 @@ const game::SectorMeshBatchData* FindBatch(
         const std::string& decalTextureId,
         float decalOpacity,
         bool decalEmissive = false,
-        Vector3 decalTint = {1.0f, 1.0f, 1.0f})
+        Vector3 decalTint = {1.0f, 1.0f, 1.0f},
+        float decalBloomIntensity = 1.0f)
 {
     for (const game::SectorMeshBatchData& batch : result.batches) {
         if (batch.textureId == textureId
                 && batch.decalTextureId == decalTextureId
                 && Near(batch.decalOpacity, decalOpacity)
                 && batch.decalEmissive == decalEmissive
-                && Near(batch.decalTint, decalTint)) {
+                && Near(batch.decalTint, decalTint)
+                && Near(batch.decalBloomIntensity, decalBloomIntensity)) {
             return &batch;
         }
     }
@@ -203,7 +205,8 @@ int CountBatches(
         const std::string& decalTextureId,
         float decalOpacity,
         bool decalEmissive = false,
-        Vector3 decalTint = {1.0f, 1.0f, 1.0f})
+        Vector3 decalTint = {1.0f, 1.0f, 1.0f},
+        float decalBloomIntensity = 1.0f)
 {
     int count = 0;
     for (const game::SectorMeshBatchData& batch : result.batches) {
@@ -211,7 +214,8 @@ int CountBatches(
                 && batch.decalTextureId == decalTextureId
                 && Near(batch.decalOpacity, decalOpacity)
                 && batch.decalEmissive == decalEmissive
-                && Near(batch.decalTint, decalTint)) {
+                && Near(batch.decalTint, decalTint)
+                && Near(batch.decalBloomIntensity, decalBloomIntensity)) {
             ++count;
         }
     }
@@ -225,7 +229,8 @@ game::SectorGeneratedSurface MakeBatchTestSurface(
         float decalOpacity,
         float xOffset,
         bool decalEmissive = false,
-        Vector3 decalTint = {1.0f, 1.0f, 1.0f})
+        Vector3 decalTint = {1.0f, 1.0f, 1.0f},
+        float decalBloomIntensity = 1.0f)
 {
     game::SectorGeneratedSurface surface;
     surface.textureId = textureId;
@@ -233,6 +238,7 @@ game::SectorGeneratedSurface MakeBatchTestSurface(
     surface.decalOpacity = decalTextureId[0] == '\0' ? 1.0f : decalOpacity;
     surface.decalEmissive = decalTextureId[0] != '\0' && decalEmissive;
     surface.decalTint = decalTextureId[0] == '\0' ? Vector3{1.0f, 1.0f, 1.0f} : decalTint;
+    surface.decalBloomIntensity = decalTextureId[0] == '\0' ? 1.0f : decalBloomIntensity;
     surface.normal = Vector3{0.0f, 1.0f, 0.0f};
     surface.vertices = {
             game::SectorGeneratedVertex{
@@ -365,15 +371,19 @@ void TestDecalMeshBatchData()
     geometry.surfaces.push_back(MakeBatchTestSurface("stone", "poster-a", Vector2{6.25f, 6.5f}, 0.6f, 12.0f, true));
     geometry.surfaces.push_back(MakeBatchTestSurface("stone", "poster-a", Vector2{7.25f, 7.5f}, 0.6f, 14.0f, true));
     geometry.surfaces.push_back(MakeBatchTestSurface("stone", "poster-a", Vector2{8.25f, 8.5f}, 0.6f, 16.0f, false, Vector3{1.0f, 0.25f, 0.25f}));
+    geometry.surfaces.push_back(MakeBatchTestSurface("stone", "poster-a", Vector2{9.25f, 9.5f}, 0.6f, 18.0f, true, Vector3{1.0f, 1.0f, 1.0f}, 3.0f));
+    geometry.surfaces.push_back(MakeBatchTestSurface("stone", "poster-a", Vector2{10.25f, 10.5f}, 0.6f, 20.0f, false, Vector3{1.0f, 1.0f, 1.0f}, std::numeric_limits<float>::infinity()));
 
     const game::SectorMeshBatchDataResult result = game::BuildSectorMeshBatchData(geometry);
-    Check(result.batches.size() == 6, "decal batch key separates base texture by decal settings");
-    Check(CountBatches(result, "stone", "poster-a") == 4, "same decal texture with different settings splits batches");
-    Check(CountBatches(result, "stone", "poster-a", 0.6f) == 1, "same base decal and opacity share one batch");
+    Check(result.batches.size() == 7, "decal batch key separates base texture by decal settings");
+    Check(CountBatches(result, "stone", "poster-a") == 5, "same decal texture with different settings splits batches");
+    Check(CountBatches(result, "stone", "poster-a", 0.6f) == 1, "same base decal opacity and bloom intensity share one batch");
     Check(CountBatches(result, "stone", "poster-a", 0.8f) == 1, "different decal opacity creates a separate batch");
     Check(CountBatches(result, "stone", "poster-a", 0.6f, true) == 1, "different decal emissive flag creates a separate batch");
     Check(CountBatches(result, "stone", "poster-a", 0.6f, false, Vector3{1.0f, 0.25f, 0.25f}) == 1,
           "different decal tint creates a separate batch");
+    Check(CountBatches(result, "stone", "poster-a", 0.6f, true, Vector3{1.0f, 1.0f, 1.0f}, 3.0f) == 1,
+          "different decal bloom intensity creates a separate batch");
     Check(CountBatches(result, "stone", "poster-b") == 1, "different decal texture creates separate batch");
     Check(CountBatches(result, "stone", "") == 1, "missing decals batch with empty decal key");
 
@@ -381,10 +391,11 @@ void TestDecalMeshBatchData()
     const game::SectorMeshBatchData* posterAHighOpacity = FindBatch(result, "stone", "poster-a", 0.8f);
     const game::SectorMeshBatchData* posterAEmissive = FindBatch(result, "stone", "poster-a", 0.6f, true);
     const game::SectorMeshBatchData* posterATinted = FindBatch(result, "stone", "poster-a", 0.6f, false, Vector3{1.0f, 0.25f, 0.25f});
+    const game::SectorMeshBatchData* posterABrightBloom = FindBatch(result, "stone", "poster-a", 0.6f, true, Vector3{1.0f, 1.0f, 1.0f}, 3.0f);
     const game::SectorMeshBatchData* posterB = FindBatch(result, "stone", "poster-b");
     const game::SectorMeshBatchData* noDecal = FindBatch(result, "stone", "");
-    Check(posterA != nullptr && posterA->vertices.size() == 6,
-          "same decal batch contains both poster-a surfaces");
+    Check(posterA != nullptr && posterA->vertices.size() == 9,
+          "same decal batch contains matching poster-a surfaces with default bloom intensity");
     Check(posterAHighOpacity != nullptr && posterAHighOpacity->vertices.size() == 3,
           "different opacity poster-a surface is isolated for uniform opacity");
     Check(posterAEmissive != nullptr && posterAEmissive->vertices.size() == 6,
@@ -402,10 +413,14 @@ void TestDecalMeshBatchData()
         Check(!posterA->decalEmissive, "mesh batch stores default decal emissive flag");
         Check(Near(posterA->decalTint, Vector3{1.0f, 1.0f, 1.0f}),
               "mesh batch stores default decal tint");
+        Check(Near(posterA->decalBloomIntensity, 1.0f),
+              "mesh batch canonicalizes default decal bloom intensity");
         Check(Near(posterA->vertices.front().decalUv, Vector2{0.25f, 0.5f}),
               "mesh batch preserves decal UV");
         Check(Near(posterA->vertices.front().decalOpacity, 0.6f),
               "mesh batch preserves decal opacity");
+        Check(Near(posterA->vertices.front().decalBloomIntensity, 1.0f),
+              "mesh batch vertex stores canonicalized decal bloom intensity");
     }
     if (posterAEmissive != nullptr && !posterAEmissive->vertices.empty()) {
         Check(posterAEmissive->decalEmissive, "mesh batch preserves emissive decal flag");
@@ -414,6 +429,10 @@ void TestDecalMeshBatchData()
         Check(Near(posterATinted->decalTint, Vector3{1.0f, 0.25f, 0.25f}),
               "mesh batch preserves decal tint");
     }
+    if (posterABrightBloom != nullptr && !posterABrightBloom->vertices.empty()) {
+        Check(Near(posterABrightBloom->decalBloomIntensity, 3.0f),
+              "mesh batch preserves decal bloom intensity");
+    }
     if (noDecal != nullptr && !noDecal->vertices.empty()) {
         Check(noDecal->decalTextureId.empty(), "no-decal batch stores empty decal texture ID");
         Check(Near(noDecal->decalOpacity, 1.0f),
@@ -421,6 +440,8 @@ void TestDecalMeshBatchData()
         Check(!noDecal->decalEmissive, "no-decal batch stores default emissive flag");
         Check(Near(noDecal->decalTint, Vector3{1.0f, 1.0f, 1.0f}),
               "no-decal batch stores default tint");
+        Check(Near(noDecal->decalBloomIntensity, 1.0f),
+              "no-decal batch stores default bloom intensity");
         Check(Near(noDecal->vertices.front().decalOpacity, 1.0f),
               "no-decal batch stores default opacity");
     }

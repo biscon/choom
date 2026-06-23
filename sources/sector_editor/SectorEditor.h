@@ -21,6 +21,9 @@ public:
 
     void Update(engine::Input& input, float dt);
     void Render(engine::AssetManager& assets);
+    void RenderPreview3DScene(engine::AssetManager& assets);
+    void RenderPreview3DOverlays();
+    void ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
     void RenderUI(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -275,6 +278,7 @@ private:
     bool ApplySurfaceDecalOpacity(TopologySurfaceEditTarget target, float opacity, engine::AssetManager* assets);
     bool ApplySurfaceDecalEmissive(TopologySurfaceEditTarget target, bool emissive, engine::AssetManager* assets);
     bool ApplySurfaceDecalTint(TopologySurfaceEditTarget target, Vector3 tint, engine::AssetManager* assets);
+    bool ApplySurfaceDecalBloomIntensity(TopologySurfaceEditTarget target, float bloomIntensity, engine::AssetManager* assets);
     bool OpenDecalTintModal(TopologySurfaceEditTarget target);
     bool ClearSurfaceDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool ResetSurface3DUv(TopologySurfaceEditTarget target, TopologyMaterialLayer layer, engine::AssetManager& assets);

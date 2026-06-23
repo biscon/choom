@@ -210,10 +210,16 @@ normal topology texture table and texture picker; decal textures are ordinary
 texture IDs, not a separate texture category. Decal UVs are masked outside
 `0..1`, so decals do not tile across the whole surface. Non-emissive decals
 are composited over the base texture first, then lit like the base surface.
-Emissive decals render unlit over the already-lit base surface, but do not cast
-light or affect lightmap baking. Tint multiplies decal RGB and is edited with a
-compact swatch that opens a modal color dialog rather than direct inspector RGB
-fields. The single optional decal layer limitation remains.
+Emissive decals render unlit over the already-lit base surface and contribute to
+a visual bloom post-process, but do not cast light or affect lightmap baking.
+Bloom is sourced only from emissive decals; bright base textures, non-emissive
+decals, editor UI, and debug overlays do not bloom. Decal opacity and tint affect
+both the rendered emissive decal and its bloom source. Emissive decals also expose
+a `Bloom` intensity value in the editor, stored as `bloomIntensity` in decal JSON,
+which affects only the bloom source and not the main emissive decal render. Tint
+multiplies decal RGB and is edited with a compact swatch that opens a modal color
+dialog rather than direct inspector RGB fields. The single optional decal layer
+limitation remains.
 
 For manual decal verification, load `decal_test` from the `Load` dialog. The
 sample level lives at `assets/levels/decal_test/decal_test.json` and uses
