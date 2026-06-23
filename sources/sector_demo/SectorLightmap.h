@@ -111,9 +111,9 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 6: topology lightmap identity uses topology sector/linedef/sidedef
-// refs and topology static lights.
-constexpr int kSectorLightmapBakeVersion = 6;
+// Version 7: middle texture receiver surfaces allocate lightmap charts and
+// participate in stale-bake detection without casting baked occlusion.
+constexpr int kSectorLightmapBakeVersion = 7;
 constexpr int kDirectSoftShadowSampleCount = 8;
 constexpr int kAmbientOcclusionSampleCount = 12;
 constexpr int kIndirectBounceSampleCount = 8;

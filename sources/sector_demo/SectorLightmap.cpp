@@ -18,6 +18,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace game {
 
@@ -446,6 +447,11 @@ bool BuildSectorLightmapBvh(
     outBvh.nodes.reserve(triangles.size() * 2);
 
     return BuildBvhNode(outBvh, triangles, 0, static_cast<int>(triangles.size()), 0, outStats, outError) >= 0;
+}
+
+bool CastsLightmapOcclusion(const SectorGeneratedSurface& surface)
+{
+    return surface.ref.kind != SectorGeneratedSurfaceKind::Middle;
 }
 
 bool IntersectRayAabb(const Ray& ray, const BakeAabb& bounds, float maxDistance, float& outEntryDistance)
@@ -922,7 +928,13 @@ std::vector<BakeTriangle> BuildBakeTriangles(const SectorGeneratedGeometry& geom
             continue;
         }
         const SectorGeneratedSurface& surface = geometry.surfaces[surfaceIndex];
+        if (!CastsLightmapOcclusion(surface)) {
+            continue;
+        }
         const SectorLightmapChart& chart = layout.charts[surfaceIndex];
+        if (chart.surfaceIndex < 0) {
+            continue;
+        }
         for (size_t i = 0; i + 2 < surface.vertices.size(); i += 3) {
             Vector3 normal = surface.normal;
             if (Vector3LengthSqr(normal) <= BakeEpsilon) {
@@ -1153,6 +1165,9 @@ bool BuildSectorLightmapLayoutFromGeometry(
 
     for (size_t surfaceIndex = 0; surfaceIndex < geometry.surfaces.size(); ++surfaceIndex) {
         const SectorGeneratedSurface& surface = geometry.surfaces[surfaceIndex];
+        if (!surface.receivesLightmap) {
+            continue;
+        }
         const int usableWidth = std::max(2, static_cast<int>(std::ceil(surface.chartWidth * SectorLightmapTexelsPerWorldUnit)));
         const int usableHeight = std::max(2, static_cast<int>(std::ceil(surface.chartHeight * SectorLightmapTexelsPerWorldUnit)));
         const int chartWidth = usableWidth + SectorLightmapGutterTexels * 2;
@@ -1278,12 +1293,36 @@ std::vector<const T*> SortedLightmapHashRecords(const std::vector<T>& values)
     return sorted;
 }
 
-std::vector<std::string> SortedLightmapTextureIds(const std::unordered_map<std::string, SectorTextureDefinition>& textures)
+void AddReferencedLightmapTexture(std::unordered_set<std::string>& textureIds, const std::string& textureId)
 {
+    if (!textureId.empty()) {
+        textureIds.insert(textureId);
+    }
+}
+
+std::vector<std::string> SortedReferencedLightmapTextureIds(const SectorTopologyMap& map)
+{
+    std::unordered_set<std::string> referenced;
+    for (const SectorTopologySideDef& sideDef : map.sideDefs) {
+        AddReferencedLightmapTexture(referenced, sideDef.wall.textureId);
+        AddReferencedLightmapTexture(referenced, sideDef.lower.textureId);
+        AddReferencedLightmapTexture(referenced, sideDef.upper.textureId);
+        AddReferencedLightmapTexture(referenced, sideDef.middle.textureId);
+    }
+    for (const SectorTopologySector& sector : map.sectors) {
+        AddReferencedLightmapTexture(referenced, sector.floorTextureId);
+        AddReferencedLightmapTexture(referenced, sector.ceilingTextureId);
+        AddReferencedLightmapTexture(referenced, sector.defaultWall.textureId);
+        AddReferencedLightmapTexture(referenced, sector.defaultLower.textureId);
+        AddReferencedLightmapTexture(referenced, sector.defaultUpper.textureId);
+    }
+
     std::vector<std::string> ids;
-    ids.reserve(textures.size());
-    for (const auto& entry : textures) {
-        ids.push_back(entry.first);
+    ids.reserve(referenced.size());
+    for (const std::string& textureId : referenced) {
+        if (map.texturesById.find(textureId) != map.texturesById.end()) {
+            ids.push_back(textureId);
+        }
     }
     std::sort(ids.begin(), ids.end());
     return ids;
@@ -1310,6 +1349,8 @@ bool IsSameLogicalSectorLightmapSurface(
                     && a.topologyLineDefId == b.topologyLineDefId
                     && a.topologySideDefId == b.topologySideDefId
                     && a.topologySide == b.topologySide;
+        case SectorGeneratedSurfaceKind::Middle:
+            return false;
     }
 
     return false;
@@ -1822,7 +1863,7 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
     FnvAppendLightmapBakeConstantsAndSettings(hash, map.lightmapSettings);
     FnvAppendInt(hash, SectorCoordSubdivisions);
 
-    const std::vector<std::string> textureIds = SortedLightmapTextureIds(map.texturesById);
+    const std::vector<std::string> textureIds = SortedReferencedLightmapTextureIds(map);
     FnvAppendInt(hash, static_cast<int>(textureIds.size()));
     for (const std::string& textureId : textureIds) {
         const SectorTextureDefinition& texture = map.texturesById.at(textureId);
@@ -1860,6 +1901,7 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
         FnvAppendTopologyWallPart(hash, sideDef->wall);
         FnvAppendTopologyWallPart(hash, sideDef->lower);
         FnvAppendTopologyWallPart(hash, sideDef->upper);
+        FnvAppendTopologyWallPart(hash, sideDef->middle);
     }
 
     const std::vector<const SectorTopologySector*> sectors = SortedLightmapHashRecords(map.sectors);

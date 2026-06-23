@@ -265,6 +265,17 @@ game::SectorGeneratedSurface MakeBatchTestSurface(
     return surface;
 }
 
+game::SectorGeneratedSurface MakeMiddleBatchTestSurface(const char* textureId, float xOffset)
+{
+    game::SectorGeneratedSurface surface =
+            MakeBatchTestSurface(textureId, "", Vector2{0.0f, 0.0f}, 1.0f, xOffset);
+    surface.ref.kind = game::SectorGeneratedSurfaceKind::Middle;
+    surface.alphaTest = true;
+    surface.alphaCutoff = 0.5f;
+    surface.receivesLightmap = true;
+    return surface;
+}
+
 int CountTrianglesByKind(
         const game::SectorGeneratedGeometry& geometry,
         game::SectorGeneratedSurfaceKind kind,
@@ -447,6 +458,56 @@ void TestDecalMeshBatchData()
     }
 }
 
+void TestMiddleTextureBatchState()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface opaque = MakeBatchTestSurface("shared", "", Vector2{0.0f, 0.0f}, 1.0f, 0.0f);
+    opaque.ref.kind = game::SectorGeneratedSurfaceKind::Wall;
+    geometry.surfaces.push_back(opaque);
+    geometry.surfaces.push_back(MakeMiddleBatchTestSurface("shared", 2.0f));
+    geometry.surfaces.push_back(MakeMiddleBatchTestSurface("shared", 4.0f));
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshBatchData(geometry);
+    Check(result.batches.size() == 2,
+          "alpha test splits middle textures from opaque walls");
+
+    const game::SectorMeshBatchData* opaqueBatch = nullptr;
+    const game::SectorMeshBatchData* middleBatch = nullptr;
+    for (const game::SectorMeshBatchData& batch : result.batches) {
+        if (batch.textureId != "shared") {
+            continue;
+        }
+        if (batch.alphaTest) {
+            middleBatch = &batch;
+        } else {
+            opaqueBatch = &batch;
+        }
+    }
+
+    Check(opaqueBatch != nullptr && !opaqueBatch->alphaTest && opaqueBatch->receivesLightmap,
+          "ordinary wall batch remains opaque and lightmapped");
+    Check(middleBatch != nullptr && middleBatch->alphaTest && middleBatch->receivesLightmap,
+          "middle texture batch stores alpha-test and lightmapped state");
+    Check(middleBatch != nullptr && Near(middleBatch->alphaCutoff, 0.5f),
+          "middle texture batch stores alpha cutoff");
+    Check(middleBatch != nullptr && middleBatch->vertices.size() == 6,
+          "matching middle texture surfaces share the alpha-test batch");
+}
+
+void TestLightmapParticipationSplitsBatchKey()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface lightmapped = MakeBatchTestSurface("stone", "", Vector2{0.0f, 0.0f}, 1.0f, 0.0f);
+    game::SectorGeneratedSurface unlightmapped = MakeBatchTestSurface("stone", "", Vector2{0.0f, 0.0f}, 1.0f, 2.0f);
+    unlightmapped.receivesLightmap = false;
+    geometry.surfaces.push_back(lightmapped);
+    geometry.surfaces.push_back(unlightmapped);
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshBatchData(geometry);
+    Check(result.batches.size() == 2,
+          "receivesLightmap participates in the batch key even without alpha test");
+}
+
 void TestHoleTopologyMeshBatchData()
 {
     const game::SectorGeneratedGeometry geometry = BuildGeometryOrFail(MakeSquareWithHole(), "hole topology geometry builds");
@@ -518,6 +579,8 @@ void TestTriangleWindingAgainstNormals()
                 case game::SectorGeneratedSurfaceKind::UpperWall:
                     ++upperCount;
                     break;
+                case game::SectorGeneratedSurfaceKind::Middle:
+                    break;
             }
         }
     }
@@ -580,18 +643,78 @@ void TestGeneratedGeometryPickingKeepsTopologyRefs()
     Check(upperHit.ref.topologySideDefId == 2, "upper wall ray preserves topology sidedef id");
 }
 
+void TestGeneratedGeometryPickingResolvesMiddleFacingRefs()
+{
+    game::SectorTopologyMap bothAssigned = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::FindSectorTopologySideDef(bothAssigned, 2)->middle = Part("front-bars");
+    game::FindSectorTopologySideDef(bothAssigned, 8)->middle = Part("back-bars");
+    const game::SectorGeneratedGeometry bothGeometry =
+            BuildGeometryOrFail(bothAssigned, "pick both-assigned middle geometry builds");
+
+    const game::SectorGeneratedSurfaceHit bothFrontHit = game::PickSectorGeneratedGeometry(
+            bothGeometry,
+            MakeRay(Vector3{0.25f, 1.0f, 0.25f}, Vector3{1.0f, 0.0f, 0.0f}));
+    Check(bothFrontHit.hit, "front ray hits both-assigned middle texture");
+    Check(bothFrontHit.ref.kind == game::SectorGeneratedSurfaceKind::Middle,
+          "front ray returns middle kind");
+    Check(bothFrontHit.ref.topologySideDefId == 2,
+          "front ray picks front middle sidedef");
+
+    const game::SectorGeneratedSurfaceHit bothBackHit = game::PickSectorGeneratedGeometry(
+            bothGeometry,
+            MakeRay(Vector3{1.0f, 1.0f, 0.25f}, Vector3{-1.0f, 0.0f, 0.0f}));
+    Check(bothBackHit.hit, "back ray hits both-assigned middle texture");
+    Check(bothBackHit.ref.kind == game::SectorGeneratedSurfaceKind::Middle,
+          "back ray returns middle kind");
+    Check(bothBackHit.ref.topologySideDefId == 8,
+          "back ray picks back middle sidedef");
+
+    game::SectorTopologyMap frontAssigned = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::FindSectorTopologySideDef(frontAssigned, 2)->middle = Part("bars");
+    const game::SectorGeneratedGeometry frontGeometry =
+            BuildGeometryOrFail(frontAssigned, "pick front-assigned middle geometry builds");
+    const game::SectorGeneratedSurfaceHit frontOwnerHit = game::PickSectorGeneratedGeometry(
+            frontGeometry,
+            MakeRay(Vector3{0.25f, 1.0f, 0.25f}, Vector3{1.0f, 0.0f, 0.0f}));
+    const game::SectorGeneratedSurfaceHit frontOwnerBackHit = game::PickSectorGeneratedGeometry(
+            frontGeometry,
+            MakeRay(Vector3{1.0f, 1.0f, 0.25f}, Vector3{-1.0f, 0.0f, 0.0f}));
+    Check(frontOwnerHit.hit && frontOwnerHit.ref.topologySideDefId == 2,
+          "front-side ray picks front owner for single-assigned middle texture");
+    Check(frontOwnerBackHit.hit && frontOwnerBackHit.ref.topologySideDefId == 2,
+          "back-side ray picks front owner for single-assigned middle texture");
+
+    game::SectorTopologyMap backAssigned = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::FindSectorTopologySideDef(backAssigned, 8)->middle = Part("bars");
+    const game::SectorGeneratedGeometry backGeometry =
+            BuildGeometryOrFail(backAssigned, "pick back-assigned middle geometry builds");
+    const game::SectorGeneratedSurfaceHit backOwnerFrontHit = game::PickSectorGeneratedGeometry(
+            backGeometry,
+            MakeRay(Vector3{0.25f, 1.0f, 0.25f}, Vector3{1.0f, 0.0f, 0.0f}));
+    const game::SectorGeneratedSurfaceHit backOwnerHit = game::PickSectorGeneratedGeometry(
+            backGeometry,
+            MakeRay(Vector3{1.0f, 1.0f, 0.25f}, Vector3{-1.0f, 0.0f, 0.0f}));
+    Check(backOwnerFrontHit.hit && backOwnerFrontHit.ref.topologySideDefId == 8,
+          "front-side ray picks back owner for back-assigned middle texture");
+    Check(backOwnerHit.hit && backOwnerHit.ref.topologySideDefId == 8,
+          "back-side ray picks back owner for back-assigned middle texture");
+}
+
 } // namespace
 
 int main()
 {
     TestSquareTopologyMeshBatchData();
     TestDecalMeshBatchData();
+    TestMiddleTextureBatchState();
+    TestLightmapParticipationSplitsBatchKey();
     TestHoleTopologyMeshBatchData();
     TestEqualHeightPortal();
     TestDifferentHeightPortal();
     TestTriangleWindingAgainstNormals();
     TestInvalidTopologyMeshBuilder();
     TestGeneratedGeometryPickingKeepsTopologyRefs();
+    TestGeneratedGeometryPickingResolvesMiddleFacingRefs();
     if (failures == 0) {
         std::puts("Sector topology mesh builder tests passed");
     }

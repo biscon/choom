@@ -281,12 +281,14 @@ private:
     bool ApplySurfaceDecalBloomIntensity(TopologySurfaceEditTarget target, float bloomIntensity, engine::AssetManager* assets);
     bool OpenDecalTintModal(TopologySurfaceEditTarget target);
     bool ClearSurfaceDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
+    bool ClearMiddleTexture(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool ResetSurface3DUv(TopologySurfaceEditTarget target, TopologyMaterialLayer layer, engine::AssetManager& assets);
     bool FitSelectedDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool FitSelectedFlatDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialU(TopologySurfaceEditTarget target, TopologyUAlignDirection direction, engine::AssetManager* assets, TopologyMaterialLayer layer);
+    bool FinishTopologyMaterialMutation(const char* status, engine::AssetManager* assets);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     bool SplitSelectedTopologyLineDef();
     bool DissolveSelectedTopologyVertex();

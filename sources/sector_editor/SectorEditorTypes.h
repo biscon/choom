@@ -68,7 +68,8 @@ enum class TopologySelectionKind {
 enum class TopologyWallPart {
     Wall,
     Lower,
-    Upper
+    Upper,
+    Middle
 };
 
 enum class TopologyMaterialLayer {
@@ -102,7 +103,8 @@ enum class SectorSurfaceKind {
     Ceiling,
     Wall,
     LowerWall,
-    UpperWall
+    UpperWall,
+    Middle
 };
 
 struct SectorSurfaceRef {
@@ -126,7 +128,8 @@ enum class TopologySurfaceEditTargetKind {
     SectorCeiling,
     SideDefWall,
     SideDefLower,
-    SideDefUpper
+    SideDefUpper,
+    SideDefMiddle
 };
 
 struct TopologySurfaceEditTarget {

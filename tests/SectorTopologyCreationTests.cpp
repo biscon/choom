@@ -133,6 +133,7 @@ void CheckUnchanged(
                           && before.sideDefs[i].wall.textureId == after.sideDefs[i].wall.textureId
                           && before.sideDefs[i].lower.textureId == after.sideDefs[i].lower.textureId
                           && before.sideDefs[i].upper.textureId == after.sideDefs[i].upper.textureId
+                          && before.sideDefs[i].middle.textureId == after.sideDefs[i].middle.textureId
                           && before.sideDefs[i].wall.uv.scale.x == after.sideDefs[i].wall.uv.scale.x
                           && before.sideDefs[i].wall.uv.scale.y == after.sideDefs[i].wall.uv.scale.y
                           && before.sideDefs[i].wall.uv.offset.x == after.sideDefs[i].wall.uv.offset.x
@@ -144,7 +145,11 @@ void CheckUnchanged(
                           && before.sideDefs[i].upper.uv.scale.x == after.sideDefs[i].upper.uv.scale.x
                           && before.sideDefs[i].upper.uv.scale.y == after.sideDefs[i].upper.uv.scale.y
                           && before.sideDefs[i].upper.uv.offset.x == after.sideDefs[i].upper.uv.offset.x
-                          && before.sideDefs[i].upper.uv.offset.y == after.sideDefs[i].upper.uv.offset.y,
+                          && before.sideDefs[i].upper.uv.offset.y == after.sideDefs[i].upper.uv.offset.y
+                          && before.sideDefs[i].middle.uv.scale.x == after.sideDefs[i].middle.uv.scale.x
+                          && before.sideDefs[i].middle.uv.scale.y == after.sideDefs[i].middle.uv.scale.y
+                          && before.sideDefs[i].middle.uv.offset.x == after.sideDefs[i].middle.uv.offset.x
+                          && before.sideDefs[i].middle.uv.offset.y == after.sideDefs[i].middle.uv.offset.y,
                   description);
         }
     }
@@ -259,14 +264,16 @@ bool SameSideDefSettings(const SectorTopologySideDef& a, const SectorTopologySid
            && a.sectorId == b.sectorId
            && SameWallPart(a.wall, b.wall)
            && SameWallPart(a.lower, b.lower)
-           && SameWallPart(a.upper, b.upper);
+           && SameWallPart(a.upper, b.upper)
+           && SameWallPart(a.middle, b.middle);
 }
 
 bool SameSideDefMaterials(const SectorTopologySideDef& a, const SectorTopologySideDef& b)
 {
     return SameWallPart(a.wall, b.wall)
            && SameWallPart(a.lower, b.lower)
-           && SameWallPart(a.upper, b.upper);
+           && SameWallPart(a.upper, b.upper)
+           && SameWallPart(a.middle, b.middle);
 }
 
 bool SameAllSideDefSettings(const SectorTopologyMap& before, const SectorTopologyMap& after)
@@ -295,6 +302,9 @@ void SetDistinctSideSettings(SectorTopologySideDef& sideDef, const char* prefix)
     sideDef.upper.textureId = std::string{prefix} + "_upper";
     sideDef.upper.uv.scale = {10.0f, 11.0f};
     sideDef.upper.uv.offset = {12.0f, 13.0f};
+    sideDef.middle.textureId = std::string{prefix} + "_middle";
+    sideDef.middle.uv.scale = {14.0f, 15.0f};
+    sideDef.middle.uv.offset = {16.0f, 17.0f};
 }
 
 int CountSideDefsForSector(const SectorTopologyMap& map, int sectorId)
@@ -364,6 +374,14 @@ void TestCreateSquare()
     Check(map.lineDefs.size() == 4, "square has 4 linedefs");
     Check(map.sideDefs.size() == 4, "square has 4 sidedefs");
     Check(map.sectors.size() == 1, "square has 1 sector");
+    for (const SectorTopologySideDef& sideDef : map.sideDefs) {
+        Check(sideDef.middle.textureId.empty()
+                      && sideDef.middle.uv.scale.x == 1.0f
+                      && sideDef.middle.uv.scale.y == 1.0f
+                      && sideDef.middle.uv.offset.x == 0.0f
+                      && sideDef.middle.uv.offset.y == 0.0f,
+              "newly created sidedef has default empty middle settings");
+    }
 
     SectorTopologyLoopSet loops;
     Check(ValidateAndExtract(map, sectorId, loops), "square validates and extracts");
@@ -468,13 +486,15 @@ void TestInsertChildCopiesParentFields()
         Check(front != nullptr && child != nullptr
                       && front->wall.textureId == child->defaultWall.textureId
                       && front->lower.textureId == child->defaultLower.textureId
-                      && front->upper.textureId == child->defaultUpper.textureId,
-              "child front sidedef copies child defaults");
+                      && front->upper.textureId == child->defaultUpper.textureId
+                      && front->middle.textureId.empty(),
+              "child front sidedef copies child defaults and starts with empty middle");
         Check(back != nullptr && copiedParent != nullptr
                       && back->wall.textureId == copiedParent->defaultWall.textureId
                       && back->lower.textureId == copiedParent->defaultLower.textureId
-                      && back->upper.textureId == copiedParent->defaultUpper.textureId,
-              "parent back sidedef copies parent defaults");
+                      && back->upper.textureId == copiedParent->defaultUpper.textureId
+                      && back->middle.textureId.empty(),
+              "parent back sidedef copies parent defaults and starts with empty middle");
     }
 }
 
@@ -1209,9 +1229,9 @@ void TestRejectDissolveMaterialMismatch()
     if (secondSide == nullptr) {
         return;
     }
-    secondSide->wall.textureId = "changed_wall";
+    secondSide->middle.textureId = "changed_middle";
     ExpectDissolveRejected(map, split.newVertexId, "different sector, material, or UV",
-                           "dissolve material mismatch fails");
+                           "dissolve middle material mismatch fails");
 }
 
 void TestRejectDissolveCandidateValidationFailure()
@@ -1798,8 +1818,10 @@ void TestCutCopiesSectorFieldsAndPreservesBoundarySideDefs()
     if (originalCutSide != nullptr && newCutSide != nullptr && preserved != nullptr && created != nullptr) {
         Check(originalCutSide->id != newCutSide->id
                       && originalCutSide->wall.textureId == preserved->defaultWall.textureId
-                      && newCutSide->wall.textureId == created->defaultWall.textureId,
-              "cut linedef sides are independent and initialized from sector defaults");
+                      && newCutSide->wall.textureId == created->defaultWall.textureId
+                      && originalCutSide->middle.textureId.empty()
+                      && newCutSide->middle.textureId.empty(),
+              "cut linedef sides are independent, initialized from sector defaults, and have empty middle");
     }
 }
 
@@ -2496,7 +2518,7 @@ void TestMergeVertexIntoUnreferencedTarget()
                   && map.sectors.size() == before.sectors.size(),
           "merge does not remove linedefs, sidedefs, or sectors");
     Check(SameAllSideDefSettings(before, map),
-          "merge preserves sidedef wall/lower/upper materials and UVs");
+          "merge preserves sidedef wall/lower/upper/middle materials and UVs");
 
     SectorTopologyLoopSet loops;
     Check(ValidateAndExtract(map, sectorId, loops), "merged sector validates and extracts");
@@ -2570,6 +2592,7 @@ void TestRejectMergeDuplicatePhysicalLineDef()
             sectorId,
             game::SectorTopologyWallPartSettings{},
             game::SectorTopologyWallPartSettings{},
+            game::SectorTopologyWallPartSettings{},
             game::SectorTopologyWallPartSettings{}
     });
     map.lineDefs.push_back(SectorTopologyLineDef{firstLineDefId, sourceVertexId, 1, firstSideDefId, -1});
@@ -2581,6 +2604,7 @@ void TestRejectMergeDuplicatePhysicalLineDef()
             secondLineDefId,
             SectorTopologySideKind::Front,
             sectorId,
+            game::SectorTopologyWallPartSettings{},
             game::SectorTopologyWallPartSettings{},
             game::SectorTopologyWallPartSettings{},
             game::SectorTopologyWallPartSettings{}

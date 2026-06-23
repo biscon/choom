@@ -43,6 +43,10 @@
       "path": "assets/images/test/metal.png",
       "filter": "anisotropic8x"
     },
+    "metal_bars_01": {
+      "path": "assets/images/middle/metal_bars_01.png",
+      "filter": "anisotropic8x"
+    },
     "riser_01": {
       "path": "assets/images/riser_01.png",
       "filter": "anisotropic8x"
@@ -7008,6 +7012,19 @@
             0.0
           ]
         }
+      },
+      "middle": {
+        "textureId": "metal_bars_01",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
       }
     },
     {
@@ -8587,7 +8604,7 @@
           1.0,
           1.0
         ],
-        "bloomIntensity": 1.0
+        "bloomIntensity": 1.5
       }
     },
     {
@@ -8770,7 +8787,7 @@
     }
   ],
   "lightmapSettings": {
-    "ambientOcclusionRadius": 10.0,
+    "ambientOcclusionRadius": 15.0,
     "ambientOcclusionStrength": 0.550000011920929,
     "indirectBounceRadius": 32.0,
     "indirectBounceStrength": 0.20000000298023224
@@ -8779,6 +8796,6 @@
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "1d52447f1edc61f7"
+    "sourceHash": "a051ded2cc085ac7"
   }
 }

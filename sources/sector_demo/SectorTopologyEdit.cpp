@@ -905,7 +905,8 @@ bool SameSideDefMergeSettings(
     return a.sectorId == b.sectorId
             && SameWallPartSettings(a.wall, b.wall)
             && SameWallPartSettings(a.lower, b.lower)
-            && SameWallPartSettings(a.upper, b.upper);
+            && SameWallPartSettings(a.upper, b.upper)
+            && SameWallPartSettings(a.middle, b.middle);
 }
 
 struct DirectedSideDefCopy {

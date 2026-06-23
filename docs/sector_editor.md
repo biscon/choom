@@ -101,6 +101,12 @@ views and maps to world Z for generated 3D geometry.
 Two-sided portals generate lower and/or upper wall surfaces only where adjacent
 sector heights differ. Equal-height two-sided portals remain visible and
 editable in 2D, but produce no 3D wall surface to pick or texture in 3D.
+Topology sidedefs can also store optional middle texture data for Doom-style
+masked portal surfaces. A sidedef middle texture renders only on a two-sided
+portal linedef, fills the visible opening from the higher floor to the lower
+ceiling, and uses alpha testing: transparent pixels are discarded rather than
+alpha-blended. Middle texture collision/blocking flags and translucent glass
+rendering are deferred.
 
 ## Sector Inspector
 
@@ -192,16 +198,19 @@ The sidedef/linedef inspector supports:
 - front/back sidedef selection
 - `Switch to opposite side` when the opposite sidedef exists
 - `Join Sectors` when the selected portal has two different adjacent sectors
-- wall, lower, and upper texture selection
-- wall, lower, and upper UV scale/offset editing
-- reset UV for the selected wall/lower/upper part
-- fit width, height, or both for the selected wall/lower/upper part
+- wall, lower, upper, and eligible two-sided middle texture selection
+- wall, lower, upper, and middle UV scale/offset editing
+- reset UV for the selected wall/lower/upper/middle part
+- fit width, height, or both for the selected wall/lower/upper/middle part
+- `Clear Middle` for the selected middle texture
 - `Split Linedef`
 - `Split At Point`
 - line-only inspection and splitting when no sidedef is selected
 
 Topology JSON can also store one optional decal layer for each floor, ceiling,
-wall, lower, and upper surface material. Surface material panels expose
+wall, lower, and upper surface material. Middle texture editing is Base-only
+for now and does not expose middle decals, emissive, tint, or bloom. Surface
+material panels expose
 `Layer: Base | Decal`. Base edits the normal texture and UV settings. Decal
 edits the optional overlay texture, UV, opacity, emissive mode, and tint for
 the selected surface. `Clear Decal` removes the selected surface decal and
@@ -231,15 +240,18 @@ replacement lines with fresh stable IDs, preserving sector ownership, side kind,
 texture IDs, and UVs. Splitting fails if the midpoint cannot be represented
 exactly on the integer coordinate grid.
 
-Wall-like surfaces use distance-based generated base UVs. Wall, lower, and
-upper U spans are based on physical linedef length, and V spans are based on the
-visible wall height. Reset UV restores scale `(1, 1)` and offset `(0, 0)`, which
+Wall-like surfaces use distance-based generated base UVs. Wall, lower, upper,
+and middle U spans are based on physical linedef length, and V spans are based
+on the visible wall or portal-opening height. Reset UV restores scale `(1, 1)`
+and offset `(0, 0)`, which
 restarts the selected wall span's local texture coordinates and tiles the texture
 every 2 world units. When Decal is the active layer and a decal is assigned,
 the same UV tools operate on the selected decal UV instead of the base UV.
 `Fit Width`, `Fit Height`, and `Fit Both` adjust only the selected
-wall/lower/upper part's active-layer UV scale and reset the fitted offset axis
+wall/lower/upper/middle part's active-layer UV scale and reset the fitted offset axis
 so that the selected texture spans once across the selected width and/or height.
+Middle Fit Height uses the portal opening from the higher adjacent floor to the
+lower adjacent ceiling. Middle textures currently fill that whole opening.
 `Align Vertical` adjusts only the selected wall/lower/upper part's V offset so
 brick rows or wall courses line up by world height. Fit and Align Vertical
 preserve the selected part's texture ID and do not change other wall parts, the
@@ -350,7 +362,7 @@ Texture pickers are used for:
 
 - sector floor and ceiling textures
 - sector default wall/lower/upper textures
-- sidedef wall/lower/upper textures
+- sidedef wall/lower/upper/middle textures
 - 3D surface panel texture targets
 
 Surface materials can be copied and pasted between matching surface types from
@@ -412,13 +424,16 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 3D picking maps generated surfaces back to topology:
 
 - floor and ceiling surfaces select the sector
-- wall, lower, and upper surfaces select the concrete sidedef and wall part
+- wall, lower, upper, and middle surfaces select the concrete sidedef and wall part
 
 The 3D surface panel edits only the selected surface target. Floor/ceiling
 targets edit sector texture and UV settings. Wall/lower/upper targets edit the
-selected sidedef's matching wall part. The Texture button opens the topology
+selected sidedef's matching wall part. Middle targets edit the selected
+sidedef's middle texture as a Base-only material. The Texture button opens the topology
 texture picker. `Layer: Base | Decal` chooses whether Texture, UV, Reset UV,
 Fit, and Align controls edit the base material or the optional decal layer.
+Middle targets hide the layer toggle and expose only Texture, UV scale/offset,
+Reset UV, Fit Width, Fit Height, Fit Both, and Clear Middle.
 When Decal is active and no decal texture is assigned, the panel shows
 `No decal assigned` and only the Texture picker remains available. Assigned
 decals expose UV, opacity, emissive, tint, and `Clear Decal`. Reset UV resets
@@ -434,8 +449,10 @@ Align U Prev / Align U Next preserve texture ID, scale, V offset, other wall
 parts, and the opposite sidedef; they do not copy material, scale, or texture
 from the neighbor and are not full wall-chain alignment yet.
 
-Equal-height portals have no generated 3D wall surface, so edit their sidedefs
-from the 2D linedef/sidedef inspector.
+Equal-height portals with an assigned middle texture still generate a middle
+portal-plane surface for 3D picking. Equal-height portals without middle texture
+data have no generated 3D wall surface, so edit their sidedefs from the 2D
+linedef/sidedef inspector.
 
 ## Baked Lightmaps
 
@@ -457,10 +474,12 @@ for the bake. If the document changed during the bake, the temporary result is
 discarded.
 
 The source hash is deterministic over the topology lightmap bake version
-(`6`), atlas and sample constants, coordinate subdivision value, map texture
-table, vertex/linedef/sidedef/sector IDs and geometry, sector and sidedef texture
-and UV fields, static lights, and bake settings. It does not include the
-installed baked-lightmap metadata itself.
+(`7`), atlas and sample constants, coordinate subdivision value, map texture
+definitions referenced by baked surface fields, vertex/linedef/sidedef/sector
+IDs and geometry, sector and sidedef texture and UV fields, static lights, and
+bake settings. Middle texture receiver data is included because it affects
+lightmap chart layout. The hash does not include the installed baked-lightmap
+metadata itself.
 
 The baked PNG stores direct static-light contribution and one-bounce indirect
 light in RGB, and ambient occlusion in alpha. 3D Mode uses a baked atlas only
@@ -469,7 +488,13 @@ matches the current topology. Otherwise the preview falls back to sector ambient
 lighting.
 
 Equal-height portals generate no wall surface and therefore no wall lightmap
-chart.
+chart unless they have an assigned middle texture.
+Middle texture surfaces allocate lightmap charts and receive baked light on
+their opaque alpha-tested pixels. They remain cutout surfaces: transparent
+texture pixels are discarded during rendering, so the lightmap does not need
+alpha for the holes. Middle texture surfaces do not cast baked shadows or
+occlude lightmap rays yet; alpha-aware middle texture shadow casting is
+deferred.
 
 ## Current Limitations
 
@@ -480,6 +505,9 @@ chart.
 - No gameplay mode.
 - No collision or floor-constrained 3D preview movement.
 - No dynamic runtime lights or dynamic shadows.
+- No middle collision/blocking flags, translucent glass, depth sorting, middle
+  texture decals, middle emissive/tint/bloom controls, or middle Copy/Paste
+  Material controls.
 - No normal maps, material maps, PBR material editing, or texture search UI.
 - Single fixed-size lightmap atlas; no multi-atlas packing.
 - No 3D geometry editing beyond texture and UV edits on generated surfaces.

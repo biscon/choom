@@ -19,10 +19,16 @@ namespace game {
 namespace {
 
 constexpr float EdgeEpsilon = 0.001f;
+constexpr float PickDistanceTieEpsilon = 0.0001f;
 
 using EarcutPoint = std::array<double, 2>;
 using EarcutRing = std::vector<EarcutPoint>;
 using EarcutPolygon = std::vector<EarcutRing>;
+
+float Dot(Vector3 a, Vector3 b)
+{
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
 
 float DecalBloomIntensityOrDefault(float value)
 {
@@ -123,8 +129,8 @@ bool ValidateTopologyGeometryValues(
     }
 
     for (const SectorTopologySideDef& sideDef : map.sideDefs) {
-        const std::array<const SectorTopologyWallPartSettings*, 3> parts{
-                &sideDef.wall, &sideDef.lower, &sideDef.upper};
+        const std::array<const SectorTopologyWallPartSettings*, 4> parts{
+                &sideDef.wall, &sideDef.lower, &sideDef.upper, &sideDef.middle};
         for (const SectorTopologyWallPartSettings* part : parts) {
             if (!IsFinite(part->uv.scale) || !IsFinite(part->uv.offset)
                 || !IsFinite(part->decal.uv.scale) || !IsFinite(part->decal.uv.offset)
@@ -374,6 +380,44 @@ bool BuildTopologyWallSurface(
     return true;
 }
 
+bool BuildTopologyMiddleSurface(
+        const SectorTopologyVertex& a,
+        const SectorTopologyVertex& b,
+        const SectorTopologySector& facingSector,
+        const SectorTopologyLineDef& lineDef,
+        const SectorTopologySideDef& facingSideDef,
+        float bottom,
+        float top,
+        const SectorTopologyWallPartSettings& settings,
+        SectorGeneratedSurface& outSurface,
+        std::string& outError)
+{
+    if (!BuildTopologyWallSurface(
+                a,
+                b,
+                facingSector,
+                lineDef,
+                facingSideDef,
+                SectorGeneratedSurfaceKind::Middle,
+                bottom,
+                top,
+                settings,
+                outSurface,
+                outError)) {
+        return false;
+    }
+
+    outSurface.decalTextureId.clear();
+    outSurface.decalOpacity = 1.0f;
+    outSurface.decalEmissive = false;
+    outSurface.decalTint = Vector3{1.0f, 1.0f, 1.0f};
+    outSurface.decalBloomIntensity = 1.0f;
+    outSurface.alphaTest = true;
+    outSurface.alphaCutoff = 0.5f;
+    outSurface.receivesLightmap = true;
+    return true;
+}
+
 } // namespace
 
 const char* SectorGeneratedSurfaceKindName(SectorGeneratedSurfaceKind kind)
@@ -384,6 +428,7 @@ const char* SectorGeneratedSurfaceKindName(SectorGeneratedSurfaceKind kind)
         case SectorGeneratedSurfaceKind::Wall: return "Wall";
         case SectorGeneratedSurfaceKind::LowerWall: return "Lower";
         case SectorGeneratedSurfaceKind::UpperWall: return "Upper";
+        case SectorGeneratedSurfaceKind::Middle: return "Middle";
     }
     return "Unknown";
 }
@@ -394,6 +439,7 @@ SectorGeneratedSurfaceHit PickSectorGeneratedGeometry(
         float minDistance)
 {
     SectorGeneratedSurfaceHit best;
+    bool bestFacesRay = false;
     for (const SectorGeneratedSurface& surface : geometry.surfaces) {
         for (size_t i = 0; i + 2 < surface.vertices.size(); i += 3) {
             RayCollision collision = GetRayCollisionTriangle(
@@ -411,11 +457,19 @@ SectorGeneratedSurfaceHit PickSectorGeneratedGeometry(
             if (!collision.hit || collision.distance <= minDistance) {
                 continue;
             }
-            if (!best.hit || collision.distance < best.distance) {
+            const bool candidateFacesRay = Dot(surface.normal, ray.direction) < 0.0f;
+            const bool candidateCloser = !best.hit
+                    || collision.distance < best.distance - PickDistanceTieEpsilon;
+            const bool candidateTieBreaks = best.hit
+                    && std::fabs(collision.distance - best.distance) <= PickDistanceTieEpsilon
+                    && candidateFacesRay
+                    && !bestFacesRay;
+            if (candidateCloser || candidateTieBreaks) {
                 best.hit = true;
                 best.ref = surface.ref;
                 best.worldPosition = collision.point;
                 best.distance = collision.distance;
+                bestFacesRay = candidateFacesRay;
             }
         }
     }
@@ -582,6 +636,99 @@ bool BuildSectorGeneratedGeometry(
             }
             generated.surfaces.push_back(std::move(wall));
         }
+    }
+
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        if (lineDef.frontSideDefId == -1 || lineDef.backSideDefId == -1) {
+            continue;
+        }
+
+        const SectorTopologySideDef* frontSideDef = FindSectorTopologySideDef(map, lineDef.frontSideDefId);
+        const SectorTopologySideDef* backSideDef = FindSectorTopologySideDef(map, lineDef.backSideDefId);
+        if (frontSideDef == nullptr || backSideDef == nullptr) {
+            return SetTopologyError(
+                    outGeometry,
+                    outError,
+                    "Could not resolve middle texture sidedefs for topology linedef "
+                            + std::to_string(lineDef.id));
+        }
+        if (frontSideDef->middle.textureId.empty() && backSideDef->middle.textureId.empty()) {
+            continue;
+        }
+
+        const SectorTopologySector* frontSector = FindSectorTopologySector(map, frontSideDef->sectorId);
+        const SectorTopologySector* backSector = FindSectorTopologySector(map, backSideDef->sectorId);
+        if (frontSector == nullptr || backSector == nullptr) {
+            return SetTopologyError(
+                    outGeometry,
+                    outError,
+                    "Could not resolve middle texture sectors for topology linedef "
+                            + std::to_string(lineDef.id));
+        }
+
+        const float bottom = std::max(frontSector->floorZ, backSector->floorZ);
+        const float top = std::min(frontSector->ceilingZ, backSector->ceilingZ);
+        if (!(top > bottom) || !std::isfinite(bottom) || !std::isfinite(top)) {
+            continue;
+        }
+
+        const SectorTopologyVertex* lineStart = nullptr;
+        const SectorTopologyVertex* lineEnd = nullptr;
+        if (!GetSectorTopologyLineVertices(map, lineDef, lineStart, lineEnd)
+            || lineStart == nullptr || lineEnd == nullptr) {
+            return SetTopologyError(
+                    outGeometry,
+                    outError,
+                    "Could not resolve vertices for topology linedef "
+                            + std::to_string(lineDef.id));
+        }
+        const double dx = static_cast<double>(lineEnd->x) - static_cast<double>(lineStart->x);
+        const double dy = static_cast<double>(lineEnd->y) - static_cast<double>(lineStart->y);
+        const double coordLength = std::sqrt(dx * dx + dy * dy);
+        if (!(coordLength > 0.0) || !std::isfinite(coordLength)) {
+            continue;
+        }
+
+        const SectorTopologyWallPartSettings* frontSettings = &frontSideDef->middle;
+        const SectorTopologyWallPartSettings* backSettings = &backSideDef->middle;
+        const SectorTopologySideDef* frontRefSideDef = frontSideDef;
+        const SectorTopologySideDef* backRefSideDef = backSideDef;
+        const SectorTopologySector* frontRefSector = frontSector;
+        const SectorTopologySector* backRefSector = backSector;
+        const bool hasFrontMiddle = !frontSettings->textureId.empty();
+        const bool hasBackMiddle = !backSettings->textureId.empty();
+        if (!hasFrontMiddle && hasBackMiddle) {
+            frontSettings = &backSideDef->middle;
+            frontRefSideDef = backSideDef;
+            frontRefSector = backSector;
+        }
+        if (!hasBackMiddle && hasFrontMiddle) {
+            backSettings = &frontSideDef->middle;
+            backRefSideDef = frontSideDef;
+            backRefSector = frontSector;
+        }
+
+        SectorGeneratedSurface middle;
+        std::string error;
+        if (!BuildTopologyMiddleSurface(
+                    *lineStart, *lineEnd, *frontSector, lineDef, *frontSideDef,
+                    bottom, top, *frontSettings, middle, error)) {
+            return SetTopologyError(outGeometry, outError, error);
+        }
+        middle.ref.topologySectorId = frontRefSector->id;
+        middle.ref.topologySideDefId = frontRefSideDef->id;
+        middle.ref.topologySide = frontRefSideDef->side;
+        generated.surfaces.push_back(std::move(middle));
+
+        if (!BuildTopologyMiddleSurface(
+                    *lineEnd, *lineStart, *backSector, lineDef, *backSideDef,
+                    bottom, top, *backSettings, middle, error)) {
+            return SetTopologyError(outGeometry, outError, error);
+        }
+        middle.ref.topologySectorId = backRefSector->id;
+        middle.ref.topologySideDefId = backRefSideDef->id;
+        middle.ref.topologySide = backRefSideDef->side;
+        generated.surfaces.push_back(std::move(middle));
     }
 
     if (generated.surfaces.empty()) {

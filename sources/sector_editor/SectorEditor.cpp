@@ -524,6 +524,7 @@ const char* TopologyWallPartName(TopologyWallPart part)
         case TopologyWallPart::Wall: return "Wall";
         case TopologyWallPart::Lower: return "Lower";
         case TopologyWallPart::Upper: return "Upper";
+        case TopologyWallPart::Middle: return "Middle";
     }
     return "Wall";
 }
@@ -534,6 +535,7 @@ const char* TopologyWallPartStatusName(TopologyWallPart part)
         case TopologyWallPart::Wall: return "wall";
         case TopologyWallPart::Lower: return "lower";
         case TopologyWallPart::Upper: return "upper";
+        case TopologyWallPart::Middle: return "middle";
     }
     return "wall";
 }
@@ -562,6 +564,7 @@ const char* TopologyWallPartSurfaceStatusName(TopologyWallPart part)
         case TopologyWallPart::Wall: return "wall";
         case TopologyWallPart::Lower: return "lower wall";
         case TopologyWallPart::Upper: return "upper wall";
+        case TopologyWallPart::Middle: return "middle";
     }
     return "wall";
 }
@@ -574,6 +577,7 @@ const char* SurfaceKindName(SectorSurfaceKind kind)
         case SectorSurfaceKind::Wall: return "Wall";
         case SectorSurfaceKind::LowerWall: return "Lower";
         case SectorSurfaceKind::UpperWall: return "Upper";
+        case SectorSurfaceKind::Middle: return "Middle";
         case SectorSurfaceKind::None: break;
     }
     return "None";
@@ -583,7 +587,8 @@ bool IsWallSurface(SectorSurfaceKind kind)
 {
     return kind == SectorSurfaceKind::Wall
             || kind == SectorSurfaceKind::LowerWall
-            || kind == SectorSurfaceKind::UpperWall;
+            || kind == SectorSurfaceKind::UpperWall
+            || kind == SectorSurfaceKind::Middle;
 }
 
 SectorSurfaceKind ToEditorSurfaceKind(SectorGeneratedSurfaceKind kind)
@@ -594,6 +599,7 @@ SectorSurfaceKind ToEditorSurfaceKind(SectorGeneratedSurfaceKind kind)
         case SectorGeneratedSurfaceKind::Wall: return SectorSurfaceKind::Wall;
         case SectorGeneratedSurfaceKind::LowerWall: return SectorSurfaceKind::LowerWall;
         case SectorGeneratedSurfaceKind::UpperWall: return SectorSurfaceKind::UpperWall;
+        case SectorGeneratedSurfaceKind::Middle: return SectorSurfaceKind::Middle;
     }
     return SectorSurfaceKind::None;
 }
@@ -603,6 +609,7 @@ TopologyWallPart SurfaceKindToTopologyWallPart(SectorSurfaceKind kind)
     switch (kind) {
         case SectorSurfaceKind::LowerWall: return TopologyWallPart::Lower;
         case SectorSurfaceKind::UpperWall: return TopologyWallPart::Upper;
+        case SectorSurfaceKind::Middle: return TopologyWallPart::Middle;
         case SectorSurfaceKind::Wall:
         case SectorSurfaceKind::Floor:
         case SectorSurfaceKind::Ceiling:
@@ -620,6 +627,7 @@ TopologySurfaceEditTargetKind SurfaceKindToTopologyEditTargetKind(SectorSurfaceK
         case SectorSurfaceKind::Wall: return TopologySurfaceEditTargetKind::SideDefWall;
         case SectorSurfaceKind::LowerWall: return TopologySurfaceEditTargetKind::SideDefLower;
         case SectorSurfaceKind::UpperWall: return TopologySurfaceEditTargetKind::SideDefUpper;
+        case SectorSurfaceKind::Middle: return TopologySurfaceEditTargetKind::SideDefMiddle;
         case SectorSurfaceKind::None: break;
     }
     return TopologySurfaceEditTargetKind::None;
@@ -630,6 +638,7 @@ TopologyWallPart TopologyEditTargetWallPart(TopologySurfaceEditTargetKind kind)
     switch (kind) {
         case TopologySurfaceEditTargetKind::SideDefLower: return TopologyWallPart::Lower;
         case TopologySurfaceEditTargetKind::SideDefUpper: return TopologyWallPart::Upper;
+        case TopologySurfaceEditTargetKind::SideDefMiddle: return TopologyWallPart::Middle;
         case TopologySurfaceEditTargetKind::SideDefWall:
         case TopologySurfaceEditTargetKind::SectorFloor:
         case TopologySurfaceEditTargetKind::SectorCeiling:
@@ -645,6 +654,7 @@ TopologySurfaceEditTargetKind TopologyWallPartEditTargetKind(TopologyWallPart pa
         case TopologyWallPart::Wall: return TopologySurfaceEditTargetKind::SideDefWall;
         case TopologyWallPart::Lower: return TopologySurfaceEditTargetKind::SideDefLower;
         case TopologyWallPart::Upper: return TopologySurfaceEditTargetKind::SideDefUpper;
+        case TopologyWallPart::Middle: return TopologySurfaceEditTargetKind::SideDefMiddle;
     }
     return TopologySurfaceEditTargetKind::SideDefWall;
 }
@@ -657,6 +667,7 @@ const char* TopologyMaterialKindName(TopologySurfaceEditTargetKind kind)
         case TopologySurfaceEditTargetKind::SideDefWall: return "wall";
         case TopologySurfaceEditTargetKind::SideDefLower: return "lower";
         case TopologySurfaceEditTargetKind::SideDefUpper: return "upper";
+        case TopologySurfaceEditTargetKind::SideDefMiddle: return "middle";
         case TopologySurfaceEditTargetKind::None:
             break;
     }
@@ -667,7 +678,8 @@ bool IsWallTopologyEditTarget(TopologySurfaceEditTargetKind kind)
 {
     return kind == TopologySurfaceEditTargetKind::SideDefWall
             || kind == TopologySurfaceEditTargetKind::SideDefLower
-            || kind == TopologySurfaceEditTargetKind::SideDefUpper;
+            || kind == TopologySurfaceEditTargetKind::SideDefUpper
+            || kind == TopologySurfaceEditTargetKind::SideDefMiddle;
 }
 
 const char* TopologyUvFitModeStatusName(TopologyUvFitMode mode)
@@ -759,6 +771,13 @@ bool IsDefaultDecalLayer(const SectorTopologyDecalLayer& decal)
             && decal.bloomIntensity == 1.0f;
 }
 
+bool IsDefaultWallPartSettings(const SectorTopologyWallPartSettings& part)
+{
+    return part.textureId.empty()
+            && IsDefaultTopologyUv(part.uv)
+            && IsDefaultDecalLayer(part.decal);
+}
+
 void ResetDecalLayer(SectorTopologyDecalLayer& decal)
 {
     decal.textureId.clear();
@@ -777,6 +796,7 @@ TopologySectorTextureField TopologyEditTargetSectorTextureField(TopologySurfaceE
         case TopologySurfaceEditTargetKind::SideDefWall:
         case TopologySurfaceEditTargetKind::SideDefLower:
         case TopologySurfaceEditTargetKind::SideDefUpper:
+        case TopologySurfaceEditTargetKind::SideDefMiddle:
         case TopologySurfaceEditTargetKind::None:
             break;
     }
@@ -888,6 +908,7 @@ SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
         case TopologyWallPart::Wall: return sideDef.wall;
         case TopologyWallPart::Lower: return sideDef.lower;
         case TopologyWallPart::Upper: return sideDef.upper;
+        case TopologyWallPart::Middle: return sideDef.middle;
     }
     return sideDef.wall;
 }
@@ -900,8 +921,64 @@ const SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
         case TopologyWallPart::Wall: return sideDef.wall;
         case TopologyWallPart::Lower: return sideDef.lower;
         case TopologyWallPart::Upper: return sideDef.upper;
+        case TopologyWallPart::Middle: return sideDef.middle;
     }
     return sideDef.wall;
+}
+
+bool IsTopologyMiddleEligible(
+        const SectorTopologyMap& map,
+        const SectorTopologySideDef* sideDef)
+{
+    if (sideDef == nullptr) {
+        return false;
+    }
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, sideDef->lineDefId);
+    if (lineDef == nullptr
+            || lineDef->frontSideDefId == -1
+            || lineDef->backSideDefId == -1) {
+        return false;
+    }
+    const int expectedSideDefId = sideDef->side == SectorTopologySideKind::Front
+            ? lineDef->frontSideDefId
+            : lineDef->backSideDefId;
+    if (expectedSideDefId != sideDef->id) {
+        return false;
+    }
+    const SectorTopologySideDef* front = FindSectorTopologySideDef(map, lineDef->frontSideDefId);
+    const SectorTopologySideDef* back = FindSectorTopologySideDef(map, lineDef->backSideDefId);
+    if (front == nullptr || back == nullptr) {
+        return false;
+    }
+    const SectorTopologySideDef* opposite = sideDef->side == SectorTopologySideKind::Front
+            ? back
+            : front;
+    return FindSectorTopologySector(map, sideDef->sectorId) != nullptr
+            && FindSectorTopologySector(map, opposite->sectorId) != nullptr;
+}
+
+TopologyWallPart ValidTopologyWallPartForSideDef(
+        const SectorTopologyMap& map,
+        const SectorTopologySideDef* sideDef,
+        TopologyWallPart wallPart)
+{
+    if (wallPart == TopologyWallPart::Middle
+            && !IsTopologyMiddleEligible(map, sideDef)) {
+        return TopologyWallPart::Wall;
+    }
+    return wallPart;
+}
+
+bool IsMiddleTopologyEditTarget(TopologySurfaceEditTargetKind kind)
+{
+    return kind == TopologySurfaceEditTargetKind::SideDefMiddle;
+}
+
+TopologyMaterialLayer EffectiveTopologyMaterialLayer(
+        TopologySurfaceEditTargetKind kind,
+        TopologyMaterialLayer layer)
+{
+    return IsMiddleTopologyEditTarget(kind) ? TopologyMaterialLayer::Base : layer;
 }
 
 bool SectorTopologyWallLengthWorld(
@@ -1016,6 +1093,14 @@ bool TopologyWallPartHasVisibleSpan(
             return oppositeSector != nullptr
                     && sector->ceilingZ > oppositeSector->ceilingZ
                     && std::isfinite(sector->ceilingZ)
+                    && std::isfinite(oppositeSector->ceilingZ);
+        case TopologyWallPart::Middle:
+            return oppositeSector != nullptr
+                    && std::min(sector->ceilingZ, oppositeSector->ceilingZ)
+                            > std::max(sector->floorZ, oppositeSector->floorZ)
+                    && std::isfinite(sector->floorZ)
+                    && std::isfinite(sector->ceilingZ)
+                    && std::isfinite(oppositeSector->floorZ)
                     && std::isfinite(oppositeSector->ceilingZ);
     }
     return false;
@@ -3177,9 +3262,18 @@ void SectorEditor::ClearStaleTopologySelection()
         stale = sideDef == nullptr
                 || lineDef == nullptr
                 || sideDef->lineDefId != lineDef->id;
+        if (!stale) {
+            state.selectedTopologyWallPart = ValidTopologyWallPartForSideDef(
+                    state.topologyMap,
+                    sideDef,
+                    state.selectedTopologyWallPart);
+        }
     } else if (state.topologySelectionKind == TopologySelectionKind::LineDef) {
         stale = state.selectedTopologyLineDefId < 0
                 || FindSectorTopologyLineDef(state.topologyMap, state.selectedTopologyLineDefId) == nullptr;
+        if (!stale && state.selectedTopologyWallPart == TopologyWallPart::Middle) {
+            state.selectedTopologyWallPart = TopologyWallPart::Wall;
+        }
     } else if (state.topologySelectionKind == TopologySelectionKind::Light) {
         stale = state.selectedTopologyLightId < 0
                 || FindSectorTopologyStaticLight(state.topologyMap, state.selectedTopologyLightId) == nullptr;
@@ -3215,6 +3309,16 @@ void SectorEditor::MarkTopologyDocumentEdited(const char* status)
     if (status != nullptr && status[0] != '\0') {
         statusText = status;
     }
+}
+
+bool SectorEditor::FinishTopologyMaterialMutation(const char* status, engine::AssetManager* assets)
+{
+    state.topologyRenderWarning.clear();
+    MarkTopologyDocumentEdited(status);
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
 }
 
 void SectorEditor::ClearTransientTopologyEditStateAfterGeometryChange()
@@ -4128,7 +4232,14 @@ void SectorEditor::DrawPreviewUvPanel(
     }
 
     const TopologySurfaceEditTarget target = state.selectedTopologySurface3D;
-    const TopologyMaterialLayer layer = state.activeTopologyMaterialLayer;
+    const bool targetIsMiddle = IsMiddleTopologyEditTarget(target.kind);
+    if (targetIsMiddle && state.activeTopologyMaterialLayer != TopologyMaterialLayer::Base) {
+        state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
+        ResetSurface3DUiState();
+    }
+    const TopologyMaterialLayer layer = EffectiveTopologyMaterialLayer(
+            target.kind,
+            state.activeTopologyMaterialLayer);
     const Rectangle panel = BuildPreviewUvPanelRect();
     DrawRectangleRec(panel, Color{12, 15, 20, 230});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
@@ -4180,42 +4291,44 @@ void SectorEditor::DrawPreviewUvPanel(
             engine::UITextJustify::Left,
             config.textColor
     );
-    const float layerLabelW = 68.0f;
-    const float layerButtonW = 78.0f;
-    engine::Text(
-            ui,
-            config,
-            assets,
-            Rectangle{panel.x + margin, top + 36.0f, layerLabelW, 30.0f},
-            font,
-            "Layer:",
-            engine::UITextJustify::Left,
-            config.mutedTextColor);
-    if (engine::ToolButton(
+    if (!targetIsMiddle) {
+        const float layerLabelW = 68.0f;
+        const float layerButtonW = 78.0f;
+        engine::Text(
                 ui,
                 config,
-                input,
                 assets,
-                "sector_editor_3d_layer_base",
-                Rectangle{panel.x + margin + layerLabelW, top + 34.0f, layerButtonW, 32.0f},
+                Rectangle{panel.x + margin, top + 36.0f, layerLabelW, 30.0f},
                 font,
-                "Base",
-                layer == TopologyMaterialLayer::Base)) {
-        state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
-        ResetSurface3DUiState();
-    }
-    if (engine::ToolButton(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_3d_layer_decal",
-                Rectangle{panel.x + margin + layerLabelW + layerButtonW + 8.0f, top + 34.0f, layerButtonW, 32.0f},
-                font,
-                "Decal",
-                layer == TopologyMaterialLayer::Decal)) {
-        state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
-        ResetSurface3DUiState();
+                "Layer:",
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        if (engine::ToolButton(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_layer_base",
+                    Rectangle{panel.x + margin + layerLabelW, top + 34.0f, layerButtonW, 32.0f},
+                    font,
+                    "Base",
+                    layer == TopologyMaterialLayer::Base)) {
+            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
+            ResetSurface3DUiState();
+        }
+        if (engine::ToolButton(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_layer_decal",
+                    Rectangle{panel.x + margin + layerLabelW + layerButtonW + 8.0f, top + 34.0f, layerButtonW, 32.0f},
+                    font,
+                    "Decal",
+                    layer == TopologyMaterialLayer::Decal)) {
+            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
+            ResetSurface3DUiState();
+        }
     }
 
     const std::string currentTexture = CurrentTextureForSurface(target, layer);
@@ -4227,12 +4340,16 @@ void SectorEditor::DrawPreviewUvPanel(
             assets,
             Rectangle{panel.x + margin, top + 72.0f, 350.0f, 30.0f},
             font,
-            TextFormat("%s texture %s", TopologyMaterialLayerName(layer), currentTexture.empty() ? "<none>" : currentTexture.c_str()),
+            targetIsMiddle
+                    ? TextFormat("Middle texture %s", currentTexture.empty() ? "<none>" : currentTexture.c_str())
+                    : TextFormat("%s texture %s", TopologyMaterialLayerName(layer), currentTexture.empty() ? "<none>" : currentTexture.c_str()),
             engine::UITextJustify::Left,
             missingTexture ? config.invalidColor : config.mutedTextColor
     );
 
-    const bool decalAssigned = layer != TopologyMaterialLayer::Decal || IsDecalAssigned(target);
+    const bool decalAssigned = targetIsMiddle
+            ? !currentTexture.empty()
+            : (layer != TopologyMaterialLayer::Decal || IsDecalAssigned(target));
     const SectorTopologyUvSettings* uv = UvForSurface(target, layer);
     Vector2 uvScale = uv == nullptr ? Vector2{1.0f, 1.0f} : uv->scale;
     Vector2 uvOffset = uv == nullptr ? Vector2{0.0f, 0.0f} : uv->offset;
@@ -4243,7 +4360,7 @@ void SectorEditor::DrawPreviewUvPanel(
                 assets,
                 Rectangle{startX, inputTop, 390.0f, 34.0f},
                 font,
-                "No decal assigned",
+                targetIsMiddle ? "No middle texture assigned" : "No decal assigned",
                 engine::UITextJustify::Left,
                 config.mutedTextColor);
     }
@@ -4329,7 +4446,22 @@ void SectorEditor::DrawPreviewUvPanel(
         actionX += smallActionW + gap;
     }
 
-    if (layer == TopologyMaterialLayer::Decal && decalAssigned) {
+    if (targetIsMiddle && decalAssigned) {
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_clear_middle",
+                    Rectangle{actionX, actionTop, 118.0f, actionH},
+                    font,
+                    "Clear Middle")) {
+            ClearMiddleTexture(target, &assets);
+        }
+        actionX += 118.0f + gap;
+    }
+
+    if (!targetIsMiddle && layer == TopologyMaterialLayer::Decal && decalAssigned) {
         if (engine::Button(
                     ui,
                     config,
@@ -4394,42 +4526,44 @@ void SectorEditor::DrawPreviewUvPanel(
                     "Fit Both")) {
             FitSelectedWallMaterial(target, TopologyUvFitMode::Both, &assets, layer);
         }
-        if (engine::Button(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    "sector_editor_3d_align_vertical",
-                    Rectangle{alignStartX, fitTop, fitButtonW, fitButtonH},
-                    font,
-                    "Align Vertical")) {
-            AlignSelectedWallMaterialVertical(target, &assets, layer);
-        }
-        if (engine::Button(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    "sector_editor_3d_align_u_prev",
-                    Rectangle{alignStartX + fitButtonW + gap, fitTop, fitButtonW, fitButtonH},
-                    font,
-                    "Align U Prev")) {
-            AlignSelectedWallMaterialU(target, TopologyUAlignDirection::Previous, &assets, layer);
-        }
-        if (engine::Button(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    "sector_editor_3d_align_u_next",
-                    Rectangle{alignStartX + (fitButtonW + gap) * 2.0f, fitTop, fitButtonW, fitButtonH},
-                    font,
-                    "Align U Next")) {
-            AlignSelectedWallMaterialU(target, TopologyUAlignDirection::Next, &assets, layer);
+        if (!targetIsMiddle) {
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_3d_align_vertical",
+                        Rectangle{alignStartX, fitTop, fitButtonW, fitButtonH},
+                        font,
+                        "Align Vertical")) {
+                AlignSelectedWallMaterialVertical(target, &assets, layer);
+            }
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_3d_align_u_prev",
+                        Rectangle{alignStartX + fitButtonW + gap, fitTop, fitButtonW, fitButtonH},
+                        font,
+                        "Align U Prev")) {
+                AlignSelectedWallMaterialU(target, TopologyUAlignDirection::Previous, &assets, layer);
+            }
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_3d_align_u_next",
+                        Rectangle{alignStartX + (fitButtonW + gap) * 2.0f, fitTop, fitButtonW, fitButtonH},
+                        font,
+                        "Align U Next")) {
+                AlignSelectedWallMaterialU(target, TopologyUAlignDirection::Next, &assets, layer);
+            }
         }
     }
 
-    if (layer == TopologyMaterialLayer::Decal && decalAssigned) {
+    if (!targetIsMiddle && layer == TopologyMaterialLayer::Decal && decalAssigned) {
         const SectorTopologyDecalLayer* decal = DecalForSurface(target);
         if (decal != nullptr) {
             engine::Text(ui, config, assets, Rectangle{startX + (colW + gap) * 4.0f, inputTop - 28.0f, colW, 24.0f}, font, "Opacity", engine::UITextJustify::Left, config.mutedTextColor);
@@ -4501,7 +4635,7 @@ void SectorEditor::DrawPreviewUvPanel(
             DrawRectangleRec(swatch, DecalTintPreviewColor(decal->tint));
             DrawRectangleLinesEx(swatch, config.borderThickness, config.borderColor);
         }
-    } else if (layer == TopologyMaterialLayer::Base) {
+    } else if (!targetIsMiddle && layer == TopologyMaterialLayer::Base) {
         if (engine::Button(
                 ui,
                 config,
@@ -6337,6 +6471,12 @@ bool SectorEditor::DrawTopologySideDefInspector(
 
     float y = 0.0f;
     SectorTopologySideDef* sideDef = SelectedTopologySideDef();
+    if (sideDef != nullptr) {
+        state.selectedTopologyWallPart = ValidTopologyWallPartForSideDef(
+                state.topologyMap,
+                sideDef,
+                state.selectedTopologyWallPart);
+    }
     engine::Text(
             ui,
             config,
@@ -6454,6 +6594,7 @@ bool SectorEditor::DrawTopologySideDefInspector(
     const SectorTopologySideDef* opposite = FindOppositeSectorTopologySideDef(
             state.topologyMap,
             sideDef->id);
+    const bool middleEligible = IsTopologyMiddleEligible(state.topologyMap, sideDef);
     if (opposite != nullptr) {
         if (opposite->sectorId != sideDef->sectorId) {
             if (engine::Button(
@@ -6492,7 +6633,12 @@ bool SectorEditor::DrawTopologySideDefInspector(
                     font,
                     TextFormat("Switch to opposite side (%s)", SectorTopologySideKindName(opposite->side)))) {
             const int oppositeId = opposite->id;
-            SelectTopologySideDef(oppositeId, state.selectedTopologyWallPart);
+            SelectTopologySideDef(
+                    oppositeId,
+                    ValidTopologyWallPartForSideDef(
+                            state.topologyMap,
+                            FindSectorTopologySideDef(state.topologyMap, oppositeId),
+                            state.selectedTopologyWallPart));
             statusText = TextFormat("Selected opposite topology sidedef %d", oppositeId);
             return true;
         }
@@ -6532,9 +6678,14 @@ bool SectorEditor::DrawTopologySideDefInspector(
     };
 
     y += 4.0f;
-    const float partButtonW = (contentW - gap * 2.0f) / 3.0f;
-    const TopologyWallPart parts[] = {TopologyWallPart::Wall, TopologyWallPart::Lower, TopologyWallPart::Upper};
-    for (int i = 0; i < 3; ++i) {
+    const int partCount = middleEligible ? 4 : 3;
+    const float partButtonW = (contentW - gap * static_cast<float>(partCount - 1)) / static_cast<float>(partCount);
+    const TopologyWallPart parts[] = {
+            TopologyWallPart::Wall,
+            TopologyWallPart::Lower,
+            TopologyWallPart::Upper,
+            TopologyWallPart::Middle};
+    for (int i = 0; i < partCount; ++i) {
         const TopologyWallPart part = parts[i];
         if (engine::ToolButton(
                     ui,
@@ -6555,25 +6706,8 @@ bool SectorEditor::DrawTopologySideDefInspector(
     }
     y += 38.0f + gap;
 
-    const TopologySurfaceEditTarget selectedMaterialTarget{
-            TopologyWallPartEditTargetKind(state.selectedTopologyWallPart),
-            sideDef->sectorId,
-            sideDef->lineDefId,
-            sideDef->id,
-            sideDef->side};
-    const float layerLabelW = 74.0f;
-    const float layerButtonW = (contentW - layerLabelW - gap) * 0.5f;
-    engine::Text(ui, config, assets, Rectangle{0.0f, y, layerLabelW, 36.0f}, font, "Layer:", engine::UITextJustify::Left, config.mutedTextColor);
-    if (engine::ToolButton(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_topology_sidedef_layer_base",
-                Rectangle{layerLabelW, y, layerButtonW, 36.0f},
-                font,
-                "Base",
-                state.activeTopologyMaterialLayer == TopologyMaterialLayer::Base)) {
+    const bool selectedMiddle = state.selectedTopologyWallPart == TopologyWallPart::Middle;
+    if (selectedMiddle && state.activeTopologyMaterialLayer != TopologyMaterialLayer::Base) {
         state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
         for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
             inputState = engine::UIFloatInputState{};
@@ -6581,27 +6715,57 @@ bool SectorEditor::DrawTopologySideDefInspector(
         uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
         uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
     }
-    if (engine::ToolButton(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_topology_sidedef_layer_decal",
-                Rectangle{layerLabelW + layerButtonW + gap, y, layerButtonW, 36.0f},
-                font,
-                "Decal",
-                state.activeTopologyMaterialLayer == TopologyMaterialLayer::Decal)) {
-        state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
-        for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
-            inputState = engine::UIFloatInputState{};
+    const TopologySurfaceEditTarget selectedMaterialTarget{
+            TopologyWallPartEditTargetKind(state.selectedTopologyWallPart),
+            sideDef->sectorId,
+            sideDef->lineDefId,
+            sideDef->id,
+            sideDef->side};
+    if (!selectedMiddle) {
+        const float layerLabelW = 74.0f;
+        const float layerButtonW = (contentW - layerLabelW - gap) * 0.5f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, layerLabelW, 36.0f}, font, "Layer:", engine::UITextJustify::Left, config.mutedTextColor);
+        if (engine::ToolButton(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_sidedef_layer_base",
+                    Rectangle{layerLabelW, y, layerButtonW, 36.0f},
+                    font,
+                    "Base",
+                    state.activeTopologyMaterialLayer == TopologyMaterialLayer::Base)) {
+            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
+            for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+                inputState = engine::UIFloatInputState{};
+            }
+            uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
+            uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
         }
-        uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
-        uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
+        if (engine::ToolButton(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_sidedef_layer_decal",
+                    Rectangle{layerLabelW + layerButtonW + gap, y, layerButtonW, 36.0f},
+                    font,
+                    "Decal",
+                    state.activeTopologyMaterialLayer == TopologyMaterialLayer::Decal)) {
+            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
+            for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+                inputState = engine::UIFloatInputState{};
+            }
+            uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
+            uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
+        }
+        y += 36.0f + gap;
     }
-    y += 36.0f + gap;
 
     SectorTopologyWallPartSettings& selectedPart = TopologyWallPartSettingsFor(*sideDef, state.selectedTopologyWallPart);
-    const TopologyMaterialLayer layer = state.activeTopologyMaterialLayer;
+    const TopologyMaterialLayer layer = selectedMiddle
+            ? TopologyMaterialLayer::Base
+            : state.activeTopologyMaterialLayer;
     drawTextureRow(
             "sector_editor_topology_sidedef_pick_selected_part",
             "Texture:",
@@ -6609,13 +6773,33 @@ bool SectorEditor::DrawTopologySideDefInspector(
             state.selectedTopologyWallPart,
             layer);
 
+    if (selectedMiddle && selectedPart.textureId.empty()) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 32.0f}, font, "No middle texture assigned", engine::UITextJustify::Left, config.mutedTextColor);
+        y += 32.0f + gap;
+        if (!IsDefaultWallPartSettings(selectedPart)) {
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_topology_sidedef_clear_middle_empty",
+                        Rectangle{0.0f, y, contentW, 38.0f},
+                        font,
+                        "Clear Middle")) {
+                ClearMiddleTexture(selectedMaterialTarget, &assets);
+            }
+            y += 38.0f + gap;
+        }
+        return true;
+    }
+
     if (layer == TopologyMaterialLayer::Decal && selectedPart.decal.textureId.empty()) {
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 32.0f}, font, "No decal assigned", engine::UITextJustify::Left, config.mutedTextColor);
         y += 32.0f + gap;
         return true;
     }
 
-    if (layer == TopologyMaterialLayer::Base) {
+    if (layer == TopologyMaterialLayer::Base && !selectedMiddle) {
         if (engine::Button(
                     ui,
                     config,
@@ -6668,12 +6852,17 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 return;
             }
             applyValue(edited);
-            state.topologyRenderWarning.clear();
-            MarkTopologyDocumentEdited(TextFormat(
+            const char* status = TextFormat(
                     "Updated topology sidedef %d %s %s UV",
                     sideDef->id,
                     TopologyWallPartStatusName(state.selectedTopologyWallPart),
-                    TopologyMaterialLayerStatusName(layer)));
+                    TopologyMaterialLayerStatusName(layer));
+            if (selectedMiddle) {
+                FinishTopologyMaterialMutation(status, &assets);
+            } else {
+                state.topologyRenderWarning.clear();
+                MarkTopologyDocumentEdited(status);
+            }
         }
     };
 
@@ -6835,12 +7024,16 @@ bool SectorEditor::DrawTopologySideDefInspector(
         for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
             inputState = engine::UIFloatInputState{};
         }
-        state.topologyRenderWarning.clear();
-        MarkTopologyDocumentEdited(TextFormat(
-                "Reset topology sidedef %d %s %s UV",
-                sideDef->id,
-                TopologyWallPartStatusName(state.selectedTopologyWallPart),
-                TopologyMaterialLayerStatusName(layer)));
+        if (selectedMiddle) {
+            FinishTopologyMaterialMutation("Reset middle UV.", &assets);
+        } else {
+            state.topologyRenderWarning.clear();
+            MarkTopologyDocumentEdited(TextFormat(
+                    "Reset topology sidedef %d %s %s UV",
+                    sideDef->id,
+                    TopologyWallPartStatusName(state.selectedTopologyWallPart),
+                    TopologyMaterialLayerStatusName(layer)));
+        }
     }
     y += 38.0f + gap;
 
@@ -6879,6 +7072,21 @@ bool SectorEditor::DrawTopologySideDefInspector(
         FitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Both, &assets, layer);
     }
     y += 34.0f + gap;
+
+    if (selectedMiddle) {
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_sidedef_clear_middle",
+                    Rectangle{0.0f, y, contentW, 38.0f},
+                    font,
+                    "Clear Middle")) {
+            ClearMiddleTexture(selectedMaterialTarget, &assets);
+        }
+        return true;
+    }
 
     if (engine::Button(
                 ui,
@@ -8485,7 +8693,10 @@ void SectorEditor::SelectTopologySideDef(int sideDefId, TopologyWallPart wallPar
     state.selectedTopologyLineDefId = lineDef->id;
     state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = sideDef->side;
-    state.selectedTopologyWallPart = wallPart;
+    state.selectedTopologyWallPart = ValidTopologyWallPartForSideDef(
+            state.topologyMap,
+            sideDef,
+            wallPart);
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
@@ -8516,7 +8727,9 @@ void SectorEditor::SelectTopologyLineDef(
     state.selectedTopologyLineDefId = lineDefId;
     state.selectedTopologyLightId = -1;
     state.selectedTopologySideKind = side;
-    state.selectedTopologyWallPart = wallPart;
+    state.selectedTopologyWallPart = wallPart == TopologyWallPart::Middle
+            ? TopologyWallPart::Wall
+            : wallPart;
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
@@ -8596,9 +8809,13 @@ bool SectorEditor::IsValidSurfaceRef(SectorSurfaceRef surface) const
         const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
                 state.topologyMap,
                 surface.topologySideDefId);
-        return sideDef != nullptr
-                && sideDef->lineDefId == surface.topologyLineDefId
-                && sideDef->side == surface.topologySide;
+        if (sideDef == nullptr
+                || sideDef->lineDefId != surface.topologyLineDefId
+                || sideDef->side != surface.topologySide) {
+            return false;
+        }
+        return surface.kind != SectorSurfaceKind::Middle
+                || IsTopologyMiddleEligible(state.topologyMap, sideDef);
     }
     return FindSectorTopologySector(state.topologyMap, surface.topologySectorId) != nullptr;
 }
@@ -8631,13 +8848,18 @@ bool SectorEditor::IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget ta
             return FindSectorTopologySector(state.topologyMap, target.sectorId) != nullptr;
         case TopologySurfaceEditTargetKind::SideDefWall:
         case TopologySurfaceEditTargetKind::SideDefLower:
-        case TopologySurfaceEditTargetKind::SideDefUpper: {
+        case TopologySurfaceEditTargetKind::SideDefUpper:
+        case TopologySurfaceEditTargetKind::SideDefMiddle: {
             const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
                     state.topologyMap,
                     target.sideDefId);
-            return sideDef != nullptr
-                    && sideDef->lineDefId == target.lineDefId
-                    && sideDef->side == target.side;
+            if (sideDef == nullptr
+                    || sideDef->lineDefId != target.lineDefId
+                    || sideDef->side != target.side) {
+                return false;
+            }
+            return target.kind != TopologySurfaceEditTargetKind::SideDefMiddle
+                    || IsTopologyMiddleEligible(state.topologyMap, sideDef);
         }
         case TopologySurfaceEditTargetKind::None:
             break;
@@ -8685,6 +8907,9 @@ const SectorTopologyDecalLayer* SectorEditor::DecalForSurface(TopologySurfaceEdi
     if (!IsValidTopologySurfaceEditTarget(target)) {
         return nullptr;
     }
+    if (IsMiddleTopologyEditTarget(target.kind)) {
+        return nullptr;
+    }
 
     if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
             || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
@@ -8707,6 +8932,9 @@ const SectorTopologyDecalLayer* SectorEditor::DecalForSurface(TopologySurfaceEdi
 SectorTopologyDecalLayer* SectorEditor::MutableDecalForSurface(TopologySurfaceEditTarget target)
 {
     if (!IsValidTopologySurfaceEditTarget(target)) {
+        return nullptr;
+    }
+    if (IsMiddleTopologyEditTarget(target.kind)) {
         return nullptr;
     }
 
@@ -8828,6 +9056,8 @@ std::string SectorEditor::CurrentTextureForSurface(
             return sideDef->lower.textureId;
         case TopologySurfaceEditTargetKind::SideDefUpper:
             return sideDef->upper.textureId;
+        case TopologySurfaceEditTargetKind::SideDefMiddle:
+            return sideDef->middle.textureId;
         case TopologySurfaceEditTargetKind::SectorFloor:
         case TopologySurfaceEditTargetKind::SectorCeiling:
         case TopologySurfaceEditTargetKind::None:
@@ -9167,6 +9397,35 @@ bool SectorEditor::ClearSurfaceDecal(
     return true;
 }
 
+bool SectorEditor::ClearMiddleTexture(
+        TopologySurfaceEditTarget target,
+        engine::AssetManager* assets)
+{
+    if (target.kind != TopologySurfaceEditTargetKind::SideDefMiddle
+            || !IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Selected middle texture target is no longer valid.";
+        return false;
+    }
+
+    SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (sideDef == nullptr) {
+        statusText = "Selected middle texture target is no longer valid.";
+        return false;
+    }
+    if (IsDefaultWallPartSettings(sideDef->middle)) {
+        statusText = "No middle texture assigned.";
+        return false;
+    }
+
+    sideDef->middle = SectorTopologyWallPartSettings{};
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+    state.decalTintModal = DecalTintModalState{};
+    return FinishTopologyMaterialMutation("Cleared middle texture.", assets);
+}
+
 bool SectorEditor::ResetSurface3DUv(
         TopologySurfaceEditTarget target,
         TopologyMaterialLayer layer,
@@ -9357,7 +9616,7 @@ bool SectorEditor::FitSelectedWallMaterial(
         TopologyMaterialLayer layer)
 {
     if (!IsWallTopologyEditTarget(target.kind) || !IsValidTopologySurfaceEditTarget(target)) {
-        statusText = "Select a wall, lower, or upper surface before fitting UVs.";
+        statusText = "Select a wall, lower, upper, or middle surface before fitting UVs.";
         return false;
     }
     if (layer == TopologyMaterialLayer::Decal && !IsDecalAssigned(target)) {
@@ -9422,6 +9681,12 @@ bool SectorEditor::FitSelectedWallMaterial(
     }
 
     const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+    if (wallPart == TopologyWallPart::Middle
+            && layer == TopologyMaterialLayer::Base
+            && sideDef->middle.textureId.empty()) {
+        statusText = "No middle texture assigned.";
+        return false;
+    }
     float heightAuthoring = 0.0f;
     switch (wallPart) {
         case TopologyWallPart::Wall:
@@ -9453,6 +9718,20 @@ bool SectorEditor::FitSelectedWallMaterial(
             }
             heightAuthoring = sector->ceilingZ - oppositeSector->ceilingZ;
             break;
+        case TopologyWallPart::Middle: {
+            if (oppositeSector == nullptr) {
+                statusText = "Middle texture fit needs an opposite sector.";
+                return false;
+            }
+            const float bottom = std::max(sector->floorZ, oppositeSector->floorZ);
+            const float top = std::min(sector->ceilingZ, oppositeSector->ceilingZ);
+            if (!(top > bottom) || !std::isfinite(bottom) || !std::isfinite(top)) {
+                statusText = "Selected middle texture has no visible height span.";
+                return false;
+            }
+            heightAuthoring = top - bottom;
+            break;
+        }
     }
 
     const float wallHeightWorld = SectorAuthoringToWorldDistance(std::fabs(heightAuthoring));
@@ -9503,15 +9782,15 @@ bool SectorEditor::FitSelectedWallMaterial(
         inputState = engine::UIFloatInputState{};
     }
 
-    MarkTopologyDocumentEdited(TextFormat(
-            "Fit %s %s %s.",
-            TopologyWallPartStatusName(wallPart),
-            TopologyMaterialLayerStatusName(layer),
-            TopologyUvFitModeStatusName(mode)));
-    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
-        return RebuildPreviewMeshesPreservingView(*assets);
-    }
-    return true;
+    return FinishTopologyMaterialMutation(
+            wallPart == TopologyWallPart::Middle
+                    ? TextFormat("Fit middle texture %s.", TopologyUvFitModeStatusName(mode))
+                    : TextFormat(
+                            "Fit %s %s %s.",
+                            TopologyWallPartStatusName(wallPart),
+                            TopologyMaterialLayerStatusName(layer),
+                            TopologyUvFitModeStatusName(mode)),
+            assets);
 }
 
 bool SectorEditor::AlignSelectedWallMaterialVertical(
@@ -9568,6 +9847,10 @@ bool SectorEditor::AlignSelectedWallMaterialVertical(
     }
 
     const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+    if (wallPart == TopologyWallPart::Middle) {
+        statusText = "Middle texture vertical alignment is not available yet.";
+        return false;
+    }
     float spanBottomAuthoring = 0.0f;
     float spanTopAuthoring = 0.0f;
     switch (wallPart) {
@@ -9603,6 +9886,9 @@ bool SectorEditor::AlignSelectedWallMaterialVertical(
             spanBottomAuthoring = oppositeSector->ceilingZ;
             spanTopAuthoring = sector->ceilingZ;
             break;
+        case TopologyWallPart::Middle:
+            statusText = "Middle texture vertical alignment is not available yet.";
+            return false;
     }
 
     const float spanBottomWorld = SectorAuthoringToWorldDistance(spanBottomAuthoring);
@@ -9715,6 +10001,10 @@ bool SectorEditor::AlignSelectedWallMaterialU(
     }
 
     const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+    if (wallPart == TopologyWallPart::Middle) {
+        statusText = "Middle texture U alignment is not available yet.";
+        return false;
+    }
     const SectorTopologyLoopEdge& selectedEdge = selectedLoop->edges[selectedEdgeIndex];
 
     if (selectedEdge.sideDefId != sideDef->id
@@ -9734,6 +10024,9 @@ bool SectorEditor::AlignSelectedWallMaterialU(
                 break;
             case TopologyWallPart::Upper:
                 statusText = "Selected upper wall has no visible height span.";
+                break;
+            case TopologyWallPart::Middle:
+                statusText = "Selected middle texture has no visible height span.";
                 break;
         }
         return false;
@@ -10057,7 +10350,10 @@ std::string SectorEditor::CurrentTextureForPickerTarget() const
         const SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(
                 *sideDef,
                 state.texturePicker.topologyWallPart);
-        return state.texturePicker.topologyLayer == TopologyMaterialLayer::Decal
+        const TopologyMaterialLayer layer = state.texturePicker.topologyWallPart == TopologyWallPart::Middle
+                ? TopologyMaterialLayer::Base
+                : state.texturePicker.topologyLayer;
+        return layer == TopologyMaterialLayer::Decal
                 ? part.decal.textureId
                 : part.textureId;
     }
@@ -10133,7 +10429,10 @@ void SectorEditor::OpenTopologySideDefTexturePicker(
         TopologyMaterialLayer layer)
 {
     TexturePickerState& picker = state.texturePicker;
-    if (FindSectorTopologySideDef(state.topologyMap, sideDefId) == nullptr) {
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, sideDefId);
+    if (sideDef == nullptr
+            || (wallPart == TopologyWallPart::Middle
+                    && !IsTopologyMiddleEligible(state.topologyMap, sideDef))) {
         picker = TexturePickerState{};
         statusText = "No topology sidedef texture target";
         return;
@@ -10142,7 +10441,9 @@ void SectorEditor::OpenTopologySideDefTexturePicker(
     picker.open = true;
     picker.rebuildPreviewOnApply = false;
     picker.topologyTargetKind = TopologyTexturePickerTargetKind::SideDef;
-    picker.topologyLayer = layer;
+    picker.topologyLayer = wallPart == TopologyWallPart::Middle
+            ? TopologyMaterialLayer::Base
+            : layer;
     picker.topologySectorId = -1;
     picker.topologyField = TopologySectorTextureField::None;
     picker.topologySideDefId = sideDefId;
@@ -10241,25 +10542,35 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
             return;
         }
         SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(*sideDef, picker.topologyWallPart);
-        if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+        const TopologyMaterialLayer layer = picker.topologyWallPart == TopologyWallPart::Middle
+                ? TopologyMaterialLayer::Base
+                : picker.topologyLayer;
+        if (layer == TopologyMaterialLayer::Decal) {
             assignDecalTexture(part.decal);
             status = TextFormat(
                     "Selected %s decal texture.",
                     TopologyWallPartStatusName(picker.topologyWallPart));
         } else {
             assignTexture(part.textureId);
-            status = TextFormat(
-                    "Changed topology sidedef %d %s texture",
-                    sideDef->id,
-                    TopologyWallPartStatusName(picker.topologyWallPart));
+            status = picker.topologyWallPart == TopologyWallPart::Middle
+                    ? "Selected middle texture."
+                    : TextFormat(
+                            "Changed topology sidedef %d %s texture",
+                            sideDef->id,
+                            TopologyWallPartStatusName(picker.topologyWallPart));
         }
     }
 
     if (changed) {
-        state.topologyRenderWarning.clear();
-        MarkTopologyDocumentEdited(status.c_str());
-        if (rebuildPreviewOnApply && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
-            RebuildPreviewMeshesPreservingView(assets);
+        if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef
+                && picker.topologyWallPart == TopologyWallPart::Middle) {
+            FinishTopologyMaterialMutation(status.c_str(), &assets);
+        } else {
+            state.topologyRenderWarning.clear();
+            MarkTopologyDocumentEdited(status.c_str());
+            if (rebuildPreviewOnApply && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+                RebuildPreviewMeshesPreservingView(assets);
+            }
         }
     }
 
