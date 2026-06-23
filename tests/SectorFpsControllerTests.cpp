@@ -236,6 +236,67 @@ void TestHeadBobVisualOnlyPoseLayer()
     Check(Near(state.feetPosition, originalFeet), "visual pose offsets do not mutate physics feet");
 }
 
+void TestLandingDipAmountCurve()
+{
+    constexpr float MinImpact = 0.5f;
+    constexpr float FullImpact = 12.0f;
+    constexpr float MaxDip = 0.45f;
+    constexpr float CurvePower = 2.25f;
+
+    Check(Near(game::ComputeSectorFpsLandingDipAmount(
+            0.25f, MinImpact, FullImpact, MaxDip, CurvePower), 0.0f),
+          "landing dip curve ignores impact below minimum");
+    Check(Near(game::ComputeSectorFpsLandingDipAmount(
+            MinImpact, MinImpact, FullImpact, MaxDip, CurvePower), 0.0f),
+          "landing dip curve is zero at minimum impact");
+
+    const float lowJumpDip = game::ComputeSectorFpsLandingDipAmount(
+            5.5f, MinImpact, FullImpact, MaxDip, CurvePower);
+    const float oneMeterDip = game::ComputeSectorFpsLandingDipAmount(
+            7.1f, MinImpact, FullImpact, MaxDip, CurvePower);
+    const float highFallDip = game::ComputeSectorFpsLandingDipAmount(
+            10.0f, MinImpact, FullImpact, MaxDip, CurvePower);
+    Check(Near(lowJumpDip, 0.0691f, 0.0002f),
+          "landing dip curve gives subtle partial dip for default jump speed");
+    Check(Near(oneMeterDip, 0.1290f, 0.0002f),
+          "landing dip curve gives moderate dip for one-meter impact speed");
+    Check(lowJumpDip > 0.0f && lowJumpDip < oneMeterDip && oneMeterDip < highFallDip,
+          "landing dip curve is monotonic across low, mid, and high impact speeds");
+
+    Check(Near(game::ComputeSectorFpsLandingDipAmount(
+            FullImpact, MinImpact, FullImpact, MaxDip, CurvePower), MaxDip),
+          "landing dip curve reaches max at full impact speed");
+    Check(Near(game::ComputeSectorFpsLandingDipAmount(
+            15.8f, MinImpact, FullImpact, MaxDip, CurvePower), MaxDip),
+          "landing dip curve clamps above full impact speed");
+}
+
+void TestLandingDipAmountInvalidInputs()
+{
+    constexpr float MinImpact = 0.5f;
+    constexpr float FullImpact = 12.0f;
+    constexpr float MaxDip = 0.45f;
+    constexpr float CurvePower = 2.25f;
+
+    const float invalidResults[] = {
+            game::ComputeSectorFpsLandingDipAmount(INFINITY, MinImpact, FullImpact, MaxDip, CurvePower),
+            game::ComputeSectorFpsLandingDipAmount(NAN, MinImpact, FullImpact, MaxDip, CurvePower),
+            game::ComputeSectorFpsLandingDipAmount(7.1f, INFINITY, FullImpact, MaxDip, CurvePower),
+            game::ComputeSectorFpsLandingDipAmount(7.1f, MinImpact, INFINITY, MaxDip, CurvePower),
+            game::ComputeSectorFpsLandingDipAmount(7.1f, MinImpact, MinImpact, MaxDip, CurvePower),
+            game::ComputeSectorFpsLandingDipAmount(7.1f, FullImpact, MinImpact, MaxDip, CurvePower),
+            game::ComputeSectorFpsLandingDipAmount(7.1f, MinImpact, FullImpact, INFINITY, CurvePower),
+            game::ComputeSectorFpsLandingDipAmount(7.1f, MinImpact, FullImpact, -1.0f, CurvePower),
+            game::ComputeSectorFpsLandingDipAmount(7.1f, MinImpact, FullImpact, MaxDip, INFINITY),
+            game::ComputeSectorFpsLandingDipAmount(7.1f, MinImpact, FullImpact, MaxDip, 0.0f),
+    };
+
+    for (const float result : invalidResults) {
+        Check(std::isfinite(result) && Near(result, 0.0f),
+              "landing dip curve returns finite zero for invalid inputs");
+    }
+}
+
 void TestLandingDipTriggerDecayAndRobustness()
 {
     game::SectorFpsLandingDipState landingDip;
@@ -248,20 +309,24 @@ void TestLandingDipTriggerDecayAndRobustness()
     Check(Near(landingDip.offsetY, 0.0f), "zero dt does not create landing dip");
 
     landingDip.offsetY = -0.05f;
-    result.transition = game::SectorFpsVerticalTransition::StayedGrounded;
-    result.landingImpactSpeed = 0.0f;
+    result.transition = game::SectorFpsVerticalTransition::Landed;
+    result.landingImpactSpeed = 12.0f;
     game::UpdateSectorFpsLandingDip(landingDip, result, 0.0f);
-    Check(Near(landingDip.offsetY, -0.05f), "zero dt does not decay landing dip");
+    Check(Near(landingDip.offsetY, -0.05f), "zero dt does not replace existing landing dip");
 
     result.transition = game::SectorFpsVerticalTransition::Landed;
-    result.landingImpactSpeed = 5.0f;
+    result.landingImpactSpeed = 7.1f;
     game::UpdateSectorFpsLandingDip(landingDip, result, 0.016f);
     Check(landingDip.offsetY < 0.0f, "landing dip creates negative camera offset");
-    Check(Near(landingDip.offsetY, -0.125f), "landing dip scales impact speed below clamp");
+    Check(Near(landingDip.offsetY, -0.1290f, 0.0002f), "landing dip follows impact range curve");
 
-    result.landingImpactSpeed = 10.0f;
+    result.landingImpactSpeed = 12.0f;
     game::UpdateSectorFpsLandingDip(landingDip, result, 0.016f);
-    Check(Near(landingDip.offsetY, -0.15f), "landing dip clamps large impact speed");
+    Check(Near(landingDip.offsetY, -0.45f), "landing dip reaches max at full impact speed");
+
+    result.landingImpactSpeed = 15.8f;
+    game::UpdateSectorFpsLandingDip(landingDip, result, 0.016f);
+    Check(Near(landingDip.offsetY, -0.45f), "landing dip clamps above full impact speed");
 
     const float offsetAfterLanding = landingDip.offsetY;
     result.transition = game::SectorFpsVerticalTransition::StayedGrounded;
@@ -269,6 +334,10 @@ void TestLandingDipTriggerDecayAndRobustness()
     game::UpdateSectorFpsLandingDip(landingDip, result, 0.016f);
     Check(landingDip.offsetY > offsetAfterLanding && landingDip.offsetY < 0.0f,
           "landing dip decays toward zero");
+
+    landingDip.offsetY = -0.05f;
+    game::UpdateSectorFpsLandingDip(landingDip, result, 0.0f);
+    Check(Near(landingDip.offsetY, -0.05f), "zero dt does not decay landing dip");
 
     landingDip.offsetY = -0.00005f;
     game::UpdateSectorFpsLandingDip(landingDip, result, 1.0f);
@@ -286,7 +355,7 @@ void TestLandingDipTriggerDecayAndRobustness()
 
     landingDip.offsetY = INFINITY;
     result.transition = game::SectorFpsVerticalTransition::StayedGrounded;
-    game::UpdateSectorFpsLandingDip(landingDip, result, 0.016f);
+    game::UpdateSectorFpsLandingDip(landingDip, result, 0.0f);
     Check(Near(landingDip.offsetY, 0.0f), "non-finite stored landing dip clears");
 }
 
@@ -693,6 +762,8 @@ int main()
     TestHeadBobUpdatesFromResolvedMovementOnly();
     TestHeadBobInactiveAndDisabledBehavior();
     TestHeadBobVisualOnlyPoseLayer();
+    TestLandingDipAmountCurve();
+    TestLandingDipAmountInvalidInputs();
     TestLandingDipTriggerDecayAndRobustness();
     TestLandingDipClearTransitions();
     TestForwardMovementIgnoresPitchAndPreservesY();

@@ -17,10 +17,11 @@ constexpr float VisualStepOffsetEpsilon = 0.0001f;
 constexpr float HeadBobBlendRate = 12.0f;
 constexpr float HeadBobOffsetEpsilon = 0.0001f;
 constexpr float HeadBobPhaseWrap = 100000.0f;
-constexpr float LandingDipScale = 0.025f;
-constexpr float MaxLandingDip = 0.15f;
 constexpr float MinLandingImpactSpeed = 0.5f;
-constexpr float LandingDipRecoveryRate = 10.0f;
+constexpr float FullLandingDipImpactSpeed = 12.0f;
+constexpr float MaxLandingDip = 0.45f;
+constexpr float LandingDipRecoveryRate = 7.0f;
+constexpr float LandingDipCurvePower = 2.25f;
 constexpr float LandingDipOffsetEpsilon = 0.0001f;
 constexpr float TwoPi = 6.28318530717958647692f;
 
@@ -298,6 +299,37 @@ void ClearSectorFpsLandingDip(SectorFpsLandingDipState& landingDip)
     landingDip = SectorFpsLandingDipState{};
 }
 
+float ComputeSectorFpsLandingDipAmount(
+        float landingImpactSpeed,
+        float minImpactSpeed,
+        float fullImpactSpeed,
+        float maxDip,
+        float curvePower)
+{
+    if (!std::isfinite(landingImpactSpeed)
+            || !std::isfinite(minImpactSpeed)
+            || !std::isfinite(fullImpactSpeed)
+            || !std::isfinite(maxDip)
+            || !std::isfinite(curvePower)
+            || fullImpactSpeed <= minImpactSpeed
+            || maxDip <= 0.0f
+            || curvePower <= 0.0f) {
+        return 0.0f;
+    }
+
+    const float impactSpeed = std::max(0.0f, landingImpactSpeed);
+    const float t = std::clamp(
+            (impactSpeed - minImpactSpeed) / (fullImpactSpeed - minImpactSpeed),
+            0.0f,
+            1.0f);
+    const float curved = std::pow(t, curvePower);
+    if (!std::isfinite(curved)) {
+        return 0.0f;
+    }
+
+    return std::clamp(curved * maxDip, 0.0f, maxDip);
+}
+
 void UpdateSectorFpsLandingDip(
         SectorFpsLandingDipState& landingDip,
         const SectorFpsVerticalResult& verticalResult,
@@ -318,15 +350,18 @@ void UpdateSectorFpsLandingDip(
     }
 
     if (verticalResult.transition == SectorFpsVerticalTransition::Landed) {
-        const float impactSpeed = std::isfinite(verticalResult.landingImpactSpeed)
-                ? std::max(0.0f, verticalResult.landingImpactSpeed)
-                : 0.0f;
-        if (impactSpeed < MinLandingImpactSpeed) {
+        const float dip = ComputeSectorFpsLandingDipAmount(
+                verticalResult.landingImpactSpeed,
+                MinLandingImpactSpeed,
+                FullLandingDipImpactSpeed,
+                MaxLandingDip,
+                LandingDipCurvePower);
+        if (dip <= 0.0f) {
             landingDip.offsetY = 0.0f;
             return;
         }
 
-        landingDip.offsetY = -std::clamp(impactSpeed * LandingDipScale, 0.0f, MaxLandingDip);
+        landingDip.offsetY = -dip;
         return;
     }
 

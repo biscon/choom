@@ -139,6 +139,12 @@ void UpdateSectorFpsHeadBob(
         float dt,
         float blendRate = DefaultSectorFpsHeadBobBlendRate());
 void ClearSectorFpsLandingDip(SectorFpsLandingDipState& landingDip);
+float ComputeSectorFpsLandingDipAmount(
+        float landingImpactSpeed,
+        float minImpactSpeed,
+        float fullImpactSpeed,
+        float maxDip,
+        float curvePower);
 void UpdateSectorFpsLandingDip(
         SectorFpsLandingDipState& landingDip,
         const SectorFpsVerticalResult& verticalResult,
