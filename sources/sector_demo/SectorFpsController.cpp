@@ -17,6 +17,11 @@ constexpr float VisualStepOffsetEpsilon = 0.0001f;
 constexpr float HeadBobBlendRate = 12.0f;
 constexpr float HeadBobOffsetEpsilon = 0.0001f;
 constexpr float HeadBobPhaseWrap = 100000.0f;
+constexpr float LandingDipScale = 0.025f;
+constexpr float MaxLandingDip = 0.15f;
+constexpr float MinLandingImpactSpeed = 0.5f;
+constexpr float LandingDipRecoveryRate = 10.0f;
+constexpr float LandingDipOffsetEpsilon = 0.0001f;
 constexpr float TwoPi = 6.28318530717958647692f;
 
 float ClampFinite(float value, float fallback, float minValue, float maxValue)
@@ -130,9 +135,25 @@ SectorMeshPreviewPose SectorFpsControllerVisualPose(
         float visualStepOffsetY,
         Vector3 headBobOffset)
 {
+    return SectorFpsControllerVisualPose(
+            state,
+            config,
+            visualStepOffsetY,
+            headBobOffset,
+            0.0f);
+}
+
+SectorMeshPreviewPose SectorFpsControllerVisualPose(
+        const SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        float visualStepOffsetY,
+        Vector3 headBobOffset,
+        float landingDipOffsetY)
+{
     SectorMeshPreviewPose pose = SectorFpsControllerPose(state, config);
     pose.position.y += visualStepOffsetY;
     pose.position = Vector3Add(pose.position, headBobOffset);
+    pose.position.y += landingDipOffsetY;
     return pose;
 }
 
@@ -270,6 +291,53 @@ void UpdateSectorFpsHeadBob(
     headBob.offset = Vector3Add(
             Vector3Scale(right, lateralBob * headBob.blend),
             Vector3{0.0f, verticalBob * headBob.blend, 0.0f});
+}
+
+void ClearSectorFpsLandingDip(SectorFpsLandingDipState& landingDip)
+{
+    landingDip = SectorFpsLandingDipState{};
+}
+
+void UpdateSectorFpsLandingDip(
+        SectorFpsLandingDipState& landingDip,
+        const SectorFpsVerticalResult& verticalResult,
+        float dt)
+{
+    if (!std::isfinite(landingDip.offsetY)) {
+        landingDip.offsetY = 0.0f;
+    }
+    if (dt <= 0.0f) {
+        return;
+    }
+
+    if (!verticalResult.hasSector
+            || verticalResult.transition == SectorFpsVerticalTransition::StartedDrop
+            || verticalResult.transition == SectorFpsVerticalTransition::CannotFit) {
+        landingDip.offsetY = 0.0f;
+        return;
+    }
+
+    if (verticalResult.transition == SectorFpsVerticalTransition::Landed) {
+        const float impactSpeed = std::isfinite(verticalResult.landingImpactSpeed)
+                ? std::max(0.0f, verticalResult.landingImpactSpeed)
+                : 0.0f;
+        if (impactSpeed < MinLandingImpactSpeed) {
+            landingDip.offsetY = 0.0f;
+            return;
+        }
+
+        landingDip.offsetY = -std::clamp(impactSpeed * LandingDipScale, 0.0f, MaxLandingDip);
+        return;
+    }
+
+    if (landingDip.offsetY == 0.0f) {
+        return;
+    }
+
+    landingDip.offsetY *= std::exp(-LandingDipRecoveryRate * dt);
+    if (std::fabs(landingDip.offsetY) < LandingDipOffsetEpsilon) {
+        landingDip.offsetY = 0.0f;
+    }
 }
 
 void UpdateSectorFpsMouseLook(
@@ -412,8 +480,10 @@ SectorFpsVerticalResult UpdateSectorFpsVerticalPhysics(
     }
 
     if (state.feetPosition.y <= context.floorZ) {
+        const float verticalVelocityBeforeLanding = state.verticalVelocity;
         state.feetPosition.y = context.floorZ;
         state.grounded = true;
+        result.landingImpactSpeed = std::max(0.0f, -verticalVelocityBeforeLanding);
         state.verticalVelocity = 0.0f;
         result.transition = SectorFpsVerticalTransition::Landed;
     }

@@ -64,6 +64,7 @@ struct SectorFpsVerticalResult {
     bool cannotFit = false;
     float floorZ = 0.0f;
     float ceilingZ = 0.0f;
+    float landingImpactSpeed = 0.0f;
     SectorFpsVerticalTransition transition = SectorFpsVerticalTransition::None;
 };
 
@@ -71,6 +72,10 @@ struct SectorFpsHeadBobState {
     float phase = 0.0f;
     float blend = 0.0f;
     Vector3 offset = {};
+};
+
+struct SectorFpsLandingDipState {
+    float offsetY = 0.0f;
 };
 
 float DefaultSectorFpsStepSmoothingRate();
@@ -97,6 +102,12 @@ SectorMeshPreviewPose SectorFpsControllerVisualPose(
         const SectorFpsControllerConfig& config,
         float visualStepOffsetY,
         Vector3 headBobOffset);
+SectorMeshPreviewPose SectorFpsControllerVisualPose(
+        const SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        float visualStepOffsetY,
+        Vector3 headBobOffset,
+        float landingDipOffsetY);
 SectorFpsControllerState SectorFpsControllerStateFromCameraPose(
         const SectorMeshPreviewPose& pose,
         const SectorFpsControllerConfig& config);
@@ -127,6 +138,11 @@ void UpdateSectorFpsHeadBob(
         float yawRadians,
         float dt,
         float blendRate = DefaultSectorFpsHeadBobBlendRate());
+void ClearSectorFpsLandingDip(SectorFpsLandingDipState& landingDip);
+void UpdateSectorFpsLandingDip(
+        SectorFpsLandingDipState& landingDip,
+        const SectorFpsVerticalResult& verticalResult,
+        float dt);
 Vector2 ComputeSectorFpsHorizontalMovementDelta(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,

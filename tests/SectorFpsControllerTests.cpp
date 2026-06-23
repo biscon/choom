@@ -222,12 +222,100 @@ void TestHeadBobVisualOnlyPoseLayer()
     const Vector3 originalFeet = state.feetPosition;
     const float visualStepOffsetY = 0.15f;
     const Vector3 headBobOffset{0.02f, -0.01f, 0.03f};
+    const float landingDipOffsetY = -0.06f;
     const game::SectorMeshPreviewPose pose =
-            game::SectorFpsControllerVisualPose(state, config, visualStepOffsetY, headBobOffset);
+            game::SectorFpsControllerVisualPose(
+                    state,
+                    config,
+                    visualStepOffsetY,
+                    headBobOffset,
+                    landingDipOffsetY);
 
-    Check(Near(pose.position, Vector3{2.02f, 5.34f, 3.03f}),
-          "headbob layers on top of physics eye and visual step offset");
-    Check(Near(state.feetPosition, originalFeet), "headbob pose does not mutate physics feet");
+    Check(Near(pose.position, Vector3{2.02f, 5.28f, 3.03f}),
+          "headbob and landing dip layer on top of physics eye and visual step offset");
+    Check(Near(state.feetPosition, originalFeet), "visual pose offsets do not mutate physics feet");
+}
+
+void TestLandingDipTriggerDecayAndRobustness()
+{
+    game::SectorFpsLandingDipState landingDip;
+    game::SectorFpsVerticalResult result;
+    result.hasSector = true;
+    result.transition = game::SectorFpsVerticalTransition::Landed;
+    result.landingImpactSpeed = 5.0f;
+
+    game::UpdateSectorFpsLandingDip(landingDip, result, 0.0f);
+    Check(Near(landingDip.offsetY, 0.0f), "zero dt does not create landing dip");
+
+    landingDip.offsetY = -0.05f;
+    result.transition = game::SectorFpsVerticalTransition::StayedGrounded;
+    result.landingImpactSpeed = 0.0f;
+    game::UpdateSectorFpsLandingDip(landingDip, result, 0.0f);
+    Check(Near(landingDip.offsetY, -0.05f), "zero dt does not decay landing dip");
+
+    result.transition = game::SectorFpsVerticalTransition::Landed;
+    result.landingImpactSpeed = 5.0f;
+    game::UpdateSectorFpsLandingDip(landingDip, result, 0.016f);
+    Check(landingDip.offsetY < 0.0f, "landing dip creates negative camera offset");
+    Check(Near(landingDip.offsetY, -0.125f), "landing dip scales impact speed below clamp");
+
+    result.landingImpactSpeed = 10.0f;
+    game::UpdateSectorFpsLandingDip(landingDip, result, 0.016f);
+    Check(Near(landingDip.offsetY, -0.15f), "landing dip clamps large impact speed");
+
+    const float offsetAfterLanding = landingDip.offsetY;
+    result.transition = game::SectorFpsVerticalTransition::StayedGrounded;
+    result.landingImpactSpeed = 0.0f;
+    game::UpdateSectorFpsLandingDip(landingDip, result, 0.016f);
+    Check(landingDip.offsetY > offsetAfterLanding && landingDip.offsetY < 0.0f,
+          "landing dip decays toward zero");
+
+    landingDip.offsetY = -0.00005f;
+    game::UpdateSectorFpsLandingDip(landingDip, result, 1.0f);
+    Check(Near(landingDip.offsetY, 0.0f), "tiny landing dip snaps to zero");
+
+    result.transition = game::SectorFpsVerticalTransition::Landed;
+    result.landingImpactSpeed = 0.25f;
+    game::UpdateSectorFpsLandingDip(landingDip, result, 0.016f);
+    Check(Near(landingDip.offsetY, 0.0f), "tiny landing impact does not create dip");
+
+    landingDip.offsetY = -0.03f;
+    result.landingImpactSpeed = INFINITY;
+    game::UpdateSectorFpsLandingDip(landingDip, result, 0.016f);
+    Check(Near(landingDip.offsetY, 0.0f), "non-finite landing impact clears and skips dip");
+
+    landingDip.offsetY = INFINITY;
+    result.transition = game::SectorFpsVerticalTransition::StayedGrounded;
+    game::UpdateSectorFpsLandingDip(landingDip, result, 0.016f);
+    Check(Near(landingDip.offsetY, 0.0f), "non-finite stored landing dip clears");
+}
+
+void TestLandingDipClearTransitions()
+{
+    game::SectorFpsLandingDipState landingDip;
+    game::SectorFpsVerticalResult result;
+    result.hasSector = true;
+
+    const game::SectorFpsVerticalTransition clearTransitions[] = {
+            game::SectorFpsVerticalTransition::StartedDrop,
+            game::SectorFpsVerticalTransition::CannotFit
+    };
+    for (const game::SectorFpsVerticalTransition transition : clearTransitions) {
+        landingDip.offsetY = -0.05f;
+        result.transition = transition;
+        game::UpdateSectorFpsLandingDip(landingDip, result, 0.016f);
+        Check(Near(landingDip.offsetY, 0.0f), "landing dip clears on vertical reset transitions");
+    }
+
+    landingDip.offsetY = -0.05f;
+    result.hasSector = false;
+    result.transition = game::SectorFpsVerticalTransition::None;
+    game::UpdateSectorFpsLandingDip(landingDip, result, 0.016f);
+    Check(Near(landingDip.offsetY, 0.0f), "landing dip clears with no sector");
+
+    landingDip.offsetY = -0.05f;
+    game::ClearSectorFpsLandingDip(landingDip);
+    Check(Near(landingDip.offsetY, 0.0f), "landing dip clears on explicit jump or mode reset");
 }
 
 void TestForwardMovementIgnoresPitchAndPreservesY()
@@ -485,6 +573,7 @@ void TestFallingAndLanding()
             game::UpdateSectorFpsVerticalPhysics(state, config, context, 2.0f);
     Check(result.transition == game::SectorFpsVerticalTransition::Landed,
           "falling player landing reports landed");
+    Check(Near(result.landingImpactSpeed, 25.0f), "falling landing reports impact speed before velocity clears");
     Check(Near(state.feetPosition.y, 0.0f), "falling player lands on floor");
     Check(state.grounded, "landing sets grounded true");
     Check(Near(state.verticalVelocity, 0.0f), "landing clears vertical velocity");
@@ -511,6 +600,7 @@ void TestJumpVerticalMotionAndLanding()
             game::UpdateSectorFpsVerticalPhysics(state, config, context, 2.0f);
     Check(result.transition == game::SectorFpsVerticalTransition::Landed,
           "jumping player eventually lands");
+    Check(result.landingImpactSpeed > 0.0f, "jump landing reports downward impact speed");
     Check(Near(state.feetPosition.y, 0.0f), "jumping player lands on floor");
     Check(state.grounded, "jump landing sets grounded");
     Check(Near(state.verticalVelocity, 0.0f), "jump landing clears velocity");
@@ -603,6 +693,8 @@ int main()
     TestHeadBobUpdatesFromResolvedMovementOnly();
     TestHeadBobInactiveAndDisabledBehavior();
     TestHeadBobVisualOnlyPoseLayer();
+    TestLandingDipTriggerDecayAndRobustness();
+    TestLandingDipClearTransitions();
     TestForwardMovementIgnoresPitchAndPreservesY();
     TestRunAndWalkSpeeds();
     TestMouseLookRawDeltaAndPitchClamp();

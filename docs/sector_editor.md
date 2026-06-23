@@ -493,9 +493,14 @@ Gameplay mode also applies visual-only headbob while grounded and actually
 moving horizontally. Headbob is layered after the physics eye pose and visual
 step smoothing, and it does not affect collision, sector lookup, vertical
 physics, or the stored feet/body position. Headbob is disabled while airborne,
-falling, jumping, standing still, or in no-sector fallback. Landing dip remains
-deferred and separate from step smoothing and headbob. The Gameplay overlay
-reports collision state, current sector, grounded/jumping/falling state, recent
+falling, jumping, standing still, or in no-sector fallback. Gameplay mode also
+applies a subtle visual-only landing dip when landing from a jump or fall. The
+landing dip is separate from step smoothing and headbob, is based on downward
+impact speed, is clamped to a small downward offset, and recovers back to the
+normal eye height without affecting physics, collision, sector lookup, or the
+stored feet/body position. Landing dip does not implement camera shake,
+rebound above normal eye height, or weapon bob. The Gameplay overlay reports
+collision state, current sector, grounded/jumping/falling state, recent
 vertical transition, recent wall/step/ceiling blocks, radius, step height, jump
 height, floor, feet, velocity, and gravity in runtime world-space values.
 

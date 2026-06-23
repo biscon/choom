@@ -365,6 +365,7 @@ struct SectorEditorState {
     bool previewCollisionNoclipFallback = false;
     float visualStepOffsetY = 0.0f;
     SectorFpsHeadBobState headBobState;
+    SectorFpsLandingDipState landingDipState;
     bool hasPreviewPose = false;
     SectorMeshPreviewPose lastPreviewPose = {};
     SectorSurfaceHit hoveredSurface3D;

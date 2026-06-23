@@ -8804,7 +8804,7 @@
     "playerRadius": 0.25,
     "playerHeight": 1.75,
     "stepHeight": 0.4000000059604645,
-    "jumpHeight": 1.0,
+    "jumpHeight": 3.0,
     "headBobStrength": 0.019999999552965164,
     "headBobFrequency": 2.0
   },
