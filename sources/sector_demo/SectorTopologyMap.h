@@ -21,6 +21,8 @@ struct SectorPreviewSettings {
     float playerHeight = 1.6f;
     float stepHeight = 0.25f;
     float jumpHeight = 0.6f;
+    float headBobStrength = 0.020f;
+    float headBobFrequency = 2.0f;
 };
 
 struct SectorTopologyMap {

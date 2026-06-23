@@ -2944,6 +2944,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                     state.fpsControllerConfig,
                     controllerInput,
                     dt);
+            const Vector2 previousFeetXZ{
+                    state.fpsControllerState.feetPosition.x,
+                    state.fpsControllerState.feetPosition.z};
             state.previewMoveResult = SectorCollisionMoveResult{};
             state.previewCollisionNoclipFallback = false;
             if (state.sectorCollisionWorldValid) {
@@ -3027,6 +3030,23 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                         DefaultSectorFpsStepSmoothingRate(),
                         dt);
             }
+            const Vector2 resolvedHorizontalMovement{
+                    state.fpsControllerState.feetPosition.x - previousFeetXZ.x,
+                    state.fpsControllerState.feetPosition.z - previousFeetXZ.y};
+            const float resolvedHorizontalSpeed = dt > 0.0f
+                    ? Vector2Length(resolvedHorizontalMovement) / dt
+                    : 0.0f;
+            const bool headBobActive = !state.previewCollisionNoclipFallback
+                    && state.previewVerticalResult.hasSector
+                    && state.fpsControllerState.grounded
+                    && !state.previewSettingsModal.open;
+            UpdateSectorFpsHeadBob(
+                    state.headBobState,
+                    state.fpsControllerConfig,
+                    headBobActive,
+                    resolvedHorizontalSpeed,
+                    state.fpsControllerState.yawRadians,
+                    dt);
             ApplyGameplayPoseToPreview();
         }
         UpdatePreview3DSelection(input);
@@ -8207,9 +8227,9 @@ void SectorEditor::DrawPreviewSettingsModal(
     DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
     const Rectangle modal{
             (EditorWidth - 620.0f) * 0.5f,
-            (EditorHeight - 680.0f) * 0.5f,
+            (EditorHeight - 790.0f) * 0.5f,
             620.0f,
-            680.0f
+            790.0f
     };
     DrawRectangleRec(modal, Color{20, 24, 32, 248});
     DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
@@ -8325,12 +8345,28 @@ void SectorEditor::DrawPreviewSettingsModal(
             0.0f,
             3.0f,
             2);
+    drawFloat(
+            "sector_editor_preview_head_bob_strength",
+            "Head bob strength",
+            modalState.draftConfig.headBobStrength,
+            modalState.headBobStrengthInput,
+            0.0f,
+            0.25f,
+            3);
+    drawFloat(
+            "sector_editor_preview_head_bob_frequency",
+            "Head bob frequency",
+            modalState.draftConfig.headBobFrequency,
+            modalState.headBobFrequencyInput,
+            0.0f,
+            20.0f,
+            2);
 
     if (!modalState.errorMessage.empty()) {
         engine::Text(
                 config,
                 assets,
-                Rectangle{modal.x + 30.0f, modal.y + 552.0f, modal.width - 60.0f, 36.0f},
+                Rectangle{modal.x + 30.0f, modal.y + modal.height - 116.0f, modal.width - 60.0f, 36.0f},
                 font,
                 modalState.errorMessage.c_str(),
                 engine::UITextJustify::Left,
@@ -8350,6 +8386,8 @@ void SectorEditor::DrawPreviewSettingsModal(
         modalState.playerHeightInput = engine::UIFloatInputState{};
         modalState.stepHeightInput = engine::UIFloatInputState{};
         modalState.jumpHeightInput = engine::UIFloatInputState{};
+        modalState.headBobStrengthInput = engine::UIFloatInputState{};
+        modalState.headBobFrequencyInput = engine::UIFloatInputState{};
         modalState.errorMessage.clear();
     }
     okayRequested = okayRequested || engine::Button(
@@ -8782,6 +8820,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
         state.previewMoveResult = SectorCollisionMoveResult{};
         state.previewCollisionNoclipFallback = false;
         state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
         state.mode = SectorEditorMode::Edit2D;
         if (StartsWith(error, "Preview failed:")) {
             statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
@@ -8797,6 +8836,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
 
     state.previewControlMode = SectorPreviewControlMode::FreeFly;
     state.visualStepOffsetY = 0.0f;
+    ClearSectorFpsHeadBob(state.headBobState);
     state.fpsControllerConfig = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
     state.mode = SectorEditorMode::Preview3D;
     state.previewUiHidden = false;
@@ -8821,6 +8861,7 @@ void SectorEditor::LeavePreview3D()
         ApplyGameplayPoseToPreview();
     }
     state.visualStepOffsetY = 0.0f;
+    ClearSectorFpsHeadBob(state.headBobState);
     state.previewControlMode = SectorPreviewControlMode::FreeFly;
     state.mode = SectorEditorMode::Edit2D;
     state.hoveredSurface3D = SectorSurfaceHit{};
@@ -8835,7 +8876,8 @@ SectorMeshPreviewPose SectorEditor::ActivePreviewPose() const
         return SectorFpsControllerVisualPose(
                 state.fpsControllerState,
                 state.fpsControllerConfig,
-                state.visualStepOffsetY);
+                state.visualStepOffsetY,
+                state.headBobState.offset);
     }
     return preview.Pose();
 }
@@ -8845,7 +8887,8 @@ void SectorEditor::ApplyGameplayPoseToPreview()
     preview.ApplyPose(SectorFpsControllerVisualPose(
                 state.fpsControllerState,
                 state.fpsControllerConfig,
-                state.visualStepOffsetY));
+                state.visualStepOffsetY,
+                state.headBobState.offset));
 }
 
 void SectorEditor::TogglePreviewControlMode()
@@ -8857,6 +8900,7 @@ void SectorEditor::TogglePreviewControlMode()
     state.fpsControllerConfig = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
     if (state.previewControlMode == SectorPreviewControlMode::FreeFly) {
         state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
         state.fpsControllerState = SectorFpsControllerStateFromCameraPose(
                 preview.Pose(),
                 state.fpsControllerConfig);
@@ -8867,6 +8911,7 @@ void SectorEditor::TogglePreviewControlMode()
     } else {
         ApplyGameplayPoseToPreview();
         state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
         state.previewControlMode = SectorPreviewControlMode::FreeFly;
         state.previewCollisionSectorId = 0;
         state.fpsControllerState.currentSectorId = 0;
@@ -8888,6 +8933,7 @@ bool SectorEditor::RebuildSectorCollisionWorld()
         state.previewMoveResult = SectorCollisionMoveResult{};
         state.previewCollisionNoclipFallback = false;
         state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
         state.sectorCollisionWorldWarning = error.empty()
                 ? "Collision world build failed"
                 : "Collision world build failed: " + error;
@@ -8904,9 +8950,11 @@ bool SectorEditor::RebuildSectorCollisionWorld()
                 BuildGameplayVerticalContext(),
                 0.0f);
         state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
     } else {
         state.previewCollisionSectorId = 0;
         state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
     }
     return true;
 }
@@ -8940,6 +8988,7 @@ void SectorEditor::RefreshGameplaySectorAndVerticalContext()
         state.previewMoveResult = SectorCollisionMoveResult{};
         state.previewCollisionNoclipFallback = false;
         state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
         return;
     }
 
@@ -8966,6 +9015,7 @@ void SectorEditor::InitializeGameplayVerticalState()
         state.previewMoveResult = SectorCollisionMoveResult{};
         state.previewCollisionNoclipFallback = false;
         state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
         return;
     }
 
@@ -8979,6 +9029,7 @@ void SectorEditor::InitializeGameplayVerticalState()
             context,
             0.0f);
     state.visualStepOffsetY = 0.0f;
+    ClearSectorFpsHeadBob(state.headBobState);
 }
 
 void SectorEditor::OpenPreviewSettingsModal()
@@ -9012,10 +9063,11 @@ void SectorEditor::ApplyPreviewSettingsModal()
                 BuildGameplayVerticalContext(),
                 0.0f);
         state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
         ApplyGameplayPoseToPreview();
     }
     statusText = TextFormat(
-            "Preview settings updated: walk %.1f run %.1f eye %.1f gravity %.1f radius %.2f height %.2f step %.2f jump %.2f",
+            "Preview settings updated: walk %.1f run %.1f eye %.1f gravity %.1f radius %.2f height %.2f step %.2f jump %.2f bob %.3f freq %.1f",
             state.fpsControllerConfig.walkSpeed,
             state.fpsControllerConfig.runSpeed,
             state.fpsControllerConfig.eyeHeight,
@@ -9023,7 +9075,9 @@ void SectorEditor::ApplyPreviewSettingsModal()
             state.fpsControllerConfig.playerRadius,
             state.fpsControllerConfig.playerHeight,
             state.fpsControllerConfig.stepHeight,
-            state.fpsControllerConfig.jumpHeight);
+            state.fpsControllerConfig.jumpHeight,
+            state.fpsControllerConfig.headBobStrength,
+            state.fpsControllerConfig.headBobFrequency);
 }
 
 void SectorEditor::RefreshDefaultTextures()

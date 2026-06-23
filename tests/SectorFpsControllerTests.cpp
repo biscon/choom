@@ -158,6 +158,78 @@ void TestVisualStepSmoothingDecayAndClearTransitions()
     }
 }
 
+void TestHeadBobUpdatesFromResolvedMovementOnly()
+{
+    game::SectorFpsControllerConfig config;
+    config.headBobStrength = 0.04f;
+    config.headBobFrequency = 8.0f;
+    config.runSpeed = 12.0f;
+    game::SectorFpsHeadBobState headBob;
+
+    game::UpdateSectorFpsHeadBob(headBob, config, true, 6.0f, 0.0f, 0.016f);
+    Check(headBob.phase > 0.0f, "grounded resolved movement advances headbob phase");
+    Check(headBob.blend > 0.0f, "grounded resolved movement increases headbob blend");
+    Check(Vector3LengthSqr(headBob.offset) > 0.0f, "grounded resolved movement produces headbob offset");
+
+    const float phaseAfterMovement = headBob.phase;
+    game::UpdateSectorFpsHeadBob(headBob, config, true, 0.0f, 0.0f, 0.016f);
+    Check(Near(headBob.phase, phaseAfterMovement), "zero resolved movement does not advance headbob phase");
+}
+
+void TestHeadBobInactiveAndDisabledBehavior()
+{
+    game::SectorFpsControllerConfig config;
+    config.headBobStrength = 0.04f;
+    config.headBobFrequency = 8.0f;
+    game::SectorFpsHeadBobState headBob;
+    game::UpdateSectorFpsHeadBob(headBob, config, true, 6.0f, 0.25f, 0.016f);
+    const float phaseAfterMovement = headBob.phase;
+    const Vector3 offsetAfterMovement = headBob.offset;
+
+    game::UpdateSectorFpsHeadBob(headBob, config, true, 6.0f, 0.25f, 0.0f);
+    Check(Near(headBob.phase, phaseAfterMovement), "zero dt does not advance headbob phase");
+    Check(Near(headBob.offset, offsetAfterMovement), "zero dt does not create a new headbob impulse");
+
+    game::UpdateSectorFpsHeadBob(headBob, config, false, 6.0f, 0.25f, 0.25f);
+    Check(Near(headBob.phase, phaseAfterMovement), "inactive headbob does not advance phase");
+    Check(headBob.blend < 1.0f, "inactive headbob decays blend toward zero");
+
+    config.headBobStrength = 0.0f;
+    game::UpdateSectorFpsHeadBob(headBob, config, true, 6.0f, 0.25f, 0.016f);
+    Check(Near(headBob.blend, 0.0f) && Near(headBob.offset, Vector3{}),
+          "zero headbob strength clears visible bob");
+
+    config.headBobStrength = 0.04f;
+    config.headBobFrequency = 0.0f;
+    headBob.phase = 1.0f;
+    headBob.blend = 1.0f;
+    headBob.offset = Vector3{1.0f, 1.0f, 1.0f};
+    game::UpdateSectorFpsHeadBob(headBob, config, true, 6.0f, 0.25f, 0.016f);
+    Check(Near(headBob.phase, 1.0f), "zero headbob frequency does not advance phase");
+    Check(Near(headBob.blend, 0.0f) && Near(headBob.offset, Vector3{}),
+          "zero headbob frequency clears visible bob");
+}
+
+void TestHeadBobVisualOnlyPoseLayer()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{2.0f, 4.0f, 3.0f};
+    state.yawRadians = 0.25f;
+    state.pitchRadians = -0.1f;
+    game::SectorFpsControllerConfig config;
+    config.eyeHeight = 1.2f;
+
+    const Vector3 originalFeet = state.feetPosition;
+    const float visualStepOffsetY = 0.15f;
+    const Vector3 headBobOffset{0.02f, -0.01f, 0.03f};
+    const game::SectorMeshPreviewPose pose =
+            game::SectorFpsControllerVisualPose(state, config, visualStepOffsetY, headBobOffset);
+
+    Check(Near(pose.position, Vector3{2.02f, 5.34f, 3.03f}),
+          "headbob layers on top of physics eye and visual step offset");
+    Check(Near(state.feetPosition, originalFeet), "headbob pose does not mutate physics feet");
+}
+
 void TestForwardMovementIgnoresPitchAndPreservesY()
 {
     game::SectorFpsControllerState state;
@@ -219,6 +291,8 @@ void TestConfigNormalization()
     config.playerHeight = NAN;
     config.stepHeight = 99.0f;
     config.jumpHeight = 99.0f;
+    config.headBobStrength = 99.0f;
+    config.headBobFrequency = 99.0f;
     config = game::NormalizeSectorFpsControllerConfig(config);
     Check(Near(config.walkSpeed, 0.1f), "walk speed clamps low");
     Check(Near(config.runSpeed, 200.0f), "run speed clamps high");
@@ -229,20 +303,30 @@ void TestConfigNormalization()
     Check(Near(config.playerHeight, 1.6f), "non-finite player height uses default");
     Check(Near(config.stepHeight, 2.0f), "step height clamps high");
     Check(Near(config.jumpHeight, 3.0f), "jump height clamps high");
+    Check(Near(config.headBobStrength, 0.25f), "headbob strength clamps high");
+    Check(Near(config.headBobFrequency, 20.0f), "headbob frequency clamps high");
 
     config.gravity = -5.0f;
     config.jumpHeight = -5.0f;
+    config.headBobStrength = -5.0f;
+    config.headBobFrequency = -5.0f;
     config = game::NormalizeSectorFpsControllerConfig(config);
     Check(Near(config.gravity, 0.0f), "gravity clamps low");
     Check(Near(config.jumpHeight, 0.0f), "jump height clamps low");
+    Check(Near(config.headBobStrength, 0.0f), "headbob strength clamps low");
+    Check(Near(config.headBobFrequency, 0.0f), "headbob frequency clamps low");
 
     config.gravity = INFINITY;
     config.jumpHeight = INFINITY;
+    config.headBobStrength = INFINITY;
+    config.headBobFrequency = INFINITY;
     config.eyeHeight = 2.2f;
     config.playerHeight = 1.0f;
     config = game::NormalizeSectorFpsControllerConfig(config);
     Check(Near(config.gravity, 25.0f), "non-finite gravity uses default");
     Check(Near(config.jumpHeight, 0.6f), "non-finite jump height uses default");
+    Check(Near(config.headBobStrength, 0.020f), "non-finite headbob strength uses default");
+    Check(Near(config.headBobFrequency, 2.0f), "non-finite headbob frequency uses default");
     Check(Near(config.playerHeight, 2.2f), "player height is at least eye height");
     Check(Near(game::DefaultSectorFpsControllerConfig().gravity, 25.0f),
           "default gravity is 25");
@@ -254,6 +338,10 @@ void TestConfigNormalization()
           "default step height is 0.25 world units");
     Check(Near(game::DefaultSectorFpsControllerConfig().jumpHeight, 0.6f),
           "default jump height is 0.6 world units");
+    Check(Near(game::DefaultSectorFpsControllerConfig().headBobStrength, 0.020f),
+          "default headbob strength is 0.020 world units");
+    Check(Near(game::DefaultSectorFpsControllerConfig().headBobFrequency, 2.0f),
+          "default headbob frequency is 2");
 }
 
 void TestJumpStart()
@@ -512,6 +600,9 @@ int main()
     TestVisualStepSmoothingCapturesSteppedUpContinuity();
     TestVisualStepSmoothingCapturesSnappedDownContinuity();
     TestVisualStepSmoothingDecayAndClearTransitions();
+    TestHeadBobUpdatesFromResolvedMovementOnly();
+    TestHeadBobInactiveAndDisabledBehavior();
+    TestHeadBobVisualOnlyPoseLayer();
     TestForwardMovementIgnoresPitchAndPreservesY();
     TestRunAndWalkSpeeds();
     TestMouseLookRawDeltaAndPitchClamp();

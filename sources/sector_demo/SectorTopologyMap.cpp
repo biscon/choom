@@ -25,6 +25,10 @@ constexpr float PreviewStepHeightMin = 0.0f;
 constexpr float PreviewStepHeightMax = 2.0f;
 constexpr float PreviewJumpHeightMin = 0.0f;
 constexpr float PreviewJumpHeightMax = 3.0f;
+constexpr float PreviewHeadBobStrengthMin = 0.0f;
+constexpr float PreviewHeadBobStrengthMax = 0.25f;
+constexpr float PreviewHeadBobFrequencyMin = 0.0f;
+constexpr float PreviewHeadBobFrequencyMax = 20.0f;
 
 float ClampFinite(float value, float fallback, float minValue, float maxValue)
 {
@@ -136,6 +140,16 @@ SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings setti
             defaults.jumpHeight,
             PreviewJumpHeightMin,
             PreviewJumpHeightMax);
+    settings.headBobStrength = ClampFinite(
+            settings.headBobStrength,
+            defaults.headBobStrength,
+            PreviewHeadBobStrengthMin,
+            PreviewHeadBobStrengthMax);
+    settings.headBobFrequency = ClampFinite(
+            settings.headBobFrequency,
+            defaults.headBobFrequency,
+            PreviewHeadBobFrequencyMin,
+            PreviewHeadBobFrequencyMax);
     return settings;
 }
 

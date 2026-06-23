@@ -465,14 +465,16 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 The left tools pane `Settings` button opens editor-session preview settings.
 The same settings are available from the 3D preview overlay while its UI is
 visible. The modal edits walk speed, run speed, mouse sensitivity, camera eye
-height, gravity, player radius, player height, step height, and jump height. Gameplay
-Preview Settings use runtime/world units, not authored units. The gameplay
-controller stores a feet/body position; the camera eye is computed by adding
-the configured eye height, while player height is the collision cylinder height
-used for ceiling clearance. Player height is normalized to at least eye height.
-Step height defaults to `0.25` world units. Jump height defaults to `0.6`
-world units. Gravity uses a positive magnitude; `0` disables falling and also
-prevents jumps from adding lift.
+height, gravity, player radius, player height, step height, jump height, head
+bob strength, and head bob frequency. Gameplay Preview Settings use
+runtime/world units or simple unitless multipliers, not authored units. The
+gameplay controller stores a feet/body position; the camera eye is computed by
+adding the configured eye height, while player height is the collision cylinder
+height used for ceiling clearance. Player height is normalized to at least eye
+height. Step height defaults to `0.25` world units. Jump height defaults to
+`0.6` world units. Head bob strength defaults to `0.020` world units and head
+bob frequency defaults to `2.0`. Gravity uses a positive magnitude; `0`
+disables falling and also prevents jumps from adding lift.
 
 Grounded Gameplay movement snaps feet to same-height floors and small up/down
 floor changes within step height. The physics feet/body position still snaps
@@ -486,11 +488,16 @@ and small upward portals within step height are passable while grounded,
 too-high upward portals block, low-ceiling portals block, and downward portals
 are passable for now. Ceiling bonks clamp the player below the ceiling and
 clear upward velocity. Step smoothing does not apply to jumps, landings,
-ceiling bonks, cannot-fit cases, no-sector fallback, or FreeFly controls. Head
-bobbing remains deferred. The Gameplay overlay reports collision state,
-current sector, grounded/jumping/falling state, recent vertical transition,
-recent wall/step/ceiling blocks, radius, step height, jump height, floor, feet,
-velocity, and gravity in runtime world-space values.
+ceiling bonks, cannot-fit cases, no-sector fallback, or FreeFly controls.
+Gameplay mode also applies visual-only headbob while grounded and actually
+moving horizontally. Headbob is layered after the physics eye pose and visual
+step smoothing, and it does not affect collision, sector lookup, vertical
+physics, or the stored feet/body position. Headbob is disabled while airborne,
+falling, jumping, standing still, or in no-sector fallback. Landing dip remains
+deferred and separate from step smoothing and headbob. The Gameplay overlay
+reports collision state, current sector, grounded/jumping/falling state, recent
+vertical transition, recent wall/step/ceiling blocks, radius, step height, jump
+height, floor, feet, velocity, and gravity in runtime world-space values.
 
 3D picking maps generated surfaces back to topology:
 

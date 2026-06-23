@@ -422,6 +422,8 @@ void TestPreviewSettingsRoundTripAndValidation()
     original.previewSettings.playerHeight = 1.75f;
     original.previewSettings.stepHeight = 0.5f;
     original.previewSettings.jumpHeight = 0.75f;
+    original.previewSettings.headBobStrength = 0.08f;
+    original.previewSettings.headBobFrequency = 10.5f;
 
     const std::string text = SaveText(original);
     const Json saved = Json::parse(text);
@@ -434,7 +436,9 @@ void TestPreviewSettingsRoundTripAndValidation()
                   && Near(saved["previewSettings"]["playerRadius"].get<float>(), 0.35f)
                   && Near(saved["previewSettings"]["playerHeight"].get<float>(), 1.75f)
                   && Near(saved["previewSettings"]["stepHeight"].get<float>(), 0.5f)
-                  && Near(saved["previewSettings"]["jumpHeight"].get<float>(), 0.75f),
+                  && Near(saved["previewSettings"]["jumpHeight"].get<float>(), 0.75f)
+                  && Near(saved["previewSettings"]["headBobStrength"].get<float>(), 0.08f)
+                  && Near(saved["previewSettings"]["headBobFrequency"].get<float>(), 10.5f),
           "preview settings values are serialized");
 
     SectorTopologyMap loaded;
@@ -448,7 +452,9 @@ void TestPreviewSettingsRoundTripAndValidation()
                   && Near(loaded.previewSettings.playerRadius, 0.35f)
                   && Near(loaded.previewSettings.playerHeight, 1.75f)
                   && Near(loaded.previewSettings.stepHeight, 0.5f)
-                  && Near(loaded.previewSettings.jumpHeight, 0.75f),
+                  && Near(loaded.previewSettings.jumpHeight, 0.75f)
+                  && Near(loaded.previewSettings.headBobStrength, 0.08f)
+                  && Near(loaded.previewSettings.headBobFrequency, 10.5f),
           "preview settings round-trip");
 
     Json withoutGravity = saved;
@@ -476,6 +482,14 @@ void TestPreviewSettingsRoundTripAndValidation()
     Check(Near(loaded.previewSettings.jumpHeight, game::DefaultSectorPreviewSettings().jumpHeight),
           "omitted jump height loads default");
 
+    Json withoutHeadBob = saved;
+    withoutHeadBob["previewSettings"].erase("headBobStrength");
+    withoutHeadBob["previewSettings"].erase("headBobFrequency");
+    Check(LoadText(withoutHeadBob.dump(), loaded, error), "omitted headbob fields are accepted");
+    Check(Near(loaded.previewSettings.headBobStrength, game::DefaultSectorPreviewSettings().headBobStrength)
+                  && Near(loaded.previewSettings.headBobFrequency, game::DefaultSectorPreviewSettings().headBobFrequency),
+          "omitted headbob fields load defaults");
+
     Json withoutPreviewSettings = saved;
     withoutPreviewSettings.erase("previewSettings");
     SectorTopologyMap oldStyle;
@@ -490,14 +504,16 @@ void TestPreviewSettingsRoundTripAndValidation()
                   && Near(oldStyle.previewSettings.playerRadius, defaults.playerRadius)
                   && Near(oldStyle.previewSettings.playerHeight, defaults.playerHeight)
                   && Near(oldStyle.previewSettings.stepHeight, defaults.stepHeight)
-                  && Near(oldStyle.previewSettings.jumpHeight, defaults.jumpHeight),
+                  && Near(oldStyle.previewSettings.jumpHeight, defaults.jumpHeight)
+                  && Near(oldStyle.previewSettings.headBobStrength, defaults.headBobStrength)
+                  && Near(oldStyle.previewSettings.headBobFrequency, defaults.headBobFrequency),
           "omitted preview settings load defaults");
 
     Json invalid = saved;
     invalid["previewSettings"] = 4;
     ExpectRejected(invalid, "non-object preview settings are rejected");
 
-    const std::array<const char*, 9> fields{
+    const std::array<const char*, 11> fields{
             "walkSpeed",
             "runSpeed",
             "mouseSensitivity",
@@ -506,7 +522,9 @@ void TestPreviewSettingsRoundTripAndValidation()
             "playerRadius",
             "playerHeight",
             "stepHeight",
-            "jumpHeight"
+            "jumpHeight",
+            "headBobStrength",
+            "headBobFrequency"
     };
     for (const char* field : fields) {
         invalid = saved;
@@ -535,6 +553,26 @@ void TestPreviewSettingsRoundTripAndValidation()
         ExpectRejectedText(nonFiniteText, "non-finite jump height is rejected");
     }
 
+    invalid = saved;
+    invalid["previewSettings"]["headBobStrength"] = "__NONFINITE__";
+    nonFiniteText = invalid.dump();
+    const size_t headBobStrengthMarkerPos = nonFiniteText.find(marker);
+    Check(headBobStrengthMarkerPos != std::string::npos, "non-finite headbob strength marker exists");
+    if (headBobStrengthMarkerPos != std::string::npos) {
+        nonFiniteText.replace(headBobStrengthMarkerPos, marker.size(), "1e999");
+        ExpectRejectedText(nonFiniteText, "non-finite headbob strength is rejected");
+    }
+
+    invalid = saved;
+    invalid["previewSettings"]["headBobFrequency"] = "__NONFINITE__";
+    nonFiniteText = invalid.dump();
+    const size_t headBobFrequencyMarkerPos = nonFiniteText.find(marker);
+    Check(headBobFrequencyMarkerPos != std::string::npos, "non-finite headbob frequency marker exists");
+    if (headBobFrequencyMarkerPos != std::string::npos) {
+        nonFiniteText.replace(headBobFrequencyMarkerPos, marker.size(), "1e999");
+        ExpectRejectedText(nonFiniteText, "non-finite headbob frequency is rejected");
+    }
+
     Json clamped = saved;
     clamped["previewSettings"]["walkSpeed"] = -5.0f;
     clamped["previewSettings"]["runSpeed"] = 500.0f;
@@ -545,6 +583,8 @@ void TestPreviewSettingsRoundTripAndValidation()
     clamped["previewSettings"]["playerHeight"] = 0.1f;
     clamped["previewSettings"]["stepHeight"] = 9.0f;
     clamped["previewSettings"]["jumpHeight"] = 9.0f;
+    clamped["previewSettings"]["headBobStrength"] = 9.0f;
+    clamped["previewSettings"]["headBobFrequency"] = 99.0f;
     Check(LoadText(clamped.dump(), loaded, error), "out-of-range preview settings load");
     Check(Near(loaded.previewSettings.walkSpeed, 0.1f)
                   && Near(loaded.previewSettings.runSpeed, 200.0f)
@@ -554,14 +594,20 @@ void TestPreviewSettingsRoundTripAndValidation()
                   && Near(loaded.previewSettings.playerRadius, 0.05f)
                   && Near(loaded.previewSettings.playerHeight, 3.0f)
                   && Near(loaded.previewSettings.stepHeight, 2.0f)
-                  && Near(loaded.previewSettings.jumpHeight, 3.0f),
+                  && Near(loaded.previewSettings.jumpHeight, 3.0f)
+                  && Near(loaded.previewSettings.headBobStrength, 0.25f)
+                  && Near(loaded.previewSettings.headBobFrequency, 20.0f),
           "out-of-range preview settings clamp");
 
     clamped["previewSettings"]["gravity"] = 500.0f;
     clamped["previewSettings"]["jumpHeight"] = -5.0f;
+    clamped["previewSettings"]["headBobStrength"] = -5.0f;
+    clamped["previewSettings"]["headBobFrequency"] = -5.0f;
     Check(LoadText(clamped.dump(), loaded, error), "high gravity preview settings load");
     Check(Near(loaded.previewSettings.gravity, 200.0f), "high gravity clamps");
     Check(Near(loaded.previewSettings.jumpHeight, 0.0f), "low jump height clamps");
+    Check(Near(loaded.previewSettings.headBobStrength, 0.0f), "low headbob strength clamps");
+    Check(Near(loaded.previewSettings.headBobFrequency, 0.0f), "low headbob frequency clamps");
 }
 
 void TestDecalDefaultsAndOmission()

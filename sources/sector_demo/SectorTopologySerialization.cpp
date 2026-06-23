@@ -379,6 +379,14 @@ SectorPreviewSettings ReadPreviewSettings(const Json& value, const std::string& 
     if (jumpHeightIt != value.end()) {
         settings.jumpHeight = ReadFloat(value, "jumpHeight", context);
     }
+    const auto headBobStrengthIt = value.find("headBobStrength");
+    if (headBobStrengthIt != value.end()) {
+        settings.headBobStrength = ReadFloat(value, "headBobStrength", context);
+    }
+    const auto headBobFrequencyIt = value.find("headBobFrequency");
+    if (headBobFrequencyIt != value.end()) {
+        settings.headBobFrequency = ReadFloat(value, "headBobFrequency", context);
+    }
     return NormalizeSectorPreviewSettings(settings);
 }
 
@@ -591,6 +599,8 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
     RequireFinite(settings.playerHeight, "previewSettings.playerHeight");
     RequireFinite(settings.stepHeight, "previewSettings.stepHeight");
     RequireFinite(settings.jumpHeight, "previewSettings.jumpHeight");
+    RequireFinite(settings.headBobStrength, "previewSettings.headBobStrength");
+    RequireFinite(settings.headBobFrequency, "previewSettings.headBobFrequency");
     const SectorPreviewSettings normalized = NormalizeSectorPreviewSettings(settings);
     return Json{
             {"walkSpeed", normalized.walkSpeed},
@@ -601,7 +611,9 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
             {"playerRadius", normalized.playerRadius},
             {"playerHeight", normalized.playerHeight},
             {"stepHeight", normalized.stepHeight},
-            {"jumpHeight", normalized.jumpHeight}
+            {"jumpHeight", normalized.jumpHeight},
+            {"headBobStrength", normalized.headBobStrength},
+            {"headBobFrequency", normalized.headBobFrequency}
     };
 }
 

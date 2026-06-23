@@ -235,6 +235,8 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState playerHeightInput;
     engine::UIFloatInputState stepHeightInput;
     engine::UIFloatInputState jumpHeightInput;
+    engine::UIFloatInputState headBobStrengthInput;
+    engine::UIFloatInputState headBobFrequencyInput;
     std::string errorMessage;
 };
 
@@ -362,6 +364,7 @@ struct SectorEditorState {
     SectorCollisionMoveResult previewMoveResult;
     bool previewCollisionNoclipFallback = false;
     float visualStepOffsetY = 0.0f;
+    SectorFpsHeadBobState headBobState;
     bool hasPreviewPose = false;
     SectorMeshPreviewPose lastPreviewPose = {};
     SectorSurfaceHit hoveredSurface3D;

@@ -17,6 +17,8 @@ struct SectorFpsControllerConfig {
     float playerHeight = 1.6f;
     float stepHeight = 0.25f;
     float jumpHeight = 0.6f;
+    float headBobStrength = 0.020f;
+    float headBobFrequency = 2.0f;
 };
 
 struct SectorFpsControllerState {
@@ -65,7 +67,14 @@ struct SectorFpsVerticalResult {
     SectorFpsVerticalTransition transition = SectorFpsVerticalTransition::None;
 };
 
+struct SectorFpsHeadBobState {
+    float phase = 0.0f;
+    float blend = 0.0f;
+    Vector3 offset = {};
+};
+
 float DefaultSectorFpsStepSmoothingRate();
+float DefaultSectorFpsHeadBobBlendRate();
 SectorFpsControllerConfig DefaultSectorFpsControllerConfig();
 SectorFpsControllerConfig NormalizeSectorFpsControllerConfig(SectorFpsControllerConfig config);
 SectorFpsControllerConfig SectorFpsControllerConfigFromPreviewSettings(
@@ -83,6 +92,11 @@ SectorMeshPreviewPose SectorFpsControllerVisualPose(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
         float visualStepOffsetY);
+SectorMeshPreviewPose SectorFpsControllerVisualPose(
+        const SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        float visualStepOffsetY,
+        Vector3 headBobOffset);
 SectorFpsControllerState SectorFpsControllerStateFromCameraPose(
         const SectorMeshPreviewPose& pose,
         const SectorFpsControllerConfig& config);
@@ -104,6 +118,15 @@ void ApplySectorFpsVisualStepSmoothing(
         const SectorFpsControllerConfig& config,
         float smoothingRate,
         float dt);
+void ClearSectorFpsHeadBob(SectorFpsHeadBobState& headBob);
+void UpdateSectorFpsHeadBob(
+        SectorFpsHeadBobState& headBob,
+        const SectorFpsControllerConfig& config,
+        bool active,
+        float horizontalSpeed,
+        float yawRadians,
+        float dt,
+        float blendRate = DefaultSectorFpsHeadBobBlendRate());
 Vector2 ComputeSectorFpsHorizontalMovementDelta(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,

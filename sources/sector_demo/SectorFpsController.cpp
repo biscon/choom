@@ -14,6 +14,10 @@ constexpr float PitchLimitRadians = 1.55334306f;
 constexpr float FloorTransitionEpsilon = 0.001f;
 constexpr float StepSmoothingRate = 16.0f;
 constexpr float VisualStepOffsetEpsilon = 0.0001f;
+constexpr float HeadBobBlendRate = 12.0f;
+constexpr float HeadBobOffsetEpsilon = 0.0001f;
+constexpr float HeadBobPhaseWrap = 100000.0f;
+constexpr float TwoPi = 6.28318530717958647692f;
 
 float ClampFinite(float value, float fallback, float minValue, float maxValue)
 {
@@ -28,6 +32,11 @@ float ClampFinite(float value, float fallback, float minValue, float maxValue)
 float DefaultSectorFpsStepSmoothingRate()
 {
     return StepSmoothingRate;
+}
+
+float DefaultSectorFpsHeadBobBlendRate()
+{
+    return HeadBobBlendRate;
 }
 
 SectorFpsControllerConfig DefaultSectorFpsControllerConfig()
@@ -56,6 +65,8 @@ SectorFpsControllerConfig SectorFpsControllerConfigFromPreviewSettings(
     config.playerHeight = settings.playerHeight;
     config.stepHeight = settings.stepHeight;
     config.jumpHeight = settings.jumpHeight;
+    config.headBobStrength = settings.headBobStrength;
+    config.headBobFrequency = settings.headBobFrequency;
     return config;
 }
 
@@ -72,6 +83,8 @@ SectorPreviewSettings SectorPreviewSettingsFromFpsControllerConfig(
     settings.playerHeight = config.playerHeight;
     settings.stepHeight = config.stepHeight;
     settings.jumpHeight = config.jumpHeight;
+    settings.headBobStrength = config.headBobStrength;
+    settings.headBobFrequency = config.headBobFrequency;
     return NormalizeSectorPreviewSettings(settings);
 }
 
@@ -104,8 +117,22 @@ SectorMeshPreviewPose SectorFpsControllerVisualPose(
         const SectorFpsControllerConfig& config,
         float visualStepOffsetY)
 {
+    return SectorFpsControllerVisualPose(
+            state,
+            config,
+            visualStepOffsetY,
+            Vector3{});
+}
+
+SectorMeshPreviewPose SectorFpsControllerVisualPose(
+        const SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        float visualStepOffsetY,
+        Vector3 headBobOffset)
+{
     SectorMeshPreviewPose pose = SectorFpsControllerPose(state, config);
     pose.position.y += visualStepOffsetY;
+    pose.position = Vector3Add(pose.position, headBobOffset);
     return pose;
 }
 
@@ -187,6 +214,62 @@ void ApplySectorFpsVisualStepSmoothing(
     }
 
     DecaySectorFpsVisualStepOffset(visualStepOffsetY, smoothingRate, dt);
+}
+
+void ClearSectorFpsHeadBob(SectorFpsHeadBobState& headBob)
+{
+    headBob = SectorFpsHeadBobState{};
+}
+
+void UpdateSectorFpsHeadBob(
+        SectorFpsHeadBobState& headBob,
+        const SectorFpsControllerConfig& config,
+        bool active,
+        float horizontalSpeed,
+        float yawRadians,
+        float dt,
+        float blendRate)
+{
+    const SectorFpsControllerConfig normalized = NormalizeSectorFpsControllerConfig(config);
+    if (normalized.headBobStrength <= 0.0f || normalized.headBobFrequency <= 0.0f) {
+        headBob.blend = 0.0f;
+        headBob.offset = Vector3{};
+        return;
+    }
+
+    if (dt <= 0.0f || blendRate <= 0.0f) {
+        return;
+    }
+
+    const bool moving = horizontalSpeed > 0.001f;
+    const bool bobActive = active && moving;
+    const float blendTarget = bobActive ? 1.0f : 0.0f;
+    const float blendStep = 1.0f - std::exp(-blendRate * dt);
+    headBob.blend += (blendTarget - headBob.blend) * blendStep;
+    headBob.blend = std::clamp(headBob.blend, 0.0f, 1.0f);
+
+    if (bobActive) {
+        const float runSpeed = std::max(normalized.runSpeed, 0.001f);
+        const float speed01 = std::clamp(horizontalSpeed / runSpeed, 0.0f, 1.0f);
+        const float cadence = 0.65f + (1.25f - 0.65f) * speed01;
+        headBob.phase += dt * normalized.headBobFrequency * cadence * TwoPi;
+        if (headBob.phase > HeadBobPhaseWrap || headBob.phase < -HeadBobPhaseWrap) {
+            headBob.phase = std::fmod(headBob.phase, TwoPi);
+        }
+    }
+
+    if (headBob.blend <= HeadBobOffsetEpsilon) {
+        headBob.blend = 0.0f;
+        headBob.offset = Vector3{};
+        return;
+    }
+
+    const float verticalBob = std::sin(headBob.phase) * normalized.headBobStrength;
+    const float lateralBob = std::cos(headBob.phase * 0.5f) * normalized.headBobStrength * 0.35f;
+    const Vector3 right{-std::sin(yawRadians), 0.0f, std::cos(yawRadians)};
+    headBob.offset = Vector3Add(
+            Vector3Scale(right, lateralBob * headBob.blend),
+            Vector3{0.0f, verticalBob * headBob.blend, 0.0f});
 }
 
 void UpdateSectorFpsMouseLook(
