@@ -3,12 +3,14 @@
 #include "engine/assets/TextureLoadFlags.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshBuilder.h"
+#include "sector_demo/SectorSkyCylinder.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
 
 #include <raylib.h>
 #include <raymath.h>
+#include <rlgl.h>
 
 #include <algorithm>
 #include <cmath>
@@ -330,6 +332,55 @@ bool ComputeGeometryBounds(const SectorGeneratedGeometry& geometry, Vector3& out
     return found;
 }
 
+Mesh CreateSkyCylinderMesh(const SectorSkyCylinderMeshData& data)
+{
+    Mesh mesh = {};
+    if (data.positions.empty()
+            || data.positions.size() != data.normals.size()
+            || data.positions.size() != data.uvs.size()
+            || data.positions.size() > static_cast<size_t>(std::numeric_limits<int>::max())
+            || data.indices.empty()
+            || data.indices.size() % 3u != 0u
+            || data.indices.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        return mesh;
+    }
+
+    mesh.vertexCount = static_cast<int>(data.positions.size());
+    mesh.triangleCount = static_cast<int>(data.indices.size() / 3u);
+    mesh.vertices = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 3 * sizeof(float))));
+    mesh.normals = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 3 * sizeof(float))));
+    mesh.texcoords = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 2 * sizeof(float))));
+    mesh.indices = static_cast<unsigned short*>(MemAlloc(static_cast<unsigned int>(data.indices.size() * sizeof(unsigned short))));
+
+    if (mesh.vertices == nullptr
+            || mesh.normals == nullptr
+            || mesh.texcoords == nullptr
+            || mesh.indices == nullptr) {
+        std::fprintf(stderr, "[SectorDemo ERROR] Failed to allocate sky cylinder mesh data\n");
+        UnloadMesh(mesh);
+        return Mesh{};
+    }
+
+    for (int i = 0; i < mesh.vertexCount; ++i) {
+        const size_t index = static_cast<size_t>(i);
+        mesh.vertices[i * 3 + 0] = data.positions[index].x;
+        mesh.vertices[i * 3 + 1] = data.positions[index].y;
+        mesh.vertices[i * 3 + 2] = data.positions[index].z;
+        mesh.normals[i * 3 + 0] = data.normals[index].x;
+        mesh.normals[i * 3 + 1] = data.normals[index].y;
+        mesh.normals[i * 3 + 2] = data.normals[index].z;
+        mesh.texcoords[i * 2 + 0] = data.uvs[index].x;
+        mesh.texcoords[i * 2 + 1] = data.uvs[index].y;
+    }
+
+    for (size_t i = 0; i < data.indices.size(); ++i) {
+        mesh.indices[i] = data.indices[i];
+    }
+
+    UploadMesh(&mesh, false);
+    return mesh;
+}
+
 } // namespace
 
 bool SectorMeshPreview::Rebuild(
@@ -380,6 +431,19 @@ bool SectorMeshPreview::Rebuild(
                 resolvedPath.c_str(),
                 SectorTextureLoadFlags(texture.filter));
         textureHandlesById.emplace(texture.id, handle);
+    }
+
+    if (ShouldRenderDefaultSkyCylinder(map)) {
+        skyTextureHandle = TextureForId(std::string(kDefaultSkyTextureId));
+        const SectorSkyCylinderMeshData skyData = BuildSkyCylinderMeshData();
+        skyCylinderMesh = CreateSkyCylinderMesh(skyData);
+        if (skyCylinderMesh.vertexCount > 0) {
+            skyMaterial = LoadMaterialDefault();
+            skyDefaultMaterialTexture = skyMaterial.maps[MATERIAL_MAP_DIFFUSE].texture;
+            skyMaterialLoaded = true;
+        } else {
+            skyTextureHandle = engine::NullTextureHandle();
+        }
     }
 
     SectorLightmapLayout lightmapLayout;
@@ -458,15 +522,19 @@ void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
     if (!initialized
             && engine::IsNull(assetScope)
             && meshes.batches.empty()
-            && !materialLoaded) {
+            && !materialLoaded
+            && skyCylinderMesh.vertexCount <= 0
+            && !skyMaterialLoaded) {
         return;
     }
 
     Leave();
     UnloadBloomResources();
+    UnloadSkyCylinderMesh();
     UnloadSectorMeshes(meshes);
     textureHandlesById.clear();
     lightmapTexture = engine::NullTextureHandle();
+    skyTextureHandle = engine::NullTextureHandle();
     sectorCount = 0;
 
     if (materialLoaded) {
@@ -579,6 +647,11 @@ void SectorMeshPreview::Render(engine::AssetManager& assets, bool useBakedAmbien
     }
 
     BeginMode3D(camera);
+    const Texture2D* skyTexture = assets.GetTexture(skyTextureHandle);
+    if (skyTexture != nullptr && skyCylinderMesh.vertexCount > 0 && skyMaterialLoaded) {
+        DrawSkyCylinder(*skyTexture);
+    }
+
     const Texture2D* lightmap = assets.GetTexture(lightmapTexture);
     float useLightmap = lightmap != nullptr ? 1.0f : 0.0f;
     float useAo = useBakedAmbientOcclusion ? 1.0f : 0.0f;
@@ -792,6 +865,30 @@ void SectorMeshPreview::RenderBloomSource(engine::AssetManager& assets)
         DrawMesh(batch.mesh, bloomSourceMaterial, MatrixIdentity());
     }
     EndMode3D();
+}
+
+void SectorMeshPreview::UnloadSkyCylinderMesh()
+{
+    if (skyCylinderMesh.vertexCount > 0) {
+        UnloadMesh(skyCylinderMesh);
+        skyCylinderMesh = Mesh{};
+    }
+
+    if (skyMaterialLoaded) {
+        skyMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = skyDefaultMaterialTexture;
+        UnloadMaterial(skyMaterial);
+        skyMaterial = Material{};
+        skyDefaultMaterialTexture = Texture2D{};
+        skyMaterialLoaded = false;
+    }
+}
+
+void SectorMeshPreview::DrawSkyCylinder(const Texture2D& texture)
+{
+    skyMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = texture;
+    rlDisableDepthMask();
+    DrawMesh(skyCylinderMesh, skyMaterial, MatrixTranslate(camera.position.x, camera.position.y, camera.position.z));
+    rlEnableDepthMask();
 }
 
 void SectorMeshPreview::ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)

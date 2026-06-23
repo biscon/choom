@@ -57,15 +57,22 @@ private:
     bool EnsureBloomResources(int sceneWidth, int sceneHeight);
     void UnloadBloomResources();
     void RenderBloomSource(engine::AssetManager& assets);
+    void UnloadSkyCylinderMesh();
+    void DrawSkyCylinder(const Texture2D& texture);
 
     SectorMeshBuildResult meshes;
     SectorGeneratedGeometry generatedGeometry;
     std::unordered_map<std::string, engine::TextureHandle> textureHandlesById;
     engine::TextureHandle lightmapTexture = engine::NullTextureHandle();
+    engine::TextureHandle skyTextureHandle = engine::NullTextureHandle();
     engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();
     Material material = {};
     Texture2D defaultMaterialTexture = {};
     bool materialLoaded = false;
+    Mesh skyCylinderMesh = {};
+    Material skyMaterial = {};
+    Texture2D skyDefaultMaterialTexture = {};
+    bool skyMaterialLoaded = false;
     int useLightmapLoc = -1;
     int useBakedAmbientOcclusionLoc = -1;
     int hasLightmapLoc = -1;

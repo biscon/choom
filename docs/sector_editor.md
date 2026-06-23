@@ -110,11 +110,18 @@ alpha-blended. Middle textures do not block by themselves; use the linedef
 Gameplay movement.
 
 Sectors can mark their ceiling as sky/open. A sky ceiling does not generate the
-normal ceiling surface, so the current 3D background/clear color shows through
-until a real skybox, skydome, or panorama renderer exists. Adjacent sectors that
-both have sky ceilings suppress the upper portal wall strip between them, even
-when their numeric ceiling heights differ. Collision still uses the sector's
-normal authored ceiling height for now.
+normal ceiling surface. In 3D preview, sky ceilings show a basic visual-only
+panorama cylinder when the map texture table contains a texture with ID
+`sky_cylinder`; the local test asset is `assets/images/sky/sky_cylinder.png`
+and should be a horizontally seamless panorama such as 4:1. The texture path is
+not hardcoded, so the texture still must be added to the map texture table with
+that ID. Missing or failed sky textures fall back to the existing clear
+background behavior. Proper map-level sky settings and picker UI are deferred.
+Adjacent sectors that both have sky ceilings suppress the upper portal wall
+strip between them, even when their numeric ceiling heights differ. The sky
+renderer is visual-only and does not affect collision, lightmaps, bloom, or
+picking; collision still uses the sector's normal authored ceiling height for
+now.
 
 ## Sector Collision Query Layer
 
