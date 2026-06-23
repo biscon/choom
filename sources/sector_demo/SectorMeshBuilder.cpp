@@ -25,6 +25,9 @@ struct SectorMeshBatchKey {
     bool decalEmissive = false;
     Vector3 decalTint = {1.0f, 1.0f, 1.0f};
     float decalBloomIntensity = 1.0f;
+    bool alphaTest = false;
+    float alphaCutoff = 0.5f;
+    bool receivesLightmap = true;
 
     bool operator==(const SectorMeshBatchKey& other) const
     {
@@ -35,7 +38,10 @@ struct SectorMeshBatchKey {
                 && decalTint.x == other.decalTint.x
                 && decalTint.y == other.decalTint.y
                 && decalTint.z == other.decalTint.z
-                && decalBloomIntensity == other.decalBloomIntensity;
+                && decalBloomIntensity == other.decalBloomIntensity
+                && alphaTest == other.alphaTest
+                && alphaCutoff == other.alphaCutoff
+                && receivesLightmap == other.receivesLightmap;
     }
 };
 
@@ -50,6 +56,9 @@ struct SectorMeshBatchKeyHash {
         const size_t tintYHash = std::hash<float>{}(key.decalTint.y);
         const size_t tintZHash = std::hash<float>{}(key.decalTint.z);
         const size_t bloomIntensityHash = std::hash<float>{}(key.decalBloomIntensity);
+        const size_t alphaTestHash = std::hash<bool>{}(key.alphaTest);
+        const size_t alphaCutoffHash = std::hash<float>{}(key.alphaCutoff);
+        const size_t receivesLightmapHash = std::hash<bool>{}(key.receivesLightmap);
         size_t hash = textureHash ^ (decalHash + 0x9e3779b9u + (textureHash << 6u) + (textureHash >> 2u));
         hash ^= opacityHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= emissiveHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
@@ -57,6 +66,9 @@ struct SectorMeshBatchKeyHash {
         hash ^= tintYHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= tintZHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= bloomIntensityHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
+        hash ^= alphaTestHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
+        hash ^= alphaCutoffHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
+        hash ^= receivesLightmapHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         return hash;
     }
 };
@@ -94,7 +106,10 @@ SectorMeshBatchData& BatchForKey(
         float decalOpacity,
         bool decalEmissive,
         Vector3 decalTint,
-        float decalBloomIntensity)
+        float decalBloomIntensity,
+        bool alphaTest,
+        float alphaCutoff,
+        bool receivesLightmap)
 {
     const bool hasDecal = !decalTextureId.empty();
     const SectorMeshBatchKey key{
@@ -103,7 +118,10 @@ SectorMeshBatchData& BatchForKey(
             hasDecal ? UnitOrDefault(decalOpacity, 1.0f) : 1.0f,
             hasDecal && decalEmissive,
             hasDecal ? UnitRgbOrWhite(decalTint) : Vector3{1.0f, 1.0f, 1.0f},
-            hasDecal ? DecalBloomIntensityOrDefault(decalBloomIntensity) : 1.0f};
+            hasDecal ? DecalBloomIntensityOrDefault(decalBloomIntensity) : 1.0f,
+            alphaTest,
+            alphaTest ? UnitOrDefault(alphaCutoff, 0.5f) : 0.5f,
+            receivesLightmap};
     const auto existing = batchIndexByKey.find(key);
     if (existing != batchIndexByKey.end()) {
         return batches[existing->second];
@@ -116,6 +134,9 @@ SectorMeshBatchData& BatchForKey(
     batch.decalEmissive = key.decalEmissive;
     batch.decalTint = key.decalTint;
     batch.decalBloomIntensity = key.decalBloomIntensity;
+    batch.alphaTest = key.alphaTest;
+    batch.alphaCutoff = key.alphaCutoff;
+    batch.receivesLightmap = key.receivesLightmap;
     batches.push_back(std::move(batch));
     const size_t index = batches.size() - 1;
     batchIndexByKey.emplace(key, index);
@@ -209,7 +230,10 @@ SectorMeshBatchDataResult BuildSectorMeshBatchData(
                 surface.decalOpacity,
                 surface.decalEmissive,
                 surface.decalTint,
-                surface.decalBloomIntensity);
+                surface.decalBloomIntensity,
+                surface.alphaTest,
+                surface.alphaCutoff,
+                surface.receivesLightmap);
         batch.vertices.reserve(batch.vertices.size() + surface.vertices.size());
         for (size_t vertexIndex = 0; vertexIndex < surface.vertices.size(); ++vertexIndex) {
             const SectorGeneratedVertex& vertex = surface.vertices[vertexIndex];
@@ -268,6 +292,9 @@ SectorMeshBuildResult BuildSectorMeshes(
         batch.decalEmissive = builder.decalEmissive;
         batch.decalTint = builder.decalTint;
         batch.decalBloomIntensity = builder.decalBloomIntensity;
+        batch.alphaTest = builder.alphaTest;
+        batch.alphaCutoff = builder.alphaCutoff;
+        batch.receivesLightmap = builder.receivesLightmap;
         batch.mesh = mesh;
         batch.vertexCount = mesh.vertexCount;
         batch.triangleCount = mesh.triangleCount;

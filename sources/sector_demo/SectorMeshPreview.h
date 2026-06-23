@@ -68,6 +68,9 @@ private:
     bool materialLoaded = false;
     int useLightmapLoc = -1;
     int useBakedAmbientOcclusionLoc = -1;
+    int hasLightmapLoc = -1;
+    int alphaTestLoc = -1;
+    int alphaCutoffLoc = -1;
     int hasDecalLoc = -1;
     int decalOpacityLoc = -1;
     int decalEmissiveLoc = -1;

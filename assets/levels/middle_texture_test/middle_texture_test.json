@@ -1,0 +1,61 @@
+{
+  "formatVersion": 2,
+  "topology": "linedef",
+  "coordSubdivisions": 16,
+  "textures": {
+    "biker_chick": {
+      "path": "assets/images/biker_chick.png",
+      "filter": "point"
+    },
+    "ceiling": {
+      "path": "assets/images/ceiling.png",
+      "filter": "bilinear"
+    },
+    "floor": {
+      "path": "assets/images/floor.png",
+      "filter": "bilinear"
+    },
+    "wall": {
+      "path": "assets/images/wall.png",
+      "filter": "bilinear"
+    }
+  },
+  "vertices": [
+    {"id": 1, "x": 0, "y": 0},
+    {"id": 2, "x": 1024, "y": 0},
+    {"id": 3, "x": 1024, "y": 1024},
+    {"id": 4, "x": 0, "y": 1024},
+    {"id": 5, "x": 2048, "y": 0},
+    {"id": 6, "x": 2048, "y": 1024}
+  ],
+  "linedefs": [
+    {"id": 1, "startVertexId": 1, "endVertexId": 2, "frontSideDefId": 1, "backSideDefId": -1},
+    {"id": 2, "startVertexId": 2, "endVertexId": 3, "frontSideDefId": 2, "backSideDefId": 8},
+    {"id": 3, "startVertexId": 3, "endVertexId": 4, "frontSideDefId": 3, "backSideDefId": -1},
+    {"id": 4, "startVertexId": 4, "endVertexId": 1, "frontSideDefId": 4, "backSideDefId": -1},
+    {"id": 5, "startVertexId": 2, "endVertexId": 5, "frontSideDefId": 5, "backSideDefId": -1},
+    {"id": 6, "startVertexId": 5, "endVertexId": 6, "frontSideDefId": 6, "backSideDefId": -1},
+    {"id": 7, "startVertexId": 6, "endVertexId": 3, "frontSideDefId": 7, "backSideDefId": -1}
+  ],
+  "sidedefs": [
+    {"id": 1, "lineDefId": 1, "side": "front", "sectorId": 10, "wall": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "lower": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "upper": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}},
+    {"id": 2, "lineDefId": 2, "side": "front", "sectorId": 10, "wall": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "lower": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "upper": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "middle": {"textureId": "biker_chick", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}},
+    {"id": 3, "lineDefId": 3, "side": "front", "sectorId": 10, "wall": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "lower": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "upper": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}},
+    {"id": 4, "lineDefId": 4, "side": "front", "sectorId": 10, "wall": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "lower": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "upper": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}},
+    {"id": 5, "lineDefId": 5, "side": "front", "sectorId": 20, "wall": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "lower": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "upper": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}},
+    {"id": 6, "lineDefId": 6, "side": "front", "sectorId": 20, "wall": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "lower": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "upper": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}},
+    {"id": 7, "lineDefId": 7, "side": "front", "sectorId": 20, "wall": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "lower": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "upper": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}},
+    {"id": 8, "lineDefId": 2, "side": "back", "sectorId": 20, "wall": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "lower": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "upper": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}}
+  ],
+  "sectors": [
+    {"id": 10, "name": "left_room", "floorZ": 0.0, "ceilingZ": 24.0, "floorTextureId": "floor", "ceilingTextureId": "ceiling", "floorUv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}, "ceilingUv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}, "ambientColor": {"r": 200, "g": 180, "b": 160, "a": 255}, "ambientIntensity": 0.75, "defaultWall": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "defaultLower": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "defaultUpper": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}},
+    {"id": 20, "name": "right_room", "floorZ": 0.0, "ceilingZ": 24.0, "floorTextureId": "floor", "ceilingTextureId": "ceiling", "floorUv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}, "ceilingUv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}, "ambientColor": {"r": 160, "g": 180, "b": 220, "a": 255}, "ambientIntensity": 0.75, "defaultWall": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "defaultLower": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}, "defaultUpper": {"textureId": "wall", "uv": {"scale": [1.0, 1.0], "offset": [0.0, 0.0]}}}
+  ],
+  "staticLights": [],
+  "lightmapSettings": {
+    "ambientOcclusionRadius": 8.0,
+    "ambientOcclusionStrength": 0.0,
+    "indirectBounceRadius": 12.0,
+    "indirectBounceStrength": 0.0
+  }
+}

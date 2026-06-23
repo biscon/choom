@@ -33,6 +33,9 @@ struct SectorMeshBatchData {
     bool decalEmissive = false;
     Vector3 decalTint = {1.0f, 1.0f, 1.0f};
     float decalBloomIntensity = 1.0f;
+    bool alphaTest = false;
+    float alphaCutoff = 0.5f;
+    bool receivesLightmap = true;
     std::vector<SectorMeshBatchVertex> vertices;
     int vertexCount = 0;
     int triangleCount = 0;

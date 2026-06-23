@@ -594,6 +594,7 @@ SectorSurfaceKind ToEditorSurfaceKind(SectorGeneratedSurfaceKind kind)
         case SectorGeneratedSurfaceKind::Wall: return SectorSurfaceKind::Wall;
         case SectorGeneratedSurfaceKind::LowerWall: return SectorSurfaceKind::LowerWall;
         case SectorGeneratedSurfaceKind::UpperWall: return SectorSurfaceKind::UpperWall;
+        case SectorGeneratedSurfaceKind::Middle: return SectorSurfaceKind::None;
     }
     return SectorSurfaceKind::None;
 }

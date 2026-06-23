@@ -101,9 +101,12 @@ views and maps to world Z for generated 3D geometry.
 Two-sided portals generate lower and/or upper wall surfaces only where adjacent
 sector heights differ. Equal-height two-sided portals remain visible and
 editable in 2D, but produce no 3D wall surface to pick or texture in 3D.
-Topology sidedefs also store optional middle texture data for future Doom-style
-masked portal surfaces. Rendering and editor controls for middle textures are
-deferred to later phases.
+Topology sidedefs can also store optional middle texture data for Doom-style
+masked portal surfaces. A sidedef middle texture renders only on a two-sided
+portal linedef, fills the visible opening from the higher floor to the lower
+ceiling, and uses alpha testing: transparent pixels are discarded rather than
+alpha-blended. Middle texture editor UI, texture picker support,
+collision/blocking flags, and translucent glass rendering are deferred.
 
 ## Sector Inspector
 
@@ -461,9 +464,10 @@ discarded.
 
 The source hash is deterministic over the topology lightmap bake version
 (`6`), atlas and sample constants, coordinate subdivision value, map texture
-table, vertex/linedef/sidedef/sector IDs and geometry, sector and sidedef texture
-and UV fields, static lights, and bake settings. It does not include the
-installed baked-lightmap metadata itself.
+definitions referenced by baked surface fields, vertex/linedef/sidedef/sector
+IDs and geometry, sector and sidedef texture and UV fields, static lights, and
+bake settings. It does not include middle texture data or the installed
+baked-lightmap metadata itself.
 
 The baked PNG stores direct static-light contribution and one-bounce indirect
 light in RGB, and ambient occlusion in alpha. 3D Mode uses a baked atlas only
@@ -473,6 +477,9 @@ lighting.
 
 Equal-height portals generate no wall surface and therefore no wall lightmap
 chart.
+Middle texture surfaces also do not allocate lightmap charts, cast baked
+shadows, or occlude lightmap rays. In 3D Mode they render with the same ambient
+fallback used by unlightmapped surfaces.
 
 ## Current Limitations
 
@@ -483,6 +490,8 @@ chart.
 - No gameplay mode.
 - No collision or floor-constrained 3D preview movement.
 - No dynamic runtime lights or dynamic shadows.
+- No middle texture editor controls, middle collision/blocking flags,
+  translucent glass, depth sorting, or middle texture decals.
 - No normal maps, material maps, PBR material editing, or texture search UI.
 - Single fixed-size lightmap atlas; no multi-atlas packing.
 - No 3D geometry editing beyond texture and UV edits on generated surfaces.

@@ -168,6 +168,35 @@ int CountWallKindsForLine(const game::SectorGeneratedGeometry& geometry, int lin
     return count;
 }
 
+int CountSurfacesForLine(
+        const game::SectorGeneratedGeometry& geometry,
+        game::SectorGeneratedSurfaceKind kind,
+        int lineDefId)
+{
+    int count = 0;
+    for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (surface.ref.kind == kind && surface.ref.topologyLineDefId == lineDefId) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+const game::SectorGeneratedSurface* FindMiddleSurface(
+        const game::SectorGeneratedGeometry& geometry,
+        int lineDefId,
+        game::SectorTopologySideKind side)
+{
+    for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (surface.ref.kind == game::SectorGeneratedSurfaceKind::Middle
+                && surface.ref.topologyLineDefId == lineDefId
+                && surface.ref.topologySide == side) {
+            return &surface;
+        }
+    }
+    return nullptr;
+}
+
 double TriangleAreaXZ(const game::SectorGeneratedSurface& surface)
 {
     double area = 0.0;
@@ -241,6 +270,127 @@ void TestEqualHeightPortal()
     Check(CountWallKindsForLine(geometry, 2) == 0, "equal-height portal emits no wall mesh");
     Check(CountWallKindsForLine(geometry, 1) == 1 && CountWallKindsForLine(geometry, 7) == 1,
           "outer one-sided walls remain");
+}
+
+void TestNoMiddleTextureGeneratesNoMiddleSurfaces()
+{
+    const game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "no-middle adjacent sectors build");
+    Check(CountSurfacesForLine(geometry, game::SectorGeneratedSurfaceKind::Middle, 2) == 0,
+          "two-sided linedef without middle texture emits no middle surfaces");
+}
+
+void TestOneSidedMiddleTextureIsIgnored()
+{
+    game::SectorTopologyMap map = MakeSquare();
+    map.sideDefs[0].middle = Part("bars");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "one-sided middle texture map builds");
+    Check(CountSurfacesForLine(geometry, game::SectorGeneratedSurfaceKind::Middle, 1) == 0,
+          "one-sided linedef middle texture emits no middle surfaces");
+}
+
+void TestSingleAssignedMiddleTextureGeneratesBothFacings()
+{
+    game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::FindSectorTopologySideDef(map, 2)->middle = Part("bars");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "single middle texture portal builds");
+    Check(CountSurfacesForLine(geometry, game::SectorGeneratedSurfaceKind::Middle, 2) == 2,
+          "one assigned middle texture emits two middle surfaces");
+    const auto* front = FindMiddleSurface(geometry, 2, game::SectorTopologySideKind::Front);
+    const auto* back = FindMiddleSurface(geometry, 2, game::SectorTopologySideKind::Back);
+    Check(front != nullptr && back != nullptr, "single middle texture has front and back facings");
+    Check(front != nullptr && front->textureId == "bars" && front->ref.topologySideDefId == 2,
+          "front middle surface uses assigned texture and front sidedef ref");
+    Check(back != nullptr && back->textureId == "bars" && back->ref.topologySideDefId == 8,
+          "back middle surface uses assigned texture and back sidedef ref");
+    Check(front != nullptr && back != nullptr
+                  && Near(front->normal, Vector3{-1.0f, 0.0f, 0.0f})
+                  && Near(back->normal, Vector3{1.0f, 0.0f, 0.0f}),
+          "middle surfaces face opposite portal sides");
+    Check(front != nullptr && front->alphaTest && !front->receivesLightmap,
+          "middle surface is alpha-tested and unlightmapped");
+}
+
+void TestBothAssignedMiddleTexturesGenerateOneFacingEach()
+{
+    game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::FindSectorTopologySideDef(map, 2)->middle = Part("front-bars");
+    game::FindSectorTopologySideDef(map, 8)->middle = Part("back-bars");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "two middle texture portal builds");
+    Check(CountSurfacesForLine(geometry, game::SectorGeneratedSurfaceKind::Middle, 2) == 2,
+          "two assigned middle textures emit two middle surfaces total");
+    const auto* front = FindMiddleSurface(geometry, 2, game::SectorTopologySideKind::Front);
+    const auto* back = FindMiddleSurface(geometry, 2, game::SectorTopologySideKind::Back);
+    Check(front != nullptr && front->textureId == "front-bars",
+          "front middle facing preserves front middle texture");
+    Check(back != nullptr && back->textureId == "back-bars",
+          "back middle facing preserves back middle texture");
+}
+
+void TestMiddleTextureSpanAndSkipRules()
+{
+    game::SectorTopologyMap map = MakeAdjacent(4.0f, 22.0f, 8.0f, 18.0f);
+    game::FindSectorTopologySideDef(map, 2)->middle = Part("bars");
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "middle texture span map builds");
+    const auto* front = FindMiddleSurface(geometry, 2, game::SectorTopologySideKind::Front);
+    Check(front != nullptr && !front->vertices.empty(), "middle span surface exists");
+    if (front != nullptr) {
+        float minY = front->vertices.front().position.y;
+        float maxY = front->vertices.front().position.y;
+        for (const game::SectorGeneratedVertex& vertex : front->vertices) {
+            minY = std::min(minY, vertex.position.y);
+            maxY = std::max(maxY, vertex.position.y);
+        }
+        Check(Near(minY, game::SectorAuthoringToWorldDistance(8.0f))
+                      && Near(maxY, game::SectorAuthoringToWorldDistance(18.0f)),
+              "middle span uses max floor and min ceiling");
+    }
+
+    game::SectorTopologyMap closed = MakeAdjacent(0.0f, 8.0f, 8.0f, 16.0f);
+    game::FindSectorTopologySideDef(closed, 2)->middle = Part("bars");
+    Check(game::BuildSectorGeneratedGeometry(closed, geometry, &error), "closed middle span map builds");
+    Check(CountSurfacesForLine(geometry, game::SectorGeneratedSurfaceKind::Middle, 2) == 0,
+          "middle surfaces are skipped when top <= bottom");
+}
+
+void TestMiddleTextureUvsUseWallConvention()
+{
+    game::SectorTopologyMap map = MakeAdjacent(4.0f, 22.0f, 8.0f, 18.0f);
+    game::SectorTopologySideDef* sideDef = game::FindSectorTopologySideDef(map, 2);
+    sideDef->middle = Part("bars");
+    sideDef->middle.uv.scale = Vector2{2.0f, 3.0f};
+    sideDef->middle.uv.offset = Vector2{0.25f, 0.5f};
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "middle UV map builds");
+    const auto* front = FindMiddleSurface(geometry, 2, game::SectorTopologySideKind::Front);
+    Check(front != nullptr && front->vertices.size() == 6, "middle UV surface has two triangles");
+    if (front == nullptr || front->vertices.size() < 4) {
+        return;
+    }
+
+    const float length = game::SectorCoordDistanceToWorldDistance(64);
+    const float height = game::SectorAuthoringToWorldDistance(10.0f);
+    const float u1 = length / game::kSectorGeneratedTextureWorldSize;
+    const float v0 = height / game::kSectorGeneratedTextureWorldSize;
+    Check(Near(front->vertices[0].uv, ApplyTestUv(Vector2{0.0f, v0}, Vector2{2.0f, 3.0f}, Vector2{0.25f, 0.5f})),
+          "middle bottom-left UV uses wall-style V span and middle UV settings");
+    Check(Near(front->vertices[1].uv, ApplyTestUv(Vector2{u1, 0.0f}, Vector2{2.0f, 3.0f}, Vector2{0.25f, 0.5f})),
+          "middle top-right UV uses linedef distance and middle UV settings");
 }
 
 void TestDifferentFloorPortal()
@@ -499,6 +649,12 @@ int main()
     TestSquare();
     TestHole();
     TestEqualHeightPortal();
+    TestNoMiddleTextureGeneratesNoMiddleSurfaces();
+    TestOneSidedMiddleTextureIsIgnored();
+    TestSingleAssignedMiddleTextureGeneratesBothFacings();
+    TestBothAssignedMiddleTexturesGenerateOneFacingEach();
+    TestMiddleTextureSpanAndSkipRules();
+    TestMiddleTextureUvsUseWallConvention();
     TestDifferentFloorPortal();
     TestDifferentCeilingPortal();
     TestDiagonalLength();

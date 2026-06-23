@@ -67,6 +67,9 @@ uniform sampler2D texture1;
 uniform sampler2D decalTexture;
 uniform float useLightmap;
 uniform float useBakedAmbientOcclusion;
+uniform int hasLightmap;
+uniform int alphaTest;
+uniform float alphaCutoff;
 uniform int hasDecal;
 uniform float decalOpacity;
 uniform int decalEmissive;
@@ -77,6 +80,9 @@ out vec4 finalColor;
 void main()
 {
     vec4 baseColor = texture(texture0, fragTexCoord);
+    if (alphaTest != 0 && baseColor.a < alphaCutoff) {
+        discard;
+    }
     vec3 surfaceRgb = baseColor.rgb;
     vec3 emissiveDecalRgb = vec3(0.0);
     float emissiveDecalAlpha = 0.0;
@@ -96,8 +102,8 @@ void main()
             surfaceRgb = mix(baseColor.rgb, decalRgb, decalAlpha);
         }
     }
-    vec4 bakedSample = (useLightmap > 0.5) ? texture(texture1, fragTexCoord2) : vec4(0.0, 0.0, 0.0, 1.0);
-    float aoFactor = (useBakedAmbientOcclusion > 0.5) ? bakedSample.a : 1.0;
+    vec4 bakedSample = (useLightmap > 0.5 && hasLightmap != 0) ? texture(texture1, fragTexCoord2) : vec4(0.0, 0.0, 0.0, 1.0);
+    float aoFactor = (useBakedAmbientOcclusion > 0.5 && hasLightmap != 0) ? bakedSample.a : 1.0;
     vec3 ambient = fragColor.rgb * aoFactor;
     vec3 bakedDirect = bakedSample.rgb;
     vec3 lighting = clamp(ambient + bakedDirect, 0.0, 1.0);
@@ -231,6 +237,9 @@ bool LoadPreviewMaterial(
         bool& materialLoaded,
         int& useLightmapLoc,
         int& useBakedAmbientOcclusionLoc,
+        int& hasLightmapLoc,
+        int& alphaTestLoc,
+        int& alphaCutoffLoc,
         int& hasDecalLoc,
         int& decalOpacityLoc,
         int& decalEmissiveLoc,
@@ -252,6 +261,9 @@ bool LoadPreviewMaterial(
     material.shader.locs[SHADER_LOC_MAP_NORMAL] = GetShaderLocation(material.shader, "decalTexture");
     useLightmapLoc = GetShaderLocation(material.shader, "useLightmap");
     useBakedAmbientOcclusionLoc = GetShaderLocation(material.shader, "useBakedAmbientOcclusion");
+    hasLightmapLoc = GetShaderLocation(material.shader, "hasLightmap");
+    alphaTestLoc = GetShaderLocation(material.shader, "alphaTest");
+    alphaCutoffLoc = GetShaderLocation(material.shader, "alphaCutoff");
     hasDecalLoc = GetShaderLocation(material.shader, "hasDecal");
     decalOpacityLoc = GetShaderLocation(material.shader, "decalOpacity");
     decalEmissiveLoc = GetShaderLocation(material.shader, "decalEmissive");
@@ -405,6 +417,9 @@ bool SectorMeshPreview::Rebuild(
                 materialLoaded,
                 useLightmapLoc,
                 useBakedAmbientOcclusionLoc,
+                hasLightmapLoc,
+                alphaTestLoc,
+                alphaCutoffLoc,
                 hasDecalLoc,
                 decalOpacityLoc,
                 decalEmissiveLoc,
@@ -589,12 +604,24 @@ void SectorMeshPreview::Render(engine::AssetManager& assets, bool useBakedAmbien
         }
 
         const int hasDecal = decalTexture != nullptr ? 1 : 0;
+        const int hasLightmap = batch.receivesLightmap ? 1 : 0;
+        const int alphaTest = batch.alphaTest ? 1 : 0;
+        const float alphaCutoff = batch.alphaCutoff;
         const float decalOpacity = batch.decalOpacity;
         const int decalEmissive = hasDecal != 0 && batch.decalEmissive ? 1 : 0;
         const Vector3 decalTint = hasDecal != 0 ? batch.decalTint : Vector3{1.0f, 1.0f, 1.0f};
         material.maps[MATERIAL_MAP_NORMAL].texture = (decalTexture != nullptr)
                 ? *decalTexture
                 : Texture2D{};
+        if (hasLightmapLoc >= 0) {
+            SetShaderValue(material.shader, hasLightmapLoc, &hasLightmap, SHADER_UNIFORM_INT);
+        }
+        if (alphaTestLoc >= 0) {
+            SetShaderValue(material.shader, alphaTestLoc, &alphaTest, SHADER_UNIFORM_INT);
+        }
+        if (alphaCutoffLoc >= 0) {
+            SetShaderValue(material.shader, alphaCutoffLoc, &alphaCutoff, SHADER_UNIFORM_FLOAT);
+        }
         if (hasDecalLoc >= 0) {
             SetShaderValue(material.shader, hasDecalLoc, &hasDecal, SHADER_UNIFORM_INT);
         }

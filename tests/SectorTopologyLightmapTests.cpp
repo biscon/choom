@@ -163,6 +163,39 @@ int CountWallChartsForLine(const game::SectorTopologyMap& map, int lineDefId)
     return count;
 }
 
+int CountValidCharts(const game::SectorLightmapLayout& layout)
+{
+    int count = 0;
+    for (const game::SectorLightmapChart& chart : layout.charts) {
+        if (chart.surfaceIndex >= 0) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+int CountGeneratedSurfaces(const game::SectorGeneratedGeometry& geometry, game::SectorGeneratedSurfaceKind kind)
+{
+    int count = 0;
+    for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (surface.ref.kind == kind) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+int CountGeneratedTrianglesExceptMiddle(const game::SectorGeneratedGeometry& geometry)
+{
+    int count = 0;
+    for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (surface.ref.kind != game::SectorGeneratedSurfaceKind::Middle) {
+            count += static_cast<int>(surface.vertices.size() / 3);
+        }
+    }
+    return count;
+}
+
 void TestSourceHashChanges()
 {
     const game::SectorTopologyMap base = MakeSquare();
@@ -195,6 +228,18 @@ void TestSourceHashChanges()
     changedLight = base;
     changedLight.staticLights[0].color.r = 64;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) != hash, "hash changes when light color changes");
+}
+
+void TestSourceHashIgnoresMiddleTextureData()
+{
+    const game::SectorTopologyMap base = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    const std::string hash = game::ComputeSectorLightmapSourceHash(base);
+
+    game::SectorTopologyMap withMiddle = base;
+    withMiddle.texturesById.emplace("bars", Texture("bars"));
+    game::FindSectorTopologySideDef(withMiddle, 2)->middle = Part("bars");
+    Check(game::ComputeSectorLightmapSourceHash(withMiddle) == hash,
+          "hash ignores middle texture data and middle-only texture table entries");
 }
 
 void TestSourceHashStableWhenVectorsReordered()
@@ -251,14 +296,42 @@ void TestLayoutSmoke()
     Check(CountWallChartsForLine(raisedPlatform, 5) > 0, "platform riser receives a chart");
 }
 
+void TestMiddleSurfacesSkippedByLightmap()
+{
+    game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    map.texturesById.emplace("bars", Texture("bars"));
+    game::FindSectorTopologySideDef(map, 2)->middle = Part("bars");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "middle lightmap test geometry builds");
+    const int middleSurfaceCount = CountGeneratedSurfaces(geometry, game::SectorGeneratedSurfaceKind::Middle);
+    Check(middleSurfaceCount == 2, "middle lightmap test generated middle surfaces");
+
+    game::SectorLightmapLayout layout;
+    Check(game::BuildSectorLightmapLayout(map, layout, error), "middle lightmap layout builds");
+    Check(static_cast<int>(layout.charts.size()) == static_cast<int>(geometry.surfaces.size()),
+          "layout keeps surface-index slots for generated geometry");
+    Check(CountValidCharts(layout) == static_cast<int>(geometry.surfaces.size()) - middleSurfaceCount,
+          "middle surfaces do not allocate valid lightmap charts");
+
+    game::SectorLightmapBakeResult result;
+    Check(game::BakeSectorLightmap(map, layout, "/tmp/sector_middle_lightmap_test.png", result, error),
+          "middle lightmap bake succeeds without using middle surfaces");
+    Check(result.staticGeometryTriangles == CountGeneratedTrianglesExceptMiddle(geometry),
+          "bake triangle/BVH input ignores middle surfaces");
+}
+
 } // namespace
 
 int main()
 {
     TestSourceHashChanges();
+    TestSourceHashIgnoresMiddleTextureData();
     TestSourceHashStableWhenVectorsReordered();
     TestLogicalSelfComparison();
     TestLayoutSmoke();
+    TestMiddleSurfacesSkippedByLightmap();
 
     if (failures != 0) {
         std::fprintf(stderr, "%d sector topology lightmap test(s) failed\n", failures);

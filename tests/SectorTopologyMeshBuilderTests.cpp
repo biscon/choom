@@ -265,6 +265,17 @@ game::SectorGeneratedSurface MakeBatchTestSurface(
     return surface;
 }
 
+game::SectorGeneratedSurface MakeMiddleBatchTestSurface(const char* textureId, float xOffset)
+{
+    game::SectorGeneratedSurface surface =
+            MakeBatchTestSurface(textureId, "", Vector2{0.0f, 0.0f}, 1.0f, xOffset);
+    surface.ref.kind = game::SectorGeneratedSurfaceKind::Middle;
+    surface.alphaTest = true;
+    surface.alphaCutoff = 0.5f;
+    surface.receivesLightmap = false;
+    return surface;
+}
+
 int CountTrianglesByKind(
         const game::SectorGeneratedGeometry& geometry,
         game::SectorGeneratedSurfaceKind kind,
@@ -447,6 +458,56 @@ void TestDecalMeshBatchData()
     }
 }
 
+void TestMiddleTextureBatchState()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface opaque = MakeBatchTestSurface("shared", "", Vector2{0.0f, 0.0f}, 1.0f, 0.0f);
+    opaque.ref.kind = game::SectorGeneratedSurfaceKind::Wall;
+    geometry.surfaces.push_back(opaque);
+    geometry.surfaces.push_back(MakeMiddleBatchTestSurface("shared", 2.0f));
+    geometry.surfaces.push_back(MakeMiddleBatchTestSurface("shared", 4.0f));
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshBatchData(geometry);
+    Check(result.batches.size() == 2,
+          "alpha test and lightmap participation split middle textures from opaque walls");
+
+    const game::SectorMeshBatchData* opaqueBatch = nullptr;
+    const game::SectorMeshBatchData* middleBatch = nullptr;
+    for (const game::SectorMeshBatchData& batch : result.batches) {
+        if (batch.textureId != "shared") {
+            continue;
+        }
+        if (batch.alphaTest) {
+            middleBatch = &batch;
+        } else {
+            opaqueBatch = &batch;
+        }
+    }
+
+    Check(opaqueBatch != nullptr && !opaqueBatch->alphaTest && opaqueBatch->receivesLightmap,
+          "ordinary wall batch remains opaque and lightmapped");
+    Check(middleBatch != nullptr && middleBatch->alphaTest && !middleBatch->receivesLightmap,
+          "middle texture batch stores alpha-test and unlightmapped state");
+    Check(middleBatch != nullptr && Near(middleBatch->alphaCutoff, 0.5f),
+          "middle texture batch stores alpha cutoff");
+    Check(middleBatch != nullptr && middleBatch->vertices.size() == 6,
+          "matching middle texture surfaces share the alpha-test batch");
+}
+
+void TestLightmapParticipationSplitsBatchKey()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface lightmapped = MakeBatchTestSurface("stone", "", Vector2{0.0f, 0.0f}, 1.0f, 0.0f);
+    game::SectorGeneratedSurface unlightmapped = MakeBatchTestSurface("stone", "", Vector2{0.0f, 0.0f}, 1.0f, 2.0f);
+    unlightmapped.receivesLightmap = false;
+    geometry.surfaces.push_back(lightmapped);
+    geometry.surfaces.push_back(unlightmapped);
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshBatchData(geometry);
+    Check(result.batches.size() == 2,
+          "receivesLightmap participates in the batch key even without alpha test");
+}
+
 void TestHoleTopologyMeshBatchData()
 {
     const game::SectorGeneratedGeometry geometry = BuildGeometryOrFail(MakeSquareWithHole(), "hole topology geometry builds");
@@ -518,6 +579,8 @@ void TestTriangleWindingAgainstNormals()
                 case game::SectorGeneratedSurfaceKind::UpperWall:
                     ++upperCount;
                     break;
+                case game::SectorGeneratedSurfaceKind::Middle:
+                    break;
             }
         }
     }
@@ -586,6 +649,8 @@ int main()
 {
     TestSquareTopologyMeshBatchData();
     TestDecalMeshBatchData();
+    TestMiddleTextureBatchState();
+    TestLightmapParticipationSplitsBatchKey();
     TestHoleTopologyMeshBatchData();
     TestEqualHeightPortal();
     TestDifferentHeightPortal();
