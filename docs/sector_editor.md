@@ -101,6 +101,9 @@ views and maps to world Z for generated 3D geometry.
 Two-sided portals generate lower and/or upper wall surfaces only where adjacent
 sector heights differ. Equal-height two-sided portals remain visible and
 editable in 2D, but produce no 3D wall surface to pick or texture in 3D.
+Topology sidedefs also store optional middle texture data for future Doom-style
+masked portal surfaces. Rendering and editor controls for middle textures are
+deferred to later phases.
 
 ## Sector Inspector
 

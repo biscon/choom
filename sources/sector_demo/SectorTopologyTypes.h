@@ -62,6 +62,7 @@ struct SectorTopologySideDef {
     SectorTopologyWallPartSettings wall;
     SectorTopologyWallPartSettings lower;
     SectorTopologyWallPartSettings upper;
+    SectorTopologyWallPartSettings middle;
 };
 
 struct SectorTopologySector {

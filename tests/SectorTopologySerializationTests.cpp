@@ -454,6 +454,67 @@ void TestDecalDefaultsAndOmission()
           "empty texture wall decal with stray data is omitted");
 }
 
+void TestMiddleDefaultsAndOmission()
+{
+    SectorTopologyMap map = MakeSquare();
+    const Json savedDefault = Json::parse(SaveText(map));
+    Check(!savedDefault["sidedefs"][0].contains("middle"),
+          "default middle settings are omitted");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(savedDefault.dump(), loaded, error), "topology without middle fields loads");
+    Check(loaded.sideDefs[0].middle.textureId.empty()
+                  && loaded.sideDefs[0].middle.uv.scale.x == 1.0f
+                  && loaded.sideDefs[0].middle.uv.scale.y == 1.0f
+                  && loaded.sideDefs[0].middle.uv.offset.x == 0.0f
+                  && loaded.sideDefs[0].middle.uv.offset.y == 0.0f
+                  && loaded.sideDefs[0].middle.decal.textureId.empty()
+                  && loaded.sideDefs[0].middle.decal.opacity == 1.0f,
+          "omitted middle loads default empty settings");
+
+    map.sideDefs[0].middle.uv.scale = {2.0f, 3.0f};
+    const Json savedUvOnly = Json::parse(SaveText(map));
+    Check(savedUvOnly["sidedefs"][0].contains("middle")
+                  && savedUvOnly["sidedefs"][0]["middle"]["textureId"].get<std::string>().empty()
+                  && savedUvOnly["sidedefs"][0]["middle"]["uv"]["scale"][0].get<float>() == 2.0f,
+          "non-default middle UV is saved even without a texture");
+
+    map = MakeSquare();
+    map.sideDefs[0].middle.decal.opacity = 0.5f;
+    const Json normalized = Json::parse(SaveText(map));
+    Check(!normalized["sidedefs"][0].contains("middle"),
+          "empty middle decal texture with stray data is omitted");
+}
+
+void TestMiddleRoundTrip()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.texturesById.emplace("bars", SectorTextureDefinition{
+            "bars", "textures/bars.png", SectorTextureFilter::Point});
+    original.sideDefs[0].middle = MakePart("bars", 2.0f, 3.0f, 4.0f, 5.0f);
+
+    const std::string text = SaveText(original);
+    const Json saved = Json::parse(text);
+    Check(saved["sidedefs"][0]["middle"]["textureId"].get<std::string>() == "bars",
+          "middle texture ID is saved");
+    Check(saved["sidedefs"][0]["middle"]["uv"]["scale"][0].get<float>() == 2.0f
+                  && saved["sidedefs"][0]["middle"]["uv"]["offset"][1].get<float>() == 5.0f,
+          "middle UV is saved");
+    Check(!saved["sidedefs"][1].contains("middle"),
+          "default middle is omitted on other sidedefs");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "topology with middle field loads");
+    Check(loaded.sideDefs[0].middle.textureId == "bars"
+                  && loaded.sideDefs[0].middle.uv.scale.x == 2.0f
+                  && loaded.sideDefs[0].middle.uv.scale.y == 3.0f
+                  && loaded.sideDefs[0].middle.uv.offset.x == 4.0f
+                  && loaded.sideDefs[0].middle.uv.offset.y == 5.0f,
+          "middle texture settings round-trip");
+}
+
 void TestDecalRoundTrip()
 {
     SectorTopologyMap original = MakeSquare();
@@ -661,6 +722,58 @@ void TestStrictDecalValidation()
     Check(output.sectors[0].floorDecal.textureId == "existing"
                   && output.sectors[0].floorDecal.opacity == 0.5f,
           "failed decal load leaves output map unchanged");
+}
+
+void TestStrictMiddleValidation()
+{
+    const Json valid = Json::parse(SaveText(MakeSquare()));
+    Json changed = valid;
+    changed["sidedefs"][0]["middle"] = "not an object";
+    ExpectRejected(changed, "middle wrong type is rejected");
+    changed = valid;
+    changed["sidedefs"][0]["middle"] = Json{
+            {"textureId", 17},
+            {"uv", {{"scale", Json::array({1, 1})}, {"offset", Json::array({0, 0})}}}
+    };
+    ExpectRejected(changed, "middle texture ID wrong type is rejected");
+    changed["sidedefs"][0]["middle"]["textureId"] = "bars";
+    changed["sidedefs"][0]["middle"]["uv"]["scale"] = Json::array({1});
+    ExpectRejected(changed, "middle UV scale wrong shape is rejected");
+    changed["sidedefs"][0]["middle"]["uv"]["scale"] = Json::array({1, 1});
+    changed["sidedefs"][0]["middle"]["uv"]["offset"] = Json::array({0, "bad"});
+    ExpectRejected(changed, "middle UV offset wrong type is rejected");
+    changed["sidedefs"][0]["middle"]["uv"]["offset"] = Json::array({0, 0});
+    changed["sidedefs"][0]["middle"]["uv"]["scale"] = Json::array({1.0e39, 1});
+    ExpectRejected(changed, "middle UV outside float range is rejected");
+    changed = valid;
+    changed["sidedefs"][0]["middle"] = Json{
+            {"textureId", "bars"},
+            {"uv", {{"scale", Json::array({1, 1})}, {"offset", Json::array({0, 0})}}},
+            {"decal", "not an object"}
+    };
+    ExpectRejected(changed, "middle nested decal wrong type is rejected");
+
+    SectorTopologyMap output = MakeSquare();
+    output.sideDefs[0].middle = MakePart("existing_middle", 2.0f, 3.0f, 4.0f, 5.0f);
+    changed = valid;
+    changed["sidedefs"][0]["middle"] = Json{
+            {"textureId", 17},
+            {"uv", {{"scale", Json::array({1, 1})}, {"offset", Json::array({0, 0})}}}
+    };
+    std::string error;
+    Check(!LoadText(changed.dump(), output, error), "invalid middle load fails");
+    Check(output.sideDefs[0].middle.textureId == "existing_middle"
+                  && output.sideDefs[0].middle.uv.offset.y == 5.0f,
+          "failed middle load leaves output map unchanged");
+
+    SectorTopologyMap invalid = MakeSquare();
+    invalid.sideDefs[0].middle = MakePart("bars", 1.0f, 1.0f, 0.0f, 0.0f);
+    invalid.sideDefs[0].middle.uv.scale.x = std::numeric_limits<float>::infinity();
+    std::string jsonOutput = "sentinel";
+    error.clear();
+    Check(!game::SaveSectorTopologyMapToJsonString(invalid, jsonOutput, &error),
+          "non-finite middle UV is rejected on save");
+    Check(jsonOutput == "sentinel", "failed middle save leaves JSON output unchanged");
 }
 
 void TestHandAuthoredJson()
@@ -989,8 +1102,11 @@ int main()
     TestStaticLightRoundTrip();
     TestLightmapMetadataRoundTrip();
     TestDecalDefaultsAndOmission();
+    TestMiddleDefaultsAndOmission();
+    TestMiddleRoundTrip();
     TestDecalRoundTrip();
     TestStrictDecalValidation();
+    TestStrictMiddleValidation();
     TestHandAuthoredJson();
     TestStrictMarkersAndShapes();
     TestStrictValuesAndValidation();

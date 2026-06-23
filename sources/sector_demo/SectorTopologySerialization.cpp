@@ -265,6 +265,20 @@ SectorTopologyWallPartSettings ReadWallPart(const Json& value, const std::string
     return part;
 }
 
+void ReadOptionalWallPart(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        SectorTopologyWallPartSettings& outPart)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        outPart = {};
+        return;
+    }
+    outPart = ReadWallPart(*it, context + "." + field);
+}
+
 SectorLightmapBakeSettings ReadLightmapSettings(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -395,6 +409,21 @@ Json WriteUv(const SectorTopologyUvSettings& uv, const std::string& context)
 bool HasDecal(const SectorTopologyDecalLayer& decal)
 {
     return !decal.textureId.empty();
+}
+
+bool IsDefaultUv(const SectorTopologyUvSettings& uv)
+{
+    return uv.scale.x == 1.0f
+            && uv.scale.y == 1.0f
+            && uv.offset.x == 0.0f
+            && uv.offset.y == 0.0f;
+}
+
+bool HasNonDefaultWallPart(const SectorTopologyWallPartSettings& part)
+{
+    return !part.textureId.empty()
+            || !IsDefaultUv(part.uv)
+            || HasDecal(part.decal);
 }
 
 Json WriteDecal(const SectorTopologyDecalLayer& decal, const std::string& context)
@@ -593,6 +622,7 @@ SectorTopologyMap ParseMap(const Json& root)
         sideDef.wall = ReadWallPart(RequireField(value, "wall", context), context + ".wall");
         sideDef.lower = ReadWallPart(RequireField(value, "lower", context), context + ".lower");
         sideDef.upper = ReadWallPart(RequireField(value, "upper", context), context + ".upper");
+        ReadOptionalWallPart(value, "middle", context, sideDef.middle);
         map.sideDefs.push_back(std::move(sideDef));
     }
 
@@ -720,7 +750,7 @@ Json SerializeMap(const SectorTopologyMap& map)
             Fail("sidedef " + std::to_string(sideDef->id) + " has an invalid side value");
         }
         const std::string context = "sidedef " + std::to_string(sideDef->id);
-        root["sidedefs"].push_back(Json{
+        Json sideDefJson{
                 {"id", sideDef->id},
                 {"lineDefId", sideDef->lineDefId},
                 {"side", sideName},
@@ -728,7 +758,11 @@ Json SerializeMap(const SectorTopologyMap& map)
                 {"wall", WriteWallPart(sideDef->wall, context + ".wall")},
                 {"lower", WriteWallPart(sideDef->lower, context + ".lower")},
                 {"upper", WriteWallPart(sideDef->upper, context + ".upper")}
-        });
+        };
+        if (HasNonDefaultWallPart(sideDef->middle)) {
+            sideDefJson["middle"] = WriteWallPart(sideDef->middle, context + ".middle");
+        }
+        root["sidedefs"].push_back(std::move(sideDefJson));
     }
 
     root["sectors"] = Json::array();
