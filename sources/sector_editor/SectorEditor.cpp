@@ -2,6 +2,7 @@
 
 #include "engine/assets/TextureLoadFlags.h"
 #include "engine/input/InputEvents.h"
+#include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTextureTypes.h"
@@ -173,9 +174,22 @@ bool SameTopologyPoint(SectorTopologyCoordPoint a, SectorTopologyCoordPoint b)
 void ResetEditorTopologyDocumentState(SectorEditorState& state)
 {
     state.topologyMap = CreateEmptySectorTopologyDocument();
+    state.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
+            state.topologyMap.previewSettings);
     state.topologyDocumentInitialized = true;
     state.topologyDocumentDirty = false;
     state.topologyDocumentStatus = "Topology document: empty";
+}
+
+const char* PreviewControlModeName(SectorPreviewControlMode mode)
+{
+    switch (mode) {
+        case SectorPreviewControlMode::FreeFly:
+            return "FreeFly";
+        case SectorPreviewControlMode::Gameplay:
+            return "Gameplay";
+    }
+    return "Unknown";
 }
 
 std::vector<LevelListEntry> ScanLevels(std::string& error)
@@ -1408,17 +1422,23 @@ void SectorEditor::RenderUI(
             ui.focusedId = 0;
             ui.openOptionId = 0;
         } else {
-            DrawPreviewOverlay(config, assets, font);
+            DrawPreviewOverlay(ui, config, input, assets, font);
         }
-        if (!state.previewUiHidden && !state.texturePicker.open && !state.decalTintModal.open) {
+        if (!state.previewUiHidden
+                && !state.texturePicker.open
+                && !state.decalTintModal.open
+                && !state.previewSettingsModal.open) {
             DrawPreviewUvPanel(ui, config, input, assets, font);
         }
         if (state.decalTintModal.open) {
             DrawDecalTintModal(ui, config, input, assets, font);
         }
+        if (state.previewSettingsModal.open) {
+            DrawPreviewSettingsModal(ui, config, input, assets, font);
+        }
         DrawTexturePickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = ui.focusedId != 0;
-        if (state.texturePicker.open || state.decalTintModal.open) {
+        if (state.texturePicker.open || state.decalTintModal.open || state.previewSettingsModal.open) {
             uiState.keyboardCaptured = true;
         }
         engine::EndUI(ui, config, input, assets);
@@ -1452,6 +1472,12 @@ void SectorEditor::RenderUI(
     }
     if (state.decalTintModal.open) {
         DrawDecalTintModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (state.previewSettingsModal.open) {
+        DrawPreviewSettingsModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -2792,10 +2818,11 @@ void SectorEditor::CommitPendingTopologySectorCut()
 
 void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
 {
+    bool controlModeToggled = false;
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
-            [this](engine::InputEvent& event) {
+            [this, &controlModeToggled](engine::InputEvent& event) {
                 if (event.key.key == KEY_F1) {
                     state.useBakedAmbientOcclusion = !state.useBakedAmbientOcclusion;
                     statusText = state.useBakedAmbientOcclusion
@@ -2817,6 +2844,13 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                     return;
                 }
 
+                if (event.key.key == KEY_F3) {
+                    TogglePreviewControlMode();
+                    controlModeToggled = true;
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
@@ -2824,8 +2858,43 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
             }
     );
 
+    if (controlModeToggled) {
+        UpdatePreview3DSelection(input);
+        return;
+    }
+
     if (state.mode == SectorEditorMode::Preview3D) {
-        preview.Update(input, dt);
+        if (state.previewControlMode == SectorPreviewControlMode::FreeFly) {
+            preview.Update(input, dt);
+        } else {
+            input.ForEachEvent(
+                    engine::InputEventType::KeyPressed,
+                    true,
+                    [this](engine::InputEvent& event) {
+                        if (event.key.key != KEY_F11) {
+                            return;
+                        }
+
+                        preview.SetMouseLookEnabled(!preview.IsMouseLookEnabled());
+                        engine::ConsumeEvent(event);
+                    }
+            );
+
+            SectorFpsControllerInput controllerInput;
+            controllerInput.moveForward = input.IsKeyDown(KEY_W);
+            controllerInput.moveBackward = input.IsKeyDown(KEY_S);
+            controllerInput.strafeLeft = input.IsKeyDown(KEY_A);
+            controllerInput.strafeRight = input.IsKeyDown(KEY_D);
+            controllerInput.run = input.IsKeyDown(KEY_LEFT_SHIFT) || input.IsKeyDown(KEY_RIGHT_SHIFT);
+            controllerInput.mouseLookEnabled = preview.IsMouseLookEnabled();
+            controllerInput.mouseDelta = input.MouseDelta();
+            UpdateSectorFpsController(
+                    state.fpsControllerState,
+                    state.fpsControllerConfig,
+                    controllerInput,
+                    dt);
+            ApplyGameplayPoseToPreview();
+        }
         UpdatePreview3DSelection(input);
     }
 }
@@ -4144,26 +4213,42 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
 }
 
 void SectorEditor::DrawPreviewOverlay(
+        engine::UIContext& ui,
         const engine::UIConfig& config,
+        engine::Input& input,
         engine::AssetManager& assets,
-        engine::FontHandle font) const
+        engine::FontHandle font)
 {
-    const Rectangle panel{32.0f, 32.0f, 760.0f, 172.0f};
+    const Rectangle panel{32.0f, 32.0f, 860.0f, 172.0f};
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
-    const Vector3 position = preview.Position();
+    const SectorMeshPreviewPose pose = ActivePreviewPose();
+    const Vector3 position = pose.position;
     engine::Text(
             config,
             assets,
             Rectangle{panel.x + 18.0f, panel.y + 14.0f, panel.width - 36.0f, 34.0f},
             font,
-            "3D Mode",
+            TextFormat("3D Mode | %s", PreviewControlModeName(state.previewControlMode)),
             engine::UITextJustify::Left
     );
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_preview_settings",
+                Rectangle{panel.x + panel.width - 152.0f, panel.y + 12.0f, 130.0f, 36.0f},
+                font,
+                "Settings")) {
+        OpenPreviewSettingsModal();
+    }
     const char* interactionText = preview.IsMouseLookEnabled()
-            ? "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return"
-            : "F1 AO | F2 hide UI | F11 cursor | click surface to select | Tab/Escape return";
+            ? (state.previewControlMode == SectorPreviewControlMode::Gameplay
+                    ? "WASD move | Shift run | Mouse look | F3 FreeFly/Gameplay | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return"
+                    : "WASD move | Mouse look | Space/Ctrl up/down | F3 FreeFly/Gameplay | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return")
+            : "F1 AO | F2 hide UI | F3 FreeFly/Gameplay | F11 cursor | click surface to select | Tab/Escape return";
     engine::Text(
             config,
             assets,
@@ -4195,14 +4280,24 @@ void SectorEditor::DrawPreviewOverlay(
             assets,
             Rectangle{panel.x + 18.0f, panel.y + 130.0f, panel.width - 36.0f, 30.0f},
             font,
-            TextFormat(
-                    "assets %.0f%% | Lightmap: %s | AO: %s | %s%s",
-                    preview.AssetProgress(assets) * 100.0f,
-                    preview.LightmapStatusText(),
-                    state.useBakedAmbientOcclusion ? "on" : "off",
-                    statusText.empty() ? "Ready" : statusText.c_str(),
-                    state.topologyDocumentDirty ? " | unsaved changes" : ""
-            ),
+            state.previewControlMode == SectorPreviewControlMode::Gameplay
+                    ? TextFormat(
+                            "assets %.0f%% | Lightmap: %s | AO: %s | walk %.1f | run %.1f | eye %.1f | %s%s",
+                            preview.AssetProgress(assets) * 100.0f,
+                            preview.LightmapStatusText(),
+                            state.useBakedAmbientOcclusion ? "on" : "off",
+                            state.fpsControllerConfig.walkSpeed,
+                            state.fpsControllerConfig.runSpeed,
+                            state.fpsControllerConfig.eyeHeight,
+                            statusText.empty() ? "Ready" : statusText.c_str(),
+                            state.topologyDocumentDirty ? " | unsaved changes" : "")
+                    : TextFormat(
+                            "assets %.0f%% | Lightmap: %s | AO: %s | %s%s",
+                            preview.AssetProgress(assets) * 100.0f,
+                            preview.LightmapStatusText(),
+                            state.useBakedAmbientOcclusion ? "on" : "off",
+                            statusText.empty() ? "Ready" : statusText.c_str(),
+                            state.topologyDocumentDirty ? " | unsaved changes" : ""),
             engine::UITextJustify::Left,
             state.topologyDocumentDirty ? Color{236, 196, 92, 255} : config.mutedTextColor
     );
@@ -5433,7 +5528,7 @@ void SectorEditor::DrawToolsPanel(
 
     const float rowH = 46.0f;
     const float gap = config.rowSpacing;
-    const float toolsContentH = 1110.0f;
+    const float toolsContentH = 1166.0f;
     const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
             ui,
@@ -5522,6 +5617,10 @@ void SectorEditor::DrawToolsPanel(
 
     if (engine::Button(ui, config, input, assets, "sector_editor_add_map_texture", Rectangle{0.0f, y, contentW, rowH}, font, "Add Map Texture")) {
         OpenAddMapTextureModal(assets);
+    }
+    y += rowH + gap;
+    if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_2d", Rectangle{0.0f, y, contentW, rowH}, font, "Settings")) {
+        OpenPreviewSettingsModal();
     }
     y += rowH + gap;
 
@@ -7628,9 +7727,6 @@ void SectorEditor::DrawConfirmationModal(
                 if (event.key.key == KEY_ESCAPE) {
                     cancelRequested = true;
                     engine::ConsumeEvent(event);
-                } else if (event.key.key == KEY_ENTER || event.key.key == KEY_KP_ENTER) {
-                    okayRequested = true;
-                    engine::ConsumeEvent(event);
                 }
             }
     );
@@ -7689,9 +7785,6 @@ void SectorEditor::DrawDecalTintModal(
             [&okayRequested, &cancelRequested](engine::InputEvent& event) {
                 if (event.key.key == KEY_ESCAPE) {
                     cancelRequested = true;
-                    engine::ConsumeEvent(event);
-                } else if (event.key.key == KEY_ENTER || event.key.key == KEY_KP_ENTER) {
-                    okayRequested = true;
                     engine::ConsumeEvent(event);
                 }
             }
@@ -7820,6 +7913,166 @@ void SectorEditor::DrawDecalTintModal(
         return;
     }
     state.decalTintModal = DecalTintModalState{};
+}
+
+void SectorEditor::DrawPreviewSettingsModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    SectorPreviewSettingsModalState& modalState = state.previewSettingsModal;
+    if (!modalState.open) {
+        return;
+    }
+
+    bool okayRequested = false;
+    bool cancelRequested = false;
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [&okayRequested, &cancelRequested](engine::InputEvent& event) {
+                if (event.key.key == KEY_ESCAPE) {
+                    cancelRequested = true;
+                    engine::ConsumeEvent(event);
+                }
+            }
+    );
+
+    DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
+    const Rectangle modal{
+            (EditorWidth - 620.0f) * 0.5f,
+            (EditorHeight - 430.0f) * 0.5f,
+            620.0f,
+            430.0f
+    };
+    DrawRectangleRec(modal, Color{20, 24, 32, 248});
+    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
+
+    float y = modal.y + 22.0f;
+    engine::Text(config, assets, Rectangle{modal.x + 26.0f, y, modal.width - 52.0f, 42.0f}, font, "Preview Settings");
+    y += 60.0f;
+
+    const float labelW = 220.0f;
+    const float inputW = 180.0f;
+    const float rowH = 40.0f;
+    const float gap = 12.0f;
+    const float labelX = modal.x + 30.0f;
+    const float inputX = labelX + labelW + 18.0f;
+    auto drawFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{labelX, y, labelW, rowH},
+                font,
+                label,
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        const engine::UINumericInputResult result = engine::FloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                id,
+                Rectangle{inputX, y, inputW, rowH},
+                font,
+                value,
+                inputState,
+                minValue,
+                maxValue,
+                decimals);
+        if (result.changed) {
+            modalState.errorMessage.clear();
+        }
+        y += rowH + gap;
+    };
+
+    drawFloat(
+            "sector_editor_preview_walk_speed",
+            "Walk speed",
+            modalState.draftConfig.walkSpeed,
+            modalState.walkSpeedInput,
+            0.1f,
+            100.0f,
+            2);
+    drawFloat(
+            "sector_editor_preview_run_speed",
+            "Run speed",
+            modalState.draftConfig.runSpeed,
+            modalState.runSpeedInput,
+            0.1f,
+            200.0f,
+            2);
+    drawFloat(
+            "sector_editor_preview_mouse_sensitivity",
+            "Mouse sensitivity",
+            modalState.draftConfig.mouseSensitivity,
+            modalState.mouseSensitivityInput,
+            0.01f,
+            20.0f,
+            3);
+    drawFloat(
+            "sector_editor_preview_eye_height",
+            "Camera eye height",
+            modalState.draftConfig.eyeHeight,
+            modalState.eyeHeightInput,
+            0.1f,
+            20.0f,
+            2);
+
+    if (!modalState.errorMessage.empty()) {
+        engine::Text(
+                config,
+                assets,
+                Rectangle{modal.x + 30.0f, modal.y + 292.0f, modal.width - 60.0f, 36.0f},
+                font,
+                modalState.errorMessage.c_str(),
+                engine::UITextJustify::Left,
+                config.invalidColor);
+    }
+
+    const float buttonY = modal.y + modal.height - 66.0f;
+    const float buttonW = 132.0f;
+    if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_reset", Rectangle{modal.x + 30.0f, buttonY, 176.0f, 44.0f}, font, "Reset Defaults")) {
+        modalState.draftConfig = DefaultSectorFpsControllerConfig();
+        modalState.walkSpeedInput = engine::UIFloatInputState{};
+        modalState.runSpeedInput = engine::UIFloatInputState{};
+        modalState.mouseSensitivityInput = engine::UIFloatInputState{};
+        modalState.eyeHeightInput = engine::UIFloatInputState{};
+        modalState.errorMessage.clear();
+    }
+    okayRequested = okayRequested || engine::Button(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_preview_settings_ok",
+            Rectangle{modal.x + modal.width - buttonW * 2.0f - 38.0f, buttonY, buttonW, 44.0f},
+            font,
+            "OK");
+    cancelRequested = cancelRequested || engine::Button(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_preview_settings_cancel",
+            Rectangle{modal.x + modal.width - buttonW - 26.0f, buttonY, buttonW, 44.0f},
+            font,
+            "Cancel");
+
+    input.ForEachEvent(engine::InputEventType::Any, true, [](engine::InputEvent& event) {
+        engine::ConsumeEvent(event);
+    });
+
+    if (cancelRequested) {
+        state.previewSettingsModal = SectorPreviewSettingsModalState{};
+        return;
+    }
+    if (okayRequested) {
+        ApplyPreviewSettingsModal();
+    }
 }
 
 void SectorEditor::DrawLightmapBakeModal(
@@ -8028,6 +8281,8 @@ bool SectorEditor::LoadLevel(
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     state.topologyMap = std::move(loaded);
+    state.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
+            state.topologyMap.previewSettings);
     state.topologyDocumentInitialized = true;
     state.topologyDocumentDirty = false;
     state.topologyDocumentStatus = TextFormat("Topology document: loaded %s", jsonAssetPath.c_str());
@@ -8185,7 +8440,8 @@ bool SectorEditor::HasDocumentModalOpen() const
     return state.saveLevelModal.open
             || state.loadLevelModal.open
             || state.confirmationModal.open
-            || state.decalTintModal.open;
+            || state.decalTintModal.open
+            || state.previewSettingsModal.open;
 }
 
 bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UIContext& ui)
@@ -8222,6 +8478,8 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
         preview.ApplyPose(state.lastPreviewPose);
     }
 
+    state.previewControlMode = SectorPreviewControlMode::FreeFly;
+    state.fpsControllerConfig = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
     state.mode = SectorEditorMode::Preview3D;
     state.previewUiHidden = false;
     state.hoveredSurface3D = SectorSurfaceHit{};
@@ -8238,12 +8496,79 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
 
 void SectorEditor::LeavePreview3D()
 {
-    state.lastPreviewPose = preview.Pose();
+    state.lastPreviewPose = ActivePreviewPose();
     state.hasPreviewPose = true;
+    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        ApplyGameplayPoseToPreview();
+    }
+    state.previewControlMode = SectorPreviewControlMode::FreeFly;
     state.mode = SectorEditorMode::Edit2D;
     state.hoveredSurface3D = SectorSurfaceHit{};
+    state.previewSettingsModal = SectorPreviewSettingsModalState{};
     preview.Leave();
     statusText = "Returned to 2D editor";
+}
+
+SectorMeshPreviewPose SectorEditor::ActivePreviewPose() const
+{
+    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        return SectorFpsControllerPose(state.fpsControllerState, state.fpsControllerConfig);
+    }
+    return preview.Pose();
+}
+
+void SectorEditor::ApplyGameplayPoseToPreview()
+{
+    preview.ApplyPose(SectorFpsControllerPose(state.fpsControllerState, state.fpsControllerConfig));
+}
+
+void SectorEditor::TogglePreviewControlMode()
+{
+    if (state.mode != SectorEditorMode::Preview3D || !preview.IsReady()) {
+        return;
+    }
+
+    state.fpsControllerConfig = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
+    if (state.previewControlMode == SectorPreviewControlMode::FreeFly) {
+        state.fpsControllerState = SectorFpsControllerStateFromCameraPose(
+                preview.Pose(),
+                state.fpsControllerConfig);
+        state.previewControlMode = SectorPreviewControlMode::Gameplay;
+    } else {
+        ApplyGameplayPoseToPreview();
+        state.previewControlMode = SectorPreviewControlMode::FreeFly;
+    }
+    statusText = TextFormat("3D control mode: %s", PreviewControlModeName(state.previewControlMode));
+}
+
+void SectorEditor::OpenPreviewSettingsModal()
+{
+    state.previewSettingsModal = SectorPreviewSettingsModalState{};
+    state.previewSettingsModal.open = true;
+    state.previewSettingsModal.draftConfig = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
+}
+
+void SectorEditor::ApplyPreviewSettingsModal()
+{
+    if (!state.previewSettingsModal.open) {
+        return;
+    }
+
+    state.fpsControllerConfig = NormalizeSectorFpsControllerConfig(state.previewSettingsModal.draftConfig);
+    state.topologyMap.previewSettings = SectorPreviewSettingsFromFpsControllerConfig(
+            state.fpsControllerConfig);
+    MarkTopologyDocumentEdited("Preview settings updated");
+    state.previewSettingsModal = SectorPreviewSettingsModalState{};
+    if (state.mode == SectorEditorMode::Preview3D
+            && state.previewControlMode == SectorPreviewControlMode::Gameplay
+            && preview.IsReady()) {
+        ApplyGameplayPoseToPreview();
+    }
+    statusText = TextFormat(
+            "Preview settings updated: walk %.1f run %.1f eye %.1f",
+            state.fpsControllerConfig.walkSpeed,
+            state.fpsControllerConfig.runSpeed,
+            state.fpsControllerConfig.eyeHeight);
 }
 
 void SectorEditor::RefreshDefaultTextures()

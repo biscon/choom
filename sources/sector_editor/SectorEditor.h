@@ -103,9 +103,11 @@ private:
     void RenderPreview3D(engine::AssetManager& assets);
     void DrawPreviewSurfaceHighlights() const;
     void DrawPreviewOverlay(
+            engine::UIContext& ui,
             const engine::UIConfig& config,
+            engine::Input& input,
             engine::AssetManager& assets,
-            engine::FontHandle font) const;
+            engine::FontHandle font);
     void DrawPreviewUvPanel(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -187,6 +189,12 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawPreviewSettingsModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
     void DrawStatusPanel(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -231,6 +239,11 @@ private:
     bool HasDocumentModalOpen() const;
     bool TryEnterPreview3D(engine::AssetManager& assets, engine::UIContext& ui);
     void LeavePreview3D();
+    SectorMeshPreviewPose ActivePreviewPose() const;
+    void ApplyGameplayPoseToPreview();
+    void TogglePreviewControlMode();
+    void OpenPreviewSettingsModal();
+    void ApplyPreviewSettingsModal();
     void RefreshDefaultTextures();
     void RefreshEditorTextureAssets(engine::AssetManager& assets);
     engine::TextureHandle EditorTextureHandleForId(const std::string& textureId) const;

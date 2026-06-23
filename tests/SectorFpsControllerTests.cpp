@@ -1,0 +1,134 @@
+#include "sector_demo/SectorFpsController.h"
+
+#include <raymath.h>
+
+#include <cmath>
+#include <cstdio>
+
+namespace {
+
+int failures = 0;
+
+void Check(bool condition, const char* description)
+{
+    if (!condition) {
+        std::fprintf(stderr, "FAIL: %s\n", description);
+        ++failures;
+    }
+}
+
+bool Near(float a, float b, float epsilon = 0.0001f)
+{
+    return std::fabs(a - b) <= epsilon;
+}
+
+bool Near(Vector3 a, Vector3 b, float epsilon = 0.0001f)
+{
+    return Near(a.x, b.x, epsilon)
+            && Near(a.y, b.y, epsilon)
+            && Near(a.z, b.z, epsilon);
+}
+
+void TestEyePositionUsesFeetAndEyeHeight()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{1.0f, 2.0f, 3.0f};
+    game::SectorFpsControllerConfig config;
+    config.eyeHeight = 5.0f;
+    Check(Near(game::SectorFpsControllerEyePosition(state, config), Vector3{1.0f, 7.0f, 3.0f}),
+            "eye position adds eye height to feet position");
+}
+
+void TestPoseConversions()
+{
+    game::SectorFpsControllerConfig config;
+    config.eyeHeight = 4.5f;
+    game::SectorMeshPreviewPose cameraPose{Vector3{10.0f, 9.0f, 3.0f}, 0.25f, -0.5f};
+    const game::SectorFpsControllerState state =
+            game::SectorFpsControllerStateFromCameraPose(cameraPose, config);
+    Check(Near(state.feetPosition, Vector3{10.0f, 4.5f, 3.0f}),
+            "camera pose to fps state subtracts eye height");
+    Check(Near(state.yawRadians, 0.25f) && Near(state.pitchRadians, -0.5f),
+            "camera pose to fps state preserves yaw and pitch");
+    Check(Near(game::SectorFpsControllerPose(state, config).position, cameraPose.position),
+            "fps state to camera pose adds eye height");
+}
+
+void TestForwardMovementIgnoresPitchAndPreservesY()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{0.0f, 3.0f, 0.0f};
+    state.yawRadians = 0.0f;
+    state.pitchRadians = 1.0f;
+    game::SectorFpsControllerConfig config;
+    config.walkSpeed = 6.0f;
+    game::SectorFpsControllerInput input;
+    input.moveForward = true;
+    UpdateSectorFpsController(state, config, input, 0.5f);
+    Check(Near(state.feetPosition, Vector3{3.0f, 3.0f, 0.0f}),
+            "forward movement uses yaw and preserves feet Y");
+}
+
+void TestRunAndWalkSpeeds()
+{
+    game::SectorFpsControllerConfig config;
+    config.walkSpeed = 6.0f;
+    config.runSpeed = 12.0f;
+
+    game::SectorFpsControllerState walking;
+    game::SectorFpsControllerInput walkInput;
+    walkInput.moveForward = true;
+    UpdateSectorFpsController(walking, config, walkInput, 1.0f);
+    Check(Near(walking.feetPosition.x, 6.0f), "walk speed is used without run");
+
+    game::SectorFpsControllerState running;
+    game::SectorFpsControllerInput runInput;
+    runInput.moveForward = true;
+    runInput.run = true;
+    UpdateSectorFpsController(running, config, runInput, 1.0f);
+    Check(Near(running.feetPosition.x, 12.0f), "run speed is used with run input");
+}
+
+void TestMouseLookRawDeltaAndPitchClamp()
+{
+    game::SectorFpsControllerState state;
+    game::SectorFpsControllerConfig config;
+    config.mouseSensitivity = 2.0f;
+    game::SectorFpsControllerInput input;
+    input.mouseLookEnabled = true;
+    input.mouseDelta = Vector2{10.0f, -10000.0f};
+    UpdateSectorFpsController(state, config, input, 123.0f);
+    Check(Near(state.yawRadians, 0.06f), "mouse look uses raw delta times sensitivity without dt");
+    Check(state.pitchRadians <= 1.5534f && state.pitchRadians >= 1.5532f,
+            "pitch clamps to about positive 89 degrees");
+}
+
+void TestConfigNormalization()
+{
+    game::SectorFpsControllerConfig config;
+    config.walkSpeed = -1.0f;
+    config.runSpeed = 999.0f;
+    config.mouseSensitivity = INFINITY;
+    config.eyeHeight = NAN;
+    config = game::NormalizeSectorFpsControllerConfig(config);
+    Check(Near(config.walkSpeed, 0.1f), "walk speed clamps low");
+    Check(Near(config.runSpeed, 200.0f), "run speed clamps high");
+    Check(Near(config.mouseSensitivity, 1.0f), "non-finite mouse sensitivity uses default");
+    Check(Near(config.eyeHeight, 5.0f), "non-finite eye height uses default");
+}
+
+} // namespace
+
+int main()
+{
+    TestEyePositionUsesFeetAndEyeHeight();
+    TestPoseConversions();
+    TestForwardMovementIgnoresPitchAndPreservesY();
+    TestRunAndWalkSpeeds();
+    TestMouseLookRawDeltaAndPitchClamp();
+    TestConfigNormalization();
+    if (failures == 0) {
+        std::puts("Sector FPS controller tests passed");
+    }
+    return failures == 0 ? 0 : 1;
+}

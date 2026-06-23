@@ -8792,6 +8792,12 @@
     "indirectBounceRadius": 32.0,
     "indirectBounceStrength": 0.20000000298023224
   },
+  "previewSettings": {
+    "walkSpeed": 3.0,
+    "runSpeed": 6.0,
+    "mouseSensitivity": 0.5,
+    "eyeHeight": 5.0
+  },
   "bakedLightmap": {
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,

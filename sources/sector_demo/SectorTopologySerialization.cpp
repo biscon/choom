@@ -305,6 +305,32 @@ SectorLightmapBakeSettings ReadLightmapSettings(const Json& value, const std::st
     return settings;
 }
 
+SectorPreviewSettings ReadPreviewSettings(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorPreviewSettings settings = DefaultSectorPreviewSettings();
+    const auto walkSpeedIt = value.find("walkSpeed");
+    if (walkSpeedIt != value.end()) {
+        settings.walkSpeed = ReadFloat(value, "walkSpeed", context);
+    }
+    const auto runSpeedIt = value.find("runSpeed");
+    if (runSpeedIt != value.end()) {
+        settings.runSpeed = ReadFloat(value, "runSpeed", context);
+    }
+    const auto mouseSensitivityIt = value.find("mouseSensitivity");
+    if (mouseSensitivityIt != value.end()) {
+        settings.mouseSensitivity = ReadFloat(value, "mouseSensitivity", context);
+    }
+    const auto eyeHeightIt = value.find("eyeHeight");
+    if (eyeHeightIt != value.end()) {
+        settings.eyeHeight = ReadFloat(value, "eyeHeight", context);
+    }
+    return NormalizeSectorPreviewSettings(settings);
+}
+
 SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -466,6 +492,13 @@ Json WriteWallPart(const SectorTopologyWallPartSettings& part, const std::string
     return value;
 }
 
+void RequireFinite(float value, const std::string& context)
+{
+    if (!std::isfinite(value)) {
+        Fail(context + " must be finite");
+    }
+}
+
 Json WriteLightmapSettings(const SectorLightmapBakeSettings& settings)
 {
     return Json{
@@ -479,6 +512,21 @@ Json WriteLightmapSettings(const SectorLightmapBakeSettings& settings)
                     SectorWorldToAuthoringDistance(0.05f),
                     SectorWorldToAuthoringDistance(16.0f))},
             {"indirectBounceStrength", std::clamp(settings.indirectBounceStrength, 0.0f, 1.0f)}
+    };
+}
+
+Json WritePreviewSettings(const SectorPreviewSettings& settings)
+{
+    RequireFinite(settings.walkSpeed, "previewSettings.walkSpeed");
+    RequireFinite(settings.runSpeed, "previewSettings.runSpeed");
+    RequireFinite(settings.mouseSensitivity, "previewSettings.mouseSensitivity");
+    RequireFinite(settings.eyeHeight, "previewSettings.eyeHeight");
+    const SectorPreviewSettings normalized = NormalizeSectorPreviewSettings(settings);
+    return Json{
+            {"walkSpeed", normalized.walkSpeed},
+            {"runSpeed", normalized.runSpeed},
+            {"mouseSensitivity", normalized.mouseSensitivity},
+            {"eyeHeight", normalized.eyeHeight}
     };
 }
 
@@ -500,13 +548,6 @@ Json WriteColor(Color color)
             {"b", static_cast<int>(color.b)},
             {"a", static_cast<int>(color.a)}
     };
-}
-
-void RequireFinite(float value, const std::string& context)
-{
-    if (!std::isfinite(value)) {
-        Fail(context + " must be finite");
-    }
 }
 
 template<typename T>
@@ -685,6 +726,11 @@ SectorTopologyMap ParseMap(const Json& root)
         map.lightmapSettings = ReadLightmapSettings(*lightmapSettingsIt, "root.lightmapSettings");
     }
 
+    const auto previewSettingsIt = root.find("previewSettings");
+    if (previewSettingsIt != root.end()) {
+        map.previewSettings = ReadPreviewSettings(*previewSettingsIt, "root.previewSettings");
+    }
+
     const auto bakedLightmapIt = root.find("bakedLightmap");
     if (bakedLightmapIt != root.end()) {
         map.bakedLightmap = ReadBakedLightmap(*bakedLightmapIt, "root.bakedLightmap");
@@ -813,6 +859,7 @@ Json SerializeMap(const SectorTopologyMap& map)
     }
 
     root["lightmapSettings"] = WriteLightmapSettings(map.lightmapSettings);
+    root["previewSettings"] = WritePreviewSettings(map.previewSettings);
     if (!map.bakedLightmap.path.empty()
             && map.bakedLightmap.width > 0
             && map.bakedLightmap.height > 0

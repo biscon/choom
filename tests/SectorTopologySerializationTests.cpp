@@ -2,6 +2,7 @@
 #include "util/json.hpp"
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -228,6 +229,14 @@ void ExpectRejected(const Json& json, const char* description)
     Check(!error.empty(), "rejected JSON reports an error");
 }
 
+void ExpectRejectedText(const std::string& text, const char* description)
+{
+    SectorTopologyMap output = MakeSquare();
+    std::string error;
+    Check(!LoadText(text, output, error), description);
+    Check(!error.empty(), "rejected JSON text reports an error");
+}
+
 void TestRoundTrip()
 {
     const SectorTopologyMap original = MakeSquare();
@@ -399,6 +408,84 @@ void TestLightmapMetadataRoundTrip()
                   && oldStyle.bakedLightmap.height == 0
                   && oldStyle.bakedLightmap.sourceHash.empty(),
           "omitted baked lightmap metadata loads empty");
+}
+
+void TestPreviewSettingsRoundTripAndValidation()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.previewSettings.walkSpeed = 7.25f;
+    original.previewSettings.runSpeed = 15.5f;
+    original.previewSettings.mouseSensitivity = 2.75f;
+    original.previewSettings.eyeHeight = 4.25f;
+
+    const std::string text = SaveText(original);
+    const Json saved = Json::parse(text);
+    Check(saved["previewSettings"].is_object(), "preview settings are written");
+    Check(Near(saved["previewSettings"]["walkSpeed"].get<float>(), 7.25f)
+                  && Near(saved["previewSettings"]["runSpeed"].get<float>(), 15.5f)
+                  && Near(saved["previewSettings"]["mouseSensitivity"].get<float>(), 2.75f)
+                  && Near(saved["previewSettings"]["eyeHeight"].get<float>(), 4.25f),
+          "preview settings values are serialized");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "preview settings JSON loads");
+    Check(Near(loaded.previewSettings.walkSpeed, 7.25f)
+                  && Near(loaded.previewSettings.runSpeed, 15.5f)
+                  && Near(loaded.previewSettings.mouseSensitivity, 2.75f)
+                  && Near(loaded.previewSettings.eyeHeight, 4.25f),
+          "preview settings round-trip");
+
+    Json withoutPreviewSettings = saved;
+    withoutPreviewSettings.erase("previewSettings");
+    SectorTopologyMap oldStyle;
+    Check(LoadText(withoutPreviewSettings.dump(), oldStyle, error),
+          "omitted preview settings field is accepted");
+    const game::SectorPreviewSettings defaults = game::DefaultSectorPreviewSettings();
+    Check(Near(oldStyle.previewSettings.walkSpeed, defaults.walkSpeed)
+                  && Near(oldStyle.previewSettings.runSpeed, defaults.runSpeed)
+                  && Near(oldStyle.previewSettings.mouseSensitivity, defaults.mouseSensitivity)
+                  && Near(oldStyle.previewSettings.eyeHeight, defaults.eyeHeight),
+          "omitted preview settings load defaults");
+
+    Json invalid = saved;
+    invalid["previewSettings"] = 4;
+    ExpectRejected(invalid, "non-object preview settings are rejected");
+
+    const std::array<const char*, 4> fields{
+            "walkSpeed",
+            "runSpeed",
+            "mouseSensitivity",
+            "eyeHeight"
+    };
+    for (const char* field : fields) {
+        invalid = saved;
+        invalid["previewSettings"][field] = "invalid";
+        ExpectRejected(invalid, "wrong-type preview settings field is rejected");
+    }
+
+    invalid = saved;
+    invalid["previewSettings"]["walkSpeed"] = "__NONFINITE__";
+    std::string nonFiniteText = invalid.dump();
+    const std::string marker = "\"__NONFINITE__\"";
+    const size_t markerPos = nonFiniteText.find(marker);
+    Check(markerPos != std::string::npos, "non-finite preview settings marker exists");
+    if (markerPos != std::string::npos) {
+        nonFiniteText.replace(markerPos, marker.size(), "1e999");
+        ExpectRejectedText(nonFiniteText, "non-finite preview settings field is rejected");
+    }
+
+    Json clamped = saved;
+    clamped["previewSettings"]["walkSpeed"] = -5.0f;
+    clamped["previewSettings"]["runSpeed"] = 500.0f;
+    clamped["previewSettings"]["mouseSensitivity"] = 0.001f;
+    clamped["previewSettings"]["eyeHeight"] = 40.0f;
+    Check(LoadText(clamped.dump(), loaded, error), "out-of-range preview settings load");
+    Check(Near(loaded.previewSettings.walkSpeed, 0.1f)
+                  && Near(loaded.previewSettings.runSpeed, 200.0f)
+                  && Near(loaded.previewSettings.mouseSensitivity, 0.01f)
+                  && Near(loaded.previewSettings.eyeHeight, 20.0f),
+          "out-of-range preview settings clamp");
 }
 
 void TestDecalDefaultsAndOmission()
@@ -1101,6 +1188,7 @@ int main()
     TestTextureFilterSerialization();
     TestStaticLightRoundTrip();
     TestLightmapMetadataRoundTrip();
+    TestPreviewSettingsRoundTripAndValidation();
     TestDecalDefaultsAndOmission();
     TestMiddleDefaultsAndOmission();
     TestMiddleRoundTrip();

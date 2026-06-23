@@ -11,6 +11,13 @@
 
 namespace game {
 
+struct SectorPreviewSettings {
+    float walkSpeed = 6.0f;
+    float runSpeed = 12.0f;
+    float mouseSensitivity = 1.0f;
+    float eyeHeight = 5.0f;
+};
+
 struct SectorTopologyMap {
     std::unordered_map<std::string, SectorTextureDefinition> texturesById;
     std::vector<SectorTopologyVertex> vertices;
@@ -18,6 +25,7 @@ struct SectorTopologyMap {
     std::vector<SectorTopologySideDef> sideDefs;
     std::vector<SectorTopologySector> sectors;
     std::vector<SectorTopologyStaticPointLight> staticLights;
+    SectorPreviewSettings previewSettings;
     SectorLightmapBakeSettings lightmapSettings;
     SectorLightmapMetadata bakedLightmap;
 };
@@ -36,6 +44,9 @@ struct SectorTopologyIndexes {
 };
 
 SectorTopologyIndexes BuildSectorTopologyIndexes(const SectorTopologyMap& map);
+
+SectorPreviewSettings DefaultSectorPreviewSettings();
+SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings settings);
 
 bool IsValidSectorTopologyId(int id);
 const char* SectorTopologySideKindName(SectorTopologySideKind side);

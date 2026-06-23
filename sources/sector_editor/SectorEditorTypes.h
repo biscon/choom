@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/ui/UI.h"
+#include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshPreview.h"
 #include "sector_demo/SectorPointTypes.h"
@@ -39,6 +40,11 @@ enum class PendingSectorDrawKind {
 enum class SectorEditorMode {
     Edit2D,
     Preview3D
+};
+
+enum class SectorPreviewControlMode {
+    FreeFly,
+    Gameplay
 };
 
 struct PendingSectorDraw {
@@ -216,6 +222,16 @@ struct DecalTintModalState {
     std::string errorMessage;
 };
 
+struct SectorPreviewSettingsModalState {
+    bool open = false;
+    SectorFpsControllerConfig draftConfig;
+    engine::UIFloatInputState walkSpeedInput;
+    engine::UIFloatInputState runSpeedInput;
+    engine::UIFloatInputState mouseSensitivityInput;
+    engine::UIFloatInputState eyeHeightInput;
+    std::string errorMessage;
+};
+
 struct VertexDragState {
     bool active = false;
     int topologyVertexId = -1;
@@ -329,6 +345,9 @@ struct SectorEditorState {
     bool hasUnsavedChanges = false;
     bool useBakedAmbientOcclusion = true;
     bool previewUiHidden = false;
+    SectorPreviewControlMode previewControlMode = SectorPreviewControlMode::FreeFly;
+    SectorFpsControllerConfig fpsControllerConfig;
+    SectorFpsControllerState fpsControllerState;
     bool hasPreviewPose = false;
     SectorMeshPreviewPose lastPreviewPose = {};
     SectorSurfaceHit hoveredSurface3D;
@@ -344,6 +363,7 @@ struct SectorEditorState {
     LoadLevelModalState loadLevelModal;
     ConfirmationModalState confirmationModal;
     DecalTintModalState decalTintModal;
+    SectorPreviewSettingsModalState previewSettingsModal;
 };
 
 struct SectorEditorUiState {

@@ -1,10 +1,28 @@
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace game {
 namespace {
+
+constexpr float PreviewWalkSpeedMin = 0.1f;
+constexpr float PreviewWalkSpeedMax = 100.0f;
+constexpr float PreviewRunSpeedMin = 0.1f;
+constexpr float PreviewRunSpeedMax = 200.0f;
+constexpr float PreviewMouseSensitivityMin = 0.01f;
+constexpr float PreviewMouseSensitivityMax = 20.0f;
+constexpr float PreviewEyeHeightMin = 0.1f;
+constexpr float PreviewEyeHeightMax = 20.0f;
+
+float ClampFinite(float value, float fallback, float minValue, float maxValue)
+{
+    if (!std::isfinite(value)) {
+        value = fallback;
+    }
+    return std::clamp(value, minValue, maxValue);
+}
 
 template<typename T>
 int AllocateNextId(const std::vector<T>& values)
@@ -53,6 +71,37 @@ T* FindById(std::vector<T>& values, int id)
 }
 
 } // namespace
+
+SectorPreviewSettings DefaultSectorPreviewSettings()
+{
+    return SectorPreviewSettings{};
+}
+
+SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings settings)
+{
+    const SectorPreviewSettings defaults = DefaultSectorPreviewSettings();
+    settings.walkSpeed = ClampFinite(
+            settings.walkSpeed,
+            defaults.walkSpeed,
+            PreviewWalkSpeedMin,
+            PreviewWalkSpeedMax);
+    settings.runSpeed = ClampFinite(
+            settings.runSpeed,
+            defaults.runSpeed,
+            PreviewRunSpeedMin,
+            PreviewRunSpeedMax);
+    settings.mouseSensitivity = ClampFinite(
+            settings.mouseSensitivity,
+            defaults.mouseSensitivity,
+            PreviewMouseSensitivityMin,
+            PreviewMouseSensitivityMax);
+    settings.eyeHeight = ClampFinite(
+            settings.eyeHeight,
+            defaults.eyeHeight,
+            PreviewEyeHeightMin,
+            PreviewEyeHeightMax);
+    return settings;
+}
 
 SectorTopologyIndexes BuildSectorTopologyIndexes(const SectorTopologyMap& map)
 {

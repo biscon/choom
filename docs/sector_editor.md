@@ -415,11 +415,24 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 3D controls:
 
 - `F11`: toggle mouse-look/captured cursor mode.
+- `F3`: toggle `FreeFly` / `Gameplay` preview controls.
 - `F1`: toggle baked ambient-occlusion display.
 - `Tab` or `Escape`: return to 2D mode.
-- In mouse-look mode: `WASD` move, mouse looks, `Space` moves up, `Ctrl` moves
-  down.
+- In `FreeFly` mouse-look mode: `WASD` move, mouse looks, `Space` moves up,
+  `Ctrl` moves down.
+- In `Gameplay` mouse-look mode: `WASD` moves horizontally relative to yaw,
+  mouse looks, and `Shift` uses run speed. Gameplay mode is still noclip:
+  it has no collision, gravity, stepping, jumping, floor snapping, or current-sector
+  tracking.
 - In visible-cursor mode: click generated surfaces to select/edit them.
+
+The left tools pane `Settings` button opens editor-session preview settings.
+The same settings are available from the 3D preview overlay while its UI is
+visible. The modal edits walk speed, run speed, mouse sensitivity, and camera
+eye height. The gameplay controller stores a feet/body position; the camera eye
+is computed by adding the configured eye height. Changing eye height while in
+Gameplay keeps the feet/body position fixed, so the camera moves up or down
+immediately for tuning.
 
 3D picking maps generated surfaces back to topology:
 
@@ -502,8 +515,8 @@ deferred.
 - No external texture import/copy; texture files must already exist under
   `assets/images`.
 - No player-start editing in the sector editor.
-- No gameplay mode.
-- No collision or floor-constrained 3D preview movement.
+- Gameplay preview mode is noclip only; collision, gravity, floor-constrained
+  movement, stepping, jumping, and current-sector tracking are deferred.
 - No dynamic runtime lights or dynamic shadows.
 - No middle collision/blocking flags, translucent glass, depth sorting, middle
   texture decals, middle emissive/tint/bloom controls, or middle Copy/Paste
