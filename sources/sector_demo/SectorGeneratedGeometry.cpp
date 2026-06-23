@@ -414,7 +414,7 @@ bool BuildTopologyMiddleSurface(
     outSurface.decalBloomIntensity = 1.0f;
     outSurface.alphaTest = true;
     outSurface.alphaCutoff = 0.5f;
-    outSurface.receivesLightmap = false;
+    outSurface.receivesLightmap = true;
     return true;
 }
 

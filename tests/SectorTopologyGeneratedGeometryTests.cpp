@@ -334,8 +334,8 @@ void TestSingleAssignedMiddleTextureGeneratesBothFacings()
                   && Near(front->normal, Vector3{-1.0f, 0.0f, 0.0f})
                   && Near(back->normal, Vector3{1.0f, 0.0f, 0.0f}),
           "middle surfaces face opposite portal sides");
-    Check(front != nullptr && front->alphaTest && !front->receivesLightmap,
-          "middle surface is alpha-tested and unlightmapped");
+    Check(front != nullptr && front->alphaTest && Near(front->alphaCutoff, 0.5f) && front->receivesLightmap,
+          "middle surface is alpha-tested and receives lightmaps");
 }
 
 void TestBackAssignedMiddleTextureGeneratesOwnerRefs()

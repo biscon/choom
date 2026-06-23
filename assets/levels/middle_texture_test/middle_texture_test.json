@@ -636,13 +636,13 @@
     {
       "id": 1,
       "position": [
-        48.0,
+        32.0,
         14.399999618530273,
         32.0
       ],
       "radius": 64.0,
       "sourceRadius": 2.0,
-      "intensity": 3.0,
+      "intensity": 2.0,
       "color": {
         "r": 255,
         "g": 255,
@@ -661,6 +661,6 @@
     "path": "assets/levels/middle_texture_test/middle_texture_test.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "3c888feeaa4e44a7"
+    "sourceHash": "c8b2f6e5b2690e10"
   }
 }

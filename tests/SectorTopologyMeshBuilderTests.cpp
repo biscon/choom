@@ -272,7 +272,7 @@ game::SectorGeneratedSurface MakeMiddleBatchTestSurface(const char* textureId, f
     surface.ref.kind = game::SectorGeneratedSurfaceKind::Middle;
     surface.alphaTest = true;
     surface.alphaCutoff = 0.5f;
-    surface.receivesLightmap = false;
+    surface.receivesLightmap = true;
     return surface;
 }
 
@@ -469,7 +469,7 @@ void TestMiddleTextureBatchState()
 
     const game::SectorMeshBatchDataResult result = game::BuildSectorMeshBatchData(geometry);
     Check(result.batches.size() == 2,
-          "alpha test and lightmap participation split middle textures from opaque walls");
+          "alpha test splits middle textures from opaque walls");
 
     const game::SectorMeshBatchData* opaqueBatch = nullptr;
     const game::SectorMeshBatchData* middleBatch = nullptr;
@@ -486,8 +486,8 @@ void TestMiddleTextureBatchState()
 
     Check(opaqueBatch != nullptr && !opaqueBatch->alphaTest && opaqueBatch->receivesLightmap,
           "ordinary wall batch remains opaque and lightmapped");
-    Check(middleBatch != nullptr && middleBatch->alphaTest && !middleBatch->receivesLightmap,
-          "middle texture batch stores alpha-test and unlightmapped state");
+    Check(middleBatch != nullptr && middleBatch->alphaTest && middleBatch->receivesLightmap,
+          "middle texture batch stores alpha-test and lightmapped state");
     Check(middleBatch != nullptr && Near(middleBatch->alphaCutoff, 0.5f),
           "middle texture batch stores alpha cutoff");
     Check(middleBatch != nullptr && middleBatch->vertices.size() == 6,

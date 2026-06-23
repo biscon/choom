@@ -449,6 +449,11 @@ bool BuildSectorLightmapBvh(
     return BuildBvhNode(outBvh, triangles, 0, static_cast<int>(triangles.size()), 0, outStats, outError) >= 0;
 }
 
+bool CastsLightmapOcclusion(const SectorGeneratedSurface& surface)
+{
+    return surface.ref.kind != SectorGeneratedSurfaceKind::Middle;
+}
+
 bool IntersectRayAabb(const Ray& ray, const BakeAabb& bounds, float maxDistance, float& outEntryDistance)
 {
     if (maxDistance <= 0.0f || !std::isfinite(maxDistance)
@@ -923,7 +928,7 @@ std::vector<BakeTriangle> BuildBakeTriangles(const SectorGeneratedGeometry& geom
             continue;
         }
         const SectorGeneratedSurface& surface = geometry.surfaces[surfaceIndex];
-        if (surface.ref.kind == SectorGeneratedSurfaceKind::Middle) {
+        if (!CastsLightmapOcclusion(surface)) {
             continue;
         }
         const SectorLightmapChart& chart = layout.charts[surfaceIndex];
@@ -1160,7 +1165,7 @@ bool BuildSectorLightmapLayoutFromGeometry(
 
     for (size_t surfaceIndex = 0; surfaceIndex < geometry.surfaces.size(); ++surfaceIndex) {
         const SectorGeneratedSurface& surface = geometry.surfaces[surfaceIndex];
-        if (surface.ref.kind == SectorGeneratedSurfaceKind::Middle) {
+        if (!surface.receivesLightmap) {
             continue;
         }
         const int usableWidth = std::max(2, static_cast<int>(std::ceil(surface.chartWidth * SectorLightmapTexelsPerWorldUnit)));
@@ -1302,6 +1307,7 @@ std::vector<std::string> SortedReferencedLightmapTextureIds(const SectorTopology
         AddReferencedLightmapTexture(referenced, sideDef.wall.textureId);
         AddReferencedLightmapTexture(referenced, sideDef.lower.textureId);
         AddReferencedLightmapTexture(referenced, sideDef.upper.textureId);
+        AddReferencedLightmapTexture(referenced, sideDef.middle.textureId);
     }
     for (const SectorTopologySector& sector : map.sectors) {
         AddReferencedLightmapTexture(referenced, sector.floorTextureId);
@@ -1895,6 +1901,7 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
         FnvAppendTopologyWallPart(hash, sideDef->wall);
         FnvAppendTopologyWallPart(hash, sideDef->lower);
         FnvAppendTopologyWallPart(hash, sideDef->upper);
+        FnvAppendTopologyWallPart(hash, sideDef->middle);
     }
 
     const std::vector<const SectorTopologySector*> sectors = SortedLightmapHashRecords(map.sectors);

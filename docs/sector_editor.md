@@ -474,11 +474,12 @@ for the bake. If the document changed during the bake, the temporary result is
 discarded.
 
 The source hash is deterministic over the topology lightmap bake version
-(`6`), atlas and sample constants, coordinate subdivision value, map texture
+(`7`), atlas and sample constants, coordinate subdivision value, map texture
 definitions referenced by baked surface fields, vertex/linedef/sidedef/sector
 IDs and geometry, sector and sidedef texture and UV fields, static lights, and
-bake settings. It does not include middle texture data or the installed
-baked-lightmap metadata itself.
+bake settings. Middle texture receiver data is included because it affects
+lightmap chart layout. The hash does not include the installed baked-lightmap
+metadata itself.
 
 The baked PNG stores direct static-light contribution and one-bounce indirect
 light in RGB, and ambient occlusion in alpha. 3D Mode uses a baked atlas only
@@ -487,10 +488,13 @@ matches the current topology. Otherwise the preview falls back to sector ambient
 lighting.
 
 Equal-height portals generate no wall surface and therefore no wall lightmap
-chart.
-Middle texture surfaces also do not allocate lightmap charts, cast baked
-shadows, or occlude lightmap rays. In 3D Mode they render with the same ambient
-fallback used by unlightmapped surfaces.
+chart unless they have an assigned middle texture.
+Middle texture surfaces allocate lightmap charts and receive baked light on
+their opaque alpha-tested pixels. They remain cutout surfaces: transparent
+texture pixels are discarded during rendering, so the lightmap does not need
+alpha for the holes. Middle texture surfaces do not cast baked shadows or
+occlude lightmap rays yet; alpha-aware middle texture shadow casting is
+deferred.
 
 ## Current Limitations
 
