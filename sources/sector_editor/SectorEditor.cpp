@@ -4310,7 +4310,7 @@ void SectorEditor::DrawPreviewOverlay(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
-    const Rectangle panel{32.0f, 32.0f, 860.0f, 172.0f};
+    const Rectangle panel{32.0f, 32.0f, 980.0f, 202.0f};
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
@@ -4353,26 +4353,26 @@ void SectorEditor::DrawPreviewOverlay(
     if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
         if (state.sectorCollisionWorldValid) {
             if (state.previewCollisionNoclipFallback) {
-                collisionStatus = " | Gameplay no sector | noclip";
+                collisionStatus = "Gameplay collision: no sector | noclip";
             } else if (state.fpsControllerState.currentSectorId == 0
                     || !state.previewVerticalResult.hasSector) {
-                collisionStatus = " | collision on | no sector";
+                collisionStatus = "Gameplay collision: on | no sector";
             } else {
                 std::string blockText;
                 if (state.previewMoveResult.hitWall) {
-                    blockText += " wall";
+                    blockText += "wall ";
                 }
                 if (state.previewMoveResult.blockedByStep) {
-                    blockText += " step";
+                    blockText += "step ";
                 }
                 if (state.previewMoveResult.blockedByCeiling) {
-                    blockText += " ceiling";
+                    blockText += "ceiling ";
                 }
                 if (blockText.empty()) {
-                    blockText = " clear";
+                    blockText = "clear";
                 }
                 collisionStatus = TextFormat(
-                        " | collision on | sector %d | %s%s | v:%s |%s | r %.2f step %.2f | floor %.2f | feet %.2f | vel %.2f | gravity %.1f",
+                        "Gameplay collision: sector %d | %s%s | vertical %s | block %s | r %.2f step %.2f | floor %.2f feet %.2f vel %.2f",
                         state.fpsControllerState.currentSectorId,
                         state.previewVerticalResult.cannotFit
                                 ? "cannot fit"
@@ -4384,11 +4384,10 @@ void SectorEditor::DrawPreviewOverlay(
                         state.fpsControllerConfig.stepHeight,
                         state.previewVerticalResult.floorZ,
                         state.fpsControllerState.feetPosition.y,
-                        state.fpsControllerState.verticalVelocity,
-                        state.fpsControllerConfig.gravity);
+                        state.fpsControllerState.verticalVelocity);
             }
         } else {
-            collisionStatus = " | collision unavailable";
+            collisionStatus = "Gameplay collision: unavailable";
         }
     }
     engine::Text(
@@ -4397,15 +4396,23 @@ void SectorEditor::DrawPreviewOverlay(
             Rectangle{panel.x + 18.0f, panel.y + 92.0f, panel.width - 36.0f, 30.0f},
             font,
             TextFormat(
-                    "pos %.2f %.2f %.2f | sectors %zu | batches %zu | triangles %d%s",
+                    "pos %.2f %.2f %.2f | sectors %zu | batches %zu | triangles %d",
                     position.x,
                     position.y,
                     position.z,
                     preview.SectorCount(),
                     preview.BatchCount(),
-                    preview.TriangleCount(),
-                    collisionStatus.c_str()
+                    preview.TriangleCount()
             ),
+            engine::UITextJustify::Left,
+            config.mutedTextColor
+    );
+    engine::Text(
+            config,
+            assets,
+            Rectangle{panel.x + 18.0f, panel.y + 122.0f, panel.width - 36.0f, 30.0f},
+            font,
+            collisionStatus.empty() ? "3D collision: FreeFly noclip" : collisionStatus.c_str(),
             engine::UITextJustify::Left,
             config.mutedTextColor
     );
@@ -4416,7 +4423,7 @@ void SectorEditor::DrawPreviewOverlay(
     engine::Text(
             config,
             assets,
-            Rectangle{panel.x + 18.0f, panel.y + 130.0f, panel.width - 36.0f, 30.0f},
+            Rectangle{panel.x + 18.0f, panel.y + 160.0f, panel.width - 36.0f, 30.0f},
             font,
             state.previewControlMode == SectorPreviewControlMode::Gameplay
                     ? TextFormat(
