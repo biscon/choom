@@ -12,6 +12,8 @@ namespace {
 constexpr float MouseRadiansPerPixel = 0.0030f;
 constexpr float PitchLimitRadians = 1.55334306f;
 constexpr float FloorTransitionEpsilon = 0.001f;
+constexpr float StepSmoothingRate = 16.0f;
+constexpr float VisualStepOffsetEpsilon = 0.0001f;
 
 float ClampFinite(float value, float fallback, float minValue, float maxValue)
 {
@@ -22,6 +24,11 @@ float ClampFinite(float value, float fallback, float minValue, float maxValue)
 }
 
 } // namespace
+
+float DefaultSectorFpsStepSmoothingRate()
+{
+    return StepSmoothingRate;
+}
 
 SectorFpsControllerConfig DefaultSectorFpsControllerConfig()
 {
@@ -92,6 +99,16 @@ SectorMeshPreviewPose SectorFpsControllerPose(
     };
 }
 
+SectorMeshPreviewPose SectorFpsControllerVisualPose(
+        const SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        float visualStepOffsetY)
+{
+    SectorMeshPreviewPose pose = SectorFpsControllerPose(state, config);
+    pose.position.y += visualStepOffsetY;
+    return pose;
+}
+
 SectorFpsControllerState SectorFpsControllerStateFromCameraPose(
         const SectorMeshPreviewPose& pose,
         const SectorFpsControllerConfig& config)
@@ -105,6 +122,71 @@ SectorFpsControllerState SectorFpsControllerStateFromCameraPose(
             false,
             0.0f
     };
+}
+
+bool SectorFpsTransitionStartsVisualStepSmoothing(SectorFpsVerticalTransition transition)
+{
+    return transition == SectorFpsVerticalTransition::SteppedUp
+            || transition == SectorFpsVerticalTransition::SnappedDown;
+}
+
+bool SectorFpsTransitionClearsVisualStepSmoothing(SectorFpsVerticalTransition transition)
+{
+    return transition == SectorFpsVerticalTransition::StartedDrop
+            || transition == SectorFpsVerticalTransition::Landed
+            || transition == SectorFpsVerticalTransition::CeilingBonk
+            || transition == SectorFpsVerticalTransition::CannotFit;
+}
+
+float CaptureSectorFpsVisualStepOffset(
+        float previousVisualEyeY,
+        const SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config)
+{
+    return previousVisualEyeY - SectorFpsControllerEyePosition(state, config).y;
+}
+
+void DecaySectorFpsVisualStepOffset(
+        float& visualStepOffsetY,
+        float smoothingRate,
+        float dt)
+{
+    if (visualStepOffsetY == 0.0f) {
+        return;
+    }
+    if (smoothingRate <= 0.0f || dt <= 0.0f) {
+        return;
+    }
+
+    visualStepOffsetY *= std::exp(-smoothingRate * dt);
+    if (std::fabs(visualStepOffsetY) < VisualStepOffsetEpsilon) {
+        visualStepOffsetY = 0.0f;
+    }
+}
+
+void ApplySectorFpsVisualStepSmoothing(
+        float& visualStepOffsetY,
+        SectorFpsVerticalTransition transition,
+        float previousVisualEyeY,
+        const SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        float smoothingRate,
+        float dt)
+{
+    if (SectorFpsTransitionStartsVisualStepSmoothing(transition)) {
+        visualStepOffsetY = CaptureSectorFpsVisualStepOffset(
+                previousVisualEyeY,
+                state,
+                config);
+        return;
+    }
+
+    if (SectorFpsTransitionClearsVisualStepSmoothing(transition)) {
+        visualStepOffsetY = 0.0f;
+        return;
+    }
+
+    DecaySectorFpsVisualStepOffset(visualStepOffsetY, smoothingRate, dt);
 }
 
 void UpdateSectorFpsMouseLook(

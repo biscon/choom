@@ -54,6 +54,110 @@ void TestPoseConversions()
             "fps state to camera pose adds eye height");
 }
 
+void TestVisualStepSmoothingCapturesSteppedUpContinuity()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{2.0f, 4.2f, 3.0f};
+    state.yawRadians = 0.25f;
+    state.pitchRadians = -0.1f;
+    game::SectorFpsControllerConfig config;
+    config.eyeHeight = 1.2f;
+    const float previousVisualEyeY = 5.2f;
+
+    float offset = 0.0f;
+    game::ApplySectorFpsVisualStepSmoothing(
+            offset,
+            game::SectorFpsVerticalTransition::SteppedUp,
+            previousVisualEyeY,
+            state,
+            config,
+            game::DefaultSectorFpsStepSmoothingRate(),
+            0.016f);
+    const game::SectorMeshPreviewPose visualPose =
+            game::SectorFpsControllerVisualPose(state, config, offset);
+
+    Check(Near(offset, -0.2f), "stepped-up smoothing captures negative continuity offset");
+    Check(Near(visualPose.position.y, previousVisualEyeY),
+          "stepped-up smoothing preserves initial visual eye height");
+    Check(Near(state.feetPosition, Vector3{2.0f, 4.2f, 3.0f}),
+          "stepped-up smoothing does not mutate physics feet");
+}
+
+void TestVisualStepSmoothingCapturesSnappedDownContinuity()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{2.0f, 3.8f, 3.0f};
+    game::SectorFpsControllerConfig config;
+    config.eyeHeight = 1.2f;
+    const float previousVisualEyeY = 5.2f;
+
+    float offset = 0.0f;
+    game::ApplySectorFpsVisualStepSmoothing(
+            offset,
+            game::SectorFpsVerticalTransition::SnappedDown,
+            previousVisualEyeY,
+            state,
+            config,
+            game::DefaultSectorFpsStepSmoothingRate(),
+            0.016f);
+    const game::SectorMeshPreviewPose visualPose =
+            game::SectorFpsControllerVisualPose(state, config, offset);
+
+    Check(Near(offset, 0.2f), "snapped-down smoothing captures positive continuity offset");
+    Check(Near(visualPose.position.y, previousVisualEyeY),
+          "snapped-down smoothing preserves initial visual eye height");
+    Check(Near(state.feetPosition, Vector3{2.0f, 3.8f, 3.0f}),
+          "snapped-down smoothing does not mutate physics feet");
+}
+
+void TestVisualStepSmoothingDecayAndClearTransitions()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{0.0f, 4.0f, 0.0f};
+    game::SectorFpsControllerConfig config;
+    config.eyeHeight = 1.2f;
+
+    float offset = 0.25f;
+    game::ApplySectorFpsVisualStepSmoothing(
+            offset,
+            game::SectorFpsVerticalTransition::StayedGrounded,
+            5.45f,
+            state,
+            config,
+            game::DefaultSectorFpsStepSmoothingRate(),
+            0.05f);
+    Check(offset > 0.0f && offset < 0.25f, "visual step smoothing decays toward zero");
+
+    game::ApplySectorFpsVisualStepSmoothing(
+            offset,
+            game::SectorFpsVerticalTransition::StayedGrounded,
+            5.45f,
+            state,
+            config,
+            game::DefaultSectorFpsStepSmoothingRate(),
+            1.0f);
+    Check(Near(offset, 0.0f), "visual step smoothing snaps tiny offsets to zero");
+
+    const game::SectorFpsVerticalTransition clearTransitions[] = {
+            game::SectorFpsVerticalTransition::StartedDrop,
+            game::SectorFpsVerticalTransition::Landed,
+            game::SectorFpsVerticalTransition::CeilingBonk,
+            game::SectorFpsVerticalTransition::CannotFit
+    };
+    for (const game::SectorFpsVerticalTransition transition : clearTransitions) {
+        offset = 0.25f;
+        game::ApplySectorFpsVisualStepSmoothing(
+                offset,
+                transition,
+                5.45f,
+                state,
+                config,
+                game::DefaultSectorFpsStepSmoothingRate(),
+                0.05f);
+        Check(Near(offset, 0.0f), "visual step smoothing clears for non-step vertical transitions");
+    }
+}
+
 void TestForwardMovementIgnoresPitchAndPreservesY()
 {
     game::SectorFpsControllerState state;
@@ -405,6 +509,9 @@ int main()
 {
     TestEyePositionUsesFeetAndEyeHeight();
     TestPoseConversions();
+    TestVisualStepSmoothingCapturesSteppedUpContinuity();
+    TestVisualStepSmoothingCapturesSnappedDownContinuity();
+    TestVisualStepSmoothingDecayAndClearTransitions();
     TestForwardMovementIgnoresPitchAndPreservesY();
     TestRunAndWalkSpeeds();
     TestMouseLookRawDeltaAndPitchClamp();

@@ -361,6 +361,7 @@ struct SectorEditorState {
     SectorFpsVerticalResult previewVerticalResult;
     SectorCollisionMoveResult previewMoveResult;
     bool previewCollisionNoclipFallback = false;
+    float visualStepOffsetY = 0.0f;
     bool hasPreviewPose = false;
     SectorMeshPreviewPose lastPreviewPose = {};
     SectorSurfaceHit hoveredSurface3D;

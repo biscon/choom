@@ -475,18 +475,22 @@ world units. Gravity uses a positive magnitude; `0` disables falling and also
 prevents jumps from adding lift.
 
 Grounded Gameplay movement snaps feet to same-height floors and small up/down
-floor changes within step height. Larger drops start falling under gravity;
-jumping is grounded-only and sets vertical velocity from
-`sqrt(2 * gravity * jumpHeight)`. Airborne players do not auto-step upward
-through higher-floor portals; they can pass only when the current vertical
-cylinder already fits the destination sector. Same-floor and small upward
-portals within step height are passable while grounded, too-high upward portals
-block, low-ceiling portals block, and downward portals are passable for now.
-Ceiling bonks clamp the player below the ceiling and clear upward velocity. The
-Gameplay overlay reports collision state, current sector, grounded/jumping/falling
-state, recent vertical transition, recent wall/step/ceiling blocks, radius, step
-height, jump height, floor, feet, velocity, and gravity in runtime world-space
-values.
+floor changes within step height. The physics feet/body position still snaps
+immediately for collision correctness, but the rendered Gameplay camera eases
+small step-up and snap-down eye-height changes visually. Larger drops start
+falling under gravity and are not step-smoothed; jumping is grounded-only and
+sets vertical velocity from `sqrt(2 * gravity * jumpHeight)`. Airborne players
+do not auto-step upward through higher-floor portals; they can pass only when
+the current vertical cylinder already fits the destination sector. Same-floor
+and small upward portals within step height are passable while grounded,
+too-high upward portals block, low-ceiling portals block, and downward portals
+are passable for now. Ceiling bonks clamp the player below the ceiling and
+clear upward velocity. Step smoothing does not apply to jumps, landings,
+ceiling bonks, cannot-fit cases, no-sector fallback, or FreeFly controls. Head
+bobbing remains deferred. The Gameplay overlay reports collision state,
+current sector, grounded/jumping/falling state, recent vertical transition,
+recent wall/step/ceiling blocks, radius, step height, jump height, floor, feet,
+velocity, and gravity in runtime world-space values.
 
 3D picking maps generated surfaces back to topology:
 

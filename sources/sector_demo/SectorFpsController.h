@@ -65,6 +65,7 @@ struct SectorFpsVerticalResult {
     SectorFpsVerticalTransition transition = SectorFpsVerticalTransition::None;
 };
 
+float DefaultSectorFpsStepSmoothingRate();
 SectorFpsControllerConfig DefaultSectorFpsControllerConfig();
 SectorFpsControllerConfig NormalizeSectorFpsControllerConfig(SectorFpsControllerConfig config);
 SectorFpsControllerConfig SectorFpsControllerConfigFromPreviewSettings(
@@ -78,9 +79,31 @@ Vector3 SectorFpsControllerEyePosition(
 SectorMeshPreviewPose SectorFpsControllerPose(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config);
+SectorMeshPreviewPose SectorFpsControllerVisualPose(
+        const SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        float visualStepOffsetY);
 SectorFpsControllerState SectorFpsControllerStateFromCameraPose(
         const SectorMeshPreviewPose& pose,
         const SectorFpsControllerConfig& config);
+bool SectorFpsTransitionStartsVisualStepSmoothing(SectorFpsVerticalTransition transition);
+bool SectorFpsTransitionClearsVisualStepSmoothing(SectorFpsVerticalTransition transition);
+float CaptureSectorFpsVisualStepOffset(
+        float previousVisualEyeY,
+        const SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config);
+void DecaySectorFpsVisualStepOffset(
+        float& visualStepOffsetY,
+        float smoothingRate,
+        float dt);
+void ApplySectorFpsVisualStepSmoothing(
+        float& visualStepOffsetY,
+        SectorFpsVerticalTransition transition,
+        float previousVisualEyeY,
+        const SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        float smoothingRate,
+        float dt);
 Vector2 ComputeSectorFpsHorizontalMovementDelta(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
