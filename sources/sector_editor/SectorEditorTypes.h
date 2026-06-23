@@ -234,6 +234,7 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState playerRadiusInput;
     engine::UIFloatInputState playerHeightInput;
     engine::UIFloatInputState stepHeightInput;
+    engine::UIFloatInputState jumpHeightInput;
     std::string errorMessage;
 };
 

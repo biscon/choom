@@ -657,6 +657,17 @@
     "indirectBounceRadius": 12.0,
     "indirectBounceStrength": 0.0
   },
+  "previewSettings": {
+    "walkSpeed": 4.0,
+    "runSpeed": 6.0,
+    "mouseSensitivity": 0.5,
+    "eyeHeight": 1.600000023841858,
+    "gravity": 25.0,
+    "playerRadius": 0.25,
+    "playerHeight": 1.75,
+    "stepHeight": 0.25,
+    "jumpHeight": 0.6000000238418579
+  },
   "bakedLightmap": {
     "path": "assets/levels/middle_texture_test/middle_texture_test.lightmap.png",
     "width": 2048,

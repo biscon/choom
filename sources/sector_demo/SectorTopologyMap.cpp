@@ -23,6 +23,8 @@ constexpr float PreviewPlayerHeightMin = 0.5f;
 constexpr float PreviewPlayerHeightMax = 3.0f;
 constexpr float PreviewStepHeightMin = 0.0f;
 constexpr float PreviewStepHeightMax = 2.0f;
+constexpr float PreviewJumpHeightMin = 0.0f;
+constexpr float PreviewJumpHeightMax = 3.0f;
 
 float ClampFinite(float value, float fallback, float minValue, float maxValue)
 {
@@ -129,6 +131,11 @@ SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings setti
             defaults.stepHeight,
             PreviewStepHeightMin,
             PreviewStepHeightMax);
+    settings.jumpHeight = ClampFinite(
+            settings.jumpHeight,
+            defaults.jumpHeight,
+            PreviewJumpHeightMin,
+            PreviewJumpHeightMax);
     return settings;
 }
 

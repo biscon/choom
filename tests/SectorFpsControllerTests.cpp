@@ -114,6 +114,7 @@ void TestConfigNormalization()
     config.playerRadius = -1.0f;
     config.playerHeight = NAN;
     config.stepHeight = 99.0f;
+    config.jumpHeight = 99.0f;
     config = game::NormalizeSectorFpsControllerConfig(config);
     Check(Near(config.walkSpeed, 0.1f), "walk speed clamps low");
     Check(Near(config.runSpeed, 200.0f), "run speed clamps high");
@@ -123,16 +124,21 @@ void TestConfigNormalization()
     Check(Near(config.playerRadius, 0.05f), "player radius clamps low");
     Check(Near(config.playerHeight, 1.6f), "non-finite player height uses default");
     Check(Near(config.stepHeight, 2.0f), "step height clamps high");
+    Check(Near(config.jumpHeight, 3.0f), "jump height clamps high");
 
     config.gravity = -5.0f;
+    config.jumpHeight = -5.0f;
     config = game::NormalizeSectorFpsControllerConfig(config);
     Check(Near(config.gravity, 0.0f), "gravity clamps low");
+    Check(Near(config.jumpHeight, 0.0f), "jump height clamps low");
 
     config.gravity = INFINITY;
+    config.jumpHeight = INFINITY;
     config.eyeHeight = 2.2f;
     config.playerHeight = 1.0f;
     config = game::NormalizeSectorFpsControllerConfig(config);
     Check(Near(config.gravity, 25.0f), "non-finite gravity uses default");
+    Check(Near(config.jumpHeight, 0.6f), "non-finite jump height uses default");
     Check(Near(config.playerHeight, 2.2f), "player height is at least eye height");
     Check(Near(game::DefaultSectorFpsControllerConfig().gravity, 25.0f),
           "default gravity is 25");
@@ -142,6 +148,58 @@ void TestConfigNormalization()
           "default player height is 1.6 world units");
     Check(Near(game::DefaultSectorFpsControllerConfig().stepHeight, 0.25f),
           "default step height is 0.25 world units");
+    Check(Near(game::DefaultSectorFpsControllerConfig().jumpHeight, 0.6f),
+          "default jump height is 0.6 world units");
+}
+
+void TestJumpStart()
+{
+    game::SectorFpsControllerState state;
+    state.grounded = true;
+    state.verticalVelocity = -3.0f;
+    game::SectorFpsControllerConfig config;
+    config.gravity = 25.0f;
+    config.jumpHeight = 0.6f;
+
+    Check(game::TryStartSectorFpsJump(state, config), "grounded jump starts");
+    Check(!state.grounded, "jump start clears grounded");
+    Check(Near(state.verticalVelocity, std::sqrt(2.0f * 25.0f * 0.6f)),
+          "jump start computes velocity from gravity and jump height");
+
+    const float jumpVelocity = state.verticalVelocity;
+    Check(!game::TryStartSectorFpsJump(state, config), "airborne jump press does nothing");
+    Check(Near(state.verticalVelocity, jumpVelocity), "airborne jump preserves velocity");
+
+    state.grounded = true;
+    state.verticalVelocity = -3.0f;
+    config.gravity = 0.0f;
+    Check(!game::TryStartSectorFpsJump(state, config), "zero gravity jump does not start");
+    Check(state.grounded, "zero gravity jump preserves grounded");
+    Check(Near(state.verticalVelocity, -3.0f), "zero gravity jump preserves velocity");
+
+    config.gravity = 25.0f;
+    config.jumpHeight = 0.0f;
+    Check(!game::TryStartSectorFpsJump(state, config), "zero jump height jump does not start");
+    Check(state.grounded, "zero jump height preserves grounded");
+}
+
+void TestJumpInputUsesEdgePress()
+{
+    game::SectorFpsControllerState state;
+    state.grounded = true;
+    game::SectorFpsControllerConfig config;
+    config.gravity = 25.0f;
+    config.jumpHeight = 0.6f;
+    game::SectorFpsControllerInput input;
+    input.jumpPressed = true;
+
+    game::UpdateSectorFpsController(state, config, input, 0.0f);
+    const float firstVelocity = state.verticalVelocity;
+    Check(!state.grounded && firstVelocity > 0.0f, "jump input starts one jump");
+
+    game::UpdateSectorFpsController(state, config, input, 0.0f);
+    Check(Near(state.verticalVelocity, firstVelocity),
+          "held jump input does not restart while airborne");
 }
 
 void TestGroundedFloorTransitions()
@@ -240,6 +298,32 @@ void TestFallingAndLanding()
     Check(Near(state.verticalVelocity, 0.0f), "landing clears vertical velocity");
 }
 
+void TestJumpVerticalMotionAndLanding()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{0.0f, 0.0f, 0.0f};
+    state.grounded = true;
+    game::SectorFpsControllerConfig config;
+    config.gravity = 10.0f;
+    config.jumpHeight = 1.0f;
+    game::SectorFpsVerticalContext context{true, 0.0f, 20.0f};
+
+    Check(game::TryStartSectorFpsJump(state, config), "jump starts before vertical update");
+    const float jumpVelocity = state.verticalVelocity;
+    game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.1f);
+    Check(state.feetPosition.y > 0.0f, "jumping player moves upward on first update");
+    Check(state.verticalVelocity < jumpVelocity, "gravity reduces upward jump velocity");
+    Check(!state.grounded, "jumping player remains airborne above floor");
+
+    const game::SectorFpsVerticalResult result =
+            game::UpdateSectorFpsVerticalPhysics(state, config, context, 2.0f);
+    Check(result.transition == game::SectorFpsVerticalTransition::Landed,
+          "jumping player eventually lands");
+    Check(Near(state.feetPosition.y, 0.0f), "jumping player lands on floor");
+    Check(state.grounded, "jump landing sets grounded");
+    Check(Near(state.verticalVelocity, 0.0f), "jump landing clears velocity");
+}
+
 void TestZeroGravityDoesNotMoveVertically()
 {
     game::SectorFpsControllerState state;
@@ -268,10 +352,13 @@ void TestCeilingClamp()
     config.gravity = 0.0f;
     game::SectorFpsVerticalContext context{true, 0.0f, 20.0f};
 
-    game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
+    const game::SectorFpsVerticalResult result =
+            game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
     Check(Near(state.feetPosition.y, 17.0f), "ceiling clamp uses player height for maximum allowed feet height");
     Check(Near(state.verticalVelocity, 0.0f), "ceiling clamp clears upward velocity");
     Check(!state.grounded, "ceiling clamp does not mark airborne player grounded");
+    Check(result.transition == game::SectorFpsVerticalTransition::CeilingBonk,
+          "ceiling clamp reports ceiling bonk transition");
 }
 
 void TestCannotFitClampsToFloor()
@@ -322,8 +409,11 @@ int main()
     TestRunAndWalkSpeeds();
     TestMouseLookRawDeltaAndPitchClamp();
     TestConfigNormalization();
+    TestJumpStart();
+    TestJumpInputUsesEdgePress();
     TestGroundedFloorTransitions();
     TestFallingAndLanding();
+    TestJumpVerticalMotionAndLanding();
     TestZeroGravityDoesNotMoveVertically();
     TestCeilingClamp();
     TestCannotFitClampsToFloor();

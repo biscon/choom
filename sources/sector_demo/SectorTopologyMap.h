@@ -20,6 +20,7 @@ struct SectorPreviewSettings {
     float playerRadius = 0.25f;
     float playerHeight = 1.6f;
     float stepHeight = 0.25f;
+    float jumpHeight = 0.6f;
 };
 
 struct SectorTopologyMap {

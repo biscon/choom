@@ -448,32 +448,38 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 - In `FreeFly` mouse-look mode: `WASD` move, mouse looks, `Space` moves up,
   `Ctrl` moves down.
 - In `Gameplay` mouse-look mode: `WASD` moves horizontally relative to yaw,
-  mouse looks, and `Shift` uses run speed. Gameplay mode follows the current
-  sector floor, applies gravity while airborne, lands on floors, clamps against
-  ceilings, and resolves horizontal cylinder collision against topology walls
-  and height-valid portals. Jumping, crouching, slopes, collision flags, and
-  polished drop behavior are still deferred.
+  `Space` jumps, mouse looks, and `Shift` uses run speed. Gameplay mode follows
+  the current sector floor, applies gravity while airborne, lands on floors,
+  clamps against ceilings, and resolves horizontal cylinder collision against
+  topology walls and height-valid portals. Crouching, slopes, collision flags,
+  and polished drop behavior are still deferred.
 - In visible-cursor mode: click generated surfaces to select/edit them.
 
 The left tools pane `Settings` button opens editor-session preview settings.
 The same settings are available from the 3D preview overlay while its UI is
 visible. The modal edits walk speed, run speed, mouse sensitivity, camera eye
-height, gravity, player radius, player height, and step height. Gameplay
+height, gravity, player radius, player height, step height, and jump height. Gameplay
 Preview Settings use runtime/world units, not authored units. The gameplay
 controller stores a feet/body position; the camera eye is computed by adding
 the configured eye height, while player height is the collision cylinder height
 used for ceiling clearance. Player height is normalized to at least eye height.
-Step height defaults to `0.25` world units. Gravity uses a positive magnitude;
-`0` disables falling.
+Step height defaults to `0.25` world units. Jump height defaults to `0.6`
+world units. Gravity uses a positive magnitude; `0` disables falling and also
+prevents jumps from adding lift.
 
 Grounded Gameplay movement snaps feet to same-height floors and small up/down
 floor changes within step height. Larger drops start falling under gravity;
-jumping remains deferred. Same-floor and small upward portals within step height
-are passable, too-high upward portals block, low-ceiling portals block, and
-downward portals are passable for now. The Gameplay overlay reports collision
-state, current sector, grounded/falling state, recent vertical transition,
-recent wall/step/ceiling blocks, radius, step height, floor, feet, velocity, and
-gravity in runtime world-space values.
+jumping is grounded-only and sets vertical velocity from
+`sqrt(2 * gravity * jumpHeight)`. Airborne players do not auto-step upward
+through higher-floor portals; they can pass only when the current vertical
+cylinder already fits the destination sector. Same-floor and small upward
+portals within step height are passable while grounded, too-high upward portals
+block, low-ceiling portals block, and downward portals are passable for now.
+Ceiling bonks clamp the player below the ceiling and clear upward velocity. The
+Gameplay overlay reports collision state, current sector, grounded/jumping/falling
+state, recent vertical transition, recent wall/step/ceiling blocks, radius, step
+height, jump height, floor, feet, velocity, and gravity in runtime world-space
+values.
 
 3D picking maps generated surfaces back to topology:
 
@@ -557,9 +563,9 @@ deferred.
   `assets/images`.
 - No player-start editing in the sector editor.
 - Gameplay preview mode has topology-based horizontal cylinder collision,
-  portal height checks, floor following, and gravity. Jumping, crouching,
-  slopes, collision flags, middle-texture blocking, polished drop behavior, and
-  NPC navigation are deferred.
+  portal height checks, floor following, gravity, landing, ceiling clamp, and
+  grounded-only jumping. Crouching, slopes, collision flags, middle-texture
+  blocking, polished drop behavior, and NPC navigation are deferred.
 - No dynamic runtime lights or dynamic shadows.
 - No middle collision/blocking flags, translucent glass, depth sorting, middle
   texture decals, middle emissive/tint/bloom controls, or middle Copy/Paste

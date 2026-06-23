@@ -208,6 +208,8 @@ const char* VerticalTransitionName(SectorFpsVerticalTransition transition)
             return "drop";
         case SectorFpsVerticalTransition::Landed:
             return "landed";
+        case SectorFpsVerticalTransition::CeilingBonk:
+            return "ceiling";
         case SectorFpsVerticalTransition::BlockedStep:
             return "blocked step";
         case SectorFpsVerticalTransition::CannotFit:
@@ -2912,6 +2914,26 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
             controllerInput.run = input.IsKeyDown(KEY_LEFT_SHIFT) || input.IsKeyDown(KEY_RIGHT_SHIFT);
             controllerInput.mouseLookEnabled = preview.IsMouseLookEnabled();
             controllerInput.mouseDelta = input.MouseDelta();
+            const bool canConsumeGameplayJump =
+                    state.mode == SectorEditorMode::Preview3D
+                    && state.previewControlMode == SectorPreviewControlMode::Gameplay
+                    && !uiState.keyboardCaptured
+                    && !state.texturePicker.open
+                    && !state.decalTintModal.open
+                    && !state.previewSettingsModal.open;
+            if (canConsumeGameplayJump) {
+                input.ForEachEvent(
+                        engine::InputEventType::KeyPressed,
+                        true,
+                        [&controllerInput](engine::InputEvent& event) {
+                            if (event.key.key != KEY_SPACE) {
+                                return;
+                            }
+                            controllerInput.jumpPressed = true;
+                            engine::ConsumeEvent(event);
+                        }
+                );
+            }
             UpdateSectorFpsMouseLook(
                     state.fpsControllerState,
                     state.fpsControllerConfig,
@@ -2979,6 +3001,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                 state.fpsControllerState.feetPosition.z += desiredHorizontalMovement.y;
             }
             RefreshGameplaySectorAndVerticalContext();
+            if (controllerInput.jumpPressed) {
+                TryStartSectorFpsJump(state.fpsControllerState, state.fpsControllerConfig);
+            }
             state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
                     state.fpsControllerState,
                     state.fpsControllerConfig,
@@ -4337,7 +4362,7 @@ void SectorEditor::DrawPreviewOverlay(
     }
     const char* interactionText = preview.IsMouseLookEnabled()
             ? (state.previewControlMode == SectorPreviewControlMode::Gameplay
-                    ? "WASD move | Shift run | Mouse look | F3 FreeFly/Gameplay | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return"
+                    ? "WASD move | Space jump | Shift run | Mouse look | F3 FreeFly/Gameplay | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return"
                     : "WASD move | Mouse look | Space/Ctrl up/down | F3 FreeFly/Gameplay | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return")
             : "F1 AO | F2 hide UI | F3 FreeFly/Gameplay | F11 cursor | click surface to select | Tab/Escape return";
     engine::Text(
@@ -4371,17 +4396,21 @@ void SectorEditor::DrawPreviewOverlay(
                 if (blockText.empty()) {
                     blockText = "clear";
                 }
+                const char* verticalState = state.previewVerticalResult.cannotFit
+                        ? "cannot fit"
+                        : (state.fpsControllerState.grounded
+                                ? "grounded"
+                                : (state.fpsControllerState.verticalVelocity > 0.0f ? "jumping" : "falling"));
                 collisionStatus = TextFormat(
-                        "Gameplay collision: sector %d | %s%s | vertical %s | block %s | r %.2f step %.2f | floor %.2f feet %.2f vel %.2f",
+                        "Gameplay collision: sector %d | %s%s | vertical %s | block %s | r %.2f step %.2f jump %.2f | floor %.2f feet %.2f vel %.2f",
                         state.fpsControllerState.currentSectorId,
-                        state.previewVerticalResult.cannotFit
-                                ? "cannot fit"
-                                : (state.fpsControllerState.grounded ? "grounded" : "falling"),
+                        verticalState,
                         state.previewVerticalResult.cannotFit ? " grounded" : "",
                         VerticalTransitionName(state.previewVerticalResult.transition),
                         blockText.c_str(),
                         state.fpsControllerConfig.playerRadius,
                         state.fpsControllerConfig.stepHeight,
+                        state.fpsControllerConfig.jumpHeight,
                         state.previewVerticalResult.floorZ,
                         state.fpsControllerState.feetPosition.y,
                         state.fpsControllerState.verticalVelocity);
@@ -4427,7 +4456,7 @@ void SectorEditor::DrawPreviewOverlay(
             font,
             state.previewControlMode == SectorPreviewControlMode::Gameplay
                     ? TextFormat(
-                            "assets %.0f%% | Lightmap: %s | AO: %s | walk %.1f | run %.1f | eye %.1f | height %.1f | gravity %.1f | %s%s",
+                            "assets %.0f%% | Lightmap: %s | AO: %s | walk %.1f | run %.1f | eye %.1f | height %.1f | gravity %.1f | jump %.1f | %s%s",
                             preview.AssetProgress(assets) * 100.0f,
                             preview.LightmapStatusText(),
                             state.useBakedAmbientOcclusion ? "on" : "off",
@@ -4436,6 +4465,7 @@ void SectorEditor::DrawPreviewOverlay(
                             state.fpsControllerConfig.eyeHeight,
                             state.fpsControllerConfig.playerHeight,
                             state.fpsControllerConfig.gravity,
+                            state.fpsControllerConfig.jumpHeight,
                             collisionWarningText,
                             state.topologyDocumentDirty ? " | unsaved changes" : "")
                     : TextFormat(
@@ -8090,9 +8120,9 @@ void SectorEditor::DrawPreviewSettingsModal(
     DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
     const Rectangle modal{
             (EditorWidth - 620.0f) * 0.5f,
-            (EditorHeight - 620.0f) * 0.5f,
+            (EditorHeight - 680.0f) * 0.5f,
             620.0f,
-            620.0f
+            680.0f
     };
     DrawRectangleRec(modal, Color{20, 24, 32, 248});
     DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
@@ -8200,12 +8230,20 @@ void SectorEditor::DrawPreviewSettingsModal(
             0.0f,
             2.0f,
             2);
+    drawFloat(
+            "sector_editor_preview_jump_height",
+            "Jump height",
+            modalState.draftConfig.jumpHeight,
+            modalState.jumpHeightInput,
+            0.0f,
+            3.0f,
+            2);
 
     if (!modalState.errorMessage.empty()) {
         engine::Text(
                 config,
                 assets,
-                Rectangle{modal.x + 30.0f, modal.y + 500.0f, modal.width - 60.0f, 36.0f},
+                Rectangle{modal.x + 30.0f, modal.y + 552.0f, modal.width - 60.0f, 36.0f},
                 font,
                 modalState.errorMessage.c_str(),
                 engine::UITextJustify::Left,
@@ -8224,6 +8262,7 @@ void SectorEditor::DrawPreviewSettingsModal(
         modalState.playerRadiusInput = engine::UIFloatInputState{};
         modalState.playerHeightInput = engine::UIFloatInputState{};
         modalState.stepHeightInput = engine::UIFloatInputState{};
+        modalState.jumpHeightInput = engine::UIFloatInputState{};
         modalState.errorMessage.clear();
     }
     okayRequested = okayRequested || engine::Button(
@@ -8871,14 +8910,15 @@ void SectorEditor::ApplyPreviewSettingsModal()
         ApplyGameplayPoseToPreview();
     }
     statusText = TextFormat(
-            "Preview settings updated: walk %.1f run %.1f eye %.1f gravity %.1f radius %.2f height %.2f step %.2f",
+            "Preview settings updated: walk %.1f run %.1f eye %.1f gravity %.1f radius %.2f height %.2f step %.2f jump %.2f",
             state.fpsControllerConfig.walkSpeed,
             state.fpsControllerConfig.runSpeed,
             state.fpsControllerConfig.eyeHeight,
             state.fpsControllerConfig.gravity,
             state.fpsControllerConfig.playerRadius,
             state.fpsControllerConfig.playerHeight,
-            state.fpsControllerConfig.stepHeight);
+            state.fpsControllerConfig.stepHeight,
+            state.fpsControllerConfig.jumpHeight);
 }
 
 void SectorEditor::RefreshDefaultTextures()

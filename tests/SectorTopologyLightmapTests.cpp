@@ -250,6 +250,10 @@ void TestSourceHashChanges()
     changedPreview.previewSettings.gravity = 99.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
           "hash ignores preview gravity");
+    changedPreview = base;
+    changedPreview.previewSettings.jumpHeight = 2.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
+          "hash ignores preview jump height");
 }
 
 void TestSourceHashIncludesMiddleTextureData()

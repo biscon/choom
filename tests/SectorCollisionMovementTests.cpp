@@ -299,6 +299,46 @@ void TestAirbornePortalRules()
     Check(result.currentSectorId == 20, "airborne player can pass when vertical span fits");
 }
 
+void TestJumpingPlayerCannotAutoStepThroughPortal()
+{
+    const Vector2 start = game::SectorCoordToWorldPosition2(Coord(60), Coord(32));
+    const game::SectorCollisionWorld world = BuildWorld(MakeAdjacent(0.0f, 2.0f));
+
+    game::SectorFpsControllerState fpsState;
+    fpsState.feetPosition = Vector3{start.x, 0.0f, start.y};
+    fpsState.currentSectorId = 10;
+    fpsState.grounded = true;
+    game::SectorFpsControllerConfig fpsConfig;
+    fpsConfig.gravity = 25.0f;
+    fpsConfig.jumpHeight = 0.6f;
+
+    Check(game::TryStartSectorFpsJump(fpsState, fpsConfig), "jump starts before portal movement");
+    game::SectorCollisionMoveResult result = Move(
+            world,
+            start,
+            Vector2{2.0f, 0.0f},
+            fpsState.currentSectorId,
+            fpsState.grounded,
+            fpsState.feetPosition.y);
+    Check(result.currentSectorId == 10 && result.blockedByStep,
+          "jumping player cannot auto-step through higher-floor portal");
+
+    fpsState.feetPosition.y = 0.25f;
+    result = Move(
+            world,
+            start,
+            Vector2{2.0f, 0.0f},
+            fpsState.currentSectorId,
+            fpsState.grounded,
+            fpsState.feetPosition.y);
+    Check(result.currentSectorId == 20,
+          "jumping player can pass higher-floor portal after current cylinder fits");
+
+    result = Move(world, start, Vector2{2.0f, 0.0f}, 10, true, 0.0f);
+    Check(result.currentSectorId == 20,
+          "grounded player can still step through higher-floor portal within step height");
+}
+
 void TestSectorFallbackAndBoundary()
 {
     const game::SectorCollisionWorld world = BuildWorld(MakeSquare());
@@ -320,6 +360,7 @@ int main()
     TestPortalStepAndCeilingRules();
     TestDownwardPortalVerticalTransitions();
     TestAirbornePortalRules();
+    TestJumpingPlayerCannotAutoStepThroughPortal();
     TestSectorFallbackAndBoundary();
     if (failures == 0) {
         std::puts("Sector collision movement tests passed");

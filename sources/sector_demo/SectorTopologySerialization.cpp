@@ -344,6 +344,10 @@ SectorPreviewSettings ReadPreviewSettings(const Json& value, const std::string& 
     if (stepHeightIt != value.end()) {
         settings.stepHeight = ReadFloat(value, "stepHeight", context);
     }
+    const auto jumpHeightIt = value.find("jumpHeight");
+    if (jumpHeightIt != value.end()) {
+        settings.jumpHeight = ReadFloat(value, "jumpHeight", context);
+    }
     return NormalizeSectorPreviewSettings(settings);
 }
 
@@ -541,6 +545,7 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
     RequireFinite(settings.playerRadius, "previewSettings.playerRadius");
     RequireFinite(settings.playerHeight, "previewSettings.playerHeight");
     RequireFinite(settings.stepHeight, "previewSettings.stepHeight");
+    RequireFinite(settings.jumpHeight, "previewSettings.jumpHeight");
     const SectorPreviewSettings normalized = NormalizeSectorPreviewSettings(settings);
     return Json{
             {"walkSpeed", normalized.walkSpeed},
@@ -550,7 +555,8 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
             {"gravity", normalized.gravity},
             {"playerRadius", normalized.playerRadius},
             {"playerHeight", normalized.playerHeight},
-            {"stepHeight", normalized.stepHeight}
+            {"stepHeight", normalized.stepHeight},
+            {"jumpHeight", normalized.jumpHeight}
     };
 }
 

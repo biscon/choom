@@ -16,6 +16,7 @@ struct SectorFpsControllerConfig {
     float playerRadius = 0.25f;
     float playerHeight = 1.6f;
     float stepHeight = 0.25f;
+    float jumpHeight = 0.6f;
 };
 
 struct SectorFpsControllerState {
@@ -33,6 +34,7 @@ struct SectorFpsControllerInput {
     bool strafeLeft = false;
     bool strafeRight = false;
     bool run = false;
+    bool jumpPressed = false;
     bool mouseLookEnabled = false;
     Vector2 mouseDelta = {};
 };
@@ -50,6 +52,7 @@ enum class SectorFpsVerticalTransition {
     SnappedDown,
     StartedDrop,
     Landed,
+    CeilingBonk,
     BlockedStep,
     CannotFit
 };
@@ -92,6 +95,9 @@ void UpdateSectorFpsController(
         const SectorFpsControllerConfig& config,
         const SectorFpsControllerInput& input,
         float dt);
+bool TryStartSectorFpsJump(
+        SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config);
 SectorFpsVerticalResult UpdateSectorFpsVerticalPhysics(
         SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,

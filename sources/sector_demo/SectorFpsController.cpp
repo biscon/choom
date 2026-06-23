@@ -48,6 +48,7 @@ SectorFpsControllerConfig SectorFpsControllerConfigFromPreviewSettings(
     config.playerRadius = settings.playerRadius;
     config.playerHeight = settings.playerHeight;
     config.stepHeight = settings.stepHeight;
+    config.jumpHeight = settings.jumpHeight;
     return config;
 }
 
@@ -63,6 +64,7 @@ SectorPreviewSettings SectorPreviewSettingsFromFpsControllerConfig(
     settings.playerRadius = config.playerRadius;
     settings.playerHeight = config.playerHeight;
     settings.stepHeight = config.stepHeight;
+    settings.jumpHeight = config.jumpHeight;
     return NormalizeSectorPreviewSettings(settings);
 }
 
@@ -157,9 +159,26 @@ void UpdateSectorFpsController(
         float dt)
 {
     UpdateSectorFpsMouseLook(state, config, input);
+    if (input.jumpPressed) {
+        TryStartSectorFpsJump(state, config);
+    }
     const Vector2 movement = ComputeSectorFpsHorizontalMovementDelta(state, config, input, dt);
     state.feetPosition.x += movement.x;
     state.feetPosition.z += movement.y;
+}
+
+bool TryStartSectorFpsJump(
+        SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config)
+{
+    const SectorFpsControllerConfig normalized = NormalizeSectorFpsControllerConfig(config);
+    if (!state.grounded || normalized.gravity <= 0.0f || normalized.jumpHeight <= 0.0f) {
+        return false;
+    }
+
+    state.verticalVelocity = std::sqrt(2.0f * normalized.gravity * normalized.jumpHeight);
+    state.grounded = false;
+    return true;
 }
 
 SectorFpsVerticalResult UpdateSectorFpsVerticalPhysics(
@@ -238,6 +257,7 @@ SectorFpsVerticalResult UpdateSectorFpsVerticalPhysics(
         state.feetPosition.y = maxFeetY;
         if (state.verticalVelocity > 0.0f) {
             state.verticalVelocity = 0.0f;
+            result.transition = SectorFpsVerticalTransition::CeilingBonk;
         }
     }
 
