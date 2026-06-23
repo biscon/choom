@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
+#include "sector_demo/SectorUnits.h"
 
 #include <algorithm>
 #include <cmath>
@@ -280,7 +281,10 @@ bool SectorCollisionWorld::BuildFromTopology(
 
         SectorCollisionSector collisionSector;
         collisionSector.sectorId = sector->id;
-        collisionSector.heights = SectorCollisionHeights{sector->floorZ, sector->ceilingZ};
+        // Topology stores authored heights; collision/runtime Y matches rendered world-space geometry.
+        collisionSector.heights = SectorCollisionHeights{
+                SectorAuthoringToWorldDistance(sector->floorZ),
+                SectorAuthoringToWorldDistance(sector->ceilingZ)};
         if (!AppendWorldLoop(map, loops.outer, collisionSector.outerLoop, errorMessage, sector->id)) {
             return false;
         }

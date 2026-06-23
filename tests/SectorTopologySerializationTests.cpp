@@ -417,6 +417,7 @@ void TestPreviewSettingsRoundTripAndValidation()
     original.previewSettings.runSpeed = 15.5f;
     original.previewSettings.mouseSensitivity = 2.75f;
     original.previewSettings.eyeHeight = 4.25f;
+    original.previewSettings.gravity = 38.5f;
 
     const std::string text = SaveText(original);
     const Json saved = Json::parse(text);
@@ -424,7 +425,8 @@ void TestPreviewSettingsRoundTripAndValidation()
     Check(Near(saved["previewSettings"]["walkSpeed"].get<float>(), 7.25f)
                   && Near(saved["previewSettings"]["runSpeed"].get<float>(), 15.5f)
                   && Near(saved["previewSettings"]["mouseSensitivity"].get<float>(), 2.75f)
-                  && Near(saved["previewSettings"]["eyeHeight"].get<float>(), 4.25f),
+                  && Near(saved["previewSettings"]["eyeHeight"].get<float>(), 4.25f)
+                  && Near(saved["previewSettings"]["gravity"].get<float>(), 38.5f),
           "preview settings values are serialized");
 
     SectorTopologyMap loaded;
@@ -433,8 +435,15 @@ void TestPreviewSettingsRoundTripAndValidation()
     Check(Near(loaded.previewSettings.walkSpeed, 7.25f)
                   && Near(loaded.previewSettings.runSpeed, 15.5f)
                   && Near(loaded.previewSettings.mouseSensitivity, 2.75f)
-                  && Near(loaded.previewSettings.eyeHeight, 4.25f),
+                  && Near(loaded.previewSettings.eyeHeight, 4.25f)
+                  && Near(loaded.previewSettings.gravity, 38.5f),
           "preview settings round-trip");
+
+    Json withoutGravity = saved;
+    withoutGravity["previewSettings"].erase("gravity");
+    Check(LoadText(withoutGravity.dump(), loaded, error), "omitted gravity field is accepted");
+    Check(Near(loaded.previewSettings.gravity, game::DefaultSectorPreviewSettings().gravity),
+          "omitted gravity loads default");
 
     Json withoutPreviewSettings = saved;
     withoutPreviewSettings.erase("previewSettings");
@@ -445,18 +454,20 @@ void TestPreviewSettingsRoundTripAndValidation()
     Check(Near(oldStyle.previewSettings.walkSpeed, defaults.walkSpeed)
                   && Near(oldStyle.previewSettings.runSpeed, defaults.runSpeed)
                   && Near(oldStyle.previewSettings.mouseSensitivity, defaults.mouseSensitivity)
-                  && Near(oldStyle.previewSettings.eyeHeight, defaults.eyeHeight),
+                  && Near(oldStyle.previewSettings.eyeHeight, defaults.eyeHeight)
+                  && Near(oldStyle.previewSettings.gravity, defaults.gravity),
           "omitted preview settings load defaults");
 
     Json invalid = saved;
     invalid["previewSettings"] = 4;
     ExpectRejected(invalid, "non-object preview settings are rejected");
 
-    const std::array<const char*, 4> fields{
+    const std::array<const char*, 5> fields{
             "walkSpeed",
             "runSpeed",
             "mouseSensitivity",
-            "eyeHeight"
+            "eyeHeight",
+            "gravity"
     };
     for (const char* field : fields) {
         invalid = saved;
@@ -465,7 +476,7 @@ void TestPreviewSettingsRoundTripAndValidation()
     }
 
     invalid = saved;
-    invalid["previewSettings"]["walkSpeed"] = "__NONFINITE__";
+    invalid["previewSettings"]["gravity"] = "__NONFINITE__";
     std::string nonFiniteText = invalid.dump();
     const std::string marker = "\"__NONFINITE__\"";
     const size_t markerPos = nonFiniteText.find(marker);
@@ -480,12 +491,18 @@ void TestPreviewSettingsRoundTripAndValidation()
     clamped["previewSettings"]["runSpeed"] = 500.0f;
     clamped["previewSettings"]["mouseSensitivity"] = 0.001f;
     clamped["previewSettings"]["eyeHeight"] = 40.0f;
+    clamped["previewSettings"]["gravity"] = -5.0f;
     Check(LoadText(clamped.dump(), loaded, error), "out-of-range preview settings load");
     Check(Near(loaded.previewSettings.walkSpeed, 0.1f)
                   && Near(loaded.previewSettings.runSpeed, 200.0f)
                   && Near(loaded.previewSettings.mouseSensitivity, 0.01f)
-                  && Near(loaded.previewSettings.eyeHeight, 20.0f),
+                  && Near(loaded.previewSettings.eyeHeight, 20.0f)
+                  && Near(loaded.previewSettings.gravity, 0.0f),
           "out-of-range preview settings clamp");
+
+    clamped["previewSettings"]["gravity"] = 500.0f;
+    Check(LoadText(clamped.dump(), loaded, error), "high gravity preview settings load");
+    Check(Near(loaded.previewSettings.gravity, 200.0f), "high gravity clamps");
 }
 
 void TestDecalDefaultsAndOmission()

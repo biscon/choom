@@ -12,12 +12,16 @@ struct SectorFpsControllerConfig {
     float runSpeed = 12.0f;
     float mouseSensitivity = 1.0f;
     float eyeHeight = 5.0f;
+    float gravity = 25.0f;
 };
 
 struct SectorFpsControllerState {
     Vector3 feetPosition = {};
     float yawRadians = 0.0f;
     float pitchRadians = 0.0f;
+    int currentSectorId = 0;
+    bool grounded = false;
+    float verticalVelocity = 0.0f;
 };
 
 struct SectorFpsControllerInput {
@@ -28,6 +32,19 @@ struct SectorFpsControllerInput {
     bool run = false;
     bool mouseLookEnabled = false;
     Vector2 mouseDelta = {};
+};
+
+struct SectorFpsVerticalContext {
+    bool hasSector = false;
+    float floorZ = 0.0f;
+    float ceilingZ = 0.0f;
+};
+
+struct SectorFpsVerticalResult {
+    bool hasSector = false;
+    bool cannotFit = false;
+    float floorZ = 0.0f;
+    float ceilingZ = 0.0f;
 };
 
 SectorFpsControllerConfig DefaultSectorFpsControllerConfig();
@@ -50,6 +67,11 @@ void UpdateSectorFpsController(
         SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
         const SectorFpsControllerInput& input,
+        float dt);
+SectorFpsVerticalResult UpdateSectorFpsVerticalPhysics(
+        SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        const SectorFpsVerticalContext& context,
         float dt);
 
 } // namespace game

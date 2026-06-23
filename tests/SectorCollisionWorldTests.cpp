@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
+#include "sector_demo/SectorUnits.h"
 
 #include <cmath>
 #include <iostream>
@@ -146,8 +147,9 @@ void TestBuildBasics()
 
     game::SectorCollisionHeights heights;
     Check(world.GetSectorFloorCeiling(10, &heights), "sector heights are available");
-    Check(Near(heights.floorZ, 2.0f) && Near(heights.ceilingZ, 18.0f),
-          "sector floor and ceiling heights are extracted");
+    Check(Near(heights.floorZ, game::SectorAuthoringToWorldDistance(2.0f))
+                  && Near(heights.ceilingZ, game::SectorAuthoringToWorldDistance(18.0f)),
+          "sector floor and ceiling heights are extracted in world units");
 
     const std::vector<game::SectorCollisionEdge>* edges = world.GetSectorEdges(10);
     Check(edges != nullptr && edges->size() == 4, "square has four collision edges");
@@ -163,6 +165,22 @@ void TestBuildBasics()
                   "edge endpoints are stored in world coordinates");
         }
     }
+}
+
+void TestHeightsUseRenderedWorldUnits()
+{
+    const SectorTopologyMap map = MakeSquare(8.0f, 40.0f);
+    game::SectorCollisionWorld world;
+    std::string error;
+    Check(world.BuildFromTopology(map, &error), "world-unit height test builds");
+
+    game::SectorCollisionHeights heights;
+    Check(world.GetSectorFloorCeiling(10, &heights), "world-unit sector heights are available");
+    Check(Near(heights.floorZ, game::SectorAuthoringToWorldDistance(8.0f))
+                  && Near(heights.ceilingZ, game::SectorAuthoringToWorldDistance(40.0f)),
+          "collision heights match generated geometry world-space Y units");
+    Check(!Near(heights.floorZ, 8.0f) && !Near(heights.ceilingZ, 40.0f),
+          "collision heights are not raw authored sector heights");
 }
 
 void TestPortalExtraction()
@@ -286,6 +304,7 @@ void TestRobustness()
 int main()
 {
     TestBuildBasics();
+    TestHeightsUseRenderedWorldUnits();
     TestPortalExtraction();
     TestPointLookup();
     TestHoles();

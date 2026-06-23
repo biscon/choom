@@ -243,6 +243,9 @@ private:
     void ApplyGameplayPoseToPreview();
     void TogglePreviewControlMode();
     bool RebuildSectorCollisionWorld();
+    SectorFpsVerticalContext BuildGameplayVerticalContext();
+    void RefreshGameplaySectorAndVerticalContext();
+    void InitializeGameplayVerticalState();
     void OpenPreviewSettingsModal();
     void ApplyPreviewSettingsModal();
     void RefreshDefaultTextures();

@@ -120,10 +120,13 @@ use Recast/Detour. It stores sector boundary loops in world X/Z coordinates for
 point-in-sector lookup, classifies one-sided edges as blocking walls, and
 classifies two-sided edges as portals with neighbor sector IDs.
 
-This is data/query support only. Gameplay preview movement remains noclip:
-movement collision, gravity, floor following, floor snapping, stepping, portal
-crossing rules, and jumping are deferred. Middle textures do not block movement
-and do not add collision.
+Gameplay preview uses this query layer for current-sector floor/ceiling lookup,
+simple gravity, landing, floor following, and ceiling clamp. Topology sector
+heights remain authored JSON values, but collision floor/ceiling heights are
+converted to the same runtime world-space Y units as rendered geometry.
+Horizontal movement is still noclip: wall collision, portal crossing rules,
+stepping, and jumping are deferred. Middle textures do not block movement and
+do not add collision.
 
 ## Sector Inspector
 
@@ -438,18 +441,26 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 - In `FreeFly` mouse-look mode: `WASD` move, mouse looks, `Space` moves up,
   `Ctrl` moves down.
 - In `Gameplay` mouse-look mode: `WASD` moves horizontally relative to yaw,
-  mouse looks, and `Shift` uses run speed. Gameplay mode is still noclip:
-  it has no collision, gravity, stepping, jumping, floor snapping, or current-sector
-  tracking.
+  mouse looks, and `Shift` uses run speed. Gameplay mode has vertical-only
+  physics: it follows the current sector floor, applies gravity while airborne,
+  lands on floors, and clamps the camera height against ceilings. Horizontal
+  wall collision, portal blocking, stepping, and jumping are still deferred.
 - In visible-cursor mode: click generated surfaces to select/edit them.
 
 The left tools pane `Settings` button opens editor-session preview settings.
 The same settings are available from the 3D preview overlay while its UI is
-visible. The modal edits walk speed, run speed, mouse sensitivity, and camera
-eye height. The gameplay controller stores a feet/body position; the camera eye
-is computed by adding the configured eye height. Changing eye height while in
-Gameplay keeps the feet/body position fixed, so the camera moves up or down
-immediately for tuning.
+visible. The modal edits walk speed, run speed, mouse sensitivity, camera eye
+height, and gravity. The gameplay controller stores a feet/body position; the
+camera eye is computed by adding the configured eye height. Changing eye height
+while in Gameplay keeps the feet/body position fixed unless the current sector
+cannot fit the configured eye height. Gravity uses a positive magnitude; `0`
+disables falling.
+
+Grounded Gameplay movement snaps feet to the current sector floor. Because
+horizontal collision and stepping are not implemented yet, noclip movement can
+cross walls or portals and then snap to the newly queried sector floor.
+The Gameplay overlay reports floor, feet, velocity, and gravity in runtime
+world-space values.
 
 3D picking maps generated surfaces back to topology:
 
@@ -532,8 +543,9 @@ deferred.
 - No external texture import/copy; texture files must already exist under
   `assets/images`.
 - No player-start editing in the sector editor.
-- Gameplay preview mode is noclip only; collision, gravity, floor-constrained
-  movement, stepping, jumping, and current-sector tracking are deferred.
+- Gameplay preview mode has vertical floor following and gravity only;
+  horizontal collision, portal blocking, stepping, jumping, crouching, slopes,
+  and player-radius/cylinder collision are deferred.
 - No dynamic runtime lights or dynamic shadows.
 - No middle collision/blocking flags, translucent glass, depth sorting, middle
   texture decals, middle emissive/tint/bloom controls, or middle Copy/Paste

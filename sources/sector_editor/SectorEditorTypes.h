@@ -230,6 +230,7 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState runSpeedInput;
     engine::UIFloatInputState mouseSensitivityInput;
     engine::UIFloatInputState eyeHeightInput;
+    engine::UIFloatInputState gravityInput;
     std::string errorMessage;
 };
 
@@ -353,6 +354,7 @@ struct SectorEditorState {
     bool sectorCollisionWorldValid = false;
     std::string sectorCollisionWorldWarning;
     int previewCollisionSectorId = 0;
+    SectorFpsVerticalResult previewVerticalResult;
     bool hasPreviewPose = false;
     SectorMeshPreviewPose lastPreviewPose = {};
     SectorSurfaceHit hoveredSurface3D;

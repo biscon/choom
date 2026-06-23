@@ -15,6 +15,8 @@ constexpr float PreviewMouseSensitivityMin = 0.01f;
 constexpr float PreviewMouseSensitivityMax = 20.0f;
 constexpr float PreviewEyeHeightMin = 0.1f;
 constexpr float PreviewEyeHeightMax = 20.0f;
+constexpr float PreviewGravityMin = 0.0f;
+constexpr float PreviewGravityMax = 200.0f;
 
 float ClampFinite(float value, float fallback, float minValue, float maxValue)
 {
@@ -100,6 +102,11 @@ SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings setti
             defaults.eyeHeight,
             PreviewEyeHeightMin,
             PreviewEyeHeightMax);
+    settings.gravity = ClampFinite(
+            settings.gravity,
+            defaults.gravity,
+            PreviewGravityMin,
+            PreviewGravityMax);
     return settings;
 }
 

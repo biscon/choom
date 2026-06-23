@@ -328,6 +328,10 @@ SectorPreviewSettings ReadPreviewSettings(const Json& value, const std::string& 
     if (eyeHeightIt != value.end()) {
         settings.eyeHeight = ReadFloat(value, "eyeHeight", context);
     }
+    const auto gravityIt = value.find("gravity");
+    if (gravityIt != value.end()) {
+        settings.gravity = ReadFloat(value, "gravity", context);
+    }
     return NormalizeSectorPreviewSettings(settings);
 }
 
@@ -521,12 +525,14 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
     RequireFinite(settings.runSpeed, "previewSettings.runSpeed");
     RequireFinite(settings.mouseSensitivity, "previewSettings.mouseSensitivity");
     RequireFinite(settings.eyeHeight, "previewSettings.eyeHeight");
+    RequireFinite(settings.gravity, "previewSettings.gravity");
     const SectorPreviewSettings normalized = NormalizeSectorPreviewSettings(settings);
     return Json{
             {"walkSpeed", normalized.walkSpeed},
             {"runSpeed", normalized.runSpeed},
             {"mouseSensitivity", normalized.mouseSensitivity},
-            {"eyeHeight", normalized.eyeHeight}
+            {"eyeHeight", normalized.eyeHeight},
+            {"gravity", normalized.gravity}
     };
 }
 

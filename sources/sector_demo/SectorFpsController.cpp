@@ -43,6 +43,7 @@ SectorFpsControllerConfig SectorFpsControllerConfigFromPreviewSettings(
     config.runSpeed = settings.runSpeed;
     config.mouseSensitivity = settings.mouseSensitivity;
     config.eyeHeight = settings.eyeHeight;
+    config.gravity = settings.gravity;
     return config;
 }
 
@@ -54,6 +55,7 @@ SectorPreviewSettings SectorPreviewSettingsFromFpsControllerConfig(
     settings.runSpeed = config.runSpeed;
     settings.mouseSensitivity = config.mouseSensitivity;
     settings.eyeHeight = config.eyeHeight;
+    settings.gravity = config.gravity;
     return NormalizeSectorPreviewSettings(settings);
 }
 
@@ -89,7 +91,10 @@ SectorFpsControllerState SectorFpsControllerStateFromCameraPose(
     return SectorFpsControllerState{
             Vector3Subtract(pose.position, Vector3{0.0f, normalized.eyeHeight, 0.0f}),
             pose.yawRadians,
-            ClampSectorFpsPitch(pose.pitchRadians)
+            ClampSectorFpsPitch(pose.pitchRadians),
+            0,
+            false,
+            0.0f
     };
 }
 
@@ -127,6 +132,57 @@ void UpdateSectorFpsController(
         const float speed = input.run ? normalized.runSpeed : normalized.walkSpeed;
         state.feetPosition = Vector3Add(state.feetPosition, Vector3Scale(movement, speed * dt));
     }
+}
+
+SectorFpsVerticalResult UpdateSectorFpsVerticalPhysics(
+        SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        const SectorFpsVerticalContext& context,
+        float dt)
+{
+    const SectorFpsControllerConfig normalized = NormalizeSectorFpsControllerConfig(config);
+    SectorFpsVerticalResult result;
+    result.hasSector = context.hasSector;
+    result.floorZ = context.floorZ;
+    result.ceilingZ = context.ceilingZ;
+
+    if (!context.hasSector) {
+        state.grounded = false;
+        return result;
+    }
+
+    const float maxFeetY = context.ceilingZ - normalized.eyeHeight;
+    const bool canFit = maxFeetY >= context.floorZ;
+    if (!canFit) {
+        state.feetPosition.y = context.floorZ;
+        state.grounded = true;
+        state.verticalVelocity = 0.0f;
+        result.cannotFit = true;
+        return result;
+    }
+
+    if (state.grounded) {
+        state.feetPosition.y = context.floorZ;
+        state.verticalVelocity = 0.0f;
+    } else if (normalized.gravity > 0.0f && dt > 0.0f) {
+        state.verticalVelocity -= normalized.gravity * dt;
+        state.feetPosition.y += state.verticalVelocity * dt;
+    }
+
+    if (state.feetPosition.y <= context.floorZ) {
+        state.feetPosition.y = context.floorZ;
+        state.grounded = true;
+        state.verticalVelocity = 0.0f;
+    }
+
+    if (state.feetPosition.y > maxFeetY) {
+        state.feetPosition.y = maxFeetY;
+        if (state.verticalVelocity > 0.0f) {
+            state.verticalVelocity = 0.0f;
+        }
+    }
+
+    return result;
 }
 
 } // namespace game

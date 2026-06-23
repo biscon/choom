@@ -110,11 +110,130 @@ void TestConfigNormalization()
     config.runSpeed = 999.0f;
     config.mouseSensitivity = INFINITY;
     config.eyeHeight = NAN;
+    config.gravity = 500.0f;
     config = game::NormalizeSectorFpsControllerConfig(config);
     Check(Near(config.walkSpeed, 0.1f), "walk speed clamps low");
     Check(Near(config.runSpeed, 200.0f), "run speed clamps high");
     Check(Near(config.mouseSensitivity, 1.0f), "non-finite mouse sensitivity uses default");
     Check(Near(config.eyeHeight, 5.0f), "non-finite eye height uses default");
+    Check(Near(config.gravity, 200.0f), "gravity clamps high");
+
+    config.gravity = -5.0f;
+    config = game::NormalizeSectorFpsControllerConfig(config);
+    Check(Near(config.gravity, 0.0f), "gravity clamps low");
+
+    config.gravity = INFINITY;
+    config = game::NormalizeSectorFpsControllerConfig(config);
+    Check(Near(config.gravity, 25.0f), "non-finite gravity uses default");
+    Check(Near(game::DefaultSectorFpsControllerConfig().gravity, 25.0f),
+          "default gravity is 25");
+}
+
+void TestGroundedPlayerSnapsToFloor()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{1.0f, 9.0f, 2.0f};
+    state.grounded = true;
+    state.verticalVelocity = -3.0f;
+    game::SectorFpsControllerConfig config;
+    game::SectorFpsVerticalContext context{true, 4.0f, 20.0f};
+
+    game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
+    Check(Near(state.feetPosition.y, 4.0f), "grounded player snaps to current floor");
+    Check(state.grounded, "grounded player stays grounded");
+    Check(Near(state.verticalVelocity, 0.0f), "grounded snap clears vertical velocity");
+
+    context.floorZ = 8.0f;
+    game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
+    Check(Near(state.feetPosition.y, 8.0f), "grounded player follows changed sector floor");
+}
+
+void TestFallingAndLanding()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{0.0f, 10.0f, 0.0f};
+    state.grounded = false;
+    game::SectorFpsControllerConfig config;
+    config.gravity = 10.0f;
+    game::SectorFpsVerticalContext context{true, 0.0f, 20.0f};
+
+    game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
+    Check(Near(state.verticalVelocity, -5.0f), "falling applies gravity to velocity");
+    Check(Near(state.feetPosition.y, 7.5f), "falling integrates feet height");
+    Check(!state.grounded, "airborne player remains falling above floor");
+
+    game::UpdateSectorFpsVerticalPhysics(state, config, context, 2.0f);
+    Check(Near(state.feetPosition.y, 0.0f), "falling player lands on floor");
+    Check(state.grounded, "landing sets grounded true");
+    Check(Near(state.verticalVelocity, 0.0f), "landing clears vertical velocity");
+}
+
+void TestZeroGravityDoesNotMoveVertically()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{0.0f, 10.0f, 0.0f};
+    state.grounded = false;
+    state.verticalVelocity = -4.0f;
+    game::SectorFpsControllerConfig config;
+    config.gravity = 0.0f;
+    game::SectorFpsVerticalContext context{true, 0.0f, 20.0f};
+
+    game::UpdateSectorFpsVerticalPhysics(state, config, context, 1.0f);
+    Check(Near(state.feetPosition.y, 10.0f), "zero gravity does not move falling player");
+    Check(Near(state.verticalVelocity, -4.0f), "zero gravity preserves existing velocity");
+    Check(!state.grounded, "zero gravity does not force grounded state above floor");
+}
+
+void TestCeilingClamp()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{0.0f, 18.0f, 0.0f};
+    state.grounded = false;
+    state.verticalVelocity = 6.0f;
+    game::SectorFpsControllerConfig config;
+    config.eyeHeight = 5.0f;
+    config.gravity = 0.0f;
+    game::SectorFpsVerticalContext context{true, 0.0f, 20.0f};
+
+    game::UpdateSectorFpsVerticalPhysics(state, config, context, 0.5f);
+    Check(Near(state.feetPosition.y, 15.0f), "ceiling clamp moves feet to maximum allowed height");
+    Check(Near(state.verticalVelocity, 0.0f), "ceiling clamp clears upward velocity");
+    Check(!state.grounded, "ceiling clamp does not mark airborne player grounded");
+}
+
+void TestCannotFitClampsToFloor()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{0.0f, 12.0f, 0.0f};
+    state.grounded = false;
+    state.verticalVelocity = 9.0f;
+    game::SectorFpsControllerConfig config;
+    config.eyeHeight = 6.0f;
+    game::SectorFpsVerticalContext context{true, 10.0f, 14.0f};
+
+    const game::SectorFpsVerticalResult result =
+            game::UpdateSectorFpsVerticalPhysics(state, config, context, 1.0f);
+    Check(result.cannotFit, "cannot-fit vertical result is reported");
+    Check(Near(state.feetPosition.y, 10.0f), "cannot-fit case leaves feet on floor");
+    Check(state.feetPosition.y >= context.floorZ, "cannot-fit case never places feet below floor");
+    Check(state.grounded, "cannot-fit case sets grounded true");
+    Check(Near(state.verticalVelocity, 0.0f), "cannot-fit case clears vertical velocity");
+}
+
+void TestNoSectorPreservesVerticalState()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{0.0f, 12.0f, 0.0f};
+    state.grounded = true;
+    state.verticalVelocity = -5.0f;
+    game::SectorFpsControllerConfig config;
+    config.gravity = 25.0f;
+    game::SectorFpsVerticalContext context{false, 0.0f, 0.0f};
+
+    game::UpdateSectorFpsVerticalPhysics(state, config, context, 1.0f);
+    Check(Near(state.feetPosition.y, 12.0f), "no-sector context preserves feet Y");
+    Check(Near(state.verticalVelocity, -5.0f), "no-sector context preserves vertical velocity");
+    Check(!state.grounded, "no-sector context clears grounded state");
 }
 
 } // namespace
@@ -127,6 +246,12 @@ int main()
     TestRunAndWalkSpeeds();
     TestMouseLookRawDeltaAndPitchClamp();
     TestConfigNormalization();
+    TestGroundedPlayerSnapsToFloor();
+    TestFallingAndLanding();
+    TestZeroGravityDoesNotMoveVertically();
+    TestCeilingClamp();
+    TestCannotFitClampsToFloor();
+    TestNoSectorPreservesVerticalState();
     if (failures == 0) {
         std::puts("Sector FPS controller tests passed");
     }

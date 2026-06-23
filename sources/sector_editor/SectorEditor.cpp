@@ -50,6 +50,7 @@ constexpr float ScreenVertexSnapPixels = 10.0f;
 constexpr float ScreenEdgePickPixels = 10.0f;
 constexpr float ScreenLightPickPixels = 12.0f;
 constexpr float PreviewHighlightLift = 0.006f;
+constexpr float GameplayFloorSnapEpsilon = 0.001f;
 
 struct LevelPaths {
     std::string jsonAssetPath;
@@ -2893,16 +2894,12 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                     state.fpsControllerConfig,
                     controllerInput,
                     dt);
-            if (state.sectorCollisionWorldValid) {
-                state.previewCollisionSectorId =
-                        state.sectorCollisionWorld.FindSectorContainingPointPreferCurrent(
-                                Vector2{
-                                        state.fpsControllerState.feetPosition.x,
-                                        state.fpsControllerState.feetPosition.z},
-                                state.previewCollisionSectorId);
-            } else {
-                state.previewCollisionSectorId = 0;
-            }
+            RefreshGameplaySectorAndVerticalContext();
+            state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
+                    state.fpsControllerState,
+                    state.fpsControllerConfig,
+                    BuildGameplayVerticalContext(),
+                    dt);
             ApplyGameplayPoseToPreview();
         }
         UpdatePreview3DSelection(input);
@@ -4271,9 +4268,22 @@ void SectorEditor::DrawPreviewOverlay(
     std::string collisionStatus;
     if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
         if (state.sectorCollisionWorldValid) {
-            collisionStatus = state.previewCollisionSectorId == 0
-                    ? " | collision sector none"
-                    : " | collision sector " + std::to_string(state.previewCollisionSectorId);
+            if (state.fpsControllerState.currentSectorId == 0
+                    || !state.previewVerticalResult.hasSector) {
+                collisionStatus = " | Gameplay no sector | noclip";
+            } else {
+                collisionStatus = TextFormat(
+                        " | Gameplay sector %d | %s%s | floor %.2f | feet %.2f | vel %.2f | gravity %.1f",
+                        state.fpsControllerState.currentSectorId,
+                        state.previewVerticalResult.cannotFit
+                                ? "cannot fit"
+                                : (state.fpsControllerState.grounded ? "grounded" : "falling"),
+                        state.previewVerticalResult.cannotFit ? " grounded" : "",
+                        state.previewVerticalResult.floorZ,
+                        state.fpsControllerState.feetPosition.y,
+                        state.fpsControllerState.verticalVelocity,
+                        state.fpsControllerConfig.gravity);
+            }
         } else {
             collisionStatus = " | collision unavailable";
         }
@@ -4307,13 +4317,14 @@ void SectorEditor::DrawPreviewOverlay(
             font,
             state.previewControlMode == SectorPreviewControlMode::Gameplay
                     ? TextFormat(
-                            "assets %.0f%% | Lightmap: %s | AO: %s | walk %.1f | run %.1f | eye %.1f | %s%s",
+                            "assets %.0f%% | Lightmap: %s | AO: %s | walk %.1f | run %.1f | eye %.1f | gravity %.1f | %s%s",
                             preview.AssetProgress(assets) * 100.0f,
                             preview.LightmapStatusText(),
                             state.useBakedAmbientOcclusion ? "on" : "off",
                             state.fpsControllerConfig.walkSpeed,
                             state.fpsControllerConfig.runSpeed,
                             state.fpsControllerConfig.eyeHeight,
+                            state.fpsControllerConfig.gravity,
                             collisionWarningText,
                             state.topologyDocumentDirty ? " | unsaved changes" : "")
                     : TextFormat(
@@ -7968,9 +7979,9 @@ void SectorEditor::DrawPreviewSettingsModal(
     DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
     const Rectangle modal{
             (EditorWidth - 620.0f) * 0.5f,
-            (EditorHeight - 430.0f) * 0.5f,
+            (EditorHeight - 480.0f) * 0.5f,
             620.0f,
-            430.0f
+            480.0f
     };
     DrawRectangleRec(modal, Color{20, 24, 32, 248});
     DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
@@ -8046,12 +8057,20 @@ void SectorEditor::DrawPreviewSettingsModal(
             0.1f,
             20.0f,
             2);
+    drawFloat(
+            "sector_editor_preview_gravity",
+            "Gravity",
+            modalState.draftConfig.gravity,
+            modalState.gravityInput,
+            0.0f,
+            200.0f,
+            2);
 
     if (!modalState.errorMessage.empty()) {
         engine::Text(
                 config,
                 assets,
-                Rectangle{modal.x + 30.0f, modal.y + 292.0f, modal.width - 60.0f, 36.0f},
+                Rectangle{modal.x + 30.0f, modal.y + 344.0f, modal.width - 60.0f, 36.0f},
                 font,
                 modalState.errorMessage.c_str(),
                 engine::UITextJustify::Left,
@@ -8066,6 +8085,7 @@ void SectorEditor::DrawPreviewSettingsModal(
         modalState.runSpeedInput = engine::UIFloatInputState{};
         modalState.mouseSensitivityInput = engine::UIFloatInputState{};
         modalState.eyeHeightInput = engine::UIFloatInputState{};
+        modalState.gravityInput = engine::UIFloatInputState{};
         modalState.errorMessage.clear();
     }
     okayRequested = okayRequested || engine::Button(
@@ -8493,6 +8513,8 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
         state.sectorCollisionWorldValid = false;
         state.sectorCollisionWorldWarning.clear();
         state.previewCollisionSectorId = 0;
+        state.fpsControllerState.currentSectorId = 0;
+        state.previewVerticalResult = SectorFpsVerticalResult{};
         state.mode = SectorEditorMode::Edit2D;
         if (StartsWith(error, "Preview failed:")) {
             statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
@@ -8562,21 +8584,16 @@ void SectorEditor::TogglePreviewControlMode()
         state.fpsControllerState = SectorFpsControllerStateFromCameraPose(
                 preview.Pose(),
                 state.fpsControllerConfig);
+        state.fpsControllerState.verticalVelocity = 0.0f;
         state.previewControlMode = SectorPreviewControlMode::Gameplay;
-        if (state.sectorCollisionWorldValid) {
-            state.previewCollisionSectorId =
-                    state.sectorCollisionWorld.FindSectorContainingPointPreferCurrent(
-                            Vector2{
-                                    state.fpsControllerState.feetPosition.x,
-                                    state.fpsControllerState.feetPosition.z},
-                            state.previewCollisionSectorId);
-        } else {
-            state.previewCollisionSectorId = 0;
-        }
+        InitializeGameplayVerticalState();
+        ApplyGameplayPoseToPreview();
     } else {
         ApplyGameplayPoseToPreview();
         state.previewControlMode = SectorPreviewControlMode::FreeFly;
         state.previewCollisionSectorId = 0;
+        state.fpsControllerState.currentSectorId = 0;
+        state.previewVerticalResult = SectorFpsVerticalResult{};
     }
     statusText = TextFormat("3D control mode: %s", PreviewControlModeName(state.previewControlMode));
 }
@@ -8587,6 +8604,8 @@ bool SectorEditor::RebuildSectorCollisionWorld()
     if (!state.sectorCollisionWorld.BuildFromTopology(state.topologyMap, &error)) {
         state.sectorCollisionWorldValid = false;
         state.previewCollisionSectorId = 0;
+        state.fpsControllerState.currentSectorId = 0;
+        state.previewVerticalResult = SectorFpsVerticalResult{};
         state.sectorCollisionWorldWarning = error.empty()
                 ? "Collision world build failed"
                 : "Collision world build failed: " + error;
@@ -8596,16 +8615,79 @@ bool SectorEditor::RebuildSectorCollisionWorld()
     state.sectorCollisionWorldValid = true;
     state.sectorCollisionWorldWarning.clear();
     if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
-        state.previewCollisionSectorId =
-                state.sectorCollisionWorld.FindSectorContainingPointPreferCurrent(
-                        Vector2{
-                                state.fpsControllerState.feetPosition.x,
-                                state.fpsControllerState.feetPosition.z},
-                        state.previewCollisionSectorId);
+        RefreshGameplaySectorAndVerticalContext();
+        state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
+                state.fpsControllerState,
+                state.fpsControllerConfig,
+                BuildGameplayVerticalContext(),
+                0.0f);
     } else {
         state.previewCollisionSectorId = 0;
     }
     return true;
+}
+
+SectorFpsVerticalContext SectorEditor::BuildGameplayVerticalContext()
+{
+    SectorFpsVerticalContext context;
+    if (!state.sectorCollisionWorldValid || state.fpsControllerState.currentSectorId == 0) {
+        return context;
+    }
+
+    SectorCollisionHeights heights;
+    if (!state.sectorCollisionWorld.GetSectorFloorCeiling(
+                state.fpsControllerState.currentSectorId,
+                &heights)) {
+        return context;
+    }
+
+    context.hasSector = true;
+    context.floorZ = heights.floorZ;
+    context.ceilingZ = heights.ceilingZ;
+    return context;
+}
+
+void SectorEditor::RefreshGameplaySectorAndVerticalContext()
+{
+    if (!state.sectorCollisionWorldValid) {
+        state.fpsControllerState.currentSectorId = 0;
+        state.previewCollisionSectorId = 0;
+        state.previewVerticalResult = SectorFpsVerticalResult{};
+        return;
+    }
+
+    state.fpsControllerState.currentSectorId =
+            state.sectorCollisionWorld.FindSectorContainingPointPreferCurrent(
+                    Vector2{
+                            state.fpsControllerState.feetPosition.x,
+                            state.fpsControllerState.feetPosition.z},
+                    state.fpsControllerState.currentSectorId);
+    state.previewCollisionSectorId = state.fpsControllerState.currentSectorId;
+}
+
+void SectorEditor::InitializeGameplayVerticalState()
+{
+    state.fpsControllerState.grounded = false;
+    state.fpsControllerState.verticalVelocity = 0.0f;
+    RefreshGameplaySectorAndVerticalContext();
+
+    const SectorFpsVerticalContext context = BuildGameplayVerticalContext();
+    if (!context.hasSector) {
+        state.fpsControllerState.currentSectorId = 0;
+        state.previewCollisionSectorId = 0;
+        state.previewVerticalResult = SectorFpsVerticalResult{};
+        return;
+    }
+
+    if (state.fpsControllerState.feetPosition.y <= context.floorZ + GameplayFloorSnapEpsilon) {
+        state.fpsControllerState.feetPosition.y = context.floorZ;
+        state.fpsControllerState.grounded = true;
+    }
+    state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
+            state.fpsControllerState,
+            state.fpsControllerConfig,
+            context,
+            0.0f);
 }
 
 void SectorEditor::OpenPreviewSettingsModal()
@@ -8621,7 +8703,11 @@ void SectorEditor::ApplyPreviewSettingsModal()
         return;
     }
 
+    const float previousGravity = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig).gravity;
     state.fpsControllerConfig = NormalizeSectorFpsControllerConfig(state.previewSettingsModal.draftConfig);
+    if (previousGravity > 0.0f && state.fpsControllerConfig.gravity == 0.0f) {
+        state.fpsControllerState.verticalVelocity = 0.0f;
+    }
     state.topologyMap.previewSettings = SectorPreviewSettingsFromFpsControllerConfig(
             state.fpsControllerConfig);
     MarkTopologyDocumentEdited("Preview settings updated");
@@ -8629,13 +8715,19 @@ void SectorEditor::ApplyPreviewSettingsModal()
     if (state.mode == SectorEditorMode::Preview3D
             && state.previewControlMode == SectorPreviewControlMode::Gameplay
             && preview.IsReady()) {
+        state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
+                state.fpsControllerState,
+                state.fpsControllerConfig,
+                BuildGameplayVerticalContext(),
+                0.0f);
         ApplyGameplayPoseToPreview();
     }
     statusText = TextFormat(
-            "Preview settings updated: walk %.1f run %.1f eye %.1f",
+            "Preview settings updated: walk %.1f run %.1f eye %.1f gravity %.1f",
             state.fpsControllerConfig.walkSpeed,
             state.fpsControllerConfig.runSpeed,
-            state.fpsControllerConfig.eyeHeight);
+            state.fpsControllerConfig.eyeHeight,
+            state.fpsControllerConfig.gravity);
 }
 
 void SectorEditor::RefreshDefaultTextures()
@@ -10546,6 +10638,8 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
         state.sectorCollisionWorldValid = false;
         state.sectorCollisionWorldWarning.clear();
         state.previewCollisionSectorId = 0;
+        state.fpsControllerState.currentSectorId = 0;
+        state.previewVerticalResult = SectorFpsVerticalResult{};
         if (StartsWith(error, "Preview failed:")) {
             statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
         } else {
