@@ -109,6 +109,13 @@ alpha-blended. Middle textures do not block by themselves; use the linedef
 `Blocks Player` flag when a see-through grate, bars, or window should block
 Gameplay movement.
 
+Sectors can mark their ceiling as sky/open. A sky ceiling does not generate the
+normal ceiling surface, so the current 3D background/clear color shows through
+until a real skybox, skydome, or panorama renderer exists. Adjacent sectors that
+both have sky ceilings suppress the upper portal wall strip between them, even
+when their numeric ceiling heights differ. Collision still uses the sector's
+normal authored ceiling height for now.
+
 ## Sector Collision Query Layer
 
 Gameplay/collision work now has a reusable `SectorCollisionWorld` query layer
@@ -146,6 +153,7 @@ Selecting a topology sector opens the sector inspector. It edits:
 
 - sector name and stable integer ID display
 - floor and ceiling heights
+- ceiling sky/open toggle
 - floor and ceiling texture IDs and UV scale/offset
 - ambient color and intensity
 - default wall, lower, and upper texture IDs and UV scale/offset

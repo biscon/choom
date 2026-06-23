@@ -306,6 +306,39 @@ void TestTextureFilterSerialization()
           "legacy bilinear upgrades to anisotropic filtering");
 }
 
+void TestCeilingSkySerialization()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.sectors[0].ceilingSky = true;
+
+    const Json saved = Json::parse(SaveText(original));
+    Check(saved["sectors"][0]["ceilingSky"] == true, "ceilingSky true is serialized");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error), "ceilingSky true JSON loads");
+    Check(loaded.sectors[0].ceilingSky, "ceilingSky true round-trips");
+
+    Json explicitFalse = saved;
+    explicitFalse["sectors"][0]["ceilingSky"] = false;
+    Check(LoadText(explicitFalse.dump(), loaded, error), "ceilingSky false JSON loads");
+    Check(!loaded.sectors[0].ceilingSky, "ceilingSky false remains false");
+
+    Json missing = saved;
+    missing["sectors"][0].erase("ceilingSky");
+    Check(LoadText(missing.dump(), loaded, error), "missing ceilingSky JSON loads");
+    Check(!loaded.sectors[0].ceilingSky, "missing ceilingSky loads false");
+
+    SectorTopologyMap defaultFalse = MakeSquare();
+    const Json defaultSaved = Json::parse(SaveText(defaultFalse));
+    Check(defaultSaved["sectors"][0].find("ceilingSky") == defaultSaved["sectors"][0].end(),
+          "default false ceilingSky is omitted");
+
+    Json invalid = saved;
+    invalid["sectors"][0]["ceilingSky"] = "yes";
+    ExpectRejected(invalid, "non-boolean ceilingSky is rejected");
+}
+
 void TestStaticLightRoundTrip()
 {
     SectorTopologyMap original = MakeSquare();
@@ -1355,6 +1388,7 @@ int main()
 {
     TestRoundTrip();
     TestTextureFilterSerialization();
+    TestCeilingSkySerialization();
     TestStaticLightRoundTrip();
     TestLightmapMetadataRoundTrip();
     TestPreviewSettingsRoundTripAndValidation();

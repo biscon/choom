@@ -79,6 +79,7 @@ struct SectorTopologySector {
 
     std::string floorTextureId;
     std::string ceilingTextureId;
+    bool ceilingSky = false;
 
     SectorTopologyUvSettings floorUv;
     SectorTopologyUvSettings ceilingUv;

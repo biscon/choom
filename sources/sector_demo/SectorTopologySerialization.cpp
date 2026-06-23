@@ -129,6 +129,18 @@ std::string ReadString(const Json& object, const char* field, const std::string&
     return value.get<std::string>();
 }
 
+bool ReadOptionalBool(const Json& object, const char* field, const std::string& context, bool defaultValue)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        return defaultValue;
+    }
+    if (!it->is_boolean()) {
+        Fail(context + "." + field + " must be a boolean");
+    }
+    return it->get<bool>();
+}
+
 Vector2 ReadVector2(const Json& value, const std::string& context)
 {
     if (!value.is_array() || value.size() != 2
@@ -769,6 +781,7 @@ SectorTopologyMap ParseMap(const Json& root)
         sector.ceilingZ = ReadFloat(value, "ceilingZ", context);
         sector.floorTextureId = ReadString(value, "floorTextureId", context);
         sector.ceilingTextureId = ReadString(value, "ceilingTextureId", context);
+        sector.ceilingSky = ReadOptionalBool(value, "ceilingSky", context, false);
         sector.floorUv = ReadUv(RequireField(value, "floorUv", context), context + ".floorUv");
         sector.ceilingUv = ReadUv(RequireField(value, "ceilingUv", context), context + ".ceilingUv");
         ReadOptionalDecal(value, "floorDecal", context, sector.floorDecal);
@@ -930,6 +943,9 @@ Json SerializeMap(const SectorTopologyMap& map)
         if (HasDecal(sector->ceilingDecal)) {
             sectorJson["ceilingDecal"] = WriteDecal(
                     sector->ceilingDecal, context + ".ceilingDecal");
+        }
+        if (sector->ceilingSky) {
+            sectorJson["ceilingSky"] = true;
         }
         root["sectors"].push_back(std::move(sectorJson));
     }

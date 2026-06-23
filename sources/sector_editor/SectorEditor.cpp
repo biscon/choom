@@ -6530,6 +6530,22 @@ bool SectorEditor::DrawTopologySectorInspector(
     drawHeight("sector_editor_topology_floor", "Floor:", sector->floorZ, uiState.floorInput, true);
     drawHeight("sector_editor_topology_ceiling", "Ceiling:", sector->ceilingZ, uiState.ceilingInput, false);
 
+    bool ceilingSky = sector->ceilingSky;
+    if (engine::Checkbox(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_ceiling_sky",
+                Rectangle{0.0f, y, contentW, rowH},
+                font,
+                "Ceiling Sky",
+                ceilingSky)) {
+        sector->ceilingSky = ceilingSky;
+        MarkTopologyDocumentEdited(TextFormat("Updated topology sector %d ceiling sky", sector->id));
+    }
+    y += rowH + gap;
+
     engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
     y += 18.0f;
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Lighting", engine::UITextJustify::Left, config.textColor);

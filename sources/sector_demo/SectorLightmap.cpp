@@ -1910,6 +1910,7 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
         FnvAppendInt(hash, sector->id);
         FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector->floorZ));
         FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector->ceilingZ));
+        FnvAppendInt(hash, sector->ceilingSky ? 1 : 0);
         FnvAppendString(hash, sector->floorTextureId);
         FnvAppendString(hash, sector->ceilingTextureId);
         FnvAppendTopologyUv(hash, sector->floorUv);
