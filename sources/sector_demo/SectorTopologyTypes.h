@@ -27,9 +27,18 @@ struct SectorTopologyUvSettings {
     Vector2 offset = {0.0f, 0.0f};
 };
 
+struct SectorTopologyDecalLayer {
+    std::string textureId;
+    SectorTopologyUvSettings uv;
+    float opacity = 1.0f;
+    bool emissive = false;
+    Vector3 tint = {1.0f, 1.0f, 1.0f};
+};
+
 struct SectorTopologyWallPartSettings {
     std::string textureId;
     SectorTopologyUvSettings uv;
+    SectorTopologyDecalLayer decal;
 };
 
 // A linedef is directed from its start vertex to its end vertex.
@@ -66,6 +75,8 @@ struct SectorTopologySector {
 
     SectorTopologyUvSettings floorUv;
     SectorTopologyUvSettings ceilingUv;
+    SectorTopologyDecalLayer floorDecal;
+    SectorTopologyDecalLayer ceilingDecal;
 
     Color ambientColor = WHITE;
     float ambientIntensity = 1.0f;

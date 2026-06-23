@@ -200,6 +200,25 @@ The sidedef/linedef inspector supports:
 - `Split At Point`
 - line-only inspection and splitting when no sidedef is selected
 
+Topology JSON can also store one optional decal layer for each floor, ceiling,
+wall, lower, and upper surface material. Surface material panels expose
+`Layer: Base | Decal`. Base edits the normal texture and UV settings. Decal
+edits the optional overlay texture, UV, opacity, emissive mode, and tint for
+the selected surface. `Clear Decal` removes the selected surface decal and
+resets texture, UV, opacity, emissive, and tint. Decal assignment uses the
+normal topology texture table and texture picker; decal textures are ordinary
+texture IDs, not a separate texture category. Decal UVs are masked outside
+`0..1`, so decals do not tile across the whole surface. Non-emissive decals
+are composited over the base texture first, then lit like the base surface.
+Emissive decals render unlit over the already-lit base surface, but do not cast
+light or affect lightmap baking. Tint multiplies decal RGB and is edited with a
+compact swatch that opens a modal color dialog rather than direct inspector RGB
+fields. The single optional decal layer limitation remains.
+
+For manual decal verification, load `decal_test` from the `Load` dialog. The
+sample level lives at `assets/levels/decal_test/decal_test.json` and uses
+`assets/images/biker_chick.png` as a transparent wall and floor decal.
+
 `Split Linedef` creates one exact midpoint vertex and replaces the selected line
 with two new linedefs. Existing front/back sidedefs are duplicated onto both
 replacement lines with fresh stable IDs, preserving sector ownership, side kind,
@@ -210,20 +229,25 @@ Wall-like surfaces use distance-based generated base UVs. Wall, lower, and
 upper U spans are based on physical linedef length, and V spans are based on the
 visible wall height. Reset UV restores scale `(1, 1)` and offset `(0, 0)`, which
 restarts the selected wall span's local texture coordinates and tiles the texture
-every 2 world units. `Fit Width`, `Fit Height`, and `Fit Both` adjust only the
-selected wall/lower/upper part's UV scale and reset the fitted offset axis so
-that the selected texture spans once across the selected width and/or height.
+every 2 world units. When Decal is the active layer and a decal is assigned,
+the same UV tools operate on the selected decal UV instead of the base UV.
+`Fit Width`, `Fit Height`, and `Fit Both` adjust only the selected
+wall/lower/upper part's active-layer UV scale and reset the fitted offset axis
+so that the selected texture spans once across the selected width and/or height.
 `Align Vertical` adjusts only the selected wall/lower/upper part's V offset so
 brick rows or wall courses line up by world height. Fit and Align Vertical
 preserve the selected part's texture ID and do not change other wall parts, the
 opposite sidedef, sector defaults, floors, or ceilings. Align Vertical also
 preserves the selected part's UV scale and U offset.
 `Align U Prev` and `Align U Next` adjust only the selected wall/lower/upper
-part's U offset so the texture continues from the previous or next visible
-compatible wall/lower/upper surface in the same sector loop, skipping edges
-where that wall part is not visible. They preserve texture ID, scale, V offset,
-other wall parts, and the opposite sidedef. They do not copy material, scale, or
-texture from the neighbor, and they are not full wall-chain alignment yet.
+part's active-layer U offset so the texture continues from the previous or next
+visible compatible wall/lower/upper surface in the same sector loop, skipping
+edges where that wall part is not visible. On the Decal layer, Align U also
+skips visible neighbors that do not have an assigned decal for the same wall
+part, uses the neighbor decal UV as the source, and never falls back to neighbor
+base UV. They preserve texture ID, scale, V offset, other wall parts, and the
+opposite sidedef. They do not copy material, scale, or texture from the
+neighbor, and they are not full wall-chain alignment yet.
 
 `Split At Point` starts a pending canvas action for the selected linedef. Click a
 snapped point exactly on that linedef to split there, or press Escape/right click
@@ -333,8 +357,10 @@ lighting, or geometry. Keyboard shortcuts are not implemented for this workflow
 yet, so use the inspector or 3D panel buttons.
 
 `Add Map Texture` scans `assets/images` recursively for PNG files. It can add or
-update a texture ID in the map texture table and choose point or bilinear
-filtering. It does not copy external files into the project.
+update a texture ID in the map texture table and choose point, bilinear,
+trilinear, or anisotropic 8x filtering. Legacy saved `"bilinear"` texture
+filters load as anisotropic 8x; exact bilinear filtering serializes as
+`"linear"`. It does not copy external files into the project.
 
 ## Move, Split, And Delete Tools
 
@@ -385,13 +411,18 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 The 3D surface panel edits only the selected surface target. Floor/ceiling
 targets edit sector texture and UV settings. Wall/lower/upper targets edit the
 selected sidedef's matching wall part. The Texture button opens the topology
-texture picker, Reset UV resets only the selected surface target, Fit Width /
-Fit Height / Fit Both fit only selected wall-like targets, Align Vertical shifts
-only selected wall-like V offsets to line up by world height, Align U Prev /
-Align U Next shift only selected wall-like U offsets to continue from the
-previous or next visible compatible wall/lower/upper surface in the same sector
-loop, skipping edges where that wall part is not visible, and Copy/Paste Material
-copies texture ID plus UV scale/offset between matching selected surface kinds.
+texture picker. `Layer: Base | Decal` chooses whether Texture, UV, Reset UV,
+Fit, and Align controls edit the base material or the optional decal layer.
+When Decal is active and no decal texture is assigned, the panel shows
+`No decal assigned` and only the Texture picker remains available. Assigned
+decals expose UV, opacity, emissive, tint, and `Clear Decal`. Reset UV resets
+only the selected surface target, Fit Width / Fit Height / Fit Both fit only
+selected wall-like targets, Align Vertical shifts only selected wall-like V offsets to line up by
+world height, Align U Prev / Align U Next shift only selected wall-like U
+offsets to continue from the previous or next visible compatible
+wall/lower/upper surface in the same sector loop, skipping edges where that wall
+part is not visible, and Copy/Paste Material copies base texture ID plus UV
+scale/offset between matching selected surface kinds.
 Align Vertical preserves texture ID, scale, U offset, and other wall parts.
 Align U Prev / Align U Next preserve texture ID, scale, V offset, other wall
 parts, and the opposite sidedef; they do not copy material, scale, or texture

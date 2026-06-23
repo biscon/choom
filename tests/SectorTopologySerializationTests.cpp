@@ -7,6 +7,7 @@
 #include <iostream>
 #include <iterator>
 #include <cmath>
+#include <limits>
 #include <string>
 
 namespace {
@@ -45,6 +46,38 @@ game::SectorTopologyWallPartSettings MakePart(
     part.uv.scale = {scaleX, scaleY};
     part.uv.offset = {offsetX, offsetY};
     return part;
+}
+
+game::SectorTopologyDecalLayer MakeDecal(
+        const char* textureId,
+        float scaleX,
+        float scaleY,
+        float offsetX,
+        float offsetY,
+        float opacity,
+        bool emissive = false,
+        Vector3 tint = {1.0f, 1.0f, 1.0f})
+{
+    game::SectorTopologyDecalLayer decal;
+    decal.textureId = textureId;
+    decal.uv.scale = {scaleX, scaleY};
+    decal.uv.offset = {offsetX, offsetY};
+    decal.opacity = opacity;
+    decal.emissive = emissive;
+    decal.tint = tint;
+    return decal;
+}
+
+bool Near(float actual, float expected, float epsilon = 0.00001f)
+{
+    return std::fabs(actual - expected) <= epsilon;
+}
+
+bool Near(Vector3 actual, Vector3 expected, float epsilon = 0.00001f)
+{
+    return Near(actual.x, expected.x, epsilon)
+            && Near(actual.y, expected.y, epsilon)
+            && Near(actual.z, expected.z, epsilon);
 }
 
 SectorTopologyMap MakeSquare()
@@ -215,12 +248,51 @@ void TestRoundTrip()
           "sector defaults round-trip");
     Check(loaded.texturesById.at("wall").filter == SectorTextureFilter::Point,
           "texture definition round-trips");
+    Check(loaded.texturesById.at("floor").filter == SectorTextureFilter::Bilinear,
+          "linear texture definition round-trips");
     Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(loaded)),
           "round-tripped map validates");
     SectorTopologyLoopSet loops;
     Check(game::ExtractSectorTopologyLoops(loaded, 1, loops)
                   && loops.outer.signedAreaTwice > 0,
           "round-tripped map extracts a CCW loop");
+}
+
+void TestTextureFilterSerialization()
+{
+    SectorTopologyMap map = MakeSquare();
+    map.texturesById.emplace("tri", SectorTextureDefinition{
+            "tri", "textures/tri.png", SectorTextureFilter::Trilinear});
+    map.texturesById.emplace("aniso", SectorTextureDefinition{
+            "aniso", "textures/aniso.png", SectorTextureFilter::Anisotropic8x});
+
+    const Json saved = Json::parse(SaveText(map));
+    Check(saved["textures"]["wall"]["filter"] == "point",
+          "point texture filter serializes");
+    Check(saved["textures"]["floor"]["filter"] == "linear",
+          "linear texture filter serializes");
+    Check(saved["textures"]["tri"]["filter"] == "trilinear",
+          "trilinear texture filter serializes");
+    Check(saved["textures"]["aniso"]["filter"] == "anisotropic8x",
+          "anisotropic texture filter serializes");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error), "all texture filter presets load");
+    Check(loaded.texturesById.at("wall").filter == SectorTextureFilter::Point,
+          "point texture filter loads");
+    Check(loaded.texturesById.at("floor").filter == SectorTextureFilter::Bilinear,
+          "linear texture filter loads");
+    Check(loaded.texturesById.at("tri").filter == SectorTextureFilter::Trilinear,
+          "trilinear texture filter loads");
+    Check(loaded.texturesById.at("aniso").filter == SectorTextureFilter::Anisotropic8x,
+          "anisotropic texture filter loads");
+
+    Json legacy = saved;
+    legacy["textures"]["floor"]["filter"] = "bilinear";
+    Check(LoadText(legacy.dump(), loaded, error), "legacy bilinear texture filter loads");
+    Check(loaded.texturesById.at("floor").filter == SectorTextureFilter::Anisotropic8x,
+          "legacy bilinear upgrades to anisotropic filtering");
 }
 
 void TestStaticLightRoundTrip()
@@ -325,6 +397,237 @@ void TestLightmapMetadataRoundTrip()
                   && oldStyle.bakedLightmap.height == 0
                   && oldStyle.bakedLightmap.sourceHash.empty(),
           "omitted baked lightmap metadata loads empty");
+}
+
+void TestDecalDefaultsAndOmission()
+{
+    SectorTopologyMap map = MakeSquare();
+    const std::string text = SaveText(map);
+    const Json saved = Json::parse(text);
+    Check(!saved["sectors"][0].contains("floorDecal"),
+          "default floor decal is omitted");
+    Check(!saved["sectors"][0].contains("ceilingDecal"),
+          "default ceiling decal is omitted");
+    Check(!saved["sidedefs"][0]["wall"].contains("decal"),
+          "default wall decal is omitted");
+    Check(!saved["sidedefs"][0]["lower"].contains("decal"),
+          "default lower decal is omitted");
+    Check(!saved["sidedefs"][0]["upper"].contains("decal"),
+          "default upper decal is omitted");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "topology without decal fields loads");
+    Check(loaded.sectors[0].floorDecal.textureId.empty()
+                  && loaded.sectors[0].floorDecal.uv.scale.x == 1.0f
+                  && loaded.sectors[0].floorDecal.uv.offset.y == 0.0f
+                  && loaded.sectors[0].floorDecal.opacity == 1.0f
+                  && !loaded.sectors[0].floorDecal.emissive
+                  && Near(loaded.sectors[0].floorDecal.tint, Vector3{1.0f, 1.0f, 1.0f}),
+          "omitted floor decal loads default no-decal state");
+    Check(loaded.sideDefs[0].wall.decal.textureId.empty()
+                  && loaded.sideDefs[0].wall.decal.uv.scale.y == 1.0f
+                  && loaded.sideDefs[0].wall.decal.opacity == 1.0f
+                  && !loaded.sideDefs[0].wall.decal.emissive
+                  && Near(loaded.sideDefs[0].wall.decal.tint, Vector3{1.0f, 1.0f, 1.0f}),
+          "omitted sidedef decal loads default no-decal state");
+
+    map.sectors[0].floorDecal.uv.scale = {2.0f, 3.0f};
+    map.sectors[0].floorDecal.uv.offset = {4.0f, 5.0f};
+    map.sectors[0].floorDecal.opacity = 0.25f;
+    map.sectors[0].floorDecal.emissive = true;
+    map.sectors[0].floorDecal.tint = Vector3{0.5f, 0.25f, 0.75f};
+    map.sideDefs[0].wall.decal.uv.scale = {6.0f, 7.0f};
+    map.sideDefs[0].wall.decal.opacity = 0.5f;
+    map.sideDefs[0].wall.decal.emissive = true;
+    map.sideDefs[0].wall.decal.tint = Vector3{0.25f, 0.5f, 0.75f};
+    const Json normalized = Json::parse(SaveText(map));
+    Check(!normalized["sectors"][0].contains("floorDecal"),
+          "empty texture sector decal with stray data is omitted");
+    Check(!normalized["sidedefs"][0]["wall"].contains("decal"),
+          "empty texture wall decal with stray data is omitted");
+}
+
+void TestDecalRoundTrip()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.sectors[0].floorDecal = MakeDecal("floor_arrow", 0.5f, 0.75f, 0.125f, 0.25f, 0.8f, true, Vector3{1.0f, 0.25f, 0.5f});
+    original.sectors[0].ceilingDecal = MakeDecal("ceiling_grime", 2.0f, 3.0f, 4.0f, 5.0f, 0.35f, false, Vector3{0.2f, 0.3f, 0.4f});
+    original.sideDefs[0].wall.decal = MakeDecal("painting_01", 0.25f, 0.5f, 0.75f, 1.0f, 1.0f, true, Vector3{0.5f, 0.6f, 0.7f});
+    original.sideDefs[0].lower.decal = MakeDecal("lower_sign", 1.25f, 1.5f, 1.75f, 2.0f, 0.65f);
+    original.sideDefs[0].upper.decal = MakeDecal("upper_text", 2.25f, 2.5f, 2.75f, 3.0f, 0.9f);
+
+    const std::string text = SaveText(original);
+    const Json saved = Json::parse(text);
+    Check(saved["sectors"][0]["floorDecal"]["textureId"].get<std::string>() == "floor_arrow",
+          "floor decal texture ID is saved");
+    Check(saved["sectors"][0]["floorDecal"]["uv"]["scale"][0].get<float>() == 0.5f,
+          "floor decal UV scale is saved");
+    Check(saved["sectors"][0]["floorDecal"]["opacity"].get<float>() == 0.8f,
+          "floor decal opacity is saved");
+    Check(saved["sectors"][0]["floorDecal"]["emissive"].get<bool>(),
+          "floor decal emissive flag is saved");
+    Check(saved["sectors"][0]["floorDecal"]["tint"][1].get<float>() == 0.25f,
+          "floor decal tint is saved");
+    Check(saved["sidedefs"][0]["wall"]["decal"]["textureId"].get<std::string>() == "painting_01",
+          "wall decal texture ID is saved");
+    Check(saved["sidedefs"][0]["lower"]["decal"]["uv"]["offset"][1].get<float>() == 2.0f,
+          "lower decal UV offset is saved");
+    Check(saved["sidedefs"][0]["upper"]["decal"]["opacity"].get<float>() == 0.9f,
+          "upper decal opacity is saved");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "topology with decal fields loads");
+    Check(loaded.sectors[0].floorDecal.textureId == "floor_arrow"
+                  && loaded.sectors[0].floorDecal.uv.scale.x == 0.5f
+                  && loaded.sectors[0].floorDecal.uv.offset.y == 0.25f
+                  && loaded.sectors[0].floorDecal.opacity == 0.8f
+                  && loaded.sectors[0].floorDecal.emissive
+                  && Near(loaded.sectors[0].floorDecal.tint, Vector3{1.0f, 0.25f, 0.5f}),
+          "floor decal round-trips");
+    Check(loaded.sectors[0].ceilingDecal.textureId == "ceiling_grime"
+                  && loaded.sectors[0].ceilingDecal.uv.scale.y == 3.0f
+                  && loaded.sectors[0].ceilingDecal.uv.offset.x == 4.0f
+                  && loaded.sectors[0].ceilingDecal.opacity == 0.35f
+                  && !loaded.sectors[0].ceilingDecal.emissive
+                  && Near(loaded.sectors[0].ceilingDecal.tint, Vector3{0.2f, 0.3f, 0.4f}),
+          "ceiling decal round-trips");
+    Check(loaded.sideDefs[0].wall.decal.textureId == "painting_01"
+                  && loaded.sideDefs[0].wall.decal.uv.offset.x == 0.75f
+                  && loaded.sideDefs[0].wall.decal.opacity == 1.0f
+                  && loaded.sideDefs[0].wall.decal.emissive
+                  && Near(loaded.sideDefs[0].wall.decal.tint, Vector3{0.5f, 0.6f, 0.7f}),
+          "wall decal round-trips");
+    Check(loaded.sideDefs[0].lower.decal.textureId == "lower_sign"
+                  && loaded.sideDefs[0].lower.decal.uv.scale.x == 1.25f
+                  && loaded.sideDefs[0].lower.decal.opacity == 0.65f,
+          "lower decal round-trips");
+    Check(loaded.sideDefs[0].upper.decal.textureId == "upper_text"
+                  && loaded.sideDefs[0].upper.decal.uv.offset.y == 3.0f
+                  && loaded.sideDefs[0].upper.decal.opacity == 0.9f,
+          "upper decal round-trips");
+
+    Json withoutOpacity = saved;
+    withoutOpacity["sidedefs"][0]["wall"]["decal"].erase("opacity");
+    Check(LoadText(withoutOpacity.dump(), loaded, error), "decal opacity is optional on load");
+    Check(loaded.sideDefs[0].wall.decal.opacity == 1.0f,
+          "omitted decal opacity defaults to 1");
+
+    Json oldDecal = saved;
+    oldDecal["sectors"][0]["floorDecal"].erase("emissive");
+    oldDecal["sectors"][0]["floorDecal"].erase("tint");
+    Check(LoadText(oldDecal.dump(), loaded, error), "old decal JSON without emissive and tint loads");
+    Check(!loaded.sectors[0].floorDecal.emissive
+                  && Near(loaded.sectors[0].floorDecal.tint, Vector3{1.0f, 1.0f, 1.0f}),
+          "old decal JSON defaults emissive and tint");
+}
+
+void TestStrictDecalValidation()
+{
+    const Json valid = Json::parse(SaveText(MakeSquare()));
+    Json changed = valid;
+    changed["sectors"][0]["floorDecal"] = "not an object";
+    ExpectRejected(changed, "decal field wrong type is rejected");
+    changed = valid;
+    changed["sectors"][0]["floorDecal"] = Json{
+            {"textureId", ""},
+            {"uv", {{"scale", Json::array({1, 1})}, {"offset", Json::array({0, 0})}}},
+            {"opacity", 1.0f}
+    };
+    ExpectRejected(changed, "empty present decal texture ID is rejected");
+    changed["sectors"][0]["floorDecal"]["textureId"] = 17;
+    ExpectRejected(changed, "decal texture ID wrong type is rejected");
+    changed = valid;
+    changed["sectors"][0]["floorDecal"] = Json{
+            {"textureId", "arrow"},
+            {"opacity", 1.0f}
+    };
+    ExpectRejected(changed, "decal missing UV is rejected");
+    changed = valid;
+    changed["sectors"][0]["floorDecal"] = Json{
+            {"textureId", "arrow"},
+            {"uv", {{"scale", Json::array({1})}, {"offset", Json::array({0, 0})}}},
+            {"opacity", 1.0f}
+    };
+    ExpectRejected(changed, "decal UV scale wrong shape is rejected");
+    changed["sectors"][0]["floorDecal"]["uv"]["scale"] = Json::array({1, 1});
+    changed["sectors"][0]["floorDecal"]["uv"]["offset"] = Json::array({0, "bad"});
+    ExpectRejected(changed, "decal UV offset wrong type is rejected");
+    changed["sectors"][0]["floorDecal"]["uv"]["offset"] = Json::array({0, 0});
+    changed["sectors"][0]["floorDecal"]["uv"]["scale"] = Json::array({1.0e39, 1});
+    ExpectRejected(changed, "decal UV outside float range is rejected");
+    changed = valid;
+    changed["sidedefs"][0]["wall"]["decal"] = Json{
+            {"textureId", "painting"},
+            {"uv", {{"scale", Json::array({1, 1})}, {"offset", Json::array({0, 0})}}},
+            {"opacity", "solid"}
+    };
+    ExpectRejected(changed, "decal opacity wrong type is rejected");
+    changed["sidedefs"][0]["wall"]["decal"]["opacity"] = -0.01f;
+    ExpectRejected(changed, "negative decal opacity is rejected");
+    changed["sidedefs"][0]["wall"]["decal"]["opacity"] = 1.01f;
+    ExpectRejected(changed, "oversized decal opacity is rejected");
+    changed["sidedefs"][0]["wall"]["decal"]["opacity"] = 1.0f;
+    changed["sidedefs"][0]["wall"]["decal"]["emissive"] = "yes";
+    ExpectRejected(changed, "decal emissive wrong type is rejected");
+    changed["sidedefs"][0]["wall"]["decal"]["emissive"] = true;
+    changed["sidedefs"][0]["wall"]["decal"]["tint"] = Json::array({1.0f, 0.5f});
+    ExpectRejected(changed, "decal tint wrong shape is rejected");
+    changed["sidedefs"][0]["wall"]["decal"]["tint"] = Json::array({1.0f, "green", 0.5f});
+    ExpectRejected(changed, "decal tint wrong type is rejected");
+    changed["sidedefs"][0]["wall"]["decal"]["tint"] = Json::array({1.0e39, 0.5f, 0.5f});
+    ExpectRejected(changed, "decal tint outside float range is rejected");
+    changed["sidedefs"][0]["wall"]["decal"]["tint"] = Json::array({1.01f, 0.5f, 0.5f});
+    ExpectRejected(changed, "oversized decal tint is rejected");
+    changed["sidedefs"][0]["wall"]["decal"]["tint"] = Json::array({-0.01f, 0.5f, 0.5f});
+    ExpectRejected(changed, "negative decal tint is rejected");
+
+    SectorTopologyMap invalid = MakeSquare();
+    invalid.sideDefs[0].wall.decal = MakeDecal("painting", 1.0f, 1.0f, 0.0f, 0.0f, 1.0f);
+    invalid.sideDefs[0].wall.decal.uv.scale.x = std::numeric_limits<float>::infinity();
+    std::string jsonOutput = "sentinel";
+    std::string error;
+    Check(!game::SaveSectorTopologyMapToJsonString(invalid, jsonOutput, &error),
+          "non-finite decal UV is rejected on save");
+    Check(jsonOutput == "sentinel", "failed decal save leaves JSON output unchanged");
+
+    invalid = MakeSquare();
+    invalid.sectors[0].floorDecal = MakeDecal("arrow", 1.0f, 1.0f, 0.0f, 0.0f, 1.5f);
+    jsonOutput = "sentinel";
+    error.clear();
+    Check(!game::SaveSectorTopologyMapToJsonString(invalid, jsonOutput, &error),
+          "invalid decal opacity is rejected on save");
+    Check(jsonOutput == "sentinel", "failed invalid opacity save leaves JSON output unchanged");
+
+    invalid = MakeSquare();
+    invalid.sectors[0].floorDecal = MakeDecal("arrow", 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, false, Vector3{1.0f, 0.5f, 1.5f});
+    jsonOutput = "sentinel";
+    error.clear();
+    Check(!game::SaveSectorTopologyMapToJsonString(invalid, jsonOutput, &error),
+          "invalid decal tint is rejected on save");
+    Check(jsonOutput == "sentinel", "failed invalid tint save leaves JSON output unchanged");
+
+    invalid.sectors[0].floorDecal.tint = Vector3{1.0f, std::numeric_limits<float>::infinity(), 1.0f};
+    jsonOutput = "sentinel";
+    error.clear();
+    Check(!game::SaveSectorTopologyMapToJsonString(invalid, jsonOutput, &error),
+          "non-finite decal tint is rejected on save");
+    Check(jsonOutput == "sentinel", "failed non-finite tint save leaves JSON output unchanged");
+
+    SectorTopologyMap output = MakeSquare();
+    output.sectors[0].floorDecal = MakeDecal("existing", 2.0f, 2.0f, 3.0f, 3.0f, 0.5f);
+    changed = valid;
+    changed["sectors"][0]["floorDecal"] = Json{
+            {"textureId", ""},
+            {"uv", {{"scale", Json::array({1, 1})}, {"offset", Json::array({0, 0})}}},
+            {"opacity", 1.0f}
+    };
+    error.clear();
+    Check(!LoadText(changed.dump(), output, error), "invalid decal load fails");
+    Check(output.sectors[0].floorDecal.textureId == "existing"
+                  && output.sectors[0].floorDecal.opacity == 0.5f,
+          "failed decal load leaves output map unchanged");
 }
 
 void TestHandAuthoredJson()
@@ -649,8 +952,12 @@ void TestFileApi()
 int main()
 {
     TestRoundTrip();
+    TestTextureFilterSerialization();
     TestStaticLightRoundTrip();
     TestLightmapMetadataRoundTrip();
+    TestDecalDefaultsAndOmission();
+    TestDecalRoundTrip();
+    TestStrictDecalValidation();
     TestHandAuthoredJson();
     TestStrictMarkersAndShapes();
     TestStrictValuesAndValidation();

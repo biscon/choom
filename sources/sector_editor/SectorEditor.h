@@ -27,6 +27,7 @@ public:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    bool IsPreview3DActive() const;
 
     Vector2 MapToScreen(Vector2 map) const;
     Vector2 ScreenToMap(Vector2 screen) const;
@@ -177,6 +178,12 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawDecalTintModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
     void DrawStatusPanel(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -256,14 +263,26 @@ private:
     bool IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget target) const;
     void ResetSurface3DUiState();
     Rectangle BuildPreviewUvPanelRect() const;
-    std::string CurrentTextureForSurface(TopologySurfaceEditTarget target) const;
+    const SectorTopologyDecalLayer* DecalForSurface(TopologySurfaceEditTarget target) const;
+    SectorTopologyDecalLayer* MutableDecalForSurface(TopologySurfaceEditTarget target);
+    const SectorTopologyUvSettings* UvForSurface(TopologySurfaceEditTarget target, TopologyMaterialLayer layer) const;
+    SectorTopologyUvSettings* MutableUvForSurface(TopologySurfaceEditTarget target, TopologyMaterialLayer layer);
+    bool IsDecalAssigned(TopologySurfaceEditTarget target) const;
+    std::string CurrentTextureForSurface(TopologySurfaceEditTarget target, TopologyMaterialLayer layer) const;
     bool CopyTopologyMaterial(TopologySurfaceEditTarget target);
     bool PasteTopologyMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets);
-    bool ApplySurface3DUvValue(TopologySurfaceEditTarget target, int component, float value, engine::AssetManager& assets);
-    bool ResetSurface3DUv(TopologySurfaceEditTarget target, engine::AssetManager& assets);
-    bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets);
-    bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets);
-    bool AlignSelectedWallMaterialU(TopologySurfaceEditTarget target, TopologyUAlignDirection direction, engine::AssetManager* assets);
+    bool ApplySurface3DUvValue(TopologySurfaceEditTarget target, TopologyMaterialLayer layer, int component, float value, engine::AssetManager& assets);
+    bool ApplySurfaceDecalOpacity(TopologySurfaceEditTarget target, float opacity, engine::AssetManager* assets);
+    bool ApplySurfaceDecalEmissive(TopologySurfaceEditTarget target, bool emissive, engine::AssetManager* assets);
+    bool ApplySurfaceDecalTint(TopologySurfaceEditTarget target, Vector3 tint, engine::AssetManager* assets);
+    bool OpenDecalTintModal(TopologySurfaceEditTarget target);
+    bool ClearSurfaceDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
+    bool ResetSurface3DUv(TopologySurfaceEditTarget target, TopologyMaterialLayer layer, engine::AssetManager& assets);
+    bool FitSelectedDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
+    bool FitSelectedFlatDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
+    bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets, TopologyMaterialLayer layer);
+    bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets, TopologyMaterialLayer layer);
+    bool AlignSelectedWallMaterialU(TopologySurfaceEditTarget target, TopologyUAlignDirection direction, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     bool SplitSelectedTopologyLineDef();
     bool DissolveSelectedTopologyVertex();
@@ -273,8 +292,8 @@ private:
     void OpenDeleteTopologySectorConfirmation(int sectorId);
     bool DeleteSelectedTopologySectorConfirmed(int sectorId);
     void ClearSelection();
-    void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field);
-    void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart);
+    void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer);
+    void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer);
     void ApplyTexturePickerSelection(engine::AssetManager& assets);
     std::string CurrentTextureForPickerTarget() const;
     bool TryRenameSelectedTopologySector();

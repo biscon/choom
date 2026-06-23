@@ -64,6 +64,10 @@ private:
     bool materialLoaded = false;
     int useLightmapLoc = -1;
     int useBakedAmbientOcclusionLoc = -1;
+    int hasDecalLoc = -1;
+    int decalOpacityLoc = -1;
+    int decalEmissiveLoc = -1;
+    int decalTintLoc = -1;
     int lightmapStatus = 0;
     bool initialized = false;
     bool mouseLookEnabled = true;

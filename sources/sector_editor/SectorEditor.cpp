@@ -99,7 +99,7 @@ void PopulateDefaultSectorTextures(TextureMap& texturesById)
         SectorTextureDefinition definition;
         definition.id = id;
         definition.path = path;
-        definition.filter = SectorTextureFilter::Bilinear;
+        definition.filter = SectorTextureFilter::Anisotropic8x;
         texturesById.emplace(id, std::move(definition));
     };
     addTexture("wall", "assets/images/wall.png");
@@ -538,6 +538,24 @@ const char* TopologyWallPartStatusName(TopologyWallPart part)
     return "wall";
 }
 
+const char* TopologyMaterialLayerName(TopologyMaterialLayer layer)
+{
+    switch (layer) {
+        case TopologyMaterialLayer::Base: return "Base";
+        case TopologyMaterialLayer::Decal: return "Decal";
+    }
+    return "Base";
+}
+
+const char* TopologyMaterialLayerStatusName(TopologyMaterialLayer layer)
+{
+    switch (layer) {
+        case TopologyMaterialLayer::Base: return "material";
+        case TopologyMaterialLayer::Decal: return "decal";
+    }
+    return "material";
+}
+
 const char* TopologyWallPartSurfaceStatusName(TopologyWallPart part)
 {
     switch (part) {
@@ -671,6 +689,76 @@ const char* TopologyUAlignDirectionStatusName(TopologyUAlignDirection direction)
     return "neighbor";
 }
 
+void ResetTopologyUv(SectorTopologyUvSettings& uv)
+{
+    uv.scale = Vector2{1.0f, 1.0f};
+    uv.offset = Vector2{0.0f, 0.0f};
+}
+
+bool IsDefaultTopologyUv(SectorTopologyUvSettings uv)
+{
+    return uv.scale.x == 1.0f
+            && uv.scale.y == 1.0f
+            && uv.offset.x == 0.0f
+            && uv.offset.y == 0.0f;
+}
+
+bool IsWhiteTint(Vector3 tint)
+{
+    return tint.x == 1.0f && tint.y == 1.0f && tint.z == 1.0f;
+}
+
+bool IsValidDecalTint(Vector3 tint)
+{
+    return std::isfinite(tint.x) && std::isfinite(tint.y) && std::isfinite(tint.z)
+            && tint.x >= 0.0f && tint.x <= 1.0f
+            && tint.y >= 0.0f && tint.y <= 1.0f
+            && tint.z >= 0.0f && tint.z <= 1.0f;
+}
+
+Vector3 ClampDecalTint(Vector3 tint)
+{
+    return Vector3{
+            std::clamp(std::isfinite(tint.x) ? tint.x : 1.0f, 0.0f, 1.0f),
+            std::clamp(std::isfinite(tint.y) ? tint.y : 1.0f, 0.0f, 1.0f),
+            std::clamp(std::isfinite(tint.z) ? tint.z : 1.0f, 0.0f, 1.0f)
+    };
+}
+
+bool SameTint(Vector3 a, Vector3 b)
+{
+    return a.x == b.x && a.y == b.y && a.z == b.z;
+}
+
+Color DecalTintPreviewColor(Vector3 tint)
+{
+    const Vector3 clamped = ClampDecalTint(tint);
+    return Color{
+            static_cast<unsigned char>(std::lround(clamped.x * 255.0f)),
+            static_cast<unsigned char>(std::lround(clamped.y * 255.0f)),
+            static_cast<unsigned char>(std::lround(clamped.z * 255.0f)),
+            255
+    };
+}
+
+bool IsDefaultDecalLayer(const SectorTopologyDecalLayer& decal)
+{
+    return decal.textureId.empty()
+            && IsDefaultTopologyUv(decal.uv)
+            && decal.opacity == 1.0f
+            && !decal.emissive
+            && IsWhiteTint(decal.tint);
+}
+
+void ResetDecalLayer(SectorTopologyDecalLayer& decal)
+{
+    decal.textureId.clear();
+    ResetTopologyUv(decal.uv);
+    decal.opacity = 1.0f;
+    decal.emissive = false;
+    decal.tint = Vector3{1.0f, 1.0f, 1.0f};
+}
+
 TopologySectorTextureField TopologyEditTargetSectorTextureField(TopologySurfaceEditTargetKind kind)
 {
     switch (kind) {
@@ -730,7 +818,20 @@ const char* TopologySectorTextureFieldLabel(TopologySectorTextureField field)
 const char* TopologyPickerTargetLabel(const TexturePickerState& picker)
 {
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef) {
-        return TextFormat("%s sidedef texture", TopologyWallPartStatusName(picker.topologyWallPart));
+        return picker.topologyLayer == TopologyMaterialLayer::Decal
+                ? TextFormat("%s sidedef decal texture", TopologyWallPartStatusName(picker.topologyWallPart))
+                : TextFormat("%s sidedef texture", TopologyWallPartStatusName(picker.topologyWallPart));
+    }
+    if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+        switch (picker.topologyField) {
+            case TopologySectorTextureField::Floor: return "floor decal texture";
+            case TopologySectorTextureField::Ceiling: return "ceiling decal texture";
+            case TopologySectorTextureField::DefaultWall:
+            case TopologySectorTextureField::DefaultLower:
+            case TopologySectorTextureField::DefaultUpper:
+            case TopologySectorTextureField::None:
+                break;
+        }
     }
     return TopologySectorTextureFieldLabel(picker.topologyField);
 }
@@ -917,6 +1018,7 @@ const SectorTopologyLoopEdge* FindVisibleTopologyWallPartNeighborEdge(
         int sectorId,
         TopologyUAlignDirection direction,
         TopologyWallPart wallPart,
+        TopologyMaterialLayer layer,
         std::string& outError)
 {
     outError.clear();
@@ -957,6 +1059,10 @@ const SectorTopologyLoopEdge* FindVisibleTopologyWallPartNeighborEdge(
             return nullptr;
         }
         if (!TopologyWallPartHasVisibleSpan(map, *sideDef, wallPart)) {
+            continue;
+        }
+        if (layer == TopologyMaterialLayer::Decal
+                && TopologyWallPartSettingsFor(*sideDef, wallPart).decal.textureId.empty()) {
             continue;
         }
         return &edge;
@@ -1137,6 +1243,9 @@ void SectorEditor::Update(engine::Input& input, float dt)
     }
 
     if (state.mode == SectorEditorMode::Preview3D) {
+        if (state.texturePicker.open || HasDocumentModalOpen()) {
+            return;
+        }
         UpdatePreview3D(input, dt);
         return;
     }
@@ -1198,13 +1307,23 @@ void SectorEditor::RenderUI(
             engine::EndUI(ui, config, input, assets);
             return;
         }
-        DrawPreviewOverlay(config, assets, font);
-        if (!state.texturePicker.open) {
+        if (state.previewUiHidden) {
+            ui.hotId = 0;
+            ui.activeId = 0;
+            ui.focusedId = 0;
+            ui.openOptionId = 0;
+        } else {
+            DrawPreviewOverlay(config, assets, font);
+        }
+        if (!state.previewUiHidden && !state.texturePicker.open && !state.decalTintModal.open) {
             DrawPreviewUvPanel(ui, config, input, assets, font);
+        }
+        if (state.decalTintModal.open) {
+            DrawDecalTintModal(ui, config, input, assets, font);
         }
         DrawTexturePickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = ui.focusedId != 0;
-        if (state.texturePicker.open) {
+        if (state.texturePicker.open || state.decalTintModal.open) {
             uiState.keyboardCaptured = true;
         }
         engine::EndUI(ui, config, input, assets);
@@ -1236,6 +1355,12 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
+    if (state.decalTintModal.open) {
+        DrawDecalTintModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
     if (state.addMapTexture.open) {
         DrawAddMapTextureModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
@@ -1259,6 +1384,11 @@ void SectorEditor::RenderUI(
         uiState.keyboardCaptured = true;
     }
     engine::EndUI(ui, config, input, assets);
+}
+
+bool SectorEditor::IsPreview3DActive() const
+{
+    return state.mode == SectorEditorMode::Preview3D;
 }
 
 Vector2 SectorEditor::MapToScreen(Vector2 map) const
@@ -2580,6 +2710,18 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                     return;
                 }
 
+                if (event.key.key == KEY_F2) {
+                    state.previewUiHidden = !state.previewUiHidden;
+                    if (state.previewUiHidden) {
+                        state.hoveredSurface3D = SectorSurfaceHit{};
+                    }
+                    statusText = state.previewUiHidden
+                            ? "3D UI hidden"
+                            : "3D UI shown";
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
@@ -2595,7 +2737,11 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
 
 void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
 {
-    if (!initialized || !preview.IsReady() || preview.IsMouseLookEnabled() || state.texturePicker.open) {
+    if (!initialized
+            || !preview.IsReady()
+            || preview.IsMouseLookEnabled()
+            || state.previewUiHidden
+            || state.texturePicker.open) {
         state.hoveredSurface3D = SectorSurfaceHit{};
         return;
     }
@@ -3787,7 +3933,9 @@ bool SectorEditor::SnapTopologyVertexMoveTarget(
 void SectorEditor::RenderPreview3D(engine::AssetManager& assets)
 {
     preview.Render(assets, state.useBakedAmbientOcclusion);
-    DrawPreviewSurfaceHighlights();
+    if (!state.previewUiHidden) {
+        DrawPreviewSurfaceHighlights();
+    }
 }
 
 SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectangle viewportRect) const
@@ -3882,8 +4030,8 @@ void SectorEditor::DrawPreviewOverlay(
             engine::UITextJustify::Left
     );
     const char* interactionText = preview.IsMouseLookEnabled()
-            ? "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F11 cursor | Tab/Escape return"
-            : "F1 AO | F11 cursor | click surface to select | Tab/Escape return";
+            ? "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return"
+            : "F1 AO | F2 hide UI | F11 cursor | click surface to select | Tab/Escape return";
     engine::Text(
             config,
             assets,
@@ -3952,12 +4100,11 @@ void SectorEditor::DrawPreviewUvPanel(
     }
 
     const TopologySurfaceEditTarget target = state.selectedTopologySurface3D;
+    const TopologyMaterialLayer layer = state.activeTopologyMaterialLayer;
     const Rectangle panel = BuildPreviewUvPanelRect();
     DrawRectangleRec(panel, Color{12, 15, 20, 230});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
-    Vector2 uvScale{1.0f, 1.0f};
-    Vector2 uvOffset{0.0f, 0.0f};
     std::string targetLabel;
 
     if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
@@ -3968,11 +4115,6 @@ void SectorEditor::DrawPreviewUvPanel(
             state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
             return;
         }
-        const SectorTopologyUvSettings& uv = target.kind == TopologySurfaceEditTargetKind::SectorFloor
-                ? sector->floorUv
-                : sector->ceilingUv;
-        uvScale = uv.scale;
-        uvOffset = uv.offset;
         targetLabel = TextFormat(
                 "%s | sector %d",
                 target.kind == TopologySurfaceEditTargetKind::SectorFloor ? "Floor" : "Ceiling",
@@ -3985,9 +4127,7 @@ void SectorEditor::DrawPreviewUvPanel(
             return;
         }
         const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
-        const SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(*sideDef, wallPart);
-        uvScale = part.uv.scale;
-        uvOffset = part.uv.offset;
+        (void)wallPart;
         targetLabel = TextFormat(
                 "%s | sideDef %d line %d",
                 SurfaceKindName(state.selectedSurface3D.kind),
@@ -3997,7 +4137,7 @@ void SectorEditor::DrawPreviewUvPanel(
 
     const float margin = 18.0f;
     const float top = panel.y + margin;
-    const float inputTop = panel.y + 78.0f;
+    const float inputTop = panel.y + 104.0f;
     const float colW = 132.0f;
     const float gap = 14.0f;
     const float startX = panel.x + 390.0f;
@@ -4012,19 +4152,73 @@ void SectorEditor::DrawPreviewUvPanel(
             engine::UITextJustify::Left,
             config.textColor
     );
-    const std::string currentTexture = CurrentTextureForSurface(target);
+    const float layerLabelW = 68.0f;
+    const float layerButtonW = 78.0f;
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{panel.x + margin, top + 36.0f, layerLabelW, 30.0f},
+            font,
+            "Layer:",
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
+    if (engine::ToolButton(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_3d_layer_base",
+                Rectangle{panel.x + margin + layerLabelW, top + 34.0f, layerButtonW, 32.0f},
+                font,
+                "Base",
+                layer == TopologyMaterialLayer::Base)) {
+        state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
+        ResetSurface3DUiState();
+    }
+    if (engine::ToolButton(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_3d_layer_decal",
+                Rectangle{panel.x + margin + layerLabelW + layerButtonW + 8.0f, top + 34.0f, layerButtonW, 32.0f},
+                font,
+                "Decal",
+                layer == TopologyMaterialLayer::Decal)) {
+        state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
+        ResetSurface3DUiState();
+    }
+
+    const std::string currentTexture = CurrentTextureForSurface(target, layer);
     const bool missingTexture = !currentTexture.empty()
             && FindSectorTopologyTexture(state.topologyMap, currentTexture) == nullptr;
     engine::Text(
             ui,
             config,
             assets,
-            Rectangle{panel.x + margin, top + 38.0f, 350.0f, 30.0f},
+            Rectangle{panel.x + margin, top + 72.0f, 350.0f, 30.0f},
             font,
-            TextFormat("texture %s", currentTexture.empty() ? "<none>" : currentTexture.c_str()),
+            TextFormat("%s texture %s", TopologyMaterialLayerName(layer), currentTexture.empty() ? "<none>" : currentTexture.c_str()),
             engine::UITextJustify::Left,
             missingTexture ? config.invalidColor : config.mutedTextColor
     );
+
+    const bool decalAssigned = layer != TopologyMaterialLayer::Decal || IsDecalAssigned(target);
+    const SectorTopologyUvSettings* uv = UvForSurface(target, layer);
+    Vector2 uvScale = uv == nullptr ? Vector2{1.0f, 1.0f} : uv->scale;
+    Vector2 uvOffset = uv == nullptr ? Vector2{0.0f, 0.0f} : uv->offset;
+    if (!decalAssigned) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{startX, inputTop, 390.0f, 34.0f},
+                font,
+                "No decal assigned",
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+    }
 
     auto drawFloat = [&](const char* id, const char* label, float value, engine::UIFloatInputState& inputState, int component, float minValue, float maxValue, float x) {
         engine::Text(
@@ -4053,61 +4247,102 @@ void SectorEditor::DrawPreviewUvPanel(
                 3
         );
         if (result.changed && edited != value && std::isfinite(edited)) {
-            ApplySurface3DUvValue(target, component, edited, assets);
+            ApplySurface3DUvValue(target, layer, component, edited, assets);
         }
     };
 
-    drawFloat("sector_editor_3d_uv_scale_u", "Scale U", uvScale.x, uiState.surface3DUvScaleUInput, 0, TopologyUvScaleMin, TopologyUvScaleMax, startX);
-    drawFloat("sector_editor_3d_uv_scale_v", "Scale V", uvScale.y, uiState.surface3DUvScaleVInput, 1, TopologyUvScaleMin, TopologyUvScaleMax, startX + (colW + gap));
-    drawFloat("sector_editor_3d_uv_offset_u", "Offset U", uvOffset.x, uiState.surface3DUvOffsetUInput, 2, -1024.0f, 1024.0f, startX + (colW + gap) * 2.0f);
-    drawFloat("sector_editor_3d_uv_offset_v", "Offset V", uvOffset.y, uiState.surface3DUvOffsetVInput, 3, -1024.0f, 1024.0f, startX + (colW + gap) * 3.0f);
+    if (decalAssigned) {
+        drawFloat("sector_editor_3d_uv_scale_u", "Scale U", uvScale.x, uiState.surface3DUvScaleUInput, 0, TopologyUvScaleMin, TopologyUvScaleMax, startX);
+        drawFloat("sector_editor_3d_uv_scale_v", "Scale V", uvScale.y, uiState.surface3DUvScaleVInput, 1, TopologyUvScaleMin, TopologyUvScaleMax, startX + (colW + gap));
+        drawFloat("sector_editor_3d_uv_offset_u", "Offset U", uvOffset.x, uiState.surface3DUvOffsetUInput, 2, -1024.0f, 1024.0f, startX + (colW + gap) * 2.0f);
+        drawFloat("sector_editor_3d_uv_offset_v", "Offset V", uvOffset.y, uiState.surface3DUvOffsetVInput, 3, -1024.0f, 1024.0f, startX + (colW + gap) * 3.0f);
+    }
 
-    if (engine::Button(
-            ui,
-            config,
-            input,
-            assets,
-            "sector_editor_3d_texture",
-            Rectangle{panel.x + panel.width - 172.0f, panel.y + 38.0f, 146.0f, 38.0f},
-            font,
-            "Texture")) {
+    const float actionTop = inputTop + 52.0f;
+    const float actionH = 34.0f;
+    const float smallActionW = 96.0f;
+    float actionX = startX;
+    auto openTexturePicker = [&]() {
         if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
                 || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-            OpenTopologyTexturePicker(target.sectorId, TopologyEditTargetSectorTextureField(target.kind));
+            OpenTopologyTexturePicker(target.sectorId, TopologyEditTargetSectorTextureField(target.kind), layer);
         } else {
-            OpenTopologySideDefTexturePicker(target.sideDefId, TopologyEditTargetWallPart(target.kind));
+            OpenTopologySideDefTexturePicker(target.sideDefId, TopologyEditTargetWallPart(target.kind), layer);
         }
         if (state.texturePicker.open) {
             state.texturePicker.rebuildPreviewOnApply = true;
         }
-    }
-
+    };
     if (engine::Button(
-            ui,
-            config,
-            input,
-            assets,
-            "sector_editor_3d_reset_uv",
-            Rectangle{panel.x + panel.width - 172.0f, panel.y + 86.0f, 146.0f, 38.0f},
-            font,
-            "Reset UV")) {
-        ResetSurface3DUv(target, assets);
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_3d_texture",
+                Rectangle{actionX, actionTop, smallActionW, actionH},
+                font,
+                "Texture")) {
+        openTexturePicker();
+    }
+    actionX += smallActionW + gap;
+
+    if (decalAssigned) {
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_reset_uv",
+                    Rectangle{actionX, actionTop, smallActionW, actionH},
+                    font,
+                    "Reset UV")) {
+            ResetSurface3DUv(target, layer, assets);
+        }
+        actionX += smallActionW + gap;
     }
 
-    if (IsWallTopologyEditTarget(target.kind)) {
+    if (layer == TopologyMaterialLayer::Decal && decalAssigned) {
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_fit_decal",
+                    Rectangle{actionX, actionTop, smallActionW, actionH},
+                    font,
+                    "Fit Decal")) {
+            FitSelectedDecal(target, &assets);
+        }
+        actionX += smallActionW + gap;
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_clear_decal",
+                    Rectangle{actionX, actionTop, 104.0f, actionH},
+                    font,
+                    "Clear Decal")) {
+            ClearSurfaceDecal(target, &assets);
+        }
+        actionX += 104.0f + gap;
+    }
+
+    if (IsWallTopologyEditTarget(target.kind) && decalAssigned && layer == TopologyMaterialLayer::Base) {
         const float fitButtonW = 118.0f;
-        const float fitTop = panel.y + 134.0f;
-        const float alignTop = panel.y + 174.0f;
+        const float fitTop = panel.y + 194.0f;
+        const float fitButtonH = 26.0f;
+        const float alignStartX = startX + (fitButtonW + gap) * 3.0f;
         if (engine::Button(
                     ui,
                     config,
                     input,
                     assets,
                     "sector_editor_3d_fit_width",
-                    Rectangle{startX, fitTop, fitButtonW, 32.0f},
+                    Rectangle{startX, fitTop, fitButtonW, fitButtonH},
                     font,
                     "Fit Width")) {
-            FitSelectedWallMaterial(target, TopologyUvFitMode::Width, &assets);
+            FitSelectedWallMaterial(target, TopologyUvFitMode::Width, &assets, layer);
         }
         if (engine::Button(
                     ui,
@@ -4115,10 +4350,10 @@ void SectorEditor::DrawPreviewUvPanel(
                     input,
                     assets,
                     "sector_editor_3d_fit_height",
-                    Rectangle{startX + fitButtonW + gap, fitTop, fitButtonW, 32.0f},
+                    Rectangle{startX + fitButtonW + gap, fitTop, fitButtonW, fitButtonH},
                     font,
                     "Fit Height")) {
-            FitSelectedWallMaterial(target, TopologyUvFitMode::Height, &assets);
+            FitSelectedWallMaterial(target, TopologyUvFitMode::Height, &assets, layer);
         }
         if (engine::Button(
                     ui,
@@ -4126,10 +4361,10 @@ void SectorEditor::DrawPreviewUvPanel(
                     input,
                     assets,
                     "sector_editor_3d_fit_both",
-                    Rectangle{startX + (fitButtonW + gap) * 2.0f, fitTop, fitButtonW, 32.0f},
+                    Rectangle{startX + (fitButtonW + gap) * 2.0f, fitTop, fitButtonW, fitButtonH},
                     font,
                     "Fit Both")) {
-            FitSelectedWallMaterial(target, TopologyUvFitMode::Both, &assets);
+            FitSelectedWallMaterial(target, TopologyUvFitMode::Both, &assets, layer);
         }
         if (engine::Button(
                     ui,
@@ -4137,10 +4372,10 @@ void SectorEditor::DrawPreviewUvPanel(
                     input,
                     assets,
                     "sector_editor_3d_align_vertical",
-                    Rectangle{startX, alignTop, fitButtonW, 32.0f},
+                    Rectangle{alignStartX, fitTop, fitButtonW, fitButtonH},
                     font,
                     "Align Vertical")) {
-            AlignSelectedWallMaterialVertical(target, &assets);
+            AlignSelectedWallMaterialVertical(target, &assets, layer);
         }
         if (engine::Button(
                     ui,
@@ -4148,10 +4383,10 @@ void SectorEditor::DrawPreviewUvPanel(
                     input,
                     assets,
                     "sector_editor_3d_align_u_prev",
-                    Rectangle{startX + fitButtonW + gap, alignTop, fitButtonW, 32.0f},
+                    Rectangle{alignStartX + fitButtonW + gap, fitTop, fitButtonW, fitButtonH},
                     font,
                     "Align U Prev")) {
-            AlignSelectedWallMaterialU(target, TopologyUAlignDirection::Previous, &assets);
+            AlignSelectedWallMaterialU(target, TopologyUAlignDirection::Previous, &assets, layer);
         }
         if (engine::Button(
                     ui,
@@ -4159,35 +4394,90 @@ void SectorEditor::DrawPreviewUvPanel(
                     input,
                     assets,
                     "sector_editor_3d_align_u_next",
-                    Rectangle{startX + (fitButtonW + gap) * 2.0f, alignTop, fitButtonW, 32.0f},
+                    Rectangle{alignStartX + (fitButtonW + gap) * 2.0f, fitTop, fitButtonW, fitButtonH},
                     font,
                     "Align U Next")) {
-            AlignSelectedWallMaterialU(target, TopologyUAlignDirection::Next, &assets);
+            AlignSelectedWallMaterialU(target, TopologyUAlignDirection::Next, &assets, layer);
         }
     }
 
-    if (engine::Button(
-            ui,
-            config,
-            input,
-            assets,
-            "sector_editor_3d_copy_material",
-            Rectangle{panel.x + panel.width - 172.0f, panel.y + 134.0f, 146.0f, 32.0f},
-            font,
-            "Copy Material")) {
-        CopyTopologyMaterial(target);
-    }
+    if (layer == TopologyMaterialLayer::Decal && decalAssigned) {
+        const SectorTopologyDecalLayer* decal = DecalForSurface(target);
+        if (decal != nullptr) {
+            engine::Text(ui, config, assets, Rectangle{startX + (colW + gap) * 4.0f, inputTop - 28.0f, colW, 24.0f}, font, "Opacity", engine::UITextJustify::Left, config.mutedTextColor);
+            float opacity = decal->opacity;
+            const engine::UINumericInputResult result = engine::FloatInput(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_decal_opacity",
+                    Rectangle{startX + (colW + gap) * 4.0f, inputTop, colW, 38.0f},
+                    font,
+                    opacity,
+                    uiState.surface3DDecalOpacityInput,
+                    0.0f,
+                    1.0f,
+                    3);
+            if (result.changed && opacity != decal->opacity && std::isfinite(opacity)) {
+                ApplySurfaceDecalOpacity(target, opacity, &assets);
+            }
+            bool emissive = decal->emissive;
+            if (engine::Checkbox(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_3d_decal_emissive",
+                        Rectangle{actionX, actionTop, 112.0f, actionH},
+                        font,
+                        "Emissive",
+                        emissive)) {
+                ApplySurfaceDecalEmissive(target, emissive, &assets);
+            }
+            actionX += 112.0f + gap;
+            const Rectangle label{actionX, actionTop, 36.0f, actionH};
+            engine::Text(ui, config, assets, label, font, "Tint:", engine::UITextJustify::Left, config.mutedTextColor);
+            const Rectangle swatch{label.x + label.width + 8.0f, label.y + 1.0f, 48.0f, actionH - 2.0f};
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_3d_decal_tint",
+                        swatch,
+                        font,
+                        "")) {
+                OpenDecalTintModal(target);
+            }
+            DrawRectangleRec(swatch, DecalTintPreviewColor(decal->tint));
+            DrawRectangleLinesEx(swatch, config.borderThickness, config.borderColor);
+        }
+    } else if (layer == TopologyMaterialLayer::Base) {
+        if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_3d_copy_material",
+                Rectangle{actionX, actionTop, 112.0f, actionH},
+                font,
+                "Copy Material")) {
+            CopyTopologyMaterial(target);
+        }
+        actionX += 112.0f + gap;
 
-    if (engine::Button(
-            ui,
-            config,
-            input,
-            assets,
-            "sector_editor_3d_paste_material",
-            Rectangle{panel.x + panel.width - 172.0f, panel.y + 174.0f, 146.0f, 32.0f},
-            font,
-            "Paste Material")) {
-        PasteTopologyMaterial(target, assets);
+        if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_3d_paste_material",
+                Rectangle{actionX, actionTop, 112.0f, actionH},
+                font,
+                "Paste Material")) {
+            PasteTopologyMaterial(target, assets);
+        }
     }
 
     input.ForEachEvent(
@@ -5228,7 +5518,14 @@ void SectorEditor::DrawSectorsPanel(
         if (hasSelectedTopologySector) {
             const float textureRowH = 36.0f + gap;
             const float uvSettingsH = 2.0f * (62.0f + gap);
-            const float materialSurfaceSectionH = 18.0f + 30.0f + (36.0f + gap) + textureRowH + uvSettingsH;
+            const float materialSurfaceSectionH = 18.0f + 30.0f
+                    + (36.0f + gap) // Layer toggle.
+                    + textureRowH
+                    + uvSettingsH
+                    + rowH + gap // Opacity.
+                    + 36.0f + gap // Emissive.
+                    + rowH + gap // Tint.
+                    + 36.0f + gap; // Fit/Clear decal action row.
             const float defaultWallSectionH = 18.0f + 30.0f + textureRowH + uvSettingsH;
 
             float height = 38.0f; // Sector title.
@@ -5244,14 +5541,14 @@ void SectorEditor::DrawSectorsPanel(
             height += 36.0f + gap; // Ambient swatch.
             height += 2.0f * materialSurfaceSectionH; // Floor/ceiling material sections.
             height += 3.0f * defaultWallSectionH; // Default wall/lower/upper sections.
-            height += 32.0f; // Bottom breathing room for the last UV row.
+            height += 96.0f; // Bottom breathing room for the last controls.
             return height;
         }
         if (hasSelectedTopologyVertex) {
             return 280.0f;
         }
         if (hasSelectedTopologySideDef) {
-            return 752.0f;
+            return 1240.0f;
         }
         if (hasSelectedTopologyLineDef) {
             return 218.0f;
@@ -5716,7 +6013,7 @@ bool SectorEditor::DrawTopologySectorInspector(
     DrawRectangleLinesEx(swatch, 1.0f, config.borderColor);
     y += 36.0f + gap;
 
-    auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologySectorTextureField field) {
+    auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologySectorTextureField field, TopologyMaterialLayer layer) {
         const float buttonW = 38.0f;
         const float labelColumnW = 82.0f;
         const Rectangle row{0.0f, y, contentW, 36.0f};
@@ -5732,7 +6029,7 @@ bool SectorEditor::DrawTopologySectorInspector(
                 engine::UITextJustify::Left,
                 missing ? config.invalidColor : config.mutedTextColor);
         if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
-            OpenTopologyTexturePicker(sector->id, field);
+            OpenTopologyTexturePicker(sector->id, field, layer);
         }
         y += row.height + gap;
     };
@@ -5750,6 +6047,7 @@ bool SectorEditor::DrawTopologySectorInspector(
                     font, edited, uiState.topologySectorUvInputs[stateOffset + stateIndex], minValue, maxValue, 3);
             if (result.changed && edited != value && std::isfinite(edited)) {
                 applyValue(edited);
+                state.topologyRenderWarning.clear();
                 MarkTopologyDocumentEdited(TextFormat("Updated topology sector %d UV", sector->id));
             }
         };
@@ -5762,49 +6060,180 @@ bool SectorEditor::DrawTopologySectorInspector(
         y += uvBlockH + gap;
     };
 
-    auto drawSurfaceSection = [&](const char* title, const char* textureButtonId, const std::string& textureId, TopologySectorTextureField field, const char* uvPrefix, SectorTopologyUvSettings& uv, int stateOffset, TopologySurfaceEditTargetKind materialKind) {
+    auto drawLayerToggle = [&](const char* idPrefix) {
+        const float labelColumnW = 82.0f;
+        const float buttonW = (contentW - labelColumnW - gap) * 0.5f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, labelColumnW, 36.0f}, font, "Layer:", engine::UITextJustify::Left, config.mutedTextColor);
+        if (engine::ToolButton(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("%s_layer_base", idPrefix),
+                    Rectangle{labelColumnW, y, buttonW, 36.0f},
+                    font,
+                    "Base",
+                    state.activeTopologyMaterialLayer == TopologyMaterialLayer::Base)) {
+            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
+            for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+                inputState = engine::UIFloatInputState{};
+            }
+        }
+        if (engine::ToolButton(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("%s_layer_decal", idPrefix),
+                    Rectangle{labelColumnW + buttonW + gap, y, buttonW, 36.0f},
+                    font,
+                    "Decal",
+                    state.activeTopologyMaterialLayer == TopologyMaterialLayer::Decal)) {
+            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
+            for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+                inputState = engine::UIFloatInputState{};
+            }
+        }
+        y += 36.0f + gap;
+    };
+
+    auto drawSurfaceSection = [&](const char* title, const char* textureButtonId, const std::string& textureId, TopologySectorTextureField field, const char* uvPrefix, SectorTopologyUvSettings& uv, SectorTopologyDecalLayer& decal, int stateOffset, int opacityStateIndex, TopologySurfaceEditTargetKind materialKind) {
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
         y += 18.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, title, engine::UITextJustify::Left, config.textColor);
         y += 30.0f;
         const TopologySurfaceEditTarget target{materialKind, sector->id};
-        const float buttonW = (contentW - gap) * 0.5f;
-        if (engine::Button(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    TextFormat("%s_copy_material", uvPrefix),
-                    Rectangle{0.0f, y, buttonW, 36.0f},
-                    font,
-                    "Copy")) {
-            CopyTopologyMaterial(target);
+        drawLayerToggle(uvPrefix);
+        const TopologyMaterialLayer layer = state.activeTopologyMaterialLayer;
+        if (layer == TopologyMaterialLayer::Base) {
+            const float buttonW = (contentW - gap) * 0.5f;
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        TextFormat("%s_copy_material", uvPrefix),
+                        Rectangle{0.0f, y, buttonW, 36.0f},
+                        font,
+                        "Copy")) {
+                CopyTopologyMaterial(target);
+            }
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        TextFormat("%s_paste_material", uvPrefix),
+                        Rectangle{buttonW + gap, y, buttonW, 36.0f},
+                        font,
+                        "Paste")) {
+                PasteTopologyMaterial(target, assets);
+            }
+            y += 36.0f + gap;
+            drawTextureRow(textureButtonId, "Texture:", textureId, field, TopologyMaterialLayer::Base);
+            drawUvSettings(uvPrefix, uv, stateOffset);
+            return;
         }
-        if (engine::Button(
+
+        drawTextureRow(textureButtonId, "Texture:", decal.textureId, field, TopologyMaterialLayer::Decal);
+        if (decal.textureId.empty()) {
+            engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 32.0f}, font, "No decal assigned", engine::UITextJustify::Left, config.mutedTextColor);
+            y += 32.0f + gap;
+            return;
+        }
+
+        drawUvSettings(uvPrefix, decal.uv, stateOffset);
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Opacity:", engine::UITextJustify::Left, config.mutedTextColor);
+        float opacity = decal.opacity;
+        const engine::UINumericInputResult opacityResult = engine::FloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                TextFormat("%s_decal_opacity", uvPrefix),
+                Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                font,
+                opacity,
+                uiState.topologySectorDecalOpacityInputs[opacityStateIndex],
+                0.0f,
+                1.0f,
+                3);
+        if (opacityResult.changed && opacity != decal.opacity && std::isfinite(opacity)) {
+            ApplySurfaceDecalOpacity(target, opacity, nullptr);
+        }
+        y += rowH + gap;
+        bool emissive = decal.emissive;
+        if (engine::Checkbox(
                     ui,
                     config,
                     input,
                     assets,
-                    TextFormat("%s_paste_material", uvPrefix),
-                    Rectangle{buttonW + gap, y, buttonW, 36.0f},
+                    TextFormat("%s_decal_emissive", uvPrefix),
+                    Rectangle{0.0f, y, contentW, 36.0f},
                     font,
-                    "Paste")) {
-            PasteTopologyMaterial(target, assets);
+                    "Emissive",
+                    emissive)) {
+            ApplySurfaceDecalEmissive(target, emissive, nullptr);
         }
         y += 36.0f + gap;
-        drawTextureRow(textureButtonId, "Texture:", textureId, field);
-        drawUvSettings(uvPrefix, uv, stateOffset);
+
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Tint:", engine::UITextJustify::Left, config.mutedTextColor);
+        const Rectangle swatchLocal{82.0f, y + 3.0f, 56.0f, rowH - 6.0f};
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("%s_decal_tint", uvPrefix),
+                    swatchLocal,
+                    font,
+                    "")) {
+            OpenDecalTintModal(target);
+        }
+        const Rectangle swatchScreen{
+                scroll.viewport.x + swatchLocal.x,
+                scroll.viewport.y - uiState.inspectorScroll.offset.y + swatchLocal.y,
+                swatchLocal.width,
+                swatchLocal.height};
+        DrawRectangleRec(swatchScreen, DecalTintPreviewColor(decal.tint));
+        DrawRectangleLinesEx(swatchScreen, config.borderThickness, config.borderColor);
+        y += rowH + gap;
+
+        const float decalButtonW = (contentW - gap) * 0.5f;
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("%s_fit_decal", uvPrefix),
+                    Rectangle{0.0f, y, decalButtonW, 36.0f},
+                    font,
+                    "Fit Decal")) {
+            FitSelectedDecal(target, nullptr);
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("%s_clear_decal", uvPrefix),
+                    Rectangle{decalButtonW + gap, y, decalButtonW, 36.0f},
+                    font,
+                    "Clear Decal")) {
+            ClearSurfaceDecal(target, nullptr);
+        }
+        y += 36.0f + gap;
     };
 
-    drawSurfaceSection("Floor", "sector_editor_topology_pick_floor", sector->floorTextureId, TopologySectorTextureField::Floor, "sector_editor_topology_floor_uv", sector->floorUv, 0, TopologySurfaceEditTargetKind::SectorFloor);
-    drawSurfaceSection("Ceiling", "sector_editor_topology_pick_ceiling", sector->ceilingTextureId, TopologySectorTextureField::Ceiling, "sector_editor_topology_ceiling_uv", sector->ceilingUv, 4, TopologySurfaceEditTargetKind::SectorCeiling);
+    drawSurfaceSection("Floor", "sector_editor_topology_pick_floor", sector->floorTextureId, TopologySectorTextureField::Floor, "sector_editor_topology_floor_uv", sector->floorUv, sector->floorDecal, 0, 0, TopologySurfaceEditTargetKind::SectorFloor);
+    drawSurfaceSection("Ceiling", "sector_editor_topology_pick_ceiling", sector->ceilingTextureId, TopologySectorTextureField::Ceiling, "sector_editor_topology_ceiling_uv", sector->ceilingUv, sector->ceilingDecal, 4, 1, TopologySurfaceEditTargetKind::SectorCeiling);
 
     auto drawWallDefaultSection = [&](const char* title, const char* textureButtonId, SectorTopologyWallPartSettings& part, TopologySectorTextureField field, const char* uvPrefix, int stateOffset) {
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
         y += 18.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, title, engine::UITextJustify::Left, config.textColor);
         y += 30.0f;
-        drawTextureRow(textureButtonId, "Texture:", part.textureId, field);
+        drawTextureRow(textureButtonId, "Texture:", part.textureId, field, TopologyMaterialLayer::Base);
         drawUvSettings(uvPrefix, part.uv, stateOffset);
     };
 
@@ -6010,11 +6439,11 @@ bool SectorEditor::DrawTopologySideDefInspector(
         y += 34.0f;
     }
 
-    auto drawTextureRow = [&](const char* id, const char* label, const SectorTopologyWallPartSettings& part, TopologyWallPart wallPart) {
+    auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologyWallPart wallPart, TopologyMaterialLayer layer) {
         const float buttonW = 38.0f;
         const float labelColumnW = 74.0f;
         const Rectangle row{0.0f, y, contentW, 36.0f};
-        const bool missing = !part.textureId.empty() && FindSectorTopologyTexture(state.topologyMap, part.textureId) == nullptr;
+        const bool missing = !textureId.empty() && FindSectorTopologyTexture(state.topologyMap, textureId) == nullptr;
         engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
         engine::Text(
                 ui,
@@ -6022,18 +6451,14 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 assets,
                 Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
                 font,
-                part.textureId.empty() ? "<none>" : part.textureId.c_str(),
+                textureId.empty() ? "<none>" : textureId.c_str(),
                 engine::UITextJustify::Left,
                 missing ? config.invalidColor : config.mutedTextColor);
         if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
-            OpenTopologySideDefTexturePicker(sideDef->id, wallPart);
+            OpenTopologySideDefTexturePicker(sideDef->id, wallPart, layer);
         }
         y += row.height + gap;
     };
-
-    drawTextureRow("sector_editor_topology_sidedef_pick_wall", "Wall:", sideDef->wall, TopologyWallPart::Wall);
-    drawTextureRow("sector_editor_topology_sidedef_pick_lower", "Lower:", sideDef->lower, TopologyWallPart::Lower);
-    drawTextureRow("sector_editor_topology_sidedef_pick_upper", "Upper:", sideDef->upper, TopologyWallPart::Upper);
 
     y += 4.0f;
     const float partButtonW = (contentW - gap * 2.0f) / 3.0f;
@@ -6065,33 +6490,87 @@ bool SectorEditor::DrawTopologySideDefInspector(
             sideDef->lineDefId,
             sideDef->id,
             sideDef->side};
-    if (engine::Button(
+    const float layerLabelW = 74.0f;
+    const float layerButtonW = (contentW - layerLabelW - gap) * 0.5f;
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, layerLabelW, 36.0f}, font, "Layer:", engine::UITextJustify::Left, config.mutedTextColor);
+    if (engine::ToolButton(
                 ui,
                 config,
                 input,
                 assets,
-                "sector_editor_topology_sidedef_copy_material",
-                Rectangle{0.0f, y, contentW, 38.0f},
+                "sector_editor_topology_sidedef_layer_base",
+                Rectangle{layerLabelW, y, layerButtonW, 36.0f},
                 font,
-                TextFormat("Copy %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
-        CopyTopologyMaterial(selectedMaterialTarget);
+                "Base",
+                state.activeTopologyMaterialLayer == TopologyMaterialLayer::Base)) {
+        state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
+        for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+        uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
     }
-    y += 38.0f + gap;
-
-    if (engine::Button(
+    if (engine::ToolButton(
                 ui,
                 config,
                 input,
                 assets,
-                "sector_editor_topology_sidedef_paste_material",
-                Rectangle{0.0f, y, contentW, 38.0f},
+                "sector_editor_topology_sidedef_layer_decal",
+                Rectangle{layerLabelW + layerButtonW + gap, y, layerButtonW, 36.0f},
                 font,
-                TextFormat("Paste %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
-        PasteTopologyMaterial(selectedMaterialTarget, assets);
+                "Decal",
+                state.activeTopologyMaterialLayer == TopologyMaterialLayer::Decal)) {
+        state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
+        for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+        uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
     }
-    y += 38.0f + gap;
+    y += 36.0f + gap;
 
     SectorTopologyWallPartSettings& selectedPart = TopologyWallPartSettingsFor(*sideDef, state.selectedTopologyWallPart);
+    const TopologyMaterialLayer layer = state.activeTopologyMaterialLayer;
+    drawTextureRow(
+            "sector_editor_topology_sidedef_pick_selected_part",
+            "Texture:",
+            layer == TopologyMaterialLayer::Decal ? selectedPart.decal.textureId : selectedPart.textureId,
+            state.selectedTopologyWallPart,
+            layer);
+
+    if (layer == TopologyMaterialLayer::Decal && selectedPart.decal.textureId.empty()) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 32.0f}, font, "No decal assigned", engine::UITextJustify::Left, config.mutedTextColor);
+        y += 32.0f + gap;
+        return true;
+    }
+
+    if (layer == TopologyMaterialLayer::Base) {
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_sidedef_copy_material",
+                    Rectangle{0.0f, y, contentW, 38.0f},
+                    font,
+                    TextFormat("Copy %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
+            CopyTopologyMaterial(selectedMaterialTarget);
+        }
+        y += 38.0f + gap;
+
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_sidedef_paste_material",
+                    Rectangle{0.0f, y, contentW, 38.0f},
+                    font,
+                    TextFormat("Paste %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
+            PasteTopologyMaterial(selectedMaterialTarget, assets);
+        }
+        y += 38.0f + gap;
+    }
+
+    SectorTopologyUvSettings& selectedUv = layer == TopologyMaterialLayer::Decal ? selectedPart.decal.uv : selectedPart.uv;
     const float uvColumnW = (contentW - gap) * 0.5f;
     const float uvBlockH = 62.0f;
     auto drawUvInput = [&](int stateIndex, const char* id, const char* label, float value, float minValue, float maxValue, Rectangle bounds, auto applyValue) {
@@ -6116,10 +6595,12 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 return;
             }
             applyValue(edited);
+            state.topologyRenderWarning.clear();
             MarkTopologyDocumentEdited(TextFormat(
-                    "Updated topology sidedef %d %s UV",
+                    "Updated topology sidedef %d %s %s UV",
                     sideDef->id,
-                    TopologyWallPartStatusName(state.selectedTopologyWallPart)));
+                    TopologyWallPartStatusName(state.selectedTopologyWallPart),
+                    TopologyMaterialLayerStatusName(layer)));
         }
     };
 
@@ -6127,40 +6608,124 @@ bool SectorEditor::DrawTopologySideDefInspector(
             0,
             "sector_editor_topology_sidedef_uv_scale_u",
             "Scale U",
-            selectedPart.uv.scale.x,
+            selectedUv.scale.x,
             TopologyUvScaleMin,
             TopologyUvScaleMax,
             Rectangle{0.0f, y, uvColumnW, uvBlockH},
-            [&](float value) { selectedPart.uv.scale.x = value; });
+            [&](float value) { selectedUv.scale.x = value; });
     drawUvInput(
             1,
             "sector_editor_topology_sidedef_uv_scale_v",
             "Scale V",
-            selectedPart.uv.scale.y,
+            selectedUv.scale.y,
             TopologyUvScaleMin,
             TopologyUvScaleMax,
             Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH},
-            [&](float value) { selectedPart.uv.scale.y = value; });
+            [&](float value) { selectedUv.scale.y = value; });
     y += uvBlockH + gap;
     drawUvInput(
             2,
             "sector_editor_topology_sidedef_uv_offset_u",
             "Offset U",
-            selectedPart.uv.offset.x,
+            selectedUv.offset.x,
             -1024.0f,
             1024.0f,
             Rectangle{0.0f, y, uvColumnW, uvBlockH},
-            [&](float value) { selectedPart.uv.offset.x = value; });
+            [&](float value) { selectedUv.offset.x = value; });
     drawUvInput(
             3,
             "sector_editor_topology_sidedef_uv_offset_v",
             "Offset V",
-            selectedPart.uv.offset.y,
+            selectedUv.offset.y,
             -1024.0f,
             1024.0f,
             Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH},
-            [&](float value) { selectedPart.uv.offset.y = value; });
+            [&](float value) { selectedUv.offset.y = value; });
     y += uvBlockH + gap;
+
+    if (layer == TopologyMaterialLayer::Decal) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Opacity:", engine::UITextJustify::Left, config.mutedTextColor);
+        float opacity = selectedPart.decal.opacity;
+        const engine::UINumericInputResult opacityResult = engine::FloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_topology_sidedef_decal_opacity",
+                Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                font,
+                opacity,
+                uiState.topologySideDefDecalOpacityInput,
+                0.0f,
+                1.0f,
+                3);
+        if (opacityResult.changed && opacity != selectedPart.decal.opacity && std::isfinite(opacity)) {
+            ApplySurfaceDecalOpacity(selectedMaterialTarget, opacity, &assets);
+        }
+        y += rowH + gap;
+
+        bool emissive = selectedPart.decal.emissive;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_sidedef_decal_emissive",
+                    Rectangle{0.0f, y, contentW, 36.0f},
+                    font,
+                    "Emissive",
+                    emissive)) {
+            ApplySurfaceDecalEmissive(selectedMaterialTarget, emissive, &assets);
+        }
+        y += 36.0f + gap;
+
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Tint:", engine::UITextJustify::Left, config.mutedTextColor);
+        const Rectangle swatchLocal{82.0f, y + 3.0f, 56.0f, rowH - 6.0f};
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_sidedef_decal_tint",
+                    swatchLocal,
+                    font,
+                    "")) {
+            OpenDecalTintModal(selectedMaterialTarget);
+        }
+        const Rectangle swatchScreen{
+                scroll.viewport.x + swatchLocal.x,
+                scroll.viewport.y - uiState.inspectorScroll.offset.y + swatchLocal.y,
+                swatchLocal.width,
+                swatchLocal.height};
+        DrawRectangleRec(swatchScreen, DecalTintPreviewColor(selectedPart.decal.tint));
+        DrawRectangleLinesEx(swatchScreen, config.borderThickness, config.borderColor);
+        y += rowH + gap;
+
+        const float decalButtonW = (contentW - gap) * 0.5f;
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_sidedef_fit_decal",
+                    Rectangle{0.0f, y, decalButtonW, 38.0f},
+                    font,
+                    "Fit Decal")) {
+            FitSelectedDecal(selectedMaterialTarget, &assets);
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_sidedef_clear_decal",
+                    Rectangle{decalButtonW + gap, y, decalButtonW, 38.0f},
+                    font,
+                    "Clear Decal")) {
+            ClearSurfaceDecal(selectedMaterialTarget, &assets);
+        }
+        y += 38.0f + gap;
+    }
 
     if (engine::Button(
                 ui,
@@ -6171,15 +6736,16 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 Rectangle{0.0f, y, contentW, 38.0f},
                 font,
                 TextFormat("Reset %s UV", TopologyWallPartName(state.selectedTopologyWallPart)))) {
-        selectedPart.uv.scale = Vector2{1.0f, 1.0f};
-        selectedPart.uv.offset = Vector2{0.0f, 0.0f};
+        ResetTopologyUv(selectedUv);
         for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
             inputState = engine::UIFloatInputState{};
         }
+        state.topologyRenderWarning.clear();
         MarkTopologyDocumentEdited(TextFormat(
-                "Reset topology sidedef %d %s UV",
+                "Reset topology sidedef %d %s %s UV",
                 sideDef->id,
-                TopologyWallPartStatusName(state.selectedTopologyWallPart)));
+                TopologyWallPartStatusName(state.selectedTopologyWallPart),
+                TopologyMaterialLayerStatusName(layer)));
     }
     y += 38.0f + gap;
 
@@ -6193,7 +6759,7 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 Rectangle{0.0f, y, fitButtonW, 34.0f},
                 font,
                 "Fit Width")) {
-        FitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Width, &assets);
+        FitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Width, &assets, layer);
     }
     if (engine::Button(
                 ui,
@@ -6204,7 +6770,7 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 Rectangle{fitButtonW + gap, y, fitButtonW, 34.0f},
                 font,
                 "Fit Height")) {
-        FitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Height, &assets);
+        FitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Height, &assets, layer);
     }
     if (engine::Button(
                 ui,
@@ -6215,7 +6781,7 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 Rectangle{(fitButtonW + gap) * 2.0f, y, fitButtonW, 34.0f},
                 font,
                 "Fit Both")) {
-        FitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Both, &assets);
+        FitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Both, &assets, layer);
     }
     y += 34.0f + gap;
 
@@ -6228,7 +6794,7 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 Rectangle{0.0f, y, contentW, 34.0f},
                 font,
                 "Align Vertical")) {
-        AlignSelectedWallMaterialVertical(selectedMaterialTarget, &assets);
+        AlignSelectedWallMaterialVertical(selectedMaterialTarget, &assets, layer);
     }
     y += 34.0f + gap;
 
@@ -6242,7 +6808,7 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 Rectangle{0.0f, y, alignButtonW, 34.0f},
                 font,
                 "Align U Prev")) {
-        AlignSelectedWallMaterialU(selectedMaterialTarget, TopologyUAlignDirection::Previous, &assets);
+        AlignSelectedWallMaterialU(selectedMaterialTarget, TopologyUAlignDirection::Previous, &assets, layer);
     }
     if (engine::Button(
                 ui,
@@ -6253,7 +6819,7 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 Rectangle{alignButtonW + gap, y, alignButtonW, 34.0f},
                 font,
                 "Align U Next")) {
-        AlignSelectedWallMaterialU(selectedMaterialTarget, TopologyUAlignDirection::Next, &assets);
+        AlignSelectedWallMaterialU(selectedMaterialTarget, TopologyUAlignDirection::Next, &assets, layer);
     }
 
     return true;
@@ -6386,6 +6952,13 @@ void SectorEditor::DrawAddMapTextureModal(
     }
     if (engine::ToolButton(ui, config, input, assets, "sector_editor_add_texture_filter_bilinear", Rectangle{rightX + 278.0f, y, 132.0f, 38.0f}, font, "Bilinear", modalState.filter == SectorTextureFilter::Bilinear)) {
         modalState.filter = SectorTextureFilter::Bilinear;
+    }
+    y += 44.0f;
+    if (engine::ToolButton(ui, config, input, assets, "sector_editor_add_texture_filter_trilinear", Rectangle{rightX + 136.0f, y, 132.0f, 38.0f}, font, "Trilinear", modalState.filter == SectorTextureFilter::Trilinear)) {
+        modalState.filter = SectorTextureFilter::Trilinear;
+    }
+    if (engine::ToolButton(ui, config, input, assets, "sector_editor_add_texture_filter_aniso8x", Rectangle{rightX + 278.0f, y, 132.0f, 38.0f}, font, "Aniso 8x", modalState.filter == SectorTextureFilter::Anisotropic8x)) {
+        modalState.filter = SectorTextureFilter::Anisotropic8x;
     }
     y += 54.0f;
 
@@ -6793,6 +7366,159 @@ void SectorEditor::DrawConfirmationModal(
     }
 }
 
+void SectorEditor::DrawDecalTintModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    DecalTintModalState& modalState = state.decalTintModal;
+    if (!modalState.open) {
+        return;
+    }
+
+    bool okayRequested = false;
+    bool cancelRequested = false;
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [&okayRequested, &cancelRequested](engine::InputEvent& event) {
+                if (event.key.key == KEY_ESCAPE) {
+                    cancelRequested = true;
+                    engine::ConsumeEvent(event);
+                } else if (event.key.key == KEY_ENTER || event.key.key == KEY_KP_ENTER) {
+                    okayRequested = true;
+                    engine::ConsumeEvent(event);
+                }
+            }
+    );
+
+    DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
+    const Rectangle modal{
+            (EditorWidth - 560.0f) * 0.5f,
+            (EditorHeight - 390.0f) * 0.5f,
+            560.0f,
+            390.0f
+    };
+    DrawRectangleRec(modal, Color{20, 24, 32, 248});
+    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
+
+    float y = modal.y + 22.0f;
+    engine::Text(config, assets, Rectangle{modal.x + 26.0f, y, modal.width - 52.0f, 42.0f}, font, "Decal Tint");
+    y += 58.0f;
+
+    const float labelW = 72.0f;
+    const float inputW = 120.0f;
+    const float inputH = 38.0f;
+    const float gap = 12.0f;
+    auto drawFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{modal.x + 28.0f, y, labelW, inputH},
+                font,
+                label,
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        const engine::UINumericInputResult result = engine::FloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                id,
+                Rectangle{modal.x + 28.0f + labelW, y, inputW, inputH},
+                font,
+                value,
+                inputState,
+                0.0f,
+                1.0f,
+                3);
+        if (result.changed) {
+            if (!std::isfinite(value)) {
+                modalState.errorMessage = "Tint values must be finite.";
+            } else {
+                value = std::clamp(value, 0.0f, 1.0f);
+                modalState.errorMessage.clear();
+            }
+        }
+        y += inputH + gap;
+    };
+
+    drawFloat("sector_editor_decal_tint_r", "R", modalState.tint.x, modalState.redInput);
+    drawFloat("sector_editor_decal_tint_g", "G", modalState.tint.y, modalState.greenInput);
+    drawFloat("sector_editor_decal_tint_b", "B", modalState.tint.z, modalState.blueInput);
+
+    const Rectangle swatch{modal.x + 270.0f, modal.y + 88.0f, 210.0f, 124.0f};
+    DrawRectangleRec(swatch, DecalTintPreviewColor(modalState.tint));
+    DrawRectangleLinesEx(swatch, config.borderThickness, config.borderColor);
+    engine::Text(
+            config,
+            assets,
+            Rectangle{swatch.x, swatch.y + swatch.height + 10.0f, swatch.width, 26.0f},
+            font,
+            "Preview",
+            engine::UITextJustify::Center,
+            config.mutedTextColor);
+
+    if (!modalState.errorMessage.empty()) {
+        engine::Text(
+                config,
+                assets,
+                Rectangle{modal.x + 28.0f, modal.y + 250.0f, modal.width - 56.0f, 34.0f},
+                font,
+                modalState.errorMessage.c_str(),
+                engine::UITextJustify::Left,
+                config.invalidColor);
+    }
+
+    const float buttonY = modal.y + modal.height - 66.0f;
+    const float buttonW = 124.0f;
+    if (engine::Button(ui, config, input, assets, "sector_editor_decal_tint_reset", Rectangle{modal.x + 28.0f, buttonY, buttonW, 44.0f}, font, "Reset White")) {
+        modalState.tint = Vector3{1.0f, 1.0f, 1.0f};
+        modalState.redInput = engine::UIFloatInputState{};
+        modalState.greenInput = engine::UIFloatInputState{};
+        modalState.blueInput = engine::UIFloatInputState{};
+        modalState.errorMessage.clear();
+    }
+    okayRequested = okayRequested || engine::Button(ui, config, input, assets, "sector_editor_decal_tint_ok", Rectangle{modal.x + modal.width - buttonW * 2.0f - 38.0f, buttonY, buttonW, 44.0f}, font, "OK");
+    cancelRequested = cancelRequested || engine::Button(ui, config, input, assets, "sector_editor_decal_tint_cancel", Rectangle{modal.x + modal.width - buttonW - 26.0f, buttonY, buttonW, 44.0f}, font, "Cancel");
+
+    input.ForEachEvent(engine::InputEventType::Any, true, [](engine::InputEvent& event) {
+        engine::ConsumeEvent(event);
+    });
+
+    if (cancelRequested) {
+        state.decalTintModal = DecalTintModalState{};
+        return;
+    }
+    if (!okayRequested) {
+        return;
+    }
+    if (!IsValidDecalTint(modalState.tint)) {
+        modalState.errorMessage = "Tint values must be between 0 and 1.";
+        statusText = modalState.errorMessage;
+        return;
+    }
+
+    const TopologySurfaceEditTarget target = modalState.target;
+    const SectorTopologyDecalLayer* decal = DecalForSurface(target);
+    if (!IsValidTopologySurfaceEditTarget(target) || decal == nullptr || decal->textureId.empty()) {
+        modalState.errorMessage = "Decal target is no longer valid.";
+        statusText = modalState.errorMessage;
+        return;
+    }
+
+    const Vector3 tint = modalState.tint;
+    const bool changed = !SameTint(decal->tint, tint);
+    if (changed && !ApplySurfaceDecalTint(target, tint, &assets)) {
+        modalState.errorMessage = statusText.empty() ? "Could not set decal tint." : statusText;
+        return;
+    }
+    state.decalTintModal = DecalTintModalState{};
+}
+
 void SectorEditor::DrawLightmapBakeModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -7013,6 +7739,7 @@ bool SectorEditor::LoadLevel(
     state.loadLevelModal = LoadLevelModalState{};
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
+    state.decalTintModal = DecalTintModalState{};
     ClearSelection();
     state.hoveredTopologyLightId = -1;
     state.hasHoveredVertex = false;
@@ -7145,6 +7872,7 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
     state.topologyDocumentStatus = TextFormat("Topology document: saved %s", paths.jsonAssetPath.c_str());
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
+    state.decalTintModal = DecalTintModalState{};
     statusText = TextFormat("Saved topology %s", paths.jsonAssetPath.c_str());
     return true;
 }
@@ -7153,7 +7881,8 @@ bool SectorEditor::HasDocumentModalOpen() const
 {
     return state.saveLevelModal.open
             || state.loadLevelModal.open
-            || state.confirmationModal.open;
+            || state.confirmationModal.open
+            || state.decalTintModal.open;
 }
 
 bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UIContext& ui)
@@ -7191,6 +7920,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     }
 
     state.mode = SectorEditorMode::Preview3D;
+    state.previewUiHidden = false;
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
@@ -7826,6 +8556,7 @@ void SectorEditor::ResetSurface3DUiState()
     uiState.surface3DUvScaleVInput = engine::UIFloatInputState{};
     uiState.surface3DUvOffsetUInput = engine::UIFloatInputState{};
     uiState.surface3DUvOffsetVInput = engine::UIFloatInputState{};
+    uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
 }
 
 void SectorEditor::ClearSelection()
@@ -7853,10 +8584,130 @@ void SectorEditor::ClearSelection()
     SyncSelectedLightIdBuffer();
 }
 
-std::string SectorEditor::CurrentTextureForSurface(TopologySurfaceEditTarget target) const
+const SectorTopologyDecalLayer* SectorEditor::DecalForSurface(TopologySurfaceEditTarget target) const
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        return nullptr;
+    }
+
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            return nullptr;
+        }
+        return target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? &sector->floorDecal
+                : &sector->ceilingDecal;
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (sideDef == nullptr) {
+        return nullptr;
+    }
+    return &TopologyWallPartSettingsFor(*sideDef, TopologyEditTargetWallPart(target.kind)).decal;
+}
+
+SectorTopologyDecalLayer* SectorEditor::MutableDecalForSurface(TopologySurfaceEditTarget target)
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        return nullptr;
+    }
+
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            return nullptr;
+        }
+        return target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? &sector->floorDecal
+                : &sector->ceilingDecal;
+    }
+
+    SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (sideDef == nullptr) {
+        return nullptr;
+    }
+    return &TopologyWallPartSettingsFor(*sideDef, TopologyEditTargetWallPart(target.kind)).decal;
+}
+
+const SectorTopologyUvSettings* SectorEditor::UvForSurface(
+        TopologySurfaceEditTarget target,
+        TopologyMaterialLayer layer) const
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        return nullptr;
+    }
+    if (layer == TopologyMaterialLayer::Decal) {
+        const SectorTopologyDecalLayer* decal = DecalForSurface(target);
+        return decal == nullptr || decal->textureId.empty() ? nullptr : &decal->uv;
+    }
+
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            return nullptr;
+        }
+        return target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? &sector->floorUv
+                : &sector->ceilingUv;
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (sideDef == nullptr) {
+        return nullptr;
+    }
+    return &TopologyWallPartSettingsFor(*sideDef, TopologyEditTargetWallPart(target.kind)).uv;
+}
+
+SectorTopologyUvSettings* SectorEditor::MutableUvForSurface(
+        TopologySurfaceEditTarget target,
+        TopologyMaterialLayer layer)
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        return nullptr;
+    }
+    if (layer == TopologyMaterialLayer::Decal) {
+        SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
+        return decal == nullptr || decal->textureId.empty() ? nullptr : &decal->uv;
+    }
+
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        if (sector == nullptr) {
+            return nullptr;
+        }
+        return target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? &sector->floorUv
+                : &sector->ceilingUv;
+    }
+
+    SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    if (sideDef == nullptr) {
+        return nullptr;
+    }
+    return &TopologyWallPartSettingsFor(*sideDef, TopologyEditTargetWallPart(target.kind)).uv;
+}
+
+bool SectorEditor::IsDecalAssigned(TopologySurfaceEditTarget target) const
+{
+    const SectorTopologyDecalLayer* decal = DecalForSurface(target);
+    return decal != nullptr && !decal->textureId.empty();
+}
+
+std::string SectorEditor::CurrentTextureForSurface(
+        TopologySurfaceEditTarget target,
+        TopologyMaterialLayer layer) const
 {
     if (!IsValidTopologySurfaceEditTarget(target)) {
         return std::string{"<none>"};
+    }
+    if (layer == TopologyMaterialLayer::Decal) {
+        const SectorTopologyDecalLayer* decal = DecalForSurface(target);
+        return decal == nullptr ? std::string{} : decal->textureId;
     }
 
     if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
@@ -7991,7 +8842,12 @@ bool SectorEditor::PasteTopologyMaterial(TopologySurfaceEditTarget target, engin
     return true;
 }
 
-bool SectorEditor::ApplySurface3DUvValue(TopologySurfaceEditTarget target, int component, float value, engine::AssetManager& assets)
+bool SectorEditor::ApplySurface3DUvValue(
+        TopologySurfaceEditTarget target,
+        TopologyMaterialLayer layer,
+        int component,
+        float value,
+        engine::AssetManager& assets)
 {
     if (!IsValidTopologySurfaceEditTarget(target) || !std::isfinite(value)) {
         return false;
@@ -8020,36 +8876,172 @@ bool SectorEditor::ApplySurface3DUvValue(TopologySurfaceEditTarget target, int c
         }
     };
 
-    bool changed = false;
-    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
-            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
-        if (sector == nullptr) {
-            return false;
-        }
-        SectorTopologyUvSettings& uv = target.kind == TopologySurfaceEditTargetKind::SectorFloor
-                ? sector->floorUv
-                : sector->ceilingUv;
-        changed = applyComponent(uv);
-    } else {
-        SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-        if (sideDef == nullptr) {
-            return false;
-        }
-        changed = applyComponent(TopologyWallPartSettingsFor(
-                *sideDef,
-                TopologyEditTargetWallPart(target.kind)).uv);
+    SectorTopologyUvSettings* uv = MutableUvForSurface(target, layer);
+    if (uv == nullptr) {
+        statusText = layer == TopologyMaterialLayer::Decal
+                ? "No decal assigned."
+                : "Selected material target is no longer valid.";
+        return false;
     }
 
+    const bool changed = applyComponent(*uv);
     if (!changed) {
         return false;
     }
 
-    MarkTopologyDocumentEdited(TextFormat("Updated 3D %s UV", SurfaceKindName(state.selectedSurface3D.kind)));
+    state.topologyRenderWarning.clear();
+    MarkTopologyDocumentEdited(TextFormat(
+            "Updated 3D %s %s UV",
+            SurfaceKindName(state.selectedSurface3D.kind),
+            TopologyMaterialLayerStatusName(layer)));
     return RebuildPreviewMeshesPreservingView(assets);
 }
 
-bool SectorEditor::ResetSurface3DUv(TopologySurfaceEditTarget target, engine::AssetManager& assets)
+bool SectorEditor::ApplySurfaceDecalOpacity(
+        TopologySurfaceEditTarget target,
+        float opacity,
+        engine::AssetManager* assets)
+{
+    if (!IsValidTopologySurfaceEditTarget(target) || !std::isfinite(opacity)) {
+        return false;
+    }
+    opacity = std::clamp(opacity, 0.0f, 1.0f);
+    SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
+    if (decal == nullptr || decal->textureId.empty()) {
+        statusText = "No decal assigned.";
+        return false;
+    }
+    if (decal->opacity == opacity) {
+        return false;
+    }
+
+    decal->opacity = opacity;
+    state.topologyRenderWarning.clear();
+    MarkTopologyDocumentEdited(TextFormat("Set %s decal opacity.", TopologyMaterialKindName(target.kind)));
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
+}
+
+bool SectorEditor::ApplySurfaceDecalEmissive(
+        TopologySurfaceEditTarget target,
+        bool emissive,
+        engine::AssetManager* assets)
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+    SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
+    if (decal == nullptr || decal->textureId.empty()) {
+        statusText = "No decal assigned.";
+        return false;
+    }
+    if (decal->emissive == emissive) {
+        return false;
+    }
+
+    decal->emissive = emissive;
+    state.topologyRenderWarning.clear();
+    MarkTopologyDocumentEdited(TextFormat("Set %s decal emissive.", TopologyMaterialKindName(target.kind)));
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
+}
+
+bool SectorEditor::ApplySurfaceDecalTint(
+        TopologySurfaceEditTarget target,
+        Vector3 tint,
+        engine::AssetManager* assets)
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+    if (!IsValidDecalTint(tint)) {
+        statusText = "Invalid decal tint.";
+        return false;
+    }
+    SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
+    if (decal == nullptr || decal->textureId.empty()) {
+        statusText = "No decal assigned.";
+        return false;
+    }
+    if (SameTint(decal->tint, tint)) {
+        return false;
+    }
+
+    decal->tint = tint;
+    state.topologyRenderWarning.clear();
+    MarkTopologyDocumentEdited(TextFormat("Set %s decal tint.", TopologyMaterialKindName(target.kind)));
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
+}
+
+bool SectorEditor::OpenDecalTintModal(TopologySurfaceEditTarget target)
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+    const SectorTopologyDecalLayer* decal = DecalForSurface(target);
+    if (decal == nullptr || decal->textureId.empty()) {
+        statusText = "No decal assigned.";
+        return false;
+    }
+
+    DecalTintModalState modal;
+    modal.open = true;
+    modal.target = target;
+    modal.tint = ClampDecalTint(decal->tint);
+    state.decalTintModal = modal;
+    return true;
+}
+
+bool SectorEditor::ClearSurfaceDecal(
+        TopologySurfaceEditTarget target,
+        engine::AssetManager* assets)
+{
+    SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
+    if (decal == nullptr) {
+        statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+    if (IsDefaultDecalLayer(*decal)) {
+        statusText = "No decal assigned.";
+        return false;
+    }
+
+    ResetDecalLayer(*decal);
+    state.topologyRenderWarning.clear();
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+    for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalOpacityInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+    uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
+    uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
+    state.decalTintModal = DecalTintModalState{};
+    MarkTopologyDocumentEdited(TextFormat("Cleared %s decal.", TopologyMaterialKindName(target.kind)));
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
+}
+
+bool SectorEditor::ResetSurface3DUv(
+        TopologySurfaceEditTarget target,
+        TopologyMaterialLayer layer,
+        engine::AssetManager& assets)
 {
     if (!IsValidTopologySurfaceEditTarget(target)) {
         return false;
@@ -8065,42 +9057,182 @@ bool SectorEditor::ResetSurface3DUv(TopologySurfaceEditTarget target, engine::As
         return changed;
     };
 
-    bool changed = false;
-    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
-            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
-        if (sector == nullptr) {
-            return false;
-        }
-        changed = target.kind == TopologySurfaceEditTargetKind::SectorFloor
-                ? resetUv(sector->floorUv)
-                : resetUv(sector->ceilingUv);
-    } else {
-        SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-        if (sideDef == nullptr) {
-            return false;
-        }
-        changed = resetUv(TopologyWallPartSettingsFor(
-                *sideDef,
-                TopologyEditTargetWallPart(target.kind)).uv);
+    SectorTopologyUvSettings* uv = MutableUvForSurface(target, layer);
+    if (uv == nullptr) {
+        statusText = layer == TopologyMaterialLayer::Decal
+                ? "No decal assigned."
+                : "Selected material target is no longer valid.";
+        return false;
     }
 
+    const bool changed = resetUv(*uv);
     if (!changed) {
         return false;
     }
 
     ResetSurface3DUiState();
-    MarkTopologyDocumentEdited(TextFormat("Reset 3D %s UV", SurfaceKindName(state.selectedSurface3D.kind)));
+    state.topologyRenderWarning.clear();
+    MarkTopologyDocumentEdited(TextFormat(
+            "Reset 3D %s %s UV",
+            SurfaceKindName(state.selectedSurface3D.kind),
+            TopologyMaterialLayerStatusName(layer)));
     return RebuildPreviewMeshesPreservingView(assets);
+}
+
+bool SectorEditor::FitSelectedDecal(
+        TopologySurfaceEditTarget target,
+        engine::AssetManager* assets)
+{
+    if (!IsValidTopologySurfaceEditTarget(target)) {
+        statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+    if (!IsDecalAssigned(target)) {
+        statusText = "No decal assigned.";
+        return false;
+    }
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        return FitSelectedFlatDecal(target, assets);
+    }
+    if (IsWallTopologyEditTarget(target.kind)) {
+        return FitSelectedWallMaterial(
+                target,
+                TopologyUvFitMode::Both,
+                assets,
+                TopologyMaterialLayer::Decal);
+    }
+
+    statusText = "Selected material target cannot be fit.";
+    return false;
+}
+
+bool SectorEditor::FitSelectedFlatDecal(
+        TopologySurfaceEditTarget target,
+        engine::AssetManager* assets)
+{
+    if (target.kind != TopologySurfaceEditTargetKind::SectorFloor
+            && target.kind != TopologySurfaceEditTargetKind::SectorCeiling) {
+        statusText = "Select a floor or ceiling surface before fitting decal UVs.";
+        return false;
+    }
+    if (!IsDecalAssigned(target)) {
+        statusText = "No decal assigned.";
+        return false;
+    }
+
+    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+    if (sector == nullptr) {
+        statusText = "Selected sector is no longer valid.";
+        return false;
+    }
+
+    SectorTopologyLoopSet loops;
+    if (!ExtractSectorTopologyLoops(state.topologyMap, sector->id, loops)) {
+        statusText = "Selected sector has invalid loops.";
+        return false;
+    }
+
+    bool hasPoint = false;
+    float minX = 0.0f;
+    float maxX = 0.0f;
+    float minY = 0.0f;
+    float maxY = 0.0f;
+    auto visitLoop = [&](const SectorTopologyLoop& loop) {
+        if (loop.vertexIds.empty()) {
+            return false;
+        }
+        for (int vertexId : loop.vertexIds) {
+            const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+            if (vertex == nullptr) {
+                return false;
+            }
+            const Vector2 world = SectorCoordToWorldPosition2(vertex->x, vertex->y);
+            if (!std::isfinite(world.x) || !std::isfinite(world.y)) {
+                return false;
+            }
+            if (!hasPoint) {
+                minX = maxX = world.x;
+                minY = maxY = world.y;
+                hasPoint = true;
+            } else {
+                minX = std::min(minX, world.x);
+                maxX = std::max(maxX, world.x);
+                minY = std::min(minY, world.y);
+                maxY = std::max(maxY, world.y);
+            }
+        }
+        return true;
+    };
+
+    if (!visitLoop(loops.outer)) {
+        statusText = "Selected sector has invalid outer loop.";
+        return false;
+    }
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        if (!visitLoop(hole)) {
+            statusText = "Selected sector has invalid hole loop.";
+            return false;
+        }
+    }
+    if (!hasPoint) {
+        statusText = "Selected sector has no vertices.";
+        return false;
+    }
+
+    const float widthWorld = maxX - minX;
+    const float heightWorld = maxY - minY;
+    if (!(widthWorld > 0.0f) || !(heightWorld > 0.0f)
+            || !std::isfinite(widthWorld) || !std::isfinite(heightWorld)) {
+        statusText = "Selected sector has invalid flat bounds.";
+        return false;
+    }
+
+    const auto validateScale = [](float scale) {
+        return std::isfinite(scale)
+                && scale >= TopologyUvScaleMin
+                && scale <= TopologyUvScaleMax;
+    };
+    const Vector2 fittedScale{
+            kSectorGeneratedTextureWorldSize / widthWorld,
+            kSectorGeneratedTextureWorldSize / heightWorld};
+    if (!validateScale(fittedScale.x) || !validateScale(fittedScale.y)) {
+        statusText = "Fit decal requires a UV scale outside the editable range.";
+        return false;
+    }
+
+    SectorTopologyUvSettings* uv = MutableUvForSurface(target, TopologyMaterialLayer::Decal);
+    if (uv == nullptr) {
+        statusText = "No decal assigned.";
+        return false;
+    }
+    uv->scale = fittedScale;
+    uv->offset = Vector2{0.0f, 0.0f};
+
+    state.topologyRenderWarning.clear();
+    ResetSurface3DUiState();
+    for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+    MarkTopologyDocumentEdited(TextFormat("Fit %s decal.", TopologyMaterialKindName(target.kind)));
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
 }
 
 bool SectorEditor::FitSelectedWallMaterial(
         TopologySurfaceEditTarget target,
         TopologyUvFitMode mode,
-        engine::AssetManager* assets)
+        engine::AssetManager* assets,
+        TopologyMaterialLayer layer)
 {
     if (!IsWallTopologyEditTarget(target.kind) || !IsValidTopologySurfaceEditTarget(target)) {
         statusText = "Select a wall, lower, or upper surface before fitting UVs.";
+        return false;
+    }
+    if (layer == TopologyMaterialLayer::Decal && !IsDecalAssigned(target)) {
+        statusText = "No decal assigned.";
         return false;
     }
 
@@ -8220,19 +9352,20 @@ bool SectorEditor::FitSelectedWallMaterial(
         return false;
     }
 
-    SectorTopologySideDef* mutableSideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-    if (mutableSideDef == nullptr) {
-        statusText = "Selected sidedef is no longer valid.";
+    SectorTopologyUvSettings* uv = MutableUvForSurface(target, layer);
+    if (uv == nullptr) {
+        statusText = layer == TopologyMaterialLayer::Decal
+                ? "No decal assigned."
+                : "Selected material target is no longer valid.";
         return false;
     }
-    SectorTopologyUvSettings& uv = TopologyWallPartSettingsFor(*mutableSideDef, wallPart).uv;
     if (fitWidth) {
-        uv.scale.x = widthScale;
-        uv.offset.x = 0.0f;
+        uv->scale.x = widthScale;
+        uv->offset.x = 0.0f;
     }
     if (fitHeight) {
-        uv.scale.y = heightScale;
-        uv.offset.y = 0.0f;
+        uv->scale.y = heightScale;
+        uv->offset.y = 0.0f;
     }
 
     state.topologyRenderWarning.clear();
@@ -8242,8 +9375,9 @@ bool SectorEditor::FitSelectedWallMaterial(
     }
 
     MarkTopologyDocumentEdited(TextFormat(
-            "Fit %s material %s.",
+            "Fit %s %s %s.",
             TopologyWallPartStatusName(wallPart),
+            TopologyMaterialLayerStatusName(layer),
             TopologyUvFitModeStatusName(mode)));
     if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
         return RebuildPreviewMeshesPreservingView(*assets);
@@ -8253,10 +9387,15 @@ bool SectorEditor::FitSelectedWallMaterial(
 
 bool SectorEditor::AlignSelectedWallMaterialVertical(
         TopologySurfaceEditTarget target,
-        engine::AssetManager* assets)
+        engine::AssetManager* assets,
+        TopologyMaterialLayer layer)
 {
     if (!IsWallTopologyEditTarget(target.kind) || !IsValidTopologySurfaceEditTarget(target)) {
         statusText = "Select a wall, lower, or upper surface before aligning UVs.";
+        return false;
+    }
+    if (layer == TopologyMaterialLayer::Decal && !IsDecalAssigned(target)) {
+        statusText = "No decal assigned.";
         return false;
     }
 
@@ -8348,25 +9487,25 @@ bool SectorEditor::AlignSelectedWallMaterialVertical(
         return false;
     }
 
-    SectorTopologySideDef* mutableSideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-    if (mutableSideDef == nullptr) {
-        statusText = "Selected sidedef is no longer valid.";
+    SectorTopologyUvSettings* uv = MutableUvForSurface(target, layer);
+    if (uv == nullptr) {
+        statusText = layer == TopologyMaterialLayer::Decal
+                ? "No decal assigned."
+                : "Selected material target is no longer valid.";
         return false;
     }
-
-    SectorTopologyUvSettings& uv = TopologyWallPartSettingsFor(*mutableSideDef, wallPart).uv;
-    if (!std::isfinite(uv.scale.y)) {
+    if (!std::isfinite(uv->scale.y)) {
         statusText = "Selected wall has invalid V scale.";
         return false;
     }
 
-    const float alignedOffsetY = -(spanTopWorld / kSectorGeneratedTextureWorldSize) * uv.scale.y;
+    const float alignedOffsetY = -(spanTopWorld / kSectorGeneratedTextureWorldSize) * uv->scale.y;
     if (!std::isfinite(alignedOffsetY)) {
         statusText = "Aligned V offset is invalid.";
         return false;
     }
 
-    uv.offset.y = alignedOffsetY;
+    uv->offset.y = alignedOffsetY;
     state.topologyRenderWarning.clear();
     ResetSurface3DUiState();
     for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
@@ -8374,8 +9513,9 @@ bool SectorEditor::AlignSelectedWallMaterialVertical(
     }
 
     MarkTopologyDocumentEdited(TextFormat(
-            "Aligned %s material vertically.",
-            TopologyWallPartStatusName(wallPart)));
+            "Aligned %s %s vertically.",
+            TopologyWallPartStatusName(wallPart),
+            TopologyMaterialLayerStatusName(layer)));
     if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
         return RebuildPreviewMeshesPreservingView(*assets);
     }
@@ -8385,10 +9525,15 @@ bool SectorEditor::AlignSelectedWallMaterialVertical(
 bool SectorEditor::AlignSelectedWallMaterialU(
         TopologySurfaceEditTarget target,
         TopologyUAlignDirection direction,
-        engine::AssetManager* assets)
+        engine::AssetManager* assets,
+        TopologyMaterialLayer layer)
 {
     if (!IsWallTopologyEditTarget(target.kind) || !IsValidTopologySurfaceEditTarget(target)) {
         statusText = "Select a wall, lower, or upper surface before aligning U.";
+        return false;
+    }
+    if (layer == TopologyMaterialLayer::Decal && !IsDecalAssigned(target)) {
+        statusText = "No decal assigned.";
         return false;
     }
 
@@ -8473,15 +9618,17 @@ bool SectorEditor::AlignSelectedWallMaterialU(
             sideDef->sectorId,
             direction,
             wallPart,
+            layer,
             neighborError);
     if (neighborEdge == nullptr) {
         if (!neighborError.empty()) {
             statusText = neighborError;
         } else {
             statusText = TextFormat(
-                    "No %s visible %s in this sector loop.",
+                    "No %s visible %s %s in this sector loop.",
                     TopologyUAlignDirectionStatusName(direction),
-                    TopologyWallPartSurfaceStatusName(wallPart));
+                    TopologyWallPartSurfaceStatusName(wallPart),
+                    TopologyMaterialLayerStatusName(layer));
         }
         return false;
     }
@@ -8517,20 +9664,22 @@ bool SectorEditor::AlignSelectedWallMaterialU(
         return false;
     }
 
-    const SectorTopologyWallPartSettings& neighborPart = TopologyWallPartSettingsFor(
-            *neighborSideDef,
-            wallPart);
-    SectorTopologySideDef* mutableSideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-    if (mutableSideDef == nullptr) {
-        statusText = "Selected sidedef is no longer valid.";
+    const SectorTopologyWallPartSettings& neighborPart = TopologyWallPartSettingsFor(*neighborSideDef, wallPart);
+    const SectorTopologyUvSettings& neighborUv = layer == TopologyMaterialLayer::Decal
+            ? neighborPart.decal.uv
+            : neighborPart.uv;
+    SectorTopologyUvSettings* selectedUv = MutableUvForSurface(target, layer);
+    if (selectedUv == nullptr) {
+        statusText = layer == TopologyMaterialLayer::Decal
+                ? "No decal assigned."
+                : "Selected material target is no longer valid.";
         return false;
     }
-    SectorTopologyUvSettings& selectedUv = TopologyWallPartSettingsFor(*mutableSideDef, wallPart).uv;
 
-    if (!std::isfinite(selectedUv.scale.x)
-            || !std::isfinite(selectedUv.offset.x)
-            || !std::isfinite(neighborPart.uv.scale.x)
-            || !std::isfinite(neighborPart.uv.offset.x)) {
+    if (!std::isfinite(selectedUv->scale.x)
+            || !std::isfinite(selectedUv->offset.x)
+            || !std::isfinite(neighborUv.scale.x)
+            || !std::isfinite(neighborUv.offset.x)) {
         statusText = "Wall U alignment requires finite U scale and offset values.";
         return false;
     }
@@ -8538,10 +9687,10 @@ bool SectorEditor::AlignSelectedWallMaterialU(
     float alignedOffsetX = 0.0f;
     if (direction == TopologyUAlignDirection::Previous) {
         const float previousBaseEndU = neighborLengthWorld / kSectorGeneratedTextureWorldSize;
-        alignedOffsetX = previousBaseEndU * neighborPart.uv.scale.x + neighborPart.uv.offset.x;
+        alignedOffsetX = previousBaseEndU * neighborUv.scale.x + neighborUv.offset.x;
     } else {
         const float selectedBaseEndU = selectedLengthWorld / kSectorGeneratedTextureWorldSize;
-        alignedOffsetX = neighborPart.uv.offset.x - selectedBaseEndU * selectedUv.scale.x;
+        alignedOffsetX = neighborUv.offset.x - selectedBaseEndU * selectedUv->scale.x;
     }
 
     if (!std::isfinite(alignedOffsetX)) {
@@ -8549,7 +9698,7 @@ bool SectorEditor::AlignSelectedWallMaterialU(
         return false;
     }
 
-    selectedUv.offset.x = alignedOffsetX;
+    selectedUv->offset.x = alignedOffsetX;
     state.topologyRenderWarning.clear();
     ResetSurface3DUiState();
     for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
@@ -8557,8 +9706,9 @@ bool SectorEditor::AlignSelectedWallMaterialU(
     }
 
     MarkTopologyDocumentEdited(TextFormat(
-            "Aligned %s U from %s.",
+            "Aligned %s %s U from %s.",
             TopologyWallPartStatusName(wallPart),
+            TopologyMaterialLayerStatusName(layer),
             TopologyUAlignDirectionStatusName(direction)));
     if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
         return RebuildPreviewMeshesPreservingView(*assets);
@@ -8775,7 +9925,12 @@ std::string SectorEditor::CurrentTextureForPickerTarget() const
         if (sideDef == nullptr) {
             return std::string{};
         }
-        return TopologyWallPartSettingsFor(*sideDef, state.texturePicker.topologyWallPart).textureId;
+        const SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(
+                *sideDef,
+                state.texturePicker.topologyWallPart);
+        return state.texturePicker.topologyLayer == TopologyMaterialLayer::Decal
+                ? part.decal.textureId
+                : part.textureId;
     }
 
     const SectorTopologySector* sector = FindSectorTopologySector(
@@ -8786,8 +9941,14 @@ std::string SectorEditor::CurrentTextureForPickerTarget() const
     }
 
     switch (state.texturePicker.topologyField) {
-        case TopologySectorTextureField::Floor: return sector->floorTextureId;
-        case TopologySectorTextureField::Ceiling: return sector->ceilingTextureId;
+        case TopologySectorTextureField::Floor:
+            return state.texturePicker.topologyLayer == TopologyMaterialLayer::Decal
+                    ? sector->floorDecal.textureId
+                    : sector->floorTextureId;
+        case TopologySectorTextureField::Ceiling:
+            return state.texturePicker.topologyLayer == TopologyMaterialLayer::Decal
+                    ? sector->ceilingDecal.textureId
+                    : sector->ceilingTextureId;
         case TopologySectorTextureField::DefaultWall: return sector->defaultWall.textureId;
         case TopologySectorTextureField::DefaultLower: return sector->defaultLower.textureId;
         case TopologySectorTextureField::DefaultUpper: return sector->defaultUpper.textureId;
@@ -8796,11 +9957,17 @@ std::string SectorEditor::CurrentTextureForPickerTarget() const
     return std::string{};
 }
 
-void SectorEditor::OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field)
+void SectorEditor::OpenTopologyTexturePicker(
+        int sectorId,
+        TopologySectorTextureField field,
+        TopologyMaterialLayer layer)
 {
     TexturePickerState& picker = state.texturePicker;
     if (FindSectorTopologySector(state.topologyMap, sectorId) == nullptr
-            || field == TopologySectorTextureField::None) {
+            || field == TopologySectorTextureField::None
+            || (layer == TopologyMaterialLayer::Decal
+                    && field != TopologySectorTextureField::Floor
+                    && field != TopologySectorTextureField::Ceiling)) {
         picker = TexturePickerState{};
         statusText = "No topology sector texture target";
         return;
@@ -8809,6 +9976,7 @@ void SectorEditor::OpenTopologyTexturePicker(int sectorId, TopologySectorTexture
     picker.open = true;
     picker.rebuildPreviewOnApply = false;
     picker.topologyTargetKind = TopologyTexturePickerTargetKind::Sector;
+    picker.topologyLayer = layer;
     picker.topologySectorId = sectorId;
     picker.topologyField = field;
     picker.topologySideDefId = -1;
@@ -8830,7 +9998,10 @@ void SectorEditor::OpenTopologyTexturePicker(int sectorId, TopologySectorTexture
     }
 }
 
-void SectorEditor::OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart)
+void SectorEditor::OpenTopologySideDefTexturePicker(
+        int sideDefId,
+        TopologyWallPart wallPart,
+        TopologyMaterialLayer layer)
 {
     TexturePickerState& picker = state.texturePicker;
     if (FindSectorTopologySideDef(state.topologyMap, sideDefId) == nullptr) {
@@ -8842,6 +10013,7 @@ void SectorEditor::OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallP
     picker.open = true;
     picker.rebuildPreviewOnApply = false;
     picker.topologyTargetKind = TopologyTexturePickerTargetKind::SideDef;
+    picker.topologyLayer = layer;
     picker.topologySectorId = -1;
     picker.topologyField = TopologySectorTextureField::None;
     picker.topologySideDefId = sideDefId;
@@ -8884,6 +10056,15 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
             changed = true;
         }
     };
+    auto assignDecalTexture = [&](SectorTopologyDecalLayer& decal) {
+        if (decal.textureId.empty()) {
+            ResetTopologyUv(decal.uv);
+            decal.opacity = 1.0f;
+            decal.emissive = false;
+            decal.tint = Vector3{1.0f, 1.0f, 1.0f};
+        }
+        assignTexture(decal.textureId);
+    };
 
     std::string status;
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::Sector) {
@@ -8895,10 +10076,18 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
 
         switch (picker.topologyField) {
             case TopologySectorTextureField::Floor:
-                assignTexture(sector->floorTextureId);
+                if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+                    assignDecalTexture(sector->floorDecal);
+                } else {
+                    assignTexture(sector->floorTextureId);
+                }
                 break;
             case TopologySectorTextureField::Ceiling:
-                assignTexture(sector->ceilingTextureId);
+                if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+                    assignDecalTexture(sector->ceilingDecal);
+                } else {
+                    assignTexture(sector->ceilingTextureId);
+                }
                 break;
             case TopologySectorTextureField::DefaultWall:
                 assignTexture(sector->defaultWall.textureId);
@@ -8912,21 +10101,32 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
             case TopologySectorTextureField::None:
                 break;
         }
-        status = TextFormat("Changed %s", TopologySectorTextureFieldLabel(picker.topologyField));
+        status = picker.topologyLayer == TopologyMaterialLayer::Decal
+                ? TextFormat("Selected %s decal texture.", picker.topologyField == TopologySectorTextureField::Floor ? "floor" : "ceiling")
+                : TextFormat("Changed %s", TopologySectorTextureFieldLabel(picker.topologyField));
     } else if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef) {
         SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, picker.topologySideDefId);
         if (sideDef == nullptr) {
             picker = TexturePickerState{};
             return;
         }
-        assignTexture(TopologyWallPartSettingsFor(*sideDef, picker.topologyWallPart).textureId);
-        status = TextFormat(
-                "Changed topology sidedef %d %s texture",
-                sideDef->id,
-                TopologyWallPartStatusName(picker.topologyWallPart));
+        SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(*sideDef, picker.topologyWallPart);
+        if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+            assignDecalTexture(part.decal);
+            status = TextFormat(
+                    "Selected %s decal texture.",
+                    TopologyWallPartStatusName(picker.topologyWallPart));
+        } else {
+            assignTexture(part.textureId);
+            status = TextFormat(
+                    "Changed topology sidedef %d %s texture",
+                    sideDef->id,
+                    TopologyWallPartStatusName(picker.topologyWallPart));
+        }
     }
 
     if (changed) {
+        state.topologyRenderWarning.clear();
         MarkTopologyDocumentEdited(status.c_str());
         if (rebuildPreviewOnApply && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
             RebuildPreviewMeshesPreservingView(assets);

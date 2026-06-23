@@ -99,11 +99,7 @@ TextureHandle TextureAssets::CreateTextureFromImage(
         return NullTextureHandle();
     }
 
-    if (HasFlag(flags, TextureLoad_BilinearFilter)) {
-        SetTextureFilter(uploaded, TEXTURE_FILTER_BILINEAR);
-    } else {
-        SetTextureFilter(uploaded, TEXTURE_FILTER_POINT);
-    }
+    ApplyTextureLoadFlags(uploaded, flags);
 
     std::lock_guard<std::mutex> lock(stateMutex);
 
@@ -330,11 +326,7 @@ void TextureAssets::UpdateMainThread(float maxMilliseconds)
                     }
                 } else if (uploadedTexture) {
                     slot.texture = uploaded;
-                    if (HasFlag(slot.flags, TextureLoad_BilinearFilter)) {
-                        SetTextureFilter(slot.texture, TEXTURE_FILTER_BILINEAR);
-                    } else {
-                        SetTextureFilter(slot.texture, TEXTURE_FILTER_POINT);
-                    }
+                    ApplyTextureLoadFlags(slot.texture, slot.flags);
                     slot.state = TextureState::Ready;
                     slot.error.clear();
                 } else {
@@ -415,6 +407,31 @@ std::string TextureAssets::MakeTextureRequestKey(const char* key, const char* pa
 std::string TextureAssets::MakeGeneratedTextureKey(const char* key, TextureLoadFlags flags)
 {
     return std::string(key) + "\n<generated>\n" + std::to_string(static_cast<uint32_t>(flags));
+}
+
+void TextureAssets::ApplyTextureLoadFlags(Texture2D& texture, TextureLoadFlags flags)
+{
+    if (texture.id == 0) {
+        return;
+    }
+
+    const bool needsMipmaps = HasFlag(flags, TextureLoad_Mipmaps)
+            || HasFlag(flags, TextureLoad_TrilinearFilter)
+            || HasFlag(flags, TextureLoad_Anisotropic8x);
+    if (needsMipmaps && texture.mipmaps <= 1) {
+        GenTextureMipmaps(&texture);
+    }
+
+    if (HasFlag(flags, TextureLoad_Anisotropic8x)) {
+        SetTextureFilter(texture, TEXTURE_FILTER_TRILINEAR);
+        SetTextureFilter(texture, TEXTURE_FILTER_ANISOTROPIC_8X);
+    } else if (HasFlag(flags, TextureLoad_TrilinearFilter)) {
+        SetTextureFilter(texture, TEXTURE_FILTER_TRILINEAR);
+    } else if (HasFlag(flags, TextureLoad_BilinearFilter)) {
+        SetTextureFilter(texture, TEXTURE_FILTER_BILINEAR);
+    } else {
+        SetTextureFilter(texture, TEXTURE_FILTER_POINT);
+    }
 }
 
 void TextureAssets::QueueTextureUnloadNoLock(TextureHandle handle)

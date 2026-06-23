@@ -138,7 +138,9 @@ engine::TextureLoadFlags flags =
 ```
 
 Use `TextureLoad_PointFilter` for pixel art. Use `TextureLoad_BilinearFilter`
-when scaled textures should be smoothed.
+when scaled textures should be smoothed without mipmaps. Use
+`TextureLoad_TrilinearFilter` for mipmapped smoothing, or
+`TextureLoad_Anisotropic8x` for detailed 3D surfaces viewed at shallow angles.
 
 ## Fonts
 

@@ -71,6 +71,11 @@ enum class TopologyWallPart {
     Upper
 };
 
+enum class TopologyMaterialLayer {
+    Base,
+    Decal
+};
+
 enum class TopologyUvFitMode {
     Width,
     Height,
@@ -143,6 +148,7 @@ struct TexturePickerState {
     bool open = false;
     bool rebuildPreviewOnApply = false;
     TopologyTexturePickerTargetKind topologyTargetKind = TopologyTexturePickerTargetKind::None;
+    TopologyMaterialLayer topologyLayer = TopologyMaterialLayer::Base;
     TopologySectorTextureField topologyField = TopologySectorTextureField::None;
     int topologySectorId = -1;
     int topologySideDefId = -1;
@@ -162,12 +168,12 @@ struct AddMapTextureState {
     std::vector<const char*> optionLabels;
     int selectedPathIndex = -1;
     char textureIdBuffer[96] = {};
-    SectorTextureFilter filter = SectorTextureFilter::Bilinear;
+    SectorTextureFilter filter = SectorTextureFilter::Anisotropic8x;
     std::string validationMessage;
     engine::AssetScopeHandle previewScope = engine::NullAssetScopeHandle();
     engine::TextureHandle previewTexture = engine::NullTextureHandle();
     std::string previewPath;
-    SectorTextureFilter previewFilter = SectorTextureFilter::Bilinear;
+    SectorTextureFilter previewFilter = SectorTextureFilter::Anisotropic8x;
 };
 
 struct SaveLevelModalState {
@@ -195,6 +201,16 @@ struct ConfirmationModalState {
     std::string title;
     std::string message;
     std::function<void()> onOkay;
+};
+
+struct DecalTintModalState {
+    bool open = false;
+    TopologySurfaceEditTarget target;
+    Vector3 tint = {1.0f, 1.0f, 1.0f};
+    engine::UIFloatInputState redInput;
+    engine::UIFloatInputState greenInput;
+    engine::UIFloatInputState blueInput;
+    std::string errorMessage;
 };
 
 struct VertexDragState {
@@ -276,6 +292,7 @@ struct SectorEditorState {
     int selectedTopologyLineDefId = -1;
     SectorTopologySideKind selectedTopologySideKind = SectorTopologySideKind::Front;
     TopologyWallPart selectedTopologyWallPart = TopologyWallPart::Wall;
+    TopologyMaterialLayer activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
     int selectedTopologyLightId = -1;
     int hoveredTopologyLightId = -1;
     bool hasHoveredVertex = false;
@@ -308,6 +325,7 @@ struct SectorEditorState {
     bool hasCurrentLevelPath = false;
     bool hasUnsavedChanges = false;
     bool useBakedAmbientOcclusion = true;
+    bool previewUiHidden = false;
     bool hasPreviewPose = false;
     SectorMeshPreviewPose lastPreviewPose = {};
     SectorSurfaceHit hoveredSurface3D;
@@ -322,6 +340,7 @@ struct SectorEditorState {
     SaveLevelModalState saveLevelModal;
     LoadLevelModalState loadLevelModal;
     ConfirmationModalState confirmationModal;
+    DecalTintModalState decalTintModal;
 };
 
 struct SectorEditorUiState {
@@ -350,8 +369,11 @@ struct SectorEditorUiState {
     engine::UIFloatInputState surface3DUvScaleVInput;
     engine::UIFloatInputState surface3DUvOffsetUInput;
     engine::UIFloatInputState surface3DUvOffsetVInput;
+    engine::UIFloatInputState surface3DDecalOpacityInput;
     engine::UIFloatInputState topologySectorUvInputs[20];
+    engine::UIFloatInputState topologySectorDecalOpacityInputs[2];
     engine::UIFloatInputState topologySideDefUvInputs[4];
+    engine::UIFloatInputState topologySideDefDecalOpacityInput;
     engine::UIScrollState toolsScroll;
     engine::UIScrollState inspectorScroll;
     char selectedSectorIdBuffer[64] = {};
