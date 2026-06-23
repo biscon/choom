@@ -2,6 +2,7 @@
 
 #include "engine/assets/TextureLoadFlags.h"
 #include "engine/input/InputEvents.h"
+#include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTextureTypes.h"
@@ -49,6 +50,7 @@ constexpr float ScreenVertexSnapPixels = 10.0f;
 constexpr float ScreenEdgePickPixels = 10.0f;
 constexpr float ScreenLightPickPixels = 12.0f;
 constexpr float PreviewHighlightLift = 0.006f;
+constexpr float GameplayFloorSnapEpsilon = 0.001f;
 
 struct LevelPaths {
     std::string jsonAssetPath;
@@ -173,9 +175,47 @@ bool SameTopologyPoint(SectorTopologyCoordPoint a, SectorTopologyCoordPoint b)
 void ResetEditorTopologyDocumentState(SectorEditorState& state)
 {
     state.topologyMap = CreateEmptySectorTopologyDocument();
+    state.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
+            state.topologyMap.previewSettings);
     state.topologyDocumentInitialized = true;
     state.topologyDocumentDirty = false;
     state.topologyDocumentStatus = "Topology document: empty";
+}
+
+const char* PreviewControlModeName(SectorPreviewControlMode mode)
+{
+    switch (mode) {
+        case SectorPreviewControlMode::FreeFly:
+            return "FreeFly";
+        case SectorPreviewControlMode::Gameplay:
+            return "Gameplay";
+    }
+    return "Unknown";
+}
+
+const char* VerticalTransitionName(SectorFpsVerticalTransition transition)
+{
+    switch (transition) {
+        case SectorFpsVerticalTransition::None:
+            return "none";
+        case SectorFpsVerticalTransition::StayedGrounded:
+            return "ground";
+        case SectorFpsVerticalTransition::SteppedUp:
+            return "step up";
+        case SectorFpsVerticalTransition::SnappedDown:
+            return "snap down";
+        case SectorFpsVerticalTransition::StartedDrop:
+            return "drop";
+        case SectorFpsVerticalTransition::Landed:
+            return "landed";
+        case SectorFpsVerticalTransition::CeilingBonk:
+            return "ceiling";
+        case SectorFpsVerticalTransition::BlockedStep:
+            return "blocked step";
+        case SectorFpsVerticalTransition::CannotFit:
+            return "cannot fit";
+    }
+    return "unknown";
 }
 
 std::vector<LevelListEntry> ScanLevels(std::string& error)
@@ -1408,17 +1448,23 @@ void SectorEditor::RenderUI(
             ui.focusedId = 0;
             ui.openOptionId = 0;
         } else {
-            DrawPreviewOverlay(config, assets, font);
+            DrawPreviewOverlay(ui, config, input, assets, font);
         }
-        if (!state.previewUiHidden && !state.texturePicker.open && !state.decalTintModal.open) {
+        if (!state.previewUiHidden
+                && !state.texturePicker.open
+                && !state.decalTintModal.open
+                && !state.previewSettingsModal.open) {
             DrawPreviewUvPanel(ui, config, input, assets, font);
         }
         if (state.decalTintModal.open) {
             DrawDecalTintModal(ui, config, input, assets, font);
         }
+        if (state.previewSettingsModal.open) {
+            DrawPreviewSettingsModal(ui, config, input, assets, font);
+        }
         DrawTexturePickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = ui.focusedId != 0;
-        if (state.texturePicker.open || state.decalTintModal.open) {
+        if (state.texturePicker.open || state.decalTintModal.open || state.previewSettingsModal.open) {
             uiState.keyboardCaptured = true;
         }
         engine::EndUI(ui, config, input, assets);
@@ -1452,6 +1498,12 @@ void SectorEditor::RenderUI(
     }
     if (state.decalTintModal.open) {
         DrawDecalTintModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (state.previewSettingsModal.open) {
+        DrawPreviewSettingsModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -2792,10 +2844,11 @@ void SectorEditor::CommitPendingTopologySectorCut()
 
 void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
 {
+    bool controlModeToggled = false;
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
-            [this](engine::InputEvent& event) {
+            [this, &controlModeToggled](engine::InputEvent& event) {
                 if (event.key.key == KEY_F1) {
                     state.useBakedAmbientOcclusion = !state.useBakedAmbientOcclusion;
                     statusText = state.useBakedAmbientOcclusion
@@ -2817,6 +2870,13 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                     return;
                 }
 
+                if (event.key.key == KEY_F3) {
+                    TogglePreviewControlMode();
+                    controlModeToggled = true;
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
@@ -2824,8 +2884,184 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
             }
     );
 
+    if (controlModeToggled) {
+        UpdatePreview3DSelection(input);
+        return;
+    }
+
     if (state.mode == SectorEditorMode::Preview3D) {
-        preview.Update(input, dt);
+        if (state.previewControlMode == SectorPreviewControlMode::FreeFly) {
+            preview.Update(input, dt);
+        } else {
+            if (!std::isfinite(state.landingDipState.offsetY)) {
+                ClearSectorFpsLandingDip(state.landingDipState);
+            }
+            const float previousVisualEyeY = preview.Pose().position.y;
+            const float previousStepVisualEyeY =
+                    previousVisualEyeY - state.landingDipState.offsetY;
+            input.ForEachEvent(
+                    engine::InputEventType::KeyPressed,
+                    true,
+                    [this](engine::InputEvent& event) {
+                        if (event.key.key != KEY_F11) {
+                            return;
+                        }
+
+                        preview.SetMouseLookEnabled(!preview.IsMouseLookEnabled());
+                        engine::ConsumeEvent(event);
+                    }
+            );
+
+            SectorFpsControllerInput controllerInput;
+            controllerInput.moveForward = input.IsKeyDown(KEY_W);
+            controllerInput.moveBackward = input.IsKeyDown(KEY_S);
+            controllerInput.strafeLeft = input.IsKeyDown(KEY_A);
+            controllerInput.strafeRight = input.IsKeyDown(KEY_D);
+            controllerInput.run = input.IsKeyDown(KEY_LEFT_SHIFT) || input.IsKeyDown(KEY_RIGHT_SHIFT);
+            controllerInput.mouseLookEnabled = preview.IsMouseLookEnabled();
+            controllerInput.mouseDelta = input.MouseDelta();
+            const bool canConsumeGameplayJump =
+                    state.mode == SectorEditorMode::Preview3D
+                    && state.previewControlMode == SectorPreviewControlMode::Gameplay
+                    && !uiState.keyboardCaptured
+                    && !state.texturePicker.open
+                    && !state.decalTintModal.open
+                    && !state.previewSettingsModal.open;
+            if (canConsumeGameplayJump) {
+                input.ForEachEvent(
+                        engine::InputEventType::KeyPressed,
+                        true,
+                        [&controllerInput](engine::InputEvent& event) {
+                            if (event.key.key != KEY_SPACE) {
+                                return;
+                            }
+                            controllerInput.jumpPressed = true;
+                            engine::ConsumeEvent(event);
+                        }
+                );
+            }
+            UpdateSectorFpsMouseLook(
+                    state.fpsControllerState,
+                    state.fpsControllerConfig,
+                    controllerInput);
+            const Vector2 desiredHorizontalMovement = ComputeSectorFpsHorizontalMovementDelta(
+                    state.fpsControllerState,
+                    state.fpsControllerConfig,
+                    controllerInput,
+                    dt);
+            const Vector2 previousFeetXZ{
+                    state.fpsControllerState.feetPosition.x,
+                    state.fpsControllerState.feetPosition.z};
+            state.previewMoveResult = SectorCollisionMoveResult{};
+            state.previewCollisionNoclipFallback = false;
+            if (state.sectorCollisionWorldValid) {
+                const Vector2 feetXZ{
+                        state.fpsControllerState.feetPosition.x,
+                        state.fpsControllerState.feetPosition.z};
+                if (state.sectorCollisionWorld.FindSector(
+                            state.fpsControllerState.currentSectorId) == nullptr) {
+                    state.fpsControllerState.currentSectorId =
+                            state.sectorCollisionWorld.FindSectorContainingPoint(feetXZ);
+                }
+                const int previousSectorId = state.fpsControllerState.currentSectorId;
+                const float previousFeetY = state.fpsControllerState.feetPosition.y;
+                const bool wasGrounded = state.fpsControllerState.grounded;
+
+                if (state.fpsControllerState.currentSectorId != 0) {
+                    const SectorFpsControllerConfig normalizedConfig =
+                            NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
+                    SectorCollisionMoveResult moveResult =
+                            state.sectorCollisionWorld.ResolveMovement(
+                                    SectorCollisionMoveState{
+                                            feetXZ,
+                                            state.fpsControllerState.feetPosition.y,
+                                            state.fpsControllerState.currentSectorId,
+                                            state.fpsControllerState.grounded},
+                                    desiredHorizontalMovement,
+                                    SectorCollisionMoveConfig{
+                                            normalizedConfig.playerRadius,
+                                            normalizedConfig.playerHeight,
+                                            normalizedConfig.stepHeight,
+                                            4});
+                    SectorCollisionHeights movedHeights;
+                    if (wasGrounded
+                            && moveResult.currentSectorId != previousSectorId
+                            && state.sectorCollisionWorld.GetSectorFloorCeiling(
+                                    moveResult.currentSectorId,
+                                    &movedHeights)
+                            && movedHeights.floorZ - previousFeetY
+                                    > normalizedConfig.stepHeight + GameplayFloorSnapEpsilon) {
+                        moveResult.positionXZ = feetXZ;
+                        moveResult.currentSectorId = previousSectorId;
+                        moveResult.blockedByStep = true;
+                    }
+                    state.previewMoveResult = moveResult;
+                    state.fpsControllerState.feetPosition.x = moveResult.positionXZ.x;
+                    state.fpsControllerState.feetPosition.z = moveResult.positionXZ.y;
+                    state.fpsControllerState.currentSectorId = moveResult.currentSectorId;
+                } else {
+                    state.previewCollisionNoclipFallback = true;
+                    state.fpsControllerState.feetPosition.x += desiredHorizontalMovement.x;
+                    state.fpsControllerState.feetPosition.z += desiredHorizontalMovement.y;
+                }
+            } else {
+                state.previewCollisionNoclipFallback = true;
+                state.fpsControllerState.feetPosition.x += desiredHorizontalMovement.x;
+                state.fpsControllerState.feetPosition.z += desiredHorizontalMovement.y;
+            }
+            RefreshGameplaySectorAndVerticalContext();
+            bool startedJump = false;
+            if (controllerInput.jumpPressed) {
+                startedJump = TryStartSectorFpsJump(
+                        state.fpsControllerState,
+                        state.fpsControllerConfig);
+                if (startedJump) {
+                    ClearSectorFpsLandingDip(state.landingDipState);
+                }
+            }
+            state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
+                    state.fpsControllerState,
+                    state.fpsControllerConfig,
+                    BuildGameplayVerticalContext(),
+                    dt);
+            if (state.previewCollisionNoclipFallback || !state.previewVerticalResult.hasSector) {
+                state.visualStepOffsetY = 0.0f;
+                ClearSectorFpsLandingDip(state.landingDipState);
+            } else if (startedJump) {
+                state.visualStepOffsetY = 0.0f;
+            } else {
+                ApplySectorFpsVisualStepSmoothing(
+                        state.visualStepOffsetY,
+                        state.previewVerticalResult.transition,
+                        previousStepVisualEyeY,
+                        state.fpsControllerState,
+                        state.fpsControllerConfig,
+                        DefaultSectorFpsStepSmoothingRate(),
+                        dt);
+                UpdateSectorFpsLandingDip(
+                        state.landingDipState,
+                        state.previewVerticalResult,
+                        dt);
+            }
+            const Vector2 resolvedHorizontalMovement{
+                    state.fpsControllerState.feetPosition.x - previousFeetXZ.x,
+                    state.fpsControllerState.feetPosition.z - previousFeetXZ.y};
+            const float resolvedHorizontalSpeed = dt > 0.0f
+                    ? Vector2Length(resolvedHorizontalMovement) / dt
+                    : 0.0f;
+            const bool headBobActive = !state.previewCollisionNoclipFallback
+                    && state.previewVerticalResult.hasSector
+                    && state.fpsControllerState.grounded
+                    && !state.previewSettingsModal.open;
+            UpdateSectorFpsHeadBob(
+                    state.headBobState,
+                    state.fpsControllerConfig,
+                    headBobActive,
+                    resolvedHorizontalSpeed,
+                    state.fpsControllerState.yawRadians,
+                    dt);
+            ApplyGameplayPoseToPreview();
+        }
         UpdatePreview3DSelection(input);
     }
 }
@@ -3318,6 +3554,29 @@ bool SectorEditor::FinishTopologyMaterialMutation(const char* status, engine::As
     if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
         return RebuildPreviewMeshesPreservingView(*assets);
     }
+    return true;
+}
+
+bool SectorEditor::SetLineDefBlocksPlayer(int lineDefId, bool blocksPlayer)
+{
+    SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, lineDefId);
+    if (lineDef == nullptr) {
+        statusText = "Selected linedef is no longer valid.";
+        return false;
+    }
+    if (lineDef->frontSideDefId == -1 || lineDef->backSideDefId == -1) {
+        statusText = "Blocks Player is only editable on two-sided portals.";
+        return false;
+    }
+    if (lineDef->flags.blocksPlayer == blocksPlayer) {
+        return true;
+    }
+
+    lineDef->flags.blocksPlayer = blocksPlayer;
+    MarkTopologyDocumentEdited(blocksPlayer
+            ? "Enabled player blocking on portal."
+            : "Disabled player blocking on portal.");
+    RebuildSectorCollisionWorld();
     return true;
 }
 
@@ -4144,26 +4403,42 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
 }
 
 void SectorEditor::DrawPreviewOverlay(
+        engine::UIContext& ui,
         const engine::UIConfig& config,
+        engine::Input& input,
         engine::AssetManager& assets,
-        engine::FontHandle font) const
+        engine::FontHandle font)
 {
-    const Rectangle panel{32.0f, 32.0f, 760.0f, 172.0f};
+    const Rectangle panel{32.0f, 32.0f, 980.0f, 202.0f};
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
-    const Vector3 position = preview.Position();
+    const SectorMeshPreviewPose pose = ActivePreviewPose();
+    const Vector3 position = pose.position;
     engine::Text(
             config,
             assets,
             Rectangle{panel.x + 18.0f, panel.y + 14.0f, panel.width - 36.0f, 34.0f},
             font,
-            "3D Mode",
+            TextFormat("3D Mode | %s", PreviewControlModeName(state.previewControlMode)),
             engine::UITextJustify::Left
     );
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_preview_settings",
+                Rectangle{panel.x + panel.width - 152.0f, panel.y + 12.0f, 130.0f, 36.0f},
+                font,
+                "Settings")) {
+        OpenPreviewSettingsModal();
+    }
     const char* interactionText = preview.IsMouseLookEnabled()
-            ? "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return"
-            : "F1 AO | F2 hide UI | F11 cursor | click surface to select | Tab/Escape return";
+            ? (state.previewControlMode == SectorPreviewControlMode::Gameplay
+                    ? "WASD move | Space jump | Shift run | Mouse look | F3 FreeFly/Gameplay | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return"
+                    : "WASD move | Mouse look | Space/Ctrl up/down | F3 FreeFly/Gameplay | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return")
+            : "F1 AO | F2 hide UI | F3 FreeFly/Gameplay | F11 cursor | click surface to select | Tab/Escape return";
     engine::Text(
             config,
             assets,
@@ -4173,6 +4448,51 @@ void SectorEditor::DrawPreviewOverlay(
             engine::UITextJustify::Left,
             config.mutedTextColor
     );
+    std::string collisionStatus;
+    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        if (state.sectorCollisionWorldValid) {
+            if (state.previewCollisionNoclipFallback) {
+                collisionStatus = "Gameplay collision: no sector | noclip";
+            } else if (state.fpsControllerState.currentSectorId == 0
+                    || !state.previewVerticalResult.hasSector) {
+                collisionStatus = "Gameplay collision: on | no sector";
+            } else {
+                std::string blockText;
+                if (state.previewMoveResult.hitWall) {
+                    blockText += "wall ";
+                }
+                if (state.previewMoveResult.blockedByStep) {
+                    blockText += "step ";
+                }
+                if (state.previewMoveResult.blockedByCeiling) {
+                    blockText += "ceiling ";
+                }
+                if (blockText.empty()) {
+                    blockText = "clear";
+                }
+                const char* verticalState = state.previewVerticalResult.cannotFit
+                        ? "cannot fit"
+                        : (state.fpsControllerState.grounded
+                                ? "grounded"
+                                : (state.fpsControllerState.verticalVelocity > 0.0f ? "jumping" : "falling"));
+                collisionStatus = TextFormat(
+                        "Gameplay collision: sector %d | %s%s | vertical %s | block %s | r %.2f step %.2f jump %.2f | floor %.2f feet %.2f vel %.2f",
+                        state.fpsControllerState.currentSectorId,
+                        verticalState,
+                        state.previewVerticalResult.cannotFit ? " grounded" : "",
+                        VerticalTransitionName(state.previewVerticalResult.transition),
+                        blockText.c_str(),
+                        state.fpsControllerConfig.playerRadius,
+                        state.fpsControllerConfig.stepHeight,
+                        state.fpsControllerConfig.jumpHeight,
+                        state.previewVerticalResult.floorZ,
+                        state.fpsControllerState.feetPosition.y,
+                        state.fpsControllerState.verticalVelocity);
+            }
+        } else {
+            collisionStatus = "Gameplay collision: unavailable";
+        }
+    }
     engine::Text(
             config,
             assets,
@@ -4193,16 +4513,42 @@ void SectorEditor::DrawPreviewOverlay(
     engine::Text(
             config,
             assets,
-            Rectangle{panel.x + 18.0f, panel.y + 130.0f, panel.width - 36.0f, 30.0f},
+            Rectangle{panel.x + 18.0f, panel.y + 122.0f, panel.width - 36.0f, 30.0f},
             font,
-            TextFormat(
-                    "assets %.0f%% | Lightmap: %s | AO: %s | %s%s",
-                    preview.AssetProgress(assets) * 100.0f,
-                    preview.LightmapStatusText(),
-                    state.useBakedAmbientOcclusion ? "on" : "off",
-                    statusText.empty() ? "Ready" : statusText.c_str(),
-                    state.topologyDocumentDirty ? " | unsaved changes" : ""
-            ),
+            collisionStatus.empty() ? "3D collision: FreeFly noclip" : collisionStatus.c_str(),
+            engine::UITextJustify::Left,
+            config.mutedTextColor
+    );
+    const char* previewStatusText = statusText.empty() ? "Ready" : statusText.c_str();
+    const char* collisionWarningText = state.sectorCollisionWorldWarning.empty()
+            ? previewStatusText
+            : state.sectorCollisionWorldWarning.c_str();
+    engine::Text(
+            config,
+            assets,
+            Rectangle{panel.x + 18.0f, panel.y + 160.0f, panel.width - 36.0f, 30.0f},
+            font,
+            state.previewControlMode == SectorPreviewControlMode::Gameplay
+                    ? TextFormat(
+                            "assets %.0f%% | Lightmap: %s | AO: %s | walk %.1f | run %.1f | eye %.1f | height %.1f | gravity %.1f | jump %.1f | %s%s",
+                            preview.AssetProgress(assets) * 100.0f,
+                            preview.LightmapStatusText(),
+                            state.useBakedAmbientOcclusion ? "on" : "off",
+                            state.fpsControllerConfig.walkSpeed,
+                            state.fpsControllerConfig.runSpeed,
+                            state.fpsControllerConfig.eyeHeight,
+                            state.fpsControllerConfig.playerHeight,
+                            state.fpsControllerConfig.gravity,
+                            state.fpsControllerConfig.jumpHeight,
+                            collisionWarningText,
+                            state.topologyDocumentDirty ? " | unsaved changes" : "")
+                    : TextFormat(
+                            "assets %.0f%% | Lightmap: %s | AO: %s | %s%s",
+                            preview.AssetProgress(assets) * 100.0f,
+                            preview.LightmapStatusText(),
+                            state.useBakedAmbientOcclusion ? "on" : "off",
+                            collisionWarningText,
+                            state.topologyDocumentDirty ? " | unsaved changes" : ""),
             engine::UITextJustify::Left,
             state.topologyDocumentDirty ? Color{236, 196, 92, 255} : config.mutedTextColor
     );
@@ -4245,6 +4591,8 @@ void SectorEditor::DrawPreviewUvPanel(
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
     std::string targetLabel;
+    int portalLineDefId = -1;
+    bool portalBlocksPlayer = false;
 
     if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
             || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
@@ -4267,6 +4615,15 @@ void SectorEditor::DrawPreviewUvPanel(
         }
         const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
         (void)wallPart;
+        const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
+                state.topologyMap,
+                sideDef->lineDefId);
+        if (lineDef != nullptr
+                && lineDef->frontSideDefId != -1
+                && lineDef->backSideDefId != -1) {
+            portalLineDefId = lineDef->id;
+            portalBlocksPlayer = lineDef->flags.blocksPlayer;
+        }
         targetLabel = TextFormat(
                 "%s | sideDef %d line %d",
                 SurfaceKindName(state.selectedSurface3D.kind),
@@ -4430,6 +4787,23 @@ void SectorEditor::DrawPreviewUvPanel(
         openTexturePicker();
     }
     actionX += smallActionW + gap;
+
+    if (portalLineDefId != -1) {
+        bool blocksPlayer = portalBlocksPlayer;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_linedef_blocks_player",
+                    Rectangle{actionX, actionTop, 146.0f, actionH},
+                    font,
+                    "Blocks Player",
+                    blocksPlayer)) {
+            SetLineDefBlocksPlayer(portalLineDefId, blocksPlayer);
+        }
+        actionX += 146.0f + gap;
+    }
 
     if (decalAssigned) {
         if (engine::Button(
@@ -5433,7 +5807,7 @@ void SectorEditor::DrawToolsPanel(
 
     const float rowH = 46.0f;
     const float gap = config.rowSpacing;
-    const float toolsContentH = 1110.0f;
+    const float toolsContentH = 1166.0f;
     const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
             ui,
@@ -5522,6 +5896,10 @@ void SectorEditor::DrawToolsPanel(
 
     if (engine::Button(ui, config, input, assets, "sector_editor_add_map_texture", Rectangle{0.0f, y, contentW, rowH}, font, "Add Map Texture")) {
         OpenAddMapTextureModal(assets);
+    }
+    y += rowH + gap;
+    if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_2d", Rectangle{0.0f, y, contentW, rowH}, font, "Settings")) {
+        OpenPreviewSettingsModal();
     }
     y += rowH + gap;
 
@@ -6656,6 +7034,24 @@ bool SectorEditor::DrawTopologySideDefInspector(
         y += 34.0f;
     }
 
+    if (lineDef->frontSideDefId != -1 && lineDef->backSideDefId != -1) {
+        bool blocksPlayer = lineDef->flags.blocksPlayer;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_topology_linedef_blocks_player",
+                    Rectangle{0.0f, y, contentW, 36.0f},
+                    font,
+                    "Blocks Player",
+                    blocksPlayer)) {
+            SetLineDefBlocksPlayer(lineDef->id, blocksPlayer);
+            return true;
+        }
+        y += 36.0f + gap;
+    }
+
     auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologyWallPart wallPart, TopologyMaterialLayer layer) {
         const float buttonW = 38.0f;
         const float labelColumnW = 74.0f;
@@ -7628,9 +8024,6 @@ void SectorEditor::DrawConfirmationModal(
                 if (event.key.key == KEY_ESCAPE) {
                     cancelRequested = true;
                     engine::ConsumeEvent(event);
-                } else if (event.key.key == KEY_ENTER || event.key.key == KEY_KP_ENTER) {
-                    okayRequested = true;
-                    engine::ConsumeEvent(event);
                 }
             }
     );
@@ -7689,9 +8082,6 @@ void SectorEditor::DrawDecalTintModal(
             [&okayRequested, &cancelRequested](engine::InputEvent& event) {
                 if (event.key.key == KEY_ESCAPE) {
                     cancelRequested = true;
-                    engine::ConsumeEvent(event);
-                } else if (event.key.key == KEY_ENTER || event.key.key == KEY_KP_ENTER) {
-                    okayRequested = true;
                     engine::ConsumeEvent(event);
                 }
             }
@@ -7820,6 +8210,229 @@ void SectorEditor::DrawDecalTintModal(
         return;
     }
     state.decalTintModal = DecalTintModalState{};
+}
+
+void SectorEditor::DrawPreviewSettingsModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    SectorPreviewSettingsModalState& modalState = state.previewSettingsModal;
+    if (!modalState.open) {
+        return;
+    }
+
+    bool okayRequested = false;
+    bool cancelRequested = false;
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [&okayRequested, &cancelRequested](engine::InputEvent& event) {
+                if (event.key.key == KEY_ESCAPE) {
+                    cancelRequested = true;
+                    engine::ConsumeEvent(event);
+                }
+            }
+    );
+
+    DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
+    const Rectangle modal{
+            (EditorWidth - 620.0f) * 0.5f,
+            (EditorHeight - 790.0f) * 0.5f,
+            620.0f,
+            790.0f
+    };
+    DrawRectangleRec(modal, Color{20, 24, 32, 248});
+    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
+
+    float y = modal.y + 22.0f;
+    engine::Text(config, assets, Rectangle{modal.x + 26.0f, y, modal.width - 52.0f, 42.0f}, font, "Preview Settings");
+    y += 60.0f;
+
+    const float labelW = 220.0f;
+    const float inputW = 180.0f;
+    const float rowH = 40.0f;
+    const float gap = 12.0f;
+    const float labelX = modal.x + 30.0f;
+    const float inputX = labelX + labelW + 18.0f;
+    auto drawFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{labelX, y, labelW, rowH},
+                font,
+                label,
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        const engine::UINumericInputResult result = engine::FloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                id,
+                Rectangle{inputX, y, inputW, rowH},
+                font,
+                value,
+                inputState,
+                minValue,
+                maxValue,
+                decimals);
+        if (result.changed) {
+            modalState.errorMessage.clear();
+        }
+        y += rowH + gap;
+    };
+
+    drawFloat(
+            "sector_editor_preview_walk_speed",
+            "Walk speed",
+            modalState.draftConfig.walkSpeed,
+            modalState.walkSpeedInput,
+            0.1f,
+            100.0f,
+            2);
+    drawFloat(
+            "sector_editor_preview_run_speed",
+            "Run speed",
+            modalState.draftConfig.runSpeed,
+            modalState.runSpeedInput,
+            0.1f,
+            200.0f,
+            2);
+    drawFloat(
+            "sector_editor_preview_mouse_sensitivity",
+            "Mouse sensitivity",
+            modalState.draftConfig.mouseSensitivity,
+            modalState.mouseSensitivityInput,
+            0.01f,
+            20.0f,
+            3);
+    drawFloat(
+            "sector_editor_preview_eye_height",
+            "Camera eye height",
+            modalState.draftConfig.eyeHeight,
+            modalState.eyeHeightInput,
+            0.1f,
+            20.0f,
+            2);
+    drawFloat(
+            "sector_editor_preview_gravity",
+            "Gravity",
+            modalState.draftConfig.gravity,
+            modalState.gravityInput,
+            0.0f,
+            200.0f,
+            2);
+    drawFloat(
+            "sector_editor_preview_player_radius",
+            "Player radius",
+            modalState.draftConfig.playerRadius,
+            modalState.playerRadiusInput,
+            0.05f,
+            2.0f,
+            2);
+    drawFloat(
+            "sector_editor_preview_player_height",
+            "Player height",
+            modalState.draftConfig.playerHeight,
+            modalState.playerHeightInput,
+            0.5f,
+            3.0f,
+            2);
+    drawFloat(
+            "sector_editor_preview_step_height",
+            "Step height",
+            modalState.draftConfig.stepHeight,
+            modalState.stepHeightInput,
+            0.0f,
+            2.0f,
+            2);
+    drawFloat(
+            "sector_editor_preview_jump_height",
+            "Jump height",
+            modalState.draftConfig.jumpHeight,
+            modalState.jumpHeightInput,
+            0.0f,
+            3.0f,
+            2);
+    drawFloat(
+            "sector_editor_preview_head_bob_strength",
+            "Head bob strength",
+            modalState.draftConfig.headBobStrength,
+            modalState.headBobStrengthInput,
+            0.0f,
+            0.25f,
+            3);
+    drawFloat(
+            "sector_editor_preview_head_bob_frequency",
+            "Head bob frequency",
+            modalState.draftConfig.headBobFrequency,
+            modalState.headBobFrequencyInput,
+            0.0f,
+            20.0f,
+            2);
+
+    if (!modalState.errorMessage.empty()) {
+        engine::Text(
+                config,
+                assets,
+                Rectangle{modal.x + 30.0f, modal.y + modal.height - 116.0f, modal.width - 60.0f, 36.0f},
+                font,
+                modalState.errorMessage.c_str(),
+                engine::UITextJustify::Left,
+                config.invalidColor);
+    }
+
+    const float buttonY = modal.y + modal.height - 66.0f;
+    const float buttonW = 132.0f;
+    if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_reset", Rectangle{modal.x + 30.0f, buttonY, 176.0f, 44.0f}, font, "Reset Defaults")) {
+        modalState.draftConfig = DefaultSectorFpsControllerConfig();
+        modalState.walkSpeedInput = engine::UIFloatInputState{};
+        modalState.runSpeedInput = engine::UIFloatInputState{};
+        modalState.mouseSensitivityInput = engine::UIFloatInputState{};
+        modalState.eyeHeightInput = engine::UIFloatInputState{};
+        modalState.gravityInput = engine::UIFloatInputState{};
+        modalState.playerRadiusInput = engine::UIFloatInputState{};
+        modalState.playerHeightInput = engine::UIFloatInputState{};
+        modalState.stepHeightInput = engine::UIFloatInputState{};
+        modalState.jumpHeightInput = engine::UIFloatInputState{};
+        modalState.headBobStrengthInput = engine::UIFloatInputState{};
+        modalState.headBobFrequencyInput = engine::UIFloatInputState{};
+        modalState.errorMessage.clear();
+    }
+    okayRequested = okayRequested || engine::Button(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_preview_settings_ok",
+            Rectangle{modal.x + modal.width - buttonW * 2.0f - 38.0f, buttonY, buttonW, 44.0f},
+            font,
+            "OK");
+    cancelRequested = cancelRequested || engine::Button(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_preview_settings_cancel",
+            Rectangle{modal.x + modal.width - buttonW - 26.0f, buttonY, buttonW, 44.0f},
+            font,
+            "Cancel");
+
+    input.ForEachEvent(engine::InputEventType::Any, true, [](engine::InputEvent& event) {
+        engine::ConsumeEvent(event);
+    });
+
+    if (cancelRequested) {
+        state.previewSettingsModal = SectorPreviewSettingsModalState{};
+        return;
+    }
+    if (okayRequested) {
+        ApplyPreviewSettingsModal();
+    }
 }
 
 void SectorEditor::DrawLightmapBakeModal(
@@ -8028,6 +8641,8 @@ bool SectorEditor::LoadLevel(
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     state.topologyMap = std::move(loaded);
+    state.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
+            state.topologyMap.previewSettings);
     state.topologyDocumentInitialized = true;
     state.topologyDocumentDirty = false;
     state.topologyDocumentStatus = TextFormat("Topology document: loaded %s", jsonAssetPath.c_str());
@@ -8185,7 +8800,8 @@ bool SectorEditor::HasDocumentModalOpen() const
     return state.saveLevelModal.open
             || state.loadLevelModal.open
             || state.confirmationModal.open
-            || state.decalTintModal.open;
+            || state.decalTintModal.open
+            || state.previewSettingsModal.open;
 }
 
 bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UIContext& ui)
@@ -8209,6 +8825,16 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
 
     std::string error;
     if (!preview.Rebuild(assets, state.topologyMap, "sector_editor_preview", error)) {
+        state.sectorCollisionWorldValid = false;
+        state.sectorCollisionWorldWarning.clear();
+        state.previewCollisionSectorId = 0;
+        state.fpsControllerState.currentSectorId = 0;
+        state.previewVerticalResult = SectorFpsVerticalResult{};
+        state.previewMoveResult = SectorCollisionMoveResult{};
+        state.previewCollisionNoclipFallback = false;
+        state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
+        ClearSectorFpsLandingDip(state.landingDipState);
         state.mode = SectorEditorMode::Edit2D;
         if (StartsWith(error, "Preview failed:")) {
             statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
@@ -8222,12 +8848,18 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
         preview.ApplyPose(state.lastPreviewPose);
     }
 
+    state.previewControlMode = SectorPreviewControlMode::FreeFly;
+    state.visualStepOffsetY = 0.0f;
+    ClearSectorFpsHeadBob(state.headBobState);
+    ClearSectorFpsLandingDip(state.landingDipState);
+    state.fpsControllerConfig = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
     state.mode = SectorEditorMode::Preview3D;
     state.previewUiHidden = false;
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
+    RebuildSectorCollisionWorld();
     statusText = TextFormat(
             "3D mode rebuilt: %zu batches, %d triangles",
             preview.BatchCount(),
@@ -8238,12 +8870,243 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
 
 void SectorEditor::LeavePreview3D()
 {
-    state.lastPreviewPose = preview.Pose();
+    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        ClearSectorFpsLandingDip(state.landingDipState);
+        ApplyGameplayPoseToPreview();
+    }
+    state.lastPreviewPose = ActivePreviewPose();
     state.hasPreviewPose = true;
+    state.visualStepOffsetY = 0.0f;
+    ClearSectorFpsHeadBob(state.headBobState);
+    ClearSectorFpsLandingDip(state.landingDipState);
+    state.previewControlMode = SectorPreviewControlMode::FreeFly;
     state.mode = SectorEditorMode::Edit2D;
     state.hoveredSurface3D = SectorSurfaceHit{};
+    state.previewSettingsModal = SectorPreviewSettingsModalState{};
     preview.Leave();
     statusText = "Returned to 2D editor";
+}
+
+SectorMeshPreviewPose SectorEditor::ActivePreviewPose() const
+{
+    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        return SectorFpsControllerVisualPose(
+                state.fpsControllerState,
+                state.fpsControllerConfig,
+                state.visualStepOffsetY,
+                state.headBobState.offset,
+                state.landingDipState.offsetY);
+    }
+    return preview.Pose();
+}
+
+void SectorEditor::ApplyGameplayPoseToPreview()
+{
+    preview.ApplyPose(SectorFpsControllerVisualPose(
+                state.fpsControllerState,
+                state.fpsControllerConfig,
+                state.visualStepOffsetY,
+                state.headBobState.offset,
+                state.landingDipState.offsetY));
+}
+
+void SectorEditor::TogglePreviewControlMode()
+{
+    if (state.mode != SectorEditorMode::Preview3D || !preview.IsReady()) {
+        return;
+    }
+
+    state.fpsControllerConfig = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
+    if (state.previewControlMode == SectorPreviewControlMode::FreeFly) {
+        state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
+        ClearSectorFpsLandingDip(state.landingDipState);
+        state.fpsControllerState = SectorFpsControllerStateFromCameraPose(
+                preview.Pose(),
+                state.fpsControllerConfig);
+        state.fpsControllerState.verticalVelocity = 0.0f;
+        state.previewControlMode = SectorPreviewControlMode::Gameplay;
+        InitializeGameplayVerticalState();
+        ApplyGameplayPoseToPreview();
+    } else {
+        ClearSectorFpsLandingDip(state.landingDipState);
+        ApplyGameplayPoseToPreview();
+        state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
+        ClearSectorFpsLandingDip(state.landingDipState);
+        state.previewControlMode = SectorPreviewControlMode::FreeFly;
+        state.previewCollisionSectorId = 0;
+        state.fpsControllerState.currentSectorId = 0;
+        state.previewVerticalResult = SectorFpsVerticalResult{};
+        state.previewMoveResult = SectorCollisionMoveResult{};
+        state.previewCollisionNoclipFallback = false;
+    }
+    statusText = TextFormat("3D control mode: %s", PreviewControlModeName(state.previewControlMode));
+}
+
+bool SectorEditor::RebuildSectorCollisionWorld()
+{
+    std::string error;
+    if (!state.sectorCollisionWorld.BuildFromTopology(state.topologyMap, &error)) {
+        state.sectorCollisionWorldValid = false;
+        state.previewCollisionSectorId = 0;
+        state.fpsControllerState.currentSectorId = 0;
+        state.previewVerticalResult = SectorFpsVerticalResult{};
+        state.previewMoveResult = SectorCollisionMoveResult{};
+        state.previewCollisionNoclipFallback = false;
+        state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
+        ClearSectorFpsLandingDip(state.landingDipState);
+        state.sectorCollisionWorldWarning = error.empty()
+                ? "Collision world build failed"
+                : "Collision world build failed: " + error;
+        return false;
+    }
+
+    state.sectorCollisionWorldValid = true;
+    state.sectorCollisionWorldWarning.clear();
+    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        RefreshGameplaySectorAndVerticalContext();
+        state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
+                state.fpsControllerState,
+                state.fpsControllerConfig,
+                BuildGameplayVerticalContext(),
+                0.0f);
+        state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
+        ClearSectorFpsLandingDip(state.landingDipState);
+    } else {
+        state.previewCollisionSectorId = 0;
+        state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
+        ClearSectorFpsLandingDip(state.landingDipState);
+    }
+    return true;
+}
+
+SectorFpsVerticalContext SectorEditor::BuildGameplayVerticalContext()
+{
+    SectorFpsVerticalContext context;
+    if (!state.sectorCollisionWorldValid || state.fpsControllerState.currentSectorId == 0) {
+        return context;
+    }
+
+    SectorCollisionHeights heights;
+    if (!state.sectorCollisionWorld.GetSectorFloorCeiling(
+                state.fpsControllerState.currentSectorId,
+                &heights)) {
+        return context;
+    }
+
+    context.hasSector = true;
+    context.floorZ = heights.floorZ;
+    context.ceilingZ = heights.ceilingZ;
+    return context;
+}
+
+void SectorEditor::RefreshGameplaySectorAndVerticalContext()
+{
+    if (!state.sectorCollisionWorldValid) {
+        state.fpsControllerState.currentSectorId = 0;
+        state.previewCollisionSectorId = 0;
+        state.previewVerticalResult = SectorFpsVerticalResult{};
+        state.previewMoveResult = SectorCollisionMoveResult{};
+        state.previewCollisionNoclipFallback = false;
+        state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
+        ClearSectorFpsLandingDip(state.landingDipState);
+        return;
+    }
+
+    state.fpsControllerState.currentSectorId =
+            state.sectorCollisionWorld.FindSectorContainingPointPreferCurrent(
+                    Vector2{
+                            state.fpsControllerState.feetPosition.x,
+                            state.fpsControllerState.feetPosition.z},
+                    state.fpsControllerState.currentSectorId);
+    state.previewCollisionSectorId = state.fpsControllerState.currentSectorId;
+}
+
+void SectorEditor::InitializeGameplayVerticalState()
+{
+    state.fpsControllerState.grounded = false;
+    state.fpsControllerState.verticalVelocity = 0.0f;
+    RefreshGameplaySectorAndVerticalContext();
+
+    const SectorFpsVerticalContext context = BuildGameplayVerticalContext();
+    if (!context.hasSector) {
+        state.fpsControllerState.currentSectorId = 0;
+        state.previewCollisionSectorId = 0;
+        state.previewVerticalResult = SectorFpsVerticalResult{};
+        state.previewMoveResult = SectorCollisionMoveResult{};
+        state.previewCollisionNoclipFallback = false;
+        state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
+        ClearSectorFpsLandingDip(state.landingDipState);
+        return;
+    }
+
+    if (state.fpsControllerState.feetPosition.y <= context.floorZ + GameplayFloorSnapEpsilon) {
+        state.fpsControllerState.feetPosition.y = context.floorZ;
+        state.fpsControllerState.grounded = true;
+    }
+    state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
+            state.fpsControllerState,
+            state.fpsControllerConfig,
+            context,
+            0.0f);
+    state.visualStepOffsetY = 0.0f;
+    ClearSectorFpsHeadBob(state.headBobState);
+    ClearSectorFpsLandingDip(state.landingDipState);
+}
+
+void SectorEditor::OpenPreviewSettingsModal()
+{
+    state.previewSettingsModal = SectorPreviewSettingsModalState{};
+    state.previewSettingsModal.open = true;
+    state.previewSettingsModal.draftConfig = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
+}
+
+void SectorEditor::ApplyPreviewSettingsModal()
+{
+    if (!state.previewSettingsModal.open) {
+        return;
+    }
+
+    const float previousGravity = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig).gravity;
+    state.fpsControllerConfig = NormalizeSectorFpsControllerConfig(state.previewSettingsModal.draftConfig);
+    if (previousGravity > 0.0f && state.fpsControllerConfig.gravity == 0.0f) {
+        state.fpsControllerState.verticalVelocity = 0.0f;
+    }
+    state.topologyMap.previewSettings = SectorPreviewSettingsFromFpsControllerConfig(
+            state.fpsControllerConfig);
+    MarkTopologyDocumentEdited("Preview settings updated");
+    state.previewSettingsModal = SectorPreviewSettingsModalState{};
+    if (state.mode == SectorEditorMode::Preview3D
+            && state.previewControlMode == SectorPreviewControlMode::Gameplay
+            && preview.IsReady()) {
+        state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
+                state.fpsControllerState,
+                state.fpsControllerConfig,
+                BuildGameplayVerticalContext(),
+                0.0f);
+        state.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(state.headBobState);
+        ClearSectorFpsLandingDip(state.landingDipState);
+        ApplyGameplayPoseToPreview();
+    }
+    statusText = TextFormat(
+            "Preview settings updated: walk %.1f run %.1f eye %.1f gravity %.1f radius %.2f height %.2f step %.2f jump %.2f bob %.3f freq %.1f",
+            state.fpsControllerConfig.walkSpeed,
+            state.fpsControllerConfig.runSpeed,
+            state.fpsControllerConfig.eyeHeight,
+            state.fpsControllerConfig.gravity,
+            state.fpsControllerConfig.playerRadius,
+            state.fpsControllerConfig.playerHeight,
+            state.fpsControllerConfig.stepHeight,
+            state.fpsControllerConfig.jumpHeight,
+            state.fpsControllerConfig.headBobStrength,
+            state.fpsControllerConfig.headBobFrequency);
 }
 
 void SectorEditor::RefreshDefaultTextures()
@@ -10144,6 +11007,10 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
         return false;
     }
 
+    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        ClearSectorFpsLandingDip(state.landingDipState);
+        ApplyGameplayPoseToPreview();
+    }
     const SectorMeshPreviewPose pose = preview.Pose();
     const bool mouseLook = preview.IsMouseLookEnabled();
     const SectorSurfaceRef selected = state.selectedSurface3D;
@@ -10151,6 +11018,14 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
 
     std::string error;
     if (!preview.Rebuild(assets, state.topologyMap, "sector_editor_preview", error)) {
+        state.sectorCollisionWorldValid = false;
+        state.sectorCollisionWorldWarning.clear();
+        state.previewCollisionSectorId = 0;
+        state.fpsControllerState.currentSectorId = 0;
+        state.previewVerticalResult = SectorFpsVerticalResult{};
+        state.previewMoveResult = SectorCollisionMoveResult{};
+        state.previewCollisionNoclipFallback = false;
+        ClearSectorFpsLandingDip(state.landingDipState);
         if (StartsWith(error, "Preview failed:")) {
             statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
         } else {
@@ -10167,6 +11042,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
     state.selectedTopologySurface3D = selectedStillValid && IsValidTopologySurfaceEditTarget(selectedTarget)
             ? selectedTarget
             : TopologySurfaceEditTarget{};
+    RebuildSectorCollisionWorld();
     return true;
 }
 

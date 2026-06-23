@@ -265,6 +265,37 @@ SectorTopologyWallPartSettings ReadWallPart(const Json& value, const std::string
     return part;
 }
 
+SectorTopologyLineDefFlags ReadLineDefFlags(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorTopologyLineDefFlags flags;
+    const auto blocksPlayerIt = value.find("blocksPlayer");
+    if (blocksPlayerIt != value.end()) {
+        if (!blocksPlayerIt->is_boolean()) {
+            Fail(context + ".blocksPlayer must be a boolean");
+        }
+        flags.blocksPlayer = blocksPlayerIt->get<bool>();
+    }
+    return flags;
+}
+
+void ReadOptionalLineDefFlags(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        SectorTopologyLineDefFlags& outFlags)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        outFlags = {};
+        return;
+    }
+    outFlags = ReadLineDefFlags(*it, context + "." + field);
+}
+
 void ReadOptionalWallPart(
         const Json& object,
         const char* field,
@@ -303,6 +334,60 @@ SectorLightmapBakeSettings ReadLightmapSettings(const Json& value, const std::st
             0.0f,
             1.0f);
     return settings;
+}
+
+SectorPreviewSettings ReadPreviewSettings(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorPreviewSettings settings = DefaultSectorPreviewSettings();
+    const auto walkSpeedIt = value.find("walkSpeed");
+    if (walkSpeedIt != value.end()) {
+        settings.walkSpeed = ReadFloat(value, "walkSpeed", context);
+    }
+    const auto runSpeedIt = value.find("runSpeed");
+    if (runSpeedIt != value.end()) {
+        settings.runSpeed = ReadFloat(value, "runSpeed", context);
+    }
+    const auto mouseSensitivityIt = value.find("mouseSensitivity");
+    if (mouseSensitivityIt != value.end()) {
+        settings.mouseSensitivity = ReadFloat(value, "mouseSensitivity", context);
+    }
+    const auto eyeHeightIt = value.find("eyeHeight");
+    if (eyeHeightIt != value.end()) {
+        settings.eyeHeight = ReadFloat(value, "eyeHeight", context);
+    }
+    const auto gravityIt = value.find("gravity");
+    if (gravityIt != value.end()) {
+        settings.gravity = ReadFloat(value, "gravity", context);
+    }
+    const auto playerRadiusIt = value.find("playerRadius");
+    if (playerRadiusIt != value.end()) {
+        settings.playerRadius = ReadFloat(value, "playerRadius", context);
+    }
+    const auto playerHeightIt = value.find("playerHeight");
+    if (playerHeightIt != value.end()) {
+        settings.playerHeight = ReadFloat(value, "playerHeight", context);
+    }
+    const auto stepHeightIt = value.find("stepHeight");
+    if (stepHeightIt != value.end()) {
+        settings.stepHeight = ReadFloat(value, "stepHeight", context);
+    }
+    const auto jumpHeightIt = value.find("jumpHeight");
+    if (jumpHeightIt != value.end()) {
+        settings.jumpHeight = ReadFloat(value, "jumpHeight", context);
+    }
+    const auto headBobStrengthIt = value.find("headBobStrength");
+    if (headBobStrengthIt != value.end()) {
+        settings.headBobStrength = ReadFloat(value, "headBobStrength", context);
+    }
+    const auto headBobFrequencyIt = value.find("headBobFrequency");
+    if (headBobFrequencyIt != value.end()) {
+        settings.headBobFrequency = ReadFloat(value, "headBobFrequency", context);
+    }
+    return NormalizeSectorPreviewSettings(settings);
 }
 
 SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& context)
@@ -426,6 +511,20 @@ bool HasNonDefaultWallPart(const SectorTopologyWallPartSettings& part)
             || HasDecal(part.decal);
 }
 
+bool HasNonDefaultLineDefFlags(const SectorTopologyLineDefFlags& flags)
+{
+    return flags.blocksPlayer;
+}
+
+Json WriteLineDefFlags(const SectorTopologyLineDefFlags& flags)
+{
+    Json value = Json::object();
+    if (flags.blocksPlayer) {
+        value["blocksPlayer"] = true;
+    }
+    return value;
+}
+
 Json WriteDecal(const SectorTopologyDecalLayer& decal, const std::string& context)
 {
     if (!std::isfinite(decal.opacity)
@@ -466,6 +565,13 @@ Json WriteWallPart(const SectorTopologyWallPartSettings& part, const std::string
     return value;
 }
 
+void RequireFinite(float value, const std::string& context)
+{
+    if (!std::isfinite(value)) {
+        Fail(context + " must be finite");
+    }
+}
+
 Json WriteLightmapSettings(const SectorLightmapBakeSettings& settings)
 {
     return Json{
@@ -479,6 +585,35 @@ Json WriteLightmapSettings(const SectorLightmapBakeSettings& settings)
                     SectorWorldToAuthoringDistance(0.05f),
                     SectorWorldToAuthoringDistance(16.0f))},
             {"indirectBounceStrength", std::clamp(settings.indirectBounceStrength, 0.0f, 1.0f)}
+    };
+}
+
+Json WritePreviewSettings(const SectorPreviewSettings& settings)
+{
+    RequireFinite(settings.walkSpeed, "previewSettings.walkSpeed");
+    RequireFinite(settings.runSpeed, "previewSettings.runSpeed");
+    RequireFinite(settings.mouseSensitivity, "previewSettings.mouseSensitivity");
+    RequireFinite(settings.eyeHeight, "previewSettings.eyeHeight");
+    RequireFinite(settings.gravity, "previewSettings.gravity");
+    RequireFinite(settings.playerRadius, "previewSettings.playerRadius");
+    RequireFinite(settings.playerHeight, "previewSettings.playerHeight");
+    RequireFinite(settings.stepHeight, "previewSettings.stepHeight");
+    RequireFinite(settings.jumpHeight, "previewSettings.jumpHeight");
+    RequireFinite(settings.headBobStrength, "previewSettings.headBobStrength");
+    RequireFinite(settings.headBobFrequency, "previewSettings.headBobFrequency");
+    const SectorPreviewSettings normalized = NormalizeSectorPreviewSettings(settings);
+    return Json{
+            {"walkSpeed", normalized.walkSpeed},
+            {"runSpeed", normalized.runSpeed},
+            {"mouseSensitivity", normalized.mouseSensitivity},
+            {"eyeHeight", normalized.eyeHeight},
+            {"gravity", normalized.gravity},
+            {"playerRadius", normalized.playerRadius},
+            {"playerHeight", normalized.playerHeight},
+            {"stepHeight", normalized.stepHeight},
+            {"jumpHeight", normalized.jumpHeight},
+            {"headBobStrength", normalized.headBobStrength},
+            {"headBobFrequency", normalized.headBobFrequency}
     };
 }
 
@@ -500,13 +635,6 @@ Json WriteColor(Color color)
             {"b", static_cast<int>(color.b)},
             {"a", static_cast<int>(color.a)}
     };
-}
-
-void RequireFinite(float value, const std::string& context)
-{
-    if (!std::isfinite(value)) {
-        Fail(context + " must be finite");
-    }
 }
 
 template<typename T>
@@ -589,13 +717,14 @@ SectorTopologyMap ParseMap(const Json& root)
         if (!lineDefs[i].is_object()) {
             Fail(context + " must be an object");
         }
-        map.lineDefs.push_back(SectorTopologyLineDef{
-                ReadInt(lineDefs[i], "id", context),
-                ReadInt(lineDefs[i], "startVertexId", context),
-                ReadInt(lineDefs[i], "endVertexId", context),
-                ReadInt(lineDefs[i], "frontSideDefId", context),
-                ReadInt(lineDefs[i], "backSideDefId", context)
-        });
+        SectorTopologyLineDef lineDef;
+        lineDef.id = ReadInt(lineDefs[i], "id", context);
+        lineDef.startVertexId = ReadInt(lineDefs[i], "startVertexId", context);
+        lineDef.endVertexId = ReadInt(lineDefs[i], "endVertexId", context);
+        lineDef.frontSideDefId = ReadInt(lineDefs[i], "frontSideDefId", context);
+        lineDef.backSideDefId = ReadInt(lineDefs[i], "backSideDefId", context);
+        ReadOptionalLineDefFlags(lineDefs[i], "flags", context, lineDef.flags);
+        map.lineDefs.push_back(lineDef);
     }
 
     const Json& sideDefs = RequireArrayField(root, "sidedefs", "root");
@@ -685,6 +814,11 @@ SectorTopologyMap ParseMap(const Json& root)
         map.lightmapSettings = ReadLightmapSettings(*lightmapSettingsIt, "root.lightmapSettings");
     }
 
+    const auto previewSettingsIt = root.find("previewSettings");
+    if (previewSettingsIt != root.end()) {
+        map.previewSettings = ReadPreviewSettings(*previewSettingsIt, "root.previewSettings");
+    }
+
     const auto bakedLightmapIt = root.find("bakedLightmap");
     if (bakedLightmapIt != root.end()) {
         map.bakedLightmap = ReadBakedLightmap(*bakedLightmapIt, "root.bakedLightmap");
@@ -730,13 +864,17 @@ Json SerializeMap(const SectorTopologyMap& map)
 
     root["linedefs"] = Json::array();
     for (const SectorTopologyLineDef* lineDef : SortedById(map.lineDefs)) {
-        root["linedefs"].push_back(Json{
+        Json lineDefJson{
                 {"id", lineDef->id},
                 {"startVertexId", lineDef->startVertexId},
                 {"endVertexId", lineDef->endVertexId},
                 {"frontSideDefId", lineDef->frontSideDefId},
                 {"backSideDefId", lineDef->backSideDefId}
-        });
+        };
+        if (HasNonDefaultLineDefFlags(lineDef->flags)) {
+            lineDefJson["flags"] = WriteLineDefFlags(lineDef->flags);
+        }
+        root["linedefs"].push_back(std::move(lineDefJson));
     }
 
     root["sidedefs"] = Json::array();
@@ -813,6 +951,7 @@ Json SerializeMap(const SectorTopologyMap& map)
     }
 
     root["lightmapSettings"] = WriteLightmapSettings(map.lightmapSettings);
+    root["previewSettings"] = WritePreviewSettings(map.previewSettings);
     if (!map.bakedLightmap.path.empty()
             && map.bakedLightmap.width > 0
             && map.bakedLightmap.height > 0

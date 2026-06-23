@@ -1,10 +1,42 @@
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace game {
 namespace {
+
+constexpr float PreviewWalkSpeedMin = 0.1f;
+constexpr float PreviewWalkSpeedMax = 100.0f;
+constexpr float PreviewRunSpeedMin = 0.1f;
+constexpr float PreviewRunSpeedMax = 200.0f;
+constexpr float PreviewMouseSensitivityMin = 0.01f;
+constexpr float PreviewMouseSensitivityMax = 20.0f;
+constexpr float PreviewEyeHeightMin = 0.1f;
+constexpr float PreviewEyeHeightMax = 3.0f;
+constexpr float PreviewGravityMin = 0.0f;
+constexpr float PreviewGravityMax = 200.0f;
+constexpr float PreviewPlayerRadiusMin = 0.05f;
+constexpr float PreviewPlayerRadiusMax = 2.0f;
+constexpr float PreviewPlayerHeightMin = 0.5f;
+constexpr float PreviewPlayerHeightMax = 3.0f;
+constexpr float PreviewStepHeightMin = 0.0f;
+constexpr float PreviewStepHeightMax = 2.0f;
+constexpr float PreviewJumpHeightMin = 0.0f;
+constexpr float PreviewJumpHeightMax = 3.0f;
+constexpr float PreviewHeadBobStrengthMin = 0.0f;
+constexpr float PreviewHeadBobStrengthMax = 0.25f;
+constexpr float PreviewHeadBobFrequencyMin = 0.0f;
+constexpr float PreviewHeadBobFrequencyMax = 20.0f;
+
+float ClampFinite(float value, float fallback, float minValue, float maxValue)
+{
+    if (!std::isfinite(value)) {
+        value = fallback;
+    }
+    return std::clamp(value, minValue, maxValue);
+}
 
 template<typename T>
 int AllocateNextId(const std::vector<T>& values)
@@ -53,6 +85,73 @@ T* FindById(std::vector<T>& values, int id)
 }
 
 } // namespace
+
+SectorPreviewSettings DefaultSectorPreviewSettings()
+{
+    return SectorPreviewSettings{};
+}
+
+SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings settings)
+{
+    const SectorPreviewSettings defaults = DefaultSectorPreviewSettings();
+    settings.walkSpeed = ClampFinite(
+            settings.walkSpeed,
+            defaults.walkSpeed,
+            PreviewWalkSpeedMin,
+            PreviewWalkSpeedMax);
+    settings.runSpeed = ClampFinite(
+            settings.runSpeed,
+            defaults.runSpeed,
+            PreviewRunSpeedMin,
+            PreviewRunSpeedMax);
+    settings.mouseSensitivity = ClampFinite(
+            settings.mouseSensitivity,
+            defaults.mouseSensitivity,
+            PreviewMouseSensitivityMin,
+            PreviewMouseSensitivityMax);
+    settings.eyeHeight = ClampFinite(
+            settings.eyeHeight,
+            defaults.eyeHeight,
+            PreviewEyeHeightMin,
+            PreviewEyeHeightMax);
+    settings.gravity = ClampFinite(
+            settings.gravity,
+            defaults.gravity,
+            PreviewGravityMin,
+            PreviewGravityMax);
+    settings.playerRadius = ClampFinite(
+            settings.playerRadius,
+            defaults.playerRadius,
+            PreviewPlayerRadiusMin,
+            PreviewPlayerRadiusMax);
+    settings.playerHeight = ClampFinite(
+            settings.playerHeight,
+            defaults.playerHeight,
+            PreviewPlayerHeightMin,
+            PreviewPlayerHeightMax);
+    settings.playerHeight = std::max(settings.playerHeight, settings.eyeHeight);
+    settings.stepHeight = ClampFinite(
+            settings.stepHeight,
+            defaults.stepHeight,
+            PreviewStepHeightMin,
+            PreviewStepHeightMax);
+    settings.jumpHeight = ClampFinite(
+            settings.jumpHeight,
+            defaults.jumpHeight,
+            PreviewJumpHeightMin,
+            PreviewJumpHeightMax);
+    settings.headBobStrength = ClampFinite(
+            settings.headBobStrength,
+            defaults.headBobStrength,
+            PreviewHeadBobStrengthMin,
+            PreviewHeadBobStrengthMax);
+    settings.headBobFrequency = ClampFinite(
+            settings.headBobFrequency,
+            defaults.headBobFrequency,
+            PreviewHeadBobFrequencyMin,
+            PreviewHeadBobFrequencyMax);
+    return settings;
+}
 
 SectorTopologyIndexes BuildSectorTopologyIndexes(const SectorTopologyMap& map)
 {

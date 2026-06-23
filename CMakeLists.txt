@@ -171,6 +171,38 @@ if(BUILD_TESTING)
     target_compile_definitions(sector_topology_creation_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(sector_topology_creation_tests PRIVATE raylib)
     add_test(NAME sector_topology_creation COMMAND sector_topology_creation_tests)
+
+    add_executable(sector_collision_world_tests
+            tests/SectorCollisionWorldTests.cpp
+            sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_collision_world_tests PRIVATE sources)
+    target_link_libraries(sector_collision_world_tests PRIVATE raylib)
+    add_test(NAME sector_collision_world COMMAND sector_collision_world_tests)
+
+    add_executable(sector_collision_movement_tests
+            tests/SectorCollisionMovementTests.cpp
+            sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorFpsController.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_collision_movement_tests PRIVATE sources)
+    target_link_libraries(sector_collision_movement_tests PRIVATE raylib)
+    add_test(NAME sector_collision_movement COMMAND sector_collision_movement_tests)
+
+    add_executable(sector_fps_controller_tests
+            tests/SectorFpsControllerTests.cpp
+            sources/sector_demo/SectorFpsController.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+    )
+    target_include_directories(sector_fps_controller_tests PRIVATE sources)
+    target_link_libraries(sector_fps_controller_tests PRIVATE raylib)
+    add_test(NAME sector_fps_controller COMMAND sector_fps_controller_tests)
 endif()
 
 # -------------------------------

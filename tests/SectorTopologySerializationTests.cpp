@@ -2,6 +2,7 @@
 #include "util/json.hpp"
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -228,6 +229,14 @@ void ExpectRejected(const Json& json, const char* description)
     Check(!error.empty(), "rejected JSON reports an error");
 }
 
+void ExpectRejectedText(const std::string& text, const char* description)
+{
+    SectorTopologyMap output = MakeSquare();
+    std::string error;
+    Check(!LoadText(text, output, error), description);
+    Check(!error.empty(), "rejected JSON text reports an error");
+}
+
 void TestRoundTrip()
 {
     const SectorTopologyMap original = MakeSquare();
@@ -401,6 +410,206 @@ void TestLightmapMetadataRoundTrip()
           "omitted baked lightmap metadata loads empty");
 }
 
+void TestPreviewSettingsRoundTripAndValidation()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.previewSettings.walkSpeed = 7.25f;
+    original.previewSettings.runSpeed = 15.5f;
+    original.previewSettings.mouseSensitivity = 2.75f;
+    original.previewSettings.eyeHeight = 1.25f;
+    original.previewSettings.gravity = 38.5f;
+    original.previewSettings.playerRadius = 0.35f;
+    original.previewSettings.playerHeight = 1.75f;
+    original.previewSettings.stepHeight = 0.5f;
+    original.previewSettings.jumpHeight = 0.75f;
+    original.previewSettings.headBobStrength = 0.08f;
+    original.previewSettings.headBobFrequency = 10.5f;
+
+    const std::string text = SaveText(original);
+    const Json saved = Json::parse(text);
+    Check(saved["previewSettings"].is_object(), "preview settings are written");
+    Check(Near(saved["previewSettings"]["walkSpeed"].get<float>(), 7.25f)
+                  && Near(saved["previewSettings"]["runSpeed"].get<float>(), 15.5f)
+                  && Near(saved["previewSettings"]["mouseSensitivity"].get<float>(), 2.75f)
+                  && Near(saved["previewSettings"]["eyeHeight"].get<float>(), 1.25f)
+                  && Near(saved["previewSettings"]["gravity"].get<float>(), 38.5f)
+                  && Near(saved["previewSettings"]["playerRadius"].get<float>(), 0.35f)
+                  && Near(saved["previewSettings"]["playerHeight"].get<float>(), 1.75f)
+                  && Near(saved["previewSettings"]["stepHeight"].get<float>(), 0.5f)
+                  && Near(saved["previewSettings"]["jumpHeight"].get<float>(), 0.75f)
+                  && Near(saved["previewSettings"]["headBobStrength"].get<float>(), 0.08f)
+                  && Near(saved["previewSettings"]["headBobFrequency"].get<float>(), 10.5f),
+          "preview settings values are serialized");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "preview settings JSON loads");
+    Check(Near(loaded.previewSettings.walkSpeed, 7.25f)
+                  && Near(loaded.previewSettings.runSpeed, 15.5f)
+                  && Near(loaded.previewSettings.mouseSensitivity, 2.75f)
+                  && Near(loaded.previewSettings.eyeHeight, 1.25f)
+                  && Near(loaded.previewSettings.gravity, 38.5f)
+                  && Near(loaded.previewSettings.playerRadius, 0.35f)
+                  && Near(loaded.previewSettings.playerHeight, 1.75f)
+                  && Near(loaded.previewSettings.stepHeight, 0.5f)
+                  && Near(loaded.previewSettings.jumpHeight, 0.75f)
+                  && Near(loaded.previewSettings.headBobStrength, 0.08f)
+                  && Near(loaded.previewSettings.headBobFrequency, 10.5f),
+          "preview settings round-trip");
+
+    Json withoutGravity = saved;
+    withoutGravity["previewSettings"].erase("gravity");
+    Check(LoadText(withoutGravity.dump(), loaded, error), "omitted gravity field is accepted");
+    Check(Near(loaded.previewSettings.gravity, game::DefaultSectorPreviewSettings().gravity),
+          "omitted gravity loads default");
+
+    Json withoutCollisionSettings = saved;
+    withoutCollisionSettings["previewSettings"].erase("playerRadius");
+    withoutCollisionSettings["previewSettings"].erase("playerHeight");
+    withoutCollisionSettings["previewSettings"].erase("stepHeight");
+    withoutCollisionSettings["previewSettings"].erase("jumpHeight");
+    Check(LoadText(withoutCollisionSettings.dump(), loaded, error),
+          "omitted collision preview fields are accepted");
+    Check(Near(loaded.previewSettings.playerRadius, game::DefaultSectorPreviewSettings().playerRadius)
+                  && Near(loaded.previewSettings.playerHeight, game::DefaultSectorPreviewSettings().playerHeight)
+                  && Near(loaded.previewSettings.stepHeight, game::DefaultSectorPreviewSettings().stepHeight)
+                  && Near(loaded.previewSettings.jumpHeight, game::DefaultSectorPreviewSettings().jumpHeight),
+          "omitted collision preview fields load defaults");
+
+    Json withoutJumpHeight = saved;
+    withoutJumpHeight["previewSettings"].erase("jumpHeight");
+    Check(LoadText(withoutJumpHeight.dump(), loaded, error), "omitted jump height field is accepted");
+    Check(Near(loaded.previewSettings.jumpHeight, game::DefaultSectorPreviewSettings().jumpHeight),
+          "omitted jump height loads default");
+
+    Json withoutHeadBob = saved;
+    withoutHeadBob["previewSettings"].erase("headBobStrength");
+    withoutHeadBob["previewSettings"].erase("headBobFrequency");
+    Check(LoadText(withoutHeadBob.dump(), loaded, error), "omitted headbob fields are accepted");
+    Check(Near(loaded.previewSettings.headBobStrength, game::DefaultSectorPreviewSettings().headBobStrength)
+                  && Near(loaded.previewSettings.headBobFrequency, game::DefaultSectorPreviewSettings().headBobFrequency),
+          "omitted headbob fields load defaults");
+
+    Json withoutPreviewSettings = saved;
+    withoutPreviewSettings.erase("previewSettings");
+    SectorTopologyMap oldStyle;
+    Check(LoadText(withoutPreviewSettings.dump(), oldStyle, error),
+          "omitted preview settings field is accepted");
+    const game::SectorPreviewSettings defaults = game::DefaultSectorPreviewSettings();
+    Check(Near(oldStyle.previewSettings.walkSpeed, defaults.walkSpeed)
+                  && Near(oldStyle.previewSettings.runSpeed, defaults.runSpeed)
+                  && Near(oldStyle.previewSettings.mouseSensitivity, defaults.mouseSensitivity)
+                  && Near(oldStyle.previewSettings.eyeHeight, defaults.eyeHeight)
+                  && Near(oldStyle.previewSettings.gravity, defaults.gravity)
+                  && Near(oldStyle.previewSettings.playerRadius, defaults.playerRadius)
+                  && Near(oldStyle.previewSettings.playerHeight, defaults.playerHeight)
+                  && Near(oldStyle.previewSettings.stepHeight, defaults.stepHeight)
+                  && Near(oldStyle.previewSettings.jumpHeight, defaults.jumpHeight)
+                  && Near(oldStyle.previewSettings.headBobStrength, defaults.headBobStrength)
+                  && Near(oldStyle.previewSettings.headBobFrequency, defaults.headBobFrequency),
+          "omitted preview settings load defaults");
+
+    Json invalid = saved;
+    invalid["previewSettings"] = 4;
+    ExpectRejected(invalid, "non-object preview settings are rejected");
+
+    const std::array<const char*, 11> fields{
+            "walkSpeed",
+            "runSpeed",
+            "mouseSensitivity",
+            "eyeHeight",
+            "gravity",
+            "playerRadius",
+            "playerHeight",
+            "stepHeight",
+            "jumpHeight",
+            "headBobStrength",
+            "headBobFrequency"
+    };
+    for (const char* field : fields) {
+        invalid = saved;
+        invalid["previewSettings"][field] = "invalid";
+        ExpectRejected(invalid, "wrong-type preview settings field is rejected");
+    }
+
+    invalid = saved;
+    invalid["previewSettings"]["gravity"] = "__NONFINITE__";
+    std::string nonFiniteText = invalid.dump();
+    const std::string marker = "\"__NONFINITE__\"";
+    const size_t markerPos = nonFiniteText.find(marker);
+    Check(markerPos != std::string::npos, "non-finite preview settings marker exists");
+    if (markerPos != std::string::npos) {
+        nonFiniteText.replace(markerPos, marker.size(), "1e999");
+        ExpectRejectedText(nonFiniteText, "non-finite preview settings field is rejected");
+    }
+
+    invalid = saved;
+    invalid["previewSettings"]["jumpHeight"] = "__NONFINITE__";
+    nonFiniteText = invalid.dump();
+    const size_t jumpMarkerPos = nonFiniteText.find(marker);
+    Check(jumpMarkerPos != std::string::npos, "non-finite jump height marker exists");
+    if (jumpMarkerPos != std::string::npos) {
+        nonFiniteText.replace(jumpMarkerPos, marker.size(), "1e999");
+        ExpectRejectedText(nonFiniteText, "non-finite jump height is rejected");
+    }
+
+    invalid = saved;
+    invalid["previewSettings"]["headBobStrength"] = "__NONFINITE__";
+    nonFiniteText = invalid.dump();
+    const size_t headBobStrengthMarkerPos = nonFiniteText.find(marker);
+    Check(headBobStrengthMarkerPos != std::string::npos, "non-finite headbob strength marker exists");
+    if (headBobStrengthMarkerPos != std::string::npos) {
+        nonFiniteText.replace(headBobStrengthMarkerPos, marker.size(), "1e999");
+        ExpectRejectedText(nonFiniteText, "non-finite headbob strength is rejected");
+    }
+
+    invalid = saved;
+    invalid["previewSettings"]["headBobFrequency"] = "__NONFINITE__";
+    nonFiniteText = invalid.dump();
+    const size_t headBobFrequencyMarkerPos = nonFiniteText.find(marker);
+    Check(headBobFrequencyMarkerPos != std::string::npos, "non-finite headbob frequency marker exists");
+    if (headBobFrequencyMarkerPos != std::string::npos) {
+        nonFiniteText.replace(headBobFrequencyMarkerPos, marker.size(), "1e999");
+        ExpectRejectedText(nonFiniteText, "non-finite headbob frequency is rejected");
+    }
+
+    Json clamped = saved;
+    clamped["previewSettings"]["walkSpeed"] = -5.0f;
+    clamped["previewSettings"]["runSpeed"] = 500.0f;
+    clamped["previewSettings"]["mouseSensitivity"] = 0.001f;
+    clamped["previewSettings"]["eyeHeight"] = 40.0f;
+    clamped["previewSettings"]["gravity"] = -5.0f;
+    clamped["previewSettings"]["playerRadius"] = -1.0f;
+    clamped["previewSettings"]["playerHeight"] = 0.1f;
+    clamped["previewSettings"]["stepHeight"] = 9.0f;
+    clamped["previewSettings"]["jumpHeight"] = 9.0f;
+    clamped["previewSettings"]["headBobStrength"] = 9.0f;
+    clamped["previewSettings"]["headBobFrequency"] = 99.0f;
+    Check(LoadText(clamped.dump(), loaded, error), "out-of-range preview settings load");
+    Check(Near(loaded.previewSettings.walkSpeed, 0.1f)
+                  && Near(loaded.previewSettings.runSpeed, 200.0f)
+                  && Near(loaded.previewSettings.mouseSensitivity, 0.01f)
+                  && Near(loaded.previewSettings.eyeHeight, 3.0f)
+                  && Near(loaded.previewSettings.gravity, 0.0f)
+                  && Near(loaded.previewSettings.playerRadius, 0.05f)
+                  && Near(loaded.previewSettings.playerHeight, 3.0f)
+                  && Near(loaded.previewSettings.stepHeight, 2.0f)
+                  && Near(loaded.previewSettings.jumpHeight, 3.0f)
+                  && Near(loaded.previewSettings.headBobStrength, 0.25f)
+                  && Near(loaded.previewSettings.headBobFrequency, 20.0f),
+          "out-of-range preview settings clamp");
+
+    clamped["previewSettings"]["gravity"] = 500.0f;
+    clamped["previewSettings"]["jumpHeight"] = -5.0f;
+    clamped["previewSettings"]["headBobStrength"] = -5.0f;
+    clamped["previewSettings"]["headBobFrequency"] = -5.0f;
+    Check(LoadText(clamped.dump(), loaded, error), "high gravity preview settings load");
+    Check(Near(loaded.previewSettings.gravity, 200.0f), "high gravity clamps");
+    Check(Near(loaded.previewSettings.jumpHeight, 0.0f), "low jump height clamps");
+    Check(Near(loaded.previewSettings.headBobStrength, 0.0f), "low headbob strength clamps");
+    Check(Near(loaded.previewSettings.headBobFrequency, 0.0f), "low headbob frequency clamps");
+}
+
 void TestDecalDefaultsAndOmission()
 {
     SectorTopologyMap map = MakeSquare();
@@ -513,6 +722,53 @@ void TestMiddleRoundTrip()
                   && loaded.sideDefs[0].middle.uv.offset.x == 4.0f
                   && loaded.sideDefs[0].middle.uv.offset.y == 5.0f,
           "middle texture settings round-trip");
+}
+
+void TestLineDefFlagsRoundTripAndDefaults()
+{
+    SectorTopologyMap original = MakeAdjacentSquares();
+    original.lineDefs[1].flags.blocksPlayer = true;
+
+    const std::string text = SaveText(original);
+    const Json saved = Json::parse(text);
+    Check(!saved["linedefs"][0].contains("flags"),
+          "default linedef flags are omitted");
+    Check(saved["linedefs"][1]["flags"]["blocksPlayer"].get<bool>(),
+          "blocksPlayer true is saved under linedef flags");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "topology with linedef flags loads");
+    Check(!loaded.lineDefs[0].flags.blocksPlayer,
+          "missing linedef flags load blocksPlayer false");
+    Check(loaded.lineDefs[1].flags.blocksPlayer,
+          "blocksPlayer true round-trips");
+
+    Json withoutBlocksPlayer = saved;
+    withoutBlocksPlayer["linedefs"][1]["flags"].erase("blocksPlayer");
+    Check(LoadText(withoutBlocksPlayer.dump(), loaded, error),
+          "linedef flags without blocksPlayer load");
+    Check(!loaded.lineDefs[1].flags.blocksPlayer,
+          "missing blocksPlayer defaults false");
+}
+
+void TestStrictLineDefFlagsValidation()
+{
+    const Json valid = Json::parse(SaveText(MakeAdjacentSquares()));
+    Json changed = valid;
+    changed["linedefs"][1]["flags"] = "not an object";
+    ExpectRejected(changed, "linedef flags wrong type is rejected");
+
+    changed = valid;
+    changed["linedefs"][1]["flags"] = Json{{"blocksPlayer", "yes"}};
+    ExpectRejected(changed, "blocksPlayer wrong type is rejected");
+
+    SectorTopologyMap output = MakeAdjacentSquares();
+    output.lineDefs[1].flags.blocksPlayer = true;
+    std::string error;
+    Check(!LoadText(changed.dump(), output, error), "invalid linedef flags load fails");
+    Check(output.lineDefs[1].flags.blocksPlayer,
+          "failed linedef flags load leaves output map unchanged");
 }
 
 void TestDecalRoundTrip()
@@ -1101,9 +1357,12 @@ int main()
     TestTextureFilterSerialization();
     TestStaticLightRoundTrip();
     TestLightmapMetadataRoundTrip();
+    TestPreviewSettingsRoundTripAndValidation();
     TestDecalDefaultsAndOmission();
     TestMiddleDefaultsAndOmission();
     TestMiddleRoundTrip();
+    TestLineDefFlagsRoundTripAndDefaults();
+    TestStrictLineDefFlagsValidation();
     TestDecalRoundTrip();
     TestStrictDecalValidation();
     TestStrictMiddleValidation();

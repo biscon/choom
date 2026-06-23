@@ -105,8 +105,40 @@ Topology sidedefs can also store optional middle texture data for Doom-style
 masked portal surfaces. A sidedef middle texture renders only on a two-sided
 portal linedef, fills the visible opening from the higher floor to the lower
 ceiling, and uses alpha testing: transparent pixels are discarded rather than
-alpha-blended. Middle texture collision/blocking flags and translucent glass
-rendering are deferred.
+alpha-blended. Middle textures do not block by themselves; use the linedef
+`Blocks Player` flag when a see-through grate, bars, or window should block
+Gameplay movement.
+
+## Sector Collision Query Layer
+
+Gameplay/collision work now has a reusable `SectorCollisionWorld` query layer
+built from the topology map. It derives collision data from 2D sector loops,
+one-sided boundaries, two-sided portal adjacency, and sector floor/ceiling
+heights.
+
+The collision query layer does not use generated render triangles and does not
+use Recast/Detour. It stores sector boundary loops in world X/Z coordinates for
+point-in-sector lookup, classifies one-sided edges as blocking walls, and
+classifies two-sided edges as portals with neighbor sector IDs.
+
+Gameplay preview uses this query layer for current-sector floor/ceiling lookup,
+horizontal player-cylinder collision, simple gravity, landing, step/drop floor
+transitions, and ceiling clamp. Topology sector heights remain authored JSON values, but
+collision floor/ceiling heights are converted to the same runtime world-space Y
+units as rendered geometry.
+
+Gameplay horizontal collision is based on 2D topology plus sector
+floor/ceiling heights, not generated render meshes. One-sided edges block
+movement. Two-sided portal edges are passable only when the destination sector
+allows the current cylinder height and grounded upward steps are within the
+configured step height. Small upward and downward floor differences within step
+height snap immediately; larger downward drops start falling under gravity
+instead of teleporting to the lower floor. A two-sided portal linedef with
+`Blocks Player` enabled behaves like a blocking wall for Gameplay movement,
+regardless of portal height passability. Middle textures do not independently
+block movement or add collision; middle texture plus `Blocks Player` is the
+intended grate/window/barrier workflow. One-sided walls already block. Projectile,
+sight, and monster blocking flags remain deferred.
 
 ## Sector Inspector
 
@@ -198,6 +230,7 @@ The sidedef/linedef inspector supports:
 - front/back sidedef selection
 - `Switch to opposite side` when the opposite sidedef exists
 - `Join Sectors` when the selected portal has two different adjacent sectors
+- `Blocks Player` on two-sided portal linedefs
 - wall, lower, upper, and eligible two-sided middle texture selection
 - wall, lower, upper, and middle UV scale/offset editing
 - reset UV for the selected wall/lower/upper/middle part
@@ -415,11 +448,66 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 3D controls:
 
 - `F11`: toggle mouse-look/captured cursor mode.
+- `F3`: toggle `FreeFly` / `Gameplay` preview controls.
 - `F1`: toggle baked ambient-occlusion display.
 - `Tab` or `Escape`: return to 2D mode.
-- In mouse-look mode: `WASD` move, mouse looks, `Space` moves up, `Ctrl` moves
-  down.
+- In `FreeFly` mouse-look mode: `WASD` move, mouse looks, `Space` moves up,
+  `Ctrl` moves down.
+- In `Gameplay` mouse-look mode: `WASD` moves horizontally relative to yaw,
+  `Space` jumps, mouse looks, and `Shift` uses run speed. Gameplay mode follows
+  the current sector floor, applies gravity while airborne, lands on floors,
+  clamps against ceilings, and resolves horizontal cylinder collision against
+  topology walls, height-valid portals, and portals marked `Blocks Player`.
+  Crouching, slopes, projectile/sight/monster collision flags, and polished drop
+  behavior are still deferred.
 - In visible-cursor mode: click generated surfaces to select/edit them.
+
+The left tools pane `Settings` button opens editor-session preview settings.
+The same settings are available from the 3D preview overlay while its UI is
+visible. The modal edits walk speed, run speed, mouse sensitivity, camera eye
+height, gravity, player radius, player height, step height, jump height, head
+bob strength, and head bob frequency. Gameplay Preview Settings use
+runtime/world units or simple unitless multipliers, not authored units. The
+gameplay controller stores a feet/body position; the camera eye is computed by
+adding the configured eye height, while player height is the collision cylinder
+height used for ceiling clearance. Player height is normalized to at least eye
+height. Step height defaults to `0.25` world units. Jump height defaults to
+`0.6` world units. Head bob strength defaults to `0.020` world units and head
+bob frequency defaults to `2.0`. Gravity uses a positive magnitude; `0`
+disables falling and also prevents jumps from adding lift.
+
+Grounded Gameplay movement snaps feet to same-height floors and small up/down
+floor changes within step height. The physics feet/body position still snaps
+immediately for collision correctness, but the rendered Gameplay camera eases
+small step-up and snap-down eye-height changes visually. Larger drops start
+falling under gravity and are not step-smoothed; jumping is grounded-only and
+sets vertical velocity from `sqrt(2 * gravity * jumpHeight)`. Airborne players
+do not auto-step upward through higher-floor portals; they can pass only when
+the current vertical cylinder already fits the destination sector. Same-floor
+and small upward portals within step height are passable while grounded,
+too-high upward portals block, low-ceiling portals block, and downward portals
+are passable for now. Ceiling bonks clamp the player below the ceiling and
+clear upward velocity. Step smoothing does not apply to jumps, landings,
+ceiling bonks, cannot-fit cases, no-sector fallback, or FreeFly controls.
+Gameplay mode also applies visual-only headbob while grounded and actually
+moving horizontally. Headbob is layered after the physics eye pose and visual
+step smoothing, and it does not affect collision, sector lookup, vertical
+physics, or the stored feet/body position. Headbob is disabled while airborne,
+falling, jumping, standing still, or in no-sector fallback. Gameplay mode also
+applies a visual-only landing dip when landing from a jump or fall. The landing
+dip is separate from step smoothing and headbob, and it uses a downward
+impact-speed range curve: impacts below the minimum impact speed produce no
+dip, impacts near the full-dip impact speed reach the maximum dip clamp, and
+an ease-in curve power keeps normal jumps subtle while allowing larger drops
+to feel more pronounced. The dip then recovers back to the normal eye height
+at a fixed recovery rate. Typical jumps should stay restrained, larger drops
+should show a clearer dip, and 3m-or-larger falls should reach or nearly reach
+the full visual effect. Landing dip does not affect physics, collision, sector
+lookup, or the stored feet/body position. Landing dip does not implement camera
+shake, rebound above normal eye height, or weapon bob. The Gameplay overlay reports
+collision state, current sector, grounded/jumping/falling state, recent
+vertical transition, recent wall/step/ceiling blocks, radius, step height, jump
+height, floor, feet, velocity, and gravity in runtime world-space values.
 
 3D picking maps generated surfaces back to topology:
 
@@ -433,7 +521,8 @@ sidedef's middle texture as a Base-only material. The Texture button opens the t
 texture picker. `Layer: Base | Decal` chooses whether Texture, UV, Reset UV,
 Fit, and Align controls edit the base material or the optional decal layer.
 Middle targets hide the layer toggle and expose only Texture, UV scale/offset,
-Reset UV, Fit Width, Fit Height, Fit Both, and Clear Middle.
+Reset UV, Fit Width, Fit Height, Fit Both, Clear Middle, and `Blocks Player`
+when the selected surface belongs to a two-sided portal linedef.
 When Decal is active and no decal texture is assigned, the panel shows
 `No decal assigned` and only the Texture picker remains available. Assigned
 decals expose UV, opacity, emissive, tint, and `Clear Decal`. Reset UV resets
@@ -452,7 +541,9 @@ from the neighbor and are not full wall-chain alignment yet.
 Equal-height portals with an assigned middle texture still generate a middle
 portal-plane surface for 3D picking. Equal-height portals without middle texture
 data have no generated 3D wall surface, so edit their sidedefs from the 2D
-linedef/sidedef inspector.
+linedef/sidedef inspector. `Blocks Player` is available in the selected
+sidedef/linedef inspector for two-sided portals even when no middle texture is
+assigned.
 
 ## Baked Lightmaps
 
@@ -502,12 +593,15 @@ deferred.
 - No external texture import/copy; texture files must already exist under
   `assets/images`.
 - No player-start editing in the sector editor.
-- No gameplay mode.
-- No collision or floor-constrained 3D preview movement.
+- Gameplay preview mode has topology-based horizontal cylinder collision,
+  portal height checks, floor following, gravity, landing, ceiling clamp, and
+  grounded-only jumping. Two-sided portal linedefs can opt into player blocking.
+  Crouching, slopes, projectile/sight/monster collision flags, polished drop
+  behavior, and NPC navigation are deferred.
 - No dynamic runtime lights or dynamic shadows.
-- No middle collision/blocking flags, translucent glass, depth sorting, middle
-  texture decals, middle emissive/tint/bloom controls, or middle Copy/Paste
-  Material controls.
+- No alpha-based middle texture collision, translucent glass, depth sorting,
+  middle texture decals, middle emissive/tint/bloom controls, or middle
+  Copy/Paste Material controls.
 - No normal maps, material maps, PBR material editing, or texture search UI.
 - Single fixed-size lightmap atlas; no multi-atlas packing.
 - No 3D geometry editing beyond texture and UV edits on generated surfaces.

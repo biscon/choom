@@ -1048,7 +1048,10 @@
       "startVertexId": 73,
       "endVertexId": 72,
       "frontSideDefId": 154,
-      "backSideDefId": 155
+      "backSideDefId": 155,
+      "flags": {
+        "blocksPlayer": true
+      }
     },
     {
       "id": 107,
@@ -7257,7 +7260,7 @@
     {
       "id": 1,
       "name": "sector_001",
-      "floorZ": -4.0,
+      "floorZ": -14.0,
       "ceilingZ": 28.0,
       "floorTextureId": "floor",
       "ceilingTextureId": "ceiling",
@@ -8792,10 +8795,23 @@
     "indirectBounceRadius": 32.0,
     "indirectBounceStrength": 0.20000000298023224
   },
+  "previewSettings": {
+    "walkSpeed": 3.0,
+    "runSpeed": 6.0,
+    "mouseSensitivity": 0.5,
+    "eyeHeight": 1.600000023841858,
+    "gravity": 20.0,
+    "playerRadius": 0.25,
+    "playerHeight": 1.75,
+    "stepHeight": 0.4000000059604645,
+    "jumpHeight": 1.0,
+    "headBobStrength": 0.019999999552965164,
+    "headBobFrequency": 2.0
+  },
   "bakedLightmap": {
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "a051ded2cc085ac7"
+    "sourceHash": "dbc186d189f07176"
   }
 }

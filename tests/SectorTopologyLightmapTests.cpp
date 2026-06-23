@@ -245,6 +245,23 @@ void TestSourceHashChanges()
     changedLight = base;
     changedLight.staticLights[0].color.r = 64;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) != hash, "hash changes when light color changes");
+
+    game::SectorTopologyMap changedPreview = base;
+    changedPreview.previewSettings.gravity = 99.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
+          "hash ignores preview gravity");
+    changedPreview = base;
+    changedPreview.previewSettings.jumpHeight = 2.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
+          "hash ignores preview jump height");
+    changedPreview = base;
+    changedPreview.previewSettings.headBobStrength = 0.2f;
+    Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
+          "hash ignores preview headbob strength");
+    changedPreview = base;
+    changedPreview.previewSettings.headBobFrequency = 12.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
+          "hash ignores preview headbob frequency");
 }
 
 void TestSourceHashIncludesMiddleTextureData()
