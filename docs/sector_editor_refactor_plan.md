@@ -431,6 +431,27 @@ Move preview settings modal UI tabs and the lightmap bake modal UI out of
 `SectorEditor.cpp`, while keeping apply/bake threading logic initially in
 `SectorEditor`.
 
+### Status
+
+Completed: 2026-06-24
+
+Summary:
+- Moved preview settings modal UI into `SectorEditorPreviewSettingsModal.h/.cpp`.
+- Moved lightmap bake modal UI into `SectorEditorLightmapModal.h/.cpp`.
+- Preserved preview apply logic, sky texture picking, and lightmap bake threading/install logic in `SectorEditor`.
+- Build/tests passed.
+
+Verification:
+- `cmake --build cmake-build-debug -j2`: passed
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed
+- `git diff --check`: passed
+- Manual GUI verification: not performed
+
+Notes:
+- Cache invalidation behavior: unchanged
+- Lightmap/source-hash behavior: unchanged
+- Collision/gameplay behavior: unchanged
+
 ### Files likely touched
 
 - `sources/sector_editor/SectorEditor.cpp`
