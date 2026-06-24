@@ -120,6 +120,13 @@ bool ExtractSectorTopologyLoops(
         SectorTopologyLoopSet& outLoops,
         std::vector<SectorTopologyValidationIssue>* outIssues = nullptr);
 
+bool ExtractSectorTopologyLoops(
+        const SectorTopologyMap& map,
+        const SectorTopologyIndexes& indexes,
+        int sectorId,
+        SectorTopologyLoopSet& outLoops,
+        std::vector<SectorTopologyValidationIssue>* outIssues = nullptr);
+
 std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
         const SectorTopologyMap& map);
 
