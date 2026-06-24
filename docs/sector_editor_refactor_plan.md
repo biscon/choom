@@ -789,6 +789,7 @@ Notes:
 - Keep completion notes concise.
 - Each future phase final report should mention how this plan document was
   updated.
+- If a phase is executed in subpasses, do not mark the whole phase complete until all planned subpasses are done. For each subpass, either add a short progress note or simply mention in the final report what remains. Avoid documentation churn unless the phase status would otherwise become misleading.
 
 ## Notes For Future Codex Tasks
 
