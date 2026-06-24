@@ -14,6 +14,7 @@
 #include <raylib.h>
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -324,12 +325,65 @@ struct PendingTopologySectorCut {
     std::string message;
 };
 
+struct CachedTopologyOutlineSegment {
+    Vector2 a = {};
+    Vector2 b = {};
+    bool hole = false;
+};
+
+struct CachedTopologySectorDraw {
+    int sectorId = -1;
+    std::string label;
+    Vector2 labelCenter = {};
+    std::vector<Vector2> fillTrianglePoints;
+    std::vector<CachedTopologyOutlineSegment> outlineSegments;
+};
+
+struct CachedTopologyLineDraw {
+    int lineDefId = -1;
+    int frontSideDefId = -1;
+    int backSideDefId = -1;
+    Vector2 start = {};
+    Vector2 end = {};
+    bool validEndpoints = false;
+    bool hasFront = false;
+    bool hasBack = false;
+    bool hasPartialEndpoint = false;
+    Vector2 partialEndpoint = {};
+};
+
+struct CachedTopologyVertexDraw {
+    int vertexId = -1;
+    SectorTopologyCoordPoint point = {};
+    Vector2 map = {};
+};
+
+struct CachedTopologyLightDraw {
+    int lightId = -1;
+    Vector2 map = {};
+    Color color = WHITE;
+    float radiusPixelsAtZoomOne = 0.0f;
+    float sourceRadiusPixelsAtZoomOne = 0.0f;
+};
+
+struct SectorEditorTopologyRenderCache {
+    bool valid = false;
+    uint64_t revision = 0;
+    std::string warning;
+    std::vector<CachedTopologySectorDraw> sectors;
+    std::vector<CachedTopologyLineDraw> lineDefs;
+    std::vector<CachedTopologyVertexDraw> vertices;
+    std::vector<CachedTopologyLightDraw> staticLights;
+};
+
 struct SectorEditorState {
     SectorTopologyMap topologyMap;
     bool topologyDocumentInitialized = false;
     bool topologyDocumentDirty = false;
     std::string topologyDocumentStatus;
     std::string topologyRenderWarning;
+    uint64_t topologyRenderRevision = 1;
+    SectorEditorTopologyRenderCache topologyRenderCache;
 
     SectorEditorTool currentTool = SectorEditorTool::Select;
     SectorEditorMode mode = SectorEditorMode::Edit2D;

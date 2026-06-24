@@ -309,8 +309,18 @@ bool ExtractSectorTopologyLoops(
         SectorTopologyLoopSet& outLoops,
         std::vector<SectorTopologyValidationIssue>* outIssues)
 {
-    outLoops = {};
     const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(map);
+    return ExtractSectorTopologyLoops(map, indexes, sectorId, outLoops, outIssues);
+}
+
+bool ExtractSectorTopologyLoops(
+        const SectorTopologyMap& map,
+        const SectorTopologyIndexes& indexes,
+        int sectorId,
+        SectorTopologyLoopSet& outLoops,
+        std::vector<SectorTopologyValidationIssue>* outIssues)
+{
+    outLoops = {};
     if (!IsValidSectorTopologyId(sectorId)
         || FindUniqueSector(map, indexes, sectorId) == nullptr) {
         AddIssue(outIssues, SectorTopologyObjectKind::Sector, sectorId,
@@ -750,7 +760,7 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
             continue;
         }
         SectorTopologyLoopSet loops;
-        ExtractSectorTopologyLoops(map, sector.id, loops, &issues);
+        ExtractSectorTopologyLoops(map, indexes, sector.id, loops, &issues);
     }
 
     return issues;

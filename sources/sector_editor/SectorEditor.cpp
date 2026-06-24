@@ -2384,14 +2384,12 @@ void SectorEditor::FinishLightDrag()
         return;
     }
 
-    state.topologyDocumentDirty = true;
-    state.hasUnsavedChanges = true;
-    statusText = TextFormat(
+    MarkTopologyDocumentEdited(TextFormat(
             "Moved topology light %d to X %.2f, Z %.2f",
             light->id,
             light->position.x,
             light->position.z
-    );
+    ));
 }
 
 void SectorEditor::CancelLightDrag(const char* message)
@@ -2708,13 +2706,11 @@ void SectorEditor::CommitPendingTopologyLineSplitAtPoint()
         SelectTopologyLineDef(split.secondLineDefId, pending.side, pending.wallPart);
     }
 
-    state.topologyDocumentDirty = true;
     state.topologyRenderWarning.clear();
-    state.hasUnsavedChanges = true;
-    statusText = TextFormat(
+    MarkTopologyDocumentEdited(TextFormat(
             "Split topology linedef %d at point; selected linedef %d",
             pending.lineDefId,
-            split.secondLineDefId);
+            split.secondLineDefId));
 }
 
 void SectorEditor::StartPendingTopologySectorCut()
@@ -3274,12 +3270,10 @@ void SectorEditor::FinalizePendingSector()
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     SelectTopologySector(createdSectorId);
-    state.topologyDocumentDirty = true;
     state.topologyRenderWarning.clear();
-    state.hasUnsavedChanges = true;
-    statusText = insertedInside
+    MarkTopologyDocumentEdited(insertedInside
             ? TextFormat("Inserted topology sector %d", createdSectorId)
-            : TextFormat("Created topology sector %d", createdSectorId);
+            : TextFormat("Created topology sector %d", createdSectorId));
 }
 
 void SectorEditor::StartInsertSectorInside()
@@ -3596,6 +3590,7 @@ void SectorEditor::MarkTopologyDocumentEdited(const char* status)
 {
     state.topologyDocumentDirty = true;
     state.hasUnsavedChanges = true;
+    InvalidateTopologyRenderCache();
     if (status != nullptr && status[0] != '\0') {
         statusText = status;
     }
@@ -3779,11 +3774,9 @@ bool SectorEditor::DeleteSelectedTopologySectorConfirmed(int sectorId)
     state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
     ClearStaleTopologySelection();
     state.topologyRenderWarning.clear();
-    state.topologyDocumentDirty = true;
-    state.hasUnsavedChanges = true;
     const bool pendingSplitTargetRemoved = hadPendingSplit
             && FindSectorTopologyLineDef(state.topologyMap, pendingSplitLineDefId) == nullptr;
-    statusText = pendingSplitTargetRemoved
+    MarkTopologyDocumentEdited(pendingSplitTargetRemoved
             ? TextFormat(
                     "Deleted topology sector %d; split at point cancelled",
                     result.deletedSectorId)
@@ -3792,7 +3785,7 @@ bool SectorEditor::DeleteSelectedTopologySectorConfirmed(int sectorId)
             result.deletedSectorId,
             result.removedSideDefCount,
             result.removedLineDefCount,
-            result.removedVertexCount);
+            result.removedVertexCount));
     return true;
 }
 
@@ -3833,9 +3826,7 @@ bool SectorEditor::DeleteLightById(int topologyLightId)
     if (state.lightDrag.topologyLightId == topologyLightId) {
         state.lightDrag = LightDragState{};
     }
-    state.topologyDocumentDirty = true;
-    state.hasUnsavedChanges = true;
-    statusText = TextFormat("Deleted topology light %d", topologyLightId);
+    MarkTopologyDocumentEdited(TextFormat("Deleted topology light %d", topologyLightId));
     return true;
 }
 
@@ -3864,9 +3855,7 @@ void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
 
     state.topologyMap.staticLights.push_back(light);
     SelectTopologyLight(lightId);
-    state.topologyDocumentDirty = true;
-    state.hasUnsavedChanges = true;
-    statusText = TextFormat("Added topology light %d", lightId);
+    MarkTopologyDocumentEdited(TextFormat("Added topology light %d", lightId));
 }
 
 bool SectorEditor::BakeLightmaps()
@@ -5138,19 +5127,198 @@ void SectorEditor::DrawGrid() const
     }
 }
 
+void SectorEditor::InvalidateTopologyRenderCache()
+{
+    ++state.topologyRenderRevision;
+    state.topologyRenderCache.valid = false;
+}
+
+void SectorEditor::EnsureTopologyRenderCache()
+{
+    if (!state.topologyRenderCache.valid
+            || state.topologyRenderCache.revision != state.topologyRenderRevision) {
+        RebuildTopologyRenderCache();
+    }
+}
+
+void SectorEditor::RebuildTopologyRenderCache()
+{
+    SectorEditorTopologyRenderCache cache;
+    cache.revision = state.topologyRenderRevision;
+
+    const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(state.topologyMap);
+    const auto issues = ValidateSectorTopologyMap(state.topologyMap);
+    if (!issues.empty()) {
+        cache.warning = "Topology render warning: "
+                + FormatSectorTopologyValidationIssue(issues.front());
+    }
+
+    cache.vertices.reserve(state.topologyMap.vertices.size());
+    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
+        CachedTopologyVertexDraw cached;
+        cached.vertexId = vertex.id;
+        cached.point = SectorTopologyCoordPoint{vertex.x, vertex.y};
+        cached.map = SectorTopologyVertexToMap(vertex);
+        cache.vertices.push_back(cached);
+    }
+
+    cache.lineDefs.reserve(state.topologyMap.lineDefs.size());
+    for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
+        CachedTopologyLineDraw cached;
+        cached.lineDefId = lineDef.id;
+        cached.frontSideDefId = lineDef.frontSideDefId;
+        cached.backSideDefId = lineDef.backSideDefId;
+
+        const SectorTopologyVertex* start = nullptr;
+        const SectorTopologyVertex* end = nullptr;
+        cached.validEndpoints = GetSectorTopologyLineVertices(state.topologyMap, lineDef, start, end);
+        if (cached.validEndpoints) {
+            cached.start = SectorTopologyVertexToMap(*start);
+            cached.end = SectorTopologyVertexToMap(*end);
+        } else {
+            const SectorTopologyVertex* partial = FindSectorTopologyVertex(state.topologyMap, lineDef.startVertexId);
+            if (partial == nullptr) {
+                partial = FindSectorTopologyVertex(state.topologyMap, lineDef.endVertexId);
+            }
+            if (partial != nullptr) {
+                cached.hasPartialEndpoint = true;
+                cached.partialEndpoint = SectorTopologyVertexToMap(*partial);
+            }
+        }
+        cached.hasFront = lineDef.frontSideDefId >= 0
+                && FindSectorTopologySideDef(state.topologyMap, lineDef.frontSideDefId) != nullptr;
+        cached.hasBack = lineDef.backSideDefId >= 0
+                && FindSectorTopologySideDef(state.topologyMap, lineDef.backSideDefId) != nullptr;
+        cache.lineDefs.push_back(cached);
+    }
+
+    cache.sectors.reserve(state.topologyMap.sectors.size());
+    for (const SectorTopologySector& sector : state.topologyMap.sectors) {
+        SectorTopologyLoopSet loops;
+        std::vector<SectorTopologyValidationIssue> loopIssues;
+        if (!ExtractSectorTopologyLoops(state.topologyMap, indexes, sector.id, loops, &loopIssues)) {
+            if (cache.warning.empty() && !loopIssues.empty()) {
+                cache.warning = "Topology render warning: "
+                        + FormatSectorTopologyValidationIssue(loopIssues.front());
+            }
+            continue;
+        }
+
+        CachedTopologySectorDraw cached;
+        cached.sectorId = sector.id;
+        cached.label = sector.name.empty() ? TextFormat("%d", sector.id) : sector.name;
+
+        using DrawEarcutPoint = std::array<double, 2>;
+        std::vector<std::vector<DrawEarcutPoint>> polygon;
+        std::vector<Vector2> flattened;
+        bool missingVertex = false;
+        const auto appendLoop = [&](const SectorTopologyLoop& loop) {
+            polygon.emplace_back();
+            polygon.back().reserve(loop.vertexIds.size());
+            for (int vertexId : loop.vertexIds) {
+                const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+                if (vertex == nullptr) {
+                    missingVertex = true;
+                    continue;
+                }
+                const Vector2 map = SectorTopologyVertexToMap(*vertex);
+                polygon.back().push_back(DrawEarcutPoint{map.x, map.y});
+                flattened.push_back(map);
+            }
+        };
+        appendLoop(loops.outer);
+        for (const SectorTopologyLoop& hole : loops.holes) {
+            appendLoop(hole);
+        }
+
+        if (missingVertex) {
+            if (cache.warning.empty()) {
+                cache.warning = TextFormat(
+                        "Topology render warning: sector %d references a missing loop vertex",
+                        sector.id
+                );
+            }
+            continue;
+        }
+
+        const std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
+        cached.fillTrianglePoints.reserve(indices.size());
+        for (uint32_t index : indices) {
+            if (index < flattened.size()) {
+                cached.fillTrianglePoints.push_back(flattened[index]);
+            }
+        }
+
+        const auto appendOutline = [&](const SectorTopologyLoop& loop, bool hole) {
+            if (loop.vertexIds.size() < 2) {
+                return;
+            }
+            for (size_t i = 0; i < loop.vertexIds.size(); ++i) {
+                const SectorTopologyVertex* a = FindSectorTopologyVertex(state.topologyMap, loop.vertexIds[i]);
+                const SectorTopologyVertex* b = FindSectorTopologyVertex(
+                        state.topologyMap,
+                        loop.vertexIds[(i + 1) % loop.vertexIds.size()]
+                );
+                if (a == nullptr || b == nullptr) {
+                    continue;
+                }
+                cached.outlineSegments.push_back(CachedTopologyOutlineSegment{
+                        SectorTopologyVertexToMap(*a),
+                        SectorTopologyVertexToMap(*b),
+                        hole
+                });
+            }
+        };
+        appendOutline(loops.outer, false);
+        for (const SectorTopologyLoop& hole : loops.holes) {
+            appendOutline(hole, true);
+        }
+
+        if (!loops.outer.vertexIds.empty()) {
+            int count = 0;
+            for (int vertexId : loops.outer.vertexIds) {
+                const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+                if (vertex == nullptr) {
+                    continue;
+                }
+                const Vector2 map = SectorTopologyVertexToMap(*vertex);
+                cached.labelCenter.x += map.x;
+                cached.labelCenter.y += map.y;
+                ++count;
+            }
+            if (count > 0) {
+                cached.labelCenter.x /= static_cast<float>(count);
+                cached.labelCenter.y /= static_cast<float>(count);
+            }
+        }
+
+        cache.sectors.push_back(std::move(cached));
+    }
+
+    cache.staticLights.reserve(state.topologyMap.staticLights.size());
+    for (const SectorTopologyStaticPointLight& light : state.topologyMap.staticLights) {
+        CachedTopologyLightDraw cached;
+        cached.lightId = light.id;
+        cached.map = Vector2{light.position.x, light.position.z};
+        cached.color = light.color;
+        cached.radiusPixelsAtZoomOne = SectorAuthoringToWorldDistance(light.radius);
+        cached.sourceRadiusPixelsAtZoomOne = SectorAuthoringToWorldDistance(light.sourceRadius);
+        cache.staticLights.push_back(cached);
+    }
+
+    cache.valid = true;
+    state.topologyRenderWarning = cache.warning;
+    state.topologyRenderCache = std::move(cache);
+}
+
 void SectorEditor::DrawTopologyDocument()
 {
-    state.topologyRenderWarning.clear();
     if (!initialized) {
         DrawText("Topology map failed to load", static_cast<int>(canvasRect.x + 24.0f), static_cast<int>(canvasRect.y + 24.0f), 28, RED);
         return;
     }
 
-    const auto issues = ValidateSectorTopologyMap(state.topologyMap);
-    if (!issues.empty()) {
-        state.topologyRenderWarning = "Topology render warning: "
-                + FormatSectorTopologyValidationIssue(issues.front());
-    }
+    EnsureTopologyRenderCache();
 
     const Color fill = Color{82, 112, 154, 42};
     const Color outline = Color{116, 139, 174, 235};
@@ -5158,14 +5326,16 @@ void SectorEditor::DrawTopologyDocument()
     const Color selectedOutline = Color{86, 232, 142, 135};
     ClearStaleTopologySelection();
     const SectorTopologySector* selectedSector = SelectedTopologySector();
-    for (const SectorTopologySector& sector : state.topologyMap.sectors) {
-        if (selectedSector != nullptr && sector.id == selectedSector->id) {
+    const CachedTopologySectorDraw* selectedCachedSector = nullptr;
+    for (const CachedTopologySectorDraw& sector : state.topologyRenderCache.sectors) {
+        if (selectedSector != nullptr && sector.sectorId == selectedSector->id) {
+            selectedCachedSector = &sector;
             continue;
         }
-        DrawTopologySectorLoops(sector, fill, outline);
+        DrawCachedTopologySector(sector, fill, outline);
     }
-    if (selectedSector != nullptr) {
-        DrawTopologySectorLoops(*selectedSector, selectedFill, selectedOutline, 10.0f);
+    if (selectedCachedSector != nullptr) {
+        DrawCachedTopologySector(*selectedCachedSector, selectedFill, selectedOutline, 10.0f);
     }
 
     DrawTopologySelectedLineHighlight();
@@ -5191,117 +5361,38 @@ void SectorEditor::DrawTopologyDocument()
     }
 }
 
-void SectorEditor::DrawTopologySectorLoops(
-        const SectorTopologySector& sector,
+void SectorEditor::DrawCachedTopologySector(
+        const CachedTopologySectorDraw& sector,
         Color fill,
         Color outline,
-        float outlineThickness)
+        float outlineThickness) const
 {
-    SectorTopologyLoopSet loops;
-    std::vector<SectorTopologyValidationIssue> loopIssues;
-    if (!ExtractSectorTopologyLoops(state.topologyMap, sector.id, loops, &loopIssues)) {
-        if (state.topologyRenderWarning.empty() && !loopIssues.empty()) {
-            state.topologyRenderWarning = "Topology render warning: "
-                    + FormatSectorTopologyValidationIssue(loopIssues.front());
-        }
-        return;
+    for (size_t i = 0; i + 2 < sector.fillTrianglePoints.size(); i += 3) {
+        DrawTriangle(
+                MapToScreen(sector.fillTrianglePoints[i]),
+                MapToScreen(sector.fillTrianglePoints[i + 1]),
+                MapToScreen(sector.fillTrianglePoints[i + 2]),
+                fill
+        );
     }
 
-    using DrawEarcutPoint = std::array<double, 2>;
-    std::vector<std::vector<DrawEarcutPoint>> polygon;
-    std::vector<Vector2> flattened;
-    bool missingVertex = false;
-    const auto appendLoop = [&](const SectorTopologyLoop& loop) {
-        polygon.emplace_back();
-        polygon.back().reserve(loop.vertexIds.size());
-        for (int vertexId : loop.vertexIds) {
-            const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
-            if (vertex == nullptr) {
-                missingVertex = true;
-                continue;
-            }
-            const Vector2 map = SectorTopologyVertexToMap(*vertex);
-            polygon.back().push_back(DrawEarcutPoint{map.x, map.y});
-            flattened.push_back(map);
-        }
-    };
-    appendLoop(loops.outer);
-    for (const SectorTopologyLoop& hole : loops.holes) {
-        appendLoop(hole);
+    for (const CachedTopologyOutlineSegment& segment : sector.outlineSegments) {
+        DrawLineEx(
+                MapToScreen(segment.a),
+                MapToScreen(segment.b),
+                outlineThickness,
+                segment.hole ? Color{164, 187, 220, 245} : outline
+        );
     }
 
-    if (missingVertex) {
-        if (state.topologyRenderWarning.empty()) {
-            state.topologyRenderWarning = TextFormat(
-                    "Topology render warning: sector %d references a missing loop vertex",
-                    sector.id
-            );
-        }
-        return;
-    }
-
-    const std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
-    for (size_t i = 0; i + 2 < indices.size(); i += 3) {
-        if (indices[i] < flattened.size()
-                && indices[i + 1] < flattened.size()
-                && indices[i + 2] < flattened.size()) {
-            DrawTriangle(
-                    MapToScreen(flattened[indices[i]]),
-                    MapToScreen(flattened[indices[i + 1]]),
-                    MapToScreen(flattened[indices[i + 2]]),
-                    fill
-            );
-        }
-    }
-
-    const auto drawLoopOutline = [&](const SectorTopologyLoop& loop, Color color) {
-        if (loop.vertexIds.size() < 2) {
-            return;
-        }
-        for (size_t i = 0; i < loop.vertexIds.size(); ++i) {
-            const SectorTopologyVertex* a = FindSectorTopologyVertex(state.topologyMap, loop.vertexIds[i]);
-            const SectorTopologyVertex* b = FindSectorTopologyVertex(
-                    state.topologyMap,
-                    loop.vertexIds[(i + 1) % loop.vertexIds.size()]
-            );
-            if (a == nullptr || b == nullptr) {
-                continue;
-            }
-            DrawLineEx(
-                    MapToScreen(SectorTopologyVertexToMap(*a)),
-                    MapToScreen(SectorTopologyVertexToMap(*b)),
-                    outlineThickness,
-                    color
-            );
-        }
-    };
-    drawLoopOutline(loops.outer, outline);
-    for (const SectorTopologyLoop& hole : loops.holes) {
-        drawLoopOutline(hole, Color{164, 187, 220, 245});
-    }
-
-    if (state.showSectorIds && !loops.outer.vertexIds.empty()) {
-        Vector2 center{};
-        int count = 0;
-        for (int vertexId : loops.outer.vertexIds) {
-            const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
-            if (vertex == nullptr) {
-                continue;
-            }
-            const Vector2 map = SectorTopologyVertexToMap(*vertex);
-            center.x += map.x;
-            center.y += map.y;
-            ++count;
-        }
-        if (count > 0) {
-            center.x /= static_cast<float>(count);
-            center.y /= static_cast<float>(count);
-            const Vector2 screen = MapToScreen(center);
-            const char* label = sector.name.empty()
-                    ? TextFormat("%d", sector.id)
-                    : sector.name.c_str();
-            DrawText(label, static_cast<int>(screen.x - 18.0f), static_cast<int>(screen.y - 10.0f), 18, RAYWHITE);
-        }
+    if (state.showSectorIds && !sector.label.empty()) {
+        const Vector2 screen = MapToScreen(sector.labelCenter);
+        DrawText(
+                sector.label.c_str(),
+                static_cast<int>(screen.x - 18.0f),
+                static_cast<int>(screen.y - 10.0f),
+                18,
+                RAYWHITE);
     }
 }
 
@@ -5361,31 +5452,20 @@ void SectorEditor::DrawTopologyLineDefs() const
     const Color backColor = Color{236, 154, 214, 220};
     const Color arrowColor = Color{236, 196, 92, 240};
 
-    for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
-        const SectorTopologyVertex* start = nullptr;
-        const SectorTopologyVertex* end = nullptr;
-        const bool validEndpoints = GetSectorTopologyLineVertices(state.topologyMap, lineDef, start, end);
-        if (!validEndpoints) {
-            const SectorTopologyVertex* partial = FindSectorTopologyVertex(state.topologyMap, lineDef.startVertexId);
-            if (partial == nullptr) {
-                partial = FindSectorTopologyVertex(state.topologyMap, lineDef.endVertexId);
-            }
-            if (partial != nullptr) {
-                const Vector2 point = MapToScreen(SectorTopologyVertexToMap(*partial));
+    for (const CachedTopologyLineDraw& lineDef : state.topologyRenderCache.lineDefs) {
+        if (!lineDef.validEndpoints) {
+            if (lineDef.hasPartialEndpoint) {
+                const Vector2 point = MapToScreen(lineDef.partialEndpoint);
                 DrawCircleLines(static_cast<int>(std::round(point.x)), static_cast<int>(std::round(point.y)), 11.0f, warningColor);
             }
             continue;
         }
 
-        const bool hasFront = lineDef.frontSideDefId >= 0
-                && FindSectorTopologySideDef(state.topologyMap, lineDef.frontSideDefId) != nullptr;
-        const bool hasBack = lineDef.backSideDefId >= 0
-                && FindSectorTopologySideDef(state.topologyMap, lineDef.backSideDefId) != nullptr;
-        const bool twoSided = hasFront && hasBack;
-        const Color lineColor = validEndpoints ? (twoSided ? twoSidedColor : oneSidedColor) : warningColor;
+        const bool twoSided = lineDef.hasFront && lineDef.hasBack;
+        const Color lineColor = twoSided ? twoSidedColor : oneSidedColor;
 
-        const Vector2 a = MapToScreen(SectorTopologyVertexToMap(*start));
-        const Vector2 b = MapToScreen(SectorTopologyVertexToMap(*end));
+        const Vector2 a = MapToScreen(lineDef.start);
+        const Vector2 b = MapToScreen(lineDef.end);
         DrawLineEx(a, b, twoSided ? 3.5f : 3.0f, lineColor);
 
         Vector2 dir{b.x - a.x, b.y - a.y};
@@ -5404,12 +5484,12 @@ void SectorEditor::DrawTopologyLineDefs() const
         DrawLineEx(arrowEnd, Vector2{arrowEnd.x - dir.x * 6.0f + normal.x * 4.0f, arrowEnd.y - dir.y * 6.0f + normal.y * 4.0f}, 2.0f, arrowColor);
         DrawLineEx(arrowEnd, Vector2{arrowEnd.x - dir.x * 6.0f - normal.x * 4.0f, arrowEnd.y - dir.y * 6.0f - normal.y * 4.0f}, 2.0f, arrowColor);
 
-        if (hasFront) {
+        if (lineDef.hasFront) {
             const Vector2 frontEnd{mid.x + normal.x * 15.0f, mid.y + normal.y * 15.0f};
             DrawLineEx(mid, frontEnd, 2.0f, frontColor);
             DrawCircleV(frontEnd, 3.0f, frontColor);
         }
-        if (hasBack) {
+        if (lineDef.hasBack) {
             const Vector2 backEnd{mid.x - normal.x * 15.0f, mid.y - normal.y * 15.0f};
             DrawLineEx(mid, backEnd, 2.0f, backColor);
             DrawCircleV(backEnd, 3.0f, backColor);
@@ -5424,11 +5504,11 @@ void SectorEditor::DrawTopologyVertices() const
     const Color selectedFill = Color{72, 220, 128, 92};
     const Color selectedOutline = Color{86, 232, 142, 245};
     const Color hoverOutline = Color{122, 220, 244, 245};
-    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
-        const Vector2 screen = MapToScreen(SectorTopologyVertexToMap(vertex));
+    for (const CachedTopologyVertexDraw& vertex : state.topologyRenderCache.vertices) {
+        const Vector2 screen = MapToScreen(vertex.map);
         const bool selected = state.topologySelectionKind == TopologySelectionKind::Vertex
-                && vertex.id == state.selectedTopologyVertexId;
-        const bool hovered = state.hasHoveredVertex && vertex.id == state.hoveredTopologyVertexId;
+                && vertex.vertexId == state.selectedTopologyVertexId;
+        const bool hovered = state.hasHoveredVertex && vertex.vertexId == state.hoveredTopologyVertexId;
         if (selected) {
             DrawCircleV(screen, 12.0f, selectedFill);
             DrawCircleLines(
@@ -5806,14 +5886,14 @@ void SectorEditor::DrawPendingTopologySectorCut() const
 
 void SectorEditor::DrawStaticLights() const
 {
-    for (const SectorTopologyStaticPointLight& light : state.topologyMap.staticLights) {
-        const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
+    for (const CachedTopologyLightDraw& light : state.topologyRenderCache.staticLights) {
+        const Vector2 center = MapToScreen(light.map);
         const bool selected = state.topologySelectionKind == TopologySelectionKind::Light
-                && light.id == state.selectedTopologyLightId;
-        const bool hovered = light.id == state.hoveredTopologyLightId;
+                && light.lightId == state.selectedTopologyLightId;
+        const bool hovered = light.lightId == state.hoveredTopologyLightId;
         Color color = light.color;
         color.a = selected ? 255 : hovered ? 235 : 205;
-        const float radiusPixels = SectorAuthoringToWorldDistance(light.radius) * state.viewZoom;
+        const float radiusPixels = light.radiusPixelsAtZoomOne * state.viewZoom;
 
         if (selected || hovered || state.currentTool == SectorEditorTool::Light) {
             DrawCircleLines(
@@ -5823,8 +5903,8 @@ void SectorEditor::DrawStaticLights() const
                     WithAlpha(color, selected ? 150 : 90)
             );
         }
-        if (selected && light.sourceRadius > 0.0f) {
-            const float sourceRadiusPixels = SectorAuthoringToWorldDistance(light.sourceRadius) * state.viewZoom;
+        if (selected && light.sourceRadiusPixelsAtZoomOne > 0.0f) {
+            const float sourceRadiusPixels = light.sourceRadiusPixelsAtZoomOne * state.viewZoom;
             if (sourceRadiusPixels >= 3.0f) {
                 DrawCircleLines(
                         static_cast<int>(std::round(center.x)),
@@ -6235,9 +6315,7 @@ void SectorEditor::DrawSectorsPanel(
             const engine::UINumericInputResult result = engine::FloatInput(ui, config, input, assets, id, Rectangle{numberLabelW, y, numberFieldW, rowH}, font, edited, inputState, minValue, maxValue, decimals);
             if (result.changed && edited != value) {
                 value = edited;
-                state.topologyDocumentDirty = true;
-                state.hasUnsavedChanges = true;
-                statusText = TextFormat("Updated topology light %d", light.id);
+                MarkTopologyDocumentEdited(TextFormat("Updated topology light %d", light.id));
             }
             y += rowH + gap;
         };
@@ -6270,9 +6348,7 @@ void SectorEditor::DrawSectorsPanel(
             edited = ClampLightSourceRadius(edited, light.radius);
             if (result.changed && edited != light.sourceRadius) {
                 light.sourceRadius = edited;
-                state.topologyDocumentDirty = true;
-                state.hasUnsavedChanges = true;
-                statusText = "Updated light source radius";
+                MarkTopologyDocumentEdited("Updated light source radius");
             }
             y += rowH + gap;
         }
@@ -6297,9 +6373,7 @@ void SectorEditor::DrawSectorsPanel(
             if (result.changed && value != static_cast<int>(channel)) {
                 channel = static_cast<unsigned char>(ClampAmbientChannel(value));
                 light.color.a = 255;
-                state.topologyDocumentDirty = true;
-                state.hasUnsavedChanges = true;
-                statusText = TextFormat("Updated topology light %d color", light.id);
+                MarkTopologyDocumentEdited(TextFormat("Updated topology light %d color", light.id));
             }
             y += rowH + gap;
         };
@@ -8863,6 +8937,7 @@ bool SectorEditor::LoadLevel(
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     state.topologyMap = std::move(loaded);
+    InvalidateTopologyRenderCache();
     state.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             state.topologyMap.previewSettings);
     state.topologyDocumentInitialized = true;
@@ -11343,13 +11418,11 @@ bool SectorEditor::SplitSelectedTopologyLineDef()
         SelectTopologyLineDef(split.secondLineDefId, previousSide, previousWallPart);
     }
 
-    state.topologyDocumentDirty = true;
     state.topologyRenderWarning.clear();
-    state.hasUnsavedChanges = true;
-    statusText = TextFormat(
+    MarkTopologyDocumentEdited(TextFormat(
             "Split topology linedef %d; selected linedef %d",
             originalLineDefId,
-            split.secondLineDefId);
+            split.secondLineDefId));
     return true;
 }
 
@@ -11389,13 +11462,11 @@ bool SectorEditor::DissolveSelectedTopologyVertex()
             dissolve.replacementLineDefId,
             SectorTopologySideKind::Front,
             state.selectedTopologyWallPart);
-    state.topologyDocumentDirty = true;
     state.topologyRenderWarning.clear();
-    state.hasUnsavedChanges = true;
-    statusText = TextFormat(
+    MarkTopologyDocumentEdited(TextFormat(
             "Dissolved topology vertex %d; selected linedef %d",
             dissolve.removedVertexId,
-            dissolve.replacementLineDefId);
+            dissolve.replacementLineDefId));
     return true;
 }
 

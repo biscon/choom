@@ -1,6 +1,11 @@
-# Project ECS Rules
+# Project / Engine / Sector Editor Rules
 
-This project uses a small sparse-set ECS for a C++17 / raylib 6 personal indie-game framework.
+This project uses a small sparse-set ECS for a C++17 / raylib 6 personal
+indie-game framework and a Doom/Build-ish sector-engine editor.
+
+The ECS/framework rules below still apply to reusable engine/game code. Sector
+editor work must also follow the topology, cache, rendering, sky, lightmap, and
+task-scoping rules in the later sections.
 
 ## ECS design rules
 
@@ -142,3 +147,158 @@ This project uses a small sparse-set ECS for a C++17 / raylib 6 personal indie-g
 - Do not add inheritance-based gameplay entities.
 - Do not add large framework abstractions before they are needed.
 - Preserve existing project structure unless a small addition is clearly needed.
+
+## Sector editor / topology rules
+
+- The active editor format is topology v2 / linedef-based `SectorTopologyMap`.
+- Do not reintroduce the old polygon `SectorMap` fallback.
+- Stable positive integer IDs are used for vertices, linedefs, sidedefs,
+  sectors, lights, etc.
+- Planar topology coordinates use exact integer `SectorCoord` with
+  `coordSubdivisions = 16`.
+- Sectors/linedefs/sidedefs follow Doom-like topology:
+  - vertices define endpoints
+  - linedefs connect vertices
+  - sidedefs belong to one side of a linedef
+  - sectors own loops/sidedefs
+  - two-sided linedefs are portals
+  - one-sided linedefs are walls
+- Preserve existing topology schema unless a task explicitly asks for a schema
+  change.
+- Use optional/backward-compatible JSON fields where practical.
+- Omit default values on save when that matches existing serialization style.
+- Prefer small, data-oriented structs and helper functions over OOP-heavy
+  designs or polymorphism.
+- Use stable IDs/handles rather than storing raw pointers into STL containers.
+
+## Sector editor mutation and cache invalidation rules
+
+- The 2D topology editor has a derived render cache for validation warnings,
+  sector fills, outlines, labels, linedefs, vertices, and lights.
+- Do not rebuild expensive derived topology every frame.
+- Avoid calling `ValidateSectorTopologyMap()`, `ExtractSectorTopologyLoops()`,
+  `BuildSectorTopologyIndexes()`, or `mapbox::earcut()` from the steady 2D frame
+  draw path.
+- The topology map is the source of truth; the 2D render cache is
+  derived/editor-only.
+- Any mutation that changes live topology or visible cached 2D editor state must
+  invalidate the 2D topology render cache.
+- Prefer existing dirty/invalidation helpers such as
+  `MarkTopologyDocumentEdited()` / `InvalidateTopologyRenderCache()` rather than
+  ad-hoc cache edits.
+- Future direct `state.topologyMap` mutations must be paired with the
+  appropriate document-edited/cache invalidation path.
+- Over-invalidation is acceptable; missed invalidation is the bug.
+- Texture registry changes currently do not require 2D render-cache invalidation
+  unless the 2D cache starts storing texture/material display state.
+- Baked lightmap result changes should not invalidate the 2D topology render
+  cache unless the 2D editor starts drawing that data.
+- Keep picking behavior consistent with what is drawn.
+- Pending tool overlays, hover/selection overlays, drag previews, and UI may
+  remain live/immediate; do not cache them unless explicitly scoped.
+- When touching topology mutation code, mention cache invalidation behavior in
+  the final report.
+
+## Sector editor rendering and preview rules
+
+- 3D preview builds cached/generated meshes when entering/rebuilding preview; do
+  not regenerate expensive 3D geometry every frame.
+- Visual-only camera effects such as step smoothing, headbob, and landing dip
+  must never feed into collision, sector lookup, or physics.
+- Gameplay preview settings use runtime/world units, roughly
+  `1 world unit ~= 1 meter`.
+- Sector heights and static-light authoring values are converted to world units
+  at render/collision/bake boundaries. Do not mix authored height units with
+  runtime gameplay units.
+- `SectorCollisionWorld` is the reusable topology-based collision query layer.
+  Do not use generated render triangles as gameplay collision.
+- Gameplay collision is currently considered good enough/locked unless a bug is
+  specifically being fixed.
+- Missing, failed, or pending textures must not crash preview rendering.
+
+## Sky and outdoor-sector rules
+
+- `SectorTopologySector::ceilingSky` marks a sector ceiling as open sky.
+- Sky ceilings do not generate normal ceiling geometry.
+- Sky-sky portals suppress upper wall strips between both-sky sectors.
+- `ceilingSky` is geometry-affecting and must remain included in the lightmap
+  source hash.
+- Sky visual settings are map-level, not per-sector.
+- Sky visual settings include texture ID, yaw offset, vertical offset/scale, and
+  top cap color.
+- Sky visual settings are visual-only and must not be included in the lightmap
+  source hash.
+- The sky cylinder/top cap is visual-only:
+  - no collision
+  - no picking
+  - no bloom
+  - no lightmap receiver/occluder role
+  - no generated surface metadata
+- Do not hardcode sky asset paths; use map texture IDs.
+- Missing/unloaded/failed sky textures must gracefully fall back to the existing
+  clear-color behavior.
+
+## Lightmap and lighting rules
+
+- Static baked lightmaps are part of the topology editor.
+- Existing point lights and AO must not regress when adding new lighting
+  features.
+- Lightmap source hash must include all settings/data that affect baked
+  geometry, receiver layout, occluders, or baked lighting results.
+- Lightmap source hash must not include purely visual preview settings.
+- Preview settings are excluded from the lightmap source hash.
+- Sky visual settings are excluded from the lightmap source hash.
+- `ceilingSky` is included because it changes generated/baked geometry.
+- Directional sun/moon light settings, if present, are included because they
+  affect baked lighting.
+- Middle textures currently receive baked light but do not cast baked
+  shadows/occlude lightmap rays unless a task explicitly changes that behavior.
+- Do not add alpha-aware middle texture shadows unless explicitly scoped.
+- Do not add dynamic runtime lights or shadowmaps as part of baked-light tasks
+  unless explicitly requested.
+- When touching lightmaps, mention source-hash behavior in the final report.
+
+## Feature tasks vs cleanup/refactor tasks
+
+- During normal feature or bugfix tasks, avoid unrelated architecture cleanup,
+  broad rewrites, renames, file moves, or style churn.
+- Architecture/code-quality cleanup is allowed when the task explicitly asks for
+  it.
+- Cleanup tasks should still be scoped, incremental, and behavior-preserving
+  unless the task explicitly says behavior may change.
+- Prefer extracting small helpers/backend modules over large framework
+  abstractions.
+- Do not split `SectorEditor.cpp` casually during feature work.
+- `SectorEditor.cpp` may be cleaned up or partially extracted during a dedicated
+  cleanup/refactor task.
+- Dedicated cleanup/refactor tasks must state:
+  - what code is being cleaned up
+  - what behavior must remain unchanged
+  - what files/modules are allowed to move/change
+  - what tests/build commands must pass
+  - any manual verification needed
+- Do not mix cleanup and feature work unless the cleanup is directly required to
+  implement the feature safely.
+
+## Codex task behavior for this project
+
+- Keep changes scoped to the requested task.
+- Avoid unrelated rewrites, renames, style churn, or architecture cleanup during
+  feature/bugfix tasks.
+- Preserve existing structure unless the task explicitly asks for a refactor.
+- Prefer incremental helpers over broad framework abstractions.
+- Do not add Unity-style GameObject classes, virtual update hierarchies, or
+  OOP-heavy gameplay/entity designs.
+- When touching topology mutations, explicitly mention cache invalidation in the
+  final report.
+- When touching lightmaps, explicitly mention source-hash behavior in the final
+  report.
+- When touching gameplay/collision/camera, explicitly state whether
+  collision/sector lookup/physics changed.
+- Do not claim manual GUI verification unless it was actually performed.
+- Run the usual checks:
+  - `cmake --build cmake-build-debug -j2`
+  - `ctest --test-dir cmake-build-debug --output-on-failure`
+  - `git diff --check`
+  - `git diff --stat`
+  - `git status --short`
