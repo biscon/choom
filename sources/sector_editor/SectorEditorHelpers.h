@@ -30,17 +30,6 @@ inline constexpr float ScreenLightPickPixels = 12.0f;
 inline constexpr float PreviewHighlightLift = 0.006f;
 inline constexpr float GameplayFloorSnapEpsilon = 0.001f;
 
-struct LevelPaths {
-    std::string jsonAssetPath;
-    std::string lightmapAssetPath;
-    std::filesystem::path jsonFilePath;
-    std::filesystem::path lightmapFilePath;
-    std::filesystem::path directoryPath;
-};
-
-bool IsValidLevelName(const std::string& name, std::string& error);
-bool BuildLevelPaths(const std::string& name, LevelPaths& paths, std::string& error);
-SectorTopologyMap CreateEmptySectorTopologyDocument();
 bool SameBoundaryCutPoint(const SectorTopologyBoundaryCutPoint& a, const SectorTopologyBoundaryCutPoint& b);
 const SectorTextureDefinition* FindSectorTopologyTexture(const SectorTopologyMap& map, const std::string& id);
 std::vector<std::string> SortedSectorTopologyTextureIds(const SectorTopologyMap& map);
@@ -49,7 +38,6 @@ SectorPoint SectorTopologyCoordPointToSectorPoint(SectorTopologyCoordPoint point
 bool SameTopologyPoint(SectorTopologyCoordPoint a, SectorTopologyCoordPoint b);
 const char* PreviewControlModeName(SectorPreviewControlMode mode);
 const char* VerticalTransitionName(SectorFpsVerticalTransition transition);
-std::vector<LevelListEntry> ScanLevels(std::string& error);
 Vector2 SectorPointToVector2(SectorPoint point);
 SectorPoint Vector2ToSectorPoint(Vector2 point);
 bool Contains(Rectangle bounds, Vector2 point);

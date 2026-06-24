@@ -2,6 +2,7 @@
 
 #include "engine/assets/TextureLoadFlags.h"
 #include "engine/input/InputEvents.h"
+#include "sector_editor/SectorEditorDocumentActions.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorLightInspector.h"
 #include "sector_editor/SectorEditorLightmapModal.h"
@@ -39,21 +40,6 @@
 #include <vector>
 
 namespace game {
-
-namespace {
-
-void ResetEditorTopologyDocumentState(SectorEditorState& state)
-{
-    state.topologyMap = CreateEmptySectorTopologyDocument();
-    state.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
-            state.topologyMap.previewSettings);
-    state.topologyDocumentInitialized = true;
-    state.topologyDocumentDirty = false;
-    state.topologyDocumentStatus = "Topology document: empty";
-}
-
-
-} // namespace
 
 bool SectorEditor::Init(engine::AssetManager& assets)
 {
@@ -5979,12 +5965,7 @@ bool SectorEditor::LoadLevel(
 {
     const bool hadPendingSplit = state.pendingTopologyLineSplitAtPoint.active;
     SectorTopologyMap loaded;
-    std::string error;
-    const std::string filePath = ResolveEditorAssetPath(jsonAssetPath);
-    if (!LoadSectorTopologyMap(filePath.c_str(), loaded, &error)) {
-        state.loadLevelModal.errorMessage = error.empty()
-                ? "Topology v2 load failed"
-                : TextFormat("Topology v2 load failed: %s", error.c_str());
+    if (!LoadSectorTopologyDocumentFromAsset(jsonAssetPath, loaded, state.loadLevelModal.errorMessage)) {
         statusText = state.loadLevelModal.errorMessage;
         return false;
     }
@@ -6033,10 +6014,7 @@ bool SectorEditor::LoadLevel(
 
 void SectorEditor::OpenConfirmation(const char* title, const char* message, std::function<void()> onOkay)
 {
-    state.confirmationModal.open = true;
-    state.confirmationModal.title = title == nullptr ? "Confirm" : title;
-    state.confirmationModal.message = message == nullptr ? "" : message;
-    state.confirmationModal.onOkay = std::move(onOkay);
+    OpenConfirmationModal(state.confirmationModal, title, message, std::move(onOkay));
 }
 
 void SectorEditor::OpenNewConfirmation(engine::AssetManager& assets)
@@ -6065,56 +6043,38 @@ void SectorEditor::OpenReloadConfirmation(engine::AssetManager& assets)
 
 void SectorEditor::OpenSaveLevelModal()
 {
-    state.saveLevelModal = SaveLevelModalState{};
-    state.saveLevelModal.open = true;
-    if (state.hasCurrentLevelPath) {
-        std::snprintf(
-                state.saveLevelModal.nameBuffer,
-                sizeof(state.saveLevelModal.nameBuffer),
-                "%s",
-                state.currentLevelName.c_str()
-        );
-    }
+    OpenSaveLevelModalState(
+            state.saveLevelModal,
+            state.hasCurrentLevelPath,
+            state.currentLevelName);
 }
 
 void SectorEditor::RefreshLevelList()
 {
-    LoadLevelModalState& modal = state.loadLevelModal;
-    modal.levels = ScanLevels(modal.errorMessage);
-    modal.optionLabels.clear();
-    modal.optionLabels.reserve(modal.levels.size());
-    for (const LevelListEntry& level : modal.levels) {
-        modal.optionLabels.push_back(level.name.c_str());
-    }
-    modal.selectedIndex = modal.levels.empty() ? -1 : 0;
-    modal.scroll = engine::UIScrollState{};
+    RefreshLoadLevelModalState(state.loadLevelModal);
 }
 
 void SectorEditor::OpenLoadLevelModal()
 {
-    state.loadLevelModal = LoadLevelModalState{};
-    state.loadLevelModal.open = true;
-    RefreshLevelList();
+    OpenLoadLevelModalState(state.loadLevelModal);
 }
 
 bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
 {
     SaveLevelModalState& modal = state.saveLevelModal;
     const std::string name = modal.nameBuffer;
-    LevelPaths paths;
-    if (!BuildLevelPaths(name, paths, modal.errorMessage)) {
+    SectorEditorSaveLevelPlan savePlan;
+    if (!PrepareSaveLevelPlan(
+                name,
+                state.hasCurrentLevelPath,
+                state.currentLevelPath,
+                overwriteConfirmed,
+                savePlan,
+                modal.errorMessage)) {
         return false;
     }
 
-    const bool savingToCurrentPath = state.hasCurrentLevelPath
-            && state.currentLevelPath == paths.jsonAssetPath;
-    std::error_code ec;
-    const bool targetExists = std::filesystem::exists(paths.jsonFilePath, ec);
-    if (ec) {
-        modal.errorMessage = TextFormat("Could not check target level: %s", ec.message().c_str());
-        return false;
-    }
-    if (targetExists && !savingToCurrentPath && !overwriteConfirmed) {
+    if (savePlan.needsOverwriteConfirmation) {
         OpenConfirmation(
                 "Overwrite Level",
                 "Level already exists. Overwrite it?",
@@ -6123,32 +6083,26 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
         return false;
     }
 
-    std::filesystem::create_directories(paths.directoryPath, ec);
-    if (ec) {
-        modal.errorMessage = TextFormat("Could not create level directory: %s", ec.message().c_str());
+    if (!EnsureSaveLevelDirectory(savePlan.paths, modal.errorMessage)) {
         return false;
     }
 
-    std::string saveError;
-    if (!SaveSectorTopologyMap(paths.jsonFilePath.string().c_str(), state.topologyMap, &saveError)) {
-        modal.errorMessage = saveError.empty()
-                ? "Could not write topology level JSON"
-                : TextFormat("Could not write topology level JSON: %s", saveError.c_str());
-        statusText = TextFormat("Save failed: %s", paths.jsonAssetPath.c_str());
+    if (!SaveSectorTopologyDocument(savePlan.paths, state.topologyMap, modal.errorMessage)) {
+        statusText = TextFormat("Save failed: %s", savePlan.paths.jsonAssetPath.c_str());
         return false;
     }
 
     state.currentLevelName = name;
-    state.currentLevelPath = paths.jsonAssetPath;
+    state.currentLevelPath = savePlan.paths.jsonAssetPath;
     state.hasCurrentLevelPath = true;
     state.hasUnsavedChanges = false;
     state.topologyDocumentInitialized = true;
     state.topologyDocumentDirty = false;
-    state.topologyDocumentStatus = TextFormat("Topology document: saved %s", paths.jsonAssetPath.c_str());
+    state.topologyDocumentStatus = TextFormat("Topology document: saved %s", savePlan.paths.jsonAssetPath.c_str());
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
     state.decalTintModal = DecalTintModalState{};
-    statusText = TextFormat("Saved topology %s", paths.jsonAssetPath.c_str());
+    statusText = TextFormat("Saved topology %s", savePlan.paths.jsonAssetPath.c_str());
     return true;
 }
 

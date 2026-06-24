@@ -9,23 +9,23 @@
     },
     "ceiling": {
       "path": "assets/images/ceiling.png",
-      "filter": "bilinear"
+      "filter": "anisotropic8x"
     },
     "floor": {
       "path": "assets/images/floor.png",
-      "filter": "bilinear"
+      "filter": "anisotropic8x"
     },
     "step_wall": {
       "path": "assets/images/wall.png",
-      "filter": "bilinear"
+      "filter": "anisotropic8x"
     },
     "upper_wall": {
       "path": "assets/images/wall.png",
-      "filter": "bilinear"
+      "filter": "anisotropic8x"
     },
     "wall": {
       "path": "assets/images/wall.png",
-      "filter": "bilinear"
+      "filter": "anisotropic8x"
     }
   },
   "vertices": [
@@ -41,7 +41,7 @@
     },
     {
       "id": 3,
-      "x": 1024,
+      "x": 1280,
       "y": 1024
     },
     {
@@ -257,7 +257,14 @@
               0.0
             ]
           },
-          "opacity": 0.75
+          "opacity": 0.75,
+          "emissive": false,
+          "tint": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "bloomIntensity": 1.0
         }
       },
       "lower": {
@@ -316,7 +323,14 @@
               0.0
             ]
           },
-          "opacity": 0.5
+          "opacity": 0.5,
+          "emissive": false,
+          "tint": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "bloomIntensity": 1.0
         }
       },
       "lower": {
@@ -352,7 +366,7 @@
       "id": 10,
       "name": "decal_test_room",
       "floorZ": 0.0,
-      "ceilingZ": 24.0,
+      "ceilingZ": 50.0,
       "floorTextureId": "floor",
       "ceilingTextureId": "ceiling",
       "floorUv": {
@@ -433,7 +447,14 @@
             -0.5
           ]
         },
-        "opacity": 0.5
+        "opacity": 0.5,
+        "emissive": false,
+        "tint": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "bloomIntensity": 1.0
       }
     }
   ],
@@ -443,5 +464,33 @@
     "ambientOcclusionStrength": 0.550000011920929,
     "indirectBounceRadius": 32.0,
     "indirectBounceStrength": 0.20000000298023224
+  },
+  "previewSettings": {
+    "walkSpeed": 6.0,
+    "runSpeed": 12.0,
+    "mouseSensitivity": 1.0,
+    "eyeHeight": 1.2000000476837158,
+    "gravity": 25.0,
+    "playerRadius": 0.25,
+    "playerHeight": 1.600000023841858,
+    "stepHeight": 0.25,
+    "jumpHeight": 0.6000000238418579,
+    "headBobStrength": 0.019999999552965164,
+    "headBobFrequency": 2.0
+  },
+  "directionalLight": {
+    "enabled": false,
+    "directionToLight": [
+      -0.38533732295036316,
+      0.8807710409164429,
+      -0.275240957736969
+    ],
+    "color": {
+      "r": 255,
+      "g": 244,
+      "b": 214,
+      "a": 255
+    },
+    "intensity": 1.0
   }
 }

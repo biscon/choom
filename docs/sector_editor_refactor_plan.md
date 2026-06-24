@@ -667,6 +667,26 @@ mark it deferred rather than incomplete.
 Extract low-level document action helpers where practical while keeping
 `SectorEditor` responsible for ownership and orchestration.
 
+### Status
+
+Completed: 2026-06-25
+
+Summary:
+- Moved document path/list/default-document helpers and narrow load/save modal/action helpers into `SectorEditorDocumentActions.h/.cpp`.
+- Preserved asset scope cleanup, preview shutdown, pending tool cancellation, selection cleanup, dirty flags, status text, and high-level document orchestration in `SectorEditor`.
+- Build/tests passed.
+
+Verification:
+- `cmake --build cmake-build-debug -j2`: passed
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed
+- `git diff --check`: passed
+- Manual GUI verification: not performed
+
+Notes:
+- Cache invalidation behavior: unchanged; load still invalidates the 2D topology render cache after replacing topology, and save-only path changes do not add cache invalidation.
+- Lightmap/source-hash behavior: unchanged
+- Collision/gameplay behavior: unchanged
+
 ### Files likely touched
 
 - `sources/sector_editor/SectorEditor.cpp`
