@@ -23,12 +23,16 @@ struct SectorSkyCylinderMeshData {
 };
 
 bool HasSkyCeilingSector(const SectorTopologyMap& map);
+const SectorTextureDefinition* FindSkyTexture(const SectorTopologyMap& map);
+bool ShouldRenderSkyCylinder(const SectorTopologyMap& map);
 const SectorTextureDefinition* FindDefaultSkyTexture(const SectorTopologyMap& map);
 bool ShouldRenderDefaultSkyCylinder(const SectorTopologyMap& map);
 SectorSkyCylinderMeshData BuildSkyCylinderMeshData(
         int segments = kDefaultSkyCylinderSegments,
         float radius = kDefaultSkyCylinderRadius,
-        float height = kDefaultSkyCylinderHeight);
+        float height = kDefaultSkyCylinderHeight,
+        float verticalOffset = 0.0f,
+        float verticalScale = 1.0f);
 SectorSkyCylinderMeshData BuildSkyCylinderTopCapMeshData(
         int segments = kDefaultSkyCylinderSegments,
         float radius = kDefaultSkyCylinderRadius,

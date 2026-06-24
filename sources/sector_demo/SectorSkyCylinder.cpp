@@ -33,21 +33,45 @@ bool HasSkyCeilingSector(const SectorTopologyMap& map)
 
 const SectorTextureDefinition* FindDefaultSkyTexture(const SectorTopologyMap& map)
 {
-    const auto it = map.texturesById.find(std::string(kDefaultSkyTextureId));
+    const auto it = map.texturesById.find(DefaultSectorTopologySkySettings().textureId);
     return it == map.texturesById.end() ? nullptr : &it->second;
+}
+
+const SectorTextureDefinition* FindSkyTexture(const SectorTopologyMap& map)
+{
+    const SectorTopologySkySettings settings = NormalizeSectorTopologySkySettings(map.skySettings);
+    if (settings.textureId.empty()) {
+        return nullptr;
+    }
+    const auto it = map.texturesById.find(settings.textureId);
+    return it == map.texturesById.end() ? nullptr : &it->second;
+}
+
+bool ShouldRenderSkyCylinder(const SectorTopologyMap& map)
+{
+    return HasSkyCeilingSector(map) && FindSkyTexture(map) != nullptr;
 }
 
 bool ShouldRenderDefaultSkyCylinder(const SectorTopologyMap& map)
 {
-    return HasSkyCeilingSector(map) && FindDefaultSkyTexture(map) != nullptr;
+    return ShouldRenderSkyCylinder(map);
 }
 
-SectorSkyCylinderMeshData BuildSkyCylinderMeshData(int segments, float radius, float height)
+SectorSkyCylinderMeshData BuildSkyCylinderMeshData(
+        int segments,
+        float radius,
+        float height,
+        float verticalOffset,
+        float verticalScale)
 {
     SectorSkyCylinderMeshData data;
     if (!IsValidSkyCylinderMeshInput(segments, radius, height)) {
         return data;
     }
+    SectorTopologySkySettings settings;
+    settings.verticalOffset = verticalOffset;
+    settings.verticalScale = verticalScale;
+    settings = NormalizeSectorTopologySkySettings(settings);
 
     const int ringVertexCount = segments + 1;
     data.positions.reserve(static_cast<size_t>(ringVertexCount) * 2u);
@@ -66,11 +90,11 @@ SectorSkyCylinderMeshData BuildSkyCylinderMeshData(int segments, float radius, f
 
         data.positions.push_back(Vector3{x, -halfHeight, z});
         data.normals.push_back(normal);
-        data.uvs.push_back(Vector2{u, 1.0f});
+        data.uvs.push_back(Vector2{u, 1.0f * settings.verticalScale + settings.verticalOffset});
 
         data.positions.push_back(Vector3{x, halfHeight, z});
         data.normals.push_back(normal);
-        data.uvs.push_back(Vector2{u, 0.0f});
+        data.uvs.push_back(Vector2{u, settings.verticalOffset});
     }
 
     for (int i = 0; i < segments; ++i) {

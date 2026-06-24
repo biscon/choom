@@ -111,20 +111,22 @@ Gameplay movement.
 
 Sectors can mark their ceiling as sky/open. A sky ceiling does not generate the
 normal ceiling surface. In 3D preview, sky ceilings show a basic visual-only
-panorama cylinder when the map texture table contains a texture with ID
-`sky_cylinder`; the local test asset is `assets/images/sky/sky_cylinder.png`
-and should be a horizontally seamless panorama such as 4:1. The texture path is
-not hardcoded, so the texture still must be added to the map texture table with
-that ID. The preview cylinder has a simple hardcoded blue top cap to close the
-visible hole when looking upward; sky textures should ideally fade their top
-band toward a similar blue. Missing or failed sky textures still fall back to
-the existing clear background behavior, and the clear color is unchanged. Proper
-map-level sky color/settings and picker UI are deferred.
+panorama cylinder when the map-level sky texture ID resolves to a loaded map
+texture. The default sky texture ID is `sky_cylinder`; the local test asset is
+`assets/images/sky/sky_cylinder.png`, but texture paths are not hardcoded and
+the texture must be present in the map texture table. Sky textures should be
+horizontally seamless panoramas such as 4:1.
+Map-level sky settings are edited in `Preview Settings -> Sky`. The yaw offset
+rotates the panorama around the camera, vertical offset/scale adjust the
+panorama placement on the cylinder, and top color controls the solid top cap.
+Missing, empty, unloaded, or failed sky textures still fall back to the existing
+clear background behavior, and the clear color is unchanged.
 Adjacent sectors that both have sky ceilings suppress the upper portal wall
 strip between them, even when their numeric ceiling heights differ. The sky
-renderer is visual-only and does not affect collision, lightmaps, bloom, or
-picking; collision still uses the sector's normal authored ceiling height for
-now.
+renderer is visual-only and its persisted settings do not affect collision,
+lightmaps, bloom, picking, or generated surface metadata; collision still uses
+the sector's normal authored ceiling height for now. `ceilingSky` sectors are
+still required for sky to appear through omitted ceilings.
 
 ## Sector Collision Query Layer
 

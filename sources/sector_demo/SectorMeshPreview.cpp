@@ -31,7 +31,6 @@ constexpr float BloomStrength = 0.5f;
 constexpr float BloomLdrIntensityScale = 10.0f;
 constexpr int BloomIterations = 3;
 constexpr int BloomDownsample = 4;
-constexpr Color kSkyTopCapColor = {95, 165, 235, 255};
 
 const char* SectorLightmapVs = R"(
 #version 330
@@ -434,9 +433,20 @@ bool SectorMeshPreview::Rebuild(
         textureHandlesById.emplace(texture.id, handle);
     }
 
-    if (ShouldRenderDefaultSkyCylinder(map)) {
-        skyTextureHandle = TextureForId(std::string(kDefaultSkyTextureId));
-        const SectorSkyCylinderMeshData skyData = BuildSkyCylinderMeshData();
+    if (ShouldRenderSkyCylinder(map)) {
+        const SectorTopologySkySettings skySettings = NormalizeSectorTopologySkySettings(map.skySettings);
+        const SectorTextureDefinition* skyTexture = FindSkyTexture(map);
+        skyTextureHandle = skyTexture == nullptr
+                ? engine::NullTextureHandle()
+                : TextureForId(skyTexture->id);
+        skyYawOffsetDegrees = skySettings.yawOffsetDegrees;
+        skyTopCapColor = skySettings.topColor;
+        const SectorSkyCylinderMeshData skyData = BuildSkyCylinderMeshData(
+                kDefaultSkyCylinderSegments,
+                kDefaultSkyCylinderRadius,
+                kDefaultSkyCylinderHeight,
+                skySettings.verticalOffset,
+                skySettings.verticalScale);
         const SectorSkyCylinderMeshData skyTopCapData = BuildSkyCylinderTopCapMeshData();
         skyCylinderMesh = CreateSkyCylinderMesh(skyData);
         skyTopCapMesh = CreateSkyCylinderMesh(skyTopCapData);
@@ -540,6 +550,8 @@ void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
     textureHandlesById.clear();
     lightmapTexture = engine::NullTextureHandle();
     skyTextureHandle = engine::NullTextureHandle();
+    skyYawOffsetDegrees = 0.0f;
+    skyTopCapColor = DefaultSectorTopologySkySettings().topColor;
     sectorCount = 0;
 
     if (materialLoaded) {
@@ -898,13 +910,15 @@ void SectorMeshPreview::UnloadSkyCylinderMesh()
 
 void SectorMeshPreview::DrawSkyCylinder(const Texture2D& texture)
 {
-    const Matrix transform = MatrixTranslate(camera.position.x, camera.position.y, camera.position.z);
+    const Matrix transform = MatrixMultiply(
+            MatrixRotateY(skyYawOffsetDegrees * DEG2RAD),
+            MatrixTranslate(camera.position.x, camera.position.y, camera.position.z));
     skyMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = texture;
     skyMaterial.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
     rlDisableDepthMask();
     DrawMesh(skyCylinderMesh, skyMaterial, transform);
     skyMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = skyDefaultMaterialTexture;
-    skyMaterial.maps[MATERIAL_MAP_DIFFUSE].color = kSkyTopCapColor;
+    skyMaterial.maps[MATERIAL_MAP_DIFFUSE].color = skyTopCapColor;
     DrawMesh(skyTopCapMesh, skyMaterial, transform);
     skyMaterial.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
     skyMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = texture;

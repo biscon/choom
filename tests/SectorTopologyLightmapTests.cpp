@@ -287,6 +287,27 @@ void TestSourceHashChanges()
     changedPreview.previewSettings.headBobFrequency = 12.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
           "hash ignores preview headbob frequency");
+
+    game::SectorTopologyMap changedSky = base;
+    changedSky.skySettings.textureId = "storm_panorama";
+    Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
+          "hash ignores sky texture ID");
+    changedSky = base;
+    changedSky.skySettings.yawOffsetDegrees = 90.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
+          "hash ignores sky yaw offset");
+    changedSky = base;
+    changedSky.skySettings.verticalOffset = 0.25f;
+    Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
+          "hash ignores sky vertical offset");
+    changedSky = base;
+    changedSky.skySettings.verticalScale = 2.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
+          "hash ignores sky vertical scale");
+    changedSky = base;
+    changedSky.skySettings.topColor = Color{10, 20, 30, 255};
+    Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
+          "hash ignores sky top color");
 }
 
 void TestSourceHashIncludesMiddleTextureData()

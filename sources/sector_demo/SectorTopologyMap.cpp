@@ -29,6 +29,8 @@ constexpr float PreviewHeadBobStrengthMin = 0.0f;
 constexpr float PreviewHeadBobStrengthMax = 0.25f;
 constexpr float PreviewHeadBobFrequencyMin = 0.0f;
 constexpr float PreviewHeadBobFrequencyMax = 20.0f;
+constexpr float SkyVerticalScaleMin = 0.01f;
+constexpr float SkyVerticalScaleMax = 100.0f;
 
 float ClampFinite(float value, float fallback, float minValue, float maxValue)
 {
@@ -150,6 +152,29 @@ SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings setti
             defaults.headBobFrequency,
             PreviewHeadBobFrequencyMin,
             PreviewHeadBobFrequencyMax);
+    return settings;
+}
+
+SectorTopologySkySettings DefaultSectorTopologySkySettings()
+{
+    return SectorTopologySkySettings{};
+}
+
+SectorTopologySkySettings NormalizeSectorTopologySkySettings(SectorTopologySkySettings settings)
+{
+    const SectorTopologySkySettings defaults = DefaultSectorTopologySkySettings();
+    if (!std::isfinite(settings.yawOffsetDegrees)) {
+        settings.yawOffsetDegrees = defaults.yawOffsetDegrees;
+    }
+    if (!std::isfinite(settings.verticalOffset)) {
+        settings.verticalOffset = defaults.verticalOffset;
+    }
+    settings.verticalScale = ClampFinite(
+            settings.verticalScale,
+            defaults.verticalScale,
+            SkyVerticalScaleMin,
+            SkyVerticalScaleMax);
+    settings.topColor.a = 255;
     return settings;
 }
 

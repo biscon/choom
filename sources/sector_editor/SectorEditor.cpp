@@ -887,6 +887,9 @@ const char* TopologySectorTextureFieldLabel(TopologySectorTextureField field)
 
 const char* TopologyPickerTargetLabel(const TexturePickerState& picker)
 {
+    if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::MapSky) {
+        return "sky texture";
+    }
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef) {
         return picker.topologyLayer == TopologyMaterialLayer::Decal
                 ? TextFormat("%s sidedef decal texture", TopologyWallPartStatusName(picker.topologyWallPart))
@@ -910,6 +913,37 @@ Color WithAlpha(Color color, unsigned char alpha)
 {
     color.a = alpha;
     return color;
+}
+
+bool SameSkySettings(const SectorTopologySkySettings& left, const SectorTopologySkySettings& right)
+{
+    const SectorTopologySkySettings a = NormalizeSectorTopologySkySettings(left);
+    const SectorTopologySkySettings b = NormalizeSectorTopologySkySettings(right);
+    return a.textureId == b.textureId
+            && a.yawOffsetDegrees == b.yawOffsetDegrees
+            && a.verticalOffset == b.verticalOffset
+            && a.verticalScale == b.verticalScale
+            && a.topColor.r == b.topColor.r
+            && a.topColor.g == b.topColor.g
+            && a.topColor.b == b.topColor.b
+            && a.topColor.a == b.topColor.a;
+}
+
+bool SamePreviewSettings(const SectorPreviewSettings& left, const SectorPreviewSettings& right)
+{
+    const SectorPreviewSettings a = NormalizeSectorPreviewSettings(left);
+    const SectorPreviewSettings b = NormalizeSectorPreviewSettings(right);
+    return a.walkSpeed == b.walkSpeed
+            && a.runSpeed == b.runSpeed
+            && a.mouseSensitivity == b.mouseSensitivity
+            && a.eyeHeight == b.eyeHeight
+            && a.gravity == b.gravity
+            && a.playerRadius == b.playerRadius
+            && a.playerHeight == b.playerHeight
+            && a.stepHeight == b.stepHeight
+            && a.jumpHeight == b.jumpHeight
+            && a.headBobStrength == b.headBobStrength
+            && a.headBobFrequency == b.headBobFrequency;
 }
 
 float Cross(Vector2 a, Vector2 b, Vector2 c)
@@ -8239,6 +8273,9 @@ void SectorEditor::DrawPreviewSettingsModal(
     if (!modalState.open) {
         return;
     }
+    if (state.texturePicker.open) {
+        return;
+    }
 
     bool okayRequested = false;
     bool cancelRequested = false;
@@ -8256,29 +8293,64 @@ void SectorEditor::DrawPreviewSettingsModal(
     DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
     const Rectangle modal{
             (EditorWidth - 620.0f) * 0.5f,
-            (EditorHeight - 790.0f) * 0.5f,
+            (EditorHeight - 700.0f) * 0.5f,
             620.0f,
-            790.0f
+            700.0f
     };
     DrawRectangleRec(modal, Color{20, 24, 32, 248});
     DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
 
     float y = modal.y + 22.0f;
     engine::Text(config, assets, Rectangle{modal.x + 26.0f, y, modal.width - 52.0f, 42.0f}, font, "Preview Settings");
-    y += 60.0f;
+    y += 54.0f;
 
-    const float labelW = 220.0f;
-    const float inputW = 180.0f;
+    const float tabW = 132.0f;
+    const float tabH = 38.0f;
+    if (engine::ToolButton(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_preview_settings_tab_general",
+                Rectangle{modal.x + 30.0f, y, tabW, tabH},
+                font,
+                "General",
+                modalState.activeTab == PreviewSettingsTab::General)) {
+        modalState.activeTab = PreviewSettingsTab::General;
+    }
+    if (engine::ToolButton(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_preview_settings_tab_sky",
+                Rectangle{modal.x + 30.0f + tabW + 8.0f, y, tabW, tabH},
+                font,
+                "Sky",
+                modalState.activeTab == PreviewSettingsTab::Sky)) {
+        modalState.activeTab = PreviewSettingsTab::Sky;
+    }
+    y += tabH + 16.0f;
+
+    const float buttonY = modal.y + modal.height - 66.0f;
+    const Rectangle scrollBounds{
+            modal.x + 30.0f,
+            y,
+            modal.width - 60.0f,
+            std::max(80.0f, buttonY - y - 18.0f)
+    };
+    const float scrollContentW = std::max(0.0f, scrollBounds.width - config.scrollbarSize);
     const float rowH = 40.0f;
     const float gap = 12.0f;
-    const float labelX = modal.x + 30.0f;
-    const float inputX = labelX + labelW + 18.0f;
-    auto drawFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
+    const float labelW = 220.0f;
+    const float inputW = 180.0f;
+    const float inputX = labelW + 18.0f;
+    auto drawFloat = [&](float& localY, const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
         engine::Text(
                 ui,
                 config,
                 assets,
-                Rectangle{labelX, y, labelW, rowH},
+                Rectangle{0.0f, localY, labelW, rowH},
                 font,
                 label,
                 engine::UITextJustify::Left,
@@ -8289,7 +8361,7 @@ void SectorEditor::DrawPreviewSettingsModal(
                 input,
                 assets,
                 id,
-                Rectangle{inputX, y, inputW, rowH},
+                Rectangle{inputX, localY, inputW, rowH},
                 font,
                 value,
                 inputState,
@@ -8299,97 +8371,122 @@ void SectorEditor::DrawPreviewSettingsModal(
         if (result.changed) {
             modalState.errorMessage.clear();
         }
-        y += rowH + gap;
+        localY += rowH + gap;
     };
 
-    drawFloat(
-            "sector_editor_preview_walk_speed",
-            "Walk speed",
-            modalState.draftConfig.walkSpeed,
-            modalState.walkSpeedInput,
-            0.1f,
-            100.0f,
-            2);
-    drawFloat(
-            "sector_editor_preview_run_speed",
-            "Run speed",
-            modalState.draftConfig.runSpeed,
-            modalState.runSpeedInput,
-            0.1f,
-            200.0f,
-            2);
-    drawFloat(
-            "sector_editor_preview_mouse_sensitivity",
-            "Mouse sensitivity",
-            modalState.draftConfig.mouseSensitivity,
-            modalState.mouseSensitivityInput,
-            0.01f,
-            20.0f,
-            3);
-    drawFloat(
-            "sector_editor_preview_eye_height",
-            "Camera eye height",
-            modalState.draftConfig.eyeHeight,
-            modalState.eyeHeightInput,
-            0.1f,
-            20.0f,
-            2);
-    drawFloat(
-            "sector_editor_preview_gravity",
-            "Gravity",
-            modalState.draftConfig.gravity,
-            modalState.gravityInput,
-            0.0f,
-            200.0f,
-            2);
-    drawFloat(
-            "sector_editor_preview_player_radius",
-            "Player radius",
-            modalState.draftConfig.playerRadius,
-            modalState.playerRadiusInput,
-            0.05f,
-            2.0f,
-            2);
-    drawFloat(
-            "sector_editor_preview_player_height",
-            "Player height",
-            modalState.draftConfig.playerHeight,
-            modalState.playerHeightInput,
-            0.5f,
-            3.0f,
-            2);
-    drawFloat(
-            "sector_editor_preview_step_height",
-            "Step height",
-            modalState.draftConfig.stepHeight,
-            modalState.stepHeightInput,
-            0.0f,
-            2.0f,
-            2);
-    drawFloat(
-            "sector_editor_preview_jump_height",
-            "Jump height",
-            modalState.draftConfig.jumpHeight,
-            modalState.jumpHeightInput,
-            0.0f,
-            3.0f,
-            2);
-    drawFloat(
-            "sector_editor_preview_head_bob_strength",
-            "Head bob strength",
-            modalState.draftConfig.headBobStrength,
-            modalState.headBobStrengthInput,
-            0.0f,
-            0.25f,
-            3);
-    drawFloat(
-            "sector_editor_preview_head_bob_frequency",
-            "Head bob frequency",
-            modalState.draftConfig.headBobFrequency,
-            modalState.headBobFrequencyInput,
-            0.0f,
-            20.0f,
-            2);
+    auto drawGeneralTab = [&]() {
+        float contentY = 0.0f;
+        const float contentH = 11.0f * (rowH + gap) + 12.0f;
+        engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
+                ui,
+                config,
+                input,
+                "sector_editor_preview_settings_general_scroll",
+                scrollBounds,
+                Vector2{scrollContentW, contentH},
+                modalState.generalScroll);
+        const float contentW = scroll.viewport.width;
+        (void)contentW;
+        drawFloat(contentY, "sector_editor_preview_walk_speed", "Walk speed", modalState.draftConfig.walkSpeed, modalState.walkSpeedInput, 0.1f, 100.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_run_speed", "Run speed", modalState.draftConfig.runSpeed, modalState.runSpeedInput, 0.1f, 200.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_mouse_sensitivity", "Mouse sensitivity", modalState.draftConfig.mouseSensitivity, modalState.mouseSensitivityInput, 0.01f, 20.0f, 3);
+        drawFloat(contentY, "sector_editor_preview_eye_height", "Camera eye height", modalState.draftConfig.eyeHeight, modalState.eyeHeightInput, 0.1f, 20.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_gravity", "Gravity", modalState.draftConfig.gravity, modalState.gravityInput, 0.0f, 200.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_player_radius", "Player radius", modalState.draftConfig.playerRadius, modalState.playerRadiusInput, 0.05f, 2.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_player_height", "Player height", modalState.draftConfig.playerHeight, modalState.playerHeightInput, 0.5f, 3.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_step_height", "Step height", modalState.draftConfig.stepHeight, modalState.stepHeightInput, 0.0f, 2.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_jump_height", "Jump height", modalState.draftConfig.jumpHeight, modalState.jumpHeightInput, 0.0f, 3.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_head_bob_strength", "Head bob strength", modalState.draftConfig.headBobStrength, modalState.headBobStrengthInput, 0.0f, 0.25f, 3);
+        drawFloat(contentY, "sector_editor_preview_head_bob_frequency", "Head bob frequency", modalState.draftConfig.headBobFrequency, modalState.headBobFrequencyInput, 0.0f, 20.0f, 2);
+        engine::EndScrollArea(ui, config, input, scroll, modalState.generalScroll);
+    };
+
+    auto drawSkyChannel = [&](float& localY, const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, localY, 92.0f, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
+        int value = static_cast<int>(channel);
+        const engine::UINumericInputResult result = engine::IntInput(
+                ui,
+                config,
+                input,
+                assets,
+                id,
+                Rectangle{104.0f, localY, 230.0f, rowH},
+                font,
+                value,
+                inputState,
+                0,
+                255,
+                1);
+        if (result.changed && value != static_cast<int>(channel)) {
+            channel = static_cast<unsigned char>(ClampAmbientChannel(value));
+            modalState.draftSkySettings.topColor.a = 255;
+            modalState.errorMessage.clear();
+        }
+        localY += rowH + gap;
+    };
+
+    auto drawSkyTab = [&]() {
+        float contentY = 0.0f;
+        const float contentH = 9.0f * (rowH + gap) + 80.0f;
+        engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
+                ui,
+                config,
+                input,
+                "sector_editor_preview_settings_sky_scroll",
+                scrollBounds,
+                Vector2{scrollContentW, contentH},
+                modalState.skyScroll);
+        const float contentW = scroll.viewport.width;
+
+        engine::Text(ui, config, assets, Rectangle{0.0f, contentY, labelW, rowH}, font, "Sky texture", engine::UITextJustify::Left, config.mutedTextColor);
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{inputX, contentY, std::max(0.0f, contentW - inputX), rowH},
+                font,
+                modalState.draftSkySettings.textureId.empty() ? "<none>" : modalState.draftSkySettings.textureId.c_str(),
+                engine::UITextJustify::Left,
+                config.textColor);
+        contentY += rowH + gap;
+        if (engine::Button(ui, config, input, assets, "sector_editor_preview_sky_pick_texture", Rectangle{inputX, contentY, 150.0f, rowH}, font, "Pick Texture")) {
+            OpenMapSkyTexturePicker();
+        }
+        if (engine::Button(ui, config, input, assets, "sector_editor_preview_sky_clear_texture", Rectangle{inputX + 162.0f, contentY, 112.0f, rowH}, font, "Clear")) {
+            modalState.draftSkySettings.textureId.clear();
+            modalState.errorMessage.clear();
+        }
+        contentY += rowH + gap;
+
+        drawFloat(contentY, "sector_editor_preview_sky_yaw", "Yaw offset", modalState.draftSkySettings.yawOffsetDegrees, modalState.skyYawOffsetInput, -3600.0f, 3600.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_sky_vertical_offset", "Vertical offset", modalState.draftSkySettings.verticalOffset, modalState.skyVerticalOffsetInput, -100.0f, 100.0f, 3);
+        drawFloat(contentY, "sector_editor_preview_sky_vertical_scale", "Vertical scale", modalState.draftSkySettings.verticalScale, modalState.skyVerticalScaleInput, 0.01f, 100.0f, 3);
+        modalState.draftSkySettings.verticalScale = NormalizeSectorTopologySkySettings(modalState.draftSkySettings).verticalScale;
+
+        contentY += 8.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, contentY, contentW, 34.0f}, font, "Top color", engine::UITextJustify::Left, config.textColor);
+        contentY += 38.0f;
+        drawSkyChannel(contentY, "sector_editor_preview_sky_top_r", "R:", modalState.draftSkySettings.topColor.r, modalState.skyTopColorRedInput);
+        drawSkyChannel(contentY, "sector_editor_preview_sky_top_g", "G:", modalState.draftSkySettings.topColor.g, modalState.skyTopColorGreenInput);
+        drawSkyChannel(contentY, "sector_editor_preview_sky_top_b", "B:", modalState.draftSkySettings.topColor.b, modalState.skyTopColorBlueInput);
+        const Rectangle swatch{
+                scroll.viewport.x + 104.0f,
+                scroll.viewport.y - modalState.skyScroll.offset.y + contentY + 2.0f,
+                std::min(130.0f, contentW - 104.0f),
+                28.0f
+        };
+        DrawRectangleRec(swatch, NormalizeSectorTopologySkySettings(modalState.draftSkySettings).topColor);
+        DrawRectangleLinesEx(swatch, 1.0f, config.borderColor);
+        contentY += 36.0f + gap;
+
+        engine::EndScrollArea(ui, config, input, scroll, modalState.skyScroll);
+    };
+
+    if (modalState.activeTab == PreviewSettingsTab::Sky) {
+        drawSkyTab();
+    } else {
+        drawGeneralTab();
+    }
 
     if (!modalState.errorMessage.empty()) {
         engine::Text(
@@ -8402,21 +8499,30 @@ void SectorEditor::DrawPreviewSettingsModal(
                 config.invalidColor);
     }
 
-    const float buttonY = modal.y + modal.height - 66.0f;
     const float buttonW = 132.0f;
     if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_reset", Rectangle{modal.x + 30.0f, buttonY, 176.0f, 44.0f}, font, "Reset Defaults")) {
-        modalState.draftConfig = DefaultSectorFpsControllerConfig();
-        modalState.walkSpeedInput = engine::UIFloatInputState{};
-        modalState.runSpeedInput = engine::UIFloatInputState{};
-        modalState.mouseSensitivityInput = engine::UIFloatInputState{};
-        modalState.eyeHeightInput = engine::UIFloatInputState{};
-        modalState.gravityInput = engine::UIFloatInputState{};
-        modalState.playerRadiusInput = engine::UIFloatInputState{};
-        modalState.playerHeightInput = engine::UIFloatInputState{};
-        modalState.stepHeightInput = engine::UIFloatInputState{};
-        modalState.jumpHeightInput = engine::UIFloatInputState{};
-        modalState.headBobStrengthInput = engine::UIFloatInputState{};
-        modalState.headBobFrequencyInput = engine::UIFloatInputState{};
+        if (modalState.activeTab == PreviewSettingsTab::Sky) {
+            modalState.draftSkySettings = DefaultSectorTopologySkySettings();
+            modalState.skyYawOffsetInput = engine::UIFloatInputState{};
+            modalState.skyVerticalOffsetInput = engine::UIFloatInputState{};
+            modalState.skyVerticalScaleInput = engine::UIFloatInputState{};
+            modalState.skyTopColorRedInput = engine::UIIntInputState{};
+            modalState.skyTopColorGreenInput = engine::UIIntInputState{};
+            modalState.skyTopColorBlueInput = engine::UIIntInputState{};
+        } else {
+            modalState.draftConfig = DefaultSectorFpsControllerConfig();
+            modalState.walkSpeedInput = engine::UIFloatInputState{};
+            modalState.runSpeedInput = engine::UIFloatInputState{};
+            modalState.mouseSensitivityInput = engine::UIFloatInputState{};
+            modalState.eyeHeightInput = engine::UIFloatInputState{};
+            modalState.gravityInput = engine::UIFloatInputState{};
+            modalState.playerRadiusInput = engine::UIFloatInputState{};
+            modalState.playerHeightInput = engine::UIFloatInputState{};
+            modalState.stepHeightInput = engine::UIFloatInputState{};
+            modalState.jumpHeightInput = engine::UIFloatInputState{};
+            modalState.headBobStrengthInput = engine::UIFloatInputState{};
+            modalState.headBobFrequencyInput = engine::UIFloatInputState{};
+        }
         modalState.errorMessage.clear();
     }
     okayRequested = okayRequested || engine::Button(
@@ -8447,7 +8553,7 @@ void SectorEditor::DrawPreviewSettingsModal(
         return;
     }
     if (okayRequested) {
-        ApplyPreviewSettingsModal();
+        ApplyPreviewSettingsModal(assets);
     }
 }
 
@@ -9081,23 +9187,42 @@ void SectorEditor::OpenPreviewSettingsModal()
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
     state.previewSettingsModal.open = true;
     state.previewSettingsModal.draftConfig = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
+    state.previewSettingsModal.draftSkySettings = NormalizeSectorTopologySkySettings(state.topologyMap.skySettings);
 }
 
-void SectorEditor::ApplyPreviewSettingsModal()
+void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
 {
     if (!state.previewSettingsModal.open) {
         return;
     }
 
+    const SectorFpsControllerConfig draftConfig = NormalizeSectorFpsControllerConfig(
+            state.previewSettingsModal.draftConfig);
+    const SectorPreviewSettings draftPreviewSettings = SectorPreviewSettingsFromFpsControllerConfig(draftConfig);
+    const SectorTopologySkySettings draftSkySettings = NormalizeSectorTopologySkySettings(
+            state.previewSettingsModal.draftSkySettings);
+    const bool previewChanged = !SamePreviewSettings(
+            state.topologyMap.previewSettings,
+            draftPreviewSettings);
+    const bool skyChanged = !SameSkySettings(state.topologyMap.skySettings, draftSkySettings);
+    if (!previewChanged && !skyChanged) {
+        state.previewSettingsModal = SectorPreviewSettingsModalState{};
+        statusText = "Preview settings unchanged";
+        return;
+    }
+
     const float previousGravity = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig).gravity;
-    state.fpsControllerConfig = NormalizeSectorFpsControllerConfig(state.previewSettingsModal.draftConfig);
+    state.fpsControllerConfig = draftConfig;
     if (previousGravity > 0.0f && state.fpsControllerConfig.gravity == 0.0f) {
         state.fpsControllerState.verticalVelocity = 0.0f;
     }
-    state.topologyMap.previewSettings = SectorPreviewSettingsFromFpsControllerConfig(
-            state.fpsControllerConfig);
+    state.topologyMap.previewSettings = draftPreviewSettings;
+    state.topologyMap.skySettings = draftSkySettings;
     MarkTopologyDocumentEdited("Preview settings updated");
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
+    if (skyChanged && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+        RebuildPreviewMeshesPreservingView(assets);
+    }
     if (state.mode == SectorEditorMode::Preview3D
             && state.previewControlMode == SectorPreviewControlMode::Gameplay
             && preview.IsReady()) {
@@ -11232,6 +11357,12 @@ bool SectorEditor::JoinSelectedTopologySectors()
 
 std::string SectorEditor::CurrentTextureForPickerTarget() const
 {
+    if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::MapSky) {
+        return state.previewSettingsModal.open
+                ? state.previewSettingsModal.draftSkySettings.textureId
+                : state.topologyMap.skySettings.textureId;
+    }
+
     if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef) {
         const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
                 state.topologyMap,
@@ -11357,6 +11488,40 @@ void SectorEditor::OpenTopologySideDefTexturePicker(
     }
 }
 
+void SectorEditor::OpenMapSkyTexturePicker()
+{
+    TexturePickerState& picker = state.texturePicker;
+    if (!state.previewSettingsModal.open) {
+        picker = TexturePickerState{};
+        statusText = "No sky texture target";
+        return;
+    }
+
+    picker.open = true;
+    picker.rebuildPreviewOnApply = false;
+    picker.topologyTargetKind = TopologyTexturePickerTargetKind::MapSky;
+    picker.topologyLayer = TopologyMaterialLayer::Base;
+    picker.topologySectorId = -1;
+    picker.topologyField = TopologySectorTextureField::None;
+    picker.topologySideDefId = -1;
+    picker.topologyWallPart = TopologyWallPart::Wall;
+    picker.selectedTextureIndex = 0;
+    picker.scroll = engine::UIScrollState{};
+    picker.textureIds.clear();
+    picker.optionLabels.clear();
+
+    const std::vector<std::string> textureIds = SortedSectorTopologyTextureIds(state.topologyMap);
+    picker.textureIds.insert(picker.textureIds.end(), textureIds.begin(), textureIds.end());
+
+    const std::string currentTexture = CurrentTextureForPickerTarget();
+    for (size_t i = 0; i < picker.textureIds.size(); ++i) {
+        picker.optionLabels.push_back(picker.textureIds[i].c_str());
+        if (picker.textureIds[i] == currentTexture) {
+            picker.selectedTextureIndex = static_cast<int>(i);
+        }
+    }
+}
+
 void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
 {
     TexturePickerState& picker = state.texturePicker;
@@ -11390,6 +11555,16 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
     };
 
     std::string status;
+    if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::MapSky) {
+        if (state.previewSettingsModal.open
+                && state.previewSettingsModal.draftSkySettings.textureId != selectedTexture) {
+            state.previewSettingsModal.draftSkySettings.textureId = selectedTexture;
+            state.previewSettingsModal.errorMessage.clear();
+        }
+        picker = TexturePickerState{};
+        return;
+    }
+
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::Sector) {
         SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, picker.topologySectorId);
         if (sector == nullptr) {

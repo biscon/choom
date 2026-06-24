@@ -643,6 +643,101 @@ void TestPreviewSettingsRoundTripAndValidation()
     Check(Near(loaded.previewSettings.headBobFrequency, 0.0f), "low headbob frequency clamps");
 }
 
+void TestSkySettingsRoundTripAndValidation()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.skySettings.textureId = "storm_panorama";
+    original.skySettings.yawOffsetDegrees = 45.5f;
+    original.skySettings.verticalOffset = -0.125f;
+    original.skySettings.verticalScale = 1.75f;
+    original.skySettings.topColor = Color{12, 34, 56, 255};
+
+    const std::string text = SaveText(original);
+    const Json saved = Json::parse(text);
+    Check(saved["skySettings"].is_object(), "non-default sky settings are written");
+    Check(saved["skySettings"]["textureId"].get<std::string>() == "storm_panorama"
+                  && Near(saved["skySettings"]["yawOffsetDegrees"].get<float>(), 45.5f)
+                  && Near(saved["skySettings"]["verticalOffset"].get<float>(), -0.125f)
+                  && Near(saved["skySettings"]["verticalScale"].get<float>(), 1.75f)
+                  && saved["skySettings"]["topColor"]["r"].get<int>() == 12
+                  && saved["skySettings"]["topColor"]["g"].get<int>() == 34
+                  && saved["skySettings"]["topColor"]["b"].get<int>() == 56
+                  && saved["skySettings"]["topColor"]["a"].get<int>() == 255,
+          "sky settings values are serialized");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "sky settings JSON loads");
+    Check(loaded.skySettings.textureId == "storm_panorama"
+                  && Near(loaded.skySettings.yawOffsetDegrees, 45.5f)
+                  && Near(loaded.skySettings.verticalOffset, -0.125f)
+                  && Near(loaded.skySettings.verticalScale, 1.75f)
+                  && loaded.skySettings.topColor.r == 12
+                  && loaded.skySettings.topColor.g == 34
+                  && loaded.skySettings.topColor.b == 56
+                  && loaded.skySettings.topColor.a == 255,
+          "sky settings round-trip");
+
+    Json missingFields = saved;
+    missingFields["skySettings"].erase("textureId");
+    missingFields["skySettings"].erase("yawOffsetDegrees");
+    missingFields["skySettings"].erase("verticalOffset");
+    missingFields["skySettings"].erase("verticalScale");
+    Check(LoadText(missingFields.dump(), loaded, error), "omitted sky setting fields are accepted");
+    const game::SectorTopologySkySettings defaults = game::DefaultSectorTopologySkySettings();
+    Check(loaded.skySettings.textureId == defaults.textureId
+                  && Near(loaded.skySettings.yawOffsetDegrees, defaults.yawOffsetDegrees)
+                  && Near(loaded.skySettings.verticalOffset, defaults.verticalOffset)
+                  && Near(loaded.skySettings.verticalScale, defaults.verticalScale)
+                  && loaded.skySettings.topColor.r == 12,
+          "omitted sky setting fields load defaults while present color remains");
+
+    Json withoutSkySettings = saved;
+    withoutSkySettings.erase("skySettings");
+    Check(LoadText(withoutSkySettings.dump(), loaded, error),
+          "omitted sky settings field is accepted");
+    Check(loaded.skySettings.textureId == defaults.textureId
+                  && Near(loaded.skySettings.yawOffsetDegrees, defaults.yawOffsetDegrees)
+                  && Near(loaded.skySettings.verticalOffset, defaults.verticalOffset)
+                  && Near(loaded.skySettings.verticalScale, defaults.verticalScale)
+                  && loaded.skySettings.topColor.r == defaults.topColor.r
+                  && loaded.skySettings.topColor.g == defaults.topColor.g
+                  && loaded.skySettings.topColor.b == defaults.topColor.b
+                  && loaded.skySettings.topColor.a == 255,
+          "omitted sky settings load defaults");
+
+    SectorTopologyMap defaultMap = MakeSquare();
+    const Json defaultSaved = Json::parse(SaveText(defaultMap));
+    Check(!defaultSaved.contains("skySettings"), "default sky settings are omitted");
+
+    Json clamped = saved;
+    clamped["skySettings"]["verticalScale"] = 0.0f;
+    Check(LoadText(clamped.dump(), loaded, error), "zero sky vertical scale loads");
+    Check(Near(loaded.skySettings.verticalScale, 0.01f), "zero sky vertical scale clamps to positive minimum");
+    clamped["skySettings"]["verticalScale"] = -4.0f;
+    Check(LoadText(clamped.dump(), loaded, error), "negative sky vertical scale loads");
+    Check(Near(loaded.skySettings.verticalScale, 0.01f), "negative sky vertical scale clamps to positive minimum");
+
+    Json invalid = saved;
+    invalid["skySettings"] = 4;
+    ExpectRejected(invalid, "non-object sky settings are rejected");
+
+    const std::array<const char*, 4> fields{
+            "textureId",
+            "yawOffsetDegrees",
+            "verticalOffset",
+            "verticalScale"
+    };
+    for (const char* field : fields) {
+        invalid = saved;
+        invalid["skySettings"][field] = field == std::string("textureId") ? Json(42) : Json("invalid");
+        ExpectRejected(invalid, "wrong-type sky settings field is rejected");
+    }
+    invalid = saved;
+    invalid["skySettings"]["topColor"] = Json::array({1, 2, 3});
+    ExpectRejected(invalid, "wrong-type sky top color is rejected");
+}
+
 void TestDecalDefaultsAndOmission()
 {
     SectorTopologyMap map = MakeSquare();
@@ -1392,6 +1487,7 @@ int main()
     TestStaticLightRoundTrip();
     TestLightmapMetadataRoundTrip();
     TestPreviewSettingsRoundTripAndValidation();
+    TestSkySettingsRoundTripAndValidation();
     TestDecalDefaultsAndOmission();
     TestMiddleDefaultsAndOmission();
     TestMiddleRoundTrip();

@@ -76,32 +76,54 @@ void AddTexture(game::SectorTopologyMap& map, const char* id)
 void TestDefaultSkyTextureLookup()
 {
     game::SectorTopologyMap empty = MakeMap(true);
-    Check(game::FindDefaultSkyTexture(empty) == nullptr,
-          "missing texture entry has no default sky texture");
-    Check(!game::ShouldRenderDefaultSkyCylinder(empty),
-          "missing texture entry disables default sky cylinder");
+    Check(game::FindSkyTexture(empty) == nullptr,
+          "missing configured texture entry has no sky texture");
+    Check(!game::ShouldRenderSkyCylinder(empty),
+          "missing configured texture entry disables sky cylinder");
 
     game::SectorTopologyMap unrelated = MakeMap(true);
     AddTexture(unrelated, "wall");
-    Check(game::FindDefaultSkyTexture(unrelated) == nullptr,
-          "unrelated texture entry has no default sky texture");
-    Check(!game::ShouldRenderDefaultSkyCylinder(unrelated),
-          "unrelated texture entry disables default sky cylinder");
+    Check(game::FindSkyTexture(unrelated) == nullptr,
+          "unrelated texture entry has no sky texture");
+    Check(!game::ShouldRenderSkyCylinder(unrelated),
+          "unrelated texture entry disables sky cylinder");
 
     game::SectorTopologyMap sky = MakeMap(true);
     AddTexture(sky, std::string(game::kDefaultSkyTextureId).c_str());
-    const game::SectorTextureDefinition* texture = game::FindDefaultSkyTexture(sky);
+    const game::SectorTextureDefinition* texture = game::FindSkyTexture(sky);
     Check(texture != nullptr, "sky_cylinder texture entry is selected");
     Check(texture != nullptr && texture->id == game::kDefaultSkyTextureId,
           "selected sky texture preserves sky_cylinder id");
-    Check(game::ShouldRenderDefaultSkyCylinder(sky),
+    Check(game::ShouldRenderSkyCylinder(sky),
           "sky sector plus sky_cylinder texture enables default sky cylinder");
+
+    game::SectorTopologyMap configured = MakeMap(true);
+    configured.skySettings.textureId = "storm";
+    AddTexture(configured, "sky_cylinder");
+    AddTexture(configured, "storm");
+    texture = game::FindSkyTexture(configured);
+    Check(texture != nullptr && texture->id == "storm",
+          "configured sky texture ID selects matching texture");
+
+    game::SectorTopologyMap emptyConfigured = MakeMap(true);
+    emptyConfigured.skySettings.textureId.clear();
+    AddTexture(emptyConfigured, std::string(game::kDefaultSkyTextureId).c_str());
+    Check(game::FindSkyTexture(emptyConfigured) == nullptr,
+          "empty configured sky texture ID selects no texture");
+    Check(!game::ShouldRenderSkyCylinder(emptyConfigured),
+          "empty configured sky texture ID disables sky cylinder");
+
+    game::SectorTopologyMap missingConfigured = MakeMap(true);
+    missingConfigured.skySettings.textureId = "missing";
+    AddTexture(missingConfigured, std::string(game::kDefaultSkyTextureId).c_str());
+    Check(game::FindSkyTexture(missingConfigured) == nullptr,
+          "missing configured sky texture ID ignores unrelated default texture");
 
     game::SectorTopologyMap noSkySector = MakeMap(false);
     AddTexture(noSkySector, std::string(game::kDefaultSkyTextureId).c_str());
     Check(!game::HasSkyCeilingSector(noSkySector),
           "map without ceilingSky sectors reports no sky ceiling");
-    Check(!game::ShouldRenderDefaultSkyCylinder(noSkySector),
+    Check(!game::ShouldRenderSkyCylinder(noSkySector),
           "sky_cylinder texture alone does not enable default sky cylinder");
 }
 
@@ -132,6 +154,34 @@ void TestSkyCylinderMeshData()
     Check(Near(data.uvs.front().y, 1.0f), "bottom V is one");
 
     Check(HasValidIndices(data), "sky cylinder indices are valid for vertex count");
+}
+
+void TestSkyCylinderVerticalUvSettings()
+{
+    constexpr int segments = 8;
+    constexpr float radius = 12.0f;
+    constexpr float height = 20.0f;
+    const game::SectorSkyCylinderMeshData data = game::BuildSkyCylinderMeshData(
+            segments,
+            radius,
+            height,
+            0.25f,
+            2.0f);
+
+    Check(Near(data.uvs[1].y, 0.25f), "vertical offset affects top V");
+    Check(Near(data.uvs.front().y, 2.25f), "vertical scale and offset affect bottom V");
+    Check(Near(data.uvs.front().x, 0.0f)
+                  && Near(data.uvs[data.uvs.size() - 2].x, 1.0f),
+          "yaw is not baked into sky cylinder U coordinates");
+
+    const game::SectorSkyCylinderMeshData clamped = game::BuildSkyCylinderMeshData(
+            segments,
+            radius,
+            height,
+            0.0f,
+            -1.0f);
+    Check(Near(clamped.uvs.front().y, 0.01f),
+          "non-positive vertical scale clamps to positive minimum in mesh data");
 }
 
 void TestSkyCylinderTopCapMeshData()
@@ -187,6 +237,7 @@ int main()
 {
     TestDefaultSkyTextureLookup();
     TestSkyCylinderMeshData();
+    TestSkyCylinderVerticalUvSettings();
     TestSkyCylinderTopCapMeshData();
 
     if (failures == 0) {

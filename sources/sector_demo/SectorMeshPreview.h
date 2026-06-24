@@ -73,6 +73,8 @@ private:
     Mesh skyTopCapMesh = {};
     Material skyMaterial = {};
     Texture2D skyDefaultMaterialTexture = {};
+    float skyYawOffsetDegrees = 0.0f;
+    Color skyTopCapColor = Color{95, 165, 235, 255};
     bool skyMaterialLoaded = false;
     int useLightmapLoc = -1;
     int useBakedAmbientOcclusionLoc = -1;

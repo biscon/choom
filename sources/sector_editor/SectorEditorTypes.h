@@ -60,7 +60,13 @@ struct PendingSectorDraw {
 enum class TopologyTexturePickerTargetKind {
     None,
     Sector,
-    SideDef
+    SideDef,
+    MapSky
+};
+
+enum class PreviewSettingsTab {
+    General,
+    Sky
 };
 
 enum class TopologySelectionKind {
@@ -225,7 +231,9 @@ struct DecalTintModalState {
 
 struct SectorPreviewSettingsModalState {
     bool open = false;
+    PreviewSettingsTab activeTab = PreviewSettingsTab::General;
     SectorFpsControllerConfig draftConfig;
+    SectorTopologySkySettings draftSkySettings;
     engine::UIFloatInputState walkSpeedInput;
     engine::UIFloatInputState runSpeedInput;
     engine::UIFloatInputState mouseSensitivityInput;
@@ -237,6 +245,14 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState jumpHeightInput;
     engine::UIFloatInputState headBobStrengthInput;
     engine::UIFloatInputState headBobFrequencyInput;
+    engine::UIFloatInputState skyYawOffsetInput;
+    engine::UIFloatInputState skyVerticalOffsetInput;
+    engine::UIFloatInputState skyVerticalScaleInput;
+    engine::UIIntInputState skyTopColorRedInput;
+    engine::UIIntInputState skyTopColorGreenInput;
+    engine::UIIntInputState skyTopColorBlueInput;
+    engine::UIScrollState generalScroll;
+    engine::UIScrollState skyScroll;
     std::string errorMessage;
 };
 
