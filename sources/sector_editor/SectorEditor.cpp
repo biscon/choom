@@ -11,6 +11,7 @@
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/SectorEditorSectorInspector.h"
 #include "sector_editor/SectorEditorTextureModals.h"
+#include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorVertexInspector.h"
@@ -1022,19 +1023,7 @@ void SectorEditor::FinishLightDrag()
     }
 
     SelectTopologyLight(lightId);
-    if (std::fabs(light->position.x - original.x) <= GeometryEpsilon
-            && std::fabs(light->position.z - original.z) <= GeometryEpsilon) {
-        light->position = original;
-        statusText = "Light unchanged";
-        return;
-    }
-
-    MarkTopologyDocumentEdited(TextFormat(
-            "Moved topology light %d to X %.2f, Z %.2f",
-            light->id,
-            light->position.x,
-            light->position.z
-    ));
+    FinishTopologyActionResult(FinishMoveStaticLight(state.topologyMap, lightId, original));
 }
 
 void SectorEditor::CancelLightDrag(const char* message)
@@ -2294,27 +2283,30 @@ bool SectorEditor::FinishMaterialActionResult(
     return FinishTopologyMaterialMutation(result.status.c_str(), assets);
 }
 
-bool SectorEditor::SetLineDefBlocksPlayer(int lineDefId, bool blocksPlayer)
+bool SectorEditor::FinishTopologyActionResult(const SectorEditorTopologyActionResult& result)
 {
-    SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, lineDefId);
-    if (lineDef == nullptr) {
-        statusText = "Selected linedef is no longer valid.";
+    if (!result.changed) {
+        if (!result.status.empty()) {
+            statusText = result.status;
+        }
         return false;
-    }
-    if (lineDef->frontSideDefId == -1 || lineDef->backSideDefId == -1) {
-        statusText = "Blocks Player is only editable on two-sided portals.";
-        return false;
-    }
-    if (lineDef->flags.blocksPlayer == blocksPlayer) {
-        return true;
     }
 
-    lineDef->flags.blocksPlayer = blocksPlayer;
-    MarkTopologyDocumentEdited(blocksPlayer
-            ? "Enabled player blocking on portal."
-            : "Disabled player blocking on portal.");
-    RebuildSectorCollisionWorld();
+    MarkTopologyDocumentEdited(result.status.c_str());
     return true;
+}
+
+bool SectorEditor::SetLineDefBlocksPlayer(int lineDefId, bool blocksPlayer)
+{
+    const SectorEditorTopologyActionResult result = game::SetPortalBlocksPlayer(
+            state.topologyMap,
+            lineDefId,
+            blocksPlayer);
+    const bool changed = FinishTopologyActionResult(result);
+    if (changed) {
+        RebuildSectorCollisionWorld();
+    }
+    return changed || result.status.empty();
 }
 
 void SectorEditor::ClearTransientTopologyEditStateAfterGeometryChange()
@@ -2494,14 +2486,18 @@ bool SectorEditor::DeleteSelectedLight()
 
 bool SectorEditor::DeleteLightById(int topologyLightId)
 {
-    if (FindSectorTopologyStaticLight(state.topologyMap, topologyLightId) == nullptr) {
-        ClearStaleTopologySelection();
-        statusText = "Select a topology light to delete.";
+    const bool hadLight = FindSectorTopologyStaticLight(state.topologyMap, topologyLightId) != nullptr;
+    const SectorEditorTopologyActionResult result = DeleteStaticLight(state.topologyMap, topologyLightId);
+    if (!result.changed) {
+        if (!hadLight) {
+            ClearStaleTopologySelection();
+        }
+        FinishTopologyActionResult(result);
         return false;
     }
 
-    if (!RemoveSectorTopologyStaticLight(state.topologyMap, topologyLightId)) {
-        statusText = "Failed to delete topology light.";
+    if (!hadLight) {
+        ClearStaleTopologySelection();
         return false;
     }
 
@@ -2514,36 +2510,28 @@ bool SectorEditor::DeleteLightById(int topologyLightId)
     if (state.lightDrag.topologyLightId == topologyLightId) {
         state.lightDrag = LightDragState{};
     }
-    MarkTopologyDocumentEdited(TextFormat("Deleted topology light %d", topologyLightId));
-    return true;
+    return FinishTopologyActionResult(result);
 }
 
 void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
 {
     const int sectorId = FindTopologySectorAt(mapPoint);
-    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sectorId);
-    if (sector == nullptr) {
-        statusText = "Light placement failed: click inside a sector";
+    const SectorEditorAddStaticLightResult result = AddStaticLightToSector(
+            state.topologyMap,
+            sectorId,
+            mapPoint);
+    if (!result.changed) {
+        if (!result.status.empty()) {
+            statusText = result.status;
+        }
         return;
     }
 
-    const int lightId = AllocateSectorTopologyStaticLightId(state.topologyMap);
-    if (!IsValidSectorTopologyId(lightId)) {
-        statusText = "Light placement failed: no topology light IDs available";
-        return;
-    }
-
-    SectorTopologyStaticPointLight light;
-    light.id = lightId;
-    light.position = Vector3{mapPoint.x, sector->floorZ + SectorWorldToAuthoringDistance(1.8f), mapPoint.y};
-    light.color = WHITE;
-    light.intensity = 1.0f;
-    light.radius = SectorWorldToAuthoringDistance(8.0f);
-    light.sourceRadius = SectorWorldToAuthoringDistance(0.25f);
-
-    state.topologyMap.staticLights.push_back(light);
-    SelectTopologyLight(lightId);
-    MarkTopologyDocumentEdited(TextFormat("Added topology light %d", lightId));
+    SelectTopologyLight(result.lightId);
+    SectorEditorTopologyActionResult finish;
+    finish.changed = true;
+    finish.status = result.status;
+    FinishTopologyActionResult(finish);
 }
 
 bool SectorEditor::BakeLightmaps()
@@ -4642,7 +4630,12 @@ void SectorEditor::DrawSectorsPanel(
 
     if (hasSelectedLight) {
         const SectorEditorLightInspectorCallbacks callbacks{
-                [this](const char* status) { MarkTopologyDocumentEdited(status); },
+                [this](const char* status) {
+                    SectorEditorTopologyActionResult result;
+                    result.changed = true;
+                    result.status = status == nullptr ? "" : status;
+                    FinishTopologyActionResult(result);
+                },
                 [this]() { return DeleteSelectedLight(); },
                 [this]() { return BakeLightmaps(); }
         };

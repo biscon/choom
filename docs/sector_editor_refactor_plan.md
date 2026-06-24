@@ -166,6 +166,8 @@ Verification:
 - `cmake --build cmake-build-debug -j2`: passed
 - `ctest --test-dir cmake-build-debug --output-on-failure`: passed
 - `git diff --check`: passed
+- `git diff --stat`: passed
+- `git status --short`: passed
 - Manual GUI verification: not performed
 
 Notes:
@@ -926,6 +928,29 @@ deferred, explicitly mark it deferred rather than incomplete.
 Introduce a small topology-action helper module and shared result/finish pattern
 only where it makes later mutation extractions clearer.
 
+### Status
+
+Completed as part of combined Phase 9A + Phase 9B pass: 2026-06-25
+
+Summary:
+- Introduced `SectorEditorTopologyActions.h/.cpp` only for the concrete Phase 9B
+  static-light and portal-blocking action wrappers.
+- Added a minimal `SectorEditorTopologyActionResult` with `changed` and
+  `status`, plus a narrow add-light payload carrying the new light ID.
+- Added `SectorEditor::FinishTopologyActionResult()` and used it immediately by
+  the Phase 9B callsites; Phase 9A was not implemented as a standalone
+  speculative abstraction pass.
+
+Verification:
+- See Phase 9B verification for the combined pass; build/tests/diff checks
+  passed.
+
+Notes:
+- Cache invalidation behavior: unchanged; successful wrapped actions still
+  finish through `MarkTopologyDocumentEdited()`.
+- Lightmap/source-hash behavior: unchanged.
+- Collision/gameplay behavior: unchanged.
+
 ### Files likely touched
 
 - `sources/sector_editor/SectorEditor.cpp`
@@ -1011,6 +1036,36 @@ Low-medium.
 
 Extract or wrap static-light mutations and portal player-blocking edits while
 preserving dirty/cache and collision rebuild behavior.
+
+### Status
+
+Completed: 2026-06-25
+
+Summary:
+- Wrapped static light add/delete/move completion and portal `Blocks Player`
+  mutation in `SectorEditorTopologyActions.h/.cpp`.
+- Routed static-light inspector edit completion through the shared topology
+  action finish path while keeping the inspector UI and field editing behavior
+  unchanged.
+- Kept `SectorEditor` responsible for selection cleanup, hover cleanup,
+  confirmation modal ownership, live drag rollback/cancel behavior, status text,
+  `MarkTopologyDocumentEdited()`, and `RebuildSectorCollisionWorld()` after
+  changed portal-blocking edits.
+
+Verification:
+- `cmake --build cmake-build-debug -j2`: passed
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed
+- `git diff --check`: passed
+- Manual GUI verification: not performed
+
+Notes:
+- Cache invalidation behavior: unchanged; successful light add/delete/move/edit
+  and changed portal blocking still call `MarkTopologyDocumentEdited()`, while
+  failed/unchanged paths do not newly invalidate the 2D topology render cache.
+- Lightmap/source-hash behavior: unchanged; static lights remain hash-affecting
+  through existing hash logic, and portal-blocking hash policy was not changed.
+- Collision/gameplay behavior: unchanged; static lights still do not affect
+  collision, and changed portal blocking still rebuilds `SectorCollisionWorld`.
 
 ### Files likely touched
 
