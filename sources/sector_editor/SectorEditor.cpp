@@ -1538,6 +1538,7 @@ void SectorEditor::RenderUI(
     }
     if (state.previewSettingsModal.open) {
         DrawPreviewSettingsModal(ui, config, input, assets, font);
+        DrawTexturePickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
