@@ -914,39 +914,450 @@ Deferred.
 Consolidate topology action wrappers that call backend topology edit functions
 and make dirty/cache/selection cleanup expectations explicit.
 
+Execute Phase 9 one subpass at a time, start each subpass in plan mode, and
+keep each subpass compiling/runnable independently. Do not mark Phase 9 complete
+until all Phase 9 subpasses that remain in scope are complete. If a subpass is
+deferred, explicitly mark it deferred rather than incomplete.
+
+## Phase 9A: Shared Topology Action Result / Finish Pattern
+
+### Goal
+
+Introduce a small topology-action helper module and shared result/finish pattern
+only where it makes later mutation extractions clearer.
+
 ### Files likely touched
 
 - `sources/sector_editor/SectorEditor.cpp`
-- `sources/sector_editor/SectorEditorTypes.h`
+- `sources/sector_editor/SectorEditor.h`
 - New files such as `SectorEditorTopologyActions.h/.cpp`
 
 ### Behavior that must remain unchanged
 
-- Vertex move, merge, dissolve.
-- Linedef split and split-at-point.
-- Sector create, insert, cut, delete, join.
-- Static light add/delete and edits.
-- Portal player-blocking edits and collision rebuild.
-- Selection after each action, status text, pending-tool cancellation, UI input
-  state reset, cache invalidation, and preview rebuild behavior.
+- No topology action behavior should change in this subpass.
+- Existing mutation paths must still call their current dirty/cache/selection
+  cleanup code.
+- Existing status text, pending-tool cancellation, UI input reset, preview
+  rebuild, and collision rebuild behavior must remain unchanged.
 
-### Implementation notes
+### Exact mutation paths likely affected
 
-- Do this after render cache, modals, inspectors, and material helpers are
-  smaller.
-- Do not add a command buffer or undo system.
-- Use backend topology functions already present in `SectorTopologyEdit.*` and
-  `SectorTopologyCreation.*`.
-- Each extracted mutation helper must either call `MarkTopologyDocumentEdited()`
-  or return a result requiring the caller to call it.
+- Shared action result structs and helper functions only.
+- Optional extraction of common post-mutation finish helpers, if the boundary is
+  explicit and behavior-preserving.
+
+### What stays in `SectorEditor.cpp`
+
+- All actual topology mutation call sites unless a tiny common finish helper is
+  moved safely.
+- All pending tool state machines, selection decisions, confirmation modals, UI
+  input resets, preview ownership, and collision-world ownership.
+
+### Cache invalidation notes
+
+- This subpass should not change cache invalidation behavior.
+- If a finish helper is introduced, it must preserve that topology-visible edits
+  invalidate through `MarkTopologyDocumentEdited()` /
+  `InvalidateTopologyRenderCache()`.
+
+### Lightmap/source-hash notes
+
+- This subpass must not change lightmap source-hash inputs.
+- Geometry, `ceilingSky`, materials/UVs, static lights, directional light, and
+  bake settings remain hash-affecting exactly as before.
+
+### Collision/gameplay notes
+
+- This subpass must not change collision, sector lookup, physics, preview pose,
+  or gameplay-preview behavior.
 
 ### Tests / verification
 
-- Standard build/test/diff commands.
-- Manually exercise every topology action: create sector, insert inside, move
-  vertex, merge vertices, split line, split line at point, cut sector, dissolve
-  vertex, delete sector, join sectors, add/delete/move light, and portal
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+Manual smoke tests are optional for Phase 9A if no mutation call sites move, but
+entering 2D mode and confirming existing selection/inspector UI still opens is
+useful.
+
+### Risk level
+
+Low-medium.
+
+### Non-goals
+
+- Do not move concrete mutation paths in this subpass unless the change is only
+  a common finish helper.
+- Do not add a command system, undo/redo, tool hierarchy, or topology semantic
+  changes.
+- Do not refactor pending tool state machines.
+
+### Final report expectations
+
+- State whether `SectorEditorTopologyActions.h/.cpp` was introduced and what
+  shared result/finish helpers were added.
+- State that cache invalidation behavior is unchanged, or audit any moved finish
+  helper explicitly.
+- State that lightmap/source-hash behavior did not change.
+- State that collision/gameplay behavior did not change.
+- Mention whether manual GUI verification was performed.
+
+## Phase 9B: Static Lights And Portal Blocking
+
+### Goal
+
+Extract or wrap static-light mutations and portal player-blocking edits while
+preserving dirty/cache and collision rebuild behavior.
+
+### Files likely touched
+
+- `sources/sector_editor/SectorEditor.cpp`
+- `sources/sector_editor/SectorEditor.h`
+- `sources/sector_editor/SectorEditorLightInspector.h/.cpp` only if callback
+  types need a narrow result/finish adjustment
+- `sources/sector_editor/SectorEditorTopologyActions.h/.cpp`
+
+### Behavior that must remain unchanged
+
+- Static light add/delete/edit/move behavior.
+- Static light selection, hover cleanup, drag rollback, and delete confirmation.
+- Portal `Blocks Player` validation and status text.
+- Collision-world rebuild after a changed portal `Blocks Player` flag.
+
+### Exact mutation paths likely affected
+
+- `AddStaticLightAt()`
+- `DeleteLightById()` and the delete confirmation callback path
+- `FinishLightDrag()` completion behavior
+- Static light inspector edit completion callback behavior
+- `SetLineDefBlocksPlayer()`
+
+### What stays in `SectorEditor.cpp`
+
+- Light drag update/cancel state machine and rollback of live drag edits.
+- Delete confirmation modal ownership.
+- Selection/hover state cleanup unless it becomes an explicit small finish step.
+- `RebuildSectorCollisionWorld()` ownership after portal-blocking changes.
+
+### Cache invalidation notes
+
+- Static light add/delete/move/edit must still call
+  `MarkTopologyDocumentEdited()` on successful changes.
+- Portal `Blocks Player` changes must still call `MarkTopologyDocumentEdited()`.
+- Failed or unchanged edits must not newly invalidate the 2D topology render
+  cache.
+
+### Lightmap/source-hash notes
+
+- Static lights remain lightmap source-hash inputs.
+- Portal `Blocks Player` behavior must not change lightmap source-hash policy
+  unless it already does so through existing serialized linedef fields.
+- Directional light, sky settings, materials, and bake settings are out of
+  scope for this subpass.
+
+### Collision/gameplay notes
+
+- Portal `Blocks Player` changes must still rebuild `SectorCollisionWorld`.
+- Static light edits must not change collision, sector lookup, physics, or
+  gameplay-preview behavior.
+
+### Tests / verification
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+Manual smoke tests:
+- Add a static light inside a sector.
+- Edit light position/color/intensity/radius/source radius.
+- Move a light and cancel a move.
+- Delete a selected light.
+- Toggle `Blocks Player` on a two-sided portal and verify Gameplay preview still
+  treats the portal according to the flag.
+
+### Risk level
+
+Medium.
+
+### Non-goals
+
+- Do not change static-light defaults, placement height, or validation.
+- Do not change lightmap baking, directional light, or preview lighting.
+- Do not add projectile/sight/monster blocking behavior.
+
+### Final report expectations
+
+- State which static-light and portal-blocking paths moved or were wrapped.
+- Include a cache invalidation audit for light add/delete/move/edit and portal
   blocking.
+- State source-hash behavior for static lights and portal blocking.
+- State whether collision/sector lookup/physics changed; expected answer is no
+  except that existing portal-blocking collision rebuild remains preserved.
+- Mention whether manual GUI verification was performed.
+
+## Phase 9C: Vertex Actions
+
+### Goal
+
+Extract backend mutation wrappers for topology vertex move, merge, and dissolve
+actions without moving pending/drag tool state machines.
+
+### Files likely touched
+
+- `sources/sector_editor/SectorEditor.cpp`
+- `sources/sector_editor/SectorEditor.h`
+- `sources/sector_editor/SectorEditorTopologyActions.h/.cpp`
+
+### Behavior that must remain unchanged
+
+- Vertex drag preview and cancel behavior.
+- Vertex move completion.
+- Drag-to-merge completion.
+- Pending `Merge Into...` commit.
+- `Dissolve Vertex` behavior and selection after dissolve.
+- Status text, hover state, inspected vertex state, selected linedef/vertex, and
+  UI input reset behavior.
+
+### Exact mutation paths likely affected
+
+- `FinishVertexDrag()` move branch.
+- `FinishVertexDrag()` merge branch.
+- `CommitPendingTopologyVertexMerge()`.
+- `DissolveSelectedTopologyVertex()`.
+
+### What stays in `SectorEditor.cpp`
+
+- `StartVertexDrag()`, `UpdateVertexDrag()`, `CancelVertexDrag()`.
+- Pending vertex merge start/update/cancel behavior.
+- Canvas input routing and hover/picking behavior.
+- Selection and UI reset orchestration unless wrapped as explicit finish code.
+
+### Cache invalidation notes
+
+- Successful vertex move, merge, and dissolve must still call
+  `MarkTopologyDocumentEdited()` and invalidate the 2D topology render cache.
+- Rejected, cancelled, or unchanged vertex actions must not newly invalidate.
+
+### Lightmap/source-hash notes
+
+- Vertex geometry remains a lightmap source-hash input.
+- Vertex actions that change geometry must continue to make existing baked
+  lightmap metadata stale through the unchanged source-hash calculation.
+- No material, static-light, directional-light, sky, or bake-setting hash policy
+  changes are in scope.
+
+### Collision/gameplay notes
+
+- This cleanup subpass must not change collision, sector lookup, physics, or
+  gameplay-preview behavior.
+- Do not add collision rebuild behavior unless it already exists for the moved
+  path.
+
+### Tests / verification
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+Manual smoke tests:
+- Move a topology vertex successfully.
+- Cancel a vertex drag.
+- Drag-merge one vertex into another valid target.
+- Use `Merge Into...` and cancel/commit.
+- Dissolve a simple degree-2 vertex and verify replacement linedef selection.
+
+### Risk level
+
+Medium-high.
+
+### Non-goals
+
+- Do not change vertex merge/dissolve validation semantics.
+- Do not add standalone vertex deletion.
+- Do not refactor canvas input or pending tool state machines.
+
+### Final report expectations
+
+- State which vertex action wrappers moved.
+- Include a cache invalidation audit for move, merge, and dissolve.
+- State that vertex geometry source-hash behavior is unchanged.
+- State whether collision/sector lookup/physics changed; expected answer is no.
+- Mention whether manual GUI verification was performed.
+
+## Phase 9D: Linedef Actions
+
+### Goal
+
+Extract backend mutation wrappers for linedef split actions while keeping
+split-at-point pending input state in `SectorEditor.cpp`.
+
+### Files likely touched
+
+- `sources/sector_editor/SectorEditor.cpp`
+- `sources/sector_editor/SectorEditor.h`
+- `sources/sector_editor/SectorEditorTopologyActions.h/.cpp`
+
+### Behavior that must remain unchanged
+
+- `Split Linedef` midpoint split behavior.
+- `Split At Point` target validation, candidate preview, cancel behavior, and
+  commit behavior.
+- Selection after split, wall-part preservation, status text, hover cleanup, 3D
+  surface selection reset, UV input reset, cache invalidation, and preview
+  behavior.
+
+### Exact mutation paths likely affected
+
+- `SplitSelectedTopologyLineDef()`.
+- `CommitPendingTopologyLineSplitAtPoint()`.
+
+### What stays in `SectorEditor.cpp`
+
+- `StartPendingTopologyLineSplitAtPoint()`.
+- `CancelPendingTopologyLineSplitAtPoint()`.
+- `ValidatePendingTopologyLineSplitAtPointTarget()`.
+- `UpdatePendingTopologyLineSplitAtPoint()`.
+- Canvas input routing, candidate picking, and overlay drawing.
+- Selection/UI reset orchestration unless wrapped as explicit finish code.
+
+### Cache invalidation notes
+
+- Successful linedef splits must still call `MarkTopologyDocumentEdited()` and
+  invalidate the 2D topology render cache.
+- Rejected, cancelled, or unchanged split attempts must not newly invalidate.
+
+### Lightmap/source-hash notes
+
+- Linedef, sidedef, vertex, and geometry changes remain lightmap source-hash
+  inputs.
+- Split actions must not change material/UV transfer behavior or middle texture
+  lightmap receiver behavior.
+
+### Collision/gameplay notes
+
+- This cleanup subpass must not change collision, sector lookup, physics, or
+  gameplay-preview behavior.
+- Do not introduce new collision rebuild behavior unless it already exists for
+  the moved path.
+
+### Tests / verification
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+Manual smoke tests:
+- Split a selected linedef at its midpoint.
+- Split a selected sidedef and verify the second sidedef/line selection.
+- Start `Split At Point`, cancel it, then commit a valid interior split point.
+- Try endpoint/already-occupied invalid split-at-point targets and verify
+  rejection without mutation.
+
+### Risk level
+
+Medium-high.
+
+### Non-goals
+
+- Do not change split validation, midpoint calculation, or exact-coordinate
+  rules.
+- Do not add arbitrary line cutting or automatic overlap splitting.
+- Do not include sector join in this subpass unless a later audit finds it is
+  clearly safer here than Phase 9E.
+
+### Final report expectations
+
+- State which linedef split paths moved.
+- Include a cache invalidation audit for midpoint split and split-at-point.
+- State source-hash behavior for split geometry/material transfer.
+- State whether collision/sector lookup/physics changed; expected answer is no.
+- Mention whether manual GUI verification was performed.
+
+## Phase 9E: Sector Actions
+
+### Goal
+
+Extract backend mutation wrappers for sector create, insert-inside, cut, delete,
+and join actions while preserving editor-owned tool and modal orchestration.
+
+### Files likely touched
+
+- `sources/sector_editor/SectorEditor.cpp`
+- `sources/sector_editor/SectorEditor.h`
+- `sources/sector_editor/SectorEditorSectorInspector.h/.cpp` only if callback
+  types need a narrow result/finish adjustment
+- `sources/sector_editor/SectorEditorTopologyActions.h/.cpp`
+
+### Behavior that must remain unchanged
+
+- Sector creation and inserted-sector creation.
+- Sector cut preview/commit behavior.
+- Sector delete confirmation and transactional deletion behavior.
+- Join Sectors behavior from selected portal/sidedef.
+- Selection after each action, pending tool cancellation, status text, UI input
+  reset, topology warning cleanup, cache invalidation, and preview behavior.
+
+### Exact mutation paths likely affected
+
+- `FinalizePendingSector()` create and insert-inside branches.
+- `CommitPendingTopologySectorCut()`.
+- `DeleteSelectedTopologySectorConfirmed()`.
+- `JoinSelectedTopologySectors()`.
+
+### What stays in `SectorEditor.cpp`
+
+- Pending sector draw state, point validation, close/cancel controls, and insert
+  setup.
+- Pending sector cut start/update/cancel and preview cache.
+- Delete confirmation modal ownership.
+- Inspector button routing.
+- Selection/UI reset orchestration unless wrapped as explicit finish code.
+
+### Cache invalidation notes
+
+- Successful create, insert-inside, cut, delete, and join actions must still
+  call `MarkTopologyDocumentEdited()` and invalidate the 2D topology render
+  cache.
+- Rejected, cancelled, preview-only, or unchanged sector actions must not newly
+  invalidate.
+
+### Lightmap/source-hash notes
+
+- Sector topology, sidedefs, linedefs, vertices, sector heights, materials/UVs,
+  ambient settings, and `ceilingSky` remain lightmap source-hash inputs.
+- Sector actions must not change sky visual settings, directional light, static
+  lights, bake settings, or installed baked-lightmap metadata behavior.
+
+### Collision/gameplay notes
+
+- This cleanup subpass must not change collision, sector lookup, physics, or
+  gameplay-preview behavior.
+- Do not introduce generated-render-triangle collision or alter
+  `SectorCollisionWorld` behavior.
+
+### Tests / verification
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+Manual smoke tests:
+- Create a sector.
+- Insert a sector inside a selected parent sector.
+- Cut a selected sector and verify both valid and rejected endpoints.
+- Delete a selected sector through confirmation.
+- Join adjacent sectors through a selected two-sided portal.
 
 ### Risk level
 
@@ -954,16 +1365,31 @@ High.
 
 ### Non-goals
 
-- No command system, undo/redo, tool hierarchy, or topology semantic changes.
-- Do not refactor pending tool state machines in the same phase.
+- Do not change sector creation, insertion, cut, delete, or join validation
+  semantics.
+- Do not change topology schema or serialization style.
+- Do not refactor pending sector/cut state machines.
+- Do not add undo/redo or a command system.
 
 ### Final report expectations
 
-- Include a cache invalidation audit for every moved mutation path.
-- Mention source-hash behavior for geometry, `ceilingSky`, materials, static
-  lights, directional light, and bake settings if any are touched.
-- State whether collision/sector lookup/physics changed; expected answer is no
-  unless a specific collision bugfix was scoped.
+- State which sector action wrappers moved.
+- Include a cache invalidation audit for create, insert-inside, cut, delete, and
+  join.
+- State source-hash behavior for sector geometry, `ceilingSky`, materials, and
+  bake relevance.
+- State whether collision/sector lookup/physics changed; expected answer is no.
+- Mention whether manual GUI verification was performed.
+
+### Overall Phase 9 Final Report Expectations
+
+- Do not report Phase 9 complete until all non-deferred Phase 9 subpasses are
+  complete.
+- If Phase 9 is completed across subpasses, add the required Phase Execution
+  Tracking status block under Phase 9 with concise summary, verification
+  results, and cache/hash/collision notes.
+- If any Phase 9 subpass is deferred or partial, mark that subpass explicitly
+  rather than implying the whole phase is complete.
 
 ## Deferred / Do Not Do Yet
 
