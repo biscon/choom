@@ -88,18 +88,9 @@ private:
     void DrawGrid() const;
     void InvalidateTopologyRenderCache();
     void EnsureTopologyRenderCache();
-    void RebuildTopologyRenderCache();
     void DrawTopologyDocument();
-    void DrawCachedTopologySector(
-            const CachedTopologySectorDraw& sector,
-            Color fill,
-            Color outline,
-            float outlineThickness = 2.0f) const;
     void DrawTopologySelectedLineHighlight() const;
-    void DrawTopologyLineDefs() const;
-    void DrawTopologyVertices() const;
     void DrawTopologySnapCrosshair() const;
-    void DrawStaticLights() const;
     void DrawPendingSector() const;
     void DrawVertexMoveOverlay() const;
     void DrawPendingTopologyVertexMerge() const;
