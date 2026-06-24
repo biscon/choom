@@ -285,6 +285,26 @@ Low-medium.
 Move texture picker and add-map-texture modal UI/actions into focused modal
 helpers.
 
+### Status
+
+Completed: 2026-06-24
+
+Summary:
+- Moved texture picker and add-map-texture modal UI/state helpers into `SectorEditorTextureModals.h/.cpp`.
+- Preserved picker target behavior, add/update texture behavior, preview texture scope handling, and modal input handling.
+- Build/tests passed.
+
+Verification:
+- `cmake --build cmake-build-debug -j2`: passed
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed
+- `git diff --check`: passed
+- Manual GUI verification: not performed
+
+Notes:
+- Cache invalidation behavior: unchanged; texture registry edits still mark dirty/unsaved and refresh texture assets without invalidating the 2D topology render cache.
+- Lightmap/source-hash behavior: unchanged; referenced texture definitions remain hash-affecting as before.
+- Collision/gameplay behavior: unchanged.
+
 ### Files likely touched
 
 - `sources/sector_editor/SectorEditor.cpp`
