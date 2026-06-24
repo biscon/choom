@@ -842,12 +842,12 @@ Medium-high.
 - State no source-hash behavior changed unless preview settings, sky,
   directional light, or lightmap settings were touched.
 
-## Phase 8C: Extract Gameplay Preview Update Helpers, if still useful
+## Phase 8C: Deferred - Gameplay Preview Update Helpers
 
 ### Goal
 
-After Phase 8B, extract gameplay preview update helpers only if a clear,
-low-risk seam remains.
+Deferred after audit: gameplay preview update helper extraction does not
+currently have a clear, low-risk seam.
 
 ### Files likely touched
 
@@ -863,16 +863,14 @@ low-risk seam remains.
 
 ### Implementation notes
 
-- Only do this after Phase 8B if there is still a clear, low-risk seam.
-- Candidate helpers include preview hotkey handling, gameplay controller input
-  collection, and the gameplay movement / vertical / headbob / landing-dip
-  update block.
+- Do not extract this phase at this time.
+- Earlier audit found the candidate preview hotkey handling, gameplay controller
+  input collection, and gameplay movement / vertical / headbob / landing-dip
+  update block too intertwined to move safely as a cleanup-only subpass.
 - Preserve visual-only behavior: step smoothing, headbob, and landing dip must
   not feed collision, sector lookup, physics, or stored feet/body position.
 - Preserve `SectorCollisionWorld` topology collision.
 - Do not use generated render triangles for gameplay collision.
-- If this looks risky or unclear, leave it deferred and explicitly mark Phase 8C
-  deferred rather than incomplete.
 
 ### Cache invalidation notes
 
@@ -890,9 +888,9 @@ low-risk seam remains.
   smoothing, headbob, landing dip, and no-sector fallback behavior must remain
   unchanged.
 
-### Risk level
+### Status
 
-Medium-high; defer if the seam is not obvious.
+Deferred.
 
 ### Non-goals
 
@@ -904,8 +902,7 @@ Medium-high; defer if the seam is not obvious.
 
 ### Final report expectations
 
-- State whether Phase 8C was completed or explicitly deferred.
-- If completed, state which gameplay update helpers moved.
+- State that Phase 8C was explicitly deferred.
 - State whether collision/sector lookup/physics changed; expected answer is no.
 - State cache invalidation behavior; expected answer is unchanged.
 - State that lightmap/source-hash behavior did not change.
