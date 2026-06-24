@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdint>
+#include <filesystem>
 #include <string>
 
 namespace {
@@ -235,6 +237,55 @@ int CountValidChartsForSurface(
     return count;
 }
 
+struct LightmapImageMetrics {
+    int maxRgb = 0;
+    double averageRgb = 0.0;
+    unsigned char minAlpha = 255;
+    int staticLightCount = 0;
+    long long directShadowRays = 0;
+};
+
+LightmapImageMetrics BakeAndMeasure(game::SectorTopologyMap map, const char* fileName)
+{
+    game::SectorLightmapLayout layout;
+    std::string error;
+    Check(game::BuildSectorLightmapLayout(map, layout, error), "metric lightmap layout builds");
+
+    const std::filesystem::path path = std::filesystem::temp_directory_path() / fileName;
+    game::SectorLightmapBakeResult result;
+    Check(game::BakeSectorLightmap(map, layout, path.string().c_str(), result, error),
+          "metric lightmap bake succeeds");
+    LightmapImageMetrics metrics;
+    metrics.staticLightCount = result.staticLightCount;
+    metrics.directShadowRays = result.directShadowRays;
+
+    Image image = LoadImage(path.string().c_str());
+    Check(image.data != nullptr, "metric lightmap image loads");
+    if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
+        return metrics;
+    }
+
+    Color* colors = LoadImageColors(image);
+    Check(colors != nullptr, "metric lightmap colors load");
+    if (colors != nullptr) {
+        uint64_t rgbSum = 0;
+        const int pixelCount = image.width * image.height;
+        for (int i = 0; i < pixelCount; ++i) {
+            const Color color = colors[i];
+            const int rgb = static_cast<int>(color.r) + static_cast<int>(color.g) + static_cast<int>(color.b);
+            metrics.maxRgb = std::max(metrics.maxRgb, rgb);
+            rgbSum += static_cast<uint64_t>(rgb);
+            metrics.minAlpha = std::min(metrics.minAlpha, color.a);
+        }
+        metrics.averageRgb = static_cast<double>(rgbSum) / static_cast<double>(pixelCount);
+        UnloadImageColors(colors);
+    }
+    UnloadImage(image);
+    std::error_code removeError;
+    std::filesystem::remove(path, removeError);
+    return metrics;
+}
+
 void TestSourceHashChanges()
 {
     const game::SectorTopologyMap base = MakeSquare();
@@ -270,6 +321,27 @@ void TestSourceHashChanges()
     changedLight = base;
     changedLight.staticLights[0].color.r = 64;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) != hash, "hash changes when light color changes");
+
+    game::SectorTopologyMap changedDirectional = base;
+    changedDirectional.directionalLight.enabled = true;
+    Check(game::ComputeSectorLightmapSourceHash(changedDirectional) != hash,
+          "hash changes when directional light enabled changes");
+    const std::string directionalHash = game::ComputeSectorLightmapSourceHash(changedDirectional);
+    changedDirectional = base;
+    changedDirectional.directionalLight.enabled = true;
+    changedDirectional.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
+    Check(game::ComputeSectorLightmapSourceHash(changedDirectional) != directionalHash,
+          "hash changes when directional light direction changes");
+    changedDirectional = base;
+    changedDirectional.directionalLight.enabled = true;
+    changedDirectional.directionalLight.color.r = 128;
+    Check(game::ComputeSectorLightmapSourceHash(changedDirectional) != directionalHash,
+          "hash changes when directional light color changes");
+    changedDirectional = base;
+    changedDirectional.directionalLight.enabled = true;
+    changedDirectional.directionalLight.intensity = 2.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedDirectional) != directionalHash,
+          "hash changes when directional light intensity changes");
 
     game::SectorTopologyMap changedPreview = base;
     changedPreview.previewSettings.gravity = 99.0f;
@@ -462,6 +534,85 @@ void TestMiddleSurfacesReceiveLightmapsWithoutOccluding()
           "middle receiver charts contribute to baked lightmap texels");
 }
 
+void TestDirectionalLightBakeBehavior()
+{
+    game::SectorTopologyMap disabled = MakeSquare();
+    disabled.staticLights.clear();
+    disabled.sectors[0].ceilingSky = true;
+    disabled.directionalLight.enabled = false;
+    const LightmapImageMetrics disabledMetrics =
+            BakeAndMeasure(disabled, "sector_directional_disabled_lightmap_test.png");
+    Check(disabledMetrics.maxRgb == 0, "disabled directional light preserves black no-light baseline");
+
+    game::SectorTopologyMap outdoor = disabled;
+    outdoor.directionalLight.enabled = true;
+    outdoor.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
+    outdoor.directionalLight.color = WHITE;
+    outdoor.directionalLight.intensity = 1.0f;
+    const LightmapImageMetrics outdoorMetrics =
+            BakeAndMeasure(outdoor, "sector_directional_outdoor_lightmap_test.png");
+    Check(outdoorMetrics.maxRgb > disabledMetrics.maxRgb + 100,
+          "unoccluded outdoor sky-sector sample facing directional light is brighter");
+
+    game::SectorTopologyMap indoor = outdoor;
+    indoor.sectors[0].ceilingSky = false;
+    const LightmapImageMetrics indoorMetrics =
+            BakeAndMeasure(indoor, "sector_directional_indoor_lightmap_test.png");
+    Check(indoorMetrics.maxRgb == 0, "indoor non-sky sample receives no directional contribution");
+
+    game::SectorTopologyMap backFacing = outdoor;
+    backFacing.directionalLight.directionToLight = Vector3{0.0f, -1.0f, 0.0f};
+    const LightmapImageMetrics backFacingMetrics =
+            BakeAndMeasure(backFacing, "sector_directional_back_facing_lightmap_test.png");
+    Check(backFacingMetrics.maxRgb == 0, "back-facing sample receives no directional contribution");
+
+    game::SectorTopologyMap shadowed = MakePlatform();
+    shadowed.staticLights.clear();
+    for (game::SectorTopologySector& sector : shadowed.sectors) {
+        sector.ceilingSky = true;
+    }
+    shadowed.directionalLight.enabled = true;
+    shadowed.directionalLight.directionToLight = Vector3{0.45f, 0.75f, 0.0f};
+    shadowed.directionalLight.color = WHITE;
+    shadowed.directionalLight.intensity = 1.0f;
+    const LightmapImageMetrics shadowedMetrics =
+            BakeAndMeasure(shadowed, "sector_directional_shadowed_lightmap_test.png");
+    Check(shadowedMetrics.averageRgb < outdoorMetrics.averageRgb,
+          "outdoor sample shadowed by solid geometry is darker on average than unshadowed outdoor sample");
+
+    game::SectorTopologyMap pointLight = MakeSquare();
+    pointLight.staticLights.clear();
+    const Vector3 lightPositions[] = {
+            Vector3{32.0f, 12.0f, 32.0f},
+            Vector3{32.0f, -24.0f, 32.0f},
+            Vector3{32.0f, 48.0f, 32.0f},
+            Vector3{-24.0f, 12.0f, 32.0f},
+            Vector3{88.0f, 12.0f, 32.0f},
+            Vector3{32.0f, 12.0f, -24.0f},
+            Vector3{32.0f, 12.0f, 88.0f}
+    };
+    int lightId = 1;
+    for (Vector3 position : lightPositions) {
+        pointLight.staticLights.push_back(game::SectorTopologyStaticPointLight{
+                lightId++,
+                position,
+                WHITE,
+                8.0f,
+                256.0f,
+                0.0f
+        });
+    }
+    pointLight.directionalLight.enabled = true;
+    pointLight.directionalLight.intensity = 0.0f;
+    pointLight.directionalLight.directionToLight = Vector3{0.0f, -1.0f, 0.0f};
+    const LightmapImageMetrics pointMetrics =
+            BakeAndMeasure(pointLight, "sector_directional_point_light_lightmap_test.png");
+    Check(pointMetrics.staticLightCount == static_cast<int>(pointLight.staticLights.size())
+                  && pointMetrics.directShadowRays > 0,
+          "point lights are still evaluated with directional settings present");
+    Check(pointMetrics.minAlpha < 255, "ambient occlusion alpha behavior remains present");
+}
+
 } // namespace
 
 int main()
@@ -472,6 +623,7 @@ int main()
     TestLogicalSelfComparison();
     TestLayoutSmoke();
     TestMiddleSurfacesReceiveLightmapsWithoutOccluding();
+    TestDirectionalLightBakeBehavior();
 
     if (failures != 0) {
         std::fprintf(stderr, "%d sector topology lightmap test(s) failed\n", failures);

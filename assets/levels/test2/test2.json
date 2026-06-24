@@ -10136,10 +10136,25 @@
       "a": 255
     }
   },
+  "directionalLight": {
+    "enabled": true,
+    "directionToLight": [
+      -0.38533732295036316,
+      0.8807710409164429,
+      -0.275240957736969
+    ],
+    "color": {
+      "r": 255,
+      "g": 244,
+      "b": 214,
+      "a": 255
+    },
+    "intensity": 1.0
+  },
   "bakedLightmap": {
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "2b483967c5e6ddef"
+    "sourceHash": "6a56405edd4450de"
   }
 }

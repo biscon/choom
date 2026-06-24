@@ -568,8 +568,8 @@ assigned.
 
 ## Baked Lightmaps
 
-`Bake Lightmaps` uses topology generated geometry and topology static lights. It
-writes the PNG to:
+`Bake Lightmaps` uses topology generated geometry, topology static lights, and
+the optional map-level outdoor directional light. It writes the PNG to:
 
 ```text
 assets/levels/<level_name>/<level_name>.lightmap.png
@@ -578,6 +578,14 @@ assets/levels/<level_name>/<level_name>.lightmap.png
 The topology JSON stores bake settings in `lightmapSettings` and installed bake
 metadata in `bakedLightmap`. Bake settings include ambient occlusion radius and
 strength, plus indirect bounce radius and strength.
+
+`Preview Settings -> Lighting` edits the map-level outdoor directional light.
+Its `directionToLight` vector points from the shaded surface toward the light
+source. The light contributes only to baked lightmap samples whose generated
+surface owner resolves to a topology sector with `ceilingSky == true`. It uses
+the bake BVH for baked shadows. Static point lights and ambient occlusion still
+work normally, and no runtime shadowmaps or dynamic runtime directional lighting
+are added.
 
 The bake runs asynchronously with progress and cancellation. It writes to a
 temporary output first. When the worker finishes, the main thread installs the
@@ -589,9 +597,11 @@ The source hash is deterministic over the topology lightmap bake version
 (`7`), atlas and sample constants, coordinate subdivision value, map texture
 definitions referenced by baked surface fields, vertex/linedef/sidedef/sector
 IDs and geometry, sector and sidedef texture and UV fields, static lights, and
-bake settings. Middle texture receiver data is included because it affects
-lightmap chart layout. The hash does not include the installed baked-lightmap
-metadata itself.
+bake settings. Directional light enabled state, normalized direction, RGB color,
+and intensity are included, so directional changes invalidate baked lightmaps.
+Middle texture receiver data is included because it affects lightmap chart
+layout. Sky visual settings do not invalidate baked lightmaps. The hash does not
+include the installed baked-lightmap metadata itself.
 
 The baked PNG stores direct static-light contribution and one-bounce indirect
 light in RGB, and ambient occlusion in alpha. 3D Mode uses a baked atlas only
