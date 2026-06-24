@@ -738,6 +738,106 @@ void TestSkySettingsRoundTripAndValidation()
     ExpectRejected(invalid, "wrong-type sky top color is rejected");
 }
 
+void TestDirectionalLightRoundTripAndValidation()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.directionalLight.enabled = true;
+    original.directionalLight.directionToLight = Vector3{0.0f, 2.0f, 0.0f};
+    original.directionalLight.color = Color{12, 34, 56, 128};
+    original.directionalLight.intensity = 1.75f;
+
+    const std::string text = SaveText(original);
+    const Json saved = Json::parse(text);
+    Check(saved["directionalLight"].is_object(), "non-default directional light is written");
+    Check(saved["directionalLight"]["enabled"].get<bool>()
+                  && Near(saved["directionalLight"]["directionToLight"][0].get<float>(), 0.0f)
+                  && Near(saved["directionalLight"]["directionToLight"][1].get<float>(), 1.0f)
+                  && Near(saved["directionalLight"]["directionToLight"][2].get<float>(), 0.0f)
+                  && saved["directionalLight"]["color"]["r"].get<int>() == 12
+                  && saved["directionalLight"]["color"]["g"].get<int>() == 34
+                  && saved["directionalLight"]["color"]["b"].get<int>() == 56
+                  && saved["directionalLight"]["color"]["a"].get<int>() == 255
+                  && Near(saved["directionalLight"]["intensity"].get<float>(), 1.75f),
+          "directional light values are serialized normalized");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "directional light JSON loads");
+    Check(loaded.directionalLight.enabled
+                  && Near(loaded.directionalLight.directionToLight, Vector3{0.0f, 1.0f, 0.0f})
+                  && loaded.directionalLight.color.r == 12
+                  && loaded.directionalLight.color.g == 34
+                  && loaded.directionalLight.color.b == 56
+                  && loaded.directionalLight.color.a == 255
+                  && Near(loaded.directionalLight.intensity, 1.75f),
+          "directional light round-trips");
+
+    Json missingFields = saved;
+    missingFields["directionalLight"].erase("enabled");
+    missingFields["directionalLight"].erase("directionToLight");
+    missingFields["directionalLight"].erase("color");
+    missingFields["directionalLight"].erase("intensity");
+    Check(LoadText(missingFields.dump(), loaded, error), "omitted directional light fields are accepted");
+    const game::SectorTopologyDirectionalLightSettings defaults =
+            game::DefaultSectorTopologyDirectionalLightSettings();
+    Check(loaded.directionalLight.enabled == defaults.enabled
+                  && Near(loaded.directionalLight.directionToLight, defaults.directionToLight)
+                  && loaded.directionalLight.color.r == defaults.color.r
+                  && Near(loaded.directionalLight.intensity, defaults.intensity),
+          "omitted directional light fields load defaults");
+
+    Json partialColor = saved;
+    partialColor["directionalLight"]["color"].erase("g");
+    Check(LoadText(partialColor.dump(), loaded, error), "omitted directional color channel is accepted");
+    Check(loaded.directionalLight.color.r == 12
+                  && loaded.directionalLight.color.g == defaults.color.g
+                  && loaded.directionalLight.color.a == 255,
+          "omitted directional color channel loads default and alpha normalizes");
+
+    Json withoutDirectionalLight = saved;
+    withoutDirectionalLight.erase("directionalLight");
+    Check(LoadText(withoutDirectionalLight.dump(), loaded, error),
+          "omitted directional light field is accepted");
+    Check(!loaded.directionalLight.enabled
+                  && Near(loaded.directionalLight.directionToLight, defaults.directionToLight)
+                  && loaded.directionalLight.color.a == 255,
+          "omitted directional light loads defaults");
+
+    SectorTopologyMap defaultMap = MakeSquare();
+    const Json defaultSaved = Json::parse(SaveText(defaultMap));
+    Check(!defaultSaved.contains("directionalLight"), "default directional light is omitted");
+
+    Json zeroDirection = saved;
+    zeroDirection["directionalLight"]["directionToLight"] = Json::array({0.0f, 0.0f, 0.0f});
+    Check(LoadText(zeroDirection.dump(), loaded, error), "zero directional light vector loads");
+    Check(Near(loaded.directionalLight.directionToLight, defaults.directionToLight),
+          "zero directional light vector falls back to default");
+
+    Json negativeIntensity = saved;
+    negativeIntensity["directionalLight"]["intensity"] = -2.0f;
+    Check(LoadText(negativeIntensity.dump(), loaded, error), "negative directional intensity loads");
+    Check(Near(loaded.directionalLight.intensity, 0.0f), "negative directional intensity clamps to zero");
+
+    Json invalid = saved;
+    invalid["directionalLight"] = 4;
+    ExpectRejected(invalid, "non-object directional light is rejected");
+    invalid = saved;
+    invalid["directionalLight"]["enabled"] = "yes";
+    ExpectRejected(invalid, "wrong-type directional enabled is rejected");
+    invalid = saved;
+    invalid["directionalLight"]["directionToLight"] = Json::array({1, 2});
+    ExpectRejected(invalid, "wrong-type directional vector is rejected");
+    invalid = saved;
+    invalid["directionalLight"]["color"] = Json::array({1, 2, 3});
+    ExpectRejected(invalid, "wrong-type directional color is rejected");
+    invalid = saved;
+    invalid["directionalLight"]["color"]["r"] = "red";
+    ExpectRejected(invalid, "wrong-type directional color channel is rejected");
+    invalid = saved;
+    invalid["directionalLight"]["intensity"] = "bright";
+    ExpectRejected(invalid, "wrong-type directional intensity is rejected");
+}
+
 void TestDecalDefaultsAndOmission()
 {
     SectorTopologyMap map = MakeSquare();
@@ -1488,6 +1588,7 @@ int main()
     TestLightmapMetadataRoundTrip();
     TestPreviewSettingsRoundTripAndValidation();
     TestSkySettingsRoundTripAndValidation();
+    TestDirectionalLightRoundTripAndValidation();
     TestDecalDefaultsAndOmission();
     TestMiddleDefaultsAndOmission();
     TestMiddleRoundTrip();

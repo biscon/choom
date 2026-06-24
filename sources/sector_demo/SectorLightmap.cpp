@@ -111,6 +111,13 @@ struct BakeRayStats {
     SectorLightmapRaycastStats indirectBounce;
 };
 
+struct LightmapWorldDirectionalLight {
+    bool enabled = false;
+    Vector3 directionToLight = {};
+    Color color = WHITE;
+    float intensity = 0.0f;
+};
+
 constexpr float BakeEpsilon = 0.0001f;
 constexpr float RayOriginEpsilon = 0.01f;
 constexpr float RayHitEpsilon = 0.001f;
@@ -282,6 +289,16 @@ bool RayIntersectsTriangle(Vector3 origin, Vector3 direction, const BakeTriangle
 bool IsFinite(Vector3 value)
 {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+float BvhSceneDiagonalWithMargin(const SectorLightmapBvh& bvh)
+{
+    if (bvh.nodes.empty()) {
+        return 0.0f;
+    }
+    const BakeAabb& bounds = bvh.nodes.front().bounds;
+    const Vector3 extent = Vector3Subtract(bounds.max, bounds.min);
+    return std::max(0.0f, Vector3Length(extent) + RayOriginEpsilon * 4.0f);
 }
 
 BakeAabb EmptyAabb()
@@ -879,6 +896,81 @@ Vector3 EvaluateDirectLight(
     return Vector3Scale(direct, 1.0f / static_cast<float>(kDirectSoftShadowSampleCount));
 }
 
+bool IsSkyOwnedLightmapSurface(
+        const SectorTopologyMap& map,
+        const SectorGeneratedSurfaceRef& surfaceRef)
+{
+    const SectorTopologySector* sector = FindSectorTopologySector(map, surfaceRef.topologySectorId);
+    return sector != nullptr && sector->ceilingSky;
+}
+
+bool IsDirectionOccluded(
+        Vector3 position,
+        Vector3 normal,
+        Vector3 directionToLight,
+        float maxDistance,
+        const SectorGeneratedSurfaceRef& sourceSurfaceRef,
+        int sourceSurfaceIndex,
+        int sourceTriangleIndex,
+        const SectorLightmapBvh& bvh,
+        const std::vector<BakeTriangle>& triangles,
+        BakeRayStats& stats)
+{
+    if (maxDistance <= RayHitEpsilon || bvh.nodes.empty()) {
+        return false;
+    }
+    const Vector3 origin = Vector3Add(position, Vector3Scale(normal, RayOriginEpsilon));
+    return RaycastBakeTrianglesAnyHit(
+            bvh,
+            triangles,
+            Ray{origin, directionToLight},
+            maxDistance,
+            sourceSurfaceRef,
+            sourceSurfaceIndex,
+            sourceTriangleIndex,
+            &stats.directHardShadow
+    );
+}
+
+Vector3 EvaluateDirectionalLight(
+        const LightmapWorldDirectionalLight& light,
+        const RasterHit& hit,
+        const SectorGeneratedSurfaceRef& surfaceRef,
+        int surfaceIndex,
+        float shadowMaxDistance,
+        const SectorLightmapBvh& bvh,
+        const std::vector<BakeTriangle>& triangles,
+        BakeRayStats& stats)
+{
+    if (!light.enabled || light.intensity <= 0.0f) {
+        return Vector3{};
+    }
+    const float lambert = std::max(Vector3DotProduct(hit.normal, light.directionToLight), 0.0f);
+    if (lambert <= 0.0f) {
+        return Vector3{};
+    }
+    if (IsDirectionOccluded(
+                hit.position,
+                hit.normal,
+                light.directionToLight,
+                shadowMaxDistance,
+                surfaceRef,
+                surfaceIndex,
+                hit.triangleIndex,
+                bvh,
+                triangles,
+                stats)) {
+        return Vector3{};
+    }
+
+    const float scale = light.intensity * lambert;
+    return Vector3{
+            (static_cast<float>(light.color.r) / 255.0f) * scale,
+            (static_cast<float>(light.color.g) / 255.0f) * scale,
+            (static_cast<float>(light.color.b) / 255.0f) * scale
+    };
+}
+
 LightmapWorldPointLight MakeWorldSpaceLight(const SectorTopologyStaticPointLight& authoringLight)
 {
     LightmapWorldPointLight light;
@@ -887,6 +979,19 @@ LightmapWorldPointLight MakeWorldSpaceLight(const SectorTopologyStaticPointLight
     light.intensity = authoringLight.intensity;
     light.radius = SectorAuthoringToWorldDistance(authoringLight.radius);
     light.sourceRadius = SectorAuthoringToWorldDistance(authoringLight.sourceRadius);
+    return light;
+}
+
+LightmapWorldDirectionalLight MakeWorldSpaceDirectionalLight(
+        const SectorTopologyDirectionalLightSettings& authoringLight)
+{
+    const SectorTopologyDirectionalLightSettings normalized =
+            NormalizeSectorTopologyDirectionalLightSettings(authoringLight);
+    LightmapWorldDirectionalLight light;
+    light.enabled = normalized.enabled;
+    light.directionToLight = normalized.directionToLight;
+    light.color = normalized.color;
+    light.intensity = normalized.intensity;
     return light;
 }
 
@@ -1279,6 +1384,20 @@ void FnvAppendLightmapBakeConstantsAndSettings(
     FnvAppendFloat(hash, std::clamp(settings.indirectBounceStrength, 0.0f, 1.0f));
 }
 
+void FnvAppendDirectionalLightSettings(
+        uint64_t& hash,
+        const SectorTopologyDirectionalLightSettings& settings)
+{
+    const SectorTopologyDirectionalLightSettings normalized =
+            NormalizeSectorTopologyDirectionalLightSettings(settings);
+    FnvAppendInt(hash, normalized.enabled ? 1 : 0);
+    FnvAppendVector3(hash, normalized.directionToLight);
+    FnvAppendInt(hash, static_cast<int>(normalized.color.r));
+    FnvAppendInt(hash, static_cast<int>(normalized.color.g));
+    FnvAppendInt(hash, static_cast<int>(normalized.color.b));
+    FnvAppendFloat(hash, normalized.intensity);
+}
+
 template<typename T>
 std::vector<const T*> SortedLightmapHashRecords(const std::vector<T>& values)
 {
@@ -1485,6 +1604,9 @@ bool BakeSectorLightmapForMap(
     for (const auto& light : map.staticLights) {
         worldLights.push_back(MakeWorldSpaceLight(light));
     }
+    const LightmapWorldDirectionalLight directionalLight =
+            MakeWorldSpaceDirectionalLight(map.directionalLight);
+    const float directionalShadowMaxDistance = BvhSceneDiagonalWithMargin(bvh);
     BakeRayStats stats;
     int allocatedChartRectanglePixels = 0;
 
@@ -1529,7 +1651,7 @@ bool BakeSectorLightmapForMap(
     const auto directStart = Clock::now();
     ReportProgress(callbacks, SectorLightmapBakePhase::DirectLighting, 0, static_cast<uint32_t>(bakeTexels.size()));
     uint32_t completedTexels = 0;
-    if (!worldLights.empty()) {
+    if (!worldLights.empty() || directionalLight.enabled) {
         for (const BakeTexel& texel : bakeTexels) {
             RasterHit hit;
             hit.hit = true;
@@ -1540,6 +1662,19 @@ bool BakeSectorLightmapForMap(
             Vector3 direct{};
             for (const LightmapWorldPointLight& light : worldLights) {
                 direct = Vector3Add(direct, EvaluateDirectLight(light, hit, texel.surfaceRef, texel.sourceSurfaceIndex, bvh, triangles, stats));
+            }
+            if (IsSkyOwnedLightmapSurface(map, texel.surfaceRef)) {
+                direct = Vector3Add(
+                        direct,
+                        EvaluateDirectionalLight(
+                                directionalLight,
+                                hit,
+                                texel.surfaceRef,
+                                texel.sourceSurfaceIndex,
+                                directionalShadowMaxDistance,
+                                bvh,
+                                triangles,
+                                stats));
             }
             directLightingFloat[texel.pixelIndex] = direct;
             ++completedTexels;
@@ -1861,6 +1996,7 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
     uint64_t hash = 14695981039346656037ull;
     FnvAppendString(hash, "sector-topology-lightmap");
     FnvAppendLightmapBakeConstantsAndSettings(hash, map.lightmapSettings);
+    FnvAppendDirectionalLightSettings(hash, map.directionalLight);
     FnvAppendInt(hash, SectorCoordSubdivisions);
 
     const std::vector<std::string> textureIds = SortedReferencedLightmapTextureIds(map);

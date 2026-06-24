@@ -33,6 +33,13 @@ struct SectorTopologySkySettings {
     Color topColor = Color{95, 165, 235, 255};
 };
 
+struct SectorTopologyDirectionalLightSettings {
+    bool enabled = false;
+    Vector3 directionToLight = Vector3{-0.35f, 0.80f, -0.25f};
+    Color color = Color{255, 244, 214, 255};
+    float intensity = 1.0f;
+};
+
 struct SectorTopologyMap {
     std::unordered_map<std::string, SectorTextureDefinition> texturesById;
     std::vector<SectorTopologyVertex> vertices;
@@ -42,6 +49,7 @@ struct SectorTopologyMap {
     std::vector<SectorTopologyStaticPointLight> staticLights;
     SectorPreviewSettings previewSettings;
     SectorTopologySkySettings skySettings;
+    SectorTopologyDirectionalLightSettings directionalLight;
     SectorLightmapBakeSettings lightmapSettings;
     SectorLightmapMetadata bakedLightmap;
 };
@@ -65,6 +73,9 @@ SectorPreviewSettings DefaultSectorPreviewSettings();
 SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings settings);
 SectorTopologySkySettings DefaultSectorTopologySkySettings();
 SectorTopologySkySettings NormalizeSectorTopologySkySettings(SectorTopologySkySettings settings);
+SectorTopologyDirectionalLightSettings DefaultSectorTopologyDirectionalLightSettings();
+SectorTopologyDirectionalLightSettings NormalizeSectorTopologyDirectionalLightSettings(
+        SectorTopologyDirectionalLightSettings settings);
 
 bool IsValidSectorTopologyId(int id);
 const char* SectorTopologySideKindName(SectorTopologySideKind side);

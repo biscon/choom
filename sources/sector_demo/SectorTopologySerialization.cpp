@@ -349,6 +349,11 @@ SectorLightmapBakeSettings ReadLightmapSettings(const Json& value, const std::st
 }
 
 Color ReadColor(const Json& value, const std::string& context);
+unsigned char ReadOptionalColorChannel(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        unsigned char defaultValue);
 
 SectorPreviewSettings ReadPreviewSettings(const Json& value, const std::string& context)
 {
@@ -434,6 +439,46 @@ SectorTopologySkySettings ReadSkySettings(const Json& value, const std::string& 
     return NormalizeSectorTopologySkySettings(settings);
 }
 
+SectorTopologyDirectionalLightSettings ReadDirectionalLightSettings(
+        const Json& value,
+        const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorTopologyDirectionalLightSettings settings = DefaultSectorTopologyDirectionalLightSettings();
+    const auto enabledIt = value.find("enabled");
+    if (enabledIt != value.end()) {
+        if (!enabledIt->is_boolean()) {
+            Fail(context + ".enabled must be a boolean");
+        }
+        settings.enabled = enabledIt->get<bool>();
+    }
+    const auto directionIt = value.find("directionToLight");
+    if (directionIt != value.end()) {
+        settings.directionToLight = ReadVector3(*directionIt, context + ".directionToLight");
+    }
+    const auto colorIt = value.find("color");
+    if (colorIt != value.end()) {
+        if (!colorIt->is_object()) {
+            Fail(context + ".color must be an object");
+        }
+        const Color defaults = DefaultSectorTopologyDirectionalLightSettings().color;
+        settings.color = Color{
+                ReadOptionalColorChannel(*colorIt, "r", context + ".color", defaults.r),
+                ReadOptionalColorChannel(*colorIt, "g", context + ".color", defaults.g),
+                ReadOptionalColorChannel(*colorIt, "b", context + ".color", defaults.b),
+                ReadOptionalColorChannel(*colorIt, "a", context + ".color", defaults.a)
+        };
+    }
+    const auto intensityIt = value.find("intensity");
+    if (intensityIt != value.end()) {
+        settings.intensity = ReadFloat(value, "intensity", context);
+    }
+    return NormalizeSectorTopologyDirectionalLightSettings(settings);
+}
+
 SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -459,6 +504,23 @@ SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& c
 
 unsigned char ReadColorChannel(const Json& object, const char* field, const std::string& context)
 {
+    const int value = ReadInt(object, field, context);
+    if (value < 0 || value > 255) {
+        Fail(context + "." + field + " must be between 0 and 255");
+    }
+    return static_cast<unsigned char>(value);
+}
+
+unsigned char ReadOptionalColorChannel(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        unsigned char defaultValue)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        return defaultValue;
+    }
     const int value = ReadInt(object, field, context);
     if (value < 0 || value > 255) {
         Fail(context + "." + field + " must be between 0 and 255");
@@ -697,6 +759,35 @@ bool IsDefaultSkySettings(const SectorTopologySkySettings& settings)
             && normalized.topColor.a == defaults.topColor.a;
 }
 
+Json WriteDirectionalLightSettings(const SectorTopologyDirectionalLightSettings& settings)
+{
+    const SectorTopologyDirectionalLightSettings normalized =
+            NormalizeSectorTopologyDirectionalLightSettings(settings);
+    return Json{
+            {"enabled", normalized.enabled},
+            {"directionToLight", WriteVector3(normalized.directionToLight, "directionalLight.directionToLight")},
+            {"color", WriteColor(normalized.color)},
+            {"intensity", normalized.intensity}
+    };
+}
+
+bool IsDefaultDirectionalLightSettings(const SectorTopologyDirectionalLightSettings& settings)
+{
+    const SectorTopologyDirectionalLightSettings normalized =
+            NormalizeSectorTopologyDirectionalLightSettings(settings);
+    const SectorTopologyDirectionalLightSettings defaults =
+            DefaultSectorTopologyDirectionalLightSettings();
+    return normalized.enabled == defaults.enabled
+            && normalized.directionToLight.x == defaults.directionToLight.x
+            && normalized.directionToLight.y == defaults.directionToLight.y
+            && normalized.directionToLight.z == defaults.directionToLight.z
+            && normalized.color.r == defaults.color.r
+            && normalized.color.g == defaults.color.g
+            && normalized.color.b == defaults.color.b
+            && normalized.color.a == defaults.color.a
+            && normalized.intensity == defaults.intensity;
+}
+
 Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
 {
     return Json{
@@ -895,11 +986,19 @@ SectorTopologyMap ParseMap(const Json& root)
         map.skySettings = ReadSkySettings(*skySettingsIt, "root.skySettings");
     }
 
+    const auto directionalLightIt = root.find("directionalLight");
+    if (directionalLightIt != root.end()) {
+        map.directionalLight = ReadDirectionalLightSettings(*directionalLightIt, "root.directionalLight");
+    }
+
     const auto bakedLightmapIt = root.find("bakedLightmap");
     if (bakedLightmapIt != root.end()) {
         map.bakedLightmap = ReadBakedLightmap(*bakedLightmapIt, "root.bakedLightmap");
     }
 
+    map.previewSettings = NormalizeSectorPreviewSettings(map.previewSettings);
+    map.skySettings = NormalizeSectorTopologySkySettings(map.skySettings);
+    map.directionalLight = NormalizeSectorTopologyDirectionalLightSettings(map.directionalLight);
     ValidateForSerialization(map);
     return map;
 }
@@ -1033,6 +1132,9 @@ Json SerializeMap(const SectorTopologyMap& map)
     root["previewSettings"] = WritePreviewSettings(map.previewSettings);
     if (!IsDefaultSkySettings(map.skySettings)) {
         root["skySettings"] = WriteSkySettings(map.skySettings);
+    }
+    if (!IsDefaultDirectionalLightSettings(map.directionalLight)) {
+        root["directionalLight"] = WriteDirectionalLightSettings(map.directionalLight);
     }
     if (!map.bakedLightmap.path.empty()
             && map.bakedLightmap.width > 0

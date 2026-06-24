@@ -31,6 +31,7 @@ constexpr float PreviewHeadBobFrequencyMin = 0.0f;
 constexpr float PreviewHeadBobFrequencyMax = 20.0f;
 constexpr float SkyVerticalScaleMin = 0.01f;
 constexpr float SkyVerticalScaleMax = 100.0f;
+constexpr float DirectionalLightMinLengthSqr = 0.000001f;
 
 float ClampFinite(float value, float fallback, float minValue, float maxValue)
 {
@@ -175,6 +176,47 @@ SectorTopologySkySettings NormalizeSectorTopologySkySettings(SectorTopologySkySe
             SkyVerticalScaleMin,
             SkyVerticalScaleMax);
     settings.topColor.a = 255;
+    return settings;
+}
+
+SectorTopologyDirectionalLightSettings DefaultSectorTopologyDirectionalLightSettings()
+{
+    SectorTopologyDirectionalLightSettings settings;
+    settings.directionToLight = NormalizeSectorTopologyDirectionalLightSettings(settings).directionToLight;
+    return settings;
+}
+
+SectorTopologyDirectionalLightSettings NormalizeSectorTopologyDirectionalLightSettings(
+        SectorTopologyDirectionalLightSettings settings)
+{
+    const Vector3 fallback{-0.35f, 0.80f, -0.25f};
+    const float fallbackLength = std::sqrt(
+            fallback.x * fallback.x + fallback.y * fallback.y + fallback.z * fallback.z);
+    const Vector3 defaultDirection{
+            fallback.x / fallbackLength,
+            fallback.y / fallbackLength,
+            fallback.z / fallbackLength
+    };
+
+    const Vector3 direction = settings.directionToLight;
+    const float lengthSqr = direction.x * direction.x + direction.y * direction.y + direction.z * direction.z;
+    if (!std::isfinite(direction.x)
+            || !std::isfinite(direction.y)
+            || !std::isfinite(direction.z)
+            || lengthSqr <= DirectionalLightMinLengthSqr) {
+        settings.directionToLight = defaultDirection;
+    } else {
+        const float length = std::sqrt(lengthSqr);
+        settings.directionToLight = Vector3{
+                direction.x / length,
+                direction.y / length,
+                direction.z / length
+        };
+    }
+    settings.color.a = 255;
+    if (!std::isfinite(settings.intensity) || settings.intensity < 0.0f) {
+        settings.intensity = 0.0f;
+    }
     return settings;
 }
 

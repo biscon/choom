@@ -929,6 +929,25 @@ bool SameSkySettings(const SectorTopologySkySettings& left, const SectorTopology
             && a.topColor.a == b.topColor.a;
 }
 
+bool SameDirectionalLightSettings(
+        const SectorTopologyDirectionalLightSettings& left,
+        const SectorTopologyDirectionalLightSettings& right)
+{
+    const SectorTopologyDirectionalLightSettings a =
+            NormalizeSectorTopologyDirectionalLightSettings(left);
+    const SectorTopologyDirectionalLightSettings b =
+            NormalizeSectorTopologyDirectionalLightSettings(right);
+    return a.enabled == b.enabled
+            && a.directionToLight.x == b.directionToLight.x
+            && a.directionToLight.y == b.directionToLight.y
+            && a.directionToLight.z == b.directionToLight.z
+            && a.color.r == b.color.r
+            && a.color.g == b.color.g
+            && a.color.b == b.color.b
+            && a.color.a == b.color.a
+            && a.intensity == b.intensity;
+}
+
 bool SamePreviewSettings(const SectorPreviewSettings& left, const SectorPreviewSettings& right)
 {
     const SectorPreviewSettings a = NormalizeSectorPreviewSettings(left);
@@ -8331,6 +8350,18 @@ void SectorEditor::DrawPreviewSettingsModal(
                 modalState.activeTab == PreviewSettingsTab::Sky)) {
         modalState.activeTab = PreviewSettingsTab::Sky;
     }
+    if (engine::ToolButton(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_preview_settings_tab_lighting",
+                Rectangle{modal.x + 30.0f + (tabW + 8.0f) * 2.0f, y, tabW, tabH},
+                font,
+                "Lighting",
+                modalState.activeTab == PreviewSettingsTab::Lighting)) {
+        modalState.activeTab = PreviewSettingsTab::Lighting;
+    }
     y += tabH + 16.0f;
 
     const float buttonY = modal.y + modal.height - 66.0f;
@@ -8402,7 +8433,7 @@ void SectorEditor::DrawPreviewSettingsModal(
         engine::EndScrollArea(ui, config, input, scroll, modalState.generalScroll);
     };
 
-    auto drawSkyChannel = [&](float& localY, const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
+    auto drawColorChannel = [&](float& localY, const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
         engine::Text(ui, config, assets, Rectangle{0.0f, localY, 92.0f, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
         int value = static_cast<int>(channel);
         const engine::UINumericInputResult result = engine::IntInput(
@@ -8420,7 +8451,6 @@ void SectorEditor::DrawPreviewSettingsModal(
                 1);
         if (result.changed && value != static_cast<int>(channel)) {
             channel = static_cast<unsigned char>(ClampAmbientChannel(value));
-            modalState.draftSkySettings.topColor.a = 255;
             modalState.errorMessage.clear();
         }
         localY += rowH + gap;
@@ -8467,9 +8497,10 @@ void SectorEditor::DrawPreviewSettingsModal(
         contentY += 8.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, contentY, contentW, 34.0f}, font, "Top color", engine::UITextJustify::Left, config.textColor);
         contentY += 38.0f;
-        drawSkyChannel(contentY, "sector_editor_preview_sky_top_r", "R:", modalState.draftSkySettings.topColor.r, modalState.skyTopColorRedInput);
-        drawSkyChannel(contentY, "sector_editor_preview_sky_top_g", "G:", modalState.draftSkySettings.topColor.g, modalState.skyTopColorGreenInput);
-        drawSkyChannel(contentY, "sector_editor_preview_sky_top_b", "B:", modalState.draftSkySettings.topColor.b, modalState.skyTopColorBlueInput);
+        drawColorChannel(contentY, "sector_editor_preview_sky_top_r", "R:", modalState.draftSkySettings.topColor.r, modalState.skyTopColorRedInput);
+        drawColorChannel(contentY, "sector_editor_preview_sky_top_g", "G:", modalState.draftSkySettings.topColor.g, modalState.skyTopColorGreenInput);
+        drawColorChannel(contentY, "sector_editor_preview_sky_top_b", "B:", modalState.draftSkySettings.topColor.b, modalState.skyTopColorBlueInput);
+        modalState.draftSkySettings.topColor.a = 255;
         const Rectangle swatch{
                 scroll.viewport.x + 104.0f,
                 scroll.viewport.y - modalState.skyScroll.offset.y + contentY + 2.0f,
@@ -8483,7 +8514,66 @@ void SectorEditor::DrawPreviewSettingsModal(
         engine::EndScrollArea(ui, config, input, scroll, modalState.skyScroll);
     };
 
-    if (modalState.activeTab == PreviewSettingsTab::Sky) {
+    auto drawLightingTab = [&]() {
+        float contentY = 0.0f;
+        const float contentH = 9.0f * (rowH + gap) + 80.0f;
+        engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
+                ui,
+                config,
+                input,
+                "sector_editor_preview_settings_lighting_scroll",
+                scrollBounds,
+                Vector2{scrollContentW, contentH},
+                modalState.lightingScroll);
+        const float contentW = scroll.viewport.width;
+
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_preview_lighting_enabled",
+                    Rectangle{0.0f, contentY, contentW, rowH},
+                    font,
+                    "Enabled",
+                    modalState.draftDirectionalLight.enabled)) {
+            modalState.errorMessage.clear();
+        }
+        contentY += rowH + gap;
+
+        contentY += 8.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, contentY, contentW, 34.0f}, font, "Direction to light", engine::UITextJustify::Left, config.textColor);
+        contentY += 38.0f;
+        drawFloat(contentY, "sector_editor_preview_light_dir_x", "X", modalState.draftDirectionalLight.directionToLight.x, modalState.lightDirectionXInput, -1.0f, 1.0f, 3);
+        drawFloat(contentY, "sector_editor_preview_light_dir_y", "Y", modalState.draftDirectionalLight.directionToLight.y, modalState.lightDirectionYInput, -1.0f, 1.0f, 3);
+        drawFloat(contentY, "sector_editor_preview_light_dir_z", "Z", modalState.draftDirectionalLight.directionToLight.z, modalState.lightDirectionZInput, -1.0f, 1.0f, 3);
+
+        drawFloat(contentY, "sector_editor_preview_light_intensity", "Intensity", modalState.draftDirectionalLight.intensity, modalState.lightIntensityInput, 0.0f, 16.0f, 3);
+        modalState.draftDirectionalLight.intensity = std::max(0.0f, modalState.draftDirectionalLight.intensity);
+
+        contentY += 8.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, contentY, contentW, 34.0f}, font, "Color", engine::UITextJustify::Left, config.textColor);
+        contentY += 38.0f;
+        drawColorChannel(contentY, "sector_editor_preview_light_r", "R:", modalState.draftDirectionalLight.color.r, modalState.lightColorRedInput);
+        drawColorChannel(contentY, "sector_editor_preview_light_g", "G:", modalState.draftDirectionalLight.color.g, modalState.lightColorGreenInput);
+        drawColorChannel(contentY, "sector_editor_preview_light_b", "B:", modalState.draftDirectionalLight.color.b, modalState.lightColorBlueInput);
+        modalState.draftDirectionalLight.color.a = 255;
+        const Rectangle swatch{
+                scroll.viewport.x + 104.0f,
+                scroll.viewport.y - modalState.lightingScroll.offset.y + contentY + 2.0f,
+                std::min(130.0f, contentW - 104.0f),
+                28.0f
+        };
+        DrawRectangleRec(swatch, NormalizeSectorTopologyDirectionalLightSettings(modalState.draftDirectionalLight).color);
+        DrawRectangleLinesEx(swatch, 1.0f, config.borderColor);
+        contentY += 36.0f + gap;
+
+        engine::EndScrollArea(ui, config, input, scroll, modalState.lightingScroll);
+    };
+
+    if (modalState.activeTab == PreviewSettingsTab::Lighting) {
+        drawLightingTab();
+    } else if (modalState.activeTab == PreviewSettingsTab::Sky) {
         drawSkyTab();
     } else {
         drawGeneralTab();
@@ -8502,7 +8592,16 @@ void SectorEditor::DrawPreviewSettingsModal(
 
     const float buttonW = 132.0f;
     if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_reset", Rectangle{modal.x + 30.0f, buttonY, 176.0f, 44.0f}, font, "Reset Defaults")) {
-        if (modalState.activeTab == PreviewSettingsTab::Sky) {
+        if (modalState.activeTab == PreviewSettingsTab::Lighting) {
+            modalState.draftDirectionalLight = DefaultSectorTopologyDirectionalLightSettings();
+            modalState.lightDirectionXInput = engine::UIFloatInputState{};
+            modalState.lightDirectionYInput = engine::UIFloatInputState{};
+            modalState.lightDirectionZInput = engine::UIFloatInputState{};
+            modalState.lightIntensityInput = engine::UIFloatInputState{};
+            modalState.lightColorRedInput = engine::UIIntInputState{};
+            modalState.lightColorGreenInput = engine::UIIntInputState{};
+            modalState.lightColorBlueInput = engine::UIIntInputState{};
+        } else if (modalState.activeTab == PreviewSettingsTab::Sky) {
             modalState.draftSkySettings = DefaultSectorTopologySkySettings();
             modalState.skyYawOffsetInput = engine::UIFloatInputState{};
             modalState.skyVerticalOffsetInput = engine::UIFloatInputState{};
@@ -9189,6 +9288,8 @@ void SectorEditor::OpenPreviewSettingsModal()
     state.previewSettingsModal.open = true;
     state.previewSettingsModal.draftConfig = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
     state.previewSettingsModal.draftSkySettings = NormalizeSectorTopologySkySettings(state.topologyMap.skySettings);
+    state.previewSettingsModal.draftDirectionalLight =
+            NormalizeSectorTopologyDirectionalLightSettings(state.topologyMap.directionalLight);
 }
 
 void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
@@ -9202,11 +9303,17 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const SectorPreviewSettings draftPreviewSettings = SectorPreviewSettingsFromFpsControllerConfig(draftConfig);
     const SectorTopologySkySettings draftSkySettings = NormalizeSectorTopologySkySettings(
             state.previewSettingsModal.draftSkySettings);
+    const SectorTopologyDirectionalLightSettings draftDirectionalLight =
+            NormalizeSectorTopologyDirectionalLightSettings(
+                    state.previewSettingsModal.draftDirectionalLight);
     const bool previewChanged = !SamePreviewSettings(
             state.topologyMap.previewSettings,
             draftPreviewSettings);
     const bool skyChanged = !SameSkySettings(state.topologyMap.skySettings, draftSkySettings);
-    if (!previewChanged && !skyChanged) {
+    const bool directionalChanged = !SameDirectionalLightSettings(
+            state.topologyMap.directionalLight,
+            draftDirectionalLight);
+    if (!previewChanged && !skyChanged && !directionalChanged) {
         state.previewSettingsModal = SectorPreviewSettingsModalState{};
         statusText = "Preview settings unchanged";
         return;
@@ -9219,6 +9326,7 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     }
     state.topologyMap.previewSettings = draftPreviewSettings;
     state.topologyMap.skySettings = draftSkySettings;
+    state.topologyMap.directionalLight = draftDirectionalLight;
     MarkTopologyDocumentEdited("Preview settings updated");
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
     if (skyChanged && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
