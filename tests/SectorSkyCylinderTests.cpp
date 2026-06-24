@@ -28,6 +28,33 @@ bool Near(Vector3 actual, Vector3 expected, float epsilon = 0.00001f)
             && Near(actual.z, expected.z, epsilon);
 }
 
+Vector3 Subtract(Vector3 a, Vector3 b)
+{
+    return Vector3{a.x - b.x, a.y - b.y, a.z - b.z};
+}
+
+Vector3 Cross(Vector3 a, Vector3 b)
+{
+    return Vector3{
+            a.y * b.z - a.z * b.y,
+            a.z * b.x - a.x * b.z,
+            a.x * b.y - a.y * b.x};
+}
+
+bool HasValidIndices(const game::SectorSkyCylinderMeshData& data)
+{
+    if (data.indices.empty() || data.indices.size() % 3u != 0u) {
+        return false;
+    }
+
+    for (uint16_t index : data.indices) {
+        if (index >= data.positions.size()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 game::SectorTopologyMap MakeMap(bool skyCeiling)
 {
     game::SectorTopologyMap map;
@@ -104,14 +131,54 @@ void TestSkyCylinderMeshData()
     Check(Near(data.uvs[1].y, 0.0f), "top V is zero");
     Check(Near(data.uvs.front().y, 1.0f), "bottom V is one");
 
-    bool validIndices = true;
-    for (uint16_t index : data.indices) {
-        if (index >= data.positions.size()) {
-            validIndices = false;
-            break;
+    Check(HasValidIndices(data), "sky cylinder indices are valid for vertex count");
+}
+
+void TestSkyCylinderTopCapMeshData()
+{
+    constexpr int segments = 8;
+    constexpr float radius = 12.0f;
+    constexpr float height = 20.0f;
+    constexpr float topY = height * 0.5f;
+    const game::SectorSkyCylinderMeshData data = game::BuildSkyCylinderTopCapMeshData(segments, radius, height);
+
+    Check(!data.positions.empty(), "sky cylinder top cap positions are non-empty");
+    Check(!data.indices.empty(), "sky cylinder top cap indices are non-empty");
+    Check(data.normals.size() == data.positions.size(),
+          "sky cylinder top cap normals match position count");
+    Check(data.uvs.size() == data.positions.size(),
+          "sky cylinder top cap UVs match position count");
+    Check(HasValidIndices(data), "sky cylinder top cap indices are valid for vertex count");
+
+    Check(Near(data.positions.front(), Vector3{0.0f, topY, 0.0f}),
+          "sky cylinder top cap includes center vertex at top origin");
+    bool verticesAtTop = true;
+    bool rimRadiusMatches = true;
+    for (size_t i = 0; i < data.positions.size(); ++i) {
+        const Vector3 position = data.positions[i];
+        if (!Near(position.y, topY)) {
+            verticesAtTop = false;
+        }
+        if (i > 0) {
+            const float xzRadius = std::sqrt(position.x * position.x + position.z * position.z);
+            if (!Near(xzRadius, radius)) {
+                rimRadiusMatches = false;
+            }
         }
     }
-    Check(validIndices, "sky cylinder indices are valid for vertex count");
+    Check(verticesAtTop, "sky cylinder top cap vertices are at the cylinder top");
+    Check(rimRadiusMatches, "sky cylinder top cap rim matches cylinder radius");
+
+    if (data.indices.size() >= 3u) {
+        const Vector3 a = data.positions[data.indices[0]];
+        const Vector3 b = data.positions[data.indices[1]];
+        const Vector3 c = data.positions[data.indices[2]];
+        const Vector3 windingNormal = Cross(Subtract(b, a), Subtract(c, a));
+        Check(windingNormal.y < 0.0f,
+              "sky cylinder top cap winding faces downward for inside visibility");
+    } else {
+        Check(false, "sky cylinder top cap has a first triangle");
+    }
 }
 
 } // namespace
@@ -120,6 +187,7 @@ int main()
 {
     TestDefaultSkyTextureLookup();
     TestSkyCylinderMeshData();
+    TestSkyCylinderTopCapMeshData();
 
     if (failures == 0) {
         std::puts("Sector sky cylinder tests passed");

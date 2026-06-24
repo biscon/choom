@@ -70,6 +70,7 @@ private:
     Texture2D defaultMaterialTexture = {};
     bool materialLoaded = false;
     Mesh skyCylinderMesh = {};
+    Mesh skyTopCapMesh = {};
     Material skyMaterial = {};
     Texture2D skyDefaultMaterialTexture = {};
     bool skyMaterialLoaded = false;

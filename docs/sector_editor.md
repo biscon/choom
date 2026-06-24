@@ -115,8 +115,11 @@ panorama cylinder when the map texture table contains a texture with ID
 `sky_cylinder`; the local test asset is `assets/images/sky/sky_cylinder.png`
 and should be a horizontally seamless panorama such as 4:1. The texture path is
 not hardcoded, so the texture still must be added to the map texture table with
-that ID. Missing or failed sky textures fall back to the existing clear
-background behavior. Proper map-level sky settings and picker UI are deferred.
+that ID. The preview cylinder has a simple hardcoded blue top cap to close the
+visible hole when looking upward; sky textures should ideally fade their top
+band toward a similar blue. Missing or failed sky textures still fall back to
+the existing clear background behavior, and the clear color is unchanged. Proper
+map-level sky color/settings and picker UI are deferred.
 Adjacent sectors that both have sky ceilings suppress the upper portal wall
 strip between them, even when their numeric ceiling heights differ. The sky
 renderer is visual-only and does not affect collision, lightmaps, bloom, or

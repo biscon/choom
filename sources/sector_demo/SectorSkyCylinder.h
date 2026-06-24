@@ -29,5 +29,9 @@ SectorSkyCylinderMeshData BuildSkyCylinderMeshData(
         int segments = kDefaultSkyCylinderSegments,
         float radius = kDefaultSkyCylinderRadius,
         float height = kDefaultSkyCylinderHeight);
+SectorSkyCylinderMeshData BuildSkyCylinderTopCapMeshData(
+        int segments = kDefaultSkyCylinderSegments,
+        float radius = kDefaultSkyCylinderRadius,
+        float height = kDefaultSkyCylinderHeight);
 
 } // namespace game

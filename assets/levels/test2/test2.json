@@ -55,6 +55,10 @@
       "path": "assets/images/riser_01_512.png",
       "filter": "anisotropic8x"
     },
+    "sky_cylinder": {
+      "path": "assets/images/sky/sky_cylinder.png",
+      "filter": "anisotropic8x"
+    },
     "square_ceiling_light": {
       "path": "assets/images/decals/square_ceiling_light.png",
       "filter": "point"

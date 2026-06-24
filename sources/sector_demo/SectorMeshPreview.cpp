@@ -31,6 +31,7 @@ constexpr float BloomStrength = 0.5f;
 constexpr float BloomLdrIntensityScale = 10.0f;
 constexpr int BloomIterations = 3;
 constexpr int BloomDownsample = 4;
+constexpr Color kSkyTopCapColor = {95, 165, 235, 255};
 
 const char* SectorLightmapVs = R"(
 #version 330
@@ -436,12 +437,15 @@ bool SectorMeshPreview::Rebuild(
     if (ShouldRenderDefaultSkyCylinder(map)) {
         skyTextureHandle = TextureForId(std::string(kDefaultSkyTextureId));
         const SectorSkyCylinderMeshData skyData = BuildSkyCylinderMeshData();
+        const SectorSkyCylinderMeshData skyTopCapData = BuildSkyCylinderTopCapMeshData();
         skyCylinderMesh = CreateSkyCylinderMesh(skyData);
-        if (skyCylinderMesh.vertexCount > 0) {
+        skyTopCapMesh = CreateSkyCylinderMesh(skyTopCapData);
+        if (skyCylinderMesh.vertexCount > 0 && skyTopCapMesh.vertexCount > 0) {
             skyMaterial = LoadMaterialDefault();
             skyDefaultMaterialTexture = skyMaterial.maps[MATERIAL_MAP_DIFFUSE].texture;
             skyMaterialLoaded = true;
         } else {
+            UnloadSkyCylinderMesh();
             skyTextureHandle = engine::NullTextureHandle();
         }
     }
@@ -524,6 +528,7 @@ void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
             && meshes.batches.empty()
             && !materialLoaded
             && skyCylinderMesh.vertexCount <= 0
+            && skyTopCapMesh.vertexCount <= 0
             && !skyMaterialLoaded) {
         return;
     }
@@ -648,7 +653,10 @@ void SectorMeshPreview::Render(engine::AssetManager& assets, bool useBakedAmbien
 
     BeginMode3D(camera);
     const Texture2D* skyTexture = assets.GetTexture(skyTextureHandle);
-    if (skyTexture != nullptr && skyCylinderMesh.vertexCount > 0 && skyMaterialLoaded) {
+    if (skyTexture != nullptr
+            && skyCylinderMesh.vertexCount > 0
+            && skyTopCapMesh.vertexCount > 0
+            && skyMaterialLoaded) {
         DrawSkyCylinder(*skyTexture);
     }
 
@@ -873,8 +881,13 @@ void SectorMeshPreview::UnloadSkyCylinderMesh()
         UnloadMesh(skyCylinderMesh);
         skyCylinderMesh = Mesh{};
     }
+    if (skyTopCapMesh.vertexCount > 0) {
+        UnloadMesh(skyTopCapMesh);
+        skyTopCapMesh = Mesh{};
+    }
 
     if (skyMaterialLoaded) {
+        skyMaterial.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
         skyMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = skyDefaultMaterialTexture;
         UnloadMaterial(skyMaterial);
         skyMaterial = Material{};
@@ -885,9 +898,16 @@ void SectorMeshPreview::UnloadSkyCylinderMesh()
 
 void SectorMeshPreview::DrawSkyCylinder(const Texture2D& texture)
 {
+    const Matrix transform = MatrixTranslate(camera.position.x, camera.position.y, camera.position.z);
     skyMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = texture;
+    skyMaterial.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
     rlDisableDepthMask();
-    DrawMesh(skyCylinderMesh, skyMaterial, MatrixTranslate(camera.position.x, camera.position.y, camera.position.z));
+    DrawMesh(skyCylinderMesh, skyMaterial, transform);
+    skyMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = skyDefaultMaterialTexture;
+    skyMaterial.maps[MATERIAL_MAP_DIFFUSE].color = kSkyTopCapColor;
+    DrawMesh(skyTopCapMesh, skyMaterial, transform);
+    skyMaterial.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
+    skyMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = texture;
     rlEnableDepthMask();
 }
 
