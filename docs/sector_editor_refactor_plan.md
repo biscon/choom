@@ -153,6 +153,26 @@ already separated in `SectorEditorTypes.h`.
 
 Move stateless helper functions and constants out of `SectorEditor.cpp`.
 
+### Status
+
+Completed: 2026-06-24
+
+Summary:
+- Moved stateless sector editor constants, labels, clamps, texture/path helpers, lightmap progress helpers, surface mapping helpers, tint/decal helpers, and small geometry helpers into `SectorEditorHelpers.h/.cpp`.
+- Preserved editor UI flow, topology mutation behavior, preview behavior, serialization, and build registration.
+- Build/tests passed.
+
+Verification:
+- `cmake --build cmake-build-debug -j2`: passed
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed
+- `git diff --check`: passed
+- Manual GUI verification: not performed
+
+Notes:
+- Cache invalidation behavior: unchanged
+- Lightmap/source-hash behavior: unchanged
+- Collision/gameplay behavior: unchanged
+
 ### Files likely touched
 
 - `sources/sector_editor/SectorEditor.cpp`
