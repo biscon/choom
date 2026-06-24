@@ -7,6 +7,7 @@
 #include "sector_editor/SectorEditorLightInspector.h"
 #include "sector_editor/SectorEditorLightmapModal.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
+#include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/SectorEditorSectorInspector.h"
 #include "sector_editor/SectorEditorTextureModals.h"
@@ -6200,175 +6201,41 @@ void SectorEditor::LeavePreview3D()
 
 SectorMeshPreviewPose SectorEditor::ActivePreviewPose() const
 {
-    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
-        return SectorFpsControllerVisualPose(
-                state.fpsControllerState,
-                state.fpsControllerConfig,
-                state.visualStepOffsetY,
-                state.headBobState.offset,
-                state.landingDipState.offsetY);
-    }
-    return preview.Pose();
+    return ActiveSectorEditorPreviewPose(state, preview);
 }
 
 void SectorEditor::ApplyGameplayPoseToPreview()
 {
-    preview.ApplyPose(SectorFpsControllerVisualPose(
-                state.fpsControllerState,
-                state.fpsControllerConfig,
-                state.visualStepOffsetY,
-                state.headBobState.offset,
-                state.landingDipState.offsetY));
+    ApplySectorEditorGameplayPoseToPreview(state, preview);
 }
 
 void SectorEditor::TogglePreviewControlMode()
 {
-    if (state.mode != SectorEditorMode::Preview3D || !preview.IsReady()) {
+    if (!ToggleSectorEditorPreviewControlMode(state, preview)) {
         return;
     }
 
-    state.fpsControllerConfig = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
-    if (state.previewControlMode == SectorPreviewControlMode::FreeFly) {
-        state.visualStepOffsetY = 0.0f;
-        ClearSectorFpsHeadBob(state.headBobState);
-        ClearSectorFpsLandingDip(state.landingDipState);
-        state.fpsControllerState = SectorFpsControllerStateFromCameraPose(
-                preview.Pose(),
-                state.fpsControllerConfig);
-        state.fpsControllerState.verticalVelocity = 0.0f;
-        state.previewControlMode = SectorPreviewControlMode::Gameplay;
-        InitializeGameplayVerticalState();
-        ApplyGameplayPoseToPreview();
-    } else {
-        ClearSectorFpsLandingDip(state.landingDipState);
-        ApplyGameplayPoseToPreview();
-        state.visualStepOffsetY = 0.0f;
-        ClearSectorFpsHeadBob(state.headBobState);
-        ClearSectorFpsLandingDip(state.landingDipState);
-        state.previewControlMode = SectorPreviewControlMode::FreeFly;
-        state.previewCollisionSectorId = 0;
-        state.fpsControllerState.currentSectorId = 0;
-        state.previewVerticalResult = SectorFpsVerticalResult{};
-        state.previewMoveResult = SectorCollisionMoveResult{};
-        state.previewCollisionNoclipFallback = false;
-    }
     statusText = TextFormat("3D control mode: %s", PreviewControlModeName(state.previewControlMode));
 }
 
 bool SectorEditor::RebuildSectorCollisionWorld()
 {
-    std::string error;
-    if (!state.sectorCollisionWorld.BuildFromTopology(state.topologyMap, &error)) {
-        state.sectorCollisionWorldValid = false;
-        state.previewCollisionSectorId = 0;
-        state.fpsControllerState.currentSectorId = 0;
-        state.previewVerticalResult = SectorFpsVerticalResult{};
-        state.previewMoveResult = SectorCollisionMoveResult{};
-        state.previewCollisionNoclipFallback = false;
-        state.visualStepOffsetY = 0.0f;
-        ClearSectorFpsHeadBob(state.headBobState);
-        ClearSectorFpsLandingDip(state.landingDipState);
-        state.sectorCollisionWorldWarning = error.empty()
-                ? "Collision world build failed"
-                : "Collision world build failed: " + error;
-        return false;
-    }
-
-    state.sectorCollisionWorldValid = true;
-    state.sectorCollisionWorldWarning.clear();
-    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
-        RefreshGameplaySectorAndVerticalContext();
-        state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
-                state.fpsControllerState,
-                state.fpsControllerConfig,
-                BuildGameplayVerticalContext(),
-                0.0f);
-        state.visualStepOffsetY = 0.0f;
-        ClearSectorFpsHeadBob(state.headBobState);
-        ClearSectorFpsLandingDip(state.landingDipState);
-    } else {
-        state.previewCollisionSectorId = 0;
-        state.visualStepOffsetY = 0.0f;
-        ClearSectorFpsHeadBob(state.headBobState);
-        ClearSectorFpsLandingDip(state.landingDipState);
-    }
-    return true;
+    return RebuildSectorEditorCollisionWorld(state);
 }
 
 SectorFpsVerticalContext SectorEditor::BuildGameplayVerticalContext()
 {
-    SectorFpsVerticalContext context;
-    if (!state.sectorCollisionWorldValid || state.fpsControllerState.currentSectorId == 0) {
-        return context;
-    }
-
-    SectorCollisionHeights heights;
-    if (!state.sectorCollisionWorld.GetSectorFloorCeiling(
-                state.fpsControllerState.currentSectorId,
-                &heights)) {
-        return context;
-    }
-
-    context.hasSector = true;
-    context.floorZ = heights.floorZ;
-    context.ceilingZ = heights.ceilingZ;
-    return context;
+    return BuildSectorEditorGameplayVerticalContext(state);
 }
 
 void SectorEditor::RefreshGameplaySectorAndVerticalContext()
 {
-    if (!state.sectorCollisionWorldValid) {
-        state.fpsControllerState.currentSectorId = 0;
-        state.previewCollisionSectorId = 0;
-        state.previewVerticalResult = SectorFpsVerticalResult{};
-        state.previewMoveResult = SectorCollisionMoveResult{};
-        state.previewCollisionNoclipFallback = false;
-        state.visualStepOffsetY = 0.0f;
-        ClearSectorFpsHeadBob(state.headBobState);
-        ClearSectorFpsLandingDip(state.landingDipState);
-        return;
-    }
-
-    state.fpsControllerState.currentSectorId =
-            state.sectorCollisionWorld.FindSectorContainingPointPreferCurrent(
-                    Vector2{
-                            state.fpsControllerState.feetPosition.x,
-                            state.fpsControllerState.feetPosition.z},
-                    state.fpsControllerState.currentSectorId);
-    state.previewCollisionSectorId = state.fpsControllerState.currentSectorId;
+    RefreshSectorEditorGameplaySectorAndVerticalContext(state);
 }
 
 void SectorEditor::InitializeGameplayVerticalState()
 {
-    state.fpsControllerState.grounded = false;
-    state.fpsControllerState.verticalVelocity = 0.0f;
-    RefreshGameplaySectorAndVerticalContext();
-
-    const SectorFpsVerticalContext context = BuildGameplayVerticalContext();
-    if (!context.hasSector) {
-        state.fpsControllerState.currentSectorId = 0;
-        state.previewCollisionSectorId = 0;
-        state.previewVerticalResult = SectorFpsVerticalResult{};
-        state.previewMoveResult = SectorCollisionMoveResult{};
-        state.previewCollisionNoclipFallback = false;
-        state.visualStepOffsetY = 0.0f;
-        ClearSectorFpsHeadBob(state.headBobState);
-        ClearSectorFpsLandingDip(state.landingDipState);
-        return;
-    }
-
-    if (state.fpsControllerState.feetPosition.y <= context.floorZ + GameplayFloorSnapEpsilon) {
-        state.fpsControllerState.feetPosition.y = context.floorZ;
-        state.fpsControllerState.grounded = true;
-    }
-    state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
-            state.fpsControllerState,
-            state.fpsControllerConfig,
-            context,
-            0.0f);
-    state.visualStepOffsetY = 0.0f;
-    ClearSectorFpsHeadBob(state.headBobState);
-    ClearSectorFpsLandingDip(state.landingDipState);
+    InitializeSectorEditorGameplayVerticalState(state);
 }
 
 void SectorEditor::OpenPreviewSettingsModal()

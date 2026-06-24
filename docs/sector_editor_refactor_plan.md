@@ -753,6 +753,29 @@ Medium.
 Extract narrow 3D preview lifecycle and gameplay-integration helpers where the
 signatures stay explicit and readable.
 
+### Status
+
+Completed: 2026-06-25
+
+Summary:
+- Moved active preview pose, gameplay pose application, control-mode switching,
+  collision-world rebuild/reset, and gameplay vertical context helpers into
+  `SectorEditorPreviewActions.h/.cpp`.
+- Preserved `SectorEditor` ownership of `SectorMeshPreview`, asset scopes, mode
+  transitions, UI reset, status text, and high-level preview orchestration.
+- Build/tests passed.
+
+Verification:
+- `cmake --build cmake-build-debug -j2`: passed
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed
+- `git diff --check`: passed
+- Manual GUI verification: not performed
+
+Notes:
+- Cache invalidation behavior: unchanged
+- Lightmap/source-hash behavior: unchanged
+- Collision/gameplay behavior: unchanged
+
 ### Files likely touched
 
 - `sources/sector_editor/SectorEditor.cpp`
