@@ -915,14 +915,17 @@ void SectorEditor::FinishVertexDrag()
 
     if (state.vertexDrag.hasMergeTarget) {
         const int targetVertexId = state.vertexDrag.mergeTargetVertexId;
-        SectorTopologyMergeVerticesResult merge;
-        std::string error;
-        if (!MergeSectorTopologyVertices(state.topologyMap, vertexId, targetVertexId, &merge, &error)) {
+        const SectorEditorMergeVerticesResult result = MergeTopologyVertices(
+                state.topologyMap,
+                vertexId,
+                targetVertexId);
+        if (!result.changed) {
             state.vertexDrag = VertexDragState{};
-            statusText = TextFormat("Merge rejected: %s", error.c_str());
+            statusText = result.status;
             return;
         }
 
+        const SectorTopologyMergeVerticesResult& merge = result.merge;
         ClearTransientTopologyEditStateAfterGeometryChange();
         SelectTopologyVertex(merge.mergedVertexId);
         state.inspectedTopologyVertexId = merge.mergedVertexId;
@@ -935,31 +938,25 @@ void SectorEditor::FinishVertexDrag()
                 ? SectorTopologyCoordPoint{merged->x, merged->y}
                 : SectorTopologyCoordPoint{};
         state.vertexDrag = VertexDragState{};
-        MarkTopologyDocumentEdited(TextFormat(
-                "Merged vertex %d into vertex %d.",
-                merge.removedVertexId,
-                merge.mergedVertexId));
+        FinishTopologyActionResult(SectorEditorTopologyActionResult{true, result.status});
         return;
     }
 
-    std::string error;
-    if (!MoveSectorTopologyVertex(state.topologyMap, vertexId, target, &error)) {
+    const SectorEditorTopologyActionResult result = MoveTopologyVertex(
+            state.topologyMap,
+            vertexId,
+            original,
+            target);
+    if (!result.changed) {
         state.vertexDrag = VertexDragState{};
-        statusText = TextFormat("Move rejected: %s", error.c_str());
+        statusText = result.status;
         return;
     }
 
     ClearTransientTopologyEditStateAfterGeometryChange();
     SelectTopologyVertex(vertexId);
     state.vertexDrag = VertexDragState{};
-    MarkTopologyDocumentEdited(TextFormat(
-            "Moved topology vertex %d %.2f,%.2f -> %.2f,%.2f",
-            vertexId,
-            SectorCoordToVisibleAuthoring(original.x),
-            SectorCoordToVisibleAuthoring(original.y),
-            SectorCoordToVisibleAuthoring(target.x),
-            SectorCoordToVisibleAuthoring(target.y)
-    ));
+    FinishTopologyActionResult(result);
 }
 
 void SectorEditor::CancelVertexDrag(const char* message)
@@ -1127,20 +1124,19 @@ void SectorEditor::CommitPendingTopologyVertexMerge()
         return;
     }
 
-    SectorTopologyMergeVerticesResult merge;
-    std::string error;
-    if (!MergeSectorTopologyVertices(
-                state.topologyMap,
-                pending.sourceVertexId,
-                pending.hoveredTargetVertexId,
-                &merge,
-                &error)) {
-        state.pendingTopologyVertexMerge.message =
-                error.empty() ? "Merge rejected." : TextFormat("Merge rejected: %s", error.c_str());
+    const SectorEditorMergeVerticesResult result = MergeTopologyVertices(
+            state.topologyMap,
+            pending.sourceVertexId,
+            pending.hoveredTargetVertexId);
+    if (!result.changed) {
+        state.pendingTopologyVertexMerge.message = result.status.empty()
+                ? "Merge rejected."
+                : result.status;
         statusText = state.pendingTopologyVertexMerge.message;
         return;
     }
 
+    const SectorTopologyMergeVerticesResult& merge = result.merge;
     ClearTransientTopologyEditStateAfterGeometryChange();
     state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
     SelectTopologyVertex(merge.mergedVertexId);
@@ -1151,10 +1147,7 @@ void SectorEditor::CommitPendingTopologyVertexMerge()
     state.hoveredTopologyVertexPoint = merged != nullptr
             ? SectorTopologyCoordPoint{merged->x, merged->y}
             : SectorTopologyCoordPoint{};
-    MarkTopologyDocumentEdited(TextFormat(
-            "Merged vertex %d into vertex %d.",
-            merge.removedVertexId,
-            merge.mergedVertexId));
+    FinishTopologyActionResult(SectorEditorTopologyActionResult{true, result.status});
 }
 
 void SectorEditor::StartPendingTopologyLineSplitAtPoint()
@@ -7151,13 +7144,13 @@ bool SectorEditor::DissolveSelectedTopologyVertex()
     }
 
     const int vertexId = vertex->id;
-    SectorTopologyDissolveVertexResult dissolve;
-    std::string error;
-    if (!DissolveSectorTopologyVertex(state.topologyMap, vertexId, &dissolve, &error)) {
-        statusText = error.empty() ? "Cannot dissolve topology vertex" : error;
+    const SectorEditorDissolveVertexResult result = DissolveTopologyVertex(state.topologyMap, vertexId);
+    if (!result.changed) {
+        statusText = result.status;
         return false;
     }
 
+    const SectorTopologyDissolveVertexResult& dissolve = result.dissolve;
     state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
     state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
     state.pendingTopologySectorCut = PendingTopologySectorCut{};
@@ -7178,10 +7171,7 @@ bool SectorEditor::DissolveSelectedTopologyVertex()
             SectorTopologySideKind::Front,
             state.selectedTopologyWallPart);
     state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(TextFormat(
-            "Dissolved topology vertex %d; selected linedef %d",
-            dissolve.removedVertexId,
-            dissolve.replacementLineDefId));
+    FinishTopologyActionResult(SectorEditorTopologyActionResult{true, result.status});
     return true;
 }
 

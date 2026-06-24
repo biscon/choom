@@ -1162,6 +1162,26 @@ Medium.
 Extract backend mutation wrappers for topology vertex move, merge, and dissolve
 actions without moving pending/drag tool state machines.
 
+### Status
+
+Completed: 2026-06-25
+
+Summary:
+- Wrapped vertex move, merge, and dissolve backend mutations in `SectorEditorTopologyActions.h/.cpp`.
+- Preserved vertex drag preview/cancel, pending `Merge Into...` state, selection/hover cleanup, UI reset, and document/cache finish behavior in `SectorEditor`.
+- Build/tests passed.
+
+Verification:
+- `cmake --build cmake-build-debug -j2`: passed
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed
+- `git diff --check`: passed
+- Manual GUI verification: not performed
+
+Notes:
+- Cache invalidation behavior: unchanged; successful vertex move, merge, and dissolve still finish through `MarkTopologyDocumentEdited()`, while rejected/cancelled/unchanged actions do not newly invalidate.
+- Lightmap/source-hash behavior: unchanged; vertex geometry remains hash-affecting through existing source-hash logic.
+- Collision/gameplay behavior: unchanged.
+
 ### Files likely touched
 
 - `sources/sector_editor/SectorEditor.cpp`

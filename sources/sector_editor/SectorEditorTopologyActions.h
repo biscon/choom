@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sector_demo/SectorTopologyEdit.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
@@ -18,6 +19,33 @@ struct SectorEditorAddStaticLightResult {
     int lightId = -1;
     std::string status;
 };
+
+struct SectorEditorMergeVerticesResult {
+    bool changed = false;
+    SectorTopologyMergeVerticesResult merge;
+    std::string status;
+};
+
+struct SectorEditorDissolveVertexResult {
+    bool changed = false;
+    SectorTopologyDissolveVertexResult dissolve;
+    std::string status;
+};
+
+SectorEditorTopologyActionResult MoveTopologyVertex(
+        SectorTopologyMap& map,
+        int vertexId,
+        SectorTopologyCoordPoint originalPoint,
+        SectorTopologyCoordPoint targetPoint);
+
+SectorEditorMergeVerticesResult MergeTopologyVertices(
+        SectorTopologyMap& map,
+        int sourceVertexId,
+        int targetVertexId);
+
+SectorEditorDissolveVertexResult DissolveTopologyVertex(
+        SectorTopologyMap& map,
+        int vertexId);
 
 SectorEditorAddStaticLightResult AddStaticLightToSector(
         SectorTopologyMap& map,

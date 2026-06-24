@@ -1,6 +1,7 @@
 #include "sector_editor/SectorEditorTopologyActions.h"
 
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_demo/SectorTopologyEdit.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
 
@@ -28,6 +29,71 @@ SectorEditorTopologyActionResult Changed(std::string status)
 }
 
 } // namespace
+
+SectorEditorTopologyActionResult MoveTopologyVertex(
+        SectorTopologyMap& map,
+        int vertexId,
+        SectorTopologyCoordPoint originalPoint,
+        SectorTopologyCoordPoint targetPoint)
+{
+    std::string error;
+    if (!MoveSectorTopologyVertex(map, vertexId, targetPoint, &error)) {
+        return Unchanged(TextFormat("Move rejected: %s", error.c_str()));
+    }
+
+    return Changed(TextFormat(
+            "Moved topology vertex %d %.2f,%.2f -> %.2f,%.2f",
+            vertexId,
+            SectorCoordToVisibleAuthoring(originalPoint.x),
+            SectorCoordToVisibleAuthoring(originalPoint.y),
+            SectorCoordToVisibleAuthoring(targetPoint.x),
+            SectorCoordToVisibleAuthoring(targetPoint.y)));
+}
+
+SectorEditorMergeVerticesResult MergeTopologyVertices(
+        SectorTopologyMap& map,
+        int sourceVertexId,
+        int targetVertexId)
+{
+    SectorTopologyMergeVerticesResult merge;
+    std::string error;
+    if (!MergeSectorTopologyVertices(map, sourceVertexId, targetVertexId, &merge, &error)) {
+        return SectorEditorMergeVerticesResult{
+                false,
+                SectorTopologyMergeVerticesResult{},
+                TextFormat("Merge rejected: %s", error.c_str())};
+    }
+
+    return SectorEditorMergeVerticesResult{
+            true,
+            merge,
+            TextFormat(
+                    "Merged vertex %d into vertex %d.",
+                    merge.removedVertexId,
+                    merge.mergedVertexId)};
+}
+
+SectorEditorDissolveVertexResult DissolveTopologyVertex(
+        SectorTopologyMap& map,
+        int vertexId)
+{
+    SectorTopologyDissolveVertexResult dissolve;
+    std::string error;
+    if (!DissolveSectorTopologyVertex(map, vertexId, &dissolve, &error)) {
+        return SectorEditorDissolveVertexResult{
+                false,
+                SectorTopologyDissolveVertexResult{},
+                error.empty() ? "Cannot dissolve topology vertex" : error};
+    }
+
+    return SectorEditorDissolveVertexResult{
+            true,
+            dissolve,
+            TextFormat(
+                    "Dissolved topology vertex %d; selected linedef %d",
+                    dissolve.removedVertexId,
+                    dissolve.replacementLineDefId)};
+}
 
 SectorEditorAddStaticLightResult AddStaticLightToSector(
         SectorTopologyMap& map,
