@@ -10124,6 +10124,18 @@
     "headBobStrength": 0.019999999552965164,
     "headBobFrequency": 2.0
   },
+  "skySettings": {
+    "textureId": "sky_cylinder",
+    "yawOffsetDegrees": 0.0,
+    "verticalOffset": 0.0,
+    "verticalScale": 1.0,
+    "topColor": {
+      "r": 50,
+      "g": 107,
+      "b": 183,
+      "a": 255
+    }
+  },
   "bakedLightmap": {
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
