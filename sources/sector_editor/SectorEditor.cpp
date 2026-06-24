@@ -1296,18 +1296,16 @@ void SectorEditor::CommitPendingTopologyLineSplitAtPoint()
         return;
     }
 
-    SectorTopologySplitLineResult split;
-    std::string error;
-    if (!SplitSectorTopologyLineDefAtPoint(
+    const SectorEditorSplitLineDefResult result = game::SplitTopologyLineDefAtPoint(
                 state.topologyMap,
                 pending.lineDefId,
-                pending.candidatePoint,
-                &split,
-                &error)) {
-        statusText = error.empty() ? "Cannot split topology linedef at point" : error;
+                pending.candidatePoint);
+    if (!result.changed) {
+        statusText = result.status;
         return;
     }
 
+    const SectorTopologySplitLineResult split = result.split;
     state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
     state.hasHoveredVertex = false;
     state.hoveredTopologyVertexId = -1;
@@ -1334,10 +1332,7 @@ void SectorEditor::CommitPendingTopologyLineSplitAtPoint()
     }
 
     state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(TextFormat(
-            "Split topology linedef %d at point; selected linedef %d",
-            pending.lineDefId,
-            split.secondLineDefId));
+    MarkTopologyDocumentEdited(result.status.c_str());
 }
 
 void SectorEditor::StartPendingTopologySectorCut()
@@ -7093,13 +7088,15 @@ bool SectorEditor::SplitSelectedTopologyLineDef()
     const SectorTopologySideKind previousSide = state.selectedTopologySideKind;
     const TopologyWallPart previousWallPart = state.selectedTopologyWallPart;
 
-    SectorTopologySplitLineResult split;
-    std::string error;
-    if (!SplitSectorTopologyLineDef(state.topologyMap, originalLineDefId, &split, &error)) {
-        statusText = error.empty() ? "Cannot split topology linedef" : error;
+    const SectorEditorSplitLineDefResult result = game::SplitTopologyLineDef(
+            state.topologyMap,
+            originalLineDefId);
+    if (!result.changed) {
+        statusText = result.status;
         return false;
     }
 
+    const SectorTopologySplitLineResult split = result.split;
     state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
     state.pendingTopologySectorCut = PendingTopologySectorCut{};
     state.hasHoveredVertex = false;
@@ -7127,10 +7124,7 @@ bool SectorEditor::SplitSelectedTopologyLineDef()
     }
 
     state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(TextFormat(
-            "Split topology linedef %d; selected linedef %d",
-            originalLineDefId,
-            split.secondLineDefId));
+    MarkTopologyDocumentEdited(result.status.c_str());
     return true;
 }
 

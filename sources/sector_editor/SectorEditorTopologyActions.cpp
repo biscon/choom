@@ -95,6 +95,51 @@ SectorEditorDissolveVertexResult DissolveTopologyVertex(
                     dissolve.replacementLineDefId)};
 }
 
+SectorEditorSplitLineDefResult SplitTopologyLineDef(
+        SectorTopologyMap& map,
+        int lineDefId)
+{
+    SectorTopologySplitLineResult split;
+    std::string error;
+    if (!SplitSectorTopologyLineDef(map, lineDefId, &split, &error)) {
+        return SectorEditorSplitLineDefResult{
+                false,
+                SectorTopologySplitLineResult{},
+                error.empty() ? "Cannot split topology linedef" : error};
+    }
+
+    return SectorEditorSplitLineDefResult{
+            true,
+            split,
+            TextFormat(
+                    "Split topology linedef %d; selected linedef %d",
+                    lineDefId,
+                    split.secondLineDefId)};
+}
+
+SectorEditorSplitLineDefResult SplitTopologyLineDefAtPoint(
+        SectorTopologyMap& map,
+        int lineDefId,
+        SectorTopologyCoordPoint point)
+{
+    SectorTopologySplitLineResult split;
+    std::string error;
+    if (!SplitSectorTopologyLineDefAtPoint(map, lineDefId, point, &split, &error)) {
+        return SectorEditorSplitLineDefResult{
+                false,
+                SectorTopologySplitLineResult{},
+                error.empty() ? "Cannot split topology linedef at point" : error};
+    }
+
+    return SectorEditorSplitLineDefResult{
+            true,
+            split,
+            TextFormat(
+                    "Split topology linedef %d at point; selected linedef %d",
+                    lineDefId,
+                    split.secondLineDefId)};
+}
+
 SectorEditorAddStaticLightResult AddStaticLightToSector(
         SectorTopologyMap& map,
         int sectorId,

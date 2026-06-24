@@ -32,6 +32,12 @@ struct SectorEditorDissolveVertexResult {
     std::string status;
 };
 
+struct SectorEditorSplitLineDefResult {
+    bool changed = false;
+    SectorTopologySplitLineResult split;
+    std::string status;
+};
+
 SectorEditorTopologyActionResult MoveTopologyVertex(
         SectorTopologyMap& map,
         int vertexId,
@@ -46,6 +52,15 @@ SectorEditorMergeVerticesResult MergeTopologyVertices(
 SectorEditorDissolveVertexResult DissolveTopologyVertex(
         SectorTopologyMap& map,
         int vertexId);
+
+SectorEditorSplitLineDefResult SplitTopologyLineDef(
+        SectorTopologyMap& map,
+        int lineDefId);
+
+SectorEditorSplitLineDefResult SplitTopologyLineDefAtPoint(
+        SectorTopologyMap& map,
+        int lineDefId,
+        SectorTopologyCoordPoint point);
 
 SectorEditorAddStaticLightResult AddStaticLightToSector(
         SectorTopologyMap& map,

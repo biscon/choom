@@ -1273,6 +1273,26 @@ Medium-high.
 Extract backend mutation wrappers for linedef split actions while keeping
 split-at-point pending input state in `SectorEditor.cpp`.
 
+### Status
+
+Completed: 2026-06-25
+
+Summary:
+- Wrapped midpoint linedef split and split-at-point backend mutations in `SectorEditorTopologyActions.h/.cpp`.
+- Preserved split-at-point pending input, candidate validation, overlays, selection cleanup, UI reset, and document/cache finish behavior in `SectorEditor`.
+- Build/tests passed.
+
+Verification:
+- `cmake --build cmake-build-debug -j2`: passed
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed
+- `git diff --check`: passed
+- Manual GUI verification: not performed
+
+Notes:
+- Cache invalidation behavior: unchanged; successful midpoint and split-at-point commits still call `MarkTopologyDocumentEdited()`, while rejected/cancelled attempts do not newly invalidate.
+- Lightmap/source-hash behavior: unchanged; linedef, sidedef, vertex, geometry, material/UV transfer, and middle texture receiver behavior remain governed by existing hash logic.
+- Collision/gameplay behavior: unchanged.
+
 ### Files likely touched
 
 - `sources/sector_editor/SectorEditor.cpp`
