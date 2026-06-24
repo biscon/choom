@@ -507,6 +507,26 @@ Medium.
 Move inspector sections out of `SectorEditor.cpp` gradually, starting with the
 lowest-coupling sections.
 
+### Status
+
+Completed: 2026-06-24
+
+Summary:
+- Moved the static-light inspector into `SectorEditorLightInspector.h/.cpp`.
+- Moved the topology vertex and vertex-merge summary inspector into `SectorEditorVertexInspector.h/.cpp`.
+- Preserved sector and sidedef inspectors in `SectorEditor.cpp` for later Phase 6 passes; build/tests passed.
+
+Verification:
+- `cmake --build cmake-build-debug -j2`: passed
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed
+- `git diff --check`: passed
+- Manual GUI verification: not performed
+
+Notes:
+- Cache invalidation behavior: unchanged; moved light edits still route through `MarkTopologyDocumentEdited()`, and moved vertex actions still use existing topology mutation methods.
+- Lightmap/source-hash behavior: unchanged; static lights remain hash-affecting through existing lightmap hash code.
+- Collision/gameplay behavior: unchanged.
+
 ### Files likely touched
 
 - `sources/sector_editor/SectorEditor.cpp`

@@ -3,11 +3,13 @@
 #include "engine/assets/TextureLoadFlags.h"
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_editor/SectorEditorLightInspector.h"
 #include "sector_editor/SectorEditorLightmapModal.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/SectorEditorVertexInspector.h"
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
@@ -4516,17 +4518,7 @@ void SectorEditor::DrawSectorsPanel(
     const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
     const auto inspectorContentHeight = [&]() {
         if (hasSelectedLight) {
-            float height = 38.0f; // Light title.
-            height += rowH + gap; // Id.
-            if (!uiState.idEditError.empty()) {
-                height += 36.0f;
-            }
-            height += rowH + gap; // Delete.
-            height += 6.0f * (rowH + gap); // Position/intensity/radius/source radius.
-            height += 3.0f * (rowH + gap); // RGB.
-            height += 36.0f + gap; // Swatch.
-            height += rowH + gap; // Bake.
-            return height;
+            return StaticLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
         }
         if (hasSelectedTopologySector) {
             const float textureRowH = 36.0f + gap;
@@ -4559,7 +4551,7 @@ void SectorEditor::DrawSectorsPanel(
             return height;
         }
         if (hasSelectedTopologyVertex) {
-            return 280.0f;
+            return SelectedVertexInspectorContentHeight();
         }
         if (hasSelectedTopologySideDef) {
             return 1240.0f;
@@ -4568,7 +4560,7 @@ void SectorEditor::DrawSectorsPanel(
             return 218.0f;
         }
         if (hasInspectedVertex || state.pendingTopologyVertexMerge.active) {
-            return 170.0f;
+            return InspectedVertexInspectorContentHeight();
         }
         return 42.0f;
     };
@@ -4604,252 +4596,49 @@ void SectorEditor::DrawSectorsPanel(
     }
 
     if (hasSelectedLight) {
-        SectorTopologyStaticPointLight& light = *SelectedTopologyLight();
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Static Light: %d", light.id), engine::UITextJustify::Left, config.textColor);
-        y += 38.0f;
-
-        const float labelW = 88.0f;
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, "Id", engine::UITextJustify::Left, config.mutedTextColor);
-        engine::Text(ui, config, assets, Rectangle{labelW, y, contentW - labelW, rowH}, font, TextFormat("%d", light.id), engine::UITextJustify::Left, config.textColor);
-        y += rowH + gap;
-
-        if (!uiState.idEditError.empty()) {
-            engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, uiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
-            y += 36.0f;
-        }
-
-        if (engine::Button(ui, config, input, assets, "sector_editor_delete_light", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Light")) {
-            DeleteSelectedLight();
-            engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
-            engine::EndPanel(ui, config, panel);
-            return;
-        }
-        y += rowH + gap;
-
-        const float numberLabelW = 92.0f;
-        const float numberFieldW = 112.0f;
-        auto drawLightFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
-            const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    font,
-                    id,
-                    label,
-                    Rectangle{0.0f, y, numberLabelW, rowH},
-                    Rectangle{numberLabelW, y, numberFieldW, rowH},
-                    engine::UITextJustify::Right,
-                    value,
-                    inputState,
-                    minValue,
-                    maxValue,
-                    decimals);
-            if (result.changed && result.value != value) {
-                value = result.value;
-                MarkTopologyDocumentEdited(TextFormat("Updated topology light %d", light.id));
-            }
-            y += rowH + gap;
+        const SectorEditorLightInspectorCallbacks callbacks{
+                [this](const char* status) { MarkTopologyDocumentEdited(status); },
+                [this]() { return DeleteSelectedLight(); },
+                [this]() { return BakeLightmaps(); }
         };
-
-        drawLightFloat("sector_editor_light_x", "X:", light.position.x, uiState.lightXInput, -8192.0f, 8192.0f, 2);
-        drawLightFloat("sector_editor_light_y", "Y:", light.position.y, uiState.lightYInput, -512.0f, 512.0f, 2);
-        drawLightFloat("sector_editor_light_z", "Z:", light.position.z, uiState.lightZInput, -8192.0f, 8192.0f, 2);
-        drawLightFloat("sector_editor_light_intensity", "Intensity:", light.intensity, uiState.lightIntensityInput, 0.0f, 8.0f, 3);
-        light.intensity = ClampLightIntensity(light.intensity);
-        drawLightFloat("sector_editor_light_radius", "Radius:", light.radius, uiState.lightRadiusInput, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), 2);
-        light.radius = ClampLightRadius(light.radius);
-        light.sourceRadius = ClampLightSourceRadius(light.sourceRadius, light.radius);
-        {
-            const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    font,
-                    "sector_editor_light_source_radius",
-                    "Source:",
-                    Rectangle{0.0f, y, numberLabelW, rowH},
-                    Rectangle{numberLabelW, y, numberFieldW, rowH},
-                    engine::UITextJustify::Right,
-                    light.sourceRadius,
-                    uiState.lightSourceRadiusInput,
-                    0.0f,
-                    SectorWorldToAuthoringDistance(8.0f),
-                    3);
-            const float edited = ClampLightSourceRadius(result.value, light.radius);
-            if (result.changed && edited != light.sourceRadius) {
-                light.sourceRadius = edited;
-                MarkTopologyDocumentEdited("Updated light source radius");
-            }
-            y += rowH + gap;
-        }
-
-        auto drawLightChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
-            const SectorEditorRgb8InputResult result = DrawRgb8ChannelInput(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    font,
-                    id,
-                    label,
-                    Rectangle{0.0f, y, numberLabelW, rowH},
-                    Rectangle{numberLabelW, y, contentW - numberLabelW, rowH},
-                    engine::UITextJustify::Right,
-                    channel,
-                    inputState);
-            if (result.changed && result.channel != channel) {
-                channel = result.channel;
-                light.color.a = 255;
-                MarkTopologyDocumentEdited(TextFormat("Updated topology light %d color", light.id));
-            }
-            y += rowH + gap;
-        };
-        drawLightChannel("sector_editor_light_r", "R:", light.color.r, uiState.lightRedInput);
-        drawLightChannel("sector_editor_light_g", "G:", light.color.g, uiState.lightGreenInput);
-        drawLightChannel("sector_editor_light_b", "B:", light.color.b, uiState.lightBlueInput);
-
-        const Rectangle swatch{
-                scroll.viewport.x + numberLabelW,
-                scroll.viewport.y - uiState.inspectorScroll.offset.y + y + 2.0f,
-                std::min(120.0f, contentW - numberLabelW),
-                28.0f
-        };
-        DrawColorSwatch(config, swatch, light.color, 1.0f);
-        y += 36.0f + gap;
-
-        if (engine::Button(ui, config, input, assets, "sector_editor_light_bake", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
-            BakeLightmaps();
-        }
-
+        DrawSelectedStaticLightInspector(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                scroll,
+                contentW,
+                rowH,
+                gap,
+                *SelectedTopologyLight(),
+                uiState,
+                callbacks);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return;
     }
 
     if (hasSelectedTopologyVertex || hasInspectedVertex || state.pendingTopologyVertexMerge.active) {
-        const int vertexId = state.pendingTopologyVertexMerge.active
-                ? state.pendingTopologyVertexMerge.sourceVertexId
-                : (hasSelectedTopologyVertex ? state.selectedTopologyVertexId : inspectedVertex->id);
-        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
-        if (vertex != nullptr) {
-            int incidentLineCount = 0;
-            for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
-                if (lineDef.startVertexId == vertex->id || lineDef.endVertexId == vertex->id) {
-                    ++incidentLineCount;
-                }
-            }
-            engine::Text(
-                    ui,
-                    config,
-                    assets,
-                    Rectangle{0.0f, y, contentW, 34.0f},
-                    font,
-                    TextFormat("Topology Vertex: %d", vertex->id),
-                    engine::UITextJustify::Left,
-                    config.textColor);
-            y += 38.0f;
-            engine::Text(
-                    ui,
-                    config,
-                    assets,
-                    Rectangle{0.0f, y, contentW, 30.0f},
-                    font,
-                    TextFormat("ID: %d", vertex->id),
-                    engine::UITextJustify::Left,
-                    config.mutedTextColor);
-            y += 30.0f;
-            engine::Text(
-                    ui,
-                    config,
-                    assets,
-                    Rectangle{0.0f, y, contentW, 30.0f},
-                    font,
-                    TextFormat(
-                            "Position: %.2f, %.2f",
-                            SectorCoordToVisibleAuthoring(vertex->x),
-                            SectorCoordToVisibleAuthoring(vertex->y)),
-                    engine::UITextJustify::Left,
-                    config.mutedTextColor);
-            y += 34.0f;
-            engine::Text(
-                    ui,
-                    config,
-                    assets,
-                    Rectangle{0.0f, y, contentW, 30.0f},
-                    font,
-                    TextFormat("Incident linedefs: %d", incidentLineCount),
-                    engine::UITextJustify::Left,
-                    config.mutedTextColor);
-            y += 34.0f;
-
-            if (state.pendingTopologyVertexMerge.active) {
-                engine::Text(
-                        ui,
-                        config,
-                        assets,
-                        Rectangle{0.0f, y, contentW, 44.0f},
-                        font,
-                        state.pendingTopologyVertexMerge.message.c_str(),
-                        engine::UITextJustify::Left,
-                        state.pendingTopologyVertexMerge.hasValidTarget
-                                ? config.textColor
-                                : config.mutedTextColor);
-                y += 48.0f;
-                if (engine::Button(
-                            ui,
-                            config,
-                            input,
-                            assets,
-                            "sector_editor_cancel_vertex_merge",
-                            Rectangle{0.0f, y, contentW, rowH},
-                            font,
-                            "Cancel Merge")) {
-                    CancelPendingTopologyVertexMerge("Cancelled vertex merge");
-                }
-            } else if (hasSelectedTopologyVertex) {
-                if (engine::Button(
-                            ui,
-                            config,
-                            input,
-                            assets,
-                            "sector_editor_dissolve_vertex",
-                            Rectangle{0.0f, y, contentW, rowH},
-                            font,
-                            "Dissolve Vertex")) {
-                    DissolveSelectedTopologyVertex();
-                }
-                y += rowH + gap;
-                if (engine::Button(
-                            ui,
-                            config,
-                            input,
-                            assets,
-                            "sector_editor_merge_vertex_into",
-                            Rectangle{0.0f, y, contentW, rowH},
-                            font,
-                            "Merge Into...")) {
-                    StartPendingTopologyVertexMerge(vertex->id);
-                }
-            } else if (engine::Button(
-                        ui,
-                        config,
-                        input,
-                        assets,
-                        "sector_editor_merge_vertex_into",
-                        Rectangle{0.0f, y, contentW, rowH},
-                        font,
-                        "Merge Into...")) {
-                StartPendingTopologyVertexMerge(vertex->id);
-            }
-        } else {
-            state.inspectedTopologyVertexId = -1;
-            if (hasSelectedTopologyVertex) {
-                ClearStaleTopologySelection();
-            }
-        }
-
+        const SectorEditorVertexInspectorCallbacks callbacks{
+                [this](const char* message) { CancelPendingTopologyVertexMerge(message); },
+                [this]() { return DissolveSelectedTopologyVertex(); },
+                [this](int vertexId) { StartPendingTopologyVertexMerge(vertexId); },
+                [this]() { ClearStaleTopologySelection(); }
+        };
+        DrawTopologyVertexInspector(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                contentW,
+                rowH,
+                gap,
+                inspectedVertex,
+                hasSelectedTopologyVertex,
+                state,
+                callbacks);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return;
