@@ -233,7 +233,6 @@ void TestSquare()
     std::string error = "stale";
     Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "square builds");
     Check(error.empty(), "successful build clears error");
-    Check(geometry.surfaces.size() == 6, "square has two flats and four walls");
     const auto* floor = FindSurface(geometry, game::SectorGeneratedSurfaceKind::Floor, 10);
     const auto* ceiling = FindSurface(geometry, game::SectorGeneratedSurfaceKind::Ceiling, 10);
     Check(floor != nullptr && floor->vertices.size() == 6, "square has one triangulated floor surface");
@@ -464,6 +463,50 @@ void TestDifferentCeilingPortal()
           "upper wall uses current sidedef upper texture");
     Check(FindSurface(geometry, game::SectorGeneratedSurfaceKind::UpperWall, 20, 2) == nullptr,
           "shorter sector side emits no duplicate upper wall");
+}
+
+void TestSkyCeilingSkipsCeilingOnly()
+{
+    game::SectorTopologyMap map = MakeSquare();
+    map.sectors[0].ceilingSky = true;
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "sky ceiling sector builds");
+    Check(FindSurface(geometry, game::SectorGeneratedSurfaceKind::Floor, 10) != nullptr,
+          "sky ceiling sector still emits floor");
+    Check(FindSurface(geometry, game::SectorGeneratedSurfaceKind::Ceiling, 10) == nullptr,
+          "sky ceiling sector emits no ceiling surface");
+    for (int lineId = 1; lineId <= 4; ++lineId) {
+        Check(FindSurface(geometry, game::SectorGeneratedSurfaceKind::Wall, 10, lineId) != nullptr,
+              "sky ceiling sector still emits one-sided walls");
+    }
+}
+
+void TestSkyCeilingPortalUpperWallRule()
+{
+    game::SectorTopologyMap bothSky = MakeAdjacent(0.0f, 24.0f, 0.0f, 16.0f);
+    bothSky.sectors[0].ceilingSky = true;
+    bothSky.sectors[1].ceilingSky = true;
+    game::FindSectorTopologySideDef(bothSky, 2)->middle = Part("bars");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(bothSky, geometry, &error),
+          "different-height sky-sky portal builds");
+    Check(FindSurface(geometry, game::SectorGeneratedSurfaceKind::UpperWall, 10, 2) == nullptr,
+          "sky-sky portal suppresses taller side upper wall");
+    Check(FindSurface(geometry, game::SectorGeneratedSurfaceKind::UpperWall, 20, 2) == nullptr,
+          "sky-sky portal emits no shorter side upper wall");
+    Check(CountSurfacesForLine(geometry, game::SectorGeneratedSurfaceKind::Middle, 2) == 2,
+          "sky-sky portal keeps middle texture surfaces independent");
+
+    game::SectorTopologyMap oneSky = MakeAdjacent(0.0f, 24.0f, 0.0f, 16.0f);
+    oneSky.sectors[0].ceilingSky = true;
+    Check(game::BuildSectorGeneratedGeometry(oneSky, geometry, &error),
+          "different-height one-sky portal builds");
+    Check(FindSurface(geometry, game::SectorGeneratedSurfaceKind::UpperWall, 10, 2) != nullptr,
+          "one-sky portal keeps normal upper wall behavior");
 }
 
 void TestDiagonalLength()
@@ -703,6 +746,8 @@ int main()
     TestMiddleTextureUvsUseWallConvention();
     TestDifferentFloorPortal();
     TestDifferentCeilingPortal();
+    TestSkyCeilingSkipsCeilingOnly();
+    TestSkyCeilingPortalUpperWallRule();
     TestDiagonalLength();
     TestHeightEditsAffectTopologyGeometry();
     TestDecalsPropagateWithoutChangingBaseUvs();

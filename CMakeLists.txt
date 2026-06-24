@@ -203,6 +203,15 @@ if(BUILD_TESTING)
     target_include_directories(sector_fps_controller_tests PRIVATE sources)
     target_link_libraries(sector_fps_controller_tests PRIVATE raylib)
     add_test(NAME sector_fps_controller COMMAND sector_fps_controller_tests)
+
+    add_executable(sector_sky_cylinder_tests
+            tests/SectorSkyCylinderTests.cpp
+            sources/sector_demo/SectorSkyCylinder.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+    )
+    target_include_directories(sector_sky_cylinder_tests PRIVATE sources)
+    target_link_libraries(sector_sky_cylinder_tests PRIVATE raylib)
+    add_test(NAME sector_sky_cylinder COMMAND sector_sky_cylinder_tests)
 endif()
 
 # -------------------------------

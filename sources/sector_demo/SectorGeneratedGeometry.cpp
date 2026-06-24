@@ -548,14 +548,16 @@ bool BuildSectorGeneratedGeometry(
         }
         generated.surfaces.push_back(std::move(floor));
 
-        SectorGeneratedSurface ceiling;
-        if (!BuildTopologyFlatSurface(
-                    map, sector, loops, SectorGeneratedSurfaceKind::Ceiling,
-                    sector.ceilingZ, Vector3{0.0f, -1.0f, 0.0f}, false,
-                    sector.ceilingTextureId, sector.ceilingUv, sector.ceilingDecal, ceiling, error)) {
-            return SetTopologyError(outGeometry, outError, error);
+        if (!sector.ceilingSky) {
+            SectorGeneratedSurface ceiling;
+            if (!BuildTopologyFlatSurface(
+                        map, sector, loops, SectorGeneratedSurfaceKind::Ceiling,
+                        sector.ceilingZ, Vector3{0.0f, -1.0f, 0.0f}, false,
+                        sector.ceilingTextureId, sector.ceilingUv, sector.ceilingDecal, ceiling, error)) {
+                return SetTopologyError(outGeometry, outError, error);
+            }
+            generated.surfaces.push_back(std::move(ceiling));
         }
-        generated.surfaces.push_back(std::move(ceiling));
     }
 
     for (const SectorTopologySideDef& sideDef : map.sideDefs) {
@@ -626,7 +628,8 @@ bool BuildSectorGeneratedGeometry(
             }
             generated.surfaces.push_back(std::move(wall));
         }
-        if (oppositeSector->ceilingZ < sector->ceilingZ) {
+        const bool suppressSkyUpperWall = sector->ceilingSky && oppositeSector->ceilingSky;
+        if (!suppressSkyUpperWall && oppositeSector->ceilingZ < sector->ceilingZ) {
             if (!BuildTopologyWallSurface(
                         *directedStart, *directedEnd, *sector, *lineDef, sideDef,
                         SectorGeneratedSurfaceKind::UpperWall,

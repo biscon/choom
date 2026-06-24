@@ -247,7 +247,7 @@ private:
     void RefreshGameplaySectorAndVerticalContext();
     void InitializeGameplayVerticalState();
     void OpenPreviewSettingsModal();
-    void ApplyPreviewSettingsModal();
+    void ApplyPreviewSettingsModal(engine::AssetManager& assets);
     void RefreshDefaultTextures();
     void RefreshEditorTextureAssets(engine::AssetManager& assets);
     engine::TextureHandle EditorTextureHandleForId(const std::string& textureId) const;
@@ -318,6 +318,7 @@ private:
     void ClearSelection();
     void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer);
     void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer);
+    void OpenMapSkyTexturePicker();
     void ApplyTexturePickerSelection(engine::AssetManager& assets);
     std::string CurrentTextureForPickerTarget() const;
     bool TryRenameSelectedTopologySector();

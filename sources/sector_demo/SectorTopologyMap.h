@@ -25,6 +25,14 @@ struct SectorPreviewSettings {
     float headBobFrequency = 2.0f;
 };
 
+struct SectorTopologySkySettings {
+    std::string textureId = "sky_cylinder";
+    float yawOffsetDegrees = 0.0f;
+    float verticalOffset = 0.0f;
+    float verticalScale = 1.0f;
+    Color topColor = Color{95, 165, 235, 255};
+};
+
 struct SectorTopologyMap {
     std::unordered_map<std::string, SectorTextureDefinition> texturesById;
     std::vector<SectorTopologyVertex> vertices;
@@ -33,6 +41,7 @@ struct SectorTopologyMap {
     std::vector<SectorTopologySector> sectors;
     std::vector<SectorTopologyStaticPointLight> staticLights;
     SectorPreviewSettings previewSettings;
+    SectorTopologySkySettings skySettings;
     SectorLightmapBakeSettings lightmapSettings;
     SectorLightmapMetadata bakedLightmap;
 };
@@ -54,6 +63,8 @@ SectorTopologyIndexes BuildSectorTopologyIndexes(const SectorTopologyMap& map);
 
 SectorPreviewSettings DefaultSectorPreviewSettings();
 SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings settings);
+SectorTopologySkySettings DefaultSectorTopologySkySettings();
+SectorTopologySkySettings NormalizeSectorTopologySkySettings(SectorTopologySkySettings settings);
 
 bool IsValidSectorTopologyId(int id);
 const char* SectorTopologySideKindName(SectorTopologySideKind side);

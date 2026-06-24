@@ -109,6 +109,26 @@ alpha-blended. Middle textures do not block by themselves; use the linedef
 `Blocks Player` flag when a see-through grate, bars, or window should block
 Gameplay movement.
 
+Sectors can mark their ceiling as sky/open. A sky ceiling does not generate the
+normal ceiling surface. In 3D preview, sky ceilings show a basic visual-only
+panorama cylinder when the map-level sky texture ID resolves to a loaded map
+texture. The default sky texture ID is `sky_cylinder`; the local test asset is
+`assets/images/sky/sky_cylinder.png`, but texture paths are not hardcoded and
+the texture must be present in the map texture table. Sky textures should be
+horizontally seamless panoramas such as 4:1, with a small flat top band matching
+the cap color; the renderer samples slightly inside that band to reduce cap seams.
+Map-level sky settings are edited in `Preview Settings -> Sky`. The yaw offset
+rotates the panorama around the camera, vertical offset/scale adjust the
+panorama placement on the cylinder, and top color controls the solid top cap.
+Missing, empty, unloaded, or failed sky textures still fall back to the existing
+clear background behavior, and the clear color is unchanged.
+Adjacent sectors that both have sky ceilings suppress the upper portal wall
+strip between them, even when their numeric ceiling heights differ. The sky
+renderer is visual-only and its persisted settings do not affect collision,
+lightmaps, bloom, picking, or generated surface metadata; collision still uses
+the sector's normal authored ceiling height for now. `ceilingSky` sectors are
+still required for sky to appear through omitted ceilings.
+
 ## Sector Collision Query Layer
 
 Gameplay/collision work now has a reusable `SectorCollisionWorld` query layer
@@ -146,6 +166,7 @@ Selecting a topology sector opens the sector inspector. It edits:
 
 - sector name and stable integer ID display
 - floor and ceiling heights
+- ceiling sky/open toggle
 - floor and ceiling texture IDs and UV scale/offset
 - ambient color and intensity
 - default wall, lower, and upper texture IDs and UV scale/offset

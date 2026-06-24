@@ -129,6 +129,18 @@ std::string ReadString(const Json& object, const char* field, const std::string&
     return value.get<std::string>();
 }
 
+bool ReadOptionalBool(const Json& object, const char* field, const std::string& context, bool defaultValue)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        return defaultValue;
+    }
+    if (!it->is_boolean()) {
+        Fail(context + "." + field + " must be a boolean");
+    }
+    return it->get<bool>();
+}
+
 Vector2 ReadVector2(const Json& value, const std::string& context)
 {
     if (!value.is_array() || value.size() != 2
@@ -336,6 +348,8 @@ SectorLightmapBakeSettings ReadLightmapSettings(const Json& value, const std::st
     return settings;
 }
 
+Color ReadColor(const Json& value, const std::string& context);
+
 SectorPreviewSettings ReadPreviewSettings(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -388,6 +402,36 @@ SectorPreviewSettings ReadPreviewSettings(const Json& value, const std::string& 
         settings.headBobFrequency = ReadFloat(value, "headBobFrequency", context);
     }
     return NormalizeSectorPreviewSettings(settings);
+}
+
+SectorTopologySkySettings ReadSkySettings(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorTopologySkySettings settings = DefaultSectorTopologySkySettings();
+    const auto textureIdIt = value.find("textureId");
+    if (textureIdIt != value.end()) {
+        settings.textureId = ReadString(value, "textureId", context);
+    }
+    const auto yawIt = value.find("yawOffsetDegrees");
+    if (yawIt != value.end()) {
+        settings.yawOffsetDegrees = ReadFloat(value, "yawOffsetDegrees", context);
+    }
+    const auto verticalOffsetIt = value.find("verticalOffset");
+    if (verticalOffsetIt != value.end()) {
+        settings.verticalOffset = ReadFloat(value, "verticalOffset", context);
+    }
+    const auto verticalScaleIt = value.find("verticalScale");
+    if (verticalScaleIt != value.end()) {
+        settings.verticalScale = ReadFloat(value, "verticalScale", context);
+    }
+    const auto topColorIt = value.find("topColor");
+    if (topColorIt != value.end()) {
+        settings.topColor = ReadColor(*topColorIt, context + ".topColor");
+    }
+    return NormalizeSectorTopologySkySettings(settings);
 }
 
 SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& context)
@@ -617,16 +661,6 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
     };
 }
 
-Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
-{
-    return Json{
-            {"path", metadata.path},
-            {"width", metadata.width},
-            {"height", metadata.height},
-            {"sourceHash", metadata.sourceHash}
-    };
-}
-
 Json WriteColor(Color color)
 {
     return Json{
@@ -634,6 +668,42 @@ Json WriteColor(Color color)
             {"g", static_cast<int>(color.g)},
             {"b", static_cast<int>(color.b)},
             {"a", static_cast<int>(color.a)}
+    };
+}
+
+Json WriteSkySettings(const SectorTopologySkySettings& settings)
+{
+    const SectorTopologySkySettings normalized = NormalizeSectorTopologySkySettings(settings);
+    return Json{
+            {"textureId", normalized.textureId},
+            {"yawOffsetDegrees", normalized.yawOffsetDegrees},
+            {"verticalOffset", normalized.verticalOffset},
+            {"verticalScale", normalized.verticalScale},
+            {"topColor", WriteColor(normalized.topColor)}
+    };
+}
+
+bool IsDefaultSkySettings(const SectorTopologySkySettings& settings)
+{
+    const SectorTopologySkySettings normalized = NormalizeSectorTopologySkySettings(settings);
+    const SectorTopologySkySettings defaults = DefaultSectorTopologySkySettings();
+    return normalized.textureId == defaults.textureId
+            && normalized.yawOffsetDegrees == defaults.yawOffsetDegrees
+            && normalized.verticalOffset == defaults.verticalOffset
+            && normalized.verticalScale == defaults.verticalScale
+            && normalized.topColor.r == defaults.topColor.r
+            && normalized.topColor.g == defaults.topColor.g
+            && normalized.topColor.b == defaults.topColor.b
+            && normalized.topColor.a == defaults.topColor.a;
+}
+
+Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
+{
+    return Json{
+            {"path", metadata.path},
+            {"width", metadata.width},
+            {"height", metadata.height},
+            {"sourceHash", metadata.sourceHash}
     };
 }
 
@@ -769,6 +839,7 @@ SectorTopologyMap ParseMap(const Json& root)
         sector.ceilingZ = ReadFloat(value, "ceilingZ", context);
         sector.floorTextureId = ReadString(value, "floorTextureId", context);
         sector.ceilingTextureId = ReadString(value, "ceilingTextureId", context);
+        sector.ceilingSky = ReadOptionalBool(value, "ceilingSky", context, false);
         sector.floorUv = ReadUv(RequireField(value, "floorUv", context), context + ".floorUv");
         sector.ceilingUv = ReadUv(RequireField(value, "ceilingUv", context), context + ".ceilingUv");
         ReadOptionalDecal(value, "floorDecal", context, sector.floorDecal);
@@ -817,6 +888,11 @@ SectorTopologyMap ParseMap(const Json& root)
     const auto previewSettingsIt = root.find("previewSettings");
     if (previewSettingsIt != root.end()) {
         map.previewSettings = ReadPreviewSettings(*previewSettingsIt, "root.previewSettings");
+    }
+
+    const auto skySettingsIt = root.find("skySettings");
+    if (skySettingsIt != root.end()) {
+        map.skySettings = ReadSkySettings(*skySettingsIt, "root.skySettings");
     }
 
     const auto bakedLightmapIt = root.find("bakedLightmap");
@@ -931,6 +1007,9 @@ Json SerializeMap(const SectorTopologyMap& map)
             sectorJson["ceilingDecal"] = WriteDecal(
                     sector->ceilingDecal, context + ".ceilingDecal");
         }
+        if (sector->ceilingSky) {
+            sectorJson["ceilingSky"] = true;
+        }
         root["sectors"].push_back(std::move(sectorJson));
     }
 
@@ -952,6 +1031,9 @@ Json SerializeMap(const SectorTopologyMap& map)
 
     root["lightmapSettings"] = WriteLightmapSettings(map.lightmapSettings);
     root["previewSettings"] = WritePreviewSettings(map.previewSettings);
+    if (!IsDefaultSkySettings(map.skySettings)) {
+        root["skySettings"] = WriteSkySettings(map.skySettings);
+    }
     if (!map.bakedLightmap.path.empty()
             && map.bakedLightmap.width > 0
             && map.bakedLightmap.height > 0

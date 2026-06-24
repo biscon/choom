@@ -213,6 +213,28 @@ int CountValidChartsForKind(
     return count;
 }
 
+int CountValidChartsForSurface(
+        const game::SectorGeneratedGeometry& geometry,
+        const game::SectorLightmapLayout& layout,
+        game::SectorGeneratedSurfaceKind kind,
+        int sectorId,
+        int lineDefId = -2)
+{
+    int count = 0;
+    for (const game::SectorLightmapChart& chart : layout.charts) {
+        if (chart.surfaceIndex < 0 || chart.surfaceIndex >= static_cast<int>(geometry.surfaces.size())) {
+            continue;
+        }
+        const game::SectorGeneratedSurface& surface = geometry.surfaces[static_cast<size_t>(chart.surfaceIndex)];
+        if (surface.ref.kind == kind
+                && surface.ref.topologySectorId == sectorId
+                && (lineDefId == -2 || surface.ref.topologyLineDefId == lineDefId)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 void TestSourceHashChanges()
 {
     const game::SectorTopologyMap base = MakeSquare();
@@ -228,6 +250,9 @@ void TestSourceHashChanges()
     changedSector = base;
     changedSector.sectors[0].ceilingTextureId = "alt";
     Check(game::ComputeSectorLightmapSourceHash(changedSector) != hash, "hash changes when sector texture changes");
+    changedSector = base;
+    changedSector.sectors[0].ceilingSky = true;
+    Check(game::ComputeSectorLightmapSourceHash(changedSector) != hash, "hash changes when sector ceiling sky changes");
 
     game::SectorTopologyMap changedSideDef = base;
     changedSideDef.sideDefs[0].wall.textureId = "alt";
@@ -262,6 +287,27 @@ void TestSourceHashChanges()
     changedPreview.previewSettings.headBobFrequency = 12.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
           "hash ignores preview headbob frequency");
+
+    game::SectorTopologyMap changedSky = base;
+    changedSky.skySettings.textureId = "storm_panorama";
+    Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
+          "hash ignores sky texture ID");
+    changedSky = base;
+    changedSky.skySettings.yawOffsetDegrees = 90.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
+          "hash ignores sky yaw offset");
+    changedSky = base;
+    changedSky.skySettings.verticalOffset = 0.25f;
+    Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
+          "hash ignores sky vertical offset");
+    changedSky = base;
+    changedSky.skySettings.verticalScale = 2.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
+          "hash ignores sky vertical scale");
+    changedSky = base;
+    changedSky.skySettings.topColor = Color{10, 20, 30, 255};
+    Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
+          "hash ignores sky top color");
 }
 
 void TestSourceHashIncludesMiddleTextureData()
@@ -343,6 +389,32 @@ void TestLayoutSmoke()
     Check(game::BuildSectorLightmapLayout(raisedPlatform, layout, error) && !layout.charts.empty(),
           "inserted platform topology layout succeeds");
     Check(CountWallChartsForLine(raisedPlatform, 5) > 0, "platform riser receives a chart");
+
+    game::SectorTopologyMap skyCeiling = MakeSquare();
+    skyCeiling.sectors[0].ceilingSky = true;
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(skyCeiling, geometry, &error), "sky ceiling chart test geometry builds");
+    Check(game::BuildSectorLightmapLayout(skyCeiling, layout, error), "sky ceiling layout succeeds");
+    Check(CountValidChartsForSurface(
+                  geometry, layout, game::SectorGeneratedSurfaceKind::Ceiling, 10) == 0,
+          "sky ceiling allocates no ceiling chart");
+
+    game::SectorTopologyMap bothSkyPortal = MakeAdjacent(0.0f, 24.0f, 0.0f, 16.0f);
+    bothSkyPortal.sectors[0].ceilingSky = true;
+    bothSkyPortal.sectors[1].ceilingSky = true;
+    Check(game::BuildSectorGeneratedGeometry(bothSkyPortal, geometry, &error), "sky-sky portal chart test geometry builds");
+    Check(game::BuildSectorLightmapLayout(bothSkyPortal, layout, error), "sky-sky portal layout succeeds");
+    Check(CountValidChartsForSurface(
+                  geometry, layout, game::SectorGeneratedSurfaceKind::UpperWall, 10, 2) == 0,
+          "sky-sky portal allocates no upper-wall chart");
+
+    game::SectorTopologyMap oneSkyPortal = MakeAdjacent(0.0f, 24.0f, 0.0f, 16.0f);
+    oneSkyPortal.sectors[0].ceilingSky = true;
+    Check(game::BuildSectorGeneratedGeometry(oneSkyPortal, geometry, &error), "one-sky portal chart test geometry builds");
+    Check(game::BuildSectorLightmapLayout(oneSkyPortal, layout, error), "one-sky portal layout succeeds");
+    Check(CountValidChartsForSurface(
+                  geometry, layout, game::SectorGeneratedSurfaceKind::UpperWall, 10, 2) == 1,
+          "one-sky portal keeps upper-wall chart");
 }
 
 void TestMiddleSurfacesReceiveLightmapsWithoutOccluding()
