@@ -654,35 +654,130 @@ Medium-high.
 ### Goal
 
 Move New/Load/Save/Reload helpers and 3D preview/gameplay integration helpers
-into focused modules after lower-risk UI/render extractions are complete.
+into focused modules after lower-risk UI/render extractions are complete. Execute
+Phase 8 one subpass at a time, start each subpass in plan mode, and keep each
+subpass compiling/runnable independently. Do not mark Phase 8 complete until all
+subpasses that remain in scope are complete. If Phase 8C is deferred, explicitly
+mark it deferred rather than incomplete.
+
+## Phase 8A: Extract Document Actions / Helpers
+
+### Goal
+
+Extract low-level document action helpers where practical while keeping
+`SectorEditor` responsible for ownership and orchestration.
 
 ### Files likely touched
 
 - `sources/sector_editor/SectorEditor.cpp`
-- New files such as `SectorEditorDocumentActions.h/.cpp` and
-  `SectorEditorPreviewActions.h/.cpp`
+- New files such as `SectorEditorDocumentActions.h/.cpp`
 
 ### Behavior that must remain unchanged
 
 - Asset scope cleanup, preview shutdown, level path rules, save/load/reload modal
   flow, dirty flags, current level path/name state, and status text.
-- 3D preview rebuild, pose preservation, free-fly/gameplay switching, collision
-  world rebuild, and visual-only camera effects.
+- Pending tool cancellation, save/load/reload confirmation behavior, and error
+  behavior.
 
 ### Implementation notes
 
-- Keep `SectorEditor` owning `SectorMeshPreview`, asset scopes, and top-level
-  mode transitions unless a narrow ownership move is clearly safe.
+- Add `SectorEditorDocumentActions.h/.cpp` if appropriate.
+- Extract only low-level document action helpers where practical:
+  reset/load/save path state handling, level list refresh, save/load modal open
+  helpers, and new/reload confirmation setup if callback ownership stays simple.
+- Keep UI drawing in `SectorEditor.cpp` unless moving it is required by the
+  helper boundary.
+- Keep `SectorEditor` owning asset scopes, preview shutdown, mode transitions,
+  dirty flags, current level name/path state, status text, and high-level
+  orchestration.
+- Do not extract 3D preview/gameplay helpers in this subpass.
+
+### Cache invalidation notes
+
+- Load/reset behavior must preserve existing topology render-cache invalidation.
+- Save-only path changes should preserve current dirty-flag behavior and should
+  not introduce new 2D cache invalidation unless visible cached 2D state changes.
+
+### Lightmap/source-hash notes
+
+- Document helper extraction must not change lightmap source-hash inputs or
+  baked-lightmap metadata behavior.
+
+### Collision/gameplay notes
+
+- Document helper extraction must not change collision, sector lookup, physics,
+  preview pose, or gameplay-preview state behavior.
+
+### Risk level
+
+Medium.
+
+### Non-goals
+
+- Do not redesign `SectorEditorState`.
+- Do not change level JSON schema or serialization style.
+- Do not move preview/gameplay integration helpers in this subpass.
+
+### Final report expectations
+
+- State which document helpers moved and which document orchestration stayed in
+  `SectorEditor`.
+- State cache invalidation behavior for load/reset.
+- State that lightmap/source-hash behavior did not change.
+- State that collision/gameplay behavior did not change.
+
+## Phase 8B: Extract Preview Lifecycle / Integration Helpers
+
+### Goal
+
+Extract narrow 3D preview lifecycle and gameplay-integration helpers where the
+signatures stay explicit and readable.
+
+### Files likely touched
+
+- `sources/sector_editor/SectorEditor.cpp`
+- New files such as `SectorEditorPreviewActions.h/.cpp`
+
+### Behavior that must remain unchanged
+
+- 3D preview rebuild, pose preservation, free-fly/gameplay switching, collision
+  world rebuild, visual-only camera effects, status text, and selection/UI reset
+  behavior.
+
+### Implementation notes
+
+- Add `SectorEditorPreviewActions.h/.cpp` if appropriate.
+- Extract narrow preview lifecycle helpers where signatures stay explicit and
+  readable: active pose calculation, gameplay pose application,
+  free-fly/gameplay toggle state transitions, collision-world rebuild state
+  reset/update, and gameplay vertical context refresh/init helpers.
+- Keep `SectorEditor` owning `SectorMeshPreview`, asset scopes, mode
+  transitions, and high-level orchestration.
+- Keep `TryEnterPreview3D()` / `LeavePreview3D()` in `SectorEditor` unless a
+  very narrow helper boundary is clearly safe.
+- Do not split `UpdatePreview3D()` in this subpass unless it is required for a
+  clean extraction and behavior remains obviously unchanged.
 - Preserve that visual-only step smoothing, headbob, and landing dip do not feed
   collision, sector lookup, or physics.
 - Preserve topology-based collision via `SectorCollisionWorld`; do not use render
   triangles for gameplay collision.
 
-### Tests / verification
+### Cache invalidation notes
 
-- Standard build/test/diff commands.
-- Manually verify new, save, load, reload, unsaved-change confirmations,
-  entering/leaving 3D, free-fly/gameplay toggle, and preview settings apply.
+- Preview lifecycle helper extraction should not change topology render-cache
+  invalidation behavior.
+
+### Lightmap/source-hash notes
+
+- Preview lifecycle helper extraction must not change lightmap source-hash
+  policy. Preview settings and sky visual settings remain excluded; directional
+  light remains hash-affecting if touched by existing settings flows.
+
+### Collision/gameplay notes
+
+- Collision, sector lookup, physics, camera pose preservation, free-fly/gameplay
+  switching, step smoothing, headbob, and landing dip behavior must remain
+  unchanged.
 
 ### Risk level
 
@@ -692,13 +787,85 @@ Medium-high.
 
 - Do not redesign `SectorEditorState`.
 - Do not change collision, physics, or camera semantics.
-- Do not change level JSON schema.
+- Do not change generated geometry or preview mesh rebuild behavior.
+- Do not extract document helpers in this subpass.
 
 ### Final report expectations
 
+- State which preview lifecycle helpers moved and which orchestration stayed in
+  `SectorEditor`.
 - State whether collision/sector lookup/physics changed; expected answer is no.
-- State cache invalidation behavior for load/reset.
-- State no source-hash behavior changed unless lightmap settings were touched.
+- State cache invalidation behavior; expected answer is unchanged.
+- State no source-hash behavior changed unless preview settings, sky,
+  directional light, or lightmap settings were touched.
+
+## Phase 8C: Extract Gameplay Preview Update Helpers, if still useful
+
+### Goal
+
+After Phase 8B, extract gameplay preview update helpers only if a clear,
+low-risk seam remains.
+
+### Files likely touched
+
+- `sources/sector_editor/SectorEditor.cpp`
+- `sources/sector_editor/SectorEditorPreviewActions.h/.cpp` if created in
+  Phase 8B
+
+### Behavior that must remain unchanged
+
+- Preview hotkeys, free-fly update, gameplay input collection, horizontal
+  movement, vertical physics, headbob, landing dip, surface selection, UI modal
+  gating, and status text.
+
+### Implementation notes
+
+- Only do this after Phase 8B if there is still a clear, low-risk seam.
+- Candidate helpers include preview hotkey handling, gameplay controller input
+  collection, and the gameplay movement / vertical / headbob / landing-dip
+  update block.
+- Preserve visual-only behavior: step smoothing, headbob, and landing dip must
+  not feed collision, sector lookup, physics, or stored feet/body position.
+- Preserve `SectorCollisionWorld` topology collision.
+- Do not use generated render triangles for gameplay collision.
+- If this looks risky or unclear, leave it deferred and explicitly mark Phase 8C
+  deferred rather than incomplete.
+
+### Cache invalidation notes
+
+- Gameplay preview update helper extraction should not change topology
+  render-cache invalidation behavior.
+
+### Lightmap/source-hash notes
+
+- Gameplay preview update helper extraction should not touch lightmap source-hash
+  inputs.
+
+### Collision/gameplay notes
+
+- Collision, sector lookup, physics, stored feet/body position, visual step
+  smoothing, headbob, landing dip, and no-sector fallback behavior must remain
+  unchanged.
+
+### Risk level
+
+Medium-high; defer if the seam is not obvious.
+
+### Non-goals
+
+- Do not change collision, physics, or camera semantics.
+- Do not change `SectorCollisionWorld` behavior.
+- Do not use generated render triangles for gameplay collision.
+- Do not introduce a tool hierarchy, command system, or broad preview
+  abstraction.
+
+### Final report expectations
+
+- State whether Phase 8C was completed or explicitly deferred.
+- If completed, state which gameplay update helpers moved.
+- State whether collision/sector lookup/physics changed; expected answer is no.
+- State cache invalidation behavior; expected answer is unchanged.
+- State that lightmap/source-hash behavior did not change.
 
 ## Phase 9: Extract Topology Mutation Wrappers And Invalidation Pattern
 
