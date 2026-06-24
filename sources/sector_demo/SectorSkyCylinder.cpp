@@ -9,6 +9,10 @@ namespace game {
 
 namespace {
 
+constexpr float kSkyCylinderTopVInset = 0.02f;
+constexpr float kSkyTopCapRadiusScale = 1.002f;
+constexpr float kSkyTopCapYOffset = -0.25f;
+
 bool IsValidSkyCylinderMeshInput(int segments, float radius, float height)
 {
     return segments >= 3
@@ -94,7 +98,7 @@ SectorSkyCylinderMeshData BuildSkyCylinderMeshData(
 
         data.positions.push_back(Vector3{x, halfHeight, z});
         data.normals.push_back(normal);
-        data.uvs.push_back(Vector2{u, settings.verticalOffset});
+        data.uvs.push_back(Vector2{u, kSkyCylinderTopVInset * settings.verticalScale + settings.verticalOffset});
     }
 
     for (int i = 0; i < segments; ++i) {
@@ -128,7 +132,8 @@ SectorSkyCylinderMeshData BuildSkyCylinderTopCapMeshData(int segments, float rad
     data.uvs.reserve(static_cast<size_t>(rimVertexCount) + 1u);
     data.indices.reserve(static_cast<size_t>(segments) * 3u);
 
-    const float topY = height * 0.5f;
+    const float topY = height * 0.5f + kSkyTopCapYOffset;
+    const float capRadius = radius * kSkyTopCapRadiusScale;
     constexpr float twoPi = PI * 2.0f;
 
     data.positions.push_back(Vector3{0.0f, topY, 0.0f});
@@ -140,8 +145,8 @@ SectorSkyCylinderMeshData BuildSkyCylinderTopCapMeshData(int segments, float rad
         const float angle = twoPi * u;
         const float cosAngle = std::cos(angle);
         const float sinAngle = std::sin(angle);
-        const float x = cosAngle * radius;
-        const float z = sinAngle * radius;
+        const float x = cosAngle * capRadius;
+        const float z = sinAngle * capRadius;
 
         data.positions.push_back(Vector3{x, topY, z});
         data.normals.push_back(Vector3{0.0f, -1.0f, 0.0f});

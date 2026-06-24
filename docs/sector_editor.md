@@ -115,7 +115,8 @@ panorama cylinder when the map-level sky texture ID resolves to a loaded map
 texture. The default sky texture ID is `sky_cylinder`; the local test asset is
 `assets/images/sky/sky_cylinder.png`, but texture paths are not hardcoded and
 the texture must be present in the map texture table. Sky textures should be
-horizontally seamless panoramas such as 4:1.
+horizontally seamless panoramas such as 4:1, with a small flat top band matching
+the cap color; the renderer samples slightly inside that band to reduce cap seams.
 Map-level sky settings are edited in `Preview Settings -> Sky`. The yaw offset
 rotates the panorama around the camera, vertical offset/scale adjust the
 panorama placement on the cylinder, and top color controls the solid top cap.

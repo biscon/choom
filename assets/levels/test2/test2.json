@@ -10127,7 +10127,7 @@
   "skySettings": {
     "textureId": "sky_cylinder",
     "yawOffsetDegrees": 0.0,
-    "verticalOffset": 0.0,
+    "verticalOffset": 0.20000000298023224,
     "verticalScale": 1.0,
     "topColor": {
       "r": 50,

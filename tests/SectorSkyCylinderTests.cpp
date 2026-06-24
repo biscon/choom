@@ -132,6 +132,7 @@ void TestSkyCylinderMeshData()
     constexpr int segments = 8;
     constexpr float radius = 12.0f;
     constexpr float height = 20.0f;
+    constexpr float topVInset = 0.02f;
     const game::SectorSkyCylinderMeshData data = game::BuildSkyCylinderMeshData(segments, radius, height);
 
     Check(data.positions.size() == static_cast<size_t>((segments + 1) * 2),
@@ -150,7 +151,7 @@ void TestSkyCylinderMeshData()
           "first and last top ring positions match at seam");
     Check(Near(data.uvs.front().x, 0.0f), "first seam U is zero");
     Check(Near(data.uvs[data.uvs.size() - 2].x, 1.0f), "last seam U is one");
-    Check(Near(data.uvs[1].y, 0.0f), "top V is zero");
+    Check(Near(data.uvs[1].y, topVInset), "top V samples inside texture top band");
     Check(Near(data.uvs.front().y, 1.0f), "bottom V is one");
 
     Check(HasValidIndices(data), "sky cylinder indices are valid for vertex count");
@@ -161,6 +162,7 @@ void TestSkyCylinderVerticalUvSettings()
     constexpr int segments = 8;
     constexpr float radius = 12.0f;
     constexpr float height = 20.0f;
+    constexpr float topVInset = 0.02f;
     const game::SectorSkyCylinderMeshData data = game::BuildSkyCylinderMeshData(
             segments,
             radius,
@@ -168,7 +170,7 @@ void TestSkyCylinderVerticalUvSettings()
             0.25f,
             2.0f);
 
-    Check(Near(data.uvs[1].y, 0.25f), "vertical offset affects top V");
+    Check(Near(data.uvs[1].y, topVInset * 2.0f + 0.25f), "vertical scale and offset affect inset top V");
     Check(Near(data.uvs.front().y, 2.25f), "vertical scale and offset affect bottom V");
     Check(Near(data.uvs.front().x, 0.0f)
                   && Near(data.uvs[data.uvs.size() - 2].x, 1.0f),
@@ -189,7 +191,11 @@ void TestSkyCylinderTopCapMeshData()
     constexpr int segments = 8;
     constexpr float radius = 12.0f;
     constexpr float height = 20.0f;
-    constexpr float topY = height * 0.5f;
+    constexpr float topCapYOffset = -0.25f;
+    constexpr float topCapRadiusScale = 1.002f;
+    constexpr float cylinderTopY = height * 0.5f;
+    constexpr float topY = cylinderTopY + topCapYOffset;
+    constexpr float capRadius = radius * topCapRadiusScale;
     const game::SectorSkyCylinderMeshData data = game::BuildSkyCylinderTopCapMeshData(segments, radius, height);
 
     Check(!data.positions.empty(), "sky cylinder top cap positions are non-empty");
@@ -201,9 +207,9 @@ void TestSkyCylinderTopCapMeshData()
     Check(HasValidIndices(data), "sky cylinder top cap indices are valid for vertex count");
 
     Check(Near(data.positions.front(), Vector3{0.0f, topY, 0.0f}),
-          "sky cylinder top cap includes center vertex at top origin");
+          "sky cylinder top cap includes center vertex slightly below cylinder top");
     bool verticesAtTop = true;
-    bool rimRadiusMatches = true;
+    bool rimRadiusOverlaps = true;
     for (size_t i = 0; i < data.positions.size(); ++i) {
         const Vector3 position = data.positions[i];
         if (!Near(position.y, topY)) {
@@ -211,13 +217,13 @@ void TestSkyCylinderTopCapMeshData()
         }
         if (i > 0) {
             const float xzRadius = std::sqrt(position.x * position.x + position.z * position.z);
-            if (!Near(xzRadius, radius)) {
-                rimRadiusMatches = false;
+            if (!Near(xzRadius, capRadius) || xzRadius <= radius) {
+                rimRadiusOverlaps = false;
             }
         }
     }
-    Check(verticesAtTop, "sky cylinder top cap vertices are at the cylinder top");
-    Check(rimRadiusMatches, "sky cylinder top cap rim matches cylinder radius");
+    Check(verticesAtTop, "sky cylinder top cap vertices are slightly below the cylinder top");
+    Check(rimRadiusOverlaps, "sky cylinder top cap rim slightly overlaps cylinder radius");
 
     if (data.indices.size() >= 3u) {
         const Vector3 a = data.positions[data.indices[0]];
