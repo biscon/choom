@@ -3,6 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "sector_editor/SectorEditorMaterialActions.h"
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_demo/SectorMeshPreview.h"
 #include "sector_demo/SectorTopologyCreation.h"
@@ -294,6 +295,7 @@ private:
     bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialU(TopologySurfaceEditTarget target, TopologyUAlignDirection direction, engine::AssetManager* assets, TopologyMaterialLayer layer);
+    bool FinishMaterialActionResult(const SectorEditorMaterialActionResult& result, engine::AssetManager* assets);
     bool FinishTopologyMaterialMutation(const char* status, engine::AssetManager* assets);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     bool SplitSelectedTopologyLineDef();

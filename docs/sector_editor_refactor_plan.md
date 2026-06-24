@@ -585,6 +585,26 @@ Medium-high overall; low-medium for static light and vertex sections.
 Move surface target lookup and material/UV/decal editing actions into focused
 editor action helpers.
 
+### Status
+
+Completed: 2026-06-24
+
+Summary:
+- Moved material surface target lookup and material/UV/decal mutation helpers into `SectorEditorMaterialActions.h/.cpp`.
+- Preserved `SectorEditor` ownership of status text, UI input resets, dirty/cache marking, and 3D preview mesh rebuild decisions.
+- Build/tests passed.
+
+Verification:
+- `cmake --build cmake-build-debug -j2`: passed
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed
+- `git diff --check`: passed
+- Manual GUI verification: not performed
+
+Notes:
+- Cache invalidation behavior: unchanged; successful material edits still flow through `MarkTopologyDocumentEdited()` / `InvalidateTopologyRenderCache()`.
+- Lightmap/source-hash behavior: unchanged; base material texture/UV and middle texture fields remain hash-affecting, decal fields remain visual-only.
+- Collision/gameplay behavior: unchanged.
+
 ### Files likely touched
 
 - `sources/sector_editor/SectorEditor.cpp`

@@ -5,6 +5,7 @@
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorLightInspector.h"
 #include "sector_editor/SectorEditorLightmapModal.h"
+#include "sector_editor/SectorEditorMaterialActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/SectorEditorSectorInspector.h"
 #include "sector_editor/SectorEditorTextureModals.h"
@@ -2261,6 +2262,49 @@ bool SectorEditor::FinishTopologyMaterialMutation(const char* status, engine::As
         return RebuildPreviewMeshesPreservingView(*assets);
     }
     return true;
+}
+
+bool SectorEditor::FinishMaterialActionResult(
+        const SectorEditorMaterialActionResult& result,
+        engine::AssetManager* assets)
+{
+    if (!result.changed) {
+        if (!result.status.empty()) {
+            statusText = result.status;
+        }
+        return false;
+    }
+
+    if (result.resetSurface3DUi) {
+        ResetSurface3DUiState();
+    }
+    if (result.resetSectorUvInputs) {
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+    }
+    if (result.resetSideDefUvInputs) {
+        for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+    }
+    if (result.resetDecalInputs) {
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalOpacityInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalBloomIntensityInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+        uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
+        uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
+        uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
+        uiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+    }
+    if (result.closeDecalTintModal) {
+        state.decalTintModal = DecalTintModalState{};
+    }
+
+    return FinishTopologyMaterialMutation(result.status.c_str(), assets);
 }
 
 bool SectorEditor::SetLineDefBlocksPlayer(int lineDefId, bool blocksPlayer)
@@ -6955,29 +6999,7 @@ TopologySurfaceEditTarget SectorEditor::TopologyEditTargetForSurface(SectorSurfa
 
 bool SectorEditor::IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget target) const
 {
-    switch (target.kind) {
-        case TopologySurfaceEditTargetKind::SectorFloor:
-        case TopologySurfaceEditTargetKind::SectorCeiling:
-            return FindSectorTopologySector(state.topologyMap, target.sectorId) != nullptr;
-        case TopologySurfaceEditTargetKind::SideDefWall:
-        case TopologySurfaceEditTargetKind::SideDefLower:
-        case TopologySurfaceEditTargetKind::SideDefUpper:
-        case TopologySurfaceEditTargetKind::SideDefMiddle: {
-            const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
-                    state.topologyMap,
-                    target.sideDefId);
-            if (sideDef == nullptr
-                    || sideDef->lineDefId != target.lineDefId
-                    || sideDef->side != target.side) {
-                return false;
-            }
-            return target.kind != TopologySurfaceEditTargetKind::SideDefMiddle
-                    || IsTopologyMiddleEligible(state.topologyMap, sideDef);
-        }
-        case TopologySurfaceEditTargetKind::None:
-            break;
-    }
-    return false;
+    return game::IsValidMaterialSurfaceTarget(state.topologyMap, target);
 }
 
 void SectorEditor::ResetSurface3DUiState()
@@ -7017,268 +7039,58 @@ void SectorEditor::ClearSelection()
 
 const SectorTopologyDecalLayer* SectorEditor::DecalForSurface(TopologySurfaceEditTarget target) const
 {
-    if (!IsValidTopologySurfaceEditTarget(target)) {
-        return nullptr;
-    }
-    if (IsMiddleTopologyEditTarget(target.kind)) {
-        return nullptr;
-    }
-
-    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
-            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-        const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
-        if (sector == nullptr) {
-            return nullptr;
-        }
-        return target.kind == TopologySurfaceEditTargetKind::SectorFloor
-                ? &sector->floorDecal
-                : &sector->ceilingDecal;
-    }
-
-    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-    if (sideDef == nullptr) {
-        return nullptr;
-    }
-    return &TopologyWallPartSettingsFor(*sideDef, TopologyEditTargetWallPart(target.kind)).decal;
+    return game::DecalForMaterialSurface(state.topologyMap, target);
 }
 
 SectorTopologyDecalLayer* SectorEditor::MutableDecalForSurface(TopologySurfaceEditTarget target)
 {
-    if (!IsValidTopologySurfaceEditTarget(target)) {
-        return nullptr;
-    }
-    if (IsMiddleTopologyEditTarget(target.kind)) {
-        return nullptr;
-    }
-
-    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
-            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
-        if (sector == nullptr) {
-            return nullptr;
-        }
-        return target.kind == TopologySurfaceEditTargetKind::SectorFloor
-                ? &sector->floorDecal
-                : &sector->ceilingDecal;
-    }
-
-    SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-    if (sideDef == nullptr) {
-        return nullptr;
-    }
-    return &TopologyWallPartSettingsFor(*sideDef, TopologyEditTargetWallPart(target.kind)).decal;
+    return game::MutableDecalForMaterialSurface(state.topologyMap, target);
 }
 
 const SectorTopologyUvSettings* SectorEditor::UvForSurface(
         TopologySurfaceEditTarget target,
         TopologyMaterialLayer layer) const
 {
-    if (!IsValidTopologySurfaceEditTarget(target)) {
-        return nullptr;
-    }
-    if (layer == TopologyMaterialLayer::Decal) {
-        const SectorTopologyDecalLayer* decal = DecalForSurface(target);
-        return decal == nullptr || decal->textureId.empty() ? nullptr : &decal->uv;
-    }
-
-    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
-            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-        const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
-        if (sector == nullptr) {
-            return nullptr;
-        }
-        return target.kind == TopologySurfaceEditTargetKind::SectorFloor
-                ? &sector->floorUv
-                : &sector->ceilingUv;
-    }
-
-    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-    if (sideDef == nullptr) {
-        return nullptr;
-    }
-    return &TopologyWallPartSettingsFor(*sideDef, TopologyEditTargetWallPart(target.kind)).uv;
+    return game::UvForMaterialSurface(state.topologyMap, target, layer);
 }
 
 SectorTopologyUvSettings* SectorEditor::MutableUvForSurface(
         TopologySurfaceEditTarget target,
         TopologyMaterialLayer layer)
 {
-    if (!IsValidTopologySurfaceEditTarget(target)) {
-        return nullptr;
-    }
-    if (layer == TopologyMaterialLayer::Decal) {
-        SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
-        return decal == nullptr || decal->textureId.empty() ? nullptr : &decal->uv;
-    }
-
-    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
-            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
-        if (sector == nullptr) {
-            return nullptr;
-        }
-        return target.kind == TopologySurfaceEditTargetKind::SectorFloor
-                ? &sector->floorUv
-                : &sector->ceilingUv;
-    }
-
-    SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-    if (sideDef == nullptr) {
-        return nullptr;
-    }
-    return &TopologyWallPartSettingsFor(*sideDef, TopologyEditTargetWallPart(target.kind)).uv;
+    return game::MutableUvForMaterialSurface(state.topologyMap, target, layer);
 }
 
 bool SectorEditor::IsDecalAssigned(TopologySurfaceEditTarget target) const
 {
-    const SectorTopologyDecalLayer* decal = DecalForSurface(target);
-    return decal != nullptr && !decal->textureId.empty();
+    return game::IsMaterialDecalAssigned(state.topologyMap, target);
 }
 
 std::string SectorEditor::CurrentTextureForSurface(
         TopologySurfaceEditTarget target,
         TopologyMaterialLayer layer) const
 {
-    if (!IsValidTopologySurfaceEditTarget(target)) {
-        return std::string{"<none>"};
-    }
-    if (layer == TopologyMaterialLayer::Decal) {
-        const SectorTopologyDecalLayer* decal = DecalForSurface(target);
-        return decal == nullptr ? std::string{} : decal->textureId;
-    }
-
-    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
-            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-        const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
-        if (sector == nullptr) {
-            return std::string{};
-        }
-        return target.kind == TopologySurfaceEditTargetKind::SectorFloor
-                ? sector->floorTextureId
-                : sector->ceilingTextureId;
-    }
-
-    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-    if (sideDef == nullptr) {
-        return std::string{};
-    }
-    switch (target.kind) {
-        case TopologySurfaceEditTargetKind::SideDefWall:
-            return sideDef->wall.textureId;
-        case TopologySurfaceEditTargetKind::SideDefLower:
-            return sideDef->lower.textureId;
-        case TopologySurfaceEditTargetKind::SideDefUpper:
-            return sideDef->upper.textureId;
-        case TopologySurfaceEditTargetKind::SideDefMiddle:
-            return sideDef->middle.textureId;
-        case TopologySurfaceEditTargetKind::SectorFloor:
-        case TopologySurfaceEditTargetKind::SectorCeiling:
-        case TopologySurfaceEditTargetKind::None:
-            break;
-    }
-    return std::string{"<none>"};
+    return game::CurrentTextureForMaterialSurface(state.topologyMap, target, layer);
 }
 
 bool SectorEditor::CopyTopologyMaterial(TopologySurfaceEditTarget target)
 {
-    if (!IsValidTopologySurfaceEditTarget(target)) {
-        statusText = "Selected material target is no longer valid.";
+    TopologyMaterialPayload payload;
+    std::string status;
+    if (!game::CopyMaterialSurface(state.topologyMap, target, payload, status)) {
+        statusText = status;
         return false;
     }
-
-    TopologyMaterialPayload payload;
-    payload.valid = true;
-    payload.kind = target.kind;
-
-    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
-            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-        const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
-        if (sector == nullptr) {
-            statusText = "Selected material target is no longer valid.";
-            return false;
-        }
-
-        if (target.kind == TopologySurfaceEditTargetKind::SectorFloor) {
-            payload.textureId = sector->floorTextureId;
-            payload.uv = sector->floorUv;
-        } else {
-            payload.textureId = sector->ceilingTextureId;
-            payload.uv = sector->ceilingUv;
-        }
-    } else {
-        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-        if (sideDef == nullptr) {
-            statusText = "Selected material target is no longer valid.";
-            return false;
-        }
-
-        const SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(
-                *sideDef,
-                TopologyEditTargetWallPart(target.kind));
-        payload.textureId = part.textureId;
-        payload.uv = part.uv;
-    }
-
     state.copiedTopologyMaterial = payload;
-    statusText = TextFormat("Copied %s material.", TopologyMaterialKindName(payload.kind));
+    statusText = status;
     return true;
 }
 
 bool SectorEditor::PasteTopologyMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets)
 {
-    if (!state.copiedTopologyMaterial.valid) {
-        statusText = "No copied material.";
-        return false;
-    }
-
-    if (!IsValidTopologySurfaceEditTarget(target)) {
-        statusText = "Selected material target is no longer valid.";
-        return false;
-    }
-
-    if (state.copiedTopologyMaterial.kind != target.kind) {
-        statusText = TextFormat(
-                "Copied material is for %s; selected target is %s.",
-                TopologyMaterialKindName(state.copiedTopologyMaterial.kind),
-                TopologyMaterialKindName(target.kind));
-        return false;
-    }
-
-    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
-            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-        SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
-        if (sector == nullptr) {
-            statusText = "Selected material target is no longer valid.";
-            return false;
-        }
-
-        if (target.kind == TopologySurfaceEditTargetKind::SectorFloor) {
-            sector->floorTextureId = state.copiedTopologyMaterial.textureId;
-            sector->floorUv = state.copiedTopologyMaterial.uv;
-        } else {
-            sector->ceilingTextureId = state.copiedTopologyMaterial.textureId;
-            sector->ceilingUv = state.copiedTopologyMaterial.uv;
-        }
-    } else {
-        SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-        if (sideDef == nullptr) {
-            statusText = "Selected material target is no longer valid.";
-            return false;
-        }
-
-        SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(
-                *sideDef,
-                TopologyEditTargetWallPart(target.kind));
-        part.textureId = state.copiedTopologyMaterial.textureId;
-        part.uv = state.copiedTopologyMaterial.uv;
-    }
-
-    state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(TextFormat("Pasted %s material.", TopologyMaterialKindName(target.kind)));
-    if (state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
-        RebuildPreviewMeshesPreservingView(assets);
-    }
-    return true;
+    return FinishMaterialActionResult(
+            game::PasteMaterialSurface(state.topologyMap, target, state.copiedTopologyMaterial),
+            &assets);
 }
 
 bool SectorEditor::ApplySurface3DUvValue(
@@ -7288,52 +7100,15 @@ bool SectorEditor::ApplySurface3DUvValue(
         float value,
         engine::AssetManager& assets)
 {
-    if (!IsValidTopologySurfaceEditTarget(target) || !std::isfinite(value)) {
-        return false;
-    }
-    if ((component == 0 || component == 1)
-            && (value < TopologyUvScaleMin || value > TopologyUvScaleMax)) {
-        return false;
-    }
-
-    auto applyComponent = [component, value](auto& uv) {
-        switch (component) {
-            case 0:
-                uv.scale.x = value;
-                return true;
-            case 1:
-                uv.scale.y = value;
-                return true;
-            case 2:
-                uv.offset.x = value;
-                return true;
-            case 3:
-                uv.offset.y = value;
-                return true;
-            default:
-                return false;
-        }
-    };
-
-    SectorTopologyUvSettings* uv = MutableUvForSurface(target, layer);
-    if (uv == nullptr) {
-        statusText = layer == TopologyMaterialLayer::Decal
-                ? "No decal assigned."
-                : "Selected material target is no longer valid.";
-        return false;
-    }
-
-    const bool changed = applyComponent(*uv);
-    if (!changed) {
-        return false;
-    }
-
-    state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(TextFormat(
-            "Updated 3D %s %s UV",
-            SurfaceKindName(state.selectedSurface3D.kind),
-            TopologyMaterialLayerStatusName(layer)));
-    return RebuildPreviewMeshesPreservingView(assets);
+    return FinishMaterialActionResult(
+            game::ApplySurfaceUvValue(
+                    state.topologyMap,
+                    target,
+                    layer,
+                    state.selectedSurface3D.kind,
+                    component,
+                    value),
+            &assets);
 }
 
 bool SectorEditor::ApplySurfaceDecalOpacity(
@@ -7341,26 +7116,7 @@ bool SectorEditor::ApplySurfaceDecalOpacity(
         float opacity,
         engine::AssetManager* assets)
 {
-    if (!IsValidTopologySurfaceEditTarget(target) || !std::isfinite(opacity)) {
-        return false;
-    }
-    opacity = std::clamp(opacity, 0.0f, 1.0f);
-    SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
-    if (decal == nullptr || decal->textureId.empty()) {
-        statusText = "No decal assigned.";
-        return false;
-    }
-    if (decal->opacity == opacity) {
-        return false;
-    }
-
-    decal->opacity = opacity;
-    state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(TextFormat("Set %s decal opacity.", TopologyMaterialKindName(target.kind)));
-    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
-        return RebuildPreviewMeshesPreservingView(*assets);
-    }
-    return true;
+    return FinishMaterialActionResult(game::ApplySurfaceDecalOpacity(state.topologyMap, target, opacity), assets);
 }
 
 bool SectorEditor::ApplySurfaceDecalEmissive(
@@ -7368,26 +7124,7 @@ bool SectorEditor::ApplySurfaceDecalEmissive(
         bool emissive,
         engine::AssetManager* assets)
 {
-    if (!IsValidTopologySurfaceEditTarget(target)) {
-        statusText = "Selected material target is no longer valid.";
-        return false;
-    }
-    SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
-    if (decal == nullptr || decal->textureId.empty()) {
-        statusText = "No decal assigned.";
-        return false;
-    }
-    if (decal->emissive == emissive) {
-        return false;
-    }
-
-    decal->emissive = emissive;
-    state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(TextFormat("Set %s decal emissive.", TopologyMaterialKindName(target.kind)));
-    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
-        return RebuildPreviewMeshesPreservingView(*assets);
-    }
-    return true;
+    return FinishMaterialActionResult(game::ApplySurfaceDecalEmissive(state.topologyMap, target, emissive), assets);
 }
 
 bool SectorEditor::ApplySurfaceDecalTint(
@@ -7395,30 +7132,7 @@ bool SectorEditor::ApplySurfaceDecalTint(
         Vector3 tint,
         engine::AssetManager* assets)
 {
-    if (!IsValidTopologySurfaceEditTarget(target)) {
-        statusText = "Selected material target is no longer valid.";
-        return false;
-    }
-    if (!IsValidDecalTint(tint)) {
-        statusText = "Invalid decal tint.";
-        return false;
-    }
-    SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
-    if (decal == nullptr || decal->textureId.empty()) {
-        statusText = "No decal assigned.";
-        return false;
-    }
-    if (SameTint(decal->tint, tint)) {
-        return false;
-    }
-
-    decal->tint = tint;
-    state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(TextFormat("Set %s decal tint.", TopologyMaterialKindName(target.kind)));
-    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
-        return RebuildPreviewMeshesPreservingView(*assets);
-    }
-    return true;
+    return FinishMaterialActionResult(game::ApplySurfaceDecalTint(state.topologyMap, target, tint), assets);
 }
 
 bool SectorEditor::ApplySurfaceDecalBloomIntensity(
@@ -7426,45 +7140,19 @@ bool SectorEditor::ApplySurfaceDecalBloomIntensity(
         float bloomIntensity,
         engine::AssetManager* assets)
 {
-    if (!IsValidTopologySurfaceEditTarget(target)) {
-        statusText = "Selected material target is no longer valid.";
-        return false;
-    }
-    bloomIntensity = ClampDecalBloomIntensity(bloomIntensity);
-    SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
-    if (decal == nullptr || decal->textureId.empty()) {
-        statusText = "No decal assigned.";
-        return false;
-    }
-    if (decal->bloomIntensity == bloomIntensity) {
-        return false;
-    }
-
-    decal->bloomIntensity = bloomIntensity;
-    state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(TextFormat("Set %s decal bloom intensity.", TopologyMaterialKindName(target.kind)));
-    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
-        return RebuildPreviewMeshesPreservingView(*assets);
-    }
-    return true;
+    return FinishMaterialActionResult(
+            game::ApplySurfaceDecalBloomIntensity(state.topologyMap, target, bloomIntensity),
+            assets);
 }
 
 bool SectorEditor::OpenDecalTintModal(TopologySurfaceEditTarget target)
 {
-    if (!IsValidTopologySurfaceEditTarget(target)) {
-        statusText = "Selected material target is no longer valid.";
-        return false;
-    }
-    const SectorTopologyDecalLayer* decal = DecalForSurface(target);
-    if (decal == nullptr || decal->textureId.empty()) {
-        statusText = "No decal assigned.";
-        return false;
-    }
-
     DecalTintModalState modal;
-    modal.open = true;
-    modal.target = target;
-    modal.tint = ClampDecalTint(decal->tint);
+    std::string status;
+    if (!game::BuildDecalTintModal(state.topologyMap, target, modal, status)) {
+        statusText = status;
+        return false;
+    }
     state.decalTintModal = modal;
     return true;
 }
@@ -7473,70 +7161,14 @@ bool SectorEditor::ClearSurfaceDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
-    SectorTopologyDecalLayer* decal = MutableDecalForSurface(target);
-    if (decal == nullptr) {
-        statusText = "Selected material target is no longer valid.";
-        return false;
-    }
-    if (IsDefaultDecalLayer(*decal)) {
-        statusText = "No decal assigned.";
-        return false;
-    }
-
-    ResetDecalLayer(*decal);
-    state.topologyRenderWarning.clear();
-    ResetSurface3DUiState();
-    for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-    for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalOpacityInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-    for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalBloomIntensityInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-    uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
-    uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
-    uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
-    uiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
-    state.decalTintModal = DecalTintModalState{};
-    MarkTopologyDocumentEdited(TextFormat("Cleared %s decal.", TopologyMaterialKindName(target.kind)));
-    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
-        return RebuildPreviewMeshesPreservingView(*assets);
-    }
-    return true;
+    return FinishMaterialActionResult(game::ClearSurfaceDecal(state.topologyMap, target), assets);
 }
 
 bool SectorEditor::ClearMiddleTexture(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
-    if (target.kind != TopologySurfaceEditTargetKind::SideDefMiddle
-            || !IsValidTopologySurfaceEditTarget(target)) {
-        statusText = "Selected middle texture target is no longer valid.";
-        return false;
-    }
-
-    SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-    if (sideDef == nullptr) {
-        statusText = "Selected middle texture target is no longer valid.";
-        return false;
-    }
-    if (IsDefaultWallPartSettings(sideDef->middle)) {
-        statusText = "No middle texture assigned.";
-        return false;
-    }
-
-    sideDef->middle = SectorTopologyWallPartSettings{};
-    ResetSurface3DUiState();
-    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-    state.decalTintModal = DecalTintModalState{};
-    return FinishTopologyMaterialMutation("Cleared middle texture.", assets);
+    return FinishMaterialActionResult(game::ClearMiddleTexture(state.topologyMap, target), assets);
 }
 
 bool SectorEditor::ResetSurface3DUv(
@@ -7544,182 +7176,23 @@ bool SectorEditor::ResetSurface3DUv(
         TopologyMaterialLayer layer,
         engine::AssetManager& assets)
 {
-    if (!IsValidTopologySurfaceEditTarget(target)) {
-        return false;
-    }
-
-    auto resetUv = [](SectorTopologyUvSettings& uv) {
-        const bool changed = uv.scale.x != 1.0f
-                || uv.scale.y != 1.0f
-                || uv.offset.x != 0.0f
-                || uv.offset.y != 0.0f;
-        uv.scale = Vector2{1.0f, 1.0f};
-        uv.offset = Vector2{0.0f, 0.0f};
-        return changed;
-    };
-
-    SectorTopologyUvSettings* uv = MutableUvForSurface(target, layer);
-    if (uv == nullptr) {
-        statusText = layer == TopologyMaterialLayer::Decal
-                ? "No decal assigned."
-                : "Selected material target is no longer valid.";
-        return false;
-    }
-
-    const bool changed = resetUv(*uv);
-    if (!changed) {
-        return false;
-    }
-
-    ResetSurface3DUiState();
-    state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(TextFormat(
-            "Reset 3D %s %s UV",
-            SurfaceKindName(state.selectedSurface3D.kind),
-            TopologyMaterialLayerStatusName(layer)));
-    return RebuildPreviewMeshesPreservingView(assets);
+    return FinishMaterialActionResult(
+            game::ResetSurfaceUv(state.topologyMap, target, layer, state.selectedSurface3D.kind),
+            &assets);
 }
 
 bool SectorEditor::FitSelectedDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
-    if (!IsValidTopologySurfaceEditTarget(target)) {
-        statusText = "Selected material target is no longer valid.";
-        return false;
-    }
-    if (!IsDecalAssigned(target)) {
-        statusText = "No decal assigned.";
-        return false;
-    }
-    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
-            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-        return FitSelectedFlatDecal(target, assets);
-    }
-    if (IsWallTopologyEditTarget(target.kind)) {
-        return FitSelectedWallMaterial(
-                target,
-                TopologyUvFitMode::Both,
-                assets,
-                TopologyMaterialLayer::Decal);
-    }
-
-    statusText = "Selected material target cannot be fit.";
-    return false;
+    return FinishMaterialActionResult(game::FitSelectedDecal(state.topologyMap, target), assets);
 }
 
 bool SectorEditor::FitSelectedFlatDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
-    if (target.kind != TopologySurfaceEditTargetKind::SectorFloor
-            && target.kind != TopologySurfaceEditTargetKind::SectorCeiling) {
-        statusText = "Select a floor or ceiling surface before fitting decal UVs.";
-        return false;
-    }
-    if (!IsDecalAssigned(target)) {
-        statusText = "No decal assigned.";
-        return false;
-    }
-
-    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
-    if (sector == nullptr) {
-        statusText = "Selected sector is no longer valid.";
-        return false;
-    }
-
-    SectorTopologyLoopSet loops;
-    if (!ExtractSectorTopologyLoops(state.topologyMap, sector->id, loops)) {
-        statusText = "Selected sector has invalid loops.";
-        return false;
-    }
-
-    bool hasPoint = false;
-    float minX = 0.0f;
-    float maxX = 0.0f;
-    float minY = 0.0f;
-    float maxY = 0.0f;
-    auto visitLoop = [&](const SectorTopologyLoop& loop) {
-        if (loop.vertexIds.empty()) {
-            return false;
-        }
-        for (int vertexId : loop.vertexIds) {
-            const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
-            if (vertex == nullptr) {
-                return false;
-            }
-            const Vector2 world = SectorCoordToWorldPosition2(vertex->x, vertex->y);
-            if (!std::isfinite(world.x) || !std::isfinite(world.y)) {
-                return false;
-            }
-            if (!hasPoint) {
-                minX = maxX = world.x;
-                minY = maxY = world.y;
-                hasPoint = true;
-            } else {
-                minX = std::min(minX, world.x);
-                maxX = std::max(maxX, world.x);
-                minY = std::min(minY, world.y);
-                maxY = std::max(maxY, world.y);
-            }
-        }
-        return true;
-    };
-
-    if (!visitLoop(loops.outer)) {
-        statusText = "Selected sector has invalid outer loop.";
-        return false;
-    }
-    for (const SectorTopologyLoop& hole : loops.holes) {
-        if (!visitLoop(hole)) {
-            statusText = "Selected sector has invalid hole loop.";
-            return false;
-        }
-    }
-    if (!hasPoint) {
-        statusText = "Selected sector has no vertices.";
-        return false;
-    }
-
-    const float widthWorld = maxX - minX;
-    const float heightWorld = maxY - minY;
-    if (!(widthWorld > 0.0f) || !(heightWorld > 0.0f)
-            || !std::isfinite(widthWorld) || !std::isfinite(heightWorld)) {
-        statusText = "Selected sector has invalid flat bounds.";
-        return false;
-    }
-
-    const auto validateScale = [](float scale) {
-        return std::isfinite(scale)
-                && scale >= TopologyUvScaleMin
-                && scale <= TopologyUvScaleMax;
-    };
-    const Vector2 fittedScale{
-            kSectorGeneratedTextureWorldSize / widthWorld,
-            kSectorGeneratedTextureWorldSize / heightWorld};
-    if (!validateScale(fittedScale.x) || !validateScale(fittedScale.y)) {
-        statusText = "Fit decal requires a UV scale outside the editable range.";
-        return false;
-    }
-
-    SectorTopologyUvSettings* uv = MutableUvForSurface(target, TopologyMaterialLayer::Decal);
-    if (uv == nullptr) {
-        statusText = "No decal assigned.";
-        return false;
-    }
-    uv->scale = fittedScale;
-    uv->offset = Vector2{0.0f, 0.0f};
-
-    state.topologyRenderWarning.clear();
-    ResetSurface3DUiState();
-    for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-    MarkTopologyDocumentEdited(TextFormat("Fit %s decal.", TopologyMaterialKindName(target.kind)));
-    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
-        return RebuildPreviewMeshesPreservingView(*assets);
-    }
-    return true;
+    return FinishMaterialActionResult(game::FitSelectedFlatDecal(state.topologyMap, target), assets);
 }
 
 bool SectorEditor::FitSelectedWallMaterial(
@@ -7728,181 +7201,8 @@ bool SectorEditor::FitSelectedWallMaterial(
         engine::AssetManager* assets,
         TopologyMaterialLayer layer)
 {
-    if (!IsWallTopologyEditTarget(target.kind) || !IsValidTopologySurfaceEditTarget(target)) {
-        statusText = "Select a wall, lower, upper, or middle surface before fitting UVs.";
-        return false;
-    }
-    if (layer == TopologyMaterialLayer::Decal && !IsDecalAssigned(target)) {
-        statusText = "No decal assigned.";
-        return false;
-    }
-
-    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-    if (sideDef == nullptr
-            || sideDef->lineDefId != target.lineDefId
-            || sideDef->sectorId != target.sectorId
-            || sideDef->side != target.side) {
-        statusText = "Selected sidedef is no longer valid.";
-        return false;
-    }
-
-    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, sideDef->lineDefId);
-    if (lineDef == nullptr) {
-        statusText = "Selected sidedef references a missing linedef.";
-        return false;
-    }
-
-    const SectorTopologyVertex* start = nullptr;
-    const SectorTopologyVertex* end = nullptr;
-    if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)
-            || start == nullptr || end == nullptr) {
-        statusText = "Selected linedef endpoints are missing.";
-        return false;
-    }
-
-    const double dx = static_cast<double>(end->x) - static_cast<double>(start->x);
-    const double dy = static_cast<double>(end->y) - static_cast<double>(start->y);
-    const double coordLength = std::sqrt(dx * dx + dy * dy);
-    const float wallLengthWorld = SectorCoordDistanceToWorldDistance(coordLength);
-    if (!(wallLengthWorld > 0.0f) || !std::isfinite(wallLengthWorld)) {
-        statusText = "Selected wall has invalid length.";
-        return false;
-    }
-
-    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sideDef->sectorId);
-    if (sector == nullptr) {
-        statusText = "Selected sidedef references a missing sector.";
-        return false;
-    }
-
-    const int oppositeSideDefId = sideDef->side == SectorTopologySideKind::Front
-            ? lineDef->backSideDefId
-            : lineDef->frontSideDefId;
-    const SectorTopologySideDef* opposite = FindOppositeSectorTopologySideDef(state.topologyMap, sideDef->id);
-    if (oppositeSideDefId != -1 && opposite == nullptr) {
-        statusText = "Selected sidedef's opposite side is no longer valid.";
-        return false;
-    }
-
-    const SectorTopologySector* oppositeSector = nullptr;
-    if (opposite != nullptr) {
-        oppositeSector = FindSectorTopologySector(state.topologyMap, opposite->sectorId);
-        if (oppositeSector == nullptr) {
-            statusText = "Selected sidedef's opposite sector is missing.";
-            return false;
-        }
-    }
-
-    const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
-    if (wallPart == TopologyWallPart::Middle
-            && layer == TopologyMaterialLayer::Base
-            && sideDef->middle.textureId.empty()) {
-        statusText = "No middle texture assigned.";
-        return false;
-    }
-    float heightAuthoring = 0.0f;
-    switch (wallPart) {
-        case TopologyWallPart::Wall:
-            if (opposite != nullptr) {
-                statusText = "Selected wall part has no visible solid wall span.";
-                return false;
-            }
-            heightAuthoring = std::fabs(sector->ceilingZ - sector->floorZ);
-            break;
-        case TopologyWallPart::Lower:
-            if (oppositeSector == nullptr) {
-                statusText = "Lower wall fit needs an opposite sector.";
-                return false;
-            }
-            if (!(oppositeSector->floorZ > sector->floorZ)) {
-                statusText = "Selected lower wall has no visible height span.";
-                return false;
-            }
-            heightAuthoring = oppositeSector->floorZ - sector->floorZ;
-            break;
-        case TopologyWallPart::Upper:
-            if (oppositeSector == nullptr) {
-                statusText = "Upper wall fit needs an opposite sector.";
-                return false;
-            }
-            if (!(sector->ceilingZ > oppositeSector->ceilingZ)) {
-                statusText = "Selected upper wall has no visible height span.";
-                return false;
-            }
-            heightAuthoring = sector->ceilingZ - oppositeSector->ceilingZ;
-            break;
-        case TopologyWallPart::Middle: {
-            if (oppositeSector == nullptr) {
-                statusText = "Middle texture fit needs an opposite sector.";
-                return false;
-            }
-            const float bottom = std::max(sector->floorZ, oppositeSector->floorZ);
-            const float top = std::min(sector->ceilingZ, oppositeSector->ceilingZ);
-            if (!(top > bottom) || !std::isfinite(bottom) || !std::isfinite(top)) {
-                statusText = "Selected middle texture has no visible height span.";
-                return false;
-            }
-            heightAuthoring = top - bottom;
-            break;
-        }
-    }
-
-    const float wallHeightWorld = SectorAuthoringToWorldDistance(std::fabs(heightAuthoring));
-    const bool fitWidth = mode == TopologyUvFitMode::Width || mode == TopologyUvFitMode::Both;
-    const bool fitHeight = mode == TopologyUvFitMode::Height || mode == TopologyUvFitMode::Both;
-    if (fitHeight && (!(wallHeightWorld > 0.0f) || !std::isfinite(wallHeightWorld))) {
-        statusText = "Selected wall has invalid height.";
-        return false;
-    }
-
-    const auto validateScale = [](float scale) {
-        return std::isfinite(scale)
-                && scale >= TopologyUvScaleMin
-                && scale <= TopologyUvScaleMax;
-    };
-    const float widthScale = kSectorGeneratedTextureWorldSize / wallLengthWorld;
-    const float heightScale = fitHeight
-            ? kSectorGeneratedTextureWorldSize / wallHeightWorld
-            : 1.0f;
-    if (fitWidth && !validateScale(widthScale)) {
-        statusText = "Fit width requires a UV scale outside the editable range.";
-        return false;
-    }
-    if (fitHeight && !validateScale(heightScale)) {
-        statusText = "Fit height requires a UV scale outside the editable range.";
-        return false;
-    }
-
-    SectorTopologyUvSettings* uv = MutableUvForSurface(target, layer);
-    if (uv == nullptr) {
-        statusText = layer == TopologyMaterialLayer::Decal
-                ? "No decal assigned."
-                : "Selected material target is no longer valid.";
-        return false;
-    }
-    if (fitWidth) {
-        uv->scale.x = widthScale;
-        uv->offset.x = 0.0f;
-    }
-    if (fitHeight) {
-        uv->scale.y = heightScale;
-        uv->offset.y = 0.0f;
-    }
-
-    state.topologyRenderWarning.clear();
-    ResetSurface3DUiState();
-    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-
-    return FinishTopologyMaterialMutation(
-            wallPart == TopologyWallPart::Middle
-                    ? TextFormat("Fit middle texture %s.", TopologyUvFitModeStatusName(mode))
-                    : TextFormat(
-                            "Fit %s %s %s.",
-                            TopologyWallPartStatusName(wallPart),
-                            TopologyMaterialLayerStatusName(layer),
-                            TopologyUvFitModeStatusName(mode)),
+    return FinishMaterialActionResult(
+            game::FitSelectedWallMaterial(state.topologyMap, target, mode, layer),
             assets);
 }
 
@@ -7911,143 +7211,9 @@ bool SectorEditor::AlignSelectedWallMaterialVertical(
         engine::AssetManager* assets,
         TopologyMaterialLayer layer)
 {
-    if (!IsWallTopologyEditTarget(target.kind) || !IsValidTopologySurfaceEditTarget(target)) {
-        statusText = "Select a wall, lower, or upper surface before aligning UVs.";
-        return false;
-    }
-    if (layer == TopologyMaterialLayer::Decal && !IsDecalAssigned(target)) {
-        statusText = "No decal assigned.";
-        return false;
-    }
-
-    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-    if (sideDef == nullptr
-            || sideDef->lineDefId != target.lineDefId
-            || sideDef->sectorId != target.sectorId
-            || sideDef->side != target.side) {
-        statusText = "Selected sidedef is no longer valid.";
-        return false;
-    }
-
-    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, sideDef->lineDefId);
-    if (lineDef == nullptr) {
-        statusText = "Selected sidedef references a missing linedef.";
-        return false;
-    }
-
-    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sideDef->sectorId);
-    if (sector == nullptr) {
-        statusText = "Selected sidedef references a missing sector.";
-        return false;
-    }
-
-    const int oppositeSideDefId = sideDef->side == SectorTopologySideKind::Front
-            ? lineDef->backSideDefId
-            : lineDef->frontSideDefId;
-    const SectorTopologySideDef* opposite = FindOppositeSectorTopologySideDef(state.topologyMap, sideDef->id);
-    if (oppositeSideDefId != -1 && opposite == nullptr) {
-        statusText = "Selected sidedef's opposite side is no longer valid.";
-        return false;
-    }
-
-    const SectorTopologySector* oppositeSector = nullptr;
-    if (opposite != nullptr) {
-        oppositeSector = FindSectorTopologySector(state.topologyMap, opposite->sectorId);
-        if (oppositeSector == nullptr) {
-            statusText = "Selected sidedef's opposite sector is missing.";
-            return false;
-        }
-    }
-
-    const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
-    if (wallPart == TopologyWallPart::Middle) {
-        statusText = "Middle texture vertical alignment is not available yet.";
-        return false;
-    }
-    float spanBottomAuthoring = 0.0f;
-    float spanTopAuthoring = 0.0f;
-    switch (wallPart) {
-        case TopologyWallPart::Wall:
-            if (opposite != nullptr) {
-                statusText = "Selected wall part has no visible solid wall span.";
-                return false;
-            }
-            spanBottomAuthoring = sector->floorZ;
-            spanTopAuthoring = sector->ceilingZ;
-            break;
-        case TopologyWallPart::Lower:
-            if (oppositeSector == nullptr) {
-                statusText = "Lower wall alignment needs an opposite sector.";
-                return false;
-            }
-            if (!(oppositeSector->floorZ > sector->floorZ)) {
-                statusText = "Selected lower wall has no visible height span.";
-                return false;
-            }
-            spanBottomAuthoring = sector->floorZ;
-            spanTopAuthoring = oppositeSector->floorZ;
-            break;
-        case TopologyWallPart::Upper:
-            if (oppositeSector == nullptr) {
-                statusText = "Upper wall alignment needs an opposite sector.";
-                return false;
-            }
-            if (!(sector->ceilingZ > oppositeSector->ceilingZ)) {
-                statusText = "Selected upper wall has no visible height span.";
-                return false;
-            }
-            spanBottomAuthoring = oppositeSector->ceilingZ;
-            spanTopAuthoring = sector->ceilingZ;
-            break;
-        case TopologyWallPart::Middle:
-            statusText = "Middle texture vertical alignment is not available yet.";
-            return false;
-    }
-
-    const float spanBottomWorld = SectorAuthoringToWorldDistance(spanBottomAuthoring);
-    const float spanTopWorld = SectorAuthoringToWorldDistance(spanTopAuthoring);
-    const float spanHeightWorld = spanTopWorld - spanBottomWorld;
-    if (!(spanHeightWorld > 0.0f)
-            || !std::isfinite(spanBottomWorld)
-            || !std::isfinite(spanTopWorld)
-            || !std::isfinite(spanHeightWorld)) {
-        statusText = "Selected wall has invalid height.";
-        return false;
-    }
-
-    SectorTopologyUvSettings* uv = MutableUvForSurface(target, layer);
-    if (uv == nullptr) {
-        statusText = layer == TopologyMaterialLayer::Decal
-                ? "No decal assigned."
-                : "Selected material target is no longer valid.";
-        return false;
-    }
-    if (!std::isfinite(uv->scale.y)) {
-        statusText = "Selected wall has invalid V scale.";
-        return false;
-    }
-
-    const float alignedOffsetY = -(spanTopWorld / kSectorGeneratedTextureWorldSize) * uv->scale.y;
-    if (!std::isfinite(alignedOffsetY)) {
-        statusText = "Aligned V offset is invalid.";
-        return false;
-    }
-
-    uv->offset.y = alignedOffsetY;
-    state.topologyRenderWarning.clear();
-    ResetSurface3DUiState();
-    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-
-    MarkTopologyDocumentEdited(TextFormat(
-            "Aligned %s %s vertically.",
-            TopologyWallPartStatusName(wallPart),
-            TopologyMaterialLayerStatusName(layer)));
-    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
-        return RebuildPreviewMeshesPreservingView(*assets);
-    }
-    return true;
+    return FinishMaterialActionResult(
+            game::AlignSelectedWallMaterialVertical(state.topologyMap, target, layer),
+            assets);
 }
 
 bool SectorEditor::AlignSelectedWallMaterialU(
@@ -8056,199 +7222,9 @@ bool SectorEditor::AlignSelectedWallMaterialU(
         engine::AssetManager* assets,
         TopologyMaterialLayer layer)
 {
-    if (!IsWallTopologyEditTarget(target.kind) || !IsValidTopologySurfaceEditTarget(target)) {
-        statusText = "Select a wall, lower, or upper surface before aligning U.";
-        return false;
-    }
-    if (layer == TopologyMaterialLayer::Decal && !IsDecalAssigned(target)) {
-        statusText = "No decal assigned.";
-        return false;
-    }
-
-    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
-    if (sideDef == nullptr
-            || sideDef->lineDefId != target.lineDefId
-            || sideDef->sectorId != target.sectorId
-            || sideDef->side != target.side) {
-        statusText = "Selected sidedef is no longer valid.";
-        return false;
-    }
-
-    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sideDef->sectorId);
-    if (sector == nullptr) {
-        statusText = "Selected sidedef references a missing sector.";
-        return false;
-    }
-
-    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, sideDef->lineDefId);
-    if (lineDef == nullptr) {
-        statusText = "Selected sidedef references a missing linedef.";
-        return false;
-    }
-
-    float selectedLengthWorld = 0.0f;
-    if (!SectorTopologyWallLengthWorld(state.topologyMap, *lineDef, selectedLengthWorld)) {
-        statusText = "Selected wall has invalid length.";
-        return false;
-    }
-
-    SectorTopologyLoopSet loops;
-    if (!ExtractSectorTopologyLoops(state.topologyMap, sideDef->sectorId, loops)) {
-        statusText = "Could not extract selected sector boundary loop.";
-        return false;
-    }
-
-    const SectorTopologyLoop* selectedLoop = nullptr;
-    size_t selectedEdgeIndex = 0;
-    if (!FindUniqueSectorLoopEdgeForSideDef(loops, sideDef->id, selectedLoop, selectedEdgeIndex)
-            || selectedLoop == nullptr
-            || selectedLoop->edges.empty()) {
-        statusText = "Selected sidedef was not found in exactly one sector loop.";
-        return false;
-    }
-
-    const size_t edgeCount = selectedLoop->edges.size();
-    if (edgeCount < 2) {
-        statusText = "Selected sector loop has no neighboring wall segment.";
-        return false;
-    }
-
-    const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
-    if (wallPart == TopologyWallPart::Middle) {
-        statusText = "Middle texture U alignment is not available yet.";
-        return false;
-    }
-    const SectorTopologyLoopEdge& selectedEdge = selectedLoop->edges[selectedEdgeIndex];
-
-    if (selectedEdge.sideDefId != sideDef->id
-            || selectedEdge.lineDefId != sideDef->lineDefId
-            || selectedEdge.side != sideDef->side) {
-        statusText = "Selected sidedef loop edge is stale.";
-        return false;
-    }
-
-    if (!TopologyWallPartHasVisibleSpan(state.topologyMap, *sideDef, wallPart)) {
-        switch (wallPart) {
-            case TopologyWallPart::Wall:
-                statusText = "Selected wall part has no visible solid wall span.";
-                break;
-            case TopologyWallPart::Lower:
-                statusText = "Selected lower wall has no visible height span.";
-                break;
-            case TopologyWallPart::Upper:
-                statusText = "Selected upper wall has no visible height span.";
-                break;
-            case TopologyWallPart::Middle:
-                statusText = "Selected middle texture has no visible height span.";
-                break;
-        }
-        return false;
-    }
-
-    std::string neighborError;
-    const SectorTopologyLoopEdge* neighborEdge = FindVisibleTopologyWallPartNeighborEdge(
-            state.topologyMap,
-            *selectedLoop,
-            selectedEdgeIndex,
-            sideDef->sectorId,
-            direction,
-            wallPart,
-            layer,
-            neighborError);
-    if (neighborEdge == nullptr) {
-        if (!neighborError.empty()) {
-            statusText = neighborError;
-        } else {
-            statusText = TextFormat(
-                    "No %s visible %s %s in this sector loop.",
-                    TopologyUAlignDirectionStatusName(direction),
-                    TopologyWallPartSurfaceStatusName(wallPart),
-                    TopologyMaterialLayerStatusName(layer));
-        }
-        return false;
-    }
-
-    const SectorTopologySideDef* neighborSideDef = FindSectorTopologySideDef(
-            state.topologyMap,
-            neighborEdge->sideDefId);
-    if (neighborSideDef == nullptr
-            || neighborSideDef->lineDefId != neighborEdge->lineDefId
-            || neighborSideDef->sectorId != sideDef->sectorId
-            || neighborSideDef->side != neighborEdge->side) {
-        statusText = TextFormat(
-                "%s sidedef is no longer valid.",
-                direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
-        return false;
-    }
-
-    const SectorTopologyLineDef* neighborLineDef = FindSectorTopologyLineDef(
-            state.topologyMap,
-            neighborSideDef->lineDefId);
-    if (neighborLineDef == nullptr) {
-        statusText = TextFormat(
-                "%s sidedef references a missing linedef.",
-                direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
-        return false;
-    }
-
-    float neighborLengthWorld = 0.0f;
-    if (!SectorTopologyWallLengthWorld(state.topologyMap, *neighborLineDef, neighborLengthWorld)) {
-        statusText = TextFormat(
-                "%s wall has invalid length.",
-                direction == TopologyUAlignDirection::Previous ? "Previous" : "Next");
-        return false;
-    }
-
-    const SectorTopologyWallPartSettings& neighborPart = TopologyWallPartSettingsFor(*neighborSideDef, wallPart);
-    const SectorTopologyUvSettings& neighborUv = layer == TopologyMaterialLayer::Decal
-            ? neighborPart.decal.uv
-            : neighborPart.uv;
-    SectorTopologyUvSettings* selectedUv = MutableUvForSurface(target, layer);
-    if (selectedUv == nullptr) {
-        statusText = layer == TopologyMaterialLayer::Decal
-                ? "No decal assigned."
-                : "Selected material target is no longer valid.";
-        return false;
-    }
-
-    if (!std::isfinite(selectedUv->scale.x)
-            || !std::isfinite(selectedUv->offset.x)
-            || !std::isfinite(neighborUv.scale.x)
-            || !std::isfinite(neighborUv.offset.x)) {
-        statusText = "Wall U alignment requires finite U scale and offset values.";
-        return false;
-    }
-
-    float alignedOffsetX = 0.0f;
-    if (direction == TopologyUAlignDirection::Previous) {
-        const float previousBaseEndU = neighborLengthWorld / kSectorGeneratedTextureWorldSize;
-        alignedOffsetX = previousBaseEndU * neighborUv.scale.x + neighborUv.offset.x;
-    } else {
-        const float selectedBaseEndU = selectedLengthWorld / kSectorGeneratedTextureWorldSize;
-        alignedOffsetX = neighborUv.offset.x - selectedBaseEndU * selectedUv->scale.x;
-    }
-
-    if (!std::isfinite(alignedOffsetX)) {
-        statusText = "Aligned U offset is invalid.";
-        return false;
-    }
-
-    selectedUv->offset.x = alignedOffsetX;
-    state.topologyRenderWarning.clear();
-    ResetSurface3DUiState();
-    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-
-    MarkTopologyDocumentEdited(TextFormat(
-            "Aligned %s %s U from %s.",
-            TopologyWallPartStatusName(wallPart),
-            TopologyMaterialLayerStatusName(layer),
-            TopologyUAlignDirectionStatusName(direction)));
-    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
-        return RebuildPreviewMeshesPreservingView(*assets);
-    }
-    return true;
+    return FinishMaterialActionResult(
+            game::AlignSelectedWallMaterialU(state.topologyMap, target, direction, layer),
+            assets);
 }
 
 bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& assets)
