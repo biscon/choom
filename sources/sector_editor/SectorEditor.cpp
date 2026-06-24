@@ -5,6 +5,7 @@
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
+#include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
@@ -3417,33 +3418,24 @@ void SectorEditor::DrawPreviewUvPanel(
     }
 
     auto drawFloat = [&](const char* id, const char* label, float value, engine::UIFloatInputState& inputState, int component, float minValue, float maxValue, float x) {
-        engine::Text(
-                ui,
-                config,
-                assets,
-                Rectangle{x, inputTop - 28.0f, colW, 24.0f},
-                font,
-                label,
-                engine::UITextJustify::Left,
-                config.mutedTextColor
-        );
-        float edited = value;
-        const engine::UINumericInputResult result = engine::FloatInput(
+        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
                 input,
                 assets,
-                id,
-                Rectangle{x, inputTop, colW, 38.0f},
                 font,
-                edited,
+                id,
+                label,
+                Rectangle{x, inputTop - 28.0f, colW, 24.0f},
+                Rectangle{x, inputTop, colW, 38.0f},
+                engine::UITextJustify::Left,
+                value,
                 inputState,
                 minValue,
                 maxValue,
-                3
-        );
-        if (result.changed && edited != value && std::isfinite(edited)) {
-            ApplySurface3DUvValue(target, layer, component, edited, assets);
+                3);
+        if (result.changed && result.value != value && result.finite) {
+            ApplySurface3DUvValue(target, layer, component, result.value, assets);
         }
     };
 
@@ -3634,42 +3626,44 @@ void SectorEditor::DrawPreviewUvPanel(
     if (!targetIsMiddle && layer == TopologyMaterialLayer::Decal && decalAssigned) {
         const SectorTopologyDecalLayer* decal = DecalForSurface(target);
         if (decal != nullptr) {
-            engine::Text(ui, config, assets, Rectangle{startX + (colW + gap) * 4.0f, inputTop - 28.0f, colW, 24.0f}, font, "Opacity", engine::UITextJustify::Left, config.mutedTextColor);
-            float opacity = decal->opacity;
-            const engine::UINumericInputResult result = engine::FloatInput(
+            const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                     ui,
                     config,
                     input,
                     assets,
-                    "sector_editor_3d_decal_opacity",
-                    Rectangle{startX + (colW + gap) * 4.0f, inputTop, colW, 38.0f},
                     font,
-                    opacity,
+                    "sector_editor_3d_decal_opacity",
+                    "Opacity",
+                    Rectangle{startX + (colW + gap) * 4.0f, inputTop - 28.0f, colW, 24.0f},
+                    Rectangle{startX + (colW + gap) * 4.0f, inputTop, colW, 38.0f},
+                    engine::UITextJustify::Left,
+                    decal->opacity,
                     uiState.surface3DDecalOpacityInput,
                     0.0f,
                     1.0f,
                     3);
-            if (result.changed && opacity != decal->opacity && std::isfinite(opacity)) {
-                ApplySurfaceDecalOpacity(target, opacity, &assets);
+            if (result.changed && result.value != decal->opacity && result.finite) {
+                ApplySurfaceDecalOpacity(target, result.value, &assets);
             }
             if (decal->emissive) {
-                engine::Text(ui, config, assets, Rectangle{startX + (colW + gap) * 5.0f, inputTop - 28.0f, colW, 24.0f}, font, "Bloom", engine::UITextJustify::Left, config.mutedTextColor);
-                float bloomIntensity = decal->bloomIntensity;
-                const engine::UINumericInputResult bloomResult = engine::FloatInput(
+                const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
                         ui,
                         config,
                         input,
                         assets,
-                        "sector_editor_3d_decal_bloom_intensity",
-                        Rectangle{startX + (colW + gap) * 5.0f, inputTop, colW, 38.0f},
                         font,
-                        bloomIntensity,
+                        "sector_editor_3d_decal_bloom_intensity",
+                        "Bloom",
+                        Rectangle{startX + (colW + gap) * 5.0f, inputTop - 28.0f, colW, 24.0f},
+                        Rectangle{startX + (colW + gap) * 5.0f, inputTop, colW, 38.0f},
+                        engine::UITextJustify::Left,
+                        decal->bloomIntensity,
                         uiState.surface3DDecalBloomIntensityInput,
                         0.0f,
                         10.0f,
                         3);
-                if (bloomResult.changed && bloomIntensity != decal->bloomIntensity) {
-                    ApplySurfaceDecalBloomIntensity(target, bloomIntensity, &assets);
+                if (bloomResult.changed && bloomResult.value != decal->bloomIntensity) {
+                    ApplySurfaceDecalBloomIntensity(target, bloomResult.value, &assets);
                 }
             }
             bool emissive = decal->emissive;
@@ -3700,8 +3694,7 @@ void SectorEditor::DrawPreviewUvPanel(
                         "")) {
                 OpenDecalTintModal(target);
             }
-            DrawRectangleRec(swatch, DecalTintPreviewColor(decal->tint));
-            DrawRectangleLinesEx(swatch, config.borderThickness, config.borderColor);
+            DrawColorSwatch(config, swatch, DecalTintPreviewColor(decal->tint), config.borderThickness);
         }
     } else if (!targetIsMiddle && layer == TopologyMaterialLayer::Base) {
         if (engine::Button(
@@ -4366,24 +4359,24 @@ void SectorEditor::DrawToolsPanel(
 
     const float lightmapLabelW = 180.0f;
     const auto drawLightmapSetting = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals, const char* status) {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, lightmapLabelW, rowH}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
-        float edited = value;
-        const engine::UINumericInputResult result = engine::FloatInput(
+        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
                 input,
                 assets,
-                id,
-                Rectangle{lightmapLabelW + gap, y, std::max(0.0f, contentW - lightmapLabelW - gap), rowH},
                 font,
-                edited,
+                id,
+                label,
+                Rectangle{0.0f, y, lightmapLabelW, rowH},
+                Rectangle{lightmapLabelW + gap, y, std::max(0.0f, contentW - lightmapLabelW - gap), rowH},
+                engine::UITextJustify::Left,
+                value,
                 inputState,
                 minValue,
                 maxValue,
-                decimals
-        );
-        if (result.changed && edited != value) {
-            value = edited;
+                decimals);
+        if (result.changed && result.value != value) {
+            value = result.value;
             state.hasUnsavedChanges = true;
             state.topologyDocumentDirty = true;
             statusText = status;
@@ -4634,11 +4627,24 @@ void SectorEditor::DrawSectorsPanel(
         const float numberLabelW = 92.0f;
         const float numberFieldW = 112.0f;
         auto drawLightFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
-            engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
-            float edited = value;
-            const engine::UINumericInputResult result = engine::FloatInput(ui, config, input, assets, id, Rectangle{numberLabelW, y, numberFieldW, rowH}, font, edited, inputState, minValue, maxValue, decimals);
-            if (result.changed && edited != value) {
-                value = edited;
+            const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    id,
+                    label,
+                    Rectangle{0.0f, y, numberLabelW, rowH},
+                    Rectangle{numberLabelW, y, numberFieldW, rowH},
+                    engine::UITextJustify::Right,
+                    value,
+                    inputState,
+                    minValue,
+                    maxValue,
+                    decimals);
+            if (result.changed && result.value != value) {
+                value = result.value;
                 MarkTopologyDocumentEdited(TextFormat("Updated topology light %d", light.id));
             }
             y += rowH + gap;
@@ -4653,23 +4659,23 @@ void SectorEditor::DrawSectorsPanel(
         light.radius = ClampLightRadius(light.radius);
         light.sourceRadius = ClampLightSourceRadius(light.sourceRadius, light.radius);
         {
-            engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, "Source:", engine::UITextJustify::Right, config.mutedTextColor);
-            float edited = light.sourceRadius;
-            const engine::UINumericInputResult result = engine::FloatInput(
+            const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                     ui,
                     config,
                     input,
                     assets,
-                    "sector_editor_light_source_radius",
-                    Rectangle{numberLabelW, y, numberFieldW, rowH},
                     font,
-                    edited,
+                    "sector_editor_light_source_radius",
+                    "Source:",
+                    Rectangle{0.0f, y, numberLabelW, rowH},
+                    Rectangle{numberLabelW, y, numberFieldW, rowH},
+                    engine::UITextJustify::Right,
+                    light.sourceRadius,
                     uiState.lightSourceRadiusInput,
                     0.0f,
                     SectorWorldToAuthoringDistance(8.0f),
-                    3
-            );
-            edited = ClampLightSourceRadius(edited, light.radius);
+                    3);
+            const float edited = ClampLightSourceRadius(result.value, light.radius);
             if (result.changed && edited != light.sourceRadius) {
                 light.sourceRadius = edited;
                 MarkTopologyDocumentEdited("Updated light source radius");
@@ -4678,24 +4684,21 @@ void SectorEditor::DrawSectorsPanel(
         }
 
         auto drawLightChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
-            engine::Text(ui, config, assets, Rectangle{0.0f, y, numberLabelW, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
-            int value = static_cast<int>(channel);
-            const engine::UINumericInputResult result = engine::IntInput(
+            const SectorEditorRgb8InputResult result = DrawRgb8ChannelInput(
                     ui,
                     config,
                     input,
                     assets,
-                    id,
-                    Rectangle{numberLabelW, y, contentW - numberLabelW, rowH},
                     font,
-                    value,
-                    inputState,
-                    0,
-                    255,
-                    1
-            );
-            if (result.changed && value != static_cast<int>(channel)) {
-                channel = static_cast<unsigned char>(ClampAmbientChannel(value));
+                    id,
+                    label,
+                    Rectangle{0.0f, y, numberLabelW, rowH},
+                    Rectangle{numberLabelW, y, contentW - numberLabelW, rowH},
+                    engine::UITextJustify::Right,
+                    channel,
+                    inputState);
+            if (result.changed && result.channel != channel) {
+                channel = result.channel;
                 light.color.a = 255;
                 MarkTopologyDocumentEdited(TextFormat("Updated topology light %d color", light.id));
             }
@@ -4711,8 +4714,7 @@ void SectorEditor::DrawSectorsPanel(
                 std::min(120.0f, contentW - numberLabelW),
                 28.0f
         };
-        DrawRectangleRec(swatch, light.color);
-        DrawRectangleLinesEx(swatch, 1.0f, config.borderColor);
+        DrawColorSwatch(config, swatch, light.color, 1.0f);
         y += 36.0f + gap;
 
         if (engine::Button(ui, config, input, assets, "sector_editor_light_bake", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
@@ -4956,22 +4958,32 @@ bool SectorEditor::DrawTopologySectorInspector(
     y += rowH + gap;
 
     auto drawHeight = [&](const char* id, const char* label, float current, engine::UIFloatInputState& inputState, bool floorField) {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
-        float edited = current;
-        const engine::UINumericInputResult result = engine::FloatInput(
-                ui, config, input, assets, id,
+        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                id,
+                label,
+                Rectangle{0.0f, y, labelW, rowH},
                 Rectangle{labelW, y, numberFieldW, rowH},
-                font, edited, inputState, -512.0f, 512.0f, 2);
-        if (result.changed && edited != current) {
-            const float nextFloor = floorField ? edited : sector->floorZ;
-            const float nextCeiling = floorField ? sector->ceilingZ : edited;
+                engine::UITextJustify::Right,
+                current,
+                inputState,
+                -512.0f,
+                512.0f,
+                2);
+        if (result.changed && result.value != current) {
+            const float nextFloor = floorField ? result.value : sector->floorZ;
+            const float nextCeiling = floorField ? sector->ceilingZ : result.value;
             if (!std::isfinite(nextFloor) || !std::isfinite(nextCeiling) || nextCeiling <= nextFloor) {
                 statusText = "Invalid topology sector heights: ceiling must be greater than floor";
             } else {
                 if (floorField) {
-                    sector->floorZ = edited;
+                    sector->floorZ = result.value;
                 } else {
-                    sector->ceilingZ = edited;
+                    sector->ceilingZ = result.value;
                 }
                 MarkTopologyDocumentEdited(TextFormat("Updated topology sector %d height", sector->id));
             }
@@ -5003,27 +5015,45 @@ bool SectorEditor::DrawTopologySectorInspector(
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Lighting", engine::UITextJustify::Left, config.textColor);
     y += 30.0f;
 
-    engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, "Intensity:", engine::UITextJustify::Right, config.mutedTextColor);
     float ambientIntensity = ClampAmbientIntensity(sector->ambientIntensity);
-    const engine::UINumericInputResult ambientResult = engine::FloatInput(
-            ui, config, input, assets, "sector_editor_topology_ambient_intensity",
+    const SectorEditorFloatInputResult ambientResult = DrawLabeledFloatInput(
+            ui,
+            config,
+            input,
+            assets,
+            font,
+            "sector_editor_topology_ambient_intensity",
+            "Intensity:",
+            Rectangle{0.0f, y, labelW, rowH},
             Rectangle{labelW, y, numberFieldW, rowH},
-            font, ambientIntensity, uiState.ambientIntensityInput, 0.0f, 1.0f, 3);
-    if (ambientResult.changed && ambientIntensity != sector->ambientIntensity) {
-        sector->ambientIntensity = ambientIntensity;
+            engine::UITextJustify::Right,
+            ambientIntensity,
+            uiState.ambientIntensityInput,
+            0.0f,
+            1.0f,
+            3);
+    if (ambientResult.changed && ambientResult.value != sector->ambientIntensity) {
+        sector->ambientIntensity = ambientResult.value;
         MarkTopologyDocumentEdited("Updated topology sector ambient intensity");
     }
     y += rowH + gap;
 
     auto drawAmbientChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
-        int value = static_cast<int>(channel);
-        const engine::UINumericInputResult result = engine::IntInput(
-                ui, config, input, assets, id,
+        const SectorEditorRgb8InputResult result = DrawRgb8ChannelInput(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                id,
+                label,
+                Rectangle{0.0f, y, labelW, rowH},
                 Rectangle{labelW, y, contentW - labelW, rowH},
-                font, value, inputState, 0, 255, 1);
-        if (result.changed && value != static_cast<int>(channel)) {
-            channel = static_cast<unsigned char>(ClampAmbientChannel(value));
+                engine::UITextJustify::Right,
+                channel,
+                inputState);
+        if (result.changed && result.channel != channel) {
+            channel = result.channel;
             sector->ambientColor.a = 255;
             MarkTopologyDocumentEdited("Updated topology sector ambient color");
         }
@@ -5038,8 +5068,7 @@ bool SectorEditor::DrawTopologySectorInspector(
             scroll.viewport.y - uiState.inspectorScroll.offset.y + y + 2.0f,
             std::min(120.0f, contentW - labelW),
             28.0f};
-    DrawRectangleRec(swatch, TopologySectorAmbientPreviewColor(*sector, 255));
-    DrawRectangleLinesEx(swatch, 1.0f, config.borderColor);
+    DrawColorSwatch(config, swatch, TopologySectorAmbientPreviewColor(*sector, 255), 1.0f);
     y += 36.0f + gap;
 
     auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologySectorTextureField field, TopologyMaterialLayer layer) {
@@ -5067,15 +5096,25 @@ bool SectorEditor::DrawTopologySectorInspector(
         const float uvColumnW = (contentW - gap) * 0.5f;
         const float uvBlockH = 62.0f;
         auto drawFloat = [&](int stateIndex, const char* suffix, const char* label, float value, float minValue, float maxValue, Rectangle bounds, auto applyValue) {
-            engine::Text(ui, config, assets, Rectangle{bounds.x, bounds.y, bounds.width, 26.0f}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
-            float edited = value;
             const std::string inputId = std::string(idPrefix) + suffix;
-            const engine::UINumericInputResult result = engine::FloatInput(
-                    ui, config, input, assets, inputId.c_str(),
+            const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    inputId.c_str(),
+                    label,
+                    Rectangle{bounds.x, bounds.y, bounds.width, 26.0f},
                     Rectangle{bounds.x, bounds.y + 26.0f, bounds.width, 36.0f},
-                    font, edited, uiState.topologySectorUvInputs[stateOffset + stateIndex], minValue, maxValue, 3);
-            if (result.changed && edited != value && std::isfinite(edited)) {
-                applyValue(edited);
+                    engine::UITextJustify::Left,
+                    value,
+                    uiState.topologySectorUvInputs[stateOffset + stateIndex],
+                    minValue,
+                    maxValue,
+                    3);
+            if (result.changed && result.value != value && result.finite) {
+                applyValue(result.value);
                 state.topologyRenderWarning.clear();
                 MarkTopologyDocumentEdited(TextFormat("Updated topology sector %d UV", sector->id));
             }
@@ -5172,23 +5211,24 @@ bool SectorEditor::DrawTopologySectorInspector(
         }
 
         drawUvSettings(uvPrefix, decal.uv, stateOffset);
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Opacity:", engine::UITextJustify::Left, config.mutedTextColor);
-        float opacity = decal.opacity;
-        const engine::UINumericInputResult opacityResult = engine::FloatInput(
+        const SectorEditorFloatInputResult opacityResult = DrawLabeledFloatInput(
                 ui,
                 config,
                 input,
                 assets,
-                TextFormat("%s_decal_opacity", uvPrefix),
-                Rectangle{82.0f, y, contentW - 82.0f, rowH},
                 font,
-                opacity,
+                TextFormat("%s_decal_opacity", uvPrefix),
+                "Opacity:",
+                Rectangle{0.0f, y, 82.0f, rowH},
+                Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                engine::UITextJustify::Left,
+                decal.opacity,
                 uiState.topologySectorDecalOpacityInputs[opacityStateIndex],
                 0.0f,
                 1.0f,
                 3);
-        if (opacityResult.changed && opacity != decal.opacity && std::isfinite(opacity)) {
-            ApplySurfaceDecalOpacity(target, opacity, nullptr);
+        if (opacityResult.changed && opacityResult.value != decal.opacity && opacityResult.finite) {
+            ApplySurfaceDecalOpacity(target, opacityResult.value, nullptr);
         }
         y += rowH + gap;
         bool emissive = decal.emissive;
@@ -5207,23 +5247,24 @@ bool SectorEditor::DrawTopologySectorInspector(
         y += 36.0f + gap;
 
         if (decal.emissive) {
-            engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Bloom:", engine::UITextJustify::Left, config.mutedTextColor);
-            float bloomIntensity = decal.bloomIntensity;
-            const engine::UINumericInputResult bloomResult = engine::FloatInput(
+            const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
                     ui,
                     config,
                     input,
                     assets,
-                    TextFormat("%s_decal_bloom_intensity", uvPrefix),
-                    Rectangle{82.0f, y, contentW - 82.0f, rowH},
                     font,
-                    bloomIntensity,
+                    TextFormat("%s_decal_bloom_intensity", uvPrefix),
+                    "Bloom:",
+                    Rectangle{0.0f, y, 82.0f, rowH},
+                    Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                    engine::UITextJustify::Left,
+                    decal.bloomIntensity,
                     uiState.topologySectorDecalBloomIntensityInputs[opacityStateIndex],
                     0.0f,
                     10.0f,
                     3);
-            if (bloomResult.changed && bloomIntensity != decal.bloomIntensity) {
-                ApplySurfaceDecalBloomIntensity(target, bloomIntensity, nullptr);
+            if (bloomResult.changed && bloomResult.value != decal.bloomIntensity) {
+                ApplySurfaceDecalBloomIntensity(target, bloomResult.value, nullptr);
             }
             y += rowH + gap;
         }
@@ -5246,8 +5287,7 @@ bool SectorEditor::DrawTopologySectorInspector(
                 scroll.viewport.y - uiState.inspectorScroll.offset.y + swatchLocal.y,
                 swatchLocal.width,
                 swatchLocal.height};
-        DrawRectangleRec(swatchScreen, DecalTintPreviewColor(decal.tint));
-        DrawRectangleLinesEx(swatchScreen, config.borderThickness, config.borderColor);
+        DrawColorSwatch(config, swatchScreen, DecalTintPreviewColor(decal.tint), config.borderThickness);
         y += rowH + gap;
 
         const float decalButtonW = (contentW - gap) * 0.5f;
@@ -5695,27 +5735,28 @@ bool SectorEditor::DrawTopologySideDefInspector(
     const float uvColumnW = (contentW - gap) * 0.5f;
     const float uvBlockH = 62.0f;
     auto drawUvInput = [&](int stateIndex, const char* id, const char* label, float value, float minValue, float maxValue, Rectangle bounds, auto applyValue) {
-        engine::Text(ui, config, assets, Rectangle{bounds.x, bounds.y, bounds.width, 26.0f}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
-        float edited = value;
-        const engine::UINumericInputResult result = engine::FloatInput(
+        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
                 input,
                 assets,
-                id,
-                Rectangle{bounds.x, bounds.y + 26.0f, bounds.width, 36.0f},
                 font,
-                edited,
+                id,
+                label,
+                Rectangle{bounds.x, bounds.y, bounds.width, 26.0f},
+                Rectangle{bounds.x, bounds.y + 26.0f, bounds.width, 36.0f},
+                engine::UITextJustify::Left,
+                value,
                 uiState.topologySideDefUvInputs[stateIndex],
                 minValue,
                 maxValue,
                 3);
-        if (result.changed && edited != value) {
-            if (!std::isfinite(edited)) {
+        if (result.changed && result.value != value) {
+            if (!result.finite) {
                 statusText = "Invalid topology sidedef UV value";
                 return;
             }
-            applyValue(edited);
+            applyValue(result.value);
             const char* status = TextFormat(
                     "Updated topology sidedef %d %s %s UV",
                     sideDef->id,
@@ -5770,23 +5811,24 @@ bool SectorEditor::DrawTopologySideDefInspector(
     y += uvBlockH + gap;
 
     if (layer == TopologyMaterialLayer::Decal) {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Opacity:", engine::UITextJustify::Left, config.mutedTextColor);
-        float opacity = selectedPart.decal.opacity;
-        const engine::UINumericInputResult opacityResult = engine::FloatInput(
+        const SectorEditorFloatInputResult opacityResult = DrawLabeledFloatInput(
                 ui,
                 config,
                 input,
                 assets,
-                "sector_editor_topology_sidedef_decal_opacity",
-                Rectangle{82.0f, y, contentW - 82.0f, rowH},
                 font,
-                opacity,
+                "sector_editor_topology_sidedef_decal_opacity",
+                "Opacity:",
+                Rectangle{0.0f, y, 82.0f, rowH},
+                Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                engine::UITextJustify::Left,
+                selectedPart.decal.opacity,
                 uiState.topologySideDefDecalOpacityInput,
                 0.0f,
                 1.0f,
                 3);
-        if (opacityResult.changed && opacity != selectedPart.decal.opacity && std::isfinite(opacity)) {
-            ApplySurfaceDecalOpacity(selectedMaterialTarget, opacity, &assets);
+        if (opacityResult.changed && opacityResult.value != selectedPart.decal.opacity && opacityResult.finite) {
+            ApplySurfaceDecalOpacity(selectedMaterialTarget, opacityResult.value, &assets);
         }
         y += rowH + gap;
 
@@ -5806,23 +5848,24 @@ bool SectorEditor::DrawTopologySideDefInspector(
         y += 36.0f + gap;
 
         if (selectedPart.decal.emissive) {
-            engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Bloom:", engine::UITextJustify::Left, config.mutedTextColor);
-            float bloomIntensity = selectedPart.decal.bloomIntensity;
-            const engine::UINumericInputResult bloomResult = engine::FloatInput(
+            const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
                     ui,
                     config,
                     input,
                     assets,
-                    "sector_editor_topology_sidedef_decal_bloom_intensity",
-                    Rectangle{82.0f, y, contentW - 82.0f, rowH},
                     font,
-                    bloomIntensity,
+                    "sector_editor_topology_sidedef_decal_bloom_intensity",
+                    "Bloom:",
+                    Rectangle{0.0f, y, 82.0f, rowH},
+                    Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                    engine::UITextJustify::Left,
+                    selectedPart.decal.bloomIntensity,
                     uiState.topologySideDefDecalBloomIntensityInput,
                     0.0f,
                     10.0f,
                     3);
-            if (bloomResult.changed && bloomIntensity != selectedPart.decal.bloomIntensity) {
-                ApplySurfaceDecalBloomIntensity(selectedMaterialTarget, bloomIntensity, &assets);
+            if (bloomResult.changed && bloomResult.value != selectedPart.decal.bloomIntensity) {
+                ApplySurfaceDecalBloomIntensity(selectedMaterialTarget, bloomResult.value, &assets);
             }
             y += rowH + gap;
         }
@@ -5845,8 +5888,7 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 scroll.viewport.y - uiState.inspectorScroll.offset.y + swatchLocal.y,
                 swatchLocal.width,
                 swatchLocal.height};
-        DrawRectangleRec(swatchScreen, DecalTintPreviewColor(selectedPart.decal.tint));
-        DrawRectangleLinesEx(swatchScreen, config.borderThickness, config.borderColor);
+        DrawColorSwatch(config, swatchScreen, DecalTintPreviewColor(selectedPart.decal.tint), config.borderThickness);
         y += rowH + gap;
 
         const float decalButtonW = (contentW - gap) * 0.5f;
@@ -6330,33 +6372,26 @@ void SectorEditor::DrawDecalTintModal(
     const float inputH = 38.0f;
     const float gap = 12.0f;
     auto drawFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState) {
-        engine::Text(
-                ui,
-                config,
-                assets,
-                Rectangle{modal.x + 28.0f, y, labelW, inputH},
-                font,
-                label,
-                engine::UITextJustify::Left,
-                config.mutedTextColor);
-        const engine::UINumericInputResult result = engine::FloatInput(
+        const SectorEditorTintFloatInputResult result = DrawNormalizedTintFloatInput(
                 ui,
                 config,
                 input,
                 assets,
-                id,
-                Rectangle{modal.x + 28.0f + labelW, y, inputW, inputH},
                 font,
+                id,
+                label,
+                Rectangle{modal.x + 28.0f, y, labelW, inputH},
+                Rectangle{modal.x + 28.0f + labelW, y, inputW, inputH},
+                engine::UITextJustify::Left,
                 value,
-                inputState,
-                0.0f,
-                1.0f,
-                3);
+                inputState);
+        if (result.finite) {
+            value = result.value;
+        }
         if (result.changed) {
-            if (!std::isfinite(value)) {
+            if (!result.finite) {
                 modalState.errorMessage = "Tint values must be finite.";
             } else {
-                value = std::clamp(value, 0.0f, 1.0f);
                 modalState.errorMessage.clear();
             }
         }
@@ -6368,8 +6403,7 @@ void SectorEditor::DrawDecalTintModal(
     drawFloat("sector_editor_decal_tint_b", "B", modalState.tint.z, modalState.blueInput);
 
     const Rectangle swatch{modal.x + 270.0f, modal.y + 88.0f, 210.0f, 124.0f};
-    DrawRectangleRec(swatch, DecalTintPreviewColor(modalState.tint));
-    DrawRectangleLinesEx(swatch, config.borderThickness, config.borderColor);
+    DrawColorSwatch(config, swatch, DecalTintPreviewColor(modalState.tint), config.borderThickness);
     engine::Text(
             config,
             assets,
@@ -6532,28 +6566,23 @@ void SectorEditor::DrawPreviewSettingsModal(
     const float inputW = 180.0f;
     const float inputX = labelW + 18.0f;
     auto drawFloat = [&](float& localY, const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
-        engine::Text(
-                ui,
-                config,
-                assets,
-                Rectangle{0.0f, localY, labelW, rowH},
-                font,
-                label,
-                engine::UITextJustify::Left,
-                config.mutedTextColor);
-        const engine::UINumericInputResult result = engine::FloatInput(
+        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
                 input,
                 assets,
-                id,
-                Rectangle{inputX, localY, inputW, rowH},
                 font,
+                id,
+                label,
+                Rectangle{0.0f, localY, labelW, rowH},
+                Rectangle{inputX, localY, inputW, rowH},
+                engine::UITextJustify::Left,
                 value,
                 inputState,
                 minValue,
                 maxValue,
                 decimals);
+        value = result.value;
         if (result.changed) {
             modalState.errorMessage.clear();
         }
@@ -6588,23 +6617,21 @@ void SectorEditor::DrawPreviewSettingsModal(
     };
 
     auto drawColorChannel = [&](float& localY, const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
-        engine::Text(ui, config, assets, Rectangle{0.0f, localY, 92.0f, rowH}, font, label, engine::UITextJustify::Right, config.mutedTextColor);
-        int value = static_cast<int>(channel);
-        const engine::UINumericInputResult result = engine::IntInput(
+        const SectorEditorRgb8InputResult result = DrawRgb8ChannelInput(
                 ui,
                 config,
                 input,
                 assets,
-                id,
-                Rectangle{104.0f, localY, 230.0f, rowH},
                 font,
-                value,
-                inputState,
-                0,
-                255,
-                1);
-        if (result.changed && value != static_cast<int>(channel)) {
-            channel = static_cast<unsigned char>(ClampAmbientChannel(value));
+                id,
+                label,
+                Rectangle{0.0f, localY, 92.0f, rowH},
+                Rectangle{104.0f, localY, 230.0f, rowH},
+                engine::UITextJustify::Right,
+                channel,
+                inputState);
+        if (result.changed && result.channel != channel) {
+            channel = result.channel;
             modalState.errorMessage.clear();
         }
         localY += rowH + gap;
@@ -6661,8 +6688,7 @@ void SectorEditor::DrawPreviewSettingsModal(
                 std::min(130.0f, contentW - 104.0f),
                 28.0f
         };
-        DrawRectangleRec(swatch, NormalizeSectorTopologySkySettings(modalState.draftSkySettings).topColor);
-        DrawRectangleLinesEx(swatch, 1.0f, config.borderColor);
+        DrawColorSwatch(config, swatch, NormalizeSectorTopologySkySettings(modalState.draftSkySettings).topColor, 1.0f);
         contentY += 36.0f + gap;
 
         engine::EndScrollArea(ui, config, input, scroll, modalState.skyScroll);
@@ -6718,8 +6744,7 @@ void SectorEditor::DrawPreviewSettingsModal(
                 std::min(130.0f, contentW - 104.0f),
                 28.0f
         };
-        DrawRectangleRec(swatch, NormalizeSectorTopologyDirectionalLightSettings(modalState.draftDirectionalLight).color);
-        DrawRectangleLinesEx(swatch, 1.0f, config.borderColor);
+        DrawColorSwatch(config, swatch, NormalizeSectorTopologyDirectionalLightSettings(modalState.draftDirectionalLight).color, 1.0f);
         contentY += 36.0f + gap;
 
         engine::EndScrollArea(ui, config, input, scroll, modalState.lightingScroll);

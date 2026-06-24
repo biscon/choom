@@ -363,6 +363,26 @@ Extract repeated numeric input, color-channel, swatch, and compact row helpers
 used by lights, ambient color, sky color, directional light color, UV controls,
 and modal settings.
 
+### Status
+
+Completed: 2026-06-24
+
+Summary:
+- Moved shared labeled numeric input, RGB8 channel, normalized tint, and swatch helpers into `SectorEditorUiHelpers.h/.cpp`.
+- Preserved caller-owned topology/material mutation policy, modal draft behavior, and RGB8-vs-normalized-tint representation boundaries.
+- Build/tests passed.
+
+Verification:
+- `cmake --build cmake-build-debug -j2`: passed
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed
+- `git diff --check`: passed
+- Manual GUI verification: not performed
+
+Notes:
+- Cache invalidation behavior: unchanged
+- Lightmap/source-hash behavior: unchanged
+- Collision/gameplay behavior: unchanged
+
 ### Files likely touched
 
 - `sources/sector_editor/SectorEditor.cpp`
