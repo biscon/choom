@@ -921,6 +921,31 @@ keep each subpass compiling/runnable independently. Do not mark Phase 9 complete
 until all Phase 9 subpasses that remain in scope are complete. If a subpass is
 deferred, explicitly mark it deferred rather than incomplete.
 
+### Status
+
+Completed: 2026-06-25
+
+Summary:
+- Completed Phase 9 across subpasses 9A through 9E.
+- Consolidated static-light, portal-blocking, vertex, linedef, and sector
+  backend mutation wrappers in `SectorEditorTopologyActions.h/.cpp`.
+- Preserved editor-owned tool state, modal orchestration, selection cleanup,
+  dirty/cache finish behavior, and collision/preview ownership.
+
+Verification:
+- `cmake --build cmake-build-debug -j2`: passed
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed
+- `git diff --check`: passed
+- `git diff --stat`: passed
+- `git status --short`: passed
+- Manual GUI verification: not performed
+
+Notes:
+- Cache invalidation behavior: unchanged; successful wrapped topology-visible
+  edits still finish through `MarkTopologyDocumentEdited()`.
+- Lightmap/source-hash behavior: unchanged.
+- Collision/gameplay behavior: unchanged.
+
 ## Phase 9A: Shared Topology Action Result / Finish Pattern
 
 ### Goal
@@ -1383,6 +1408,35 @@ Medium-high.
 
 Extract backend mutation wrappers for sector create, insert-inside, cut, delete,
 and join actions while preserving editor-owned tool and modal orchestration.
+
+### Status
+
+Completed: 2026-06-25
+
+Summary:
+- Wrapped sector create, insert-inside, cut, delete, and join backend mutations
+  in `SectorEditorTopologyActions.h/.cpp`.
+- Preserved pending sector draw/cut state, cut preview validation on copied
+  maps, delete confirmation ownership, inspector routing, selection cleanup,
+  and document/cache finish behavior in `SectorEditor`.
+- Build/tests passed.
+
+Verification:
+- `cmake --build cmake-build-debug -j2`: passed
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed
+- `git diff --check`: passed
+- `git diff --stat`: passed
+- `git status --short`: passed
+- Manual GUI verification: not performed
+
+Notes:
+- Cache invalidation behavior: unchanged; successful create, insert-inside,
+  cut, delete, and join actions still call `MarkTopologyDocumentEdited()`,
+  while rejected/cancelled/preview-only paths do not newly invalidate.
+- Lightmap/source-hash behavior: unchanged; sector geometry, sidedefs, linedefs,
+  vertices, heights, materials/UVs, ambient settings, and `ceilingSky` remain
+  governed by existing source-hash logic.
+- Collision/gameplay behavior: unchanged.
 
 ### Files likely touched
 

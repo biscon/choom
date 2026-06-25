@@ -140,6 +140,119 @@ SectorEditorSplitLineDefResult SplitTopologyLineDefAtPoint(
                     split.secondLineDefId)};
 }
 
+SectorEditorCreateSectorResult CreateTopologySector(
+        SectorTopologyMap& map,
+        const std::vector<SectorTopologyCoordPoint>& points,
+        const SectorTopologyCreatePolygonOptions& options)
+{
+    int sectorId = -1;
+    std::string error;
+    if (!CreateSectorTopologyPolygon(map, points, options, &sectorId, &error)) {
+        return SectorEditorCreateSectorResult{
+                false,
+                -1,
+                error.empty() ? "Could not create topology sector" : error};
+    }
+
+    return SectorEditorCreateSectorResult{
+            true,
+            sectorId,
+            TextFormat("Created topology sector %d", sectorId)};
+}
+
+SectorEditorCreateSectorResult InsertTopologySectorInside(
+        SectorTopologyMap& map,
+        int parentSectorId,
+        const std::vector<SectorTopologyCoordPoint>& points,
+        const SectorTopologyInsertPolygonOptions& options)
+{
+    int sectorId = -1;
+    std::string error;
+    if (!InsertSectorTopologyPolygon(map, parentSectorId, points, options, &sectorId, &error)) {
+        return SectorEditorCreateSectorResult{
+                false,
+                -1,
+                error.empty() ? "Could not create topology sector" : error};
+    }
+
+    return SectorEditorCreateSectorResult{
+            true,
+            sectorId,
+            TextFormat("Inserted topology sector %d", sectorId)};
+}
+
+SectorEditorDeleteSectorResult DeleteTopologySector(
+        SectorTopologyMap& map,
+        int sectorId)
+{
+    SectorTopologyDeleteSectorResult deleted;
+    std::string error;
+    if (!DeleteSectorTopologySector(map, sectorId, &deleted, &error)) {
+        return SectorEditorDeleteSectorResult{
+                false,
+                SectorTopologyDeleteSectorResult{},
+                error.empty() ? "Cannot delete topology sector" : error};
+    }
+
+    return SectorEditorDeleteSectorResult{
+            true,
+            deleted,
+            TextFormat(
+                    "Deleted topology sector %d; removed %d sidedefs, %d linedefs, %d vertices",
+                    deleted.deletedSectorId,
+                    deleted.removedSideDefCount,
+                    deleted.removedLineDefCount,
+                    deleted.removedVertexCount)};
+}
+
+SectorEditorCutSectorResult CutTopologySector(
+        SectorTopologyMap& map,
+        int sectorId,
+        SectorTopologyBoundaryCutPoint firstPoint,
+        SectorTopologyBoundaryCutPoint secondPoint)
+{
+    SectorTopologyCutSectorResult cut;
+    std::string error;
+    if (!CutSectorTopologySectorBetweenBoundaryPoints(map, sectorId, firstPoint, secondPoint, &cut, &error)) {
+        return SectorEditorCutSectorResult{
+                false,
+                SectorTopologyCutSectorResult{},
+                error.empty() ? "Sector cut rejected." : error};
+    }
+
+    return SectorEditorCutSectorResult{
+            true,
+            cut,
+            TextFormat(
+                    "Cut topology sector %d; created sector %d.",
+                    cut.originalSectorId,
+                    cut.newSectorId)};
+}
+
+SectorEditorJoinSectorsResult JoinTopologySectors(
+        SectorTopologyMap& map,
+        int winnerSectorId,
+        int otherSectorId)
+{
+    SectorTopologyJoinSectorsResult join;
+    std::string error;
+    if (!JoinSectorTopologySectors(map, winnerSectorId, otherSectorId, &join, &error)) {
+        return SectorEditorJoinSectorsResult{
+                false,
+                SectorTopologyJoinSectorsResult{},
+                error.empty() ? "Join Sectors rejected." : error};
+    }
+
+    return SectorEditorJoinSectorsResult{
+            true,
+            join,
+            TextFormat(
+                    "Joined topology sectors %d and %d; kept sector %d.",
+                    join.survivingSectorId,
+                    join.removedSectorId,
+                    join.survivingSectorId)};
+}
+
 SectorEditorAddStaticLightResult AddStaticLightToSector(
         SectorTopologyMap& map,
         int sectorId,

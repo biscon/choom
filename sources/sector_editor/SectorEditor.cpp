@@ -1489,29 +1489,23 @@ void SectorEditor::CommitPendingTopologySectorCut()
     }
 
     const PendingTopologySectorCut committed = pending;
-    SectorTopologyCutSectorResult cut;
-    std::string error;
-    if (!CutSectorTopologySectorBetweenBoundaryPoints(
+    const SectorEditorCutSectorResult result = game::CutTopologySector(
                 state.topologyMap,
                 committed.sectorId,
                 committed.firstPoint,
-                committed.candidatePoint,
-                &cut,
-                &error)) {
+                committed.candidatePoint);
+    if (!result.changed) {
         pending.cacheHasFirstPoint = false;
         pending.hasValidCandidate = false;
-        pending.message = error.empty() ? "Sector cut rejected." : error;
+        pending.message = result.status;
         statusText = pending.message;
         return;
     }
 
     ClearTransientTopologyEditStateAfterGeometryChange();
     state.pendingTopologySectorCut = PendingTopologySectorCut{};
-    SelectTopologySector(cut.originalSectorId);
-    MarkTopologyDocumentEdited(TextFormat(
-            "Cut topology sector %d; created sector %d.",
-            cut.originalSectorId,
-            cut.newSectorId));
+    SelectTopologySector(result.cut.originalSectorId);
+    MarkTopologyDocumentEdited(result.status.c_str());
 }
 
 void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
@@ -1857,33 +1851,27 @@ void SectorEditor::FinalizePendingSector()
         return;
     }
 
-    int createdSectorId = -1;
-    bool created = false;
+    SectorEditorCreateSectorResult result;
     if (state.pendingSector.kind == PendingSectorDrawKind::InsertInside) {
         SectorTopologyInsertPolygonOptions options;
-        created = InsertSectorTopologyPolygon(
+        result = game::InsertTopologySectorInside(
                 state.topologyMap,
                 state.pendingSector.parentTopologySectorId,
                 topologyPoints,
-                options,
-                &createdSectorId,
-                &error);
+                options);
     } else {
         SectorTopologyCreatePolygonOptions options = BuildTopologyCreateOptions();
-        created = CreateSectorTopologyPolygon(
+        result = game::CreateTopologySector(
                 state.topologyMap,
                 topologyPoints,
-                options,
-                &createdSectorId,
-                &error);
+                options);
     }
-    if (!created) {
-        state.pendingSector.errorMessage = error.empty() ? "Could not create topology sector" : error;
+    if (!result.changed) {
+        state.pendingSector.errorMessage = result.status;
         statusText = state.pendingSector.errorMessage;
         return;
     }
 
-    const bool insertedInside = state.pendingSector.kind == PendingSectorDrawKind::InsertInside;
     state.pendingSector = PendingSectorDraw{};
     state.hasHoveredVertex = false;
     state.hoveredTopologyVertexId = -1;
@@ -1891,11 +1879,9 @@ void SectorEditor::FinalizePendingSector()
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    SelectTopologySector(createdSectorId);
+    SelectTopologySector(result.sectorId);
     state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(insertedInside
-            ? TextFormat("Inserted topology sector %d", createdSectorId)
-            : TextFormat("Created topology sector %d", createdSectorId));
+    MarkTopologyDocumentEdited(result.status.c_str());
 }
 
 void SectorEditor::StartInsertSectorInside()
@@ -2419,10 +2405,9 @@ bool SectorEditor::DeleteSelectedTopologySectorConfirmed(int sectorId)
 {
     const bool hadPendingSplit = state.pendingTopologyLineSplitAtPoint.active;
     const int pendingSplitLineDefId = state.pendingTopologyLineSplitAtPoint.lineDefId;
-    SectorTopologyDeleteSectorResult result;
-    std::string error;
-    if (!DeleteSectorTopologySector(state.topologyMap, sectorId, &result, &error)) {
-        statusText = error.empty() ? "Cannot delete topology sector" : error;
+    const SectorEditorDeleteSectorResult result = game::DeleteTopologySector(state.topologyMap, sectorId);
+    if (!result.changed) {
+        statusText = result.status;
         return false;
     }
 
@@ -2447,13 +2432,8 @@ bool SectorEditor::DeleteSelectedTopologySectorConfirmed(int sectorId)
     MarkTopologyDocumentEdited(pendingSplitTargetRemoved
             ? TextFormat(
                     "Deleted topology sector %d; split at point cancelled",
-                    result.deletedSectorId)
-            : TextFormat(
-            "Deleted topology sector %d; removed %d sidedefs, %d linedefs, %d vertices",
-            result.deletedSectorId,
-            result.removedSideDefCount,
-            result.removedLineDefCount,
-            result.removedVertexCount));
+                    result.deleted.deletedSectorId)
+            : result.status.c_str());
     return true;
 }
 
@@ -7202,15 +7182,12 @@ bool SectorEditor::JoinSelectedTopologySectors()
         return false;
     }
 
-    SectorTopologyJoinSectorsResult join;
-    std::string error;
-    if (!JoinSectorTopologySectors(
+    const SectorEditorJoinSectorsResult result = game::JoinTopologySectors(
                 state.topologyMap,
                 winnerSideDef->sectorId,
-                otherSideDef->sectorId,
-                &join,
-                &error)) {
-        statusText = error.empty() ? "Join Sectors rejected." : error;
+                otherSideDef->sectorId);
+    if (!result.changed) {
+        statusText = result.status;
         return false;
     }
 
@@ -7225,12 +7202,8 @@ bool SectorEditor::JoinSelectedTopologySectors()
     state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
     state.hoveredTopologyLightId = -1;
     ClearTransientTopologyEditStateAfterGeometryChange();
-    SelectTopologySector(join.survivingSectorId);
-    MarkTopologyDocumentEdited(TextFormat(
-            "Joined topology sectors %d and %d; kept sector %d.",
-            join.survivingSectorId,
-            join.removedSectorId,
-            join.survivingSectorId));
+    SelectTopologySector(result.join.survivingSectorId);
+    MarkTopologyDocumentEdited(result.status.c_str());
     return true;
 }
 

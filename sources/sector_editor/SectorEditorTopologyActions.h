@@ -6,6 +6,7 @@
 #include <raylib.h>
 
 #include <string>
+#include <vector>
 
 namespace game {
 
@@ -38,6 +39,30 @@ struct SectorEditorSplitLineDefResult {
     std::string status;
 };
 
+struct SectorEditorCreateSectorResult {
+    bool changed = false;
+    int sectorId = -1;
+    std::string status;
+};
+
+struct SectorEditorDeleteSectorResult {
+    bool changed = false;
+    SectorTopologyDeleteSectorResult deleted;
+    std::string status;
+};
+
+struct SectorEditorCutSectorResult {
+    bool changed = false;
+    SectorTopologyCutSectorResult cut;
+    std::string status;
+};
+
+struct SectorEditorJoinSectorsResult {
+    bool changed = false;
+    SectorTopologyJoinSectorsResult join;
+    std::string status;
+};
+
 SectorEditorTopologyActionResult MoveTopologyVertex(
         SectorTopologyMap& map,
         int vertexId,
@@ -61,6 +86,32 @@ SectorEditorSplitLineDefResult SplitTopologyLineDefAtPoint(
         SectorTopologyMap& map,
         int lineDefId,
         SectorTopologyCoordPoint point);
+
+SectorEditorCreateSectorResult CreateTopologySector(
+        SectorTopologyMap& map,
+        const std::vector<SectorTopologyCoordPoint>& points,
+        const SectorTopologyCreatePolygonOptions& options);
+
+SectorEditorCreateSectorResult InsertTopologySectorInside(
+        SectorTopologyMap& map,
+        int parentSectorId,
+        const std::vector<SectorTopologyCoordPoint>& points,
+        const SectorTopologyInsertPolygonOptions& options);
+
+SectorEditorDeleteSectorResult DeleteTopologySector(
+        SectorTopologyMap& map,
+        int sectorId);
+
+SectorEditorCutSectorResult CutTopologySector(
+        SectorTopologyMap& map,
+        int sectorId,
+        SectorTopologyBoundaryCutPoint firstPoint,
+        SectorTopologyBoundaryCutPoint secondPoint);
+
+SectorEditorJoinSectorsResult JoinTopologySectors(
+        SectorTopologyMap& map,
+        int winnerSectorId,
+        int otherSectorId);
 
 SectorEditorAddStaticLightResult AddStaticLightToSector(
         SectorTopologyMap& map,
