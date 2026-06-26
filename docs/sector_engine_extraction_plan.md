@@ -78,6 +78,34 @@ When that happens, Codex must:
       "id": "phase_04",
       "title": "Clarify SectorMeshPreview Responsibilities",
       "type": "phase",
+      "status": "Planned"
+    },
+    {
+      "id": "phase_04a",
+      "title": "Audit Preview Renderer And Wrapper Responsibilities",
+      "type": "pass",
+      "parent": "phase_04",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_04b",
+      "title": "Introduce Renderer-Focused API Names Without Ownership Changes",
+      "type": "pass",
+      "parent": "phase_04",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_04c",
+      "title": "Adapt Editor And Demo Preview Wrappers To Renderer API",
+      "type": "pass",
+      "parent": "phase_04",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_04d",
+      "title": "Document Renderer Resource Ownership And Rebuild Boundaries",
+      "type": "pass",
+      "parent": "phase_04",
       "status": "Not Started"
     },
     {
@@ -129,7 +157,11 @@ inside it are `Completed`.
 | Phase 1B: Update Call Sites And Compatibility Helpers | Deferred |  | Folded into Phase 1A so the first dependency cleanup is buildable and reviewable as one pass. Do not create a long-lived compatibility alias unless needed temporarily during the implementation. |
 | Phase 2: Extract Gameplay Preview Update Boundary | Completed | 2026-06-26 | Moved gameplay-preview movement/collision/vertical/visual update orchestration from `SectorEditor::UpdatePreview3D` into `UpdateSectorEditorGameplayPreview()` in preview actions, while leaving editor hotkeys, UI/modal input gating, pose application, and 3D selection timing in the editor. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Source code changed. Collision, sector lookup, physics, camera feel, serialization, generated geometry, lightmap source-hash behavior, and 2D editor behavior intended unchanged. Cache invalidation unchanged; no topology mutation paths touched. Manual GUI verification not performed. |
 | Phase 3: Extract Freefly Camera/Input Behavior | Completed | 2026-06-26 | Added `SectorFreeflyController` helper/state, moved freefly F11 cursor toggle, mouse-look warmup, yaw/pitch, and movement updates out of `SectorMeshPreview`, and wired editor/demo owners to apply controller poses to the renderer. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Source code changed. Freefly camera feel/cursor behavior intended unchanged. Collision, sector lookup, gameplay-preview physics, serialization, generated geometry, lightmap source-hash behavior, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. |
-| Phase 4: Clarify SectorMeshPreview Responsibilities | Not Started |  | Split renderer/resource responsibilities from preview wrapper responsibilities. |
+| Phase 4: Clarify SectorMeshPreview Responsibilities | Planned | 2026-06-26 | Split into smaller passes because the original phase spans renderer/resource naming, ownership boundaries, editor/demo call-site adaptation, generated geometry access, and picking behavior. No source code changed in this planning pass. |
+| Phase 4A: Audit Preview Renderer And Wrapper Responsibilities | Not Started |  | Identify current `SectorMeshPreview` responsibilities, classify renderer/resource ownership versus editor/demo wrapper policy, and record exact behavior boundaries before source changes. |
+| Phase 4B: Introduce Renderer-Focused API Names Without Ownership Changes | Not Started |  | Add narrow renderer-facing names/types or method aliases only where they clarify existing render/resource duties; preserve resource ownership and generated geometry semantics. |
+| Phase 4C: Adapt Editor And Demo Preview Wrappers To Renderer API | Not Started |  | Update editor/demo call sites to use the clarified renderer API while keeping preview rebuild timing, picking, highlights, and material editing behavior unchanged. |
+| Phase 4D: Document Renderer Resource Ownership And Rebuild Boundaries | Not Started |  | Record the final ownership/rebuild rules and complete Phase 4 only after all non-deferred Phase 4 passes are completed. |
 | Phase 5: Define Minimal Sector World Runtime Boundary | Not Started |  | Add only proven reusable runtime boundary after previous seams exist. |
 | Phase 6: Plan Legacy Folder/File Renames | Not Started |  | Rename/move from `sector_demo` toward `sector_engine` only after dependency cleanup. |
 | Phase 7: Prepare Future SectorGame Consumption | Not Started |  | Later phase; no future game implementation yet. |
@@ -523,6 +555,118 @@ How to update this plan after completion:
   notes.
 - If the split is too broad, add smaller passes such as resource naming,
   renderer-only API, wrapper adaptation, and demo/editor call-site cleanup.
+
+Planned smaller passes:
+
+#### Phase 4A: Audit Preview Renderer And Wrapper Responsibilities
+
+Goal:
+
+Produce a focused audit of `SectorMeshPreview` after Phase 3, separating:
+
+- Renderer/resource duties: mesh/material/render texture/shader/bloom/lightmap
+  resources, generated geometry storage for drawing, texture lookup/fallback,
+  sky rendering, and draw-time state.
+- Preview wrapper policy: asset scope creation/destruction policy, rebuild
+  timing, editor/demo pose ownership, editor picking/highlight integration, and
+  material editing adapters.
+
+Allowed source changes:
+
+- Documentation only, preferably in this plan unless a nearby code comment is
+  needed to prevent accidental ownership confusion.
+
+Suggested checks:
+
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+Completion notes must state that no behavior changed, no source code changed
+unless a comment was added, and no manual GUI verification was performed unless
+it actually was.
+
+#### Phase 4B: Introduce Renderer-Focused API Names Without Ownership Changes
+
+Goal:
+
+Add the smallest renderer-focused names, helpers, or method aliases needed to
+make current `SectorMeshPreview` render/resource responsibilities explicit
+without moving files, changing ownership, or altering rebuild timing.
+
+Allowed source changes:
+
+- `sources/sector_demo/SectorMeshPreview.*`
+- Directly required build/test call-site updates.
+
+Non-goals:
+
+- Do not move folders or rename files.
+- Do not change asset scope lifetime.
+- Do not change generated geometry creation, storage, or surface metadata.
+- Do not change editor picking or material editing behavior.
+
+Suggested checks:
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+#### Phase 4C: Adapt Editor And Demo Preview Wrappers To Renderer API
+
+Goal:
+
+Move editor/demo call sites toward the clarified renderer API while keeping
+wrapper-owned policy in the editor/demo layer.
+
+Allowed source changes:
+
+- `sources/sector_editor/SectorEditor.cpp`
+- `sources/sector_editor/SectorEditorPreviewActions.*` if directly needed.
+- `sources/sector_demo/SectorDemo.*`
+- Narrow `SectorMeshPreview.*` follow-up edits required by the adaptation.
+
+Behavior that must remain unchanged:
+
+- Preview rebuild timing and asset scope lifetime.
+- 3D picking/highlights/material editing.
+- Texture fallback, sky fallback, bloom, and lightmap texture handling.
+- Collision, physics, camera feel, serialization, generated geometry, and
+  lightmap source-hash behavior.
+
+Suggested checks:
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+#### Phase 4D: Document Renderer Resource Ownership And Rebuild Boundaries
+
+Goal:
+
+Record the resulting `SectorMeshPreview` responsibility boundary after the
+source passes, including what remains wrapper/editor/demo policy and what is
+renderer/resource behavior.
+
+Allowed source changes:
+
+- Documentation only unless a small code comment is needed near an ownership or
+  rebuild boundary.
+
+Suggested checks:
+
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+Completion notes must state resource lifetime behavior, generated geometry
+behavior, lightmap source-hash behavior, serialization behavior, and manual GUI
+verification status. Mark Phase 4 `Completed` only after all non-deferred Phase
+4 passes are completed.
 
 ### Phase 5: Define Minimal Sector World Runtime Boundary
 
