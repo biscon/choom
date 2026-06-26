@@ -192,8 +192,8 @@ inside it are `Completed`.
 | Phase 4D: Document Renderer Resource Ownership And Rebuild Boundaries | Completed | 2026-06-26 | Recorded final `SectorMeshPreview` renderer/resource ownership, wrapper policy, rebuild, and shutdown boundaries below. Verification passed: `git diff --check`, `git diff --stat`, `git status --short`. Documentation-only pass; no source code changed. Resource lifetime, generated geometry behavior, lightmap source-hash behavior, serialization behavior, collision/physics/camera feel, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. |
 | Phase 5: Define Minimal Sector World Runtime Boundary | Planned | 2026-06-26 | Split into smaller passes because the original phase is too broad to implement safely in one run. No source code changed. Execute Phase 5A next. |
 | Phase 5A: Audit Reusable Runtime Boundary Need | Not Started |  | Documentation-only audit of whether a `SectorWorldRuntime` object removes real duplication, or whether existing free functions and small structs are still the right boundary. |
-| Phase 5B: Define Minimal Runtime State Boundary If Proven | Not Started |  | If Phase 5A proves a runtime object is useful, add the smallest state/API boundary without moving files or hiding editor policy. Otherwise defer this pass with a reason. |
-| Phase 5C: Adapt Runtime Consumers Without Editor Policy Leakage | Not Started |  | Adapt only the editor/demo consumers required by the Phase 5B boundary, preserving editor-owned dirty/cache/UI/status policy. |
+| Phase 5B: Define Minimal Runtime State Boundary If Proven | Not Started |  | If Phase 5A proves a runtime object is useful, define the smallest state/API boundary and perform only minimal compile-required call-site edits. Otherwise defer this pass with a reason. |
+| Phase 5C: Adapt Runtime Consumers Without Editor Policy Leakage | Not Started |  | Adapt editor/demo consumers only if Phase 5B introduces a runtime boundary; otherwise defer with the reason that there are no runtime-boundary consumers to adapt. |
 | Phase 5D: Document Final Runtime Dependency Boundary | Not Started |  | Record what the runtime boundary owns, what it does not own, dependency rules, behavior notes, and any deferred rename/folder decisions before Phase 6. |
 | Phase 6: Plan Legacy Folder/File Renames | Not Started |  | Rename/move from `sector_demo` toward `sector_engine` only after dependency cleanup. |
 | Phase 7: Prepare Future SectorGame Consumption | Not Started |  | Later phase; no future game implementation yet. |
@@ -921,6 +921,14 @@ Allowed source changes:
 - Direct build registration changes required for a new file.
 - Directly required compile-fix edits in editor/demo call sites.
 
+Scope split from Phase 5C:
+
+- Phase 5B should define the boundary and perform only the minimal call-site
+  edits required to keep the project compiling.
+- Intentional consumer cleanup/adaptation belongs in Phase 5C after the boundary
+  exists.
+- Do not silently absorb all Phase 5C work into Phase 5B.
+
 Non-goals:
 
 - Do not move folders or rename legacy `sector_demo` paths.
@@ -945,6 +953,15 @@ Goal:
 
 Adapt only the editor/demo consumers required by the Phase 5B boundary while
 keeping wrapper-owned policy in those wrappers.
+
+Precondition:
+
+- Phase 5C only runs if Phase 5B introduced a runtime boundary.
+- If Phase 5B is `Deferred` because Phase 5A concludes that existing free
+  functions and small structs are sufficient, then Phase 5C must also be marked
+  `Deferred` with the reason: "No runtime boundary was introduced in Phase 5B,
+  so there are no consumers to adapt."
+- In that case, Phase 5C must not make source changes.
 
 Allowed source changes:
 
