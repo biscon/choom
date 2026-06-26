@@ -1,11 +1,13 @@
 #pragma once
 
 #include "sector_editor/SectorEditorTypes.h"
-#include "sector_demo/SectorMeshPreview.h"
+#include "sector_demo/SectorViewPose.h"
 
 namespace game {
 
-SectorMeshPreviewPose ActiveSectorEditorPreviewPose(
+class SectorMeshPreview;
+
+SectorViewPose ActiveSectorEditorPreviewPose(
         const SectorEditorState& state,
         const SectorMeshPreview& preview);
 void ApplySectorEditorGameplayPoseToPreview(

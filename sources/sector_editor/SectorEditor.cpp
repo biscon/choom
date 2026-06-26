@@ -3100,7 +3100,7 @@ void SectorEditor::DrawPreviewOverlay(
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
-    const SectorMeshPreviewPose pose = ActivePreviewPose();
+    const SectorViewPose pose = ActivePreviewPose();
     const Vector3 position = pose.position;
     engine::Text(
             config,
@@ -6160,7 +6160,7 @@ void SectorEditor::LeavePreview3D()
     statusText = "Returned to 2D editor";
 }
 
-SectorMeshPreviewPose SectorEditor::ActivePreviewPose() const
+SectorViewPose SectorEditor::ActivePreviewPose() const
 {
     return ActiveSectorEditorPreviewPose(state, preview);
 }
@@ -7019,7 +7019,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
         ClearSectorFpsLandingDip(state.landingDipState);
         ApplyGameplayPoseToPreview();
     }
-    const SectorMeshPreviewPose pose = preview.Pose();
+    const SectorViewPose pose = preview.Pose();
     const bool mouseLook = preview.IsMouseLookEnabled();
     const SectorSurfaceRef selected = state.selectedSurface3D;
     const TopologySurfaceEditTarget selectedTarget = state.selectedTopologySurface3D;

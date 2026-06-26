@@ -1012,12 +1012,12 @@ void SectorMeshPreview::ApplyEmissiveDecalBloom(engine::AssetManager& assets, Re
     EndTextureMode();
 }
 
-SectorMeshPreviewPose SectorMeshPreview::Pose() const
+SectorViewPose SectorMeshPreview::Pose() const
 {
-    return SectorMeshPreviewPose{position, yawRadians, pitchRadians};
+    return SectorViewPose{position, yawRadians, pitchRadians};
 }
 
-void SectorMeshPreview::ApplyPose(const SectorMeshPreviewPose& pose)
+void SectorMeshPreview::ApplyPose(const SectorViewPose& pose)
 {
     position = pose.position;
     yawRadians = pose.yawRadians;

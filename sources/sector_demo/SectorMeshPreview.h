@@ -4,6 +4,7 @@
 #include "engine/input/Input.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorMeshTypes.h"
+#include "sector_demo/SectorViewPose.h"
 
 #include <raylib.h>
 
@@ -13,12 +14,6 @@
 namespace game {
 
 struct SectorTopologyMap;
-
-struct SectorMeshPreviewPose {
-    Vector3 position = {};
-    float yawRadians = 0.0f;
-    float pitchRadians = 0.0f;
-};
 
 class SectorMeshPreview {
 public:
@@ -40,8 +35,8 @@ public:
     bool IsMouseLookEnabled() const { return mouseLookEnabled; }
     Vector3 Position() const { return position; }
     const Camera3D& Camera() const { return camera; }
-    SectorMeshPreviewPose Pose() const;
-    void ApplyPose(const SectorMeshPreviewPose& pose);
+    SectorViewPose Pose() const;
+    void ApplyPose(const SectorViewPose& pose);
     void SetMouseLookEnabled(bool enabled);
     size_t SectorCount() const { return sectorCount; }
     size_t BatchCount() const { return meshes.batches.size(); }

@@ -229,7 +229,7 @@ private:
     bool HasDocumentModalOpen() const;
     bool TryEnterPreview3D(engine::AssetManager& assets, engine::UIContext& ui);
     void LeavePreview3D();
-    SectorMeshPreviewPose ActivePreviewPose() const;
+    SectorViewPose ActivePreviewPose() const;
     void ApplyGameplayPoseToPreview();
     void TogglePreviewControlMode();
     bool RebuildSectorCollisionWorld();

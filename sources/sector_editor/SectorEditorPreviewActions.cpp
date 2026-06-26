@@ -2,6 +2,7 @@
 
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_demo/SectorFpsController.h"
+#include "sector_demo/SectorMeshPreview.h"
 
 namespace game {
 
@@ -31,7 +32,7 @@ void ResetPreviewCollisionAndVisualState(SectorEditorState& state)
 
 } // namespace
 
-SectorMeshPreviewPose ActiveSectorEditorPreviewPose(
+SectorViewPose ActiveSectorEditorPreviewPose(
         const SectorEditorState& state,
         const SectorMeshPreview& preview)
 {

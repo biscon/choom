@@ -46,14 +46,14 @@ When that happens, Codex must:
       "id": "phase_01",
       "title": "Decouple FPS Controller From Mesh Preview Pose",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01a",
       "title": "Introduce SectorViewPose And Switch FPS Controller Call Sites",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01b",
@@ -124,8 +124,8 @@ inside it are `Completed`.
 
 | Phase / Pass | Status | Date | Notes |
 | --- | --- | --- | --- |
-| Phase 1: Decouple FPS Controller From Mesh Preview Pose | Not Started |  | First recommended execution phase. Behavior should remain unchanged. |
-| Phase 1A: Introduce SectorViewPose And Switch FPS Controller Call Sites | Not Started |  | Use neutral `SectorViewPose`; switch `SectorFpsController` and affected call sites directly in this pass if the diff remains small. Behavior must remain unchanged. |
+| Phase 1: Decouple FPS Controller From Mesh Preview Pose | Completed | 2026-06-26 | Completed after Phase 1A; Phase 1B remains deferred. Source code changed only for neutral pose type/call-site cleanup. Behavior intended unchanged. |
+| Phase 1A: Introduce SectorViewPose And Switch FPS Controller Call Sites | Completed | 2026-06-26 | Added neutral `SectorViewPose`, made `SectorFpsController` use it instead of `SectorMeshPreviewPose`, and switched preview/editor/test call sites. Verification passed: `cmake --build cmake-build-debug -j2` (CMake regenerated for new header), `ctest --test-dir cmake-build-debug --output-on-failure`. Collision, sector lookup, physics, camera feel, serialization, generated geometry, rendering, and lightmap source-hash behavior intended unchanged. No topology mutation or 2D cache invalidation paths touched. Manual GUI verification not performed. |
 | Phase 1B: Update Call Sites And Compatibility Helpers | Deferred |  | Folded into Phase 1A so the first dependency cleanup is buildable and reviewable as one pass. Do not create a long-lived compatibility alias unless needed temporarily during the implementation. |
 | Phase 2: Extract Gameplay Preview Update Boundary | Not Started |  | Move reusable/semi-reusable player update orchestration out of `SectorEditor::UpdatePreview3D`. |
 | Phase 3: Extract Freefly Camera/Input Behavior | Not Started |  | Stop `SectorMeshPreview` renderer from owning freefly controls. |

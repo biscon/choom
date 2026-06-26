@@ -447,7 +447,7 @@ struct SectorEditorState {
     SectorFpsHeadBobState headBobState;
     SectorFpsLandingDipState landingDipState;
     bool hasPreviewPose = false;
-    SectorMeshPreviewPose lastPreviewPose = {};
+    SectorViewPose lastPreviewPose = {};
     SectorSurfaceHit hoveredSurface3D;
     SectorSurfaceRef selectedSurface3D;
     TopologySurfaceEditTarget selectedTopologySurface3D;
