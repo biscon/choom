@@ -146,6 +146,41 @@ When that happens, Codex must:
       "id": "phase_06",
       "title": "Plan Legacy Folder/File Renames",
       "type": "phase",
+      "status": "Planned"
+    },
+    {
+      "id": "phase_06a",
+      "title": "Audit Legacy Sector Demo Files For Rename Planning",
+      "type": "pass",
+      "parent": "phase_06",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_06b",
+      "title": "Plan Exact Rename Map And Include Strategy",
+      "type": "pass",
+      "parent": "phase_06",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_06c",
+      "title": "Move Clearly Reusable Backend Modules",
+      "type": "pass",
+      "parent": "phase_06",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_06d",
+      "title": "Adapt Includes And Build Registration After Moves",
+      "type": "pass",
+      "parent": "phase_06",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_06e",
+      "title": "Document Remaining Legacy Demo Files And Deferred Moves",
+      "type": "pass",
+      "parent": "phase_06",
       "status": "Not Started"
     },
     {
@@ -195,7 +230,12 @@ inside it are `Completed`.
 | Phase 5B: Define Minimal Runtime State Boundary If Proven | Deferred | 2026-06-26 | Deferred because Phase 5A found no proven runtime-object need under the current code state: there is no second runtime consumer or duplicated setup/update path to justify adding `SectorWorldRuntime`. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`, `git diff --check`, `git diff --stat`, `git status --short`. Documentation-only tracking update; no source code changed. Behavior unchanged: collision, physics, camera feel, generated geometry, lightmap source-hash behavior, serialization, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. |
 | Phase 5C: Adapt Runtime Consumers Without Editor Policy Leakage | Deferred | 2026-06-26 | Deferred because no runtime boundary was introduced in Phase 5B, so there are no consumers to adapt. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`, `git diff --check`, `git diff --stat`, `git status --short`. Documentation-only tracking update; no source code changed. Behavior unchanged: 2D editor topology authoring, preview enter/leave/rebuild timing, freefly and gameplay-preview controls, collision, sector lookup, physics, camera feel, generated geometry, lightmap source-hash behavior, serialization, asset upload/unload behavior, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. |
 | Phase 5D: Document Final Runtime Dependency Boundary | Completed | 2026-06-26 | Recorded the final Phase 5 dependency boundary below: reusable runtime remains the existing narrow sector services and data structs rather than a new facade. Verification passed: `git diff --check`, `git diff --stat`, `git status --short`. Documentation-only pass; no source code changed. Behavior unchanged: collision, sector lookup, physics, camera feel, generated geometry, lightmap source-hash behavior, serialization, topology mutation paths, 2D cache invalidation, editor behavior, and asset upload/unload rules. Manual GUI verification not performed. Phase 5 is complete. |
-| Phase 6: Plan Legacy Folder/File Renames | Not Started |  | Rename/move from `sector_demo` toward `sector_engine` only after dependency cleanup. |
+| Phase 6: Plan Legacy Folder/File Renames | Planned |  | Split into smaller rename-planning and mechanical-move passes before any folder/file rename work happens. Phase 6A should execute next. |
+| Phase 6A: Audit Legacy Sector Demo Files For Rename Planning | Not Started |  | Documentation-only audit of which legacy `sources/sector_demo/` files are reusable backend modules versus demo/sample wrappers. |
+| Phase 6B: Plan Exact Rename Map And Include Strategy | Not Started |  | Creates the exact move/rename map and include/build strategy before source moves. |
+| Phase 6C: Move Clearly Reusable Backend Modules | Not Started |  | Performs the first mechanical move batch for clearly reusable backend modules only. |
+| Phase 6D: Adapt Includes And Build Registration After Moves | Not Started |  | Adapts includes/build registration after the move batch, with behavior unchanged. |
+| Phase 6E: Document Remaining Legacy Demo Files And Deferred Moves | Not Started |  | Documents remaining legacy/demo files and deferred moves. |
 | Phase 7: Prepare Future SectorGame Consumption | Not Started |  | Later phase; no future game implementation yet. |
 
 ## Execution Tracking Rules
@@ -1142,6 +1182,132 @@ Non-goals:
 - Do not change architecture during rename-only passes.
 - Do not add `SectorGame`.
 - Do not create a new facade solely because a directory was renamed.
+
+Phase 6 must rename/move only proven reusable backend modules. It must not
+create a facade or rename `SectorDemo.*` into `SectorEngine` just because the
+old folder name is bad.
+
+Planned smaller passes:
+
+#### Phase 6A: Audit Legacy Sector Demo Files For Rename Planning
+
+Purpose:
+
+- Documentation-only audit.
+- Classify files currently under `sources/sector_demo/` into:
+  - proven reusable backend/runtime modules
+  - renderer/resource modules
+  - legacy demo/sample wrapper modules
+  - files that should stay put for now
+- Use the Phase 5 conclusion: do not invent a `SectorWorldRuntime` facade just
+  to justify a rename.
+- Do not move files.
+- Do not change includes.
+- Do not change source code.
+
+Suggested checks:
+
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+Completion notes must state no source code changed unless only a tiny comment
+was added.
+
+#### Phase 6B: Plan Exact Rename Map And Include Strategy
+
+Purpose:
+
+- Documentation-only or plan-only pass.
+- Produce an exact proposed move map before source files are moved.
+- Identify which files should move toward `sources/sector_engine/` or similar
+  naming.
+- Identify which files should remain demo/sample wrappers, especially
+  `SectorDemo.*`.
+- Identify include-path and build-registration strategy.
+- Avoid behavior changes.
+- Avoid facade creation.
+- Do not move files yet.
+
+Suggested checks:
+
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+#### Phase 6C: Move Clearly Reusable Backend Modules
+
+Purpose:
+
+- Execute the first mechanical move batch only after Phase 6B has a concrete
+  move map.
+- Move only clearly reusable backend modules.
+- Do not move ambiguous demo/sample wrappers.
+- Do not create a `SectorWorldRuntime` facade.
+- Do not combine move work with behavior refactors.
+- Keep the diff mechanical and reviewable.
+
+Allowed source changes:
+
+- Moved files from `sources/sector_demo/` to the chosen backend folder.
+- Directly required include updates.
+- Directly required build registration updates.
+- Directly required test include updates.
+
+Behavior that must remain unchanged:
+
+- Runtime/editor behavior.
+- Serialization.
+- Generated geometry.
+- Collision.
+- Preview rendering.
+- Sky.
+- Lightmap source-hash behavior.
+- Freefly/gameplay camera feel.
+- Asset upload/unload behavior.
+
+Suggested checks:
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+#### Phase 6D: Adapt Includes And Build Registration After Moves
+
+Purpose:
+
+- Perform any narrow include/build cleanup left after Phase 6C.
+- Keep this as a mechanical follow-up, not a behavior refactor.
+- Do not move additional ambiguous files unless Phase 6B explicitly listed them
+  for this pass.
+- Do not change architecture during include cleanup.
+
+Suggested checks:
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+#### Phase 6E: Document Remaining Legacy Demo Files And Deferred Moves
+
+Purpose:
+
+- Documentation-only closeout.
+- Record what moved, what stayed, and why.
+- Explicitly record the status of `SectorDemo.*`.
+- Record any files deferred because their role is still ambiguous.
+- Mark Phase 6 complete only when all non-deferred Phase 6 passes are
+  completed.
+
+Suggested checks:
+
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
 
 Suggested tests/manual smoke checks:
 
