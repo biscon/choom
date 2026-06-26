@@ -54,7 +54,7 @@ bool SectorEditor::Init(engine::AssetManager& assets)
 void SectorEditor::Shutdown(engine::AssetManager& assets)
 {
     ShutdownLightmapBake();
-    preview.Shutdown(assets);
+    preview.ShutdownRendererResources(assets);
     if (!engine::IsNull(state.editorTextureScope)) {
         assets.UnloadScope(state.editorTextureScope);
     }
@@ -1559,9 +1559,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
     if (state.mode == SectorEditorMode::Preview3D) {
         if (state.previewControlMode == SectorPreviewControlMode::FreeFly) {
             UpdateSectorFreeflyController(state.freeflyController, input, dt);
-            preview.ApplyPose(state.freeflyController.pose);
+            preview.ApplyRendererPose(state.freeflyController.pose);
         } else {
-            const float previousVisualEyeY = preview.Pose().position.y;
+            const float previousVisualEyeY = preview.RendererPose().position.y;
             input.ForEachEvent(
                     engine::InputEventType::KeyPressed,
                     true,
@@ -1607,7 +1607,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
             }
             UpdateSectorEditorGameplayPreview(state, controllerInput, previousVisualEyeY, dt);
             ApplyGameplayPoseToPreview();
-            state.freeflyController.pose = preview.Pose();
+            state.freeflyController.pose = preview.RendererPose();
         }
         UpdatePreview3DSelection(input);
     }
@@ -1616,7 +1616,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
 void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
 {
     if (!initialized
-            || !preview.IsReady()
+            || !preview.IsRendererReady()
             || state.freeflyController.mouseLookEnabled
             || state.previewUiHidden
             || state.texturePicker.open) {
@@ -2089,7 +2089,7 @@ bool SectorEditor::FinishTopologyMaterialMutation(const char* status, engine::As
 {
     state.topologyRenderWarning.clear();
     MarkTopologyDocumentEdited(status);
-    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
         return RebuildPreviewMeshesPreservingView(*assets);
     }
     return true;
@@ -2653,7 +2653,7 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
     }
     TraceLog(LOG_INFO, "INFO: Lightmap bake completed asynchronously in %.2fs", result.bakeResult.totalBakeSeconds);
 
-    if (state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+    if (state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
         RebuildPreviewMeshesPreservingView(assets);
     }
 
@@ -2879,7 +2879,7 @@ void SectorEditor::RenderPreview3D(engine::AssetManager& assets)
 
 void SectorEditor::RenderPreview3DScene(engine::AssetManager& assets)
 {
-    preview.Render(assets, state.useBakedAmbientOcclusion);
+    preview.DrawScene(assets, state.useBakedAmbientOcclusion);
 }
 
 void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
@@ -2887,7 +2887,7 @@ void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTextu
     if (state.mode != SectorEditorMode::Preview3D) {
         return;
     }
-    preview.ApplyEmissiveDecalBloom(assets, sceneTarget);
+    preview.ApplyEmissiveDecalBloomToScene(assets, sceneTarget);
 }
 
 void SectorEditor::RenderPreview3DOverlays()
@@ -2900,7 +2900,7 @@ void SectorEditor::RenderPreview3DOverlays()
 SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectangle viewportRect) const
 {
     SectorSurfaceHit best;
-    if (!preview.IsReady()) {
+    if (!preview.IsRendererReady()) {
         return best;
     }
 
@@ -2910,13 +2910,13 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
     };
     const Ray ray = GetScreenToWorldRayEx(
             localMouse,
-            preview.Camera(),
+            preview.RenderCamera(),
             static_cast<int>(std::round(viewportRect.width)),
             static_cast<int>(std::round(viewportRect.height))
     );
 
     const SectorGeneratedSurfaceHit hit = PickSectorGeneratedGeometry(
-            preview.GeneratedGeometry(),
+            preview.RenderedGeometry(),
             ray,
             GeometryEpsilon);
     if (!hit.hit) {
@@ -2932,7 +2932,7 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
 
 void SectorEditor::DrawPreviewSurfaceHighlights() const
 {
-    if (!preview.IsReady() || state.freeflyController.mouseLookEnabled) {
+    if (!preview.IsRendererReady() || state.freeflyController.mouseLookEnabled) {
         return;
     }
 
@@ -2941,7 +2941,7 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
             return;
         }
         const float lift = IsWallSurface(surface.kind) ? PreviewHighlightLift : PreviewHighlightLift * 2.0f;
-        for (const SectorGeneratedSurface& generated : preview.GeneratedGeometry().surfaces) {
+        for (const SectorGeneratedSurface& generated : preview.RenderedGeometry().surfaces) {
             const SectorSurfaceRef generatedRef = ToEditorSurfaceRef(generated.ref);
             if (!SameSurfaceRef(surface, generatedRef)) {
                 continue;
@@ -2959,7 +2959,7 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
         (void)thickness;
     };
 
-    BeginMode3D(preview.Camera());
+    BeginMode3D(preview.RenderCamera());
     if (state.hoveredSurface3D.hit
             && !SameSurfaceRef(state.hoveredSurface3D.surface, state.selectedSurface3D)) {
         drawSurface(state.hoveredSurface3D.surface, Color{248, 238, 124, 235}, 2.0f);
@@ -3099,8 +3099,8 @@ void SectorEditor::DrawPreviewOverlay(
             state.previewControlMode == SectorPreviewControlMode::Gameplay
                     ? TextFormat(
                             "assets %.0f%% | Lightmap: %s | AO: %s | walk %.1f | run %.1f | eye %.1f | height %.1f | gravity %.1f | jump %.1f | %s%s",
-                            preview.AssetProgress(assets) * 100.0f,
-                            preview.LightmapStatusText(),
+                            preview.RendererAssetProgress(assets) * 100.0f,
+                            preview.RendererLightmapStatusText(),
                             state.useBakedAmbientOcclusion ? "on" : "off",
                             state.fpsControllerConfig.walkSpeed,
                             state.fpsControllerConfig.runSpeed,
@@ -3112,8 +3112,8 @@ void SectorEditor::DrawPreviewOverlay(
                             state.topologyDocumentDirty ? " | unsaved changes" : "")
                     : TextFormat(
                             "assets %.0f%% | Lightmap: %s | AO: %s | %s%s",
-                            preview.AssetProgress(assets) * 100.0f,
-                            preview.LightmapStatusText(),
+                            preview.RendererAssetProgress(assets) * 100.0f,
+                            preview.RendererLightmapStatusText(),
                             state.useBakedAmbientOcclusion ? "on" : "off",
                             collisionWarningText,
                             state.topologyDocumentDirty ? " | unsaved changes" : ""),
@@ -5781,7 +5781,7 @@ void SectorEditor::DrawStatusPanel(
 void SectorEditor::ResetToBlankMap(engine::AssetManager& assets)
 {
     ShutdownLightmapBake();
-    preview.Shutdown(assets);
+    preview.ShutdownRendererResources(assets);
     if (!engine::IsNull(state.editorTextureScope)) {
         assets.UnloadScope(state.editorTextureScope);
     }
@@ -5813,7 +5813,7 @@ bool SectorEditor::LoadLevel(
         return false;
     }
 
-    preview.Shutdown(assets);
+    preview.ShutdownRendererResources(assets);
     CancelPendingSector(nullptr);
     CancelPendingTopologyVertexMerge(nullptr);
     CancelPendingTopologyLineSplitAtPoint(nullptr);
@@ -5978,7 +5978,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     uiState.keyboardCaptured = false;
 
     std::string error;
-    if (!preview.Rebuild(assets, state.topologyMap, "sector_editor_preview", error)) {
+    if (!preview.RebuildRendererResources(assets, state.topologyMap, "sector_editor_preview", error)) {
         state.sectorCollisionWorldValid = false;
         state.sectorCollisionWorldWarning.clear();
         state.previewCollisionSectorId = 0;
@@ -5999,13 +5999,13 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     }
 
     if (state.hasPreviewPose) {
-        preview.ApplyPose(state.lastPreviewPose);
+        preview.ApplyRendererPose(state.lastPreviewPose);
     }
 
     state.previewControlMode = SectorPreviewControlMode::FreeFly;
-    ResetSectorFreeflyController(state.freeflyController, preview.Pose());
+    ResetSectorFreeflyController(state.freeflyController, preview.RendererPose());
     EnterSectorFreeflyController(state.freeflyController);
-    preview.ApplyPose(state.freeflyController.pose);
+    preview.ApplyRendererPose(state.freeflyController.pose);
     state.visualStepOffsetY = 0.0f;
     ClearSectorFpsHeadBob(state.headBobState);
     ClearSectorFpsLandingDip(state.landingDipState);
@@ -6130,12 +6130,12 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     state.topologyMap.directionalLight = draftDirectionalLight;
     MarkTopologyDocumentEdited("Preview settings updated");
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
-    if (skyChanged && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+    if (skyChanged && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
         RebuildPreviewMeshesPreservingView(assets);
     }
     if (state.mode == SectorEditorMode::Preview3D
             && state.previewControlMode == SectorPreviewControlMode::Gameplay
-            && preview.IsReady()) {
+            && preview.IsRendererReady()) {
         state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
                 state.fpsControllerState,
                 state.fpsControllerConfig,
@@ -6895,7 +6895,7 @@ bool SectorEditor::AlignSelectedWallMaterialU(
 
 bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& assets)
 {
-    if (!preview.IsReady()) {
+    if (!preview.IsRendererReady()) {
         return false;
     }
 
@@ -6903,13 +6903,13 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
         ClearSectorFpsLandingDip(state.landingDipState);
         ApplyGameplayPoseToPreview();
     }
-    const SectorViewPose pose = preview.Pose();
+    const SectorViewPose pose = preview.RendererPose();
     const bool mouseLook = state.freeflyController.mouseLookEnabled;
     const SectorSurfaceRef selected = state.selectedSurface3D;
     const TopologySurfaceEditTarget selectedTarget = state.selectedTopologySurface3D;
 
     std::string error;
-    if (!preview.Rebuild(assets, state.topologyMap, "sector_editor_preview", error)) {
+    if (!preview.RebuildRendererResources(assets, state.topologyMap, "sector_editor_preview", error)) {
         state.sectorCollisionWorldValid = false;
         state.sectorCollisionWorldWarning.clear();
         state.previewCollisionSectorId = 0;
@@ -6928,7 +6928,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
         return false;
     }
 
-    preview.ApplyPose(pose);
+    preview.ApplyRendererPose(pose);
     ResetSectorFreeflyController(state.freeflyController, pose);
     SetSectorFreeflyMouseLookEnabled(state.freeflyController, mouseLook);
     const bool selectedStillValid = IsValidSurfaceRef(selected);
@@ -7134,7 +7134,7 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
         } else {
             state.topologyRenderWarning.clear();
             MarkTopologyDocumentEdited(result.status.c_str());
-            if (result.rebuildPreviewOnApply && state.mode == SectorEditorMode::Preview3D && preview.IsReady()) {
+            if (result.rebuildPreviewOnApply && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
                 RebuildPreviewMeshesPreservingView(assets);
             }
         }

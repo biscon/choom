@@ -56,7 +56,7 @@ void ApplySectorEditorGameplayPoseToPreview(
         const SectorEditorState& state,
         SectorMeshPreview& preview)
 {
-    preview.ApplyPose(SectorFpsControllerVisualPose(
+    preview.ApplyRendererPose(SectorFpsControllerVisualPose(
             state.fpsControllerState,
             state.fpsControllerConfig,
             state.visualStepOffsetY,
@@ -68,7 +68,7 @@ bool ToggleSectorEditorPreviewControlMode(
         SectorEditorState& state,
         SectorMeshPreview& preview)
 {
-    if (state.mode != SectorEditorMode::Preview3D || !preview.IsReady()) {
+    if (state.mode != SectorEditorMode::Preview3D || !preview.IsRendererReady()) {
         return false;
     }
 
@@ -86,7 +86,7 @@ bool ToggleSectorEditorPreviewControlMode(
         const bool mouseLookEnabled = state.freeflyController.mouseLookEnabled;
         ClearSectorFpsLandingDip(state.landingDipState);
         ApplySectorEditorGameplayPoseToPreview(state, preview);
-        ResetSectorFreeflyController(state.freeflyController, preview.Pose());
+        ResetSectorFreeflyController(state.freeflyController, preview.RendererPose());
         SetSectorFreeflyMouseLookEnabled(state.freeflyController, mouseLookEnabled);
         ClearPreviewGameplayVisualState(state);
         state.previewControlMode = SectorPreviewControlMode::FreeFly;
