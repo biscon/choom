@@ -22,10 +22,6 @@ namespace game {
 
 namespace {
 
-constexpr float MouseSensitivity = 0.0030f;
-constexpr float MoveSpeed = 5.0f;
-constexpr float PitchLimit = 1.45f;
-constexpr int MouseLookWarmupFrames = 2;
 constexpr bool BloomEnabled = true;
 constexpr float BloomStrength = 0.5f;
 constexpr float BloomLdrIntensityScale = 10.0f;
@@ -520,13 +516,11 @@ bool SectorMeshPreview::Rebuild(
     }
     yawRadians = 0.0f;
     pitchRadians = 0.0f;
-    mouseLookEnabled = true;
     camera.fovy = 75.0f;
     camera.projection = CAMERA_PERSPECTIVE;
     UpdateCamera();
 
     initialized = true;
-    Enter();
     return true;
 }
 
@@ -543,7 +537,6 @@ void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
         return;
     }
 
-    Leave();
     UnloadBloomResources();
     UnloadSkyCylinderMesh();
     UnloadSectorMeshes(meshes);
@@ -570,91 +563,6 @@ void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
     }
 
     initialized = false;
-}
-
-void SectorMeshPreview::Enter()
-{
-    if (!initialized) {
-        return;
-    }
-
-    mouseLookEnabled = true;
-    mouseLookWarmupFrames = MouseLookWarmupFrames;
-    DisableCursor();
-}
-
-void SectorMeshPreview::Leave()
-{
-    EnableCursor();
-}
-
-void SectorMeshPreview::Update(engine::Input& input, float dt)
-{
-    if (!initialized) {
-        return;
-    }
-
-    input.ForEachEvent(
-            engine::InputEventType::KeyPressed,
-            true,
-            [this](engine::InputEvent& event) {
-                if (event.key.key != KEY_F11) {
-                    return;
-                }
-
-                mouseLookEnabled = !mouseLookEnabled;
-                if (mouseLookEnabled) {
-                    mouseLookWarmupFrames = MouseLookWarmupFrames;
-                    DisableCursor();
-                } else {
-                    EnableCursor();
-                }
-                engine::ConsumeEvent(event);
-            }
-    );
-
-    if (mouseLookEnabled) {
-        if (mouseLookWarmupFrames > 0) {
-            --mouseLookWarmupFrames;
-        } else {
-            const Vector2 mouseDelta = input.MouseDelta();
-            yawRadians += mouseDelta.x * MouseSensitivity;
-            pitchRadians -= mouseDelta.y * MouseSensitivity;
-            pitchRadians = Clamp(pitchRadians, -PitchLimit, PitchLimit);
-        }
-    }
-
-    if (mouseLookEnabled) {
-        Vector3 forward{std::cos(yawRadians), 0.0f, std::sin(yawRadians)};
-        Vector3 right{-forward.z, 0.0f, forward.x};
-        Vector3 movement{};
-
-        if (input.IsKeyDown(KEY_W)) {
-            movement = Vector3Add(movement, forward);
-        }
-        if (input.IsKeyDown(KEY_S)) {
-            movement = Vector3Subtract(movement, forward);
-        }
-        if (input.IsKeyDown(KEY_D)) {
-            movement = Vector3Add(movement, right);
-        }
-        if (input.IsKeyDown(KEY_A)) {
-            movement = Vector3Subtract(movement, right);
-        }
-        if (input.IsKeyDown(KEY_SPACE)) {
-            movement.y += 1.0f;
-        }
-        if (input.IsKeyDown(KEY_LEFT_CONTROL) || input.IsKeyDown(KEY_RIGHT_CONTROL)) {
-            movement.y -= 1.0f;
-        }
-
-        if (Vector3LengthSqr(movement) > 0.0001f) {
-            movement = Vector3Normalize(movement);
-            position = Vector3Add(position, Vector3Scale(movement, MoveSpeed * dt));
-        }
-    }
-
-    UpdateCamera();
 }
 
 void SectorMeshPreview::Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion)
@@ -1023,21 +931,6 @@ void SectorMeshPreview::ApplyPose(const SectorViewPose& pose)
     yawRadians = pose.yawRadians;
     pitchRadians = pose.pitchRadians;
     UpdateCamera();
-}
-
-void SectorMeshPreview::SetMouseLookEnabled(bool enabled)
-{
-    if (!initialized) {
-        return;
-    }
-
-    mouseLookEnabled = enabled;
-    if (mouseLookEnabled) {
-        mouseLookWarmupFrames = MouseLookWarmupFrames;
-        DisableCursor();
-    } else {
-        EnableCursor();
-    }
 }
 
 float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const

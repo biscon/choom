@@ -2,6 +2,7 @@
 
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
+#include "sector_demo/SectorFreeflyController.h"
 #include "sector_demo/SectorMeshPreview.h"
 
 namespace game {
@@ -17,6 +18,7 @@ public:
 
 private:
     SectorMeshPreview preview;
+    SectorFreeflyControllerState freeflyController;
     bool initialized = false;
 };
 

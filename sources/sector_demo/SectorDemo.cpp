@@ -26,19 +26,30 @@ bool SectorDemo::Init(engine::AssetManager& assets, const char* mapPath)
         return false;
     }
 
+    ResetSectorFreeflyController(freeflyController, preview.Pose());
+    EnterSectorFreeflyController(freeflyController);
+    preview.ApplyPose(freeflyController.pose);
     initialized = true;
     return true;
 }
 
 void SectorDemo::Shutdown(engine::AssetManager& assets)
 {
+    if (initialized) {
+        LeaveSectorFreeflyController();
+    }
     preview.Shutdown(assets);
     initialized = false;
 }
 
 void SectorDemo::Update(engine::Input& input, float dt)
 {
-    preview.Update(input, dt);
+    if (!initialized) {
+        return;
+    }
+
+    UpdateSectorFreeflyController(freeflyController, input, dt);
+    preview.ApplyPose(freeflyController.pose);
 }
 
 void SectorDemo::Render(engine::AssetManager& assets)

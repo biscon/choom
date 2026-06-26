@@ -72,7 +72,7 @@ When that happens, Codex must:
       "id": "phase_03",
       "title": "Extract Freefly Camera/Input Behavior",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04",
@@ -128,7 +128,7 @@ inside it are `Completed`.
 | Phase 1A: Introduce SectorViewPose And Switch FPS Controller Call Sites | Completed | 2026-06-26 | Added neutral `SectorViewPose`, made `SectorFpsController` use it instead of `SectorMeshPreviewPose`, and switched preview/editor/test call sites. Verification passed: `cmake --build cmake-build-debug -j2` (CMake regenerated for new header), `ctest --test-dir cmake-build-debug --output-on-failure`. Collision, sector lookup, physics, camera feel, serialization, generated geometry, rendering, and lightmap source-hash behavior intended unchanged. No topology mutation or 2D cache invalidation paths touched. Manual GUI verification not performed. |
 | Phase 1B: Update Call Sites And Compatibility Helpers | Deferred |  | Folded into Phase 1A so the first dependency cleanup is buildable and reviewable as one pass. Do not create a long-lived compatibility alias unless needed temporarily during the implementation. |
 | Phase 2: Extract Gameplay Preview Update Boundary | Completed | 2026-06-26 | Moved gameplay-preview movement/collision/vertical/visual update orchestration from `SectorEditor::UpdatePreview3D` into `UpdateSectorEditorGameplayPreview()` in preview actions, while leaving editor hotkeys, UI/modal input gating, pose application, and 3D selection timing in the editor. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Source code changed. Collision, sector lookup, physics, camera feel, serialization, generated geometry, lightmap source-hash behavior, and 2D editor behavior intended unchanged. Cache invalidation unchanged; no topology mutation paths touched. Manual GUI verification not performed. |
-| Phase 3: Extract Freefly Camera/Input Behavior | Not Started |  | Stop `SectorMeshPreview` renderer from owning freefly controls. |
+| Phase 3: Extract Freefly Camera/Input Behavior | Completed | 2026-06-26 | Added `SectorFreeflyController` helper/state, moved freefly F11 cursor toggle, mouse-look warmup, yaw/pitch, and movement updates out of `SectorMeshPreview`, and wired editor/demo owners to apply controller poses to the renderer. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Source code changed. Freefly camera feel/cursor behavior intended unchanged. Collision, sector lookup, gameplay-preview physics, serialization, generated geometry, lightmap source-hash behavior, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. |
 | Phase 4: Clarify SectorMeshPreview Responsibilities | Not Started |  | Split renderer/resource responsibilities from preview wrapper responsibilities. |
 | Phase 5: Define Minimal Sector World Runtime Boundary | Not Started |  | Add only proven reusable runtime boundary after previous seams exist. |
 | Phase 6: Plan Legacy Folder/File Renames | Not Started |  | Rename/move from `sector_demo` toward `sector_engine` only after dependency cleanup. |

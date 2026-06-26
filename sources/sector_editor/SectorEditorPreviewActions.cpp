@@ -48,7 +48,8 @@ SectorViewPose ActiveSectorEditorPreviewPose(
                 state.headBobState.offset,
                 state.landingDipState.offsetY);
     }
-    return preview.Pose();
+    (void)preview;
+    return state.freeflyController.pose;
 }
 
 void ApplySectorEditorGameplayPoseToPreview(
@@ -75,15 +76,18 @@ bool ToggleSectorEditorPreviewControlMode(
     if (state.previewControlMode == SectorPreviewControlMode::FreeFly) {
         ClearPreviewGameplayVisualState(state);
         state.fpsControllerState = SectorFpsControllerStateFromCameraPose(
-                preview.Pose(),
+                state.freeflyController.pose,
                 state.fpsControllerConfig);
         state.fpsControllerState.verticalVelocity = 0.0f;
         state.previewControlMode = SectorPreviewControlMode::Gameplay;
         InitializeSectorEditorGameplayVerticalState(state);
         ApplySectorEditorGameplayPoseToPreview(state, preview);
     } else {
+        const bool mouseLookEnabled = state.freeflyController.mouseLookEnabled;
         ClearSectorFpsLandingDip(state.landingDipState);
         ApplySectorEditorGameplayPoseToPreview(state, preview);
+        ResetSectorFreeflyController(state.freeflyController, preview.Pose());
+        SetSectorFreeflyMouseLookEnabled(state.freeflyController, mouseLookEnabled);
         ClearPreviewGameplayVisualState(state);
         state.previewControlMode = SectorPreviewControlMode::FreeFly;
         ResetPreviewCollisionState(state);

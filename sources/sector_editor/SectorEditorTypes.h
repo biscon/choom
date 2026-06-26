@@ -3,6 +3,7 @@
 #include "engine/ui/UI.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorFpsController.h"
+#include "sector_demo/SectorFreeflyController.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshPreview.h"
 #include "sector_demo/SectorPointTypes.h"
@@ -434,6 +435,7 @@ struct SectorEditorState {
     bool useBakedAmbientOcclusion = true;
     bool previewUiHidden = false;
     SectorPreviewControlMode previewControlMode = SectorPreviewControlMode::FreeFly;
+    SectorFreeflyControllerState freeflyController;
     SectorFpsControllerConfig fpsControllerConfig;
     SectorFpsControllerState fpsControllerState;
     SectorCollisionWorld sectorCollisionWorld;

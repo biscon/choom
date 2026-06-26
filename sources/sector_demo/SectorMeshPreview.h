@@ -1,7 +1,6 @@
 #pragma once
 
 #include "engine/assets/AssetManager.h"
-#include "engine/input/Input.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorViewPose.h"
@@ -24,20 +23,14 @@ public:
             std::string& error);
     void Shutdown(engine::AssetManager& assets);
 
-    void Enter();
-    void Leave();
-
-    void Update(engine::Input& input, float dt);
     void Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
     void ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
 
     bool IsReady() const { return initialized; }
-    bool IsMouseLookEnabled() const { return mouseLookEnabled; }
     Vector3 Position() const { return position; }
     const Camera3D& Camera() const { return camera; }
     SectorViewPose Pose() const;
     void ApplyPose(const SectorViewPose& pose);
-    void SetMouseLookEnabled(bool enabled);
     size_t SectorCount() const { return sectorCount; }
     size_t BatchCount() const { return meshes.batches.size(); }
     int TriangleCount() const { return meshes.triangleCount; }
@@ -104,8 +97,6 @@ private:
     int bloomTargetHeight = 0;
     int lightmapStatus = 0;
     bool initialized = false;
-    bool mouseLookEnabled = true;
-    int mouseLookWarmupFrames = 0;
     size_t sectorCount = 0;
 
     Camera3D camera = {};

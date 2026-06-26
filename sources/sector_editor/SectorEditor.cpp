@@ -16,6 +16,7 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorVertexInspector.h"
 #include "sector_demo/SectorFpsController.h"
+#include "sector_demo/SectorFreeflyController.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTextureTypes.h"
@@ -1557,7 +1558,8 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
 
     if (state.mode == SectorEditorMode::Preview3D) {
         if (state.previewControlMode == SectorPreviewControlMode::FreeFly) {
-            preview.Update(input, dt);
+            UpdateSectorFreeflyController(state.freeflyController, input, dt);
+            preview.ApplyPose(state.freeflyController.pose);
         } else {
             const float previousVisualEyeY = preview.Pose().position.y;
             input.ForEachEvent(
@@ -1568,7 +1570,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                             return;
                         }
 
-                        preview.SetMouseLookEnabled(!preview.IsMouseLookEnabled());
+                        SetSectorFreeflyMouseLookEnabled(
+                                state.freeflyController,
+                                !state.freeflyController.mouseLookEnabled);
                         engine::ConsumeEvent(event);
                     }
             );
@@ -1579,7 +1583,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
             controllerInput.strafeLeft = input.IsKeyDown(KEY_A);
             controllerInput.strafeRight = input.IsKeyDown(KEY_D);
             controllerInput.run = input.IsKeyDown(KEY_LEFT_SHIFT) || input.IsKeyDown(KEY_RIGHT_SHIFT);
-            controllerInput.mouseLookEnabled = preview.IsMouseLookEnabled();
+            controllerInput.mouseLookEnabled = state.freeflyController.mouseLookEnabled;
             controllerInput.mouseDelta = input.MouseDelta();
             const bool canConsumeGameplayJump =
                     state.mode == SectorEditorMode::Preview3D
@@ -1603,6 +1607,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
             }
             UpdateSectorEditorGameplayPreview(state, controllerInput, previousVisualEyeY, dt);
             ApplyGameplayPoseToPreview();
+            state.freeflyController.pose = preview.Pose();
         }
         UpdatePreview3DSelection(input);
     }
@@ -1612,7 +1617,7 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
 {
     if (!initialized
             || !preview.IsReady()
-            || preview.IsMouseLookEnabled()
+            || state.freeflyController.mouseLookEnabled
             || state.previewUiHidden
             || state.texturePicker.open) {
         state.hoveredSurface3D = SectorSurfaceHit{};
@@ -2927,7 +2932,7 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
 
 void SectorEditor::DrawPreviewSurfaceHighlights() const
 {
-    if (!preview.IsReady() || preview.IsMouseLookEnabled()) {
+    if (!preview.IsReady() || state.freeflyController.mouseLookEnabled) {
         return;
     }
 
@@ -2997,7 +3002,7 @@ void SectorEditor::DrawPreviewOverlay(
                 "Settings")) {
         OpenPreviewSettingsModal();
     }
-    const char* interactionText = preview.IsMouseLookEnabled()
+    const char* interactionText = state.freeflyController.mouseLookEnabled
             ? (state.previewControlMode == SectorPreviewControlMode::Gameplay
                     ? "WASD move | Space jump | Shift run | Mouse look | F3 FreeFly/Gameplay | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return"
                     : "WASD move | Mouse look | Space/Ctrl up/down | F3 FreeFly/Gameplay | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return")
@@ -3129,7 +3134,7 @@ void SectorEditor::DrawPreviewUvPanel(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
-    if (preview.IsMouseLookEnabled()) {
+    if (state.freeflyController.mouseLookEnabled) {
         return;
     }
 
@@ -5998,6 +6003,9 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     }
 
     state.previewControlMode = SectorPreviewControlMode::FreeFly;
+    ResetSectorFreeflyController(state.freeflyController, preview.Pose());
+    EnterSectorFreeflyController(state.freeflyController);
+    preview.ApplyPose(state.freeflyController.pose);
     state.visualStepOffsetY = 0.0f;
     ClearSectorFpsHeadBob(state.headBobState);
     ClearSectorFpsLandingDip(state.landingDipState);
@@ -6032,7 +6040,7 @@ void SectorEditor::LeavePreview3D()
     state.mode = SectorEditorMode::Edit2D;
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
-    preview.Leave();
+    LeaveSectorFreeflyController();
     statusText = "Returned to 2D editor";
 }
 
@@ -6896,7 +6904,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
         ApplyGameplayPoseToPreview();
     }
     const SectorViewPose pose = preview.Pose();
-    const bool mouseLook = preview.IsMouseLookEnabled();
+    const bool mouseLook = state.freeflyController.mouseLookEnabled;
     const SectorSurfaceRef selected = state.selectedSurface3D;
     const TopologySurfaceEditTarget selectedTarget = state.selectedTopologySurface3D;
 
@@ -6916,11 +6924,13 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
             statusText = error.empty() ? "3D mode rebuild failed" : error;
         }
         state.mode = SectorEditorMode::Edit2D;
+        LeaveSectorFreeflyController();
         return false;
     }
 
     preview.ApplyPose(pose);
-    preview.SetMouseLookEnabled(mouseLook);
+    ResetSectorFreeflyController(state.freeflyController, pose);
+    SetSectorFreeflyMouseLookEnabled(state.freeflyController, mouseLook);
     const bool selectedStillValid = IsValidSurfaceRef(selected);
     state.selectedSurface3D = selectedStillValid ? selected : SectorSurfaceRef{};
     state.selectedTopologySurface3D = selectedStillValid && IsValidTopologySurfaceEditTarget(selectedTarget)
