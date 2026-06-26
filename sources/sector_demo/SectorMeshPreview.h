@@ -21,22 +21,37 @@ public:
             const SectorTopologyMap& map,
             const char* scopeName,
             std::string& error);
+    bool RebuildRendererResources(
+            engine::AssetManager& assets,
+            const SectorTopologyMap& map,
+            const char* scopeName,
+            std::string& error);
     void Shutdown(engine::AssetManager& assets);
+    void ShutdownRendererResources(engine::AssetManager& assets);
 
     void Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
+    void DrawScene(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
     void ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
+    void ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
 
     bool IsReady() const { return initialized; }
+    bool IsRendererReady() const { return IsReady(); }
     Vector3 Position() const { return position; }
     const Camera3D& Camera() const { return camera; }
+    const Camera3D& RenderCamera() const { return Camera(); }
     SectorViewPose Pose() const;
+    SectorViewPose RendererPose() const;
     void ApplyPose(const SectorViewPose& pose);
+    void ApplyRendererPose(const SectorViewPose& pose);
     size_t SectorCount() const { return sectorCount; }
     size_t BatchCount() const { return meshes.batches.size(); }
     int TriangleCount() const { return meshes.triangleCount; }
     const SectorGeneratedGeometry& GeneratedGeometry() const { return generatedGeometry; }
+    const SectorGeneratedGeometry& RenderedGeometry() const { return GeneratedGeometry(); }
     float AssetProgress(engine::AssetManager& assets) const;
+    float RendererAssetProgress(engine::AssetManager& assets) const;
     const char* LightmapStatusText() const;
+    const char* RendererLightmapStatusText() const;
 
 private:
     static std::string ResolveAssetPath(const std::string& path);

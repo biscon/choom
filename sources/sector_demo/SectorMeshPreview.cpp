@@ -385,6 +385,15 @@ bool SectorMeshPreview::Rebuild(
         const char* scopeName,
         std::string& error)
 {
+    return RebuildRendererResources(assets, map, scopeName, error);
+}
+
+bool SectorMeshPreview::RebuildRendererResources(
+        engine::AssetManager& assets,
+        const SectorTopologyMap& map,
+        const char* scopeName,
+        std::string& error)
+{
     Shutdown(assets);
     error.clear();
 
@@ -526,6 +535,11 @@ bool SectorMeshPreview::Rebuild(
 
 void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
 {
+    ShutdownRendererResources(assets);
+}
+
+void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
+{
     generatedGeometry = {};
     if (!initialized
             && engine::IsNull(assetScope)
@@ -566,6 +580,11 @@ void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
 }
 
 void SectorMeshPreview::Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion)
+{
+    DrawScene(assets, useBakedAmbientOcclusion);
+}
+
+void SectorMeshPreview::DrawScene(engine::AssetManager& assets, bool useBakedAmbientOcclusion)
 {
     if (!initialized) {
         return;
@@ -835,6 +854,11 @@ void SectorMeshPreview::DrawSkyCylinder(const Texture2D& texture)
 
 void SectorMeshPreview::ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
 {
+    ApplyEmissiveDecalBloomToScene(assets, sceneTarget);
+}
+
+void SectorMeshPreview::ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
+{
     if (!initialized || !BloomEnabled || sceneTarget.texture.id == 0) {
         return;
     }
@@ -922,10 +946,20 @@ void SectorMeshPreview::ApplyEmissiveDecalBloom(engine::AssetManager& assets, Re
 
 SectorViewPose SectorMeshPreview::Pose() const
 {
+    return RendererPose();
+}
+
+SectorViewPose SectorMeshPreview::RendererPose() const
+{
     return SectorViewPose{position, yawRadians, pitchRadians};
 }
 
 void SectorMeshPreview::ApplyPose(const SectorViewPose& pose)
+{
+    ApplyRendererPose(pose);
+}
+
+void SectorMeshPreview::ApplyRendererPose(const SectorViewPose& pose)
 {
     position = pose.position;
     yawRadians = pose.yawRadians;
@@ -935,10 +969,20 @@ void SectorMeshPreview::ApplyPose(const SectorViewPose& pose)
 
 float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const
 {
+    return RendererAssetProgress(assets);
+}
+
+float SectorMeshPreview::RendererAssetProgress(engine::AssetManager& assets) const
+{
     return engine::IsNull(assetScope) ? 1.0f : assets.GetScopeProgress(assetScope);
 }
 
 const char* SectorMeshPreview::LightmapStatusText() const
+{
+    return RendererLightmapStatusText();
+}
+
+const char* SectorMeshPreview::RendererLightmapStatusText() const
 {
     return SectorLightmapStatusText(static_cast<SectorLightmapStatus>(lightmapStatus));
 }
