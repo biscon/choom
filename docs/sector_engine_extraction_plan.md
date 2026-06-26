@@ -1,0 +1,705 @@
+# Sector Engine Extraction Plan
+
+## How To Use This Plan
+
+This is a living execution plan. Future Codex runs may be given a minimal
+prompt such as:
+
+```text
+Read docs/sector_engine_extraction_plan.md and execute the next unfinished step.
+```
+
+When that happens, Codex must:
+
+1. Read this "How To Use This Plan" section first.
+2. Scan the phase/pass status table.
+3. Identify the first phase or pass whose status is not `Completed` or
+   `Deferred`.
+4. Plan only that next unfinished phase/pass.
+5. Do not skip ahead.
+6. Do not execute multiple phases/passes in one run unless the plan explicitly
+   says they are a single combined pass.
+7. If the selected phase is too broad, stop and propose smaller passes under
+   that phase instead of implementing it.
+8. If Codex proposes smaller passes, update this plan document to add those
+   passes under the current phase, then stop. Do not implement source changes in
+   the same run unless explicitly instructed.
+9. After successfully executing a phase/pass, update this document in the same
+   run with status, date, summary, verification results, and behavior notes.
+10. Keep the plan document self-tracking so future fresh-context runs can resume
+    from it.
+
+## Status Legend
+
+- `Not Started`: no implementation or detailed pass planning has begun.
+- `Planned`: the phase/pass has a concrete scope, but no source work has begun.
+- `In Progress`: source or document work for the phase/pass has started and is
+  not complete.
+- `Completed`: the phase/pass was executed, verified, and this plan was updated.
+- `Deferred`: the phase/pass is intentionally postponed and the reason is
+  recorded.
+- `Blocked`: the phase/pass cannot continue without a decision, dependency, or
+  external fix.
+- `Partial`: some scoped work landed, but one or more intended items remain.
+
+A phase containing passes is only `Completed` when all non-deferred passes
+inside it are `Completed`.
+
+`Deferred` must be explicit and must include a reason.
+
+## Current Progress
+
+| Phase / Pass | Status | Date | Notes |
+| --- | --- | --- | --- |
+| Phase 1: Decouple FPS Controller From Mesh Preview Pose | Not Started |  | First recommended execution phase. Behavior should remain unchanged. |
+| Phase 1A: Introduce Neutral Sector View Pose | Not Started |  | Replace controller dependency on `SectorMeshPreviewPose` with neutral pose/view data. |
+| Phase 1B: Update Call Sites And Compatibility Helpers | Not Started |  | Keep editor and preview pose behavior unchanged; may be combined with 1A if small. |
+| Phase 2: Extract Gameplay Preview Update Boundary | Not Started |  | Move reusable/semi-reusable player update orchestration out of `SectorEditor::UpdatePreview3D`. |
+| Phase 3: Extract Freefly Camera/Input Behavior | Not Started |  | Stop `SectorMeshPreview` renderer from owning freefly controls. |
+| Phase 4: Clarify SectorMeshPreview Responsibilities | Not Started |  | Split renderer/resource responsibilities from preview wrapper responsibilities. |
+| Phase 5: Define Minimal Sector World Runtime Boundary | Not Started |  | Add only proven reusable runtime boundary after previous seams exist. |
+| Phase 6: Plan Legacy Folder/File Renames | Not Started |  | Rename/move from `sector_demo` toward `sector_engine` only after dependency cleanup. |
+| Phase 7: Prepare Future SectorGame Consumption | Not Started |  | Later phase; no future game implementation yet. |
+
+## Execution Tracking Rules
+
+- Each phase/pass must be independently buildable and testable.
+- Each phase/pass final report must state whether source code changed.
+- Each implementation phase/pass must update this document before finishing.
+- The update should be small and local.
+- Do not rewrite unrelated phases when marking progress.
+- If a phase/pass changes collision, physics, camera feel, lightmap hash
+  behavior, serialization, generated geometry, or editor behavior, clearly say
+  so.
+- If behavior is intended to remain unchanged, explicitly state that in the
+  status note.
+- Do not claim manual GUI verification unless it was actually performed.
+- If a phase/pass produces only a plan or audit and no source changes, state
+  that clearly.
+- If a phase is too broad and Codex "roaches out" by producing a subplan instead
+  of implementation, that is acceptable only if it writes those subpasses back
+  into this plan document and stops.
+
+## 1. Goal And Desired End State
+
+The goal is a cleaner dependency split between three layers:
+
+- `SectorEditor`: editor UI, tools, selection, inspectors, modals, document
+  dirty/cache policy, editor status, 2D authoring workflow, and editor-only 3D
+  picking/editing.
+- `SectorEngine`: reusable sector-world and runtime services usable by editor
+  preview and by future game/runtime code.
+- Future `SectorGame`: an actual gameplay layer that depends on `SectorEngine`,
+  not on `SectorEditor`.
+
+The desired end state is not a grand framework. It is a small set of reusable,
+data-oriented sector services with one-way dependencies:
+
+```text
+SectorEditor -> SectorEngine
+SectorGame   -> SectorEngine
+SectorEngine -> engine services and raylib where explicitly renderer-facing
+```
+
+`SectorEngine` should own reusable sector topology, generated geometry,
+collision query/runtime movement helpers, lightmap layout/bake/hash services,
+sky mesh helpers, and proven render/resource pieces. `SectorEditor` should keep
+editor policy and UI orchestration. `SectorGame` should be introduced later only
+after the runtime boundary is real.
+
+## 2. Current Starting Point
+
+This plan starts from `docs/sector_engine_split_audit.md`.
+
+Relevant findings:
+
+- Topology v2 data and helpers are already reusable under the legacy
+  `sources/sector_demo/` directory: `SectorTopologyMap`, topology creation/edit,
+  validation, geometry, serialization, and units.
+- Generated geometry, mesh building, collision queries, sky mesh data, and
+  lightmap layout/bake/hash code are already mostly editor-independent by direct
+  dependency.
+- `SectorEditor` still owns 3D preview orchestration, gameplay-preview input
+  collection, collision-world rebuild timing, player movement application,
+  visual camera effects, status text, and editor-specific 3D picking/material
+  editing.
+- `SectorMeshPreview` is editor-independent, but it mixes render resources,
+  generated geometry storage, asset scope ownership, camera pose, freefly input,
+  cursor toggling, sky rendering, lightmap application, and bloom resources.
+- `SectorFpsController` is mostly reusable, but it directly includes
+  `SectorMeshPreview.h` only to use `SectorMeshPreviewPose`.
+- `SectorEditorPreviewActions` is useful editor glue, but it accepts
+  `SectorEditorState&`, so it is not a reusable runtime boundary.
+- `SectorDemo` is currently a thin legacy demo wrapper around
+  `SectorMeshPreview` freefly mode. It should not be treated as the desired
+  long-term engine boundary or blindly renamed to `SectorEngine`.
+- `SectorEditorState` mixes editor and runtime-preview state. Avoid broad
+  redesign for now; use small seams first.
+
+## 3. Dependency Direction Rules
+
+Allowed:
+
+- `SectorEditor` may depend on `SectorEngine`.
+- Future `SectorGame` may depend on `SectorEngine`.
+- `SectorEngine` may depend on reusable `engine` services such as assets and
+  input only when that dependency is explicit and appropriate.
+- Renderer-facing sector engine code may depend on raylib resource types while
+  keeping ownership and lifetime clear.
+- Editor glue may adapt editor state to reusable runtime update/input structs.
+
+Forbidden:
+
+- `SectorEngine` must not depend on `SectorEditor`.
+- Future `SectorGame` must not depend on `SectorEditor`.
+- Reusable movement/controller helpers must not depend on preview renderer
+  types just to exchange pose data.
+- Do not create cyclic dependencies between editor, runtime, renderer, topology,
+  collision, lightmap, and future game code.
+- Do not reintroduce the old polygon `SectorMap` fallback.
+- Do not add a broad command system, virtual game-object hierarchy, ECS rewrite,
+  speculative facade, or OOP-heavy runtime abstraction.
+
+## 4. Proposed Phases
+
+### Phase 1: Decouple FPS Controller From Mesh Preview Pose
+
+Goal:
+
+Introduce a neutral sector view/pose type if appropriate, then make
+`SectorFpsController` depend on that neutral type instead of
+`SectorMeshPreviewPose`.
+
+Why it helps:
+
+This removes the clearest wrong-way dependency before moving larger update
+logic. The FPS/controller helpers should be reusable runtime math, not dependent
+on the preview renderer header. This is small enough to review carefully.
+
+Files/functions likely touched:
+
+- `sources/sector_demo/SectorFpsController.h`
+- `sources/sector_demo/SectorFpsController.cpp`
+- `sources/sector_demo/SectorMeshPreview.h`
+- `sources/sector_demo/SectorMeshPreview.cpp`
+- `sources/sector_editor/SectorEditor.h`
+- `sources/sector_editor/SectorEditor.cpp`
+- `sources/sector_editor/SectorEditorPreviewActions.h`
+- `sources/sector_editor/SectorEditorPreviewActions.cpp`
+- Possibly a small new header such as `SectorViewPose.h` or
+  `SectorCameraPose.h` under the current sector backend area.
+
+Exact behavior that must remain unchanged:
+
+- Camera position, yaw, and pitch values.
+- Freefly and gameplay preview camera feel.
+- Jumping, gravity, step smoothing, headbob, landing dip, and mouse look.
+- Collision, sector lookup, portal blocking, and no-clip fallback behavior.
+- Preview pose preservation when entering/leaving/rebuilding 3D mode.
+- Serialization and lightmap source-hash behavior.
+- Generated geometry and rendering output.
+
+Risks/goblins:
+
+- Accidentally changing pitch clamping or eye-height offset conversion.
+- Adding duplicate pose types with unclear conversion ownership.
+- Pulling more renderer code into controller helpers instead of less.
+- Renaming too much while attempting a tiny dependency cleanup.
+
+Non-goals:
+
+- Do not move files to `sector_engine` yet.
+- Do not extract gameplay update orchestration yet.
+- Do not change `SectorEditorState`.
+- Do not change `SectorMeshPreview` resource ownership or freefly behavior yet.
+
+Suggested tests/manual smoke checks:
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+- Manual smoke, if performed: enter 3D mode, toggle freefly/gameplay, move,
+  jump, step across height changes, toggle mouse look, leave/re-enter preview,
+  and rebuild preview while preserving view.
+
+Final report expectations:
+
+- State source code changed.
+- State that collision/sector lookup/physics/camera feel were intended to remain
+  unchanged.
+- State that lightmap source-hash behavior and serialization were unchanged.
+- State whether manual GUI verification was performed.
+- Mention that this phase does not touch topology mutation or 2D cache
+  invalidation.
+
+How to update this plan after completion:
+
+- Mark Phase 1A and/or Phase 1B `Completed` with date, summary, verification,
+  and behavior notes.
+- Mark Phase 1 `Completed` only after all non-deferred Phase 1 passes are
+  complete.
+- If the pass is split further, add the subpasses under Phase 1 and stop before
+  source changes unless explicitly instructed.
+
+### Phase 2: Extract Gameplay Preview Update Boundary
+
+Goal:
+
+Move the gameplay-preview update orchestration out of
+`SectorEditor::UpdatePreview3D` into a reusable or semi-reusable boundary that
+updates player/controller state from input, collision world, and vertical
+context while preserving movement feel exactly.
+
+Why it helps:
+
+`SectorEditor::UpdatePreview3D` currently combines editor hotkeys, UI gating,
+input collection, collision resolution, vertical physics, visual camera effects,
+and preview pose application. A small update boundary can make player movement
+usable outside the editor without pretending to be a full game framework.
+
+Files/functions likely touched:
+
+- `sources/sector_editor/SectorEditor.cpp`
+- `sources/sector_editor/SectorEditorPreviewActions.*`
+- `sources/sector_editor/SectorEditorTypes.h`
+- `sources/sector_demo/SectorFpsController.*`
+- `sources/sector_demo/SectorCollisionWorld.*`
+- Possibly a small new gameplay-preview/runtime update helper in the current
+  sector backend area.
+
+Exact behavior that must remain unchanged:
+
+- Input gating by editor UI/modals.
+- F1/F2/F3/Tab/Escape/F11 preview behavior.
+- WASD, Shift, Space, and mouse-look behavior.
+- Collision resolution, portal blocking, step blocking, no-clip fallback,
+  current-sector repair, floor/ceiling lookup, jump start, vertical velocity,
+  gravity, landing, ceiling clamp, step smoothing, headbob, and landing dip.
+- Preview selection update timing after movement.
+- Preview pose application.
+- Lightmap source hash, serialization, generated geometry, and 2D editor
+  behavior.
+
+Risks/goblins:
+
+- Moving editor UI capture rules into reusable code.
+- Combining physical player state with visual-only offsets in a way that affects
+  collision or sector lookup.
+- Changing the order of horizontal collision, sector refresh, jump, vertical
+  physics, and visual effects.
+- Hiding editor status/debug fields behind an oversized runtime object.
+
+Non-goals:
+
+- Do not implement a command buffer or input abstraction framework.
+- Do not introduce a full player entity/component model.
+- Do not redesign `SectorEditorState`.
+- Do not change collision math unless fixing a separately scoped bug.
+
+Suggested tests/manual smoke checks:
+
+- Usual build/tests/diff checks.
+- Manual smoke strongly recommended: compare before/after movement feel in
+  gameplay preview, including stairs/steps, drops, ceiling bonk, blocked portal,
+  headbob, landing dip, mouse-look toggle, and preview settings modal behavior.
+
+Final report expectations:
+
+- State source code changed.
+- Explicitly state whether collision, sector lookup, physics, and camera feel
+  changed. Expected answer: unchanged.
+- State lightmap source-hash and serialization behavior unchanged.
+- State cache invalidation unchanged unless a preview setting mutation path was
+  touched.
+
+How to update this plan after completion:
+
+- Mark Phase 2 or its subpasses with date, summary, verification, behavior
+  notes, and manual smoke status.
+- If Phase 2 proves too broad, add smaller passes such as input collection,
+  horizontal/collision update, vertical/visual update, and pose application, then
+  stop.
+
+### Phase 3: Extract Freefly Camera/Input Behavior
+
+Goal:
+
+Move freefly camera/input update behavior out of `SectorMeshPreview` so the
+renderer no longer owns preview controls.
+
+Why it helps:
+
+`SectorMeshPreview` should become closer to a renderer/resource owner. Freefly
+controls are useful for editor/demo preview, but not for every future sector
+runtime user.
+
+Files/functions likely touched:
+
+- `sources/sector_demo/SectorMeshPreview.h`
+- `sources/sector_demo/SectorMeshPreview.cpp`
+- `sources/sector_demo/SectorDemo.*`
+- `sources/sector_editor/SectorEditor.cpp`
+- `sources/sector_editor/SectorEditorPreviewActions.*`
+- Possibly a small freefly controller helper under the sector backend area.
+
+Exact behavior that must remain unchanged:
+
+- Freefly movement speed, keys, yaw/pitch sensitivity, pitch limits, cursor
+  toggling, mouse-look warmup, and camera update.
+- Editor preview freefly/gameplay toggling behavior.
+- Demo overlay and freefly demo behavior.
+- Collision and gameplay-preview physics, which should not be touched.
+- Lightmap source hash, serialization, and generated geometry.
+
+Risks/goblins:
+
+- Cursor state and mouse-look warmup are easy to subtly alter.
+- `SectorDemo` may need a wrapper but should not become the new engine boundary.
+- Mixing freefly controller state with gameplay controller state would blur the
+  desired split.
+
+Non-goals:
+
+- Do not rename `SectorDemo` yet.
+- Do not redesign renderer resource ownership.
+- Do not make freefly a general gameplay controller.
+
+Suggested tests/manual smoke checks:
+
+- Usual build/tests/diff checks.
+- Manual smoke: freefly movement and F11 cursor toggle in editor preview and
+  legacy demo path if available.
+
+Final report expectations:
+
+- State source code changed.
+- State camera feel/cursor behavior intended unchanged.
+- State collision/physics/sector lookup unchanged.
+- State lightmap source-hash and serialization unchanged.
+
+How to update this plan after completion:
+
+- Mark Phase 3 or subpasses with date, summary, verification, and behavior
+  notes.
+- If cursor/input ownership is too broad, split into a planning pass and stop.
+
+### Phase 4: Clarify SectorMeshPreview Responsibilities
+
+Goal:
+
+Split or clarify `SectorMeshPreview` into renderer/resource responsibilities
+versus editor/demo preview wrapper responsibilities.
+
+Why it helps:
+
+After freefly extraction, `SectorMeshPreview` can be evaluated honestly. The
+renderer/resource part may be a reusable sector renderer, while the wrapper
+part may stay editor/demo-specific.
+
+Files/functions likely touched:
+
+- `sources/sector_demo/SectorMeshPreview.*`
+- `sources/sector_demo/SectorMeshBuilder.*`
+- `sources/sector_demo/SectorSkyCylinder.*`
+- `sources/sector_demo/SectorGeneratedGeometry.*`
+- `sources/sector_demo/SectorDemo.*`
+- `sources/sector_editor/SectorEditor.cpp`
+
+Exact behavior that must remain unchanged:
+
+- Preview rebuild timing and asset scope lifetime.
+- Generated geometry output and surface metadata.
+- Texture handle lookup, missing texture fallback, lightmap texture handling,
+  sky fallback, emissive bloom, and material/shader setup.
+- Editor 3D picking/highlights and material editing behavior.
+- Collision/physics/camera feel.
+- Lightmap source-hash behavior and serialization.
+
+Risks/goblins:
+
+- Resource lifetime regressions around asset scopes, materials, meshes, render
+  textures, and raylib unload rules.
+- Accidentally changing generated geometry ownership used by 3D picking.
+- Treating renderer cleanup as an excuse for broad naming churn.
+
+Non-goals:
+
+- Do not create a broad `SectorEngine` facade in this phase.
+- Do not move folders yet unless the phase has already been split and proven.
+- Do not change lightmap baking or generated geometry semantics.
+
+Suggested tests/manual smoke checks:
+
+- Usual build/tests/diff checks.
+- Manual smoke: enter/rebuild/leave preview repeatedly, confirm textures,
+  lightmap status, sky, bloom, and 3D surface picking still work.
+
+Final report expectations:
+
+- State source code changed.
+- State generated geometry behavior unchanged.
+- State lightmap source-hash unchanged.
+- State resource lifetime behavior intended unchanged.
+- State manual GUI verification status.
+
+How to update this plan after completion:
+
+- Mark Phase 4 or subpasses with date, summary, verification, and behavior
+  notes.
+- If the split is too broad, add smaller passes such as resource naming,
+  renderer-only API, wrapper adaptation, and demo/editor call-site cleanup.
+
+### Phase 5: Define Minimal Sector World Runtime Boundary
+
+Goal:
+
+Only after the previous seams are proven, consider a minimal
+`SectorWorldRuntime` or `SectorEngine` boundary that groups reusable runtime
+state and services without hiding editor policy inside it.
+
+Why it helps:
+
+This is where a small runtime object may become useful, but only after pose,
+gameplay update, freefly, and preview rendering responsibilities are cleaner.
+The boundary should reflect working code rather than a speculative architecture.
+
+Files/functions likely touched:
+
+- Proven reusable files currently under `sources/sector_demo/`.
+- `SectorCollisionWorld.*`
+- `SectorFpsController.*`
+- `SectorGeneratedGeometry.*`
+- `SectorMeshBuilder.*`
+- `SectorLightmap.*`
+- `SectorSkyCylinder.*`
+- Editor and demo call sites that consume those services.
+
+Exact behavior that must remain unchanged:
+
+- Topology v2 schema and serialization.
+- Collision, physics, camera feel, jumping, step smoothing, headbob, landing
+  dip, portal blocking, generated geometry, lightmap source-hash policy, and
+  editor behavior.
+- Resource upload/unload rules through `AssetManager`.
+
+Risks/goblins:
+
+- Creating a facade before there is a real need.
+- Accidentally moving editor dirty/cache policy into engine code.
+- Making a runtime wrapper own save/load UI, modals, or editor status.
+- Introducing cycles between runtime, renderer, and editor helper modules.
+
+Non-goals:
+
+- Do not redesign `SectorEditorState`.
+- Do not implement `SectorGame`.
+- Do not add virtual interfaces or game-object hierarchies.
+- Do not hide topology mutation/cache invalidation policy in runtime code.
+
+Suggested tests/manual smoke checks:
+
+- Usual build/tests/diff checks.
+- Manual smoke across 2D editing, 3D freefly, gameplay preview, lightmap status,
+  sky, and save/load if touched.
+
+Final report expectations:
+
+- State source code changed.
+- State exactly what the new boundary owns and what it does not own.
+- State collision/physics/camera/generated geometry/lightmap hash/serialization
+  behavior.
+- State cache invalidation behavior if topology/editor mutation paths were
+  touched.
+
+How to update this plan after completion:
+
+- Mark Phase 5 or subpasses with date, summary, verification, and behavior
+  notes.
+- Record any newly proven dependency rules before planning folder renames.
+
+### Phase 6: Plan Legacy Folder/File Renames Toward SectorEngine
+
+Goal:
+
+After dependency cleanup, plan and then execute small rename/move passes from
+legacy `sources/sector_demo/` naming toward `sources/sector_engine/` where that
+matches the proven boundary.
+
+Why it helps:
+
+The current folder name is legacy from the old tech demo and does not describe
+the reusable backend. But folder churn before dependency cleanup would make
+review harder and may hide behavior changes.
+
+Files/functions likely touched:
+
+- Build registration files.
+- Reusable sector backend/runtime files currently under `sources/sector_demo/`.
+- Includes in `sources/sector_editor/`, legacy demo code, tests, and docs.
+- `SectorDemo.*` only after deciding whether it remains a demo wrapper, becomes
+  a runtime sample, or is renamed differently.
+
+Exact behavior that must remain unchanged:
+
+- All runtime, editor, serialization, generated geometry, collision, preview,
+  sky, and lightmap behavior.
+- Include paths and build output should change only as required by the rename.
+
+Risks/goblins:
+
+- Large noisy diffs.
+- Breaking includes/build files.
+- Renaming `SectorDemo` into `SectorEngine` even though it is currently only a
+  freefly demo wrapper.
+- Combining folder churn with behavior changes.
+
+Non-goals:
+
+- Do not change architecture during rename-only passes.
+- Do not add `SectorGame`.
+- Do not create a new facade solely because a directory was renamed.
+
+Suggested tests/manual smoke checks:
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+- Manual smoke optional if no behavior code changes occur, but useful after a
+  large include/build move.
+
+Final report expectations:
+
+- State source code changed, but behavior intended unchanged.
+- List moved/renamed modules.
+- State no collision/physics/camera/lightmap hash/serialization/editor behavior
+  changes were intended.
+
+How to update this plan after completion:
+
+- Mark each rename pass separately so review remains practical.
+- Record any deferred files with reasons, especially `SectorDemo.*`.
+
+### Phase 7: Prepare Future SectorGame Consumption
+
+Goal:
+
+Later, use the resulting engine boundary from both `SectorEditor` and a future
+`SectorGame`.
+
+Why it helps:
+
+This validates that `SectorEngine` is not merely editor extraction, but a real
+reusable runtime layer. It should happen after the boundary has proven itself in
+the editor preview and legacy demo paths.
+
+Files/functions likely touched:
+
+- Future `sources/sector_game/` files if and when a real gameplay task exists.
+- Reusable `SectorEngine` headers and runtime helpers.
+- Project/game integration code that selects editor, demo, or game modes.
+
+Exact behavior that must remain unchanged:
+
+- Existing editor behavior unless the future task explicitly changes it.
+- Existing sector engine runtime behavior.
+- Topology v2, serialization, collision, camera feel, generated geometry, sky,
+  and lightmap source-hash policy.
+
+Risks/goblins:
+
+- Building speculative game abstractions before there is a concrete game need.
+- Making `SectorGame` depend on editor types for convenience.
+- Pulling editor UI/status/cache policy into runtime code.
+
+Non-goals:
+
+- Do not start this phase until a concrete game/runtime task exists.
+- Do not invent a general gameplay framework.
+- Do not rewrite ECS or introduce inheritance-based gameplay entities.
+
+Suggested tests/manual smoke checks:
+
+- Define per-task when this phase becomes real.
+- At minimum, usual build/tests/diff checks and editor preview smoke.
+
+Final report expectations:
+
+- State source code changed.
+- State whether `SectorGame` depends only on `SectorEngine` and lower layers.
+- State any behavior changes explicitly.
+
+How to update this plan after completion:
+
+- Add concrete passes once a real future game/runtime task exists.
+- Mark this phase `Deferred` if no concrete game task exists, with that reason.
+
+## 5. First Recommended Execution Phase
+
+The safest first executable phase is Phase 1:
+Decouple `SectorFpsController` from `SectorMeshPreviewPose`.
+
+Reason:
+
+- The audit found a concrete direct dependency problem:
+  `SectorFpsController.h` includes `SectorMeshPreview.h` only for
+  `SectorMeshPreviewPose`.
+- The change can be narrow and behavior-preserving.
+- It reduces dependency direction risk before extracting larger gameplay update
+  orchestration.
+- It does not require folder renames, `SectorEditorState` redesign, renderer
+  resource changes, or gameplay movement rewrites.
+
+Recommended execution shape:
+
+- If the diff is small, execute Phase 1A and Phase 1B together as one combined
+  pass.
+- If the call-site impact is larger than expected, first update this plan with
+  smaller subpasses under Phase 1, then stop.
+
+## 6. Things To Defer
+
+- Folder/file renames from `sector_demo` to `sector_engine` until dependency
+  cleanup has reduced review risk.
+- A broad `SectorEngine` facade before the actual seams are proven.
+- Treating `SectorDemo` as the desired long-term boundary or blindly renaming it
+  to `SectorEngine`.
+- Full preview rewrite.
+- FPS movement rewrite.
+- Collision behavior changes.
+- Physics/camera feel changes.
+- Full `SectorEditorState` redesign.
+- Command system or editor action framework.
+- ECS rewrite.
+- Virtual interfaces, game-object hierarchy, or inheritance-based gameplay
+  entities.
+- Future `SectorGame` implementation until there is a concrete game/runtime
+  task.
+- Lightmap hash policy changes unless a task is explicitly about lightmaps.
+- Topology schema changes or any reintroduction of old polygon `SectorMap`.
+
+## 7. Open Questions
+
+- Phase 1: Should the neutral pose type be named `SectorViewPose`,
+  `SectorCameraPose`, or something else that remains renderer-neutral?
+- Phase 1: Should `SectorMeshPreviewPose` become an alias/wrapper temporarily,
+  or should call sites switch directly to the neutral type in one pass?
+- Phase 2: What is the smallest useful data struct for gameplay-preview update
+  results without copying all of `SectorEditorState`?
+- Phase 2: Which editor-only input gates should remain in `SectorEditor` before
+  calling reusable movement update code?
+- Phase 2: Should visual-only offsets live in reusable controller state, or
+  remain in editor/preview wrapper state with reusable helper functions?
+- Phase 3: Should freefly controls live beside the legacy `SectorDemo` wrapper,
+  beside editor preview glue, or as a small reusable debug-camera helper?
+- Phase 4: What part of `SectorMeshPreview` is a renderer, and what part is a
+  preview wrapper responsible for asset scope/rebuild policy?
+- Phase 5: Does a `SectorWorldRuntime` object remove real duplication, or are
+  free functions and small structs still enough?
+- Phase 6: Which legacy `sector_demo` files are backend/runtime files, and which
+  should remain demo/sample wrappers?
+- Phase 7: What concrete gameplay need should drive the first `SectorGame`
+  integration?
