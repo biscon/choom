@@ -112,6 +112,34 @@ When that happens, Codex must:
       "id": "phase_05",
       "title": "Define Minimal Sector World Runtime Boundary",
       "type": "phase",
+      "status": "Planned"
+    },
+    {
+      "id": "phase_05a",
+      "title": "Audit Reusable Runtime Boundary Need",
+      "type": "pass",
+      "parent": "phase_05",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_05b",
+      "title": "Define Minimal Runtime State Boundary If Proven",
+      "type": "pass",
+      "parent": "phase_05",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_05c",
+      "title": "Adapt Runtime Consumers Without Editor Policy Leakage",
+      "type": "pass",
+      "parent": "phase_05",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_05d",
+      "title": "Document Final Runtime Dependency Boundary",
+      "type": "pass",
+      "parent": "phase_05",
       "status": "Not Started"
     },
     {
@@ -162,7 +190,11 @@ inside it are `Completed`.
 | Phase 4B: Introduce Renderer-Focused API Names Without Ownership Changes | Completed | 2026-06-26 | Added compatibility-preserving renderer-focused `SectorMeshPreview` API names for renderer resource rebuild/shutdown, scene drawing, bloom composition, camera/pose/geometry access, asset progress, and lightmap status. Existing API names remain as wrappers for Phase 4C adaptation. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Source code changed only in `SectorMeshPreview.*` plus this plan update. Resource ownership, preview rebuild timing, generated geometry output/surface metadata, texture/lightmap/sky/bloom behavior, editor picking/highlights/material editing, collision/physics/camera feel, serialization, lightmap source-hash behavior, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. |
 | Phase 4C: Adapt Editor And Demo Preview Wrappers To Renderer API | Completed | 2026-06-26 | Updated editor/demo preview-wrapper call sites to use renderer-focused `SectorMeshPreview` API names for rebuild/shutdown, draw/bloom composition, pose/camera/geometry access, readiness, asset progress, and lightmap status. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Source code changed only in allowed wrapper files plus this plan update. Preview rebuild timing, asset scope lifetime, 3D picking/highlights/material editing, texture fallback, sky fallback, bloom, lightmap texture handling, collision/physics/camera feel, serialization, generated geometry behavior, lightmap source-hash behavior, topology mutation paths, and 2D cache invalidation intended unchanged. Manual GUI verification not performed. |
 | Phase 4D: Document Renderer Resource Ownership And Rebuild Boundaries | Completed | 2026-06-26 | Recorded final `SectorMeshPreview` renderer/resource ownership, wrapper policy, rebuild, and shutdown boundaries below. Verification passed: `git diff --check`, `git diff --stat`, `git status --short`. Documentation-only pass; no source code changed. Resource lifetime, generated geometry behavior, lightmap source-hash behavior, serialization behavior, collision/physics/camera feel, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. |
-| Phase 5: Define Minimal Sector World Runtime Boundary | Not Started |  | Add only proven reusable runtime boundary after previous seams exist. |
+| Phase 5: Define Minimal Sector World Runtime Boundary | Planned | 2026-06-26 | Split into smaller passes because the original phase is too broad to implement safely in one run. No source code changed. Execute Phase 5A next. |
+| Phase 5A: Audit Reusable Runtime Boundary Need | Not Started |  | Documentation-only audit of whether a `SectorWorldRuntime` object removes real duplication, or whether existing free functions and small structs are still the right boundary. |
+| Phase 5B: Define Minimal Runtime State Boundary If Proven | Not Started |  | If Phase 5A proves a runtime object is useful, add the smallest state/API boundary without moving files or hiding editor policy. Otherwise defer this pass with a reason. |
+| Phase 5C: Adapt Runtime Consumers Without Editor Policy Leakage | Not Started |  | Adapt only the editor/demo consumers required by the Phase 5B boundary, preserving editor-owned dirty/cache/UI/status policy. |
+| Phase 5D: Document Final Runtime Dependency Boundary | Not Started |  | Record what the runtime boundary owns, what it does not own, dependency rules, behavior notes, and any deferred rename/folder decisions before Phase 6. |
 | Phase 6: Plan Legacy Folder/File Renames | Not Started |  | Rename/move from `sector_demo` toward `sector_engine` only after dependency cleanup. |
 | Phase 7: Prepare Future SectorGame Consumption | Not Started |  | Later phase; no future game implementation yet. |
 
@@ -822,6 +854,148 @@ How to update this plan after completion:
 - Mark Phase 5 or subpasses with date, summary, verification, and behavior
   notes.
 - Record any newly proven dependency rules before planning folder renames.
+
+Planned smaller passes:
+
+#### Phase 5A: Audit Reusable Runtime Boundary Need
+
+Goal:
+
+Audit the current reusable sector runtime pieces after Phases 1-4 and decide
+whether a `SectorWorldRuntime` object removes real duplication, or whether the
+existing free functions and small state structs remain sufficient.
+
+Allowed source changes:
+
+- Documentation only, preferably in this plan.
+
+Audit scope:
+
+- `SectorCollisionWorld.*`
+- `SectorFpsController.*`
+- `SectorFreeflyController.*`
+- `SectorViewPose.h`
+- `SectorGeneratedGeometry.*`
+- `SectorMeshBuilder.*`
+- `SectorLightmap.*`
+- `SectorSkyCylinder.*`
+- Editor/demo call sites that currently compose collision, controller, geometry,
+  renderer, and lightmap services.
+
+Questions to answer:
+
+- Which state is genuinely runtime-owned versus editor/demo wrapper-owned?
+- Is there duplicated setup/update code that a small runtime object would
+  actually reduce?
+- Which dependencies must remain one-way from editor/demo wrappers into reusable
+  sector services?
+- Which editor policies must not move into runtime code: document dirty state,
+  2D topology render-cache invalidation, modals, status text, selection,
+  inspector behavior, save/load UI, and preview hotkeys.
+
+Suggested checks:
+
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+Completion notes must state that no source code changed unless a small comment
+was added, whether manual GUI verification was performed, and whether Phase 5B
+should implement a runtime object or be deferred.
+
+#### Phase 5B: Define Minimal Runtime State Boundary If Proven
+
+Goal:
+
+If Phase 5A proves a runtime object is useful, add the smallest
+`SectorWorldRuntime` or similarly named boundary needed to group reusable
+runtime state and services without changing behavior. If Phase 5A concludes
+free functions and existing structs are sufficient, mark this pass `Deferred`
+with the reason and do not add source code.
+
+Allowed source changes:
+
+- Proven reusable files currently under `sources/sector_demo/`.
+- A small new runtime-boundary header/source under the current sector backend
+  area if needed.
+- Direct build registration changes required for a new file.
+- Directly required compile-fix edits in editor/demo call sites.
+
+Non-goals:
+
+- Do not move folders or rename legacy `sector_demo` paths.
+- Do not redesign `SectorEditorState`.
+- Do not move editor dirty/cache policy, UI/modals, status text, selection, or
+  save/load workflow into runtime code.
+- Do not change topology schema, serialization, generated geometry, lightmap
+  hash behavior, collision, physics, or camera feel.
+- Do not add `SectorGame`, virtual interfaces, or game-object hierarchies.
+
+Suggested checks:
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+#### Phase 5C: Adapt Runtime Consumers Without Editor Policy Leakage
+
+Goal:
+
+Adapt only the editor/demo consumers required by the Phase 5B boundary while
+keeping wrapper-owned policy in those wrappers.
+
+Allowed source changes:
+
+- `sources/sector_editor/SectorEditor.*`
+- `sources/sector_editor/SectorEditorPreviewActions.*`
+- `sources/sector_editor/SectorEditorTypes.h` if directly required.
+- `sources/sector_demo/SectorDemo.*`
+- Narrow follow-up edits to the Phase 5B runtime-boundary files.
+
+Behavior that must remain unchanged:
+
+- 2D editor topology authoring behavior.
+- Preview enter/leave/rebuild timing.
+- Freefly and gameplay-preview controls.
+- Collision, sector lookup, physics, camera feel, jumping, step smoothing,
+  headbob, landing dip, and portal blocking.
+- Generated geometry output/surface metadata.
+- Lightmap source-hash behavior.
+- Serialization and asset upload/unload behavior.
+
+Suggested checks:
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+#### Phase 5D: Document Final Runtime Dependency Boundary
+
+Goal:
+
+Record the resulting Phase 5 runtime boundary, including what it owns, what
+remains editor/demo policy, dependency direction rules, and any decisions needed
+before Phase 6 rename planning.
+
+Allowed source changes:
+
+- Documentation only unless a small code comment is needed near a runtime
+  ownership boundary.
+
+Suggested checks:
+
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+
+Completion notes must state source-code-change status, collision/physics/camera
+behavior, generated geometry behavior, lightmap source-hash behavior,
+serialization behavior, topology mutation and 2D cache invalidation behavior,
+manual GUI verification status, and whether Phase 5 is complete.
 
 ### Phase 6: Plan Legacy Folder/File Renames Toward SectorEngine
 
