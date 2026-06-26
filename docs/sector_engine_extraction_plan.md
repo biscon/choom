@@ -78,7 +78,7 @@ When that happens, Codex must:
       "id": "phase_04",
       "title": "Clarify SectorMeshPreview Responsibilities",
       "type": "phase",
-      "status": "Planned"
+      "status": "Completed"
     },
     {
       "id": "phase_04a",
@@ -106,7 +106,7 @@ When that happens, Codex must:
       "title": "Document Renderer Resource Ownership And Rebuild Boundaries",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05",
@@ -157,11 +157,11 @@ inside it are `Completed`.
 | Phase 1B: Update Call Sites And Compatibility Helpers | Deferred |  | Folded into Phase 1A so the first dependency cleanup is buildable and reviewable as one pass. Do not create a long-lived compatibility alias unless needed temporarily during the implementation. |
 | Phase 2: Extract Gameplay Preview Update Boundary | Completed | 2026-06-26 | Moved gameplay-preview movement/collision/vertical/visual update orchestration from `SectorEditor::UpdatePreview3D` into `UpdateSectorEditorGameplayPreview()` in preview actions, while leaving editor hotkeys, UI/modal input gating, pose application, and 3D selection timing in the editor. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Source code changed. Collision, sector lookup, physics, camera feel, serialization, generated geometry, lightmap source-hash behavior, and 2D editor behavior intended unchanged. Cache invalidation unchanged; no topology mutation paths touched. Manual GUI verification not performed. |
 | Phase 3: Extract Freefly Camera/Input Behavior | Completed | 2026-06-26 | Added `SectorFreeflyController` helper/state, moved freefly F11 cursor toggle, mouse-look warmup, yaw/pitch, and movement updates out of `SectorMeshPreview`, and wired editor/demo owners to apply controller poses to the renderer. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Source code changed. Freefly camera feel/cursor behavior intended unchanged. Collision, sector lookup, gameplay-preview physics, serialization, generated geometry, lightmap source-hash behavior, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. |
-| Phase 4: Clarify SectorMeshPreview Responsibilities | Planned | 2026-06-26 | Split into smaller passes because the original phase spans renderer/resource naming, ownership boundaries, editor/demo call-site adaptation, generated geometry access, and picking behavior. No source code changed in this planning pass. |
+| Phase 4: Clarify SectorMeshPreview Responsibilities | Completed | 2026-06-26 | Completed after Phase 4D. `SectorMeshPreview` now has renderer-focused API names in use by editor/demo wrappers, and the final renderer resource ownership/rebuild boundary is documented below. Source code changed only in earlier Phase 4B/4C passes; Phase 4D was documentation-only. Behavior intended unchanged across Phase 4: resource lifetime, preview rebuild timing, generated geometry, picking/highlights/material editing, collision/physics/camera feel, serialization, lightmap source-hash behavior, topology mutation paths, and 2D cache invalidation. Manual GUI verification not performed. |
 | Phase 4A: Audit Preview Renderer And Wrapper Responsibilities | Completed | 2026-06-26 | Audited current `SectorMeshPreview` responsibilities after Phase 3 and recorded renderer/resource duties versus editor/demo wrapper policy below. Verification passed: `git diff --check`, `git diff --stat`, `git status --short`. Documentation-only pass; no source code changed. Behavior unchanged: preview rebuild timing, resource lifetime, generated geometry, picking/highlights/material editing, collision/physics/camera feel, serialization, lightmap source-hash behavior, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. |
 | Phase 4B: Introduce Renderer-Focused API Names Without Ownership Changes | Completed | 2026-06-26 | Added compatibility-preserving renderer-focused `SectorMeshPreview` API names for renderer resource rebuild/shutdown, scene drawing, bloom composition, camera/pose/geometry access, asset progress, and lightmap status. Existing API names remain as wrappers for Phase 4C adaptation. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Source code changed only in `SectorMeshPreview.*` plus this plan update. Resource ownership, preview rebuild timing, generated geometry output/surface metadata, texture/lightmap/sky/bloom behavior, editor picking/highlights/material editing, collision/physics/camera feel, serialization, lightmap source-hash behavior, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. |
 | Phase 4C: Adapt Editor And Demo Preview Wrappers To Renderer API | Completed | 2026-06-26 | Updated editor/demo preview-wrapper call sites to use renderer-focused `SectorMeshPreview` API names for rebuild/shutdown, draw/bloom composition, pose/camera/geometry access, readiness, asset progress, and lightmap status. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Source code changed only in allowed wrapper files plus this plan update. Preview rebuild timing, asset scope lifetime, 3D picking/highlights/material editing, texture fallback, sky fallback, bloom, lightmap texture handling, collision/physics/camera feel, serialization, generated geometry behavior, lightmap source-hash behavior, topology mutation paths, and 2D cache invalidation intended unchanged. Manual GUI verification not performed. |
-| Phase 4D: Document Renderer Resource Ownership And Rebuild Boundaries | Not Started |  | Record the final ownership/rebuild rules and complete Phase 4 only after all non-deferred Phase 4 passes are completed. |
+| Phase 4D: Document Renderer Resource Ownership And Rebuild Boundaries | Completed | 2026-06-26 | Recorded final `SectorMeshPreview` renderer/resource ownership, wrapper policy, rebuild, and shutdown boundaries below. Verification passed: `git diff --check`, `git diff --stat`, `git status --short`. Documentation-only pass; no source code changed. Resource lifetime, generated geometry behavior, lightmap source-hash behavior, serialization behavior, collision/physics/camera feel, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. |
 | Phase 5: Define Minimal Sector World Runtime Boundary | Not Started |  | Add only proven reusable runtime boundary after previous seams exist. |
 | Phase 6: Plan Legacy Folder/File Renames | Not Started |  | Rename/move from `sector_demo` toward `sector_engine` only after dependency cleanup. |
 | Phase 7: Prepare Future SectorGame Consumption | Not Started |  | Later phase; no future game implementation yet. |
@@ -701,6 +701,59 @@ Completion notes must state resource lifetime behavior, generated geometry
 behavior, lightmap source-hash behavior, serialization behavior, and manual GUI
 verification status. Mark Phase 4 `Completed` only after all non-deferred Phase
 4 passes are completed.
+
+Final responsibility boundary:
+
+- `SectorMeshPreview` is the preview renderer/resource owner. It owns generated
+  geometry storage used for rendering and read-only editor picking,
+  `SectorMeshBuildResult` mesh batches, uploaded raylib meshes/materials,
+  shader uniform locations, texture handle lookup by topology texture ID,
+  optional baked lightmap texture handle/status, sky cylinder/top-cap render
+  resources, emissive decal bloom render textures/shaders/materials, and the
+  renderer camera/pose.
+- `SectorMeshPreview::RebuildRendererResources()` is the only normal rebuild
+  entry point for those renderer resources. It first shuts down existing
+  renderer resources, validates the topology inputs needed by preview rendering,
+  rebuilds generated geometry and render mesh batches from the topology map,
+  creates the caller-named asset scope, requests topology textures/lightmap
+  texture through `AssetManager`, creates sky render resources when the map has
+  outdoor sky geometry, loads preview materials, resets the renderer pose from
+  geometry bounds, and marks the renderer ready.
+- `SectorMeshPreview::ShutdownRendererResources()` is the matching owner-side
+  cleanup boundary. It clears generated geometry, unloads bloom resources, sky
+  meshes/materials, sector meshes, preview materials, texture-handle lookup
+  state, lightmap/sky handles, and unloads the renderer-owned asset scope
+  through `AssetManager`.
+- The `AssetManager` still owns actual texture/font/GPU asset lifetime; the
+  preview renderer owns only the scope handle it created for preview resources
+  and the raylib meshes/materials/render textures it directly loads. Texture
+  requests and scope unloads still happen on the main thread through
+  `AssetManager`.
+- Editor/demo wrappers own preview policy rather than renderer resources:
+  entering/leaving preview, deciding when topology changes require preview
+  rebuilds, choosing the asset scope name (`"sector_editor_preview"` or
+  `"sector_demo"`), preserving/restoring poses across rebuilds, driving freefly
+  or gameplay controllers, modal/input gating, status text, and deciding
+  whether baked ambient occlusion is enabled for a draw.
+- Editor 3D picking/highlight/material-editing policy remains outside the
+  renderer. It may read `RenderCamera()` and `RenderedGeometry()` for hit tests
+  against what the renderer generated, but selection state and topology/material
+  mutations remain editor/editor-action responsibilities.
+- Rebuild timing remains wrapper-driven. The renderer does not watch document
+  dirty flags, topology cache invalidation, lightmap bake completion, texture
+  registry edits, or editor tool state. Callers explicitly request a rebuild at
+  existing preview entry/rebuild points.
+- Generated geometry behavior is unchanged. The renderer still stores the same
+  generated geometry and surface metadata built from `SectorTopologyMap`; no
+  ownership transfer, schema change, picking change, or collision dependency was
+  introduced in Phase 4.
+- Lightmap source-hash behavior is unchanged. Phase 4 only clarified preview
+  renderer API/boundaries; it did not change baked-light inputs, receiver
+  layout, occluders, sky-geometry hash behavior, directional/static light data,
+  or preview-only setting exclusions.
+- Serialization behavior is unchanged. Phase 4 did not change topology JSON,
+  generated geometry serialization, texture registry schema, sky settings
+  schema, or lightmap metadata persistence.
 
 ### Phase 5: Define Minimal Sector World Runtime Boundary
 
