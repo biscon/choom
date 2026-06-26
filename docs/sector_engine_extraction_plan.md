@@ -112,14 +112,14 @@ When that happens, Codex must:
       "id": "phase_05",
       "title": "Define Minimal Sector World Runtime Boundary",
       "type": "phase",
-      "status": "Planned"
+      "status": "In Progress"
     },
     {
       "id": "phase_05a",
       "title": "Audit Reusable Runtime Boundary Need",
       "type": "pass",
       "parent": "phase_05",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05b",
@@ -190,8 +190,8 @@ inside it are `Completed`.
 | Phase 4B: Introduce Renderer-Focused API Names Without Ownership Changes | Completed | 2026-06-26 | Added compatibility-preserving renderer-focused `SectorMeshPreview` API names for renderer resource rebuild/shutdown, scene drawing, bloom composition, camera/pose/geometry access, asset progress, and lightmap status. Existing API names remain as wrappers for Phase 4C adaptation. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Source code changed only in `SectorMeshPreview.*` plus this plan update. Resource ownership, preview rebuild timing, generated geometry output/surface metadata, texture/lightmap/sky/bloom behavior, editor picking/highlights/material editing, collision/physics/camera feel, serialization, lightmap source-hash behavior, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. |
 | Phase 4C: Adapt Editor And Demo Preview Wrappers To Renderer API | Completed | 2026-06-26 | Updated editor/demo preview-wrapper call sites to use renderer-focused `SectorMeshPreview` API names for rebuild/shutdown, draw/bloom composition, pose/camera/geometry access, readiness, asset progress, and lightmap status. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Source code changed only in allowed wrapper files plus this plan update. Preview rebuild timing, asset scope lifetime, 3D picking/highlights/material editing, texture fallback, sky fallback, bloom, lightmap texture handling, collision/physics/camera feel, serialization, generated geometry behavior, lightmap source-hash behavior, topology mutation paths, and 2D cache invalidation intended unchanged. Manual GUI verification not performed. |
 | Phase 4D: Document Renderer Resource Ownership And Rebuild Boundaries | Completed | 2026-06-26 | Recorded final `SectorMeshPreview` renderer/resource ownership, wrapper policy, rebuild, and shutdown boundaries below. Verification passed: `git diff --check`, `git diff --stat`, `git status --short`. Documentation-only pass; no source code changed. Resource lifetime, generated geometry behavior, lightmap source-hash behavior, serialization behavior, collision/physics/camera feel, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. |
-| Phase 5: Define Minimal Sector World Runtime Boundary | Planned | 2026-06-26 | Split into smaller passes because the original phase is too broad to implement safely in one run. No source code changed. Execute Phase 5A next. |
-| Phase 5A: Audit Reusable Runtime Boundary Need | Not Started |  | Documentation-only audit of whether a `SectorWorldRuntime` object removes real duplication, or whether existing free functions and small structs are still the right boundary. |
+| Phase 5: Define Minimal Sector World Runtime Boundary | In Progress | 2026-06-26 | Split into smaller passes because the original phase is too broad to implement safely in one run. Phase 5A audit is complete; execute Phase 5B next. No source code changed in Phase 5 so far. |
+| Phase 5A: Audit Reusable Runtime Boundary Need | Completed | 2026-06-26 | Audited current reusable runtime pieces and editor/demo composition points after Phases 1-4. Conclusion: a `SectorWorldRuntime` object is not yet proven to remove real duplication; existing free functions, small state structs, `SectorCollisionWorld`, and wrapper-owned composition remain the better boundary for now. Verification passed: `git diff --check`, `git diff --stat`, `git status --short`. Documentation-only pass; no source code changed. Behavior unchanged: collision, physics, camera feel, generated geometry, lightmap source-hash behavior, serialization, topology mutation paths, and 2D cache invalidation unchanged. Manual GUI verification not performed. Phase 5B should be deferred when selected unless a new runtime consumer or duplicated setup proves a concrete runtime-object need. |
 | Phase 5B: Define Minimal Runtime State Boundary If Proven | Not Started |  | If Phase 5A proves a runtime object is useful, define the smallest state/API boundary and perform only minimal compile-required call-site edits. Otherwise defer this pass with a reason. |
 | Phase 5C: Adapt Runtime Consumers Without Editor Policy Leakage | Not Started |  | Adapt editor/demo consumers only if Phase 5B introduces a runtime boundary; otherwise defer with the reason that there are no runtime-boundary consumers to adapt. |
 | Phase 5D: Document Final Runtime Dependency Boundary | Not Started |  | Record what the runtime boundary owns, what it does not own, dependency rules, behavior notes, and any deferred rename/folder decisions before Phase 6. |
@@ -902,6 +902,51 @@ Suggested checks:
 Completion notes must state that no source code changed unless a small comment
 was added, whether manual GUI verification was performed, and whether Phase 5B
 should implement a runtime object or be deferred.
+
+Audit result:
+
+- Runtime-owned state currently exists as narrow reusable pieces rather than a
+  single world object. `SectorCollisionWorld` owns derived collision sectors,
+  edges, portal neighbors, and movement queries built from `SectorTopologyMap`.
+  `SectorFpsControllerState`, `SectorFpsHeadBobState`,
+  `SectorFpsLandingDipState`, `SectorFreeflyControllerState`, and
+  `SectorViewPose` are small state structs with free update/conversion helpers.
+  Generated geometry, mesh batch data, lightmap layout/bake/hash utilities, and
+  sky mesh helpers are also free-function/data-struct services.
+- Editor/demo wrapper-owned state remains larger and policy-heavy:
+  `SectorEditorState` owns preview mode, hotkey/modal gating, status/warning
+  strings, selected/hovered 3D surfaces, preview settings modal state, saved
+  preview pose, freefly/gameplay mode switching, collision validity reporting,
+  no-clip fallback reporting, and 2D document dirty/cache policy. `SectorDemo`
+  owns only legacy demo initialization, map loading, asset scope naming,
+  freefly controller driving, and overlay text.
+- The only substantial gameplay-runtime composition is
+  `UpdateSectorEditorGameplayPreview()` plus nearby helpers in
+  `SectorEditorPreviewActions.cpp`. That code intentionally bridges reusable
+  movement/collision helpers to editor-owned fields such as preview warnings,
+  modal state, no-clip fallback, and pose application. Moving it wholesale into
+  a `SectorWorldRuntime` today would either copy much of `SectorEditorState` or
+  pull editor policy into reusable runtime code.
+- There is not enough duplication today to justify a new object. The editor is
+  the only gameplay-collision consumer; the legacy demo uses the renderer and
+  freefly controller only, not `SectorCollisionWorld` or FPS gameplay movement.
+  A future game/runtime consumer may prove a small runtime boundary, but the
+  current code does not have repeated setup/update paths to collapse.
+- Dependency direction is currently acceptable for this stage: editor/demo
+  wrappers depend on reusable sector services; reusable collision, controller,
+  generated geometry, lightmap, and sky helpers do not depend on editor types.
+  `SectorFreeflyController` depends on `engine::Input` because it is a concrete
+  debug/freefly input helper; that should stay explicit instead of being hidden
+  behind a broad runtime facade.
+- Editor policies that must remain out of runtime code are unchanged: document
+  dirty state, 2D topology render-cache invalidation, modals, status text,
+  selection/hover state, inspectors, save/load UI, preview hotkeys, and asset
+  scope naming/rebuild timing.
+- Phase 5B should be deferred when it is selected under the current code state.
+  A `SectorWorldRuntime` should be introduced only after a second real consumer
+  or duplicated runtime setup proves specific ownership, such as shared
+  collision-world lifetime plus gameplay controller update state independent of
+  editor UI/status fields.
 
 #### Phase 5B: Define Minimal Runtime State Boundary If Proven
 
