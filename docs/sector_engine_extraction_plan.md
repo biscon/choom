@@ -29,6 +29,79 @@ When that happens, Codex must:
 10. Keep the plan document self-tracking so future fresh-context runs can resume
     from it.
 
+```plan-state-json
+{
+  "plan_id": "sector_engine_extraction_plan",
+  "status_values": [
+    "Not Started",
+    "Planned",
+    "In Progress",
+    "Completed",
+    "Deferred",
+    "Blocked",
+    "Partial"
+  ],
+  "items": [
+    {
+      "id": "phase_01",
+      "title": "Decouple FPS Controller From Mesh Preview Pose",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_01a",
+      "title": "Introduce SectorViewPose And Switch FPS Controller Call Sites",
+      "type": "pass",
+      "parent": "phase_01",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_01b",
+      "title": "Update Call Sites And Compatibility Helpers",
+      "type": "pass",
+      "parent": "phase_01",
+      "status": "Deferred"
+    },
+    {
+      "id": "phase_02",
+      "title": "Extract Gameplay Preview Update Boundary",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_03",
+      "title": "Extract Freefly Camera/Input Behavior",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_04",
+      "title": "Clarify SectorMeshPreview Responsibilities",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_05",
+      "title": "Define Minimal Sector World Runtime Boundary",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_06",
+      "title": "Plan Legacy Folder/File Renames",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_07",
+      "title": "Prepare Future SectorGame Consumption",
+      "type": "phase",
+      "status": "Not Started"
+    }
+  ]
+}
+```
+
 ## Status Legend
 
 - `Not Started`: no implementation or detailed pass planning has begun.
@@ -52,8 +125,8 @@ inside it are `Completed`.
 | Phase / Pass | Status | Date | Notes |
 | --- | --- | --- | --- |
 | Phase 1: Decouple FPS Controller From Mesh Preview Pose | Not Started |  | First recommended execution phase. Behavior should remain unchanged. |
-| Phase 1A: Introduce Neutral Sector View Pose | Not Started |  | Replace controller dependency on `SectorMeshPreviewPose` with neutral pose/view data. |
-| Phase 1B: Update Call Sites And Compatibility Helpers | Not Started |  | Keep editor and preview pose behavior unchanged; may be combined with 1A if small. |
+| Phase 1A: Introduce SectorViewPose And Switch FPS Controller Call Sites | Not Started |  | Use neutral `SectorViewPose`; switch `SectorFpsController` and affected call sites directly in this pass if the diff remains small. Behavior must remain unchanged. |
+| Phase 1B: Update Call Sites And Compatibility Helpers | Deferred |  | Folded into Phase 1A so the first dependency cleanup is buildable and reviewable as one pass. Do not create a long-lived compatibility alias unless needed temporarily during the implementation. |
 | Phase 2: Extract Gameplay Preview Update Boundary | Not Started |  | Move reusable/semi-reusable player update orchestration out of `SectorEditor::UpdatePreview3D`. |
 | Phase 3: Extract Freefly Camera/Input Behavior | Not Started |  | Stop `SectorMeshPreview` renderer from owning freefly controls. |
 | Phase 4: Clarify SectorMeshPreview Responsibilities | Not Started |  | Split renderer/resource responsibilities from preview wrapper responsibilities. |
@@ -655,8 +728,9 @@ Reason:
 
 Recommended execution shape:
 
-- If the diff is small, execute Phase 1A and Phase 1B together as one combined
-  pass.
+- Execute Phase 1A as the combined first dependency cleanup pass if the diff is
+  small. Phase 1B is deferred because its call-site and compatibility-helper
+  scope is folded into Phase 1A.
 - If the call-site impact is larger than expected, first update this plan with
   smaller subpasses under Phase 1, then stop.
 
@@ -681,12 +755,23 @@ Recommended execution shape:
 - Lightmap hash policy changes unless a task is explicitly about lightmaps.
 - Topology schema changes or any reintroduction of old polygon `SectorMap`.
 
-## 7. Open Questions
+## Resolved Decisions
 
-- Phase 1: Should the neutral pose type be named `SectorViewPose`,
-  `SectorCameraPose`, or something else that remains renderer-neutral?
-- Phase 1: Should `SectorMeshPreviewPose` become an alias/wrapper temporarily,
-  or should call sites switch directly to the neutral type in one pass?
+- Phase 1 uses the neutral name `SectorViewPose`.
+- `SectorViewPose` should represent renderer-neutral view state such as
+  position, yaw, and pitch.
+- `SectorFpsController` should depend on `SectorViewPose`, not
+  `SectorMeshPreviewPose` or `SectorMeshPreview.h`.
+- Prefer switching call sites directly in Phase 1A if the diff is small.
+- Avoid a long-lived `SectorMeshPreviewPose` alias. A temporary compatibility
+  helper is acceptable only if it keeps the pass small and buildable, and should
+  be removed or documented before Phase 1 is marked complete.
+
+## 7. Deferred Decisions For Later Phases
+
+These are not blockers for Phase 1. Resolve each decision at the start of the
+phase where it becomes relevant.
+
 - Phase 2: What is the smallest useful data struct for gameplay-preview update
   results without copying all of `SectorEditorState`?
 - Phase 2: Which editor-only input gates should remain in `SectorEditor` before
