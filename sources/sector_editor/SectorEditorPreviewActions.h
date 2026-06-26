@@ -21,5 +21,10 @@ SectorFpsVerticalContext BuildSectorEditorGameplayVerticalContext(
         const SectorEditorState& state);
 void RefreshSectorEditorGameplaySectorAndVerticalContext(SectorEditorState& state);
 void InitializeSectorEditorGameplayVerticalState(SectorEditorState& state);
+void UpdateSectorEditorGameplayPreview(
+        SectorEditorState& state,
+        const SectorFpsControllerInput& controllerInput,
+        float previousVisualEyeY,
+        float dt);
 
 } // namespace game

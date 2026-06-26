@@ -66,7 +66,7 @@ When that happens, Codex must:
       "id": "phase_02",
       "title": "Extract Gameplay Preview Update Boundary",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03",
@@ -127,7 +127,7 @@ inside it are `Completed`.
 | Phase 1: Decouple FPS Controller From Mesh Preview Pose | Completed | 2026-06-26 | Completed after Phase 1A; Phase 1B remains deferred. Source code changed only for neutral pose type/call-site cleanup. Behavior intended unchanged. |
 | Phase 1A: Introduce SectorViewPose And Switch FPS Controller Call Sites | Completed | 2026-06-26 | Added neutral `SectorViewPose`, made `SectorFpsController` use it instead of `SectorMeshPreviewPose`, and switched preview/editor/test call sites. Verification passed: `cmake --build cmake-build-debug -j2` (CMake regenerated for new header), `ctest --test-dir cmake-build-debug --output-on-failure`. Collision, sector lookup, physics, camera feel, serialization, generated geometry, rendering, and lightmap source-hash behavior intended unchanged. No topology mutation or 2D cache invalidation paths touched. Manual GUI verification not performed. |
 | Phase 1B: Update Call Sites And Compatibility Helpers | Deferred |  | Folded into Phase 1A so the first dependency cleanup is buildable and reviewable as one pass. Do not create a long-lived compatibility alias unless needed temporarily during the implementation. |
-| Phase 2: Extract Gameplay Preview Update Boundary | Not Started |  | Move reusable/semi-reusable player update orchestration out of `SectorEditor::UpdatePreview3D`. |
+| Phase 2: Extract Gameplay Preview Update Boundary | Completed | 2026-06-26 | Moved gameplay-preview movement/collision/vertical/visual update orchestration from `SectorEditor::UpdatePreview3D` into `UpdateSectorEditorGameplayPreview()` in preview actions, while leaving editor hotkeys, UI/modal input gating, pose application, and 3D selection timing in the editor. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Source code changed. Collision, sector lookup, physics, camera feel, serialization, generated geometry, lightmap source-hash behavior, and 2D editor behavior intended unchanged. Cache invalidation unchanged; no topology mutation paths touched. Manual GUI verification not performed. |
 | Phase 3: Extract Freefly Camera/Input Behavior | Not Started |  | Stop `SectorMeshPreview` renderer from owning freefly controls. |
 | Phase 4: Clarify SectorMeshPreview Responsibilities | Not Started |  | Split renderer/resource responsibilities from preview wrapper responsibilities. |
 | Phase 5: Define Minimal Sector World Runtime Boundary | Not Started |  | Add only proven reusable runtime boundary after previous seams exist. |

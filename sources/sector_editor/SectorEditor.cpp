@@ -1559,12 +1559,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
         if (state.previewControlMode == SectorPreviewControlMode::FreeFly) {
             preview.Update(input, dt);
         } else {
-            if (!std::isfinite(state.landingDipState.offsetY)) {
-                ClearSectorFpsLandingDip(state.landingDipState);
-            }
             const float previousVisualEyeY = preview.Pose().position.y;
-            const float previousStepVisualEyeY =
-                    previousVisualEyeY - state.landingDipState.offsetY;
             input.ForEachEvent(
                     engine::InputEventType::KeyPressed,
                     true,
@@ -1606,126 +1601,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                         }
                 );
             }
-            UpdateSectorFpsMouseLook(
-                    state.fpsControllerState,
-                    state.fpsControllerConfig,
-                    controllerInput);
-            const Vector2 desiredHorizontalMovement = ComputeSectorFpsHorizontalMovementDelta(
-                    state.fpsControllerState,
-                    state.fpsControllerConfig,
-                    controllerInput,
-                    dt);
-            const Vector2 previousFeetXZ{
-                    state.fpsControllerState.feetPosition.x,
-                    state.fpsControllerState.feetPosition.z};
-            state.previewMoveResult = SectorCollisionMoveResult{};
-            state.previewCollisionNoclipFallback = false;
-            if (state.sectorCollisionWorldValid) {
-                const Vector2 feetXZ{
-                        state.fpsControllerState.feetPosition.x,
-                        state.fpsControllerState.feetPosition.z};
-                if (state.sectorCollisionWorld.FindSector(
-                            state.fpsControllerState.currentSectorId) == nullptr) {
-                    state.fpsControllerState.currentSectorId =
-                            state.sectorCollisionWorld.FindSectorContainingPoint(feetXZ);
-                }
-                const int previousSectorId = state.fpsControllerState.currentSectorId;
-                const float previousFeetY = state.fpsControllerState.feetPosition.y;
-                const bool wasGrounded = state.fpsControllerState.grounded;
-
-                if (state.fpsControllerState.currentSectorId != 0) {
-                    const SectorFpsControllerConfig normalizedConfig =
-                            NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
-                    SectorCollisionMoveResult moveResult =
-                            state.sectorCollisionWorld.ResolveMovement(
-                                    SectorCollisionMoveState{
-                                            feetXZ,
-                                            state.fpsControllerState.feetPosition.y,
-                                            state.fpsControllerState.currentSectorId,
-                                            state.fpsControllerState.grounded},
-                                    desiredHorizontalMovement,
-                                    SectorCollisionMoveConfig{
-                                            normalizedConfig.playerRadius,
-                                            normalizedConfig.playerHeight,
-                                            normalizedConfig.stepHeight,
-                                            4});
-                    SectorCollisionHeights movedHeights;
-                    if (wasGrounded
-                            && moveResult.currentSectorId != previousSectorId
-                            && state.sectorCollisionWorld.GetSectorFloorCeiling(
-                                    moveResult.currentSectorId,
-                                    &movedHeights)
-                            && movedHeights.floorZ - previousFeetY
-                                    > normalizedConfig.stepHeight + GameplayFloorSnapEpsilon) {
-                        moveResult.positionXZ = feetXZ;
-                        moveResult.currentSectorId = previousSectorId;
-                        moveResult.blockedByStep = true;
-                    }
-                    state.previewMoveResult = moveResult;
-                    state.fpsControllerState.feetPosition.x = moveResult.positionXZ.x;
-                    state.fpsControllerState.feetPosition.z = moveResult.positionXZ.y;
-                    state.fpsControllerState.currentSectorId = moveResult.currentSectorId;
-                } else {
-                    state.previewCollisionNoclipFallback = true;
-                    state.fpsControllerState.feetPosition.x += desiredHorizontalMovement.x;
-                    state.fpsControllerState.feetPosition.z += desiredHorizontalMovement.y;
-                }
-            } else {
-                state.previewCollisionNoclipFallback = true;
-                state.fpsControllerState.feetPosition.x += desiredHorizontalMovement.x;
-                state.fpsControllerState.feetPosition.z += desiredHorizontalMovement.y;
-            }
-            RefreshGameplaySectorAndVerticalContext();
-            bool startedJump = false;
-            if (controllerInput.jumpPressed) {
-                startedJump = TryStartSectorFpsJump(
-                        state.fpsControllerState,
-                        state.fpsControllerConfig);
-                if (startedJump) {
-                    ClearSectorFpsLandingDip(state.landingDipState);
-                }
-            }
-            state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
-                    state.fpsControllerState,
-                    state.fpsControllerConfig,
-                    BuildGameplayVerticalContext(),
-                    dt);
-            if (state.previewCollisionNoclipFallback || !state.previewVerticalResult.hasSector) {
-                state.visualStepOffsetY = 0.0f;
-                ClearSectorFpsLandingDip(state.landingDipState);
-            } else if (startedJump) {
-                state.visualStepOffsetY = 0.0f;
-            } else {
-                ApplySectorFpsVisualStepSmoothing(
-                        state.visualStepOffsetY,
-                        state.previewVerticalResult.transition,
-                        previousStepVisualEyeY,
-                        state.fpsControllerState,
-                        state.fpsControllerConfig,
-                        DefaultSectorFpsStepSmoothingRate(),
-                        dt);
-                UpdateSectorFpsLandingDip(
-                        state.landingDipState,
-                        state.previewVerticalResult,
-                        dt);
-            }
-            const Vector2 resolvedHorizontalMovement{
-                    state.fpsControllerState.feetPosition.x - previousFeetXZ.x,
-                    state.fpsControllerState.feetPosition.z - previousFeetXZ.y};
-            const float resolvedHorizontalSpeed = dt > 0.0f
-                    ? Vector2Length(resolvedHorizontalMovement) / dt
-                    : 0.0f;
-            const bool headBobActive = !state.previewCollisionNoclipFallback
-                    && state.previewVerticalResult.hasSector
-                    && state.fpsControllerState.grounded
-                    && !state.previewSettingsModal.open;
-            UpdateSectorFpsHeadBob(
-                    state.headBobState,
-                    state.fpsControllerConfig,
-                    headBobActive,
-                    resolvedHorizontalSpeed,
-                    state.fpsControllerState.yawRadians,
-                    dt);
+            UpdateSectorEditorGameplayPreview(state, controllerInput, previousVisualEyeY, dt);
             ApplyGameplayPoseToPreview();
         }
         UpdatePreview3DSelection(input);
