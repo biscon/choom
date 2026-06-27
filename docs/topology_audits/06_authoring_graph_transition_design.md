@@ -85,7 +85,7 @@ Reason:
   Current topology types already map well to final runtime topology, but sidedefs and sectors are too strict for partially authored geometry. Properties need to survive while faces temporarily fail to resolve.
 
 Consequences:
-  The graph can represent loose lines, dangling endpoints, crossings, unresolved sides, and unresolved room anchors. Derivation decides which closed faces become runtime sectors.
+  The graph can represent loose lines, dangling endpoints, crossings, endpoint-on-segment cases, unresolved sides, and unresolved room anchors. Derivation planarizes normal intersections before deciding which closed faces become runtime sectors.
 
 Implementation notes:
   Conceptual data model:
@@ -141,10 +141,10 @@ Reason:
   Persisting last-valid topology adds a second truth source and makes stale preview state easier to confuse with the saved graph. A memory-only last-valid result gives useful continuity while editing without making file semantics ambiguous.
 
 Consequences:
-  The editor can continue drawing authoring lines and diagnostics while the graph is invalid. 3D preview can either keep showing the last valid derived topology with a clear stale/invalid indicator, or be disabled if no valid derived topology exists. A freshly loaded invalid graph has no persisted fallback topology unless derivation succeeds.
+  The editor can continue drawing authoring lines and diagnostics while the graph is invalid. The 2D editor may show the last valid derived fills only with a clear stale/invalid indicator. Entering or rebuilding 3D preview is disabled unless the graph has a current valid derived topology. A freshly loaded invalid graph has no persisted fallback topology unless derivation succeeds.
 
 Implementation notes:
-  Store derivation status in editor state: valid/current, valid/stale, invalid/no-derived, invalid/last-valid-visible. UI should make stale derived topology explicit. Any edit that changes graph geometry or visible authoring state must invalidate the relevant 2D render cache and mark the derived result stale until derivation succeeds.
+  Store derivation status in editor state: valid/current, valid/stale, invalid/no-derived, invalid/last-valid-visible. The 2D editor may show stale derived fills or diagnostics if they are clearly marked. Entering or rebuilding 3D preview should require a current valid derivation; do not let the user unknowingly preview stale topology as if it matched the graph. Any edit that changes graph geometry or visible authoring state must invalidate the relevant 2D render cache and mark the derived result stale until derivation succeeds.
 
 ## ID Strategy
 
@@ -161,7 +161,8 @@ Implementation notes:
   Practical policy:
   - authoring vertices keep IDs through coordinate moves
   - authoring lines keep IDs through endpoint moves and carry line flags/specials
-  - authoring sides are identified by `(authoringLineId, side)` unless a separate side ID proves useful
+  - authoring sides start as `(authoringLineId, side)` identities
+  - do not add separate authoring side IDs unless derivation or property tests prove they are needed
   - face anchors own room/sector-like IDs and properties
   - derived vertices may reuse authoring vertex IDs for unchanged graph vertices and allocate new IDs for inserted intersection points
   - derived linedefs may reuse authoring line IDs only for unsplit one-to-one segments; split children get deterministic new IDs or generated IDs
@@ -183,26 +184,28 @@ Consequences:
 Implementation notes:
   Conflict rules should be explicit:
   - line split: child authoring or derived lines inherit line metadata and both directed-side material sets
-  - face split: the original/selected side keeps the original face anchor when unambiguous; the new face clones properties or receives defaults by a deterministic editor rule
-  - face merge: require an explicit rule, such as selected/dominant anchor wins, or surface a diagnostic requiring user choice
+  - face split: keep the original face anchor on the face containing the old anchor seed or label point when available; new faces clone properties or receive defaults by a deterministic editor rule
+  - face merge: if exactly one anchor survives in the merged face, keep it
+  - multi-anchor face merge: report a diagnostic and require later user choice instead of silently choosing a winner
   - ambiguous derivation: report a diagnostic and do not silently guess
   - unresolved face anchor: keep the anchor in the graph, do not delete its properties
+  - first implementation: prefer conservative defaults and diagnostics over trying to solve every split/merge conflict immediately
 
 ## Derivation Pipeline
 
 Decision:
-  Derivation should be a pure, testable pipeline from graph to validated topology, diagnostics, and mapping.
+  Derivation should be a pure, testable pipeline from graph to validated topology, diagnostics, and mapping. It auto-planarizes the authoring graph: normal segment crossings, T-junctions, and endpoint-on-segment cases are automatically split into graph vertices/edges for derivation.
 
 Reason:
-  The bridge is the core risk. It must be deterministic and testable before UI tools depend on it.
+  The bridge is the core risk. It must be deterministic and testable before UI tools depend on it. Requiring the user to manually split every linedef at every intersection would defeat the purpose of a permissive Doom-editor-like graph.
 
 Consequences:
-  Editor tools can mutate graph data freely, then request derivation. Runtime systems receive only the successful strict result. Diagnostics explain why a graph cannot currently produce runtime topology.
+  Editor tools can mutate graph data freely, then request derivation. The authored graph may remain permissive, while derivation operates on a normalized planar graph. Runtime systems receive only the successful strict result. Diagnostics explain why a graph cannot currently produce runtime topology.
 
 Implementation notes:
   Pipeline:
   - authoring graph
-  - normalize and split intersections as needed
+  - normalize and auto-split normal crossings, T-junctions, and endpoint-on-segment cases
   - build planar graph
   - find closed faces
   - assign and resolve face anchors
@@ -211,7 +214,79 @@ Implementation notes:
   - validate strict topology
   - produce derivation diagnostics and authoring-to-derived ID mapping
 
-  Diagnostics should cover dangling lines, crossings, overlaps, zero-length lines, ambiguous faces, unresolved face anchors, unassigned sides, invalid portals, duplicate/coincident endpoints where unsupported, and any property projection conflict.
+  Auto-split cases:
+  - normal segment crossings
+  - T-junctions
+  - endpoint-on-segment cases
+
+  Diagnose, refuse, or require cleanup instead of silently guessing:
+  - exact duplicate lines
+  - collinear overlapping segments
+  - near-miss almost-intersections
+  - zero-length lines
+  - tiny sliver faces below threshold
+  - ambiguous face or property anchors
+  - unresolved face anchors
+  - unassigned sides
+  - invalid portals
+  - duplicate/coincident endpoints where unsupported
+  - property projection conflicts
+
+## Legacy Tooling And Inspector Transition Strategy
+
+Decision:
+  Once `AuthoringGraph` is authoritative, normal editor UI tools must mutate `AuthoringGraph`, not derived `SectorTopologyMap`. `SectorTopologyMap` is generated output and should not be directly edited by normal editor tools.
+
+Reason:
+  Directly editing derived topology creates two competing sources of truth. The graph would no longer reliably derive the preview/runtime topology, and save/load, property anchoring, selection remapping, and lightmap invalidation would become confused.
+
+Consequences:
+  Legacy direct-topology tools can exist only while the old topology path is still active, or as temporary/dev-only tools outside graph-authoritative mode. Once graph-authoritative mode is enabled, direct `SectorTopologyMap` mutation tools should be hidden, disabled, retired, or reimplemented as authoring graph operations.
+
+Implementation notes:
+  Retire or demote to legacy-only unless reimplemented as graph operations:
+  - closed polygon Sector draw tool
+  - Insert Sector Inside
+  - Cut Sector as a direct topology operation
+  - Delete Sector as a direct topology operation
+  - Split linedef at midpoint as a direct topology operation
+  - Split linedef at point as a direct topology operation
+  - Merge topology vertices as a direct topology operation
+  - Dissolve topology vertex as a direct topology operation
+
+  Reimplement old concepts in graph terms:
+  - Draw Sector Polygon: replaced by freeform authoring line drawing or loop drawing
+  - Insert Sector Inside: replaced by drawing authoring lines inside an existing face; derivation creates inner faces, holes, or sectors
+  - Cut Sector: replaced by authoring line drawing across a face; derivation splits faces
+  - Split Linedef: mostly replaced by auto-splitting during derivation, plus an optional explicit split-authoring-line command for user convenience
+  - Merge/Dissolve Vertex: reimplemented as authoring vertex merge/dissolve operations, followed by derivation
+  - Delete Sector: becomes delete face/room anchor, delete boundary lines, or clear room properties depending on the intended UX
+
+  Preserve and port these workflows so they write through authoring anchors:
+  - texture picker
+  - material/wall part editors
+  - sector/floor/ceiling property inspector
+  - sidedef/wall/lower/upper/middle material inspector
+  - `blocksPlayer` / line flag editing
+  - light tools and static light editing
+  - preview settings
+  - import texture workflow
+
+  Porting rule:
+  - sector inspector becomes `AuthoringFaceAnchor` / `RoomAnchor` inspector
+  - sidedef inspector becomes `AuthoringSide` inspector
+  - linedef flags become `AuthoringLine` inspector
+  - derived 3D surface selection maps back to authoring side or face anchor before editing
+
+  Transitional strategy:
+  1. Keep legacy topology tools only while the old topology path is still active.
+  2. Introduce authoring graph state and derivation behind the scenes.
+  3. Once graph-authoritative mode is enabled, hide or disable direct topology mutation tools.
+  4. Add the new minimal graph tools: draw line, select line/vertex, move vertex, delete line/vertex.
+  5. Port inspectors to authoring anchors.
+  6. Delete or demote old topology tools after graph tools cover the workflow.
+
+  This avoids a hybrid state where some tools mutate the graph and other tools mutate the derived map.
 
 ## Editor Integration Strategy
 
@@ -239,7 +314,7 @@ Consequences:
   Preview build, gameplay collision, generated mesh, 3D picking, and lightmap bake remain derived-topology operations. Generated surface refs can remain topology refs, but editing a selected 3D surface must map back to authoring side or face anchors before mutating source data.
 
 Implementation notes:
-  Do not over-preserve old lightmaps. Clear or mark baked metadata stale when derived topology changes, when derivation fails, or when `ComputeSectorLightmapSourceHash()` changes. Preserve current source-hash behavior unless a later lightmap-specific task explicitly changes it. Sky visual settings remain visual-only and excluded from the hash; `ceilingSky` remains geometry-affecting and included through derived sectors.
+  Do not over-preserve old lightmaps. Stale-on-derivation is acceptable for this transition. Clear or mark baked metadata stale when derived topology changes, when derivation fails, or when `ComputeSectorLightmapSourceHash()` changes. Do not redesign lightmap hashing around logical surface IDs in this transition. Preserve current source-hash behavior unless a later lightmap-specific task explicitly changes it. Sky visual settings remain visual-only and excluded from the hash; `ceilingSky` remains geometry-affecting and included through derived sectors.
 
 ## Migration / Import Strategy For Existing Test Levels
 
@@ -321,22 +396,31 @@ Implementation notes:
   6. Add editor state fields for authoring graph, derivation status, last-valid derived topology, and mapping.
   7. Add 2D rendering overlay for authoring graph lines, vertices, anchors, and diagnostics.
   8. Add authoring line draw, split, delete, and move tools.
-  9. Project properties and inspector editing through line, side, and face anchors.
-  10. Switch preview, bake, and save to the derived-from-authoring path.
-  11. Remove or demote the old closed-sector authoring path once graph tools cover the needed workflow.
+  9. Hide or disable direct topology mutation tools in graph-authoritative mode.
+  10. Project properties and inspector editing through line, side, and face anchors.
+  11. Switch preview, bake, and save to the derived-from-authoring path.
+  12. Remove or demote the old closed-sector authoring path once graph tools cover the needed workflow.
 
 ## Open Questions
 
 Decision:
-  Leave only implementation-detail questions open; the source/derived split and compatibility policy are decided by this design.
+  Close the major design questions now. Leave only narrow implementation details for derivation tests and editor prototypes.
 
 Reason:
-  Future runner plans need concrete direction, but some details are better answered by derivation tests and editor prototypes.
+  Future runner plans need concrete direction. The remaining uncertainty should be about thresholds and UI details, not source-of-truth ownership or basic graph semantics.
 
 Consequences:
-  Open questions:
-  - Should crossing lines auto-split during derivation, or should some crossings require an explicit user split command?
-  - Which deterministic rule should choose the surviving anchor when a face split or merge is not selected-driven?
-  - Should separate authoring side IDs be added, or is `(lineId, side)` sufficient long term?
-  - How much stale last-valid topology should 3D preview show before the UI becomes misleading?
-  - Should lightmap source hashing eventually move from derived topology IDs to generated logical surface IDs, or is stale-on-derivation acceptable?
+  Closed decisions:
+  - crossing lines auto-split during derivation for normal crossings, T-junctions, and endpoint-on-segment cases
+  - face split keeps the original anchor on the face containing the old anchor seed/label point when available
+  - face merge keeps a single surviving anchor, but multiple anchors in one merged face produce a diagnostic and require later user choice
+  - authoring side identity starts as `(lineId, side)`; no separate side IDs unless tests prove they are needed
+  - last-valid derived topology is memory-only; 2D may show it only when clearly stale, and 3D preview requires current valid derivation
+  - lightmaps may stale on derivation; do not redesign hashing around logical surface IDs in this transition
+
+Implementation notes:
+  Narrow implementation details still to decide:
+  - exact tolerance or threshold for tiny sliver face diagnostics
+  - exact UI wording and visual treatment for stale 2D derived fills
+  - whether an explicit split-authoring-line command is useful even though derivation auto-splits
+  - initial default/clone rule for new faces created by a split when no anchor seed is available
