@@ -88,49 +88,49 @@ Suggested path:
       "id": "phase_11_minimal_authoring_tools",
       "title": "Add minimal authoring line and vertex tools",
       "type": "phase",
-      "status": "In Progress",
+      "status": "Completed",
       "parent": null
     },
     {
       "id": "phase_11a_authoring_selection_state",
       "title": "Add authoring graph selection and edit helper state",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_11_minimal_authoring_tools"
     },
     {
       "id": "phase_11b_draw_authoring_line_tool",
       "title": "Add authoring line drawing in the existing 2D editor",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_11_minimal_authoring_tools"
     },
     {
       "id": "phase_11c_select_delete_authoring_line",
       "title": "Add authoring line picking, selection, and delete",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_11_minimal_authoring_tools"
     },
     {
       "id": "phase_11d_select_move_delete_authoring_vertex",
       "title": "Add authoring vertex picking, movement, and safe delete",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_11_minimal_authoring_tools"
     },
     {
       "id": "phase_11e_authoring_derivation_after_edits",
       "title": "Refresh derivation and cache state after authoring graph edits",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_11_minimal_authoring_tools"
     },
     {
       "id": "phase_11f_tools_pane_integration",
       "title": "Integrate minimal authoring tools into the existing tools pane",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_11_minimal_authoring_tools"
     },
     {

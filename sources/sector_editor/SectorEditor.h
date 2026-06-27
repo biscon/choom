@@ -53,6 +53,10 @@ private:
     void UpdateVertexDrag(engine::Input& input);
     void FinishVertexDrag();
     void CancelVertexDrag(const char* message);
+    void StartAuthoringVertexDrag(int vertexId, SectorTopologyCoordPoint point);
+    void UpdateAuthoringVertexDrag(engine::Input& input);
+    void FinishAuthoringVertexDrag();
+    void CancelAuthoringVertexDrag(const char* message);
     void StartLightDrag(int topologyLightId);
     void UpdateLightDrag(engine::Input& input);
     void FinishLightDrag();
@@ -76,6 +80,8 @@ private:
     void CancelPendingSector(const char* message);
     void StartInsertSectorInside();
     bool IsPendingInsertParentValid() const;
+    void CancelPendingAuthoringLine(const char* message);
+    void AddAuthoringLinePoint(SectorPoint point);
     void RemoveLastPendingSectorPoint();
     void AddPendingSectorPoint(SectorPoint point);
     void FinalizePendingSector();
@@ -93,6 +99,8 @@ private:
     void DrawTopologyDocument();
     void DrawTopologySelectedLineHighlight() const;
     void DrawTopologySnapCrosshair() const;
+    void DrawPendingAuthoringLine() const;
+    void DrawAuthoringVertexMoveOverlay() const;
     void DrawPendingSector() const;
     void DrawVertexMoveOverlay() const;
     void DrawPendingTopologyVertexMerge() const;
@@ -202,6 +210,11 @@ private:
             int& outSideDefId,
             SectorTopologySideKind& outSide,
             bool& outPreferredMissing) const;
+    int FindAuthoringLineNearScreenPoint(Vector2 screenPoint) const;
+    bool FindAuthoringVertexNearScreenPoint(
+            Vector2 screenPoint,
+            int& outVertexId,
+            SectorTopologyCoordPoint& outPoint) const;
     int FindTopologyLightNearScreenPoint(Vector2 screenPoint) const;
     bool FindTopologyVertexNearScreenPoint(
             Vector2 screenPoint,
@@ -214,6 +227,10 @@ private:
             SectorTopologyCoordPoint point,
             int excludedVertexId = -1) const;
     bool SnapTopologyVertexMoveTarget(
+            Vector2 mapPoint,
+            SectorTopologyCoordPoint& outPoint,
+            std::string& error) const;
+    bool SnapAuthoringVertexMoveTarget(
             Vector2 mapPoint,
             SectorTopologyCoordPoint& outPoint,
             std::string& error) const;
@@ -266,6 +283,10 @@ private:
     void SelectTopologySideDef(int sideDefId, TopologyWallPart wallPart);
     void SelectTopologyLineDef(int lineDefId, SectorTopologySideKind side, TopologyWallPart wallPart);
     void SelectTopologyLight(int topologyLightId);
+    void SelectAuthoringLine(int lineId);
+    bool DeleteSelectedAuthoringLine();
+    void SelectAuthoringVertex(int vertexId);
+    bool DeleteSelectedAuthoringVertex();
     void SelectSurface3D(SectorSurfaceRef surface);
     bool IsValidSurfaceRef(SectorSurfaceRef surface) const;
     bool SameSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b) const;

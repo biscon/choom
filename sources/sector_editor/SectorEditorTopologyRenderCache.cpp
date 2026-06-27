@@ -439,9 +439,13 @@ void DrawCachedAuthoringGraphOverlay(
         const SectorEditorTopologyDrawContext& context)
 {
     const Color lineColor = Color{248, 216, 108, 245};
+    const Color selectedLineColor = Color{98, 230, 162, 255};
+    const Color hoveredLineColor = Color{122, 220, 244, 255};
     const Color lineShadow = Color{20, 24, 32, 220};
     const Color warningColor = Color{236, 92, 92, 245};
     const Color vertexFill = Color{255, 242, 178, 255};
+    const Color selectedVertexFill = Color{98, 230, 162, 255};
+    const Color hoveredVertexFill = Color{122, 220, 244, 255};
     const Color vertexOutline = Color{22, 26, 34, 245};
 
     for (const CachedAuthoringLineDraw& line : cache.authoringLines) {
@@ -459,14 +463,28 @@ void DrawCachedAuthoringGraphOverlay(
 
         const Vector2 a = CachedMapToScreen(context, line.start);
         const Vector2 b = CachedMapToScreen(context, line.end);
-        DrawLineEx(a, b, 5.0f, lineShadow);
-        DrawLineEx(a, b, 2.5f, lineColor);
+        const bool selected =
+                context.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
+                && context.selectedAuthoring.lineId == line.lineId;
+        const bool hovered =
+                context.hoveredAuthoring.kind == SectorAuthoringSelectionKind::Line
+                && context.hoveredAuthoring.lineId == line.lineId;
+        const Color activeColor = selected ? selectedLineColor : (hovered ? hoveredLineColor : lineColor);
+        DrawLineEx(a, b, selected ? 8.0f : 5.0f, lineShadow);
+        DrawLineEx(a, b, selected ? 4.0f : 2.5f, activeColor);
     }
 
     for (const CachedAuthoringVertexDraw& vertex : cache.authoringVertices) {
         const Vector2 screen = CachedMapToScreen(context, vertex.map);
-        DrawCircleV(screen, 6.0f, vertexOutline);
-        DrawCircleV(screen, 3.5f, vertexFill);
+        const bool selected =
+                context.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex
+                && context.selectedAuthoring.vertexId == vertex.vertexId;
+        const bool hovered =
+                context.hoveredAuthoring.kind == SectorAuthoringSelectionKind::Vertex
+                && context.hoveredAuthoring.vertexId == vertex.vertexId;
+        const Color fill = selected ? selectedVertexFill : (hovered ? hoveredVertexFill : vertexFill);
+        DrawCircleV(screen, selected ? 7.5f : (hovered ? 7.0f : 6.0f), vertexOutline);
+        DrawCircleV(screen, selected || hovered ? 4.5f : 3.5f, fill);
     }
 }
 

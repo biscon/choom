@@ -380,7 +380,8 @@ const char* ToolName(SectorEditorTool tool)
 {
     switch (tool) {
         case SectorEditorTool::Select: return "Select";
-        case SectorEditorTool::Sector: return "Sector";
+        case SectorEditorTool::Sector: return "Legacy Sector";
+        case SectorEditorTool::AuthoringLine: return "Authoring Line";
         case SectorEditorTool::InsertSectorInside: return "Insert Inside";
         case SectorEditorTool::Light: return "Light";
         case SectorEditorTool::Move: return "Move";
@@ -693,12 +694,13 @@ Vector3 SectorPointToWorld(SectorPoint point, float height)
 const char* ToolHelpText(SectorEditorTool tool)
 {
     switch (tool) {
-        case SectorEditorTool::Select: return "Select: click lights, linedefs, or sectors in canvas";
-        case SectorEditorTool::Sector: return "Sector: left click add, click first closes, right click/Esc cancels, Backspace removes";
+        case SectorEditorTool::Select: return "Select: click authoring lines/vertices, lights, linedefs, or sectors";
+        case SectorEditorTool::Sector: return "Legacy sector: closed topology polygon tool; use Authoring Line for graph edits";
+        case SectorEditorTool::AuthoringLine: return "Authoring line: left click start/end, right click/Esc cancels";
         case SectorEditorTool::InsertSectorInside: return "Insert sector: draw inside selected parent; Enter closes, right click/Esc cancels";
         case SectorEditorTool::Light: return "Light: click inside a sector to place a baked static point light";
-        case SectorEditorTool::Move: return "Move: drag topology light or vertex";
-        case SectorEditorTool::Erase: return "Erase: click sector to delete";
+        case SectorEditorTool::Move: return "Move: drag legacy topology light or vertex";
+        case SectorEditorTool::Erase: return "Erase: delete legacy topology sectors";
     }
     return "";
 }

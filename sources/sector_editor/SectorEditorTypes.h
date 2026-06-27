@@ -30,6 +30,7 @@ namespace game {
 enum class SectorEditorTool {
     Select,
     Sector,
+    AuthoringLine,
     InsertSectorInside,
     Light,
     Move,
@@ -67,6 +68,13 @@ struct PendingSectorDraw {
     std::string errorMessage;
 };
 
+struct PendingAuthoringLineDraw {
+    bool active = false;
+    SectorTopologyCoordPoint startPoint = {};
+    int startVertexId = -1;
+    std::string errorMessage;
+};
+
 enum class TopologyTexturePickerTargetKind {
     None,
     Sector,
@@ -87,6 +95,18 @@ enum class TopologySelectionKind {
     SideDef,
     LineDef,
     Light
+};
+
+enum class SectorAuthoringSelectionKind {
+    None,
+    Line,
+    Vertex
+};
+
+struct SectorAuthoringSelectionTarget {
+    SectorAuthoringSelectionKind kind = SectorAuthoringSelectionKind::None;
+    int lineId = -1;
+    int vertexId = -1;
 };
 
 enum class TopologyWallPart {
@@ -290,6 +310,15 @@ struct VertexDragState {
     std::string errorMessage;
 };
 
+struct AuthoringVertexDragState {
+    bool active = false;
+    int vertexId = -1;
+    SectorTopologyCoordPoint originalPoint = {};
+    SectorTopologyCoordPoint previewPoint = {};
+    bool hasPreviewPoint = false;
+    std::string errorMessage;
+};
+
 struct LightDragState {
     bool active = false;
     int topologyLightId = -1;
@@ -451,12 +480,16 @@ struct SectorEditorState {
     int hoveredTopologyVertexId = -1;
     SectorTopologyCoordPoint hoveredTopologyVertexPoint = {};
     int inspectedTopologyVertexId = -1;
+    SectorAuthoringSelectionTarget selectedAuthoring;
+    SectorAuthoringSelectionTarget hoveredAuthoring;
 
     Vector2 snappedMouseMap = {0.0f, 0.0f};
     Vector2 rawMouseMap = {0.0f, 0.0f};
 
     PendingSectorDraw pendingSector;
+    PendingAuthoringLineDraw pendingAuthoringLine;
     VertexDragState vertexDrag;
+    AuthoringVertexDragState authoringVertexDrag;
     LightDragState lightDrag;
     PendingTopologyLineSplitAtPoint pendingTopologyLineSplitAtPoint;
     PendingTopologyVertexMerge pendingTopologyVertexMerge;

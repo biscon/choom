@@ -2,6 +2,7 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorTopologySerialization.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
+#include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
 
 #include <algorithm>
@@ -123,6 +124,11 @@ void AddAuthoringLineWithId(game::SectorAuthoringGraph& graph, int id, int start
     line.startVertexId = startVertexId;
     line.endVertexId = endVertexId;
     graph.lines.push_back(line);
+}
+
+bool TextContains(const char* text, const char* expected)
+{
+    return text != nullptr && std::string{text}.find(expected) != std::string::npos;
 }
 
 game::SectorAuthoringGraph MakeGraphFromLines(
@@ -1710,6 +1716,590 @@ void TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics()
           "failed editor derivation keeps memory-only last-valid topology");
 }
 
+void TestEditorAuthoringSelectionTargetsRepresentLineAndVertex()
+{
+    game::SectorEditorState state;
+    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
+    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+
+    const game::SectorAuthoringSelectionTarget lineTarget =
+            game::MakeSectorAuthoringLineSelectionTarget(10);
+    const game::SectorAuthoringSelectionTarget vertexTarget =
+            game::MakeSectorAuthoringVertexSelectionTarget(1);
+
+    Check(lineTarget.kind == game::SectorAuthoringSelectionKind::Line,
+          "authoring selection target can represent a line");
+    Check(lineTarget.lineId == 10 && lineTarget.vertexId == -1,
+          "authoring line selection target stores only the line ID");
+    Check(vertexTarget.kind == game::SectorAuthoringSelectionKind::Vertex,
+          "authoring selection target can represent a vertex");
+    Check(vertexTarget.vertexId == 1 && vertexTarget.lineId == -1,
+          "authoring vertex selection target stores only the vertex ID");
+    Check(game::IsSectorAuthoringSelectionTargetValid(state.authoringGraph, lineTarget),
+          "authoring line target validates against the graph");
+    Check(game::IsSectorAuthoringSelectionTargetValid(state.authoringGraph, vertexTarget),
+          "authoring vertex target validates against the graph");
+    Check(state.topologyMap.vertices.empty() && state.topologyMap.lineDefs.empty(),
+          "authoring selection target helpers do not mutate derived topology");
+}
+
+void TestEditorAuthoringSelectionHelpersSetClearAndRejectMissingTargets()
+{
+    game::SectorEditorState state;
+    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
+    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+
+    Check(game::SelectSectorEditorAuthoringLine(state, 10),
+          "select authoring line helper accepts an existing line");
+    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Line,
+          "select authoring line helper records line selection");
+    Check(!game::SelectSectorEditorAuthoringLine(state, 99),
+          "select authoring line helper rejects missing line");
+    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Line
+                  && state.selectedAuthoring.lineId == 10,
+          "rejected authoring line selection leaves previous selection intact");
+    Check(!game::SelectSectorEditorAuthoringLine(state, 0),
+          "select authoring line helper rejects zero line ID");
+    Check(!game::SelectSectorEditorAuthoringLine(state, -1),
+          "select authoring line helper rejects negative line ID");
+    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Line
+                  && state.selectedAuthoring.lineId == 10,
+          "invalid authoring line selection leaves previous selection intact");
+
+    Check(game::SelectSectorEditorAuthoringVertex(state, 1),
+          "select authoring vertex helper accepts an existing vertex");
+    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex,
+          "select authoring vertex helper records vertex selection");
+    Check(!game::SelectSectorEditorAuthoringVertex(state, 99),
+          "select authoring vertex helper rejects missing vertex");
+    Check(!game::SelectSectorEditorAuthoringVertex(state, 0),
+          "select authoring vertex helper rejects zero vertex ID");
+    Check(!game::SelectSectorEditorAuthoringVertex(state, -1),
+          "select authoring vertex helper rejects negative vertex ID");
+    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
+                  && state.selectedAuthoring.vertexId == 1,
+          "invalid authoring vertex selection leaves previous selection intact");
+
+    game::ClearSectorEditorAuthoringSelection(state);
+    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+          "clear authoring selection helper clears selection kind");
+    Check(state.topologyMap.vertices.empty() && state.topologyMap.lineDefs.empty(),
+          "authoring selection helpers do not mutate derived topology");
+}
+
+void TestEditorAuthoringHoverAndPruneUseGraphValidity()
+{
+    game::SectorEditorState state;
+    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
+    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+
+    Check(game::SelectSectorEditorAuthoringLine(state, 10),
+          "prune setup selects authoring line");
+    Check(game::SetHoveredSectorEditorAuthoringVertex(state, 2),
+          "hover authoring vertex helper accepts existing vertex");
+    Check(!game::SetHoveredSectorEditorAuthoringVertex(state, 0),
+          "hover authoring vertex helper rejects zero vertex ID");
+    Check(!game::SetHoveredSectorEditorAuthoringVertex(state, -1),
+          "hover authoring vertex helper rejects negative vertex ID");
+    Check(state.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
+                  && state.hoveredAuthoring.vertexId == 2,
+          "invalid authoring vertex hover leaves previous hover intact");
+    Check(game::SetHoveredSectorEditorAuthoringLine(state, 10),
+          "hover authoring line helper accepts existing line");
+    Check(!game::SetHoveredSectorEditorAuthoringLine(state, 0),
+          "hover authoring line helper rejects zero line ID");
+    Check(!game::SetHoveredSectorEditorAuthoringLine(state, -1),
+          "hover authoring line helper rejects negative line ID");
+    Check(state.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::Line
+                  && state.hoveredAuthoring.lineId == 10,
+          "invalid authoring line hover leaves previous hover intact");
+    Check(game::SetHoveredSectorEditorAuthoringVertex(state, 2),
+          "prune setup restores authoring vertex hover");
+
+    state.authoringGraph.lines.clear();
+    state.authoringGraph.vertices.erase(
+            std::remove_if(
+                    state.authoringGraph.vertices.begin(),
+                    state.authoringGraph.vertices.end(),
+                    [](const game::SectorAuthoringVertex& vertex) {
+                        return vertex.id == 2;
+                    }),
+            state.authoringGraph.vertices.end());
+
+    game::PruneSectorEditorAuthoringSelectionToGraph(state);
+    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+          "authoring selection prune clears deleted line selection");
+    Check(state.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+          "authoring selection prune clears deleted vertex hover");
+    Check(state.topologyMap.vertices.empty() && state.topologyMap.lineDefs.empty(),
+          "authoring hover/prune helpers do not mutate derived topology");
+}
+
+void TestEditorAuthoringLineDrawHelperCreatesLooseLineAndMarksDirty()
+{
+    game::SectorEditorState state;
+    game::InitializeSectorEditorAuthoringStateFromTopology(state, game::SectorTopologyMap{});
+    const uint64_t originalRevision = state.topologyRenderRevision;
+    const std::size_t originalTopologyVertexCount = state.topologyMap.vertices.size();
+    const std::size_t originalTopologyLineCount = state.topologyMap.lineDefs.size();
+
+    int lineId = -1;
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 0},
+                  &lineId),
+          "authoring line draw helper creates a loose line");
+
+    Check(game::IsValidSectorAuthoringId(lineId), "authoring line draw helper returns a valid line ID");
+    Check(state.authoringGraph.vertices.size() == 2,
+          "authoring line draw helper creates endpoint vertices");
+    Check(state.authoringGraph.lines.size() == 1,
+          "authoring line draw helper creates one authoring line");
+    const game::SectorAuthoringLine* line =
+            game::FindSectorAuthoringLine(state.authoringGraph, lineId);
+    Check(line != nullptr && line->startVertexId != line->endVertexId,
+          "authoring line draw helper connects distinct endpoint vertices");
+    Check(state.topologyDocumentDirty, "authoring line draw helper marks document dirty");
+    Check(state.authoringDerivedTopologyStale,
+          "authoring line draw helper marks derived topology stale");
+    Check(!state.topologyRenderCache.valid,
+          "authoring line draw helper invalidates cached editor topology rendering");
+    Check(state.topologyRenderRevision == originalRevision + 1,
+          "authoring line draw helper bumps topology render revision");
+    Check(state.topologyMap.vertices.size() == originalTopologyVertexCount
+                  && state.topologyMap.lineDefs.size() == originalTopologyLineCount,
+          "authoring line draw helper does not directly mutate derived topology");
+}
+
+void TestEditorAuthoringLineDrawHelperReusesVerticesAndRejectsZeroLength()
+{
+    game::SectorEditorState state;
+    AddAuthoringVertexWithId(state.authoringGraph, 7, 0, 0);
+    const uint64_t originalRevision = state.topologyRenderRevision;
+
+    int lineId = -1;
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 0},
+                  &lineId),
+          "authoring line draw helper creates a line from an existing endpoint");
+    Check(state.authoringGraph.vertices.size() == 2,
+          "authoring line draw helper reuses exact-coordinate endpoint vertex");
+    const game::SectorAuthoringLine* line =
+            game::FindSectorAuthoringLine(state.authoringGraph, lineId);
+    Check(line != nullptr && line->startVertexId == 7,
+          "authoring line draw helper connects reused start vertex");
+
+    const std::size_t vertexCount = state.authoringGraph.vertices.size();
+    const std::size_t lineCount = state.authoringGraph.lines.size();
+    Check(!game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{64, 0},
+                  game::SectorTopologyCoordPoint{64, 0}),
+          "authoring line draw helper rejects zero-length lines");
+    Check(state.authoringGraph.vertices.size() == vertexCount
+                  && state.authoringGraph.lines.size() == lineCount,
+          "rejected zero-length authoring line leaves graph unchanged");
+    Check(state.topologyRenderRevision == originalRevision + 1,
+          "rejected zero-length authoring line does not invalidate cache again");
+    Check(state.topologyMap.vertices.empty() && state.topologyMap.lineDefs.empty(),
+          "authoring line draw helper zero-length rejection does not mutate derived topology");
+}
+
+void TestEditorAuthoringLinePickingFindsNearestValidLine()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringVertexWithId(graph, 2, 64, 0);
+    AddAuthoringVertexWithId(graph, 3, 0, 64);
+    AddAuthoringVertexWithId(graph, 4, 64, 64);
+    AddAuthoringLineWithId(graph, 20, 1, 2);
+    AddAuthoringLineWithId(graph, 10, 3, 4);
+    AddAuthoringLineWithId(graph, 30, 1, 99);
+
+    int lineId = -1;
+    Check(game::FindSectorEditorAuthoringLineNearMapPoint(
+                  graph,
+                  Vector2{game::SectorCoordToVisibleAuthoring(32), 0.125f},
+                  0.25f,
+                  &lineId),
+          "authoring line picking finds a nearby valid line");
+    Check(lineId == 20, "authoring line picking returns the nearest line ID");
+
+    lineId = -1;
+    Check(!game::FindSectorEditorAuthoringLineNearMapPoint(
+                  graph,
+                  Vector2{game::SectorCoordToVisibleAuthoring(32), 8.0f},
+                  0.25f,
+                  &lineId),
+          "authoring line picking rejects points outside the threshold");
+    Check(lineId == -1, "authoring line picking leaves output unchanged on miss");
+
+    Check(!game::FindSectorEditorAuthoringLineNearMapPoint(
+                  graph,
+                  Vector2{0.0f, 0.0f},
+                  -1.0f),
+          "authoring line picking rejects negative thresholds");
+}
+
+void TestEditorAuthoringDeleteSelectedLineOnlyMutatesGraphAndInvalidates()
+{
+    game::SectorEditorState state;
+    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
+    AddAuthoringVertexWithId(state.authoringGraph, 3, 64, 64);
+    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+    AddAuthoringLineWithId(state.authoringGraph, 20, 2, 3);
+
+    game::SectorAuthoringLineSide frontSide;
+    frontSide.id.lineId = 10;
+    frontSide.id.side = game::SectorTopologySideKind::Front;
+    state.authoringGraph.lineSides.push_back(frontSide);
+    game::SectorAuthoringLineSide otherSide;
+    otherSide.id.lineId = 20;
+    otherSide.id.side = game::SectorTopologySideKind::Back;
+    state.authoringGraph.lineSides.push_back(otherSide);
+
+    Check(game::SelectSectorEditorAuthoringLine(state, 10),
+          "delete selected authoring line setup selects line");
+    Check(game::SetHoveredSectorEditorAuthoringLine(state, 10),
+          "delete selected authoring line setup hovers line");
+    const uint64_t originalRevision = state.topologyRenderRevision;
+    const std::size_t originalTopologyVertexCount = state.topologyMap.vertices.size();
+    const std::size_t originalTopologyLineCount = state.topologyMap.lineDefs.size();
+
+    Check(game::DeleteSectorEditorSelectedAuthoringLine(state),
+          "delete selected authoring line helper deletes the selected line");
+    Check(game::FindSectorAuthoringLine(state.authoringGraph, 10) == nullptr,
+          "delete selected authoring line removes the line from the graph");
+    Check(game::FindSectorAuthoringLine(state.authoringGraph, 20) != nullptr,
+          "delete selected authoring line preserves other lines");
+    Check(state.authoringGraph.vertices.size() == 3,
+          "delete selected authoring line leaves endpoint vertices for vertex pass");
+    Check(state.authoringGraph.lineSides.size() == 1
+                  && state.authoringGraph.lineSides.front().id.lineId == 20,
+          "delete selected authoring line removes side metadata for the deleted line");
+    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+          "delete selected authoring line prunes deleted selection");
+    Check(state.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+          "delete selected authoring line prunes deleted hover");
+    Check(state.topologyDocumentDirty, "delete selected authoring line marks document dirty");
+    Check(state.authoringDerivedTopologyStale,
+          "delete selected authoring line marks derived topology stale");
+    Check(!state.topologyRenderCache.valid,
+          "delete selected authoring line invalidates cached editor topology rendering");
+    Check(state.topologyRenderRevision == originalRevision + 1,
+          "delete selected authoring line bumps topology render revision");
+    Check(state.topologyMap.vertices.size() == originalTopologyVertexCount
+                  && state.topologyMap.lineDefs.size() == originalTopologyLineCount,
+          "delete selected authoring line does not directly mutate derived topology");
+
+    Check(!game::DeleteSectorEditorSelectedAuthoringLine(state),
+          "delete selected authoring line helper rejects missing selection");
+}
+
+void TestEditorAuthoringVertexPickingFindsNearestValidVertex()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 20, 0, 0);
+    AddAuthoringVertexWithId(graph, 10, 64, 0);
+
+    int vertexId = -1;
+    game::SectorTopologyCoordPoint point{};
+    Check(game::FindSectorEditorAuthoringVertexNearMapPoint(
+                  graph,
+                  Vector2{game::SectorCoordToVisibleAuthoring(64), 0.125f},
+                  0.25f,
+                  &vertexId,
+                  &point),
+          "authoring vertex picking finds a nearby vertex");
+    Check(vertexId == 10 && point.x == 64 && point.y == 0,
+          "authoring vertex picking returns nearest vertex ID and point");
+
+    vertexId = -1;
+    Check(!game::FindSectorEditorAuthoringVertexNearMapPoint(
+                  graph,
+                  Vector2{game::SectorCoordToVisibleAuthoring(32), 4.0f},
+                  0.25f,
+                  &vertexId),
+          "authoring vertex picking rejects points outside threshold");
+    Check(vertexId == -1, "authoring vertex picking leaves output unchanged on miss");
+
+    Check(!game::FindSectorEditorAuthoringVertexNearMapPoint(
+                  graph,
+                  Vector2{0.0f, 0.0f},
+                  -1.0f),
+          "authoring vertex picking rejects negative thresholds");
+}
+
+void TestEditorAuthoringMoveVertexUpdatesConnectedLinesAndInvalidates()
+{
+    game::SectorEditorState state;
+    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
+    AddAuthoringVertexWithId(state.authoringGraph, 3, 0, 64);
+    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+    AddAuthoringLineWithId(state.authoringGraph, 20, 3, 1);
+    Check(game::SelectSectorEditorAuthoringVertex(state, 1),
+          "move authoring vertex setup selects vertex");
+    Check(game::SetHoveredSectorEditorAuthoringVertex(state, 1),
+          "move authoring vertex setup hovers vertex");
+    const uint64_t originalRevision = state.topologyRenderRevision;
+    const std::size_t originalTopologyVertexCount = state.topologyMap.vertices.size();
+    const std::size_t originalTopologyLineCount = state.topologyMap.lineDefs.size();
+
+    Check(game::MoveSectorEditorAuthoringVertex(
+                  state,
+                  1,
+                  game::SectorTopologyCoordPoint{16, 16}),
+          "move authoring vertex helper moves the selected vertex");
+
+    const game::SectorAuthoringVertex* moved =
+            game::FindSectorAuthoringVertex(state.authoringGraph, 1);
+    Check(moved != nullptr && moved->x == 16 && moved->y == 16,
+          "move authoring vertex updates vertex coordinates");
+    const game::SectorAuthoringLine* firstLine =
+            game::FindSectorAuthoringLine(state.authoringGraph, 10);
+    const game::SectorAuthoringLine* secondLine =
+            game::FindSectorAuthoringLine(state.authoringGraph, 20);
+    Check(firstLine != nullptr && firstLine->startVertexId == 1 && firstLine->endVertexId == 2,
+          "move authoring vertex preserves first connected line endpoint IDs");
+    Check(secondLine != nullptr && secondLine->startVertexId == 3 && secondLine->endVertexId == 1,
+          "move authoring vertex preserves second connected line endpoint IDs");
+    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
+                  && state.selectedAuthoring.vertexId == 1,
+          "move authoring vertex preserves valid selection");
+    Check(state.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
+                  && state.hoveredAuthoring.vertexId == 1,
+          "move authoring vertex preserves valid hover");
+    Check(state.topologyDocumentDirty, "move authoring vertex marks document dirty");
+    Check(state.hasUnsavedChanges, "move authoring vertex marks unsaved changes");
+    Check(state.authoringDerivedTopologyStale,
+          "move authoring vertex marks derived topology stale");
+    Check(!state.topologyRenderCache.valid,
+          "move authoring vertex invalidates cached editor topology rendering");
+    Check(state.topologyRenderRevision == originalRevision + 1,
+          "move authoring vertex bumps topology render revision");
+    Check(state.topologyMap.vertices.size() == originalTopologyVertexCount
+                  && state.topologyMap.lineDefs.size() == originalTopologyLineCount,
+          "move authoring vertex does not directly mutate derived topology");
+
+    const uint64_t afterMoveRevision = state.topologyRenderRevision;
+    Check(!game::MoveSectorEditorAuthoringVertex(
+                  state,
+                  1,
+                  game::SectorTopologyCoordPoint{16, 16}),
+          "move authoring vertex helper treats unchanged coordinates as no-op");
+    Check(state.topologyRenderRevision == afterMoveRevision,
+          "unchanged authoring vertex move does not invalidate again");
+}
+
+void TestEditorAuthoringDeleteConnectedVertexIsExplicitlyRejected()
+{
+    game::SectorEditorState state;
+    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
+    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+    Check(game::SelectSectorEditorAuthoringVertex(state, 1),
+          "delete connected authoring vertex setup selects vertex");
+    const uint64_t originalRevision = state.topologyRenderRevision;
+
+    Check(!game::DeleteSectorEditorSelectedAuthoringVertex(state),
+          "delete selected authoring vertex rejects connected vertices");
+    Check(game::FindSectorAuthoringVertex(state.authoringGraph, 1) != nullptr,
+          "delete connected authoring vertex leaves vertex in graph");
+    Check(game::FindSectorAuthoringLine(state.authoringGraph, 10) != nullptr,
+          "delete connected authoring vertex leaves connected line in graph");
+    Check(!state.topologyDocumentDirty,
+          "delete connected authoring vertex does not mark document dirty");
+    Check(!state.hasUnsavedChanges,
+          "delete connected authoring vertex does not mark unsaved changes");
+    Check(state.topologyRenderRevision == originalRevision,
+          "delete connected authoring vertex does not invalidate cache");
+    Check(state.authoringDerivationStatus == "Authoring vertex is connected; delete its lines first.",
+          "delete connected authoring vertex records explicit safe-delete status");
+    Check(state.topologyMap.vertices.empty() && state.topologyMap.lineDefs.empty(),
+          "delete connected authoring vertex does not directly mutate derived topology");
+}
+
+void TestEditorAuthoringDeleteIsolatedVertexOnlyMutatesGraphAndInvalidates()
+{
+    game::SectorEditorState state;
+    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
+    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+    Check(game::SelectSectorEditorAuthoringVertex(state, 2),
+          "delete isolated authoring vertex setup selects vertex");
+    Check(game::SetHoveredSectorEditorAuthoringVertex(state, 2),
+          "delete isolated authoring vertex setup hovers vertex");
+    Check(game::DeleteSectorEditorSelectedAuthoringLine(state) == false,
+          "delete isolated authoring vertex setup keeps line because vertex is selected");
+    state.authoringGraph.lines.clear();
+    const uint64_t originalRevision = state.topologyRenderRevision;
+    const std::size_t originalTopologyVertexCount = state.topologyMap.vertices.size();
+    const std::size_t originalTopologyLineCount = state.topologyMap.lineDefs.size();
+
+    Check(game::DeleteSectorEditorSelectedAuthoringVertex(state),
+          "delete selected authoring vertex deletes isolated vertex");
+    Check(game::FindSectorAuthoringVertex(state.authoringGraph, 2) == nullptr,
+          "delete isolated authoring vertex removes vertex from graph");
+    Check(game::FindSectorAuthoringVertex(state.authoringGraph, 1) != nullptr,
+          "delete isolated authoring vertex preserves other vertices");
+    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+          "delete isolated authoring vertex prunes deleted selection");
+    Check(state.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+          "delete isolated authoring vertex prunes deleted hover");
+    Check(state.topologyDocumentDirty, "delete isolated authoring vertex marks document dirty");
+    Check(state.hasUnsavedChanges, "delete isolated authoring vertex marks unsaved changes");
+    Check(state.authoringDerivedTopologyStale,
+          "delete isolated authoring vertex marks derived topology stale");
+    Check(!state.topologyRenderCache.valid,
+          "delete isolated authoring vertex invalidates cached editor topology rendering");
+    Check(state.topologyRenderRevision == originalRevision + 1,
+          "delete isolated authoring vertex bumps topology render revision");
+    Check(state.topologyMap.vertices.size() == originalTopologyVertexCount
+                  && state.topologyMap.lineDefs.size() == originalTopologyLineCount,
+          "delete isolated authoring vertex does not directly mutate derived topology");
+}
+
+void TestEditorAuthoringEditsRefreshValidCrossingDerivation()
+{
+    game::SectorEditorState state;
+
+    int lineId = -1;
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 0},
+                  &lineId),
+          "crossing refresh setup adds south boundary");
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{64, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &lineId),
+          "crossing refresh setup adds east boundary");
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{64, 64},
+                  game::SectorTopologyCoordPoint{0, 64},
+                  &lineId),
+          "crossing refresh setup adds north boundary");
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 64},
+                  game::SectorTopologyCoordPoint{0, 0},
+                  &lineId),
+          "crossing refresh setup adds west boundary");
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &lineId),
+          "crossing refresh setup adds first diagonal");
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{64, 0},
+                  game::SectorTopologyCoordPoint{0, 64},
+                  &lineId),
+          "crossing refresh setup adds second diagonal");
+
+    Check(state.authoringDerivation.success,
+          "completed crossing graph edit refreshes successful derivation");
+    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
+          "completed crossing graph edit marks derivation current");
+    Check(!state.authoringDerivedTopologyStale,
+          "completed crossing graph edit clears stale flag");
+    Check(state.topologyMap.sectors.size() == 4,
+          "completed crossing graph edit derives four sectors");
+    Check(state.topologyMap.vertices.size() == 5,
+          "completed crossing graph edit derives inserted intersection vertex");
+    Check(state.lastValidAuthoringDerivedTopology.has_value(),
+          "completed crossing graph edit records last-valid topology");
+}
+
+void TestEditorAuthoringFailedRefreshDoesNotReplaceLastValidTopology()
+{
+    game::SectorEditorState state;
+
+    int lineId = -1;
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 0},
+                  &lineId),
+          "failed refresh setup adds south boundary");
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{64, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &lineId),
+          "failed refresh setup adds east boundary");
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{64, 64},
+                  game::SectorTopologyCoordPoint{0, 64},
+                  &lineId),
+          "failed refresh setup adds north boundary");
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 64},
+                  game::SectorTopologyCoordPoint{0, 0},
+                  &lineId),
+          "failed refresh setup adds west boundary");
+
+    Check(state.authoringDerivation.success,
+          "failed refresh setup creates current derived topology");
+    const game::SectorTopologyMap lastValid = state.topologyMap;
+
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{64, 0},
+                  game::SectorTopologyCoordPoint{128, 0},
+                  &lineId),
+          "failed refresh test adds dangling line");
+
+    Check(!state.authoringDerivation.success,
+          "failed refresh records failed derivation");
+    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidLastValid,
+          "failed refresh keeps invalid/last-valid state");
+    Check(state.authoringDerivedTopologyStale,
+          "failed refresh keeps derived topology stale");
+    Check(!state.authoringDerivation.diagnostics.empty(),
+          "failed refresh records diagnostics");
+    Check(state.topologyMap.sectors.size() == lastValid.sectors.size()
+                  && state.topologyMap.lineDefs.size() == lastValid.lineDefs.size()
+                  && state.topologyMap.vertices.size() == lastValid.vertices.size(),
+          "failed refresh does not replace current derived topology");
+    Check(state.lastValidAuthoringDerivedTopology.has_value()
+                  && state.lastValidAuthoringDerivedTopology->sectors.size() == lastValid.sectors.size(),
+          "failed refresh keeps memory-only last-valid topology");
+}
+
+void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
+{
+    Check(TextContains(game::ToolName(game::SectorEditorTool::AuthoringLine), "Authoring"),
+          "authoring line tool name is exposed as an authoring graph tool");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::AuthoringLine), "start/end"),
+          "authoring line tool help describes mouse-driven line creation");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Select), "authoring"),
+          "select tool help includes authoring graph selection targets");
+
+    Check(TextContains(game::ToolName(game::SectorEditorTool::Sector), "Legacy"),
+          "closed-sector polygon tool is labeled as legacy in the tools pane");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Sector), "Legacy"),
+          "closed-sector polygon help distinguishes legacy topology mutation");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Move), "legacy topology"),
+          "topology move help distinguishes legacy topology mutation");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Erase), "legacy topology"),
+          "topology erase help distinguishes legacy topology mutation");
+}
+
 void TestEditorAuthoringLastValidTopologyIsNotPersisted()
 {
     game::SectorEditorState state;
@@ -1796,6 +2386,20 @@ int main()
     TestAuthoringOverlayRenderCacheIncludesReferenceDiagnostics();
     TestEditorAuthoringSuccessfulDerivationUpdatesState();
     TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics();
+    TestEditorAuthoringSelectionTargetsRepresentLineAndVertex();
+    TestEditorAuthoringSelectionHelpersSetClearAndRejectMissingTargets();
+    TestEditorAuthoringHoverAndPruneUseGraphValidity();
+    TestEditorAuthoringLineDrawHelperCreatesLooseLineAndMarksDirty();
+    TestEditorAuthoringLineDrawHelperReusesVerticesAndRejectsZeroLength();
+    TestEditorAuthoringLinePickingFindsNearestValidLine();
+    TestEditorAuthoringDeleteSelectedLineOnlyMutatesGraphAndInvalidates();
+    TestEditorAuthoringVertexPickingFindsNearestValidVertex();
+    TestEditorAuthoringMoveVertexUpdatesConnectedLinesAndInvalidates();
+    TestEditorAuthoringDeleteConnectedVertexIsExplicitlyRejected();
+    TestEditorAuthoringDeleteIsolatedVertexOnlyMutatesGraphAndInvalidates();
+    TestEditorAuthoringEditsRefreshValidCrossingDerivation();
+    TestEditorAuthoringFailedRefreshDoesNotReplaceLastValidTopology();
+    TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools();
     TestEditorAuthoringLastValidTopologyIsNotPersisted();
 
     if (failures != 0) {

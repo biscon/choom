@@ -22,6 +22,8 @@ struct SectorEditorTopologyDrawContext {
     bool hasHoveredVertex = false;
     int hoveredVertexId = -1;
     int hoveredLightId = -1;
+    SectorAuthoringSelectionTarget selectedAuthoring;
+    SectorAuthoringSelectionTarget hoveredAuthoring;
 };
 
 SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
