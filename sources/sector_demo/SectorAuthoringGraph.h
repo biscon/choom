@@ -179,6 +179,15 @@ enum class SectorAuthoringDerivationDiagnosticKind {
     AuthoringReference,
     Planarization,
     FaceExtraction,
+    DanglingLine,
+    ZeroLengthLine,
+    DuplicateLine,
+    CollinearOverlap,
+    NearMiss,
+    TinySliverFace,
+    AmbiguousFaceAnchor,
+    UnresolvedFaceAnchor,
+    InvalidSideProjection,
     NonIntegerVertex,
     InvalidTopology
 };
@@ -187,6 +196,7 @@ struct SectorAuthoringDerivationDiagnostic {
     SectorAuthoringValidationSeverity severity = SectorAuthoringValidationSeverity::Error;
     SectorAuthoringDerivationDiagnosticKind kind = SectorAuthoringDerivationDiagnosticKind::AuthoringReference;
     int objectId = -1;
+    int relatedObjectId = -1;
     std::string message;
 };
 
@@ -200,16 +210,20 @@ struct SectorAuthoringDerivedLineMapping {
     int planarEdgeId = -1;
     int authoringLineId = -1;
     int topologyLineDefId = -1;
+    int sourceLineId = -1;
 };
 
 struct SectorAuthoringDerivedSideMapping {
     int authoringLineId = -1;
     SectorTopologySideKind authoringSide = SectorTopologySideKind::Front;
     int topologySideDefId = -1;
+    int topologyLineDefId = -1;
+    int topologySectorId = -1;
 };
 
 struct SectorAuthoringDerivedSectorMapping {
     int extractedFaceId = -1;
+    int faceAnchorId = -1;
     int topologySectorId = -1;
 };
 

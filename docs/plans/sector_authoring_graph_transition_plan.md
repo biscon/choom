@@ -53,14 +53,14 @@ Suggested path:
       "id": "phase_06_diagnostics_and_mapping",
       "title": "Add derivation diagnostics and ID mapping",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {
       "id": "phase_07_property_projection",
       "title": "Project authoring properties into derived topology",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {

@@ -82,6 +82,32 @@ bool HasDerivationDiagnostic(
     return false;
 }
 
+bool HasDerivationDiagnosticFor(
+        const std::vector<game::SectorAuthoringDerivationDiagnostic>& diagnostics,
+        game::SectorAuthoringDerivationDiagnosticKind kind,
+        int objectId)
+{
+    for (const game::SectorAuthoringDerivationDiagnostic& diagnostic : diagnostics) {
+        if (diagnostic.kind == kind && diagnostic.objectId == objectId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const game::SectorAuthoringDerivationDiagnostic* FindDerivationDiagnosticFor(
+        const std::vector<game::SectorAuthoringDerivationDiagnostic>& diagnostics,
+        game::SectorAuthoringDerivationDiagnosticKind kind,
+        int objectId)
+{
+    for (const game::SectorAuthoringDerivationDiagnostic& diagnostic : diagnostics) {
+        if (diagnostic.kind == kind && diagnostic.objectId == objectId) {
+            return &diagnostic;
+        }
+    }
+    return nullptr;
+}
+
 void AddAuthoringVertexWithId(game::SectorAuthoringGraph& graph, int id, game::SectorCoord x, game::SectorCoord y)
 {
     graph.vertices.push_back(game::SectorAuthoringVertex{id, x, y});
@@ -174,6 +200,56 @@ int CountPlanarEdgesForLine(const game::SectorAuthoringPlanarizationResult& resu
         }
     }
     return count;
+}
+
+int CountDerivedLineMappingsForAuthoringLine(
+        const game::SectorAuthoringDerivationMapping& mapping,
+        int lineId)
+{
+    int count = 0;
+    for (const game::SectorAuthoringDerivedLineMapping& lineMapping : mapping.lines) {
+        if (lineMapping.authoringLineId == lineId) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+const game::SectorAuthoringDerivedSectorMapping* FindSectorMappingForAnchor(
+        const game::SectorAuthoringDerivationMapping& mapping,
+        int anchorId)
+{
+    for (const game::SectorAuthoringDerivedSectorMapping& sectorMapping : mapping.sectors) {
+        if (sectorMapping.faceAnchorId == anchorId) {
+            return &sectorMapping;
+        }
+    }
+    return nullptr;
+}
+
+const game::SectorTopologyLineDef* FindDerivedLineDefForAuthoringLine(
+        const game::SectorAuthoringDerivationResult& result,
+        int authoringLineId)
+{
+    for (const game::SectorAuthoringDerivedLineMapping& lineMapping : result.mapping.lines) {
+        if (lineMapping.authoringLineId == authoringLineId) {
+            return game::FindSectorTopologyLineDef(result.topology, lineMapping.topologyLineDefId);
+        }
+    }
+    return nullptr;
+}
+
+const game::SectorTopologySideDef* FindDerivedSideDefForAuthoringSide(
+        const game::SectorAuthoringDerivationResult& result,
+        int authoringLineId,
+        game::SectorTopologySideKind side)
+{
+    for (const game::SectorAuthoringDerivedSideMapping& sideMapping : result.mapping.sides) {
+        if (sideMapping.authoringLineId == authoringLineId && sideMapping.authoringSide == side) {
+            return game::FindSectorTopologySideDef(result.topology, sideMapping.topologySideDefId);
+        }
+    }
+    return nullptr;
 }
 
 game::SectorAuthoringFaceExtractionResult ExtractFacesFromGraph(const game::SectorAuthoringGraph& graph)
@@ -1105,8 +1181,352 @@ void TestDeriveDuplicateLinesFail()
     Check(result.topology.lineDefs.empty(), "duplicate line graph returns no derived linedefs");
     Check(HasDerivationDiagnostic(
                   result.diagnostics,
-                  game::SectorAuthoringDerivationDiagnosticKind::Planarization),
-          "duplicate line graph reports planarization diagnostic");
+                  game::SectorAuthoringDerivationDiagnosticKind::DuplicateLine),
+          "duplicate line graph reports duplicate line diagnostic");
+}
+
+void TestDeriveDiagnosticsUseSpecificKindsAndSources()
+{
+    const game::SectorAuthoringGraph openGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}},
+            {{1, 2}, {2, 3}});
+    const game::SectorAuthoringDerivationResult openResult =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(openGraph);
+    Check(HasDerivationDiagnostic(
+                  openResult.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::DanglingLine),
+          "open graph derivation reports explicit dangling line diagnostic");
+
+    const game::SectorAuthoringGraph duplicateGraph = MakeGraphFromLines({
+            {0, 0}, {32, 0},
+            {32, 0}, {0, 0}});
+    const game::SectorAuthoringDerivationResult duplicateResult =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(duplicateGraph);
+    Check(HasDerivationDiagnosticFor(
+                  duplicateResult.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::DuplicateLine,
+                  10),
+          "duplicate line derivation diagnostic includes source line ID");
+    Check(!duplicateResult.diagnostics.empty()
+                  && duplicateResult.diagnostics.front().relatedObjectId == 11,
+          "duplicate line derivation diagnostic includes related line ID");
+
+    const game::SectorAuthoringGraph overlapGraph = MakeGraphFromLines({
+            {0, 0}, {64, 0},
+            {32, 0}, {96, 0}});
+    const game::SectorAuthoringDerivationResult overlapResult =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(overlapGraph);
+    Check(HasDerivationDiagnostic(
+                  overlapResult.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::CollinearOverlap),
+          "overlap derivation reports explicit collinear overlap diagnostic");
+}
+
+void TestDeriveDanglingLineDiagnosticUsesAuthoringLineId()
+{
+    const int danglingLineId = 14;
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}, {96, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {3, 5}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    Check(!result.success, "dangling line graph fails derivation");
+    const game::SectorAuthoringDerivationDiagnostic* diagnostic = FindDerivationDiagnosticFor(
+            result.diagnostics,
+            game::SectorAuthoringDerivationDiagnosticKind::DanglingLine,
+            danglingLineId);
+    Check(diagnostic != nullptr, "dangling line diagnostic uses authoring line ID");
+
+    int danglingPlanarEdgeId = -1;
+    for (const game::SectorAuthoringPlanarEdge& edge : result.planar.edges) {
+        if (edge.sourceLineId == danglingLineId) {
+            danglingPlanarEdgeId = edge.id;
+            break;
+        }
+    }
+    Check(danglingPlanarEdgeId > 0, "dangling line planar edge is available for comparison");
+    if (diagnostic != nullptr && danglingPlanarEdgeId > 0) {
+        Check(diagnostic->objectId != danglingPlanarEdgeId,
+              "dangling line diagnostic does not use internal planar edge ID as primary object");
+        Check(diagnostic->relatedObjectId == danglingPlanarEdgeId,
+              "dangling line diagnostic keeps internal planar edge ID as related data");
+    }
+}
+
+void TestDeriveSplitLineMapping()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {1, 3}, {2, 4}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "split-line mapping graph derives valid topology");
+    Check(CountDerivedLineMappingsForAuthoringLine(result.mapping, 14) == 2,
+          "planarized diagonal maps one authoring line to two derived linedefs");
+    for (const game::SectorAuthoringDerivedLineMapping& lineMapping : result.mapping.lines) {
+        if (lineMapping.authoringLineId == 14) {
+            Check(lineMapping.sourceLineId == 14, "line mapping records derived back-source line ID");
+            Check(lineMapping.topologyLineDefId > 0, "split line mapping records derived linedef ID");
+        }
+    }
+}
+
+void TestDeriveFaceAnchorMapping()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    game::SectorAuthoringFaceAnchor anchor;
+    anchor.id = 200;
+    anchor.x = 32;
+    anchor.y = 32;
+    graph.faceAnchors.push_back(anchor);
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "anchored square derives valid topology");
+    const game::SectorAuthoringDerivedSectorMapping* sectorMapping =
+            FindSectorMappingForAnchor(result.mapping, 200);
+    Check(sectorMapping != nullptr, "face anchor maps to derived sector");
+    if (sectorMapping != nullptr) {
+        Check(sectorMapping->extractedFaceId > 0, "sector mapping records extracted face ID");
+        Check(sectorMapping->faceAnchorId == 200, "sector mapping records face anchor ID");
+        Check(sectorMapping->topologySectorId == 200, "derived sector uses unambiguous face anchor ID");
+    }
+}
+
+void TestDeriveFaceAnchorDiagnostics()
+{
+    game::SectorAuthoringGraph unresolvedGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    game::SectorAuthoringFaceAnchor unresolvedAnchor;
+    unresolvedAnchor.id = 300;
+    unresolvedAnchor.x = 128;
+    unresolvedAnchor.y = 128;
+    unresolvedGraph.faceAnchors.push_back(unresolvedAnchor);
+
+    const game::SectorAuthoringDerivationResult unresolvedResult =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(unresolvedGraph);
+    Check(!unresolvedResult.success, "unresolved face anchor fails derivation cleanly");
+    Check(HasDerivationDiagnosticFor(
+                  unresolvedResult.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::UnresolvedFaceAnchor,
+                  300),
+          "unresolved face anchor reports explicit diagnostic with anchor ID");
+
+    game::SectorAuthoringGraph ambiguousGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    game::SectorAuthoringFaceAnchor firstAnchor;
+    firstAnchor.id = 400;
+    firstAnchor.x = 32;
+    firstAnchor.y = 32;
+    ambiguousGraph.faceAnchors.push_back(firstAnchor);
+    game::SectorAuthoringFaceAnchor secondAnchor;
+    secondAnchor.id = 401;
+    secondAnchor.x = 48;
+    secondAnchor.y = 48;
+    ambiguousGraph.faceAnchors.push_back(secondAnchor);
+
+    const game::SectorAuthoringDerivationResult ambiguousResult =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(ambiguousGraph);
+    Check(!ambiguousResult.success, "multiple anchors in one face fail derivation cleanly");
+    Check(HasDerivationDiagnostic(
+                  ambiguousResult.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::AmbiguousFaceAnchor),
+          "multiple anchors in one face report ambiguous face anchor diagnostic");
+}
+
+void TestDeriveInvalidSideProjectionDiagnostic()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    game::SectorAuthoringLineSide side;
+    side.id.lineId = 999;
+    side.id.side = game::SectorTopologySideKind::Front;
+    graph.lineSides.push_back(side);
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    Check(!result.success, "invalid side projection fails derivation cleanly");
+    Check(HasDerivationDiagnosticFor(
+                  result.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::InvalidSideProjection,
+                  999),
+          "invalid side projection reports explicit diagnostic with source line ID");
+}
+
+void TestDeriveProjectsFaceAnchorProperties()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    game::SectorAuthoringFaceAnchor anchor;
+    anchor.id = 200;
+    anchor.name = "projected";
+    anchor.x = 32;
+    anchor.y = 32;
+    anchor.floorZ = -4.0f;
+    anchor.ceilingZ = 48.0f;
+    anchor.floorTextureId = "floor_projected";
+    anchor.ceilingTextureId = "ceiling_projected";
+    anchor.ceilingSky = true;
+    anchor.floorUv.scale = Vector2{2.0f, 3.0f};
+    anchor.floorUv.offset = Vector2{4.0f, 5.0f};
+    anchor.ceilingUv.scale = Vector2{6.0f, 7.0f};
+    anchor.ceilingUv.offset = Vector2{8.0f, 9.0f};
+    anchor.floorDecal.textureId = "floor_decal_projected";
+    anchor.ceilingDecal.textureId = "ceiling_decal_projected";
+    anchor.ambientColor = Color{12, 24, 36, 255};
+    anchor.ambientIntensity = 0.45f;
+    anchor.defaultWall = WallPart("anchor_wall", 1.0f, 2.0f, 3.0f, 4.0f);
+    anchor.defaultLower = WallPart("anchor_lower", 2.0f, 3.0f, 4.0f, 5.0f);
+    anchor.defaultUpper = WallPart("anchor_upper", 3.0f, 4.0f, 5.0f, 6.0f);
+    graph.faceAnchors.push_back(anchor);
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "face anchor property projection derives valid topology");
+    const game::SectorTopologySector* sector = game::FindSectorTopologySector(result.topology, 200);
+    Check(sector != nullptr, "projected face anchor uses anchor ID as derived sector ID");
+    if (sector != nullptr) {
+        Check(anchor.id == sector->id, "projected sector keeps anchor ID");
+        Check(anchor.name == sector->name, "projected sector keeps anchor name");
+        Check(anchor.floorZ == sector->floorZ, "projected sector keeps floor height");
+        Check(anchor.ceilingZ == sector->ceilingZ, "projected sector keeps ceiling height");
+        Check(anchor.floorTextureId == sector->floorTextureId, "projected sector keeps floor texture");
+        Check(anchor.ceilingTextureId == sector->ceilingTextureId, "projected sector keeps ceiling texture");
+        Check(sector->ceilingSky, "projected sector keeps ceiling sky");
+        Check(SameUv(anchor.floorUv, sector->floorUv), "projected sector keeps floor UV");
+        Check(SameUv(anchor.ceilingUv, sector->ceilingUv), "projected sector keeps ceiling UV");
+        Check(anchor.floorDecal.textureId == sector->floorDecal.textureId, "projected sector keeps floor decal");
+        Check(anchor.ceilingDecal.textureId == sector->ceilingDecal.textureId, "projected sector keeps ceiling decal");
+        Check(anchor.ambientColor.r == sector->ambientColor.r
+                      && anchor.ambientColor.g == sector->ambientColor.g
+                      && anchor.ambientColor.b == sector->ambientColor.b
+                      && anchor.ambientColor.a == sector->ambientColor.a,
+              "projected sector keeps ambient color");
+        Check(anchor.ambientIntensity == sector->ambientIntensity, "projected sector keeps ambient intensity");
+        CheckWallPartCopied(sector->defaultWall, anchor.defaultWall, "projected sector keeps default wall");
+        CheckWallPartCopied(sector->defaultLower, anchor.defaultLower, "projected sector keeps default lower");
+        CheckWallPartCopied(sector->defaultUpper, anchor.defaultUpper, "projected sector keeps default upper");
+    }
+}
+
+void TestDeriveProjectsSideMaterialsAndLineFlags()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    if (game::SectorAuthoringLine* line = game::FindSectorAuthoringLine(graph, 10)) {
+        line->flags.blocksPlayer = true;
+    }
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall = WallPart("side_wall", 1.0f, 2.0f, 3.0f, 4.0f);
+    side.lower = WallPart("side_lower", 2.0f, 3.0f, 4.0f, 5.0f);
+    side.upper = WallPart("side_upper", 3.0f, 4.0f, 5.0f, 6.0f);
+    side.middle = WallPart("side_middle", 4.0f, 5.0f, 6.0f, 7.0f);
+    side.middle.decal.textureId = "side_middle_decal";
+    side.middle.decal.opacity = 0.25f;
+    graph.lineSides.push_back(side);
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "side material projection derives valid topology");
+    const game::SectorTopologyLineDef* lineDef = FindDerivedLineDefForAuthoringLine(result, 10);
+    Check(lineDef != nullptr && lineDef->flags.blocksPlayer, "authoring line blocksPlayer projects to derived linedef");
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            result,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "authoring side maps to a derived sidedef");
+    if (sideDef != nullptr) {
+        CheckWallPartCopied(sideDef->wall, side.wall, "authoring side wall projects to derived sidedef");
+        CheckWallPartCopied(sideDef->lower, side.lower, "authoring side lower projects to derived sidedef");
+        CheckWallPartCopied(sideDef->upper, side.upper, "authoring side upper projects to derived sidedef");
+        CheckWallPartCopied(sideDef->middle, side.middle, "authoring side middle projects to derived sidedef");
+    }
+}
+
+void TestDeriveSplitLineDuplicatesProjectedProperties()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {1, 3}, {2, 4}});
+    if (game::SectorAuthoringLine* diagonal = game::FindSectorAuthoringLine(graph, 14)) {
+        diagonal->flags.blocksPlayer = true;
+    }
+    game::SectorAuthoringLineSide frontSide;
+    frontSide.id = game::SectorAuthoringSideId{14, game::SectorTopologySideKind::Front};
+    frontSide.wall = WallPart("split_front_wall", 1.0f, 2.0f, 3.0f, 4.0f);
+    graph.lineSides.push_back(frontSide);
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "split-line property projection derives valid topology");
+    int projectedLineCount = 0;
+    int projectedFrontSideCount = 0;
+    for (const game::SectorAuthoringDerivedLineMapping& lineMapping : result.mapping.lines) {
+        if (lineMapping.authoringLineId != 14) {
+            continue;
+        }
+        const game::SectorTopologyLineDef* lineDef =
+                game::FindSectorTopologyLineDef(result.topology, lineMapping.topologyLineDefId);
+        Check(lineDef != nullptr && lineDef->flags.blocksPlayer, "split derived linedef keeps source line flag");
+        ++projectedLineCount;
+    }
+    for (const game::SectorAuthoringDerivedSideMapping& sideMapping : result.mapping.sides) {
+        if (sideMapping.authoringLineId != 14
+                || sideMapping.authoringSide != game::SectorTopologySideKind::Front) {
+            continue;
+        }
+        const game::SectorTopologySideDef* sideDef =
+                game::FindSectorTopologySideDef(result.topology, sideMapping.topologySideDefId);
+        Check(sideDef != nullptr && sideDef->wall.textureId == "split_front_wall",
+              "split derived sidedef keeps source side wall material");
+        ++projectedFrontSideCount;
+    }
+    Check(projectedLineCount == 2, "split source line projects flags to both child linedefs");
+    Check(projectedFrontSideCount == 2, "split source side projects materials to both child sidedefs");
+}
+
+void TestDeriveUnresolvedAnchorPreservesAuthoringProperties()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    game::SectorAuthoringFaceAnchor unresolvedAnchor;
+    unresolvedAnchor.id = 300;
+    unresolvedAnchor.x = 128;
+    unresolvedAnchor.y = 128;
+    unresolvedAnchor.floorTextureId = "unresolved_floor";
+    graph.faceAnchors.push_back(unresolvedAnchor);
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    Check(!result.success, "unresolved property anchor fails derivation");
+    Check(HasDerivationDiagnosticFor(
+                  result.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::UnresolvedFaceAnchor,
+                  300),
+          "unresolved property anchor reports diagnostic");
+    const game::SectorAuthoringFaceAnchor* preserved =
+            game::FindSectorAuthoringFaceAnchor(graph, 300);
+    Check(preserved != nullptr && preserved->floorTextureId == "unresolved_floor",
+          "unresolved anchor properties remain in authoring graph");
 }
 
 void TestDerivedTopologyBuildsGeometry()
@@ -1170,6 +1590,16 @@ int main()
     TestDeriveSquareWithMixedLineDirections();
     TestDeriveOpenGraphFails();
     TestDeriveDuplicateLinesFail();
+    TestDeriveDiagnosticsUseSpecificKindsAndSources();
+    TestDeriveDanglingLineDiagnosticUsesAuthoringLineId();
+    TestDeriveSplitLineMapping();
+    TestDeriveFaceAnchorMapping();
+    TestDeriveFaceAnchorDiagnostics();
+    TestDeriveInvalidSideProjectionDiagnostic();
+    TestDeriveProjectsFaceAnchorProperties();
+    TestDeriveProjectsSideMaterialsAndLineFlags();
+    TestDeriveSplitLineDuplicatesProjectedProperties();
+    TestDeriveUnresolvedAnchorPreservesAuthoringProperties();
     TestDerivedTopologyBuildsGeometry();
 
     if (failures != 0) {
