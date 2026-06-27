@@ -18,21 +18,21 @@ Suggested path:
       "id": "phase_01_authoring_graph_model",
       "title": "Add AuthoringGraph data model only",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {
       "id": "phase_02_topology_v2_import",
       "title": "Add topology-v2 to AuthoringGraph import",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {
       "id": "phase_03_planarization_autosplit",
       "title": "Add authoring graph planarization and auto-split",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {
