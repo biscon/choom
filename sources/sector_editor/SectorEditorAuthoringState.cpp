@@ -290,6 +290,55 @@ bool FindSectorEditorAuthoringVertexNearMapPoint(
     return true;
 }
 
+bool FindSectorEditorAuthoringSelectionNearMapPoint(
+        const SectorAuthoringGraph& graph,
+        Vector2 mapPoint,
+        float vertexMaxDistance,
+        float lineMaxDistance,
+        SectorAuthoringSelectionTarget* outTarget,
+        SectorTopologyCoordPoint* outVertexPoint)
+{
+    int vertexId = -1;
+    SectorTopologyCoordPoint vertexPoint{};
+    if (FindSectorEditorAuthoringVertexNearMapPoint(
+                graph,
+                mapPoint,
+                vertexMaxDistance,
+                &vertexId,
+                &vertexPoint)) {
+        if (outTarget != nullptr) {
+            *outTarget = MakeSectorAuthoringVertexSelectionTarget(vertexId);
+        }
+        if (outVertexPoint != nullptr) {
+            *outVertexPoint = vertexPoint;
+        }
+        return true;
+    }
+
+    int lineId = -1;
+    if (FindSectorEditorAuthoringLineNearMapPoint(
+                graph,
+                mapPoint,
+                lineMaxDistance,
+                &lineId)) {
+        if (outTarget != nullptr) {
+            *outTarget = MakeSectorAuthoringLineSelectionTarget(lineId);
+        }
+        if (outVertexPoint != nullptr) {
+            *outVertexPoint = SectorTopologyCoordPoint{};
+        }
+        return true;
+    }
+
+    if (outTarget != nullptr) {
+        *outTarget = EmptyAuthoringSelectionTarget();
+    }
+    if (outVertexPoint != nullptr) {
+        *outVertexPoint = SectorTopologyCoordPoint{};
+    }
+    return false;
+}
+
 bool AddSectorEditorAuthoringLineSegment(
         SectorEditorState& state,
         SectorTopologyCoordPoint start,

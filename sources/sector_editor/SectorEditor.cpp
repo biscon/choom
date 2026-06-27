@@ -364,38 +364,42 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
         return;
     }
 
-    if (state.currentTool == SectorEditorTool::Move || state.currentTool == SectorEditorTool::Select) {
+    if (state.currentTool == SectorEditorTool::Select) {
+        SectorAuthoringSelectionTarget target;
+        SectorTopologyCoordPoint authoringVertexPoint{};
+        if (FindAuthoringSelectionNearScreenPoint(
+                    input.MousePosition(),
+                    target,
+                    authoringVertexPoint)) {
+            if (target.kind == SectorAuthoringSelectionKind::Vertex) {
+                SetHoveredSectorEditorAuthoringVertex(state, target.vertexId);
+            } else if (target.kind == SectorAuthoringSelectionKind::Line) {
+                SetHoveredSectorEditorAuthoringLine(state, target.lineId);
+            }
+        }
+        state.inspectedTopologyVertexId = -1;
+        return;
+    }
+
+    if (state.currentTool == SectorEditorTool::AuthoringMove) {
+        int authoringVertexId = -1;
+        SectorTopologyCoordPoint authoringVertexPoint{};
+        if (FindAuthoringVertexNearScreenPoint(
+                    input.MousePosition(),
+                    authoringVertexId,
+                    authoringVertexPoint)) {
+            SetHoveredSectorEditorAuthoringVertex(state, authoringVertexId);
+        }
+        state.inspectedTopologyVertexId = -1;
+        return;
+    }
+
+    if (state.currentTool == SectorEditorTool::Move) {
         const int lightId = FindTopologyLightNearScreenPoint(input.MousePosition());
         if (lightId >= 0) {
             state.hoveredTopologyLightId = lightId;
             if (!state.pendingTopologyVertexMerge.active) {
                 state.inspectedTopologyVertexId = -1;
-            }
-        } else if (state.currentTool == SectorEditorTool::Select) {
-            int authoringVertexId = -1;
-            SectorTopologyCoordPoint authoringVertexPoint{};
-            if (FindAuthoringVertexNearScreenPoint(
-                        input.MousePosition(),
-                        authoringVertexId,
-                        authoringVertexPoint)) {
-                SetHoveredSectorEditorAuthoringVertex(state, authoringVertexId);
-                state.inspectedTopologyVertexId = -1;
-            } else {
-                int vertexId = -1;
-                SectorTopologyCoordPoint point;
-                if (FindTopologyVertexNearScreenPoint(input.MousePosition(), vertexId, point)) {
-                    state.hasHoveredVertex = true;
-                    state.hoveredTopologyVertexId = vertexId;
-                    state.hoveredTopologyVertexPoint = point;
-                    state.inspectedTopologyVertexId = vertexId;
-                } else if (const int authoringLineId =
-                                   FindAuthoringLineNearScreenPoint(input.MousePosition());
-                           authoringLineId >= 0) {
-                    SetHoveredSectorEditorAuthoringLine(state, authoringLineId);
-                    state.inspectedTopologyVertexId = -1;
-                } else if (!state.pendingTopologyVertexMerge.active) {
-                    state.inspectedTopologyVertexId = -1;
-                }
             }
         } else {
             int vertexId = -1;
@@ -463,7 +467,15 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (event.key.key == KEY_DELETE) {
-                    if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line) {
+                    if (IsGraphAuthoringTool(state.currentTool)) {
+                        if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line) {
+                            DeleteSelectedAuthoringLine();
+                        } else if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex) {
+                            DeleteSelectedAuthoringVertex();
+                        } else {
+                            statusText = "Select an authoring line or isolated authoring vertex to delete.";
+                        }
+                    } else if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line) {
                         DeleteSelectedAuthoringLine();
                     } else if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex) {
                         DeleteSelectedAuthoringVertex();
@@ -688,7 +700,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
             engine::InputEventType::MouseButtonPressed,
             true,
             [this](engine::InputEvent& event) {
-                if (state.currentTool == SectorEditorTool::Select
+                if (state.currentTool == SectorEditorTool::AuthoringMove
                         && event.mouseButton.button == MOUSE_LEFT_BUTTON
                         && Contains(canvasRect, event.mouseButton.position)) {
                     int authoringVertexId = -1;
@@ -698,6 +710,9 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                                 authoringVertexId,
                                 point)) {
                         StartAuthoringVertexDrag(authoringVertexId, point);
+                        engine::ConsumeEvent(event);
+                    } else {
+                        statusText = "Move Vertex: click an authoring vertex";
                         engine::ConsumeEvent(event);
                     }
                     return;
@@ -764,90 +779,25 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::Select) {
-                    const int lightId = FindTopologyLightNearScreenPoint(event.mouseClick.releasePosition);
-                    if (lightId >= 0) {
-                        SelectTopologyLight(lightId);
-                        statusText = TextFormat("Selected topology light %d", lightId);
-                        engine::ConsumeEvent(event);
-                        return;
-                    }
-
-                    int authoringVertexId = -1;
+                    SectorAuthoringSelectionTarget target;
                     SectorTopologyCoordPoint authoringVertexPoint{};
-                    if (FindAuthoringVertexNearScreenPoint(
+                    if (FindAuthoringSelectionNearScreenPoint(
                                 event.mouseClick.releasePosition,
-                                authoringVertexId,
+                                target,
                                 authoringVertexPoint)) {
-                        SelectAuthoringVertex(authoringVertexId);
-                        statusText = TextFormat("Selected authoring vertex %d", authoringVertexId);
-                        engine::ConsumeEvent(event);
-                        return;
-                    }
-
-                    int vertexId = -1;
-                    SectorTopologyCoordPoint vertexPoint;
-                    if (FindTopologyVertexNearScreenPoint(
-                                event.mouseClick.releasePosition,
-                                vertexId,
-                                vertexPoint)) {
-                        SelectTopologyVertex(vertexId);
-                        statusText = TextFormat("Selected topology vertex %d", vertexId);
-                        engine::ConsumeEvent(event);
-                        return;
-                    }
-
-                    int lineDefId = -1;
-                    int sideDefId = -1;
-                    SectorTopologySideKind side = SectorTopologySideKind::Front;
-                    bool preferredMissing = false;
-                    const int authoringLineId =
-                            FindAuthoringLineNearScreenPoint(event.mouseClick.releasePosition);
-                    if (authoringLineId >= 0) {
-                        SelectAuthoringLine(authoringLineId);
-                        statusText = TextFormat("Selected authoring line %d", authoringLineId);
-                        engine::ConsumeEvent(event);
-                        return;
-                    }
-
-                    if (FindTopologyLineNearScreenPoint(
-                                event.mouseClick.releasePosition,
-                                ScreenToMap(event.mouseClick.releasePosition),
-                                lineDefId,
-                                sideDefId,
-                                side,
-                                preferredMissing)) {
-                        if (sideDefId >= 0) {
-                            SelectTopologySideDef(sideDefId, state.selectedTopologyWallPart);
-                            statusText = preferredMissing
-                                    ? TextFormat(
-                                            "Selected topology %s sidedef %d; clicked side has no sidedef",
-                                            SectorTopologySideKindName(side),
-                                            sideDefId)
-                                    : TextFormat(
-                                            "Selected topology %s sidedef %d",
-                                            SectorTopologySideKindName(side),
-                                            sideDefId);
-                        } else {
-                            SelectTopologyLineDef(lineDefId, side, state.selectedTopologyWallPart);
-                            statusText = TextFormat("Selected topology linedef %d (no sidedef)", lineDefId);
+                        if (target.kind == SectorAuthoringSelectionKind::Vertex) {
+                            SelectAuthoringVertex(target.vertexId);
+                            statusText = TextFormat("Selected authoring vertex %d", target.vertexId);
+                        } else if (target.kind == SectorAuthoringSelectionKind::Line) {
+                            SelectAuthoringLine(target.lineId);
+                            statusText = TextFormat("Selected authoring line %d", target.lineId);
                         }
                         engine::ConsumeEvent(event);
                         return;
                     }
 
-                    bool multipleMatches = false;
-                    const int sectorId = FindTopologySectorAt(
-                            ScreenToMap(event.mouseClick.releasePosition),
-                            &multipleMatches);
-                    if (sectorId >= 0) {
-                        SelectTopologySector(sectorId);
-                        statusText = multipleMatches
-                                ? TextFormat("Selected topology sector %d (lowest ID on boundary)", sectorId)
-                                : TextFormat("Selected topology sector %d", sectorId);
-                    } else {
-                        ClearSelection();
-                        statusText = "Selected: none";
-                    }
+                    ClearSelection();
+                    statusText = "Selected authoring: none";
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -899,6 +849,12 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
 
                 if (state.currentTool == SectorEditorTool::Move) {
                     statusText = "Move: click a topology light or vertex";
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
+                if (state.currentTool == SectorEditorTool::AuthoringMove) {
+                    statusText = "Move Vertex: click an authoring vertex";
                     engine::ConsumeEvent(event);
                 }
             }
@@ -1089,6 +1045,7 @@ void SectorEditor::StartAuthoringVertexDrag(int vertexId, SectorTopologyCoordPoi
     }
 
     SelectAuthoringVertex(vertexId);
+    ClearTopologySelectionOnly();
     state.authoringVertexDrag.active = true;
     state.authoringVertexDrag.vertexId = vertexId;
     state.authoringVertexDrag.originalPoint = point;
@@ -2018,6 +1975,8 @@ void SectorEditor::CancelPendingAuthoringLine(const char* message)
 
 void SectorEditor::AddAuthoringLinePoint(SectorPoint point)
 {
+    ClearTopologySelectionOnly();
+
     std::string error;
     SectorTopologyCoordPoint topologyPoint;
     if (!ToTopologyCoordPoint(point, topologyPoint, error)) {
@@ -4260,7 +4219,7 @@ void SectorEditor::DrawVertexMoveOverlay() const
 
 void SectorEditor::DrawAuthoringVertexMoveOverlay() const
 {
-    if (state.currentTool != SectorEditorTool::Select
+    if (state.currentTool != SectorEditorTool::AuthoringMove
             && !state.authoringVertexDrag.active) {
         return;
     }
@@ -4559,7 +4518,22 @@ void SectorEditor::DrawToolsPanel(
 
     const float rowH = 46.0f;
     const float gap = config.rowSpacing;
-    const float toolsContentH = 1166.0f;
+    const float separatorH = 22.0f;
+    const float sectionLabelH = 26.0f;
+    const float lightmapLabelH = 32.0f;
+    const float bottomPadding = rowH + gap * 2.0f;
+    const auto rowsHeight = [rowH, gap](int count) {
+        return static_cast<float>(count) * (rowH + gap);
+    };
+    const float toolsContentH =
+            sectionLabelH + rowsHeight(3)
+            + separatorH + sectionLabelH + rowsHeight(1)
+            + separatorH + sectionLabelH + rowsHeight(3)
+            + separatorH + rowsHeight(4)
+            + lightmapLabelH + rowsHeight(5)
+            + separatorH + rowsHeight(4)
+            + separatorH + rowsHeight(1)
+            + bottomPadding;
     const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
             ui,
@@ -4630,7 +4604,7 @@ void SectorEditor::DrawToolsPanel(
         if (state.vertexDrag.active && tool != SectorEditorTool::Move) {
             CancelVertexDrag("Cancelled vertex move");
         }
-        if (state.authoringVertexDrag.active && tool != SectorEditorTool::Select) {
+        if (state.authoringVertexDrag.active && tool != SectorEditorTool::AuthoringMove) {
             CancelAuthoringVertexDrag("Cancelled authoring vertex move");
         }
         if (state.lightDrag.active && tool != SectorEditorTool::Move) {
@@ -4642,13 +4616,17 @@ void SectorEditor::DrawToolsPanel(
         if (state.pendingTopologyVertexMerge.active) {
             CancelPendingTopologyVertexMerge("Cancelled vertex merge");
         }
+        if (IsGraphAuthoringTool(tool)) {
+            ClearTopologySelectionOnly();
+        }
         state.currentTool = tool;
     };
 
     sectionLabel("Graph authoring");
     const SectorEditorTool graphTools[] = {
             SectorEditorTool::Select,
-            SectorEditorTool::AuthoringLine
+            SectorEditorTool::AuthoringLine,
+            SectorEditorTool::AuthoringMove
     };
     for (SectorEditorTool tool : graphTools) {
         if (drawToolButton(tool)) {
@@ -6960,6 +6938,22 @@ bool SectorEditor::FindAuthoringVertexNearScreenPoint(
             &outPoint);
 }
 
+bool SectorEditor::FindAuthoringSelectionNearScreenPoint(
+        Vector2 screenPoint,
+        SectorAuthoringSelectionTarget& outTarget,
+        SectorTopologyCoordPoint& outVertexPoint) const
+{
+    const float vertexMaxDistance = ScreenVertexSnapPixels / std::max(1.0f, state.viewZoom);
+    const float lineMaxDistance = ScreenEdgePickPixels / std::max(1.0f, state.viewZoom);
+    return FindSectorEditorAuthoringSelectionNearMapPoint(
+            state.authoringGraph,
+            ScreenToMap(screenPoint),
+            vertexMaxDistance,
+            lineMaxDistance,
+            &outTarget,
+            &outVertexPoint);
+}
+
 void SectorEditor::SelectTopologySector(int sectorId)
 {
     if (FindSectorTopologySector(state.topologyMap, sectorId) == nullptr) {
@@ -7203,6 +7197,30 @@ void SectorEditor::ResetSurface3DUiState()
     uiState.surface3DUvOffsetVInput = engine::UIFloatInputState{};
     uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
     uiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+}
+
+void SectorEditor::ClearTopologySelectionOnly()
+{
+    state.vertexDrag = VertexDragState{};
+    state.lightDrag = LightDragState{};
+    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+    state.pendingTopologySectorCut = PendingTopologySectorCut{};
+    state.topologySelectionKind = TopologySelectionKind::None;
+    state.selectedTopologySectorId = -1;
+    state.selectedTopologyVertexId = -1;
+    state.selectedTopologySideDefId = -1;
+    state.selectedTopologyLineDefId = -1;
+    state.selectedTopologyLightId = -1;
+    state.selectedTopologySideKind = SectorTopologySideKind::Front;
+    state.inspectedTopologyVertexId = -1;
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ResetSurface3DUiState();
+    uiState.idBufferSectorIndex = -1;
+    uiState.idBufferLightIndex = -1;
+    SyncSelectedSectorIdBuffer();
+    SyncSelectedLightIdBuffer();
 }
 
 void SectorEditor::ClearSelection()

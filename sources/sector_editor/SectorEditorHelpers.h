@@ -65,6 +65,7 @@ std::string MakeTemporaryLightmapPath(const std::string& finalOutputPath);
 void DeleteFileIfExists(const std::string& path);
 std::string GeneratedTextureIdBase(const std::string& assetPath);
 const char* ToolName(SectorEditorTool tool);
+bool IsGraphAuthoringTool(SectorEditorTool tool);
 const char* TopologyWallPartName(TopologyWallPart part);
 const char* TopologyWallPartStatusName(TopologyWallPart part);
 const char* TopologyMaterialLayerName(TopologyMaterialLayer layer);

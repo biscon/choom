@@ -31,6 +31,7 @@ enum class SectorEditorTool {
     Select,
     Sector,
     AuthoringLine,
+    AuthoringMove,
     InsertSectorInside,
     Light,
     Move,

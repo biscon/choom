@@ -43,6 +43,14 @@ bool FindSectorEditorAuthoringVertexNearMapPoint(
         int* outVertexId = nullptr,
         SectorTopologyCoordPoint* outPoint = nullptr);
 
+bool FindSectorEditorAuthoringSelectionNearMapPoint(
+        const SectorAuthoringGraph& graph,
+        Vector2 mapPoint,
+        float vertexMaxDistance,
+        float lineMaxDistance,
+        SectorAuthoringSelectionTarget* outTarget = nullptr,
+        SectorTopologyCoordPoint* outVertexPoint = nullptr);
+
 bool AddSectorEditorAuthoringLineSegment(
         SectorEditorState& state,
         SectorTopologyCoordPoint start,

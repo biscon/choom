@@ -382,12 +382,20 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::Select: return "Select";
         case SectorEditorTool::Sector: return "Legacy Sector";
         case SectorEditorTool::AuthoringLine: return "Authoring Line";
+        case SectorEditorTool::AuthoringMove: return "Move Vertex";
         case SectorEditorTool::InsertSectorInside: return "Insert Inside";
         case SectorEditorTool::Light: return "Light";
         case SectorEditorTool::Move: return "Move";
         case SectorEditorTool::Erase: return "Erase";
     }
     return "Unknown";
+}
+
+bool IsGraphAuthoringTool(SectorEditorTool tool)
+{
+    return tool == SectorEditorTool::Select
+            || tool == SectorEditorTool::AuthoringLine
+            || tool == SectorEditorTool::AuthoringMove;
 }
 
 const char* TopologyWallPartName(TopologyWallPart part)
@@ -694,9 +702,10 @@ Vector3 SectorPointToWorld(SectorPoint point, float height)
 const char* ToolHelpText(SectorEditorTool tool)
 {
     switch (tool) {
-        case SectorEditorTool::Select: return "Select: click authoring lines/vertices, lights, linedefs, or sectors";
+        case SectorEditorTool::Select: return "Select: click authoring lines or vertices";
         case SectorEditorTool::Sector: return "Legacy sector: closed topology polygon tool; use Authoring Line for graph edits";
-        case SectorEditorTool::AuthoringLine: return "Authoring line: left click start/end, right click/Esc cancels";
+        case SectorEditorTool::AuthoringLine: return "Authoring line: click snapped points to create authoring lines, right click/Esc cancels";
+        case SectorEditorTool::AuthoringMove: return "Move Vertex: drag authoring vertices";
         case SectorEditorTool::InsertSectorInside: return "Insert sector: draw inside selected parent; Enter closes, right click/Esc cancels";
         case SectorEditorTool::Light: return "Light: click inside a sector to place a baked static point light";
         case SectorEditorTool::Move: return "Move: drag legacy topology light or vertex";

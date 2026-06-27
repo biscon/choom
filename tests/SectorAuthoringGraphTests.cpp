@@ -2037,6 +2037,54 @@ void TestEditorAuthoringVertexPickingFindsNearestValidVertex()
           "authoring vertex picking rejects negative thresholds");
 }
 
+void TestEditorAuthoringSelectionPickingPrefersVerticesThenLines()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringVertexWithId(graph, 2, 64, 0);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+
+    game::SectorAuthoringSelectionTarget target;
+    game::SectorTopologyCoordPoint vertexPoint{};
+    Check(game::FindSectorEditorAuthoringSelectionNearMapPoint(
+                  graph,
+                  Vector2{0.0f, 0.0f},
+                  0.25f,
+                  0.25f,
+                  &target,
+                  &vertexPoint),
+          "authoring selection picking finds an authoring target");
+    Check(target.kind == game::SectorAuthoringSelectionKind::Vertex
+                  && target.vertexId == 1,
+          "authoring selection picking prefers vertex over overlapping line");
+    Check(vertexPoint.x == 0 && vertexPoint.y == 0,
+          "authoring selection picking returns the picked vertex point");
+
+    target = game::SectorAuthoringSelectionTarget{};
+    Check(game::FindSectorEditorAuthoringSelectionNearMapPoint(
+                  graph,
+                  Vector2{game::SectorCoordToVisibleAuthoring(32), 0.0f},
+                  0.25f,
+                  0.25f,
+                  &target),
+          "authoring selection picking finds an authoring line");
+    Check(target.kind == game::SectorAuthoringSelectionKind::Line
+                  && target.lineId == 10
+                  && target.vertexId == -1,
+          "authoring selection picking returns only authoring line targets");
+
+    target = game::MakeSectorAuthoringLineSelectionTarget(10);
+    Check(!game::FindSectorEditorAuthoringSelectionNearMapPoint(
+                  graph,
+                  Vector2{game::SectorCoordToVisibleAuthoring(32), 4.0f},
+                  0.25f,
+                  0.25f,
+                  &target),
+          "authoring selection picking misses empty space");
+    Check(target.kind == game::SectorAuthoringSelectionKind::None,
+          "authoring selection picking clears target on miss");
+}
+
 void TestEditorAuthoringMoveVertexUpdatesConnectedLinesAndInvalidates()
 {
     game::SectorEditorState state;
@@ -2285,10 +2333,20 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
 {
     Check(TextContains(game::ToolName(game::SectorEditorTool::AuthoringLine), "Authoring"),
           "authoring line tool name is exposed as an authoring graph tool");
-    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::AuthoringLine), "start/end"),
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::AuthoringLine), "snapped points"),
           "authoring line tool help describes mouse-driven line creation");
     Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Select), "authoring"),
           "select tool help includes authoring graph selection targets");
+    Check(TextContains(game::ToolName(game::SectorEditorTool::AuthoringMove), "Move"),
+          "authoring move tool name is exposed as a graph tool");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::AuthoringMove), "authoring vertices"),
+          "authoring move tool help describes graph vertex movement");
+    Check(game::IsGraphAuthoringTool(game::SectorEditorTool::Select),
+          "select is classified as a graph-authoring tool");
+    Check(game::IsGraphAuthoringTool(game::SectorEditorTool::AuthoringLine),
+          "authoring line is classified as a graph-authoring tool");
+    Check(game::IsGraphAuthoringTool(game::SectorEditorTool::AuthoringMove),
+          "authoring move is classified as a graph-authoring tool");
 
     Check(TextContains(game::ToolName(game::SectorEditorTool::Sector), "Legacy"),
           "closed-sector polygon tool is labeled as legacy in the tools pane");
@@ -2296,6 +2354,8 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "closed-sector polygon help distinguishes legacy topology mutation");
     Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Move), "legacy topology"),
           "topology move help distinguishes legacy topology mutation");
+    Check(!game::IsGraphAuthoringTool(game::SectorEditorTool::Move),
+          "legacy topology move is not classified as a graph-authoring tool");
     Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Erase), "legacy topology"),
           "topology erase help distinguishes legacy topology mutation");
 }
@@ -2394,6 +2454,7 @@ int main()
     TestEditorAuthoringLinePickingFindsNearestValidLine();
     TestEditorAuthoringDeleteSelectedLineOnlyMutatesGraphAndInvalidates();
     TestEditorAuthoringVertexPickingFindsNearestValidVertex();
+    TestEditorAuthoringSelectionPickingPrefersVerticesThenLines();
     TestEditorAuthoringMoveVertexUpdatesConnectedLinesAndInvalidates();
     TestEditorAuthoringDeleteConnectedVertexIsExplicitlyRejected();
     TestEditorAuthoringDeleteIsolatedVertexOnlyMutatesGraphAndInvalidates();

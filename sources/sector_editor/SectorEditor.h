@@ -215,6 +215,10 @@ private:
             Vector2 screenPoint,
             int& outVertexId,
             SectorTopologyCoordPoint& outPoint) const;
+    bool FindAuthoringSelectionNearScreenPoint(
+            Vector2 screenPoint,
+            SectorAuthoringSelectionTarget& outTarget,
+            SectorTopologyCoordPoint& outVertexPoint) const;
     int FindTopologyLightNearScreenPoint(Vector2 screenPoint) const;
     bool FindTopologyVertexNearScreenPoint(
             Vector2 screenPoint,
@@ -328,6 +332,7 @@ private:
     void OpenDeleteSelectedTopologySectorConfirmation();
     void OpenDeleteTopologySectorConfirmation(int sectorId);
     bool DeleteSelectedTopologySectorConfirmed(int sectorId);
+    void ClearTopologySelectionOnly();
     void ClearSelection();
     void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer);
     void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer);
