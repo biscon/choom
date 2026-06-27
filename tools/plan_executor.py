@@ -8,13 +8,15 @@ import datetime as dt
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
 import threading
+import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 
 DONE_STATUSES = {"Completed", "Deferred"}
@@ -38,6 +40,10 @@ SYSTEMD_INHIBIT_BIN_ENV = "PLAN_EXECUTOR_SYSTEMD_INHIBIT_BIN"
 SYSTEMD_INHIBIT_MISSING_ERROR = (
     "--inhibit-sleep requested, but systemd-inhibit was not found."
 )
+TEXTUAL_MISSING_ERROR = (
+    "TUI mode requires the 'textual' package. Install it with: pip install textual"
+)
+RUN_ALL_USER_STOP_REQUESTED = "user_stop_requested"
 
 
 def positive_int(value: str) -> int:
@@ -98,6 +104,38 @@ class PlanState:
     items_by_id: dict[str, PlanItem]
     children_by_parent: dict[str, list[PlanItem]]
     validation_details: list[str]
+
+
+@dataclass(frozen=True)
+class PlanStatusView:
+    plan_file: Path
+    plan_id: str
+    selected: PlanItem | None
+    selected_parent: PlanItem | None
+    items: list[PlanItem]
+    suggested_prompt: str | None
+    warning: str | None = None
+
+
+@dataclass(frozen=True)
+class TuiOptions:
+    run_all: bool = False
+    max_passes: int = 10
+    review_after_pass: bool = False
+    fix_after_review: bool = False
+    commit_after_pass: bool = False
+    commit_prefix: str = "plan"
+    copy_to_run_dir: bool = False
+    run_dir: str | None = None
+    inhibit_sleep: bool = False
+    codex_bin: str = "codex"
+
+
+@dataclass(frozen=True)
+class TuiPlanLoadState:
+    input_path: str
+    view: PlanStatusView | None
+    load_error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -318,11 +356,16 @@ class RunAllRecord:
         return data
 
 
-def parse_args() -> argparse.Namespace:
+def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Select the first unfinished item from a markdown plan-state-json block."
     )
-    parser.add_argument("plan_file", help="Path to the markdown plan file.")
+    parser.add_argument("plan_file", nargs="?", help="Path to the markdown plan file.")
+    parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="Open the Textual terminal UI for status inspection and option setup.",
+    )
     parser.add_argument(
         "--copy-to-run-dir",
         nargs="?",
@@ -337,6 +380,30 @@ def parse_args() -> argparse.Namespace:
         "--json",
         action="store_true",
         help="Print machine-readable JSON output.",
+    )
+    parser.add_argument(
+        "--result-json",
+        metavar="PATH",
+        help=(
+            "Write single-pass execution metadata JSON to PATH. "
+            "Only applies to normal single-pass execution."
+        ),
+    )
+    parser.add_argument(
+        "--run-all-result-json",
+        metavar="PATH",
+        help=(
+            "Write run-all execution metadata JSON to PATH. "
+            "Only applies to --run-all execution."
+        ),
+    )
+    parser.add_argument(
+        "--run-all-stop-file",
+        metavar="PATH",
+        help=(
+            "Stop --run-all cleanly between passes when PATH exists. "
+            "Only applies to --run-all execution."
+        ),
     )
     parser.add_argument(
         "--status",
@@ -413,7 +480,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print extra validation details.",
     )
-    return parser.parse_args()
+    return parser
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    return create_parser().parse_args(argv)
 
 
 def find_systemd_inhibit() -> str | None:
@@ -558,6 +629,116 @@ def load_json_state(plan_file: Path) -> dict[str, Any]:
 
 def load_plan_state_from_file(plan_file: Path) -> PlanState:
     return validate_plan_state(load_json_state(plan_file))
+
+
+def build_plan_status_view(plan_file: Path, include_parents: bool = False) -> PlanStatusView:
+    plan_state = load_plan_state_from_file(plan_file)
+    selection = select_next_item(plan_state, include_parents=include_parents)
+    selected = selection.item
+    selected_parent = None
+    suggested_prompt = None
+    if selected is not None:
+        if selected.parent is not None:
+            selected_parent = plan_state.items_by_id[selected.parent]
+        suggested_prompt = f"Read {plan_file} and execute {selected.id} only."
+    return PlanStatusView(
+        plan_file=plan_file,
+        plan_id=plan_state.plan_id,
+        selected=selected,
+        selected_parent=selected_parent,
+        items=plan_state.items,
+        suggested_prompt=suggested_prompt,
+        warning=selection.warning,
+    )
+
+
+def load_tui_plan_state(plan_path: str) -> TuiPlanLoadState:
+    input_path = plan_path.strip()
+    if not input_path:
+        return TuiPlanLoadState(
+            input_path=input_path,
+            view=None,
+            load_error="plan path is empty.",
+        )
+    try:
+        view = build_plan_status_view(Path(input_path))
+    except PlanError as exc:
+        return TuiPlanLoadState(input_path=input_path, view=None, load_error=str(exc))
+    return TuiPlanLoadState(input_path=input_path, view=view)
+
+
+def build_tui_option_argv(options: TuiOptions, *, include_run_all: bool = True) -> list[str]:
+    argv: list[str] = []
+    if options.run_all:
+        if not include_run_all:
+            raise PlanError(
+                "Run all is not implemented in the TUI yet. "
+                "Uncheck Run all to run one pass."
+            )
+        argv.append("--run-all")
+        argv.extend(["--max-passes", str(options.max_passes)])
+    if options.review_after_pass:
+        argv.append("--review-after-pass")
+    if options.fix_after_review:
+        argv.append("--fix-after-review")
+    if options.commit_after_pass:
+        argv.append("--commit-after-pass")
+    if options.commit_prefix != "plan":
+        argv.extend(["--commit-prefix", options.commit_prefix])
+    if options.copy_to_run_dir:
+        argv.append("--copy-to-run-dir")
+        if options.run_dir:
+            argv.append(options.run_dir)
+    if options.inhibit_sleep:
+        argv.append("--inhibit-sleep")
+    if options.codex_bin != "codex":
+        argv.extend(["--codex-bin", options.codex_bin])
+    return argv
+
+
+def build_tui_command_preview(plan_path: str, options: TuiOptions) -> str:
+    argv = ["python3", "tools/plan_executor.py"]
+    if plan_path:
+        argv.append(plan_path)
+    argv.extend(build_tui_option_argv(options))
+    return shlex.join(argv)
+
+
+def build_tui_subprocess_argv(
+    plan_path: str,
+    options: TuiOptions,
+    *,
+    mode: Literal["one_pass", "run_all"] = "one_pass",
+    python_executable: str = sys.executable,
+    runner_path: Path | None = None,
+    result_json_path: Path | str | None = None,
+    run_all_result_json_path: Path | str | None = None,
+    run_all_stop_file_path: Path | str | None = None,
+) -> list[str]:
+    runner = runner_path or Path(__file__).resolve()
+    argv = [python_executable, str(runner)]
+    if plan_path:
+        argv.append(plan_path)
+    if mode == "one_pass":
+        argv.extend(build_tui_option_argv(replace(options, run_all=False)))
+    elif mode == "run_all":
+        argv.extend(build_tui_option_argv(replace(options, run_all=True)))
+    else:
+        raise PlanError(f"unknown TUI subprocess mode: {mode}")
+    if mode == "one_pass" and result_json_path is not None:
+        argv.extend(["--result-json", str(result_json_path)])
+    if mode == "run_all" and run_all_result_json_path is not None:
+        argv.extend(["--run-all-result-json", str(run_all_result_json_path)])
+    if mode == "run_all" and run_all_stop_file_path is not None:
+        argv.extend(["--run-all-stop-file", str(run_all_stop_file_path)])
+    return argv
+
+
+def find_docs_markdown_plans(root: Path = Path(".")) -> list[Path]:
+    docs_dir = root / "docs"
+    if not docs_dir.is_dir():
+        return []
+    return sorted(path.relative_to(root) for path in docs_dir.glob("**/*.md") if path.is_file())
 
 
 def selection_to_json_obj(selection: Selection) -> dict[str, Any]:
@@ -1106,6 +1287,32 @@ def write_text_file(path: Path, text: str) -> None:
 
 def write_json_file(path: Path, data: Any) -> None:
     write_text_file(path, json.dumps(data, indent=2) + "\n")
+
+
+def write_json_file_atomic(path: Path, data: Any) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            json.dump(data, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        temp_path.replace(path)
+    except OSError as exc:
+        try:
+            if "temp_path" in locals() and temp_path.exists():
+                temp_path.unlink()
+        except OSError:
+            pass
+        raise PlanError(f"{path}: failed to write result metadata: {exc}") from exc
 
 
 def copy_plan_backup(source: Path, destination: Path) -> None:
@@ -2327,6 +2534,82 @@ def build_execution_json_output(
     return output
 
 
+def expected_review_artifact_path(
+    result: ExecutionResult,
+    review: ReviewResult | None,
+    filename: str,
+) -> str | None:
+    if review is None or not review.requested:
+        return None
+    if result.logs_dir is None:
+        return None
+    return str(result.logs_dir / filename)
+
+
+def build_single_pass_result_metadata(
+    plan_files: PlanFiles,
+    plan_state: PlanState,
+    result: ExecutionResult,
+    return_code: int,
+) -> dict[str, Any]:
+    output = build_execution_json_output(
+        plan_files,
+        plan_state,
+        result,
+        verbose=False,
+    )
+    review = result.review or ReviewResult.not_requested()
+    fix = result.fix or FixResult.not_requested()
+    review_after_fix = result.review_after_fix or ReviewResult.not_requested()
+    output.update(
+        {
+            "schema_version": 1,
+            "return_code": return_code,
+            "review_requested": review.requested,
+            "fix_after_review_requested": fix.requested,
+            "review_result_md": expected_review_artifact_path(
+                result,
+                review,
+                "review_result.md",
+            ),
+            "review_result_json": expected_review_artifact_path(
+                result,
+                review,
+                "review_result.json",
+            ),
+            "review_after_fix_result_md": expected_review_artifact_path(
+                result,
+                review_after_fix,
+                "review_after_fix_result.md",
+            ),
+            "review_after_fix_result_json": expected_review_artifact_path(
+                result,
+                review_after_fix,
+                "review_after_fix_result.json",
+            ),
+        }
+    )
+    return output
+
+
+def write_single_pass_result_metadata(
+    result_json_path: Path | None,
+    plan_files: PlanFiles,
+    plan_state: PlanState,
+    result: ExecutionResult,
+    return_code: int,
+) -> None:
+    metadata = build_single_pass_result_metadata(
+        plan_files,
+        plan_state,
+        result,
+        return_code,
+    )
+    write_json_file_atomic(result.logs_dir / "execution_summary.json", metadata)
+    if result_json_path is not None:
+        write_json_file_atomic(result_json_path, metadata)
+
+
 def command_exit_code(result: ExecutionResult) -> int:
     if result.review is not None and result.review.failed():
         recoverable_needs_fix = (
@@ -2362,11 +2645,18 @@ def item_json(selection: Selection) -> dict[str, str] | None:
     return selection.item.to_json_obj() if selection.item is not None else None
 
 
-def write_run_all_summary(run_dir: Path, records: list[RunAllRecord], stop_reason: str) -> None:
-    summary = {
+def build_run_all_summary_data(
+    records: list[RunAllRecord],
+    stop_reason: str,
+) -> dict[str, Any]:
+    return {
         "stop_reason": stop_reason,
         "passes": [record.to_json_obj() for record in records],
     }
+
+
+def write_run_all_summary(run_dir: Path, records: list[RunAllRecord], stop_reason: str) -> None:
+    summary = build_run_all_summary_data(records, stop_reason)
     write_json_file(run_dir / "run_all_summary.json", summary)
     lines = ["Run-all summary:"]
     for record in records:
@@ -2432,6 +2722,143 @@ def print_run_all_summary(records: list[RunAllRecord], stop_reason: str) -> None
     print(f"Stopped: {stop_reason}")
 
 
+def normalize_run_all_stop_reason(stop_reason: str, records: list[RunAllRecord]) -> str:
+    if records:
+        status = records[-1].status
+        if status != "passed":
+            return status
+    normalized = {
+        "plan complete": "plan_complete",
+        "max passes": "max_passes_reached",
+        "Codex failed": "codex_failed",
+        "harness failed": "harness_failed",
+        "parse failed": "parse_failed",
+        "no progress": "no_progress",
+        "plan expanded needs review": "plan_expanded_needs_review",
+        "selected item not completed": "selected_item_not_completed",
+        "commit failed": "commit_failed",
+        "fix failed": "fix_failed",
+        "review failed": "review_failed",
+        "review after fix failed": "review_after_fix_failed",
+        RUN_ALL_USER_STOP_REQUESTED: RUN_ALL_USER_STOP_REQUESTED,
+    }.get(stop_reason)
+    if normalized is not None:
+        return normalized
+    if stop_reason and stop_reason.replace("_", "").replace("-", "").isalnum():
+        return stop_reason.replace("-", "_")
+    return "unknown"
+
+
+def run_all_stop_message(stop_reason: str) -> str:
+    messages = {
+        "plan complete": "Plan complete: no unfinished items remain.",
+        "max passes": "Stopped after reaching max passes.",
+        "Codex failed": "Stopped because Codex failed.",
+        "harness failed": "Stopped because harness checks failed.",
+        "parse failed": "Stopped because the plan could not be parsed.",
+        "no progress": "Stopped because the selected item did not make progress.",
+        "plan expanded needs review": "Stopped because the plan expanded and needs review.",
+        "selected item not completed": "Stopped because the selected item was not completed.",
+        "commit failed": "Stopped because commit creation failed.",
+        RUN_ALL_USER_STOP_REQUESTED: (
+            "Stopped after current pass because stop was requested."
+        ),
+    }
+    return messages.get(stop_reason, f"Stopped: {stop_reason}.")
+
+
+def run_all_record_selection_before(record: RunAllRecord) -> dict[str, str | None]:
+    return {
+        "id": record.selected_id,
+        "title": record.selected_title,
+    }
+
+
+def run_all_record_selection_after(record: RunAllRecord) -> dict[str, str | None] | None:
+    if record.selected_after_id is None:
+        return None
+    return {
+        "id": record.selected_after_id,
+        "title": record.selected_after_title,
+    }
+
+
+def current_selection_json(
+    plan_file: Path,
+    *,
+    include_parents: bool,
+) -> dict[str, str] | None:
+    try:
+        plan_state = load_plan_state_from_file(plan_file)
+    except PlanError:
+        return None
+    return item_json(select_next_item(plan_state, include_parents=include_parents))
+
+
+def build_run_all_result_metadata(
+    plan_files: PlanFiles,
+    records: list[RunAllRecord],
+    stop_reason: str,
+    return_code: int,
+    max_passes: int,
+    *,
+    include_parents: bool,
+) -> dict[str, Any]:
+    summary_json = (
+        plan_files.run_dir / "run_all_summary.json"
+        if plan_files.run_dir is not None
+        else None
+    )
+    selected_before = run_all_record_selection_before(records[0]) if records else None
+    selected_after = current_selection_json(
+        plan_files.plan_file,
+        include_parents=include_parents,
+    )
+    if selected_after is None and records:
+        selected_after = run_all_record_selection_after(records[-1])
+    summary = build_run_all_summary_data(records, stop_reason)
+    return {
+        "schema_version": 1,
+        "mode": "run_all",
+        "plan_file": str(plan_files.plan_file),
+        "original_plan_file": str(plan_files.original_plan_file),
+        "run_dir": str(plan_files.run_dir) if plan_files.run_dir is not None else None,
+        "summary_json": str(summary_json) if summary_json is not None else None,
+        "return_code": return_code,
+        "stop_reason": normalize_run_all_stop_reason(stop_reason, records),
+        "stop_message": run_all_stop_message(stop_reason),
+        "max_passes": max_passes,
+        "passes_started": len(records),
+        "passes_completed": len(records),
+        "selected_before": selected_before,
+        "selected_after": selected_after,
+        "summary": summary,
+    }
+
+
+def write_run_all_result_metadata(
+    result_json_path: Path | None,
+    plan_files: PlanFiles,
+    records: list[RunAllRecord],
+    stop_reason: str,
+    return_code: int,
+    max_passes: int,
+    *,
+    include_parents: bool,
+) -> None:
+    if result_json_path is None:
+        return
+    metadata = build_run_all_result_metadata(
+        plan_files,
+        records,
+        stop_reason,
+        return_code,
+        max_passes,
+        include_parents=include_parents,
+    )
+    write_json_file_atomic(result_json_path, metadata)
+
+
 def print_run_all_banner(
     pass_number: int,
     max_passes: int,
@@ -2485,6 +2912,10 @@ def classify_run_all_result(
     return "selected_item_not_completed", "selected item not completed"
 
 
+def run_all_stop_requested(stop_file_path: Path | None) -> bool:
+    return stop_file_path is not None and stop_file_path.exists()
+
+
 def run_all(
     plan_files: PlanFiles,
     max_passes: int,
@@ -2495,25 +2926,42 @@ def run_all(
     fix_after_review: bool,
     commit_after_pass: bool,
     commit_prefix: str,
+    run_all_result_json_path: Path | None = None,
+    run_all_stop_file_path: Path | None = None,
 ) -> int:
     records: list[RunAllRecord] = []
 
+    def finish_run_all(stop_reason: str, return_code: int) -> int:
+        write_run_all_summary(plan_files.run_dir, records, stop_reason)
+        write_run_all_result_metadata(
+            run_all_result_json_path,
+            plan_files,
+            records,
+            stop_reason,
+            return_code,
+            max_passes,
+            include_parents=include_parents,
+        )
+        print_run_all_summary(records, stop_reason)
+        return return_code
+
     for pass_number in range(1, max_passes + 1):
+        if run_all_stop_requested(run_all_stop_file_path):
+            print("Stop requested before starting next pass.")
+            return finish_run_all(RUN_ALL_USER_STOP_REQUESTED, 0)
+
         try:
             plan_state_before = load_plan_state_from_file(plan_files.plan_file)
         except PlanError:
             stop_reason = "parse failed"
-            write_run_all_summary(plan_files.run_dir, records, stop_reason)
-            print_run_all_summary(records, stop_reason)
+            finish_run_all(stop_reason, 1)
             raise
 
         selection_before = select_next_item(plan_state_before, include_parents=include_parents)
         if selection_before.item is None:
             stop_reason = "plan complete"
             print("Plan complete: no unfinished items remain.")
-            write_run_all_summary(plan_files.run_dir, records, stop_reason)
-            print_run_all_summary(records, stop_reason)
-            return 0
+            return finish_run_all(stop_reason, 0)
 
         logs_dir = per_pass_logs_dir(plan_files.run_dir, selection_before.item.id)
         print_run_all_banner(
@@ -2545,8 +2993,7 @@ def run_all(
             )
             records.append(record)
             stop_reason = "parse failed"
-            write_run_all_summary(plan_files.run_dir, records, stop_reason)
-            print_run_all_summary(records, stop_reason)
+            finish_run_all(stop_reason, 1)
             raise
 
         selected_after_item = item_json(result.selected_after)
@@ -2582,10 +3029,8 @@ def run_all(
                 record.commit = commit_not_eligible("Codex failed")
             records.append(record)
             stop_reason = "Codex failed"
-            write_run_all_summary(plan_files.run_dir, records, stop_reason)
             print(f"Codex failed with return code {result.codex_returncode}.")
-            print_run_all_summary(records, stop_reason)
-            return result.codex_returncode or 1
+            return finish_run_all(stop_reason, result.codex_returncode or 1)
 
         if not harness_checks_passed(result):
             record.status = "harness_failed"
@@ -2595,10 +3040,8 @@ def run_all(
                 record.commit = commit_not_eligible("harness failed")
             records.append(record)
             stop_reason = "harness failed"
-            write_run_all_summary(plan_files.run_dir, records, stop_reason)
             print("Harness checks failed.")
-            print_run_all_summary(records, stop_reason)
-            return 1
+            return finish_run_all(stop_reason, 1)
 
         record.status, stop_reason = classify_run_all_result(
             selection_before,
@@ -2613,10 +3056,8 @@ def run_all(
             if commit_after_pass:
                 record.commit = commit_not_eligible(stop_reason)
             records.append(record)
-            write_run_all_summary(plan_files.run_dir, records, stop_reason)
             print(f"Run-all stopped: {stop_reason}.")
-            print_run_all_summary(records, stop_reason)
-            return 1
+            return finish_run_all(stop_reason, 1)
 
         if review_after_pass:
             result = run_review_after_pass(
@@ -2648,10 +3089,8 @@ def run_all(
                             record.commit = commit_not_eligible("fix did not pass")
                         records.append(record)
                         stop_reason = result.fix.stop_reason or "fix failed"
-                        write_run_all_summary(plan_files.run_dir, records, stop_reason)
                         print_fix_result(result.fix)
-                        print_run_all_summary(records, stop_reason)
-                        return command_exit_code(result)
+                        return finish_run_all(stop_reason, command_exit_code(result))
                     if (
                         result.review_after_fix is not None
                         and result.review_after_fix.failed()
@@ -2665,21 +3104,17 @@ def run_all(
                         stop_reason = (
                             result.review_after_fix.stop_reason or "review after fix failed"
                         )
-                        write_run_all_summary(plan_files.run_dir, records, stop_reason)
                         print_fix_result(result.fix)
                         print_review_result(result.review_after_fix)
-                        print_run_all_summary(records, stop_reason)
-                        return command_exit_code(result)
+                        return finish_run_all(stop_reason, command_exit_code(result))
                 else:
                     record.status = result.review.stop_reason or "review_failed"
                     if commit_after_pass:
                         record.commit = commit_not_eligible("review did not pass")
                     records.append(record)
                     stop_reason = result.review.stop_reason or "review failed"
-                    write_run_all_summary(plan_files.run_dir, records, stop_reason)
                     print_review_result(result.review)
-                    print_run_all_summary(records, stop_reason)
-                    return command_exit_code(result)
+                    return finish_run_all(stop_reason, command_exit_code(result))
 
             if fix_after_review and (record.fix is None or not record.fix.requested):
                 record.fix = result.fix or FixResult.not_attempted()
@@ -2694,10 +3129,8 @@ def run_all(
                     record.commit = commit_not_eligible("review did not pass")
                 records.append(record)
                 stop_reason = result.review_after_fix.stop_reason or "review after fix failed"
-                write_run_all_summary(plan_files.run_dir, records, stop_reason)
                 print_review_result(result.review_after_fix)
-                print_run_all_summary(records, stop_reason)
-                return command_exit_code(result)
+                return finish_run_all(stop_reason, command_exit_code(result))
 
         result = apply_commit_if_eligible(
             plan_files,
@@ -2711,10 +3144,8 @@ def run_all(
             record.status = "commit_failed"
             records.append(record)
             stop_reason = "commit failed"
-            write_run_all_summary(plan_files.run_dir, records, stop_reason)
             print_commit_result(result.commit)
-            print_run_all_summary(records, stop_reason)
-            return result.commit.returncode or 1
+            return finish_run_all(stop_reason, result.commit.returncode or 1)
         records.append(record)
 
         next_text = "plan complete"
@@ -2732,19 +3163,54 @@ def run_all(
 
         if result.selected_after.item is None:
             stop_reason = "plan complete"
-            write_run_all_summary(plan_files.run_dir, records, stop_reason)
-            print_run_all_summary(records, stop_reason)
-            return 0
+            return finish_run_all(stop_reason, 0)
+
+        if run_all_stop_requested(run_all_stop_file_path):
+            print("Stop requested. Run-all will not start another pass.")
+            return finish_run_all(RUN_ALL_USER_STOP_REQUESTED, 0)
 
     stop_reason = "max passes"
-    write_run_all_summary(plan_files.run_dir, records, stop_reason)
     print("Max-pass limit reached before plan completion.")
-    print_run_all_summary(records, stop_reason)
-    return 1
+    return finish_run_all(stop_reason, 1)
 
 
-def main() -> int:
-    args = parse_args()
+def load_tui_runner() -> Any:
+    try:
+        from plan_executor_tui import run_tui
+    except ModuleNotFoundError as exc:
+        if exc.name != "plan_executor_tui":
+            raise
+        from tools.plan_executor_tui import run_tui
+    return run_tui
+
+
+def launch_tui(initial_plan_path: str | None = None, runner_loader: Any = load_tui_runner) -> int:
+    try:
+        run_tui = runner_loader()
+    except ModuleNotFoundError as exc:
+        if exc.name is not None and (
+            exc.name == "textual" or exc.name.startswith("textual.")
+        ):
+            print(TEXTUAL_MISSING_ERROR, file=sys.stderr)
+            return 1
+        raise
+    return int(run_tui(initial_plan_path) or 0)
+
+
+def main(argv: list[str] | None = None) -> int:
+    raw_argv = sys.argv[1:] if argv is None else argv
+    args = parse_args(raw_argv)
+
+    if args.tui:
+        return launch_tui(args.plan_file)
+    if args.plan_file is None:
+        parser = create_parser()
+        if not raw_argv and sys.stdin.isatty() and sys.stdout.isatty():
+            return launch_tui()
+        parser.print_usage(sys.stderr)
+        print("plan_executor.py: error: the following arguments are required: plan_file", file=sys.stderr)
+        return 2
+
     original_plan_file = Path(args.plan_file)
 
     try:
@@ -2754,6 +3220,22 @@ def main() -> int:
             raise PlanError("--run-all cannot be used with --dry-run-prompt")
         if args.run_all and args.json:
             raise PlanError("--run-all --json is not implemented yet.")
+        if args.run_all and args.result_json:
+            raise PlanError("--run-all cannot be used with --result-json")
+        if (
+            args.run_all_result_json
+            and not args.run_all
+            and not args.status
+            and not args.dry_run_prompt
+        ):
+            raise PlanError("--run-all-result-json can only be used with --run-all")
+        if (
+            args.run_all_stop_file
+            and not args.run_all
+            and not args.status
+            and not args.dry_run_prompt
+        ):
+            raise PlanError("--run-all-stop-file can only be used with --run-all")
         if args.fix_after_review and not args.review_after_pass:
             raise PlanError("--fix-after-review requires --review-after-pass")
         if args.fix_after_review and args.max_fix_attempts != 1:
@@ -2796,6 +3278,16 @@ def main() -> int:
                 fix_after_review=args.fix_after_review,
                 commit_after_pass=args.commit_after_pass,
                 commit_prefix=args.commit_prefix,
+                run_all_result_json_path=(
+                    Path(args.run_all_result_json)
+                    if args.run_all_result_json is not None
+                    else None
+                ),
+                run_all_stop_file_path=(
+                    Path(args.run_all_stop_file)
+                    if args.run_all_stop_file is not None
+                    else None
+                ),
             )
         except PlanError as exc:
             print(f"Error: {exc}", file=sys.stderr)
@@ -2884,6 +3376,19 @@ def main() -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
+    exit_code = command_exit_code(result)
+    try:
+        write_single_pass_result_metadata(
+            Path(args.result_json) if args.result_json else None,
+            plan_files,
+            plan_state,
+            result,
+            exit_code,
+        )
+    except PlanError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
     if args.json:
         print(
             json.dumps(
@@ -2900,7 +3405,7 @@ def main() -> int:
             args.codex_bin,
             args.verbose,
         )
-    return command_exit_code(result)
+    return exit_code
 
 
 if __name__ == "__main__":

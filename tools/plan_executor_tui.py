@@ -1,0 +1,2703 @@
+"""Textual status/configuration shell for plan_executor."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import shlex
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Literal
+
+from textual import on
+from textual.app import App, ComposeResult
+from textual.binding import Binding
+from textual.containers import Horizontal, ScrollableContainer, Vertical
+from textual.screen import ModalScreen
+from textual.widgets import (
+    Button,
+    Checkbox,
+    Footer,
+    Header,
+    Input,
+    Label,
+    ListItem,
+    ListView,
+    Log,
+    Static,
+)
+
+try:
+    from tools import plan_executor
+except ImportError:
+    import plan_executor  # type: ignore[no-redef]
+
+
+MAX_RAW_OUTPUT_LINES = 5000
+MAX_RAW_OUTPUT_DISPLAY_BOOTSTRAP_LINES = 500
+MAX_RAW_OUTPUT_APPEND_PER_REFRESH = 200
+MAX_RAW_OUTPUT_PENDING_RESET_THRESHOLD = 1000
+MAX_RAW_OUTPUT_RENDER_LINE_CHARS = 1000
+RAW_OUTPUT_REFRESH_INTERVAL_SECONDS = 0.15
+GLOBAL_RUN_INDICATOR_INTERVAL_SECONDS = 0.2
+GLOBAL_RUN_INDICATOR_FRAMES = ("|", "/", "-", "\\")
+RAW_OUTPUT_TRUNCATION_TEXT = "[output truncated: oldest lines dropped]"
+TUI_RESULT_JSON_PATH = plan_executor.DEFAULT_RUNS_DIR / "tui-latest-run-result.json"
+TUI_RUN_ALL_RESULT_JSON_PATH = (
+    plan_executor.DEFAULT_RUNS_DIR / "tui-latest-run-all-result.json"
+)
+TUI_RUN_ALL_STOP_FILE_PATH = (
+    plan_executor.DEFAULT_RUNS_DIR / "tui-run-all-stop-request.json"
+)
+RUN_ALL_REVIEW_UNAVAILABLE_MESSAGE = (
+    "No review was run for the latest run-all.\n"
+    "Enable Review after pass to show review output here."
+)
+RUN_ALL_COPY_GUARD_MESSAGE = (
+    "Run all with Copy to run dir is not supported in the TUI yet. "
+    "Load a copied plan directly to use live run-all progress."
+)
+
+
+class PlanBrowseDialog(ModalScreen[Path | None]):
+    """Small keyboard-friendly picker for Markdown plans under docs/."""
+
+    CSS = """
+    PlanBrowseDialog {
+        align: center middle;
+    }
+
+    #browse-dialog {
+        width: 70%;
+        height: 70%;
+        border: round $accent;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    #browse-title {
+        height: 1;
+        text-style: bold;
+    }
+
+    #browse-list {
+        height: 1fr;
+        margin: 1 0;
+    }
+
+    #browse-empty {
+        height: 1fr;
+        margin: 1 0;
+    }
+
+    #browse-actions {
+        height: 3;
+        align-horizontal: right;
+    }
+    """
+
+    BINDINGS = [
+        ("escape", "cancel", "Close"),
+    ]
+
+    def __init__(self, paths: list[Path]) -> None:
+        super().__init__()
+        self.paths = paths
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="browse-dialog"):
+            yield Static("Browse Markdown plans in docs/", id="browse-title")
+            if self.paths:
+                yield ListView(
+                    *[ListItem(Label(str(path))) for path in self.paths],
+                    id="browse-list",
+                )
+            else:
+                yield Static("No Markdown files found under docs/.", id="browse-empty")
+            with Horizontal(id="browse-actions"):
+                yield Button("Cancel", id="browse-cancel")
+
+    @on(ListView.Selected, "#browse-list")
+    def plan_selected(self, event: ListView.Selected) -> None:
+        self.dismiss(self.paths[event.index])
+
+    @on(Button.Pressed, "#browse-cancel")
+    def cancel_pressed(self) -> None:
+        self.dismiss(None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class QuitAfterRunDialog(ModalScreen[bool]):
+    """Confirm quitting after the active pass finishes."""
+
+    CSS = """
+    QuitAfterRunDialog {
+        align: center middle;
+    }
+
+    #quit-after-run-dialog {
+        width: 54;
+        height: 11;
+        border: round $warning;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    #quit-after-run-title {
+        height: 1;
+        text-style: bold;
+    }
+
+    #quit-after-run-message {
+        height: 2;
+        margin: 1 0;
+    }
+
+    #quit-after-run-actions {
+        height: 3;
+        align-horizontal: right;
+    }
+    """
+
+    BINDINGS = [
+        ("escape", "cancel", "Cancel"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="quit-after-run-dialog"):
+            yield Static("Run in progress", id="quit-after-run-title")
+            yield Static(
+                "Wait for the current pass before quitting.",
+                id="quit-after-run-message",
+            )
+            with Horizontal(id="quit-after-run-actions"):
+                yield Button("Cancel", id="quit-cancel", compact=True)
+                yield Button("Exit after run", id="quit-after-run", compact=True)
+
+    @on(Button.Pressed, "#quit-cancel")
+    def cancel_pressed(self) -> None:
+        self.dismiss(False)
+
+    @on(Button.Pressed, "#quit-after-run")
+    def quit_after_run_pressed(self) -> None:
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
+def render_recent_log_lines(lines: list[str], visible_count: int = 3) -> str:
+    """Render the newest log lines in chronological order."""
+    if visible_count <= 0:
+        return ""
+    return "\n".join(lines[-visible_count:])
+
+
+@dataclass(frozen=True)
+class ActiveRunSnapshot:
+    selected_id: str
+    selected_title: str
+    started_at: datetime
+    options_summary: str
+    codex_bin: str
+    mode: Literal["one_pass", "run_all"] = "one_pass"
+    max_passes: int | None = None
+
+
+def render_global_run_indicator(
+    active_run: ActiveRunSnapshot | None,
+    *,
+    run_in_progress: bool,
+    frame: str,
+    now: datetime,
+    run_all_stop_requested: bool = False,
+) -> str:
+    if not run_in_progress:
+        return "Idle"
+    if active_run is None:
+        return f"{frame} Running pass"
+
+    elapsed = format_elapsed_duration(active_run.started_at, now)
+    if active_run.mode == "run_all":
+        if run_all_stop_requested:
+            return f"{frame} Running all - stop requested  {elapsed}"
+        return f"{frame} Running all  {elapsed}"
+    if active_run.selected_id:
+        return f"{frame} Running pass {active_run.selected_id}  {elapsed}"
+    return f"{frame} Running pass  {elapsed}"
+
+
+@dataclass
+class LastRunResult:
+    selected_id: str
+    selected_title: str
+    finished_at: datetime
+    return_code: int | None = None
+    failure_message: str | None = None
+    reload_error: str | None = None
+    mode: Literal["one_pass", "run_all"] = "one_pass"
+
+
+@dataclass
+class LatestRunMetadata:
+    result_json_path: str
+    plan_file: str | None = None
+    original_plan_file: str | None = None
+    run_dir: str | None = None
+    logs_dir: str | None = None
+    return_code: int | None = None
+    selected_before_id: str | None = None
+    selected_before_title: str | None = None
+    review_requested: bool | None = None
+    fix_after_review_requested: bool | None = None
+    review_verdict: str | None = None
+    review_summary: str | None = None
+    review_result_md: str | None = None
+    review_result_json: str | None = None
+    review_after_fix_verdict: str | None = None
+    review_after_fix_summary: str | None = None
+    review_after_fix_result_md: str | None = None
+    review_after_fix_result_json: str | None = None
+    load_error: str | None = None
+
+
+@dataclass
+class RunAllPassMetadata:
+    selected_id: str | None = None
+    selected_title: str | None = None
+    status: str | None = None
+    logs_dir: str | None = None
+    codex_returncode: int | None = None
+    selected_after_id: str | None = None
+    selected_after_title: str | None = None
+    selected_item_post_status: str | None = None
+    review_requested: bool | None = None
+    review_verdict: str | None = None
+    review_summary: str | None = None
+    review_stop_reason: str | None = None
+    review_result_md: str | None = None
+    review_result_json: str | None = None
+    fix_requested: bool | None = None
+    fix_attempted: bool | None = None
+    fix_returncode: int | None = None
+    fix_harness_checks_passed: bool | None = None
+    fix_stop_reason: str | None = None
+    review_after_fix_requested: bool | None = None
+    review_after_fix_verdict: str | None = None
+    review_after_fix_summary: str | None = None
+    review_after_fix_stop_reason: str | None = None
+    review_after_fix_result_md: str | None = None
+    review_after_fix_result_json: str | None = None
+
+
+@dataclass
+class LatestRunAllMetadata:
+    result_json_path: str
+    plan_file: str | None = None
+    run_dir: str | None = None
+    summary_json: str | None = None
+    return_code: int | None = None
+    stop_reason: str | None = None
+    stop_message: str | None = None
+    max_passes: int | None = None
+    passes_started: int | None = None
+    passes_completed: int | None = None
+    selected_before_id: str | None = None
+    selected_before_title: str | None = None
+    selected_after_id: str | None = None
+    selected_after_title: str | None = None
+    passes: list[RunAllPassMetadata] = field(default_factory=list)
+    load_error: str | None = None
+
+
+def optional_str(raw: dict[str, Any], key: str) -> str | None:
+    value = raw.get(key)
+    return value if isinstance(value, str) else None
+
+
+def optional_int(raw: dict[str, Any], key: str) -> int | None:
+    value = raw.get(key)
+    return value if isinstance(value, int) else None
+
+
+def selected_item_field(raw: dict[str, Any], key: str) -> str | None:
+    selected_before = raw.get("selected_before")
+    if not isinstance(selected_before, dict):
+        return None
+    value = selected_before.get(key)
+    return value if isinstance(value, str) else None
+
+
+def selected_dict_field(raw: dict[str, Any], selected_key: str, key: str) -> str | None:
+    selected = raw.get(selected_key)
+    if not isinstance(selected, dict):
+        return None
+    value = selected.get(key)
+    return value if isinstance(value, str) else None
+
+
+def optional_bool(raw: dict[str, Any], key: str) -> bool | None:
+    value = raw.get(key)
+    return value if isinstance(value, bool) else None
+
+
+def parse_run_all_passes(raw: dict[str, Any]) -> list[RunAllPassMetadata]:
+    summary = raw.get("summary")
+    if not isinstance(summary, dict):
+        return []
+    passes = summary.get("passes")
+    if not isinstance(passes, list):
+        return []
+    parsed = []
+    for pass_record in passes:
+        if not isinstance(pass_record, dict):
+            continue
+        parsed.append(
+            RunAllPassMetadata(
+                selected_id=optional_str(pass_record, "selected_id"),
+                selected_title=optional_str(pass_record, "selected_title"),
+                status=optional_str(pass_record, "status"),
+                logs_dir=optional_str(pass_record, "logs_dir"),
+                codex_returncode=optional_int(pass_record, "codex_returncode"),
+                selected_after_id=optional_str(pass_record, "selected_after_id"),
+                selected_after_title=optional_str(pass_record, "selected_after_title"),
+                selected_item_post_status=optional_str(
+                    pass_record,
+                    "selected_item_post_status",
+                ),
+                review_requested=optional_bool(pass_record, "review_requested"),
+                review_verdict=optional_str(pass_record, "review_verdict"),
+                review_summary=optional_str(pass_record, "review_summary"),
+                review_stop_reason=optional_str(pass_record, "review_stop_reason"),
+                review_result_md=optional_str(pass_record, "review_result_md"),
+                review_result_json=optional_str(pass_record, "review_result_json"),
+                fix_requested=optional_bool(pass_record, "fix_requested"),
+                fix_attempted=optional_bool(pass_record, "fix_attempted"),
+                fix_returncode=optional_int(pass_record, "fix_returncode"),
+                fix_harness_checks_passed=optional_bool(
+                    pass_record,
+                    "fix_harness_checks_passed",
+                ),
+                fix_stop_reason=optional_str(pass_record, "fix_stop_reason"),
+                review_after_fix_requested=optional_bool(
+                    pass_record,
+                    "review_after_fix_requested",
+                ),
+                review_after_fix_verdict=optional_str(
+                    pass_record,
+                    "review_after_fix_verdict",
+                ),
+                review_after_fix_summary=optional_str(
+                    pass_record,
+                    "review_after_fix_summary",
+                ),
+                review_after_fix_stop_reason=optional_str(
+                    pass_record,
+                    "review_after_fix_stop_reason",
+                ),
+                review_after_fix_result_md=optional_str(
+                    pass_record,
+                    "review_after_fix_result_md",
+                ),
+                review_after_fix_result_json=optional_str(
+                    pass_record,
+                    "review_after_fix_result_json",
+                ),
+            )
+        )
+    return parsed
+
+
+def load_latest_run_metadata(path: Path) -> LatestRunMetadata:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        return LatestRunMetadata(
+            result_json_path=str(path),
+            load_error=f"failed to read result metadata: {exc}",
+        )
+    except json.JSONDecodeError as exc:
+        return LatestRunMetadata(
+            result_json_path=str(path),
+            load_error=f"failed to parse result metadata: {exc}",
+        )
+    if not isinstance(raw, dict):
+        return LatestRunMetadata(
+            result_json_path=str(path),
+            load_error="result metadata root is not an object",
+        )
+    return LatestRunMetadata(
+        result_json_path=str(path),
+        plan_file=optional_str(raw, "plan_file"),
+        original_plan_file=optional_str(raw, "original_plan_file"),
+        run_dir=optional_str(raw, "run_dir"),
+        logs_dir=optional_str(raw, "logs_dir"),
+        return_code=optional_int(raw, "return_code"),
+        selected_before_id=selected_item_field(raw, "id"),
+        selected_before_title=selected_item_field(raw, "title"),
+        review_requested=(
+            raw.get("review_requested")
+            if isinstance(raw.get("review_requested"), bool)
+            else None
+        ),
+        fix_after_review_requested=(
+            raw.get("fix_after_review_requested")
+            if isinstance(raw.get("fix_after_review_requested"), bool)
+            else None
+        ),
+        review_verdict=optional_str(raw, "review_verdict"),
+        review_summary=optional_str(raw, "review_summary"),
+        review_result_md=optional_str(raw, "review_result_md"),
+        review_result_json=optional_str(raw, "review_result_json"),
+        review_after_fix_verdict=optional_str(raw, "review_after_fix_verdict"),
+        review_after_fix_summary=optional_str(raw, "review_after_fix_summary"),
+        review_after_fix_result_md=optional_str(raw, "review_after_fix_result_md"),
+        review_after_fix_result_json=optional_str(raw, "review_after_fix_result_json"),
+    )
+
+
+def load_latest_run_all_metadata(path: Path) -> LatestRunAllMetadata:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        return LatestRunAllMetadata(
+            result_json_path=str(path),
+            load_error=f"failed to read run-all result metadata: {exc}",
+        )
+    except json.JSONDecodeError as exc:
+        return LatestRunAllMetadata(
+            result_json_path=str(path),
+            load_error=f"failed to parse run-all result metadata: {exc}",
+        )
+    if not isinstance(raw, dict):
+        return LatestRunAllMetadata(
+            result_json_path=str(path),
+            load_error="run-all result metadata root is not an object",
+        )
+    return LatestRunAllMetadata(
+        result_json_path=str(path),
+        plan_file=optional_str(raw, "plan_file"),
+        run_dir=optional_str(raw, "run_dir"),
+        summary_json=optional_str(raw, "summary_json"),
+        return_code=optional_int(raw, "return_code"),
+        stop_reason=optional_str(raw, "stop_reason"),
+        stop_message=optional_str(raw, "stop_message"),
+        max_passes=optional_int(raw, "max_passes"),
+        passes_started=optional_int(raw, "passes_started"),
+        passes_completed=optional_int(raw, "passes_completed"),
+        selected_before_id=selected_dict_field(raw, "selected_before", "id"),
+        selected_before_title=selected_dict_field(raw, "selected_before", "title"),
+        selected_after_id=selected_dict_field(raw, "selected_after", "id"),
+        selected_after_title=selected_dict_field(raw, "selected_after", "title"),
+        passes=parse_run_all_passes(raw),
+    )
+
+
+@dataclass(frozen=True)
+class ReviewArtifactSelection:
+    status: str
+    artifact_path: Path | None = None
+    artifact_label: str | None = None
+    json_path: Path | None = None
+    pass_id: str | None = None
+    pass_title: str | None = None
+    verdict: str | None = None
+    summary: str | None = None
+    message: str | None = None
+    error: str | None = None
+
+
+def readable_file(path_text: str | None) -> Path | None:
+    if not path_text:
+        return None
+    path = Path(path_text)
+    try:
+        return path if path.is_file() else None
+    except OSError:
+        return None
+
+
+def select_latest_review_artifact(
+    metadata: LatestRunMetadata | None,
+) -> ReviewArtifactSelection:
+    if metadata is None:
+        return ReviewArtifactSelection(
+            status="no_metadata",
+            message=(
+                "No review result yet.\n"
+                "Run a pass with Review after pass enabled to capture a review."
+            ),
+        )
+    if metadata.load_error:
+        return ReviewArtifactSelection(
+            status="metadata_error",
+            message=f"Latest run metadata could not be loaded:\n{metadata.load_error}",
+            error=metadata.load_error,
+        )
+    if metadata.review_requested is False:
+        return ReviewArtifactSelection(
+            status="review_not_requested",
+            message=(
+                "No review was run for the latest pass.\n"
+                "Enable Review after pass to show review output here."
+            ),
+        )
+
+    candidates = [
+        (
+            "Review after fix",
+            metadata.review_after_fix_result_md,
+            metadata.review_after_fix_result_json,
+        ),
+        ("Review", metadata.review_result_md, metadata.review_result_json),
+    ]
+    missing_paths = []
+    for label, markdown_path_text, json_path_text in candidates:
+        if not markdown_path_text:
+            continue
+        markdown_path = Path(markdown_path_text)
+        selected_path = readable_file(markdown_path_text)
+        if selected_path is not None:
+            return ReviewArtifactSelection(
+                status="selected",
+                artifact_path=selected_path,
+                artifact_label=label,
+                json_path=Path(json_path_text) if json_path_text else None,
+            )
+        missing_paths.append(str(markdown_path))
+
+    if missing_paths:
+        return ReviewArtifactSelection(
+            status="artifact_unreadable",
+            message=(
+                "Review was requested, but no review markdown artifact was found."
+            ),
+            error="\n".join(missing_paths),
+        )
+    return ReviewArtifactSelection(
+        status="artifact_missing",
+        message="Review was requested, but no review markdown artifact was found.",
+    )
+
+
+def select_latest_run_all_review_artifact(
+    metadata: LatestRunAllMetadata | None,
+) -> ReviewArtifactSelection:
+    if metadata is None:
+        return ReviewArtifactSelection(
+            status="no_metadata",
+            message=(
+                "No review result yet.\n"
+                "Run all with Review after pass enabled to capture a review."
+            ),
+        )
+    if metadata.load_error:
+        return ReviewArtifactSelection(
+            status="metadata_error",
+            message=f"Latest run-all metadata could not be loaded:\n{metadata.load_error}",
+            error=metadata.load_error,
+        )
+
+    review_requested = any(
+        pass_record.review_requested is True
+        or pass_record.review_after_fix_requested is True
+        for pass_record in metadata.passes
+    )
+    if not review_requested:
+        return ReviewArtifactSelection(
+            status="review_not_requested",
+            message=RUN_ALL_REVIEW_UNAVAILABLE_MESSAGE,
+        )
+
+    missing_paths = []
+    for pass_record in reversed(metadata.passes):
+        candidates = [
+            (
+                "Review after fix",
+                pass_record.review_after_fix_result_md,
+                pass_record.review_after_fix_result_json,
+                pass_record.review_after_fix_verdict,
+                pass_record.review_after_fix_summary,
+            ),
+            (
+                "Review",
+                pass_record.review_result_md,
+                pass_record.review_result_json,
+                pass_record.review_verdict,
+                pass_record.review_summary,
+            ),
+        ]
+        for label, markdown_path_text, json_path_text, verdict, summary in candidates:
+            if not markdown_path_text:
+                continue
+            markdown_path = Path(markdown_path_text)
+            selected_path = readable_file(markdown_path_text)
+            if selected_path is not None:
+                return ReviewArtifactSelection(
+                    status="selected",
+                    artifact_path=selected_path,
+                    artifact_label=label,
+                    json_path=Path(json_path_text) if json_path_text else None,
+                    pass_id=pass_record.selected_id,
+                    pass_title=pass_record.selected_title,
+                    verdict=verdict,
+                    summary=summary,
+                )
+            missing_paths.append(str(markdown_path))
+
+    if missing_paths:
+        return ReviewArtifactSelection(
+            status="artifact_unreadable",
+            message=(
+                "Review was requested, but no run-all review markdown artifact was found."
+            ),
+            error="\n".join(missing_paths),
+        )
+    return ReviewArtifactSelection(
+        status="artifact_missing",
+        message="Review was requested, but no run-all review markdown artifact was found.",
+    )
+
+
+def load_review_markdown(selection: ReviewArtifactSelection) -> tuple[str | None, str | None]:
+    if selection.artifact_path is None:
+        return None, selection.message
+    try:
+        return selection.artifact_path.read_text(encoding="utf-8"), None
+    except OSError as exc:
+        return (
+            None,
+            f"Could not read review artifact:\n{selection.artifact_path}\n{exc}",
+        )
+
+
+def read_review_summary_from_json(path: Path | None) -> tuple[str | None, str | None]:
+    if path is None:
+        return None, None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, None
+    if not isinstance(raw, dict):
+        return None, None
+    verdict = raw.get("verdict")
+    summary = raw.get("summary")
+    return (
+        verdict if isinstance(verdict, str) and verdict else None,
+        summary if isinstance(summary, str) and summary else None,
+    )
+
+
+def review_run_text(metadata: LatestRunMetadata | None) -> str:
+    if metadata is None or metadata.selected_before_id is None:
+        return "Not available"
+    if metadata.selected_before_title:
+        return f"{metadata.selected_before_id} - {metadata.selected_before_title}"
+    return metadata.selected_before_id
+
+
+def review_status_text(
+    metadata: LatestRunMetadata | None,
+    selection: ReviewArtifactSelection,
+) -> str:
+    if selection.status != "selected":
+        return "Unavailable"
+    if metadata is None:
+        return "Review available"
+    if selection.artifact_label == "Review after fix":
+        verdict = metadata.review_after_fix_verdict
+        summary = metadata.review_after_fix_summary
+    else:
+        verdict = metadata.review_verdict
+        summary = metadata.review_summary
+    if verdict is None and summary is None:
+        verdict, summary = read_review_summary_from_json(selection.json_path)
+    if verdict and summary:
+        return f"{verdict} - {summary}"
+    if verdict:
+        return verdict
+    if summary:
+        return summary
+    return "Review available"
+
+
+def run_all_review_pass_text(selection: ReviewArtifactSelection) -> str:
+    if selection.pass_id is None:
+        return "Not available"
+    if selection.pass_title:
+        return f"{selection.pass_id} - {selection.pass_title}"
+    return selection.pass_id
+
+
+def run_all_review_status_text(selection: ReviewArtifactSelection) -> str:
+    if selection.status != "selected":
+        return "Unavailable"
+    verdict = selection.verdict
+    summary = selection.summary
+    if verdict is None and summary is None:
+        verdict, summary = read_review_summary_from_json(selection.json_path)
+    if verdict and summary:
+        return f"{verdict} - {summary}"
+    if verdict:
+        return verdict
+    if summary:
+        return summary
+    return "Review available"
+
+
+def render_review_details(
+    metadata: LatestRunMetadata | None,
+    selection: ReviewArtifactSelection,
+) -> str:
+    if selection.status != "selected":
+        return "Review"
+    return "\n".join(
+        [
+            "Review",
+            "",
+            "Run:",
+            f"  {review_run_text(metadata)}",
+            "",
+            "Source:",
+            f"  {selection.artifact_path}",
+            "",
+            "Status:",
+            f"  {review_status_text(metadata, selection)}",
+        ]
+    )
+
+
+def render_run_all_review_details(selection: ReviewArtifactSelection) -> str:
+    if selection.status != "selected":
+        return "Review"
+    return "\n".join(
+        [
+            "Review",
+            "",
+            "Run:",
+            "  run-all",
+            "",
+            "Pass:",
+            f"  {run_all_review_pass_text(selection)}",
+            "",
+            "Source:",
+            f"  {selection.artifact_path}",
+            "",
+            "Status:",
+            f"  {run_all_review_status_text(selection)}",
+        ]
+    )
+
+
+@dataclass(frozen=True)
+class RawOutputLine:
+    seq: int
+    stream: str
+    text: str
+
+
+@dataclass
+class RawOutputState:
+    selected_id: str | None = None
+    selected_title: str | None = None
+    command: str | None = None
+    status: str | None = None
+    lines: list[RawOutputLine] = field(default_factory=list)
+    next_seq: int = 1
+    truncated: bool = False
+
+
+def format_elapsed_duration(started_at: datetime, now: datetime) -> str:
+    elapsed_seconds = max(0, int((now - started_at).total_seconds()))
+    hours, remainder = divmod(elapsed_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+def summarize_tui_options(options: plan_executor.TuiOptions) -> str:
+    enabled = []
+    if options.review_after_pass:
+        enabled.append("review")
+    if options.fix_after_review:
+        enabled.append("fix")
+    if options.commit_after_pass:
+        enabled.append("commit")
+    if options.copy_to_run_dir:
+        enabled.append("copy")
+    if options.inhibit_sleep:
+        enabled.append("inhibit sleep")
+    return ", ".join(enabled) if enabled else "none"
+
+
+def format_run_result(result: LastRunResult) -> str:
+    if result.return_code is not None:
+        if result.return_code == 0:
+            return f"Finished with return code {result.return_code}"
+        return f"Failed with return code {result.return_code}"
+    if result.failure_message:
+        return f"Failed: {result.failure_message}"
+    return "Failed"
+
+
+def format_return_code_result(return_code: int | None) -> str:
+    if return_code is None:
+        return "unavailable"
+    if return_code == 0:
+        return f"Finished with return code {return_code}"
+    return f"Failed with return code {return_code}"
+
+
+def unavailable(value: object | None) -> str:
+    if value is None:
+        return "unavailable"
+    if isinstance(value, str):
+        return value if value else "unavailable"
+    return str(value)
+
+
+def selected_label(selected_id: str | None, selected_title: str | None) -> str:
+    if not selected_id:
+        return "unavailable"
+    if selected_title:
+        return f"{selected_id} - {selected_title}"
+    return selected_id
+
+
+def current_selection_label(view: plan_executor.PlanStatusView | None) -> str:
+    if view is None:
+        return "unavailable"
+    if view.selected is None:
+        return "Plan complete"
+    return selected_label(view.selected.id, view.selected.title)
+
+
+def review_summary_status(
+    *,
+    requested: bool | None,
+    verdict: str | None = None,
+    summary: str | None = None,
+    stop_reason: str | None = None,
+) -> str:
+    if requested is False:
+        return "not requested"
+    if requested is None and verdict is None and summary is None and stop_reason is None:
+        return "unavailable"
+    if stop_reason:
+        return f"failed ({stop_reason})"
+    if verdict and summary:
+        return f"{verdict} - {summary}"
+    if verdict:
+        return verdict
+    if summary:
+        return summary
+    return "available" if requested else "unavailable"
+
+
+def fix_summary_status(pass_record: RunAllPassMetadata) -> str:
+    if pass_record.fix_requested is False:
+        return "not requested"
+    if pass_record.fix_requested is None:
+        return "unavailable"
+    if pass_record.fix_stop_reason:
+        return f"failed ({pass_record.fix_stop_reason})"
+    if pass_record.fix_harness_checks_passed is True:
+        return "passed"
+    if pass_record.fix_harness_checks_passed is False:
+        return "failed"
+    if pass_record.fix_returncode is not None:
+        return f"return code {pass_record.fix_returncode}"
+    return "attempted" if pass_record.fix_attempted else "not attempted"
+
+
+def render_run_all_pass_list(passes: list[RunAllPassMetadata]) -> list[str]:
+    if not passes:
+        return ["Pass details unavailable."]
+
+    lines: list[str] = []
+    for index, pass_record in enumerate(passes, start=1):
+        lines.append(
+            f"{index}. {selected_label(pass_record.selected_id, pass_record.selected_title)}"
+        )
+        lines.append(f"   Status: {unavailable(pass_record.status)}")
+        if pass_record.codex_returncode is not None:
+            lines.append(f"   Result: return code {pass_record.codex_returncode}")
+        if pass_record.selected_item_post_status:
+            lines.append(f"   Item status: {pass_record.selected_item_post_status}")
+        review_status = review_summary_status(
+            requested=pass_record.review_requested,
+            verdict=pass_record.review_verdict,
+            summary=pass_record.review_summary,
+            stop_reason=pass_record.review_stop_reason,
+        )
+        if review_status != "not requested":
+            lines.append(f"   Review: {review_status}")
+        fix_status = fix_summary_status(pass_record)
+        if fix_status != "not requested":
+            lines.append(f"   Fix: {fix_status}")
+        rereview_status = review_summary_status(
+            requested=pass_record.review_after_fix_requested,
+            verdict=pass_record.review_after_fix_verdict,
+            summary=pass_record.review_after_fix_summary,
+            stop_reason=pass_record.review_after_fix_stop_reason,
+        )
+        if rereview_status != "not requested":
+            lines.append(f"   Rereview: {rereview_status}")
+        lines.append("")
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines
+
+
+def render_run_all_summary_text(
+    metadata: LatestRunAllMetadata | None,
+    last_run: LastRunResult | None = None,
+    loaded_view: plan_executor.PlanStatusView | None = None,
+) -> str:
+    if metadata is None:
+        return (
+            "Summary\n\n"
+            "Run-all metadata unavailable.\n"
+            "Run all to capture a summary."
+        )
+    if metadata.load_error:
+        return "\n".join(
+            [
+                "Summary",
+                "",
+                "Mode:",
+                "  run-all",
+                "",
+                "Metadata:",
+                f"  {metadata.load_error}",
+            ]
+        )
+
+    return_code = metadata.return_code
+    if return_code is None and last_run is not None:
+        return_code = last_run.return_code
+    lines = [
+        "Summary",
+        "",
+        "Mode:",
+        "  run-all",
+        "",
+        "Result:",
+        f"  {format_return_code_result(return_code)}",
+        "",
+        "Stop reason:",
+        f"  {unavailable(metadata.stop_reason)}",
+        "",
+        "Stop message:",
+        f"  {unavailable(metadata.stop_message)}",
+        "",
+        "Passes:",
+        (
+            "  "
+            f"{unavailable(metadata.passes_completed)}"
+            " / "
+            f"{unavailable(metadata.max_passes)}"
+        ),
+        "",
+        "Plan:",
+        f"  {unavailable(metadata.plan_file)}",
+        "",
+        "Run dir:",
+        f"  {unavailable(metadata.run_dir)}",
+        "",
+        "Current selection:",
+        f"  {current_selection_label(loaded_view)}",
+        "",
+        "Passes:",
+        "",
+    ]
+    lines.extend(render_run_all_pass_list(metadata.passes))
+    return "\n".join(lines)
+
+
+def one_pass_review_status(metadata: LatestRunMetadata | None) -> str:
+    if metadata is None:
+        return "unavailable"
+    return review_summary_status(
+        requested=metadata.review_requested,
+        verdict=metadata.review_after_fix_verdict or metadata.review_verdict,
+        summary=metadata.review_after_fix_summary or metadata.review_summary,
+    )
+
+
+def render_one_pass_summary_text(
+    metadata: LatestRunMetadata | None,
+    last_run: LastRunResult | None = None,
+) -> str:
+    return_code = metadata.return_code if metadata is not None else None
+    if return_code is None and last_run is not None:
+        return_code = last_run.return_code
+    selected_id = metadata.selected_before_id if metadata is not None else None
+    selected_title = metadata.selected_before_title if metadata is not None else None
+    if not selected_id and last_run is not None:
+        selected_id = last_run.selected_id
+        selected_title = last_run.selected_title
+
+    if metadata is not None and metadata.load_error:
+        metadata_status = metadata.load_error
+    else:
+        metadata_status = None
+
+    lines = [
+        "Summary",
+        "",
+        "Mode:",
+        "  one-pass",
+        "",
+        "Run:",
+        f"  {selected_label(selected_id, selected_title)}",
+        "",
+        "Result:",
+        f"  {format_return_code_result(return_code)}",
+        "",
+        "Plan:",
+        f"  {unavailable(metadata.plan_file if metadata is not None else None)}",
+        "",
+        "Run dir:",
+        f"  {unavailable(metadata.run_dir if metadata is not None else None)}",
+        "",
+        "Logs:",
+        f"  {unavailable(metadata.logs_dir if metadata is not None else None)}",
+        "",
+        "Review:",
+        f"  {one_pass_review_status(metadata)}",
+    ]
+    if metadata_status is not None:
+        lines.extend(["", "Metadata:", f"  {metadata_status}"])
+    return "\n".join(lines)
+
+
+def render_latest_summary_view(
+    *,
+    run_in_progress: bool,
+    latest_execution_kind: Literal["one_pass", "run_all"] | None,
+    latest_run_metadata: LatestRunMetadata | None,
+    latest_run_all_metadata: LatestRunAllMetadata | None,
+    last_run: LastRunResult | None,
+    loaded_view: plan_executor.PlanStatusView | None,
+) -> str:
+    if run_in_progress:
+        return "Run in progress.\nSummary will be available after completion."
+    if latest_execution_kind == "run_all":
+        return render_run_all_summary_text(
+            latest_run_all_metadata,
+            last_run,
+            loaded_view,
+        )
+    if latest_execution_kind == "one_pass":
+        return render_one_pass_summary_text(latest_run_metadata, last_run)
+    return "No run summary yet.\nRun a pass or run all to capture a summary."
+
+
+def reset_raw_output_state(
+    state: RawOutputState,
+    *,
+    selected_id: str,
+    selected_title: str,
+    command: str,
+    status: str,
+) -> None:
+    state.selected_id = selected_id
+    state.selected_title = selected_title
+    state.command = command
+    state.status = status
+    state.lines.clear()
+    state.next_seq = 1
+    state.truncated = False
+
+
+def append_raw_output_line(
+    state: RawOutputState,
+    stream: str,
+    text: str,
+    *,
+    max_lines: int = MAX_RAW_OUTPUT_LINES,
+) -> None:
+    if max_lines <= 0:
+        state.lines.clear()
+        state.truncated = True
+        return
+    state.lines.append(RawOutputLine(seq=state.next_seq, stream=stream, text=text))
+    state.next_seq += 1
+    if len(state.lines) > max_lines:
+        state.truncated = True
+        del state.lines[: len(state.lines) - max_lines]
+
+
+def render_raw_output_details(state: RawOutputState) -> str:
+    if (
+        state.selected_id is None
+        and state.command is None
+        and state.status is None
+        and not state.lines
+    ):
+        return "Raw Output\n\nNo run output yet.\nRun a pass to capture stdout/stderr."
+
+    run_text = "Not available"
+    if state.selected_id is not None:
+        if state.selected_title:
+            run_text = f"{state.selected_id} - {state.selected_title}"
+        else:
+            run_text = state.selected_id
+    return "\n".join(
+        [
+            "Raw Output",
+            "",
+            "Run:",
+            f"  {run_text}",
+            "",
+            "Command:",
+            f"  {state.command or 'Not available'}",
+            "",
+            "Status:",
+            f"  {state.status or 'Not available'}",
+        ]
+    )
+
+
+def render_raw_output_line(line: RawOutputLine) -> str:
+    text = line.text
+    if len(text) > MAX_RAW_OUTPUT_RENDER_LINE_CHARS:
+        text = f"{text[:MAX_RAW_OUTPUT_RENDER_LINE_CHARS]} [line truncated]"
+    return f"[{line.stream}] {text}"
+
+
+def raw_output_tail_notice(displayed_count: int, retained_count: int) -> str:
+    return (
+        "[output view showing latest "
+        f"{displayed_count} of {retained_count} retained lines]"
+    )
+
+
+def raw_output_first_retained_seq(state: RawOutputState) -> int | None:
+    return state.lines[0].seq if state.lines else None
+
+
+def raw_output_newest_retained_seq(state: RawOutputState) -> int | None:
+    return state.lines[-1].seq if state.lines else None
+
+
+def render_raw_output_display_tail(
+    state: RawOutputState,
+    *,
+    max_render_lines: int = MAX_RAW_OUTPUT_DISPLAY_BOOTSTRAP_LINES,
+) -> list[str]:
+    if (
+        state.selected_id is None
+        and state.command is None
+        and state.status is None
+        and not state.lines
+    ):
+        return []
+    rendered: list[str] = []
+    if state.truncated:
+        rendered.append(RAW_OUTPUT_TRUNCATION_TEXT)
+    if max_render_lines > 0 and len(state.lines) > max_render_lines:
+        rendered.append(raw_output_tail_notice(max_render_lines, len(state.lines)))
+        lines = state.lines[-max_render_lines:]
+    else:
+        lines = state.lines
+    rendered.extend(render_raw_output_line(line) for line in lines)
+    if not rendered:
+        rendered.append("No output captured yet.")
+    return rendered
+
+
+def render_raw_output_lines(
+    state: RawOutputState,
+    *,
+    max_render_lines: int = MAX_RAW_OUTPUT_DISPLAY_BOOTSTRAP_LINES,
+) -> str:
+    rendered = render_raw_output_display_tail(
+        state,
+        max_render_lines=max_render_lines,
+    )
+    return "\n".join(rendered)
+
+
+def render_raw_output_state(state: RawOutputState) -> str:
+    output = render_raw_output_lines(state)
+    if output:
+        return f"{render_raw_output_details(state)}\n\nOutput:\n{output}"
+    return render_raw_output_details(state)
+
+
+def append_current_selection_lines(
+    lines: list[str], view: plan_executor.PlanStatusView | None, load_error: str | None
+) -> None:
+    if load_error:
+        lines.extend(["Current selection:", f"  Load failed: {load_error}"])
+        return
+    if view is None:
+        lines.extend(["Current selection:", "  No valid plan loaded."])
+        return
+    if view.selected is None:
+        lines.extend(["Current selection:", "  Plan complete.", "  No runnable item selected."])
+        return
+    item = view.selected
+    lines.extend(["Current selection:", f"  {item.id} - {item.title}"])
+
+
+def build_selection_panel_text(
+    loaded_view: plan_executor.PlanStatusView | None,
+    active_run: ActiveRunSnapshot | None,
+    last_run: LastRunResult | None,
+    load_error: str | None,
+    now: datetime,
+    latest_run_all_metadata: LatestRunAllMetadata | None = None,
+    run_all_stop_requested: bool = False,
+) -> str:
+    lines = ["Current Selection", ""]
+    if active_run is not None:
+        if active_run.mode == "run_all":
+            lines.extend(
+                [
+                    "Running all:",
+                    "",
+                    "Started:",
+                    f"  {active_run.started_at.strftime('%H:%M:%S')}",
+                    "",
+                    "Elapsed:",
+                    f"  {format_elapsed_duration(active_run.started_at, now)}",
+                    "",
+                    "Max passes:",
+                    f"  {active_run.max_passes if active_run.max_passes is not None else 'Not available'}",
+                    "",
+                    "Options:",
+                    f"  {active_run.options_summary}",
+                    "",
+                ]
+            )
+            if run_all_stop_requested:
+                lines.extend(
+                    [
+                        "Stop requested:",
+                        "  will stop after current pass",
+                        "",
+                    ]
+                )
+            append_current_selection_lines(lines, loaded_view, load_error)
+            return "\n".join(lines)
+        lines.extend(
+            [
+                "Running:",
+                f"  {active_run.selected_id} - {active_run.selected_title}",
+                "",
+                "Started:",
+                f"  {active_run.started_at.strftime('%H:%M:%S')}",
+                "",
+                "Elapsed:",
+                f"  {format_elapsed_duration(active_run.started_at, now)}",
+                "",
+                "Command:",
+                "  one pass",
+                "",
+                "Options:",
+                f"  {active_run.options_summary}",
+                "",
+                "Codex:",
+                f"  {active_run.codex_bin}",
+            ]
+        )
+        return "\n".join(lines)
+
+    if last_run is not None:
+        last_run_text = (
+            "run-all"
+            if last_run.mode == "run_all"
+            else f"{last_run.selected_id} - {last_run.selected_title}"
+        )
+        lines.extend(
+            [
+                "Last run:",
+                f"  {last_run_text}",
+                "",
+                "Result:",
+                f"  {format_run_result(last_run)}",
+                "",
+            ]
+        )
+        if last_run.mode == "run_all":
+            if (
+                latest_run_all_metadata is not None
+                and latest_run_all_metadata.load_error is not None
+            ):
+                lines.extend(
+                    [
+                        "Run-all metadata:",
+                        f"  {latest_run_all_metadata.load_error}",
+                        "",
+                    ]
+                )
+            else:
+                stop_reason = (
+                    latest_run_all_metadata.stop_reason
+                    if latest_run_all_metadata is not None
+                    and latest_run_all_metadata.stop_reason
+                    else "unavailable"
+                )
+                lines.extend(["Stop reason:", f"  {stop_reason}", ""])
+                if latest_run_all_metadata is not None:
+                    passes_started = latest_run_all_metadata.passes_started
+                    max_passes = latest_run_all_metadata.max_passes
+                    if passes_started is not None or max_passes is not None:
+                        lines.extend(
+                            [
+                                "Passes:",
+                                (
+                                    "  "
+                                    f"{passes_started if passes_started is not None else 'unavailable'}"
+                                    " / "
+                                    f"{max_passes if max_passes is not None else 'unavailable'}"
+                                ),
+                                "",
+                            ]
+                        )
+        reload_error = last_run.reload_error or load_error
+        if reload_error:
+            lines.extend(["Reload:", f"  Load failed: {reload_error}"])
+        else:
+            append_current_selection_lines(lines, loaded_view, None)
+        return "\n".join(lines)
+
+    if load_error:
+        lines.extend(["Load failed:", load_error])
+        return "\n".join(lines)
+
+    if loaded_view is None:
+        lines.append("No valid plan loaded.")
+        return "\n".join(lines)
+
+    if loaded_view.selected is None:
+        lines.extend(["Plan complete.", "No runnable item selected."])
+        return "\n".join(lines)
+
+    item = loaded_view.selected
+    lines.extend(
+        [
+            "Selected:",
+            f"  {item.id} - {item.title}",
+            "",
+            "Type:",
+            f"  {item.type}",
+            "",
+            "Status:",
+            f"  {item.status}",
+        ]
+    )
+    if loaded_view.selected_parent is not None:
+        parent = loaded_view.selected_parent
+        lines.extend(["", "Parent:", f"  {parent.id} - {parent.title}"])
+    if loaded_view.warning is not None:
+        lines.extend(["", "Warning:", f"  {loaded_view.warning}"])
+    return "\n".join(lines)
+
+
+class PlanExecutorTui(App[None]):
+    """Read-only TUI for inspecting plans and composing runner commands."""
+
+    CSS = """
+    Screen {
+        layout: vertical;
+    }
+
+    #top {
+        height: 2;
+        padding: 0 1 0 1;
+    }
+
+    #path-row {
+        height: 1;
+        align-vertical: middle;
+    }
+
+    #paste-hint {
+        height: 1;
+        color: $text-muted;
+    }
+
+    #plan-label {
+        width: 6;
+        height: 1;
+        content-align: left middle;
+    }
+
+    #plan-path {
+        width: 1fr;
+        margin: 0 1 0 0;
+    }
+
+    #load {
+        min-width: 8;
+        margin: 0 1 0 0;
+    }
+
+    #browse {
+        min-width: 10;
+        margin: 0 1 0 0;
+    }
+
+    #run-pass-button {
+        min-width: 12;
+        margin: 0 1 0 0;
+    }
+
+    #stop-after-pass-button {
+        min-width: 18;
+        margin: 0;
+    }
+
+    #main {
+        height: 1fr;
+    }
+
+    #progress-panel {
+        width: 42%;
+        height: 100%;
+        border: round $accent;
+        padding: 0 1;
+    }
+
+    #progress {
+        height: auto;
+    }
+
+    #selection {
+        width: 58%;
+        height: 100%;
+        border: round $accent;
+        padding: 0 1;
+    }
+
+    #options {
+        height: 8;
+        border: round $accent;
+        padding: 0 1;
+    }
+
+    #log {
+        height: 5;
+        border: round $accent;
+        padding: 0 1;
+    }
+
+    .option-row {
+        height: 1;
+        margin: 0;
+        align-vertical: middle;
+    }
+
+    .option-group {
+        width: 18;
+        height: 1;
+        text-style: bold;
+        content-align: left middle;
+    }
+
+    .option-primary {
+        width: 28;
+        height: 1;
+    }
+
+    .option-secondary-label {
+        width: 16;
+        height: 1;
+        content-align: left middle;
+    }
+
+    .option-secondary-control {
+        height: 1;
+    }
+
+    #options Input {
+        margin: 0;
+    }
+
+    #options Checkbox {
+        margin: 0 2 0 0;
+    }
+
+    #options Label {
+        padding: 0;
+        margin: 0;
+    }
+
+    .short-input {
+        width: 12;
+    }
+
+    .medium-input {
+        width: 28;
+    }
+
+    #command-preview {
+        height: 4;
+        border: round $accent;
+        padding: 0 1;
+        margin: 1 0 0 0;
+    }
+
+    #dashboard-view {
+        height: 1fr;
+    }
+
+    #raw-output-view {
+        height: 1fr;
+        padding: 0 1;
+    }
+
+    #raw-output-details {
+        height: 10;
+        border: round $accent;
+        padding: 0 1;
+    }
+
+    #raw-output-log {
+        height: 1fr;
+        border: round $accent;
+        padding: 0 1;
+        margin: 1 0 0 0;
+    }
+
+    #review-view {
+        height: 1fr;
+        padding: 0 1;
+    }
+
+    #review-details {
+        height: 10;
+        border: round $accent;
+        padding: 0 1;
+    }
+
+    #review-scroll {
+        height: 1fr;
+        border: round $accent;
+        padding: 0 1;
+        margin: 1 0 0 0;
+    }
+
+    #review-markdown {
+        height: auto;
+    }
+
+    #summary-view {
+        height: 1fr;
+        padding: 0 1;
+    }
+
+    #summary-details {
+        height: 3;
+        border: round $accent;
+        padding: 0 1;
+    }
+
+    #summary-scroll {
+        height: 1fr;
+        border: round $accent;
+        padding: 0 1;
+        margin: 1 0 0 0;
+    }
+
+    #summary-text {
+        height: auto;
+    }
+
+    #global-run-indicator {
+        height: 1;
+        padding: 0 1;
+        content-align: right middle;
+        color: $text-muted;
+    }
+    """
+
+    BINDINGS = [
+        Binding("f2", "show_dashboard", "Dashboard"),
+        Binding("f3", "show_output", "Output"),
+        Binding("f4", "show_review", "Review"),
+        Binding("f5", "show_summary", "Summary"),
+        Binding("q", "safe_quit", "Quit", priority=True),
+        Binding("ctrl+c", "safe_quit", "Quit", priority=True),
+        Binding("r", "run_pass", "Run pass"),
+        Binding("escape", "blur_input", "Blur input"),
+    ]
+
+    def __init__(self, initial_plan_path: str | None = None) -> None:
+        super().__init__()
+        self.initial_plan_path = initial_plan_path or ""
+        self.plan_path_text = self.initial_plan_path
+        self.loaded_view: plan_executor.PlanStatusView | None = None
+        self.log_lines: list[str] = []
+        self.run_in_progress = False
+        self.run_process: asyncio.subprocess.Process | None = None
+        self.quit_after_run = False
+        self.safe_quit_dialog_open = False
+        self.current_run_selected_id: str | None = None
+        self.current_run_started_at: datetime | None = None
+        self.current_run_mode: Literal["one_pass", "run_all"] | None = None
+        self.active_run: ActiveRunSnapshot | None = None
+        self.last_run_result: LastRunResult | None = None
+        self.latest_run_metadata: LatestRunMetadata | None = None
+        self.latest_run_all_metadata: LatestRunAllMetadata | None = None
+        self.latest_execution_kind: Literal["one_pass", "run_all"] | None = None
+        self.current_result_json_path: Path | None = None
+        self.current_run_all_result_json_path: Path | None = None
+        self.current_run_all_stop_file_path: Path | None = None
+        self.run_all_stop_requested = False
+        self.current_load_error: str | None = None
+        self.elapsed_refresh_timer: Any | None = None
+        self.raw_output_refresh_timer: Any | None = None
+        self.run_all_live_reload_timer: Any | None = None
+        self.global_run_indicator_timer: Any | None = None
+        self.global_run_indicator_frame_index = 0
+        self.last_live_reload_selected_id: str | None = None
+        self.last_live_reload_error: str | None = None
+        self.raw_output_state = RawOutputState()
+        self.raw_output_dirty = False
+        self.raw_output_display_initialized = False
+        self.raw_output_displayed_until_seq: int | None = None
+        self.raw_output_display_write_count = 0
+        self.raw_output_displayed_lines: list[str] = []
+        self.raw_output_last_displayed_lines: list[str] = []
+        self.raw_output_display_has_placeholder = False
+        self.active_view = "dashboard"
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        with Vertical(id="dashboard-view"):
+            with Vertical(id="top"):
+                with Horizontal(id="path-row"):
+                    yield Label("Plan:", id="plan-label")
+                    yield Input(
+                        value=self.initial_plan_path,
+                        placeholder="docs/my_plan.md",
+                        id="plan-path",
+                        compact=True,
+                    )
+                    yield Button("Load", id="load", variant="primary", compact=True)
+                    yield Button("Browse", id="browse", compact=True)
+                    yield Button("Run Pass", id="run-pass-button", compact=True)
+                    yield Button("Stop After Pass", id="stop-after-pass-button", compact=True)
+                yield Static(
+                    "Paste paths using your terminal paste shortcut, usually Ctrl+Shift+V.",
+                    id="paste-hint",
+                )
+            with Horizontal(id="main"):
+                progress_panel = ScrollableContainer(id="progress-panel")
+                progress_panel.border_title = "Progress"
+                with progress_panel:
+                    yield Static("No plan loaded.", id="progress")
+                yield Static("Current Selection\n\nNo valid plan loaded.", id="selection")
+            with Vertical(id="options"):
+                with Horizontal(classes="option-row"):
+                    yield Label("Run:", classes="option-group")
+                    yield Checkbox("Run all", id="run-all", classes="option-primary", compact=True)
+                    yield Label("Max passes:", classes="option-secondary-label")
+                    yield Input(
+                        value="10",
+                        id="max-passes",
+                        classes="short-input option-secondary-control",
+                        compact=True,
+                    )
+                with Horizontal(classes="option-row"):
+                    yield Label("Quality gates:", classes="option-group")
+                    yield Checkbox(
+                        "Review after pass",
+                        id="review-after-pass",
+                        classes="option-primary",
+                        compact=True,
+                    )
+                    yield Checkbox(
+                        "Fix after review",
+                        id="fix-after-review",
+                        classes="option-secondary-control",
+                        compact=True,
+                    )
+                with Horizontal(classes="option-row"):
+                    yield Label("Git:", classes="option-group")
+                    yield Checkbox(
+                        "Commit after pass",
+                        id="commit-after-pass",
+                        classes="option-primary",
+                        compact=True,
+                    )
+                    yield Label("Commit prefix:", classes="option-secondary-label")
+                    yield Input(
+                        value="plan",
+                        id="commit-prefix",
+                        classes="short-input option-secondary-control",
+                        compact=True,
+                    )
+                with Horizontal(classes="option-row"):
+                    yield Label("Plan copy:", classes="option-group")
+                    yield Checkbox(
+                        "Copy to run dir",
+                        id="copy-to-run-dir",
+                        classes="option-primary",
+                        compact=True,
+                    )
+                    yield Label("Run dir:", classes="option-secondary-label")
+                    yield Input(
+                        placeholder=".agent-runs/example",
+                        id="run-dir",
+                        classes="medium-input option-secondary-control",
+                        compact=True,
+                    )
+                with Horizontal(classes="option-row"):
+                    yield Label("Runtime:", classes="option-group")
+                    yield Checkbox(
+                        "Inhibit sleep",
+                        id="inhibit-sleep",
+                        classes="option-primary",
+                        compact=True,
+                    )
+                    yield Label("Codex bin:", classes="option-secondary-label")
+                    yield Input(
+                        value="codex",
+                        id="codex-bin",
+                        classes="medium-input option-secondary-control",
+                        compact=True,
+                    )
+                yield Label("Idle", id="run-status")
+            yield Static("", id="command-preview")
+            log_widget = Static("", id="log")
+            log_widget.border_title = "Log"
+            yield log_widget
+        with Vertical(id="raw-output-view"):
+            yield Static("", id="raw-output-details")
+            output_log = Log(
+                highlight=False,
+                auto_scroll=True,
+                id="raw-output-log",
+            )
+            output_log.border_title = "Output"
+            yield output_log
+        with Vertical(id="review-view"):
+            yield Static("", id="review-details")
+            review_scroll = ScrollableContainer(id="review-scroll", can_focus=True)
+            review_scroll.border_title = "Review"
+            with review_scroll:
+                yield Static("", id="review-markdown")
+        with Vertical(id="summary-view"):
+            yield Static("Summary", id="summary-details")
+            summary_scroll = ScrollableContainer(id="summary-scroll", can_focus=True)
+            summary_scroll.border_title = "Summary"
+            with summary_scroll:
+                yield Static("", id="summary-text")
+        yield Label("Idle", id="global-run-indicator")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.append_log("TUI started.")
+        self.query_one("#raw-output-view").display = False
+        self.query_one("#review-view").display = False
+        self.query_one("#summary-view").display = False
+        self.refresh_review_view(auto_scroll=False)
+        self.refresh_summary_view(auto_scroll=False)
+        self.elapsed_refresh_timer = self.set_interval(
+            1.0, self.refresh_running_selection
+        )
+        self.raw_output_refresh_timer = self.set_interval(
+            RAW_OUTPUT_REFRESH_INTERVAL_SECONDS, self.refresh_dirty_raw_output_view
+        )
+        self.run_all_live_reload_timer = self.set_interval(
+            2.0, self.quiet_reload_for_run_all
+        )
+        self.global_run_indicator_timer = self.set_interval(
+            GLOBAL_RUN_INDICATOR_INTERVAL_SECONDS,
+            self.refresh_global_run_indicator,
+        )
+        self.refresh_global_run_indicator()
+        self.update_command_preview()
+        self.update_control_state()
+        if self.initial_plan_path:
+            if self.load_plan(self.initial_plan_path):
+                self.clear_entry_focus()
+
+    @on(Button.Pressed, "#load")
+    def load_button_pressed(self) -> None:
+        if self.run_in_progress:
+            self.append_log("Cannot load while a run is in progress.")
+            return
+        self.load_plan(self.plan_path_text)
+
+    @on(Button.Pressed, "#browse")
+    def browse_button_pressed(self) -> None:
+        if self.run_in_progress:
+            self.append_log("Cannot browse while a run is in progress.")
+            return
+        self.push_screen(
+            PlanBrowseDialog(plan_executor.find_docs_markdown_plans()),
+            self.browse_finished,
+        )
+
+    @on(Button.Pressed, "#run-pass-button")
+    def run_pass_button_pressed(self) -> None:
+        self.action_run_pass()
+
+    @on(Button.Pressed, "#stop-after-pass-button")
+    def stop_after_pass_button_pressed(self) -> None:
+        self.request_stop_after_pass()
+
+    @on(Input.Submitted, "#plan-path")
+    def plan_path_submitted(self, event: Input.Submitted) -> None:
+        if self.run_in_progress:
+            self.append_log("Cannot load while a run is in progress.")
+            return
+        if self.load_plan(event.value):
+            self.clear_entry_focus()
+
+    @on(Input.Changed)
+    def input_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "plan-path":
+            self.plan_path_text = event.value.strip()
+        if event.input.id in {
+            "plan-path",
+            "max-passes",
+            "commit-prefix",
+            "run-dir",
+            "codex-bin",
+        }:
+            self.update_command_preview()
+
+    @on(Checkbox.Changed)
+    def checkbox_changed(self) -> None:
+        self.update_command_preview()
+        self.update_control_state()
+
+    def action_blur_input(self) -> None:
+        focused = self.focused
+        if isinstance(focused, Input):
+            focused.blur()
+            self.set_focus(None)
+
+    def action_show_dashboard(self) -> None:
+        self.active_view = "dashboard"
+        self.query_one("#raw-output-view").display = False
+        self.query_one("#review-view").display = False
+        self.query_one("#summary-view").display = False
+        self.query_one("#dashboard-view").display = True
+        self.set_focus(None)
+
+    def action_show_output(self) -> None:
+        focused = self.focused
+        if isinstance(focused, Input):
+            focused.blur()
+        self.active_view = "output"
+        self.query_one("#dashboard-view").display = False
+        self.query_one("#review-view").display = False
+        self.query_one("#summary-view").display = False
+        self.query_one("#raw-output-view").display = True
+        output_log = self.query_one("#raw-output-log", Log)
+        self.set_focus(output_log)
+        if self.refresh_raw_output_view(auto_scroll=True):
+            self.raw_output_dirty = not self.raw_output_display_is_synchronized()
+
+    def action_show_review(self) -> None:
+        focused = self.focused
+        if isinstance(focused, Input):
+            focused.blur()
+        self.active_view = "review"
+        self.query_one("#dashboard-view").display = False
+        self.query_one("#raw-output-view").display = False
+        self.query_one("#summary-view").display = False
+        self.query_one("#review-view").display = True
+        review_scroll = self.query_one("#review-scroll", ScrollableContainer)
+        self.set_focus(review_scroll)
+        self.refresh_review_view(auto_scroll=False)
+
+    def action_show_summary(self) -> None:
+        focused = self.focused
+        if isinstance(focused, Input):
+            focused.blur()
+        self.active_view = "summary"
+        self.query_one("#dashboard-view").display = False
+        self.query_one("#raw-output-view").display = False
+        self.query_one("#review-view").display = False
+        self.query_one("#summary-view").display = True
+        summary_scroll = self.query_one("#summary-scroll", ScrollableContainer)
+        self.set_focus(summary_scroll)
+        self.refresh_summary_view(auto_scroll=False)
+
+    def request_safe_quit(self) -> None:
+        if not self.run_in_progress:
+            self.exit()
+            return
+        if self.safe_quit_dialog_open:
+            return
+        self.safe_quit_dialog_open = True
+        self.push_screen(QuitAfterRunDialog(), self.quit_after_run_finished)
+
+    def action_safe_quit(self) -> None:
+        self.request_safe_quit()
+
+    def action_quit(self) -> None:
+        self.request_safe_quit()
+
+    def action_help_quit(self) -> None:
+        self.request_safe_quit()
+
+    def clear_run_all_stop_file(self) -> bool:
+        try:
+            TUI_RUN_ALL_STOP_FILE_PATH.unlink(missing_ok=True)
+        except OSError as exc:
+            self.append_log(f"Failed to clear stale stop request: {exc}")
+            return False
+        return True
+
+    def cleanup_run_all_stop_file(self) -> None:
+        try:
+            TUI_RUN_ALL_STOP_FILE_PATH.unlink(missing_ok=True)
+        except OSError as exc:
+            self.append_log(f"Failed to clean up stop request: {exc}")
+
+    def request_stop_after_pass(self) -> None:
+        if (
+            not self.run_in_progress
+            or self.current_run_mode != "run_all"
+            or self.run_all_stop_requested
+        ):
+            return
+        try:
+            TUI_RUN_ALL_STOP_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            TUI_RUN_ALL_STOP_FILE_PATH.write_text(
+                json.dumps(
+                    {
+                        "requested_at": datetime.now().isoformat(timespec="seconds"),
+                        "reason": "user_requested_stop_after_pass",
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            self.append_log(f"Failed to request stop after pass: {exc}")
+            return
+        self.run_all_stop_requested = True
+        self.append_log("Stop requested. Runner will stop after the current pass.")
+        self.update_run_status("Running all - stop requested")
+        self.render_selection_panel()
+        self.refresh_global_run_indicator()
+        self.update_control_state()
+
+    def action_run_pass(self) -> None:
+        if self.run_in_progress:
+            self.append_log("Run already in progress.")
+            return
+        if self.loaded_view is None:
+            self.append_log("Cannot run: no valid plan loaded.")
+            return
+        options = self.current_options()
+        mode: Literal["one_pass", "run_all"] = "run_all" if options.run_all else "one_pass"
+        if options.run_all:
+            if self.loaded_view.selected is None:
+                self.append_log("Cannot run all: plan is already complete.")
+                return
+            if options.copy_to_run_dir:
+                self.append_log(RUN_ALL_COPY_GUARD_MESSAGE)
+                return
+            self.run_all_stop_requested = False
+            if not self.clear_run_all_stop_file():
+                return
+        elif self.loaded_view.selected is None:
+            self.append_log("Cannot run: no valid plan loaded.")
+            return
+
+        selected_id = self.loaded_view.selected.id
+        selected_title = self.loaded_view.selected.title
+        plan_path = self.plan_path_text
+        self.run_in_progress = True
+        self.quit_after_run = False
+        self.last_run_result = None
+        self.latest_run_metadata = None
+        self.latest_run_all_metadata = None
+        self.latest_execution_kind = mode
+        self.refresh_review_view(auto_scroll=False)
+        self.refresh_summary_view(auto_scroll=False)
+        self.current_load_error = None
+        self.current_run_selected_id = selected_id
+        self.current_run_mode = mode
+        self.current_result_json_path = TUI_RESULT_JSON_PATH if mode == "one_pass" else None
+        self.current_run_all_result_json_path = (
+            TUI_RUN_ALL_RESULT_JSON_PATH if mode == "run_all" else None
+        )
+        self.current_run_all_stop_file_path = (
+            TUI_RUN_ALL_STOP_FILE_PATH if mode == "run_all" else None
+        )
+        self.last_live_reload_selected_id = selected_id if mode == "run_all" else None
+        self.last_live_reload_error = None
+        started_at = datetime.now()
+        self.current_run_started_at = started_at
+        self.active_run = ActiveRunSnapshot(
+            selected_id=selected_id,
+            selected_title=selected_title,
+            started_at=started_at,
+            options_summary=summarize_tui_options(options),
+            codex_bin=options.codex_bin,
+            mode=mode,
+            max_passes=options.max_passes if mode == "run_all" else None,
+        )
+        self.render_selection_panel()
+        self.update_run_status("Running all" if mode == "run_all" else f"Running {selected_id}")
+        self.refresh_global_run_indicator()
+        self.update_control_state()
+        self.run_worker(
+            self.run_selected_pass(
+                plan_path,
+                selected_id,
+                options,
+                self.current_result_json_path,
+                mode=mode,
+                run_all_result_json_path=self.current_run_all_result_json_path,
+                run_all_stop_file_path=self.current_run_all_stop_file_path,
+            ),
+            name="run-pass",
+            exclusive=True,
+        )
+
+    def browse_finished(self, selected_path: Path | None) -> None:
+        if self.run_in_progress:
+            self.append_log("Cannot browse while a run is in progress.")
+            return
+        if selected_path is None:
+            return
+        if self.load_plan(str(selected_path)):
+            self.clear_entry_focus()
+
+    def quit_after_run_finished(self, should_quit: bool) -> None:
+        self.safe_quit_dialog_open = False
+        if should_quit:
+            self.quit_after_run = True
+            self.append_log("Will quit after current pass finishes.")
+
+    def clear_entry_focus(self) -> None:
+        self.query_one("#plan-path", Input).blur()
+        self.set_focus(None)
+
+    def load_plan(
+        self,
+        plan_path: str | None = None,
+        *,
+        log_load: bool = True,
+        preserve_last_run: bool = False,
+    ) -> bool:
+        if not preserve_last_run:
+            self.last_run_result = None
+            self.latest_execution_kind = None
+            self.latest_run_metadata = None
+            self.latest_run_all_metadata = None
+            try:
+                self.refresh_summary_view(auto_scroll=False)
+            except Exception:
+                pass
+        if plan_path is None:
+            plan_path = self.plan_path_text
+        plan_text = plan_path.strip()
+        self.plan_path_text = plan_text
+        path_input = self.query_one("#plan-path", Input)
+        if path_input.value != plan_text:
+            path_input.value = plan_text
+        if log_load:
+            self.append_log(f"Attempting to load plan: {plan_text}")
+        state = plan_executor.load_tui_plan_state(plan_text)
+        if state.view is None:
+            error = state.load_error or "unknown error"
+            log_error = error.removeprefix(f"{plan_text}: ")
+            self.loaded_view = None
+            self.current_load_error = error
+            self.render_invalid_plan(error)
+            if log_load:
+                self.append_log(f"Failed to load plan: {plan_text}: {log_error}")
+            self.update_command_preview()
+            if not self.quit_after_run:
+                self.update_control_state()
+            self.query_one("#plan-path", Input).focus()
+            self.refresh_summary_view(auto_scroll=False)
+            return False
+
+        previous_selected = (
+            self.loaded_view.selected.id
+            if self.loaded_view is not None and self.loaded_view.selected is not None
+            else None
+        )
+        view = state.view
+
+        self.loaded_view = view
+        self.current_load_error = None
+        self.render_progress(view)
+        self.render_selection_panel()
+        selected_id = view.selected.id if view.selected is not None else None
+        if log_load:
+            if selected_id is None:
+                self.append_log("Plan complete.")
+            else:
+                self.append_log(f"Loaded plan. Selected {selected_id}.")
+        if log_load and previous_selected is not None and previous_selected != selected_id:
+            self.append_log(f"Selected item changed after reload: {previous_selected} -> {selected_id}.")
+        self.update_command_preview()
+        if not self.quit_after_run:
+            self.update_control_state()
+        self.refresh_summary_view(auto_scroll=False)
+        return True
+
+    def quiet_reload_for_run_all(self) -> None:
+        if not self.run_in_progress or self.current_run_mode != "run_all":
+            return
+        state = plan_executor.load_tui_plan_state(self.plan_path_text)
+        if state.view is None:
+            error = state.load_error or "unknown error"
+            self.current_load_error = error
+            if self.last_live_reload_error != error:
+                self.append_log(f"Live reload failed: {error}")
+                self.last_live_reload_error = error
+            self.render_selection_panel()
+            return
+
+        view = state.view
+        selected_id = view.selected.id if view.selected is not None else None
+        if self.last_live_reload_error is not None:
+            self.append_log("Live reload recovered.")
+            self.last_live_reload_error = None
+        if (
+            self.last_live_reload_selected_id is not None
+            and selected_id != self.last_live_reload_selected_id
+        ):
+            self.append_log(
+                f"Selected item changed: {self.last_live_reload_selected_id} -> {selected_id}."
+            )
+        self.last_live_reload_selected_id = selected_id
+        self.loaded_view = view
+        self.current_load_error = None
+        self.render_progress(view)
+        self.render_selection_panel()
+
+    def render_progress(self, view: plan_executor.PlanStatusView) -> None:
+        lines = []
+        for item in view.items:
+            indent = "  " if item.parent is not None else ""
+            lines.append(f"{indent}{item.id} {item.status}")
+        self.query_one("#progress", Static).update("\n".join(lines))
+
+    def render_invalid_plan(self, error: str) -> None:
+        self.query_one("#progress", Static).update("No valid plan loaded.")
+        self.current_load_error = error
+        if self.last_run_result is not None:
+            self.last_run_result.reload_error = error
+        self.render_selection_panel()
+
+    def render_selection(self, view: plan_executor.PlanStatusView) -> None:
+        self.loaded_view = view
+        self.current_load_error = None
+        self.render_selection_panel()
+
+    def render_selection_panel(self, now: datetime | None = None) -> None:
+        self.query_one("#selection", Static).update(
+            build_selection_panel_text(
+                self.loaded_view,
+                self.active_run,
+                self.last_run_result,
+                self.current_load_error,
+                now or datetime.now(),
+                self.latest_run_all_metadata,
+                self.run_all_stop_requested,
+            )
+        )
+
+    def refresh_running_selection(self) -> None:
+        if self.run_in_progress:
+            self.render_selection_panel()
+
+    def refresh_global_run_indicator(self) -> None:
+        try:
+            label = self.query_one("#global-run-indicator", Label)
+        except Exception:
+            return
+        frame = GLOBAL_RUN_INDICATOR_FRAMES[self.global_run_indicator_frame_index]
+        label.update(
+            render_global_run_indicator(
+                self.active_run,
+                run_in_progress=self.run_in_progress,
+                frame=frame,
+                now=datetime.now(),
+                run_all_stop_requested=self.run_all_stop_requested,
+            )
+        )
+        if self.run_in_progress:
+            self.global_run_indicator_frame_index = (
+                self.global_run_indicator_frame_index + 1
+            ) % len(GLOBAL_RUN_INDICATOR_FRAMES)
+
+    def update_command_preview(self) -> None:
+        options = self.current_options()
+        preview = plan_executor.build_tui_command_preview(self.plan_path_text, options)
+        self.query_one("#command-preview", Static).update(f"Command preview:\n{preview}")
+
+    def update_run_status(self, message: str) -> None:
+        self.query_one("#run-status", Label).update(message)
+
+    def reset_raw_output_display(self, *, clear_widget: bool = True) -> None:
+        self.raw_output_display_initialized = False
+        self.raw_output_displayed_until_seq = None
+        self.raw_output_displayed_lines = []
+        self.raw_output_last_displayed_lines = []
+        self.raw_output_display_has_placeholder = False
+        if clear_widget:
+            try:
+                self.query_one("#raw-output-log", Log).clear()
+            except Exception:
+                pass
+
+    def raw_output_display_is_synchronized(self) -> bool:
+        newest_seq = raw_output_newest_retained_seq(self.raw_output_state)
+        if newest_seq is None:
+            return self.raw_output_display_initialized
+        return self.raw_output_displayed_until_seq == newest_seq
+
+    def raw_output_pending_lines(self) -> list[RawOutputLine]:
+        displayed_until_seq = self.raw_output_displayed_until_seq
+        if displayed_until_seq is None:
+            return list(self.raw_output_state.lines)
+        return [
+            line
+            for line in self.raw_output_state.lines
+            if line.seq > displayed_until_seq
+        ]
+
+    def raw_output_needs_tail_reset(self, pending_count: int) -> bool:
+        if not self.raw_output_display_initialized:
+            return True
+        if self.raw_output_display_has_placeholder and pending_count > 0:
+            return True
+        first_seq = raw_output_first_retained_seq(self.raw_output_state)
+        if (
+            first_seq is not None
+            and self.raw_output_displayed_until_seq is not None
+            and self.raw_output_displayed_until_seq < first_seq
+        ):
+            return True
+        return pending_count > MAX_RAW_OUTPUT_PENDING_RESET_THRESHOLD
+
+    def write_raw_output_log_lines(
+        self,
+        raw_output_log: Log,
+        lines: list[str],
+        *,
+        auto_scroll: bool,
+    ) -> None:
+        if not lines:
+            return
+        raw_output_log.write_lines(lines, scroll_end=auto_scroll)
+        self.raw_output_display_write_count += 1
+        self.raw_output_displayed_lines.extend(lines)
+        self.raw_output_last_displayed_lines = lines
+
+    def reset_raw_output_log_to_tail(
+        self,
+        raw_output_log: Log,
+        *,
+        auto_scroll: bool,
+    ) -> None:
+        raw_output_log.clear()
+        lines = render_raw_output_display_tail(self.raw_output_state)
+        self.raw_output_displayed_lines = []
+        self.write_raw_output_log_lines(
+            raw_output_log,
+            lines,
+            auto_scroll=auto_scroll,
+        )
+        self.raw_output_display_has_placeholder = (
+            not self.raw_output_state.lines
+            and lines == ["No output captured yet."]
+        )
+        self.raw_output_display_initialized = True
+        self.raw_output_displayed_until_seq = raw_output_newest_retained_seq(
+            self.raw_output_state
+        )
+
+    def refresh_raw_output_view(self, *, auto_scroll: bool = True) -> bool:
+        try:
+            raw_output_details = self.query_one("#raw-output-details", Static)
+            raw_output_log = self.query_one("#raw-output-log", Log)
+        except Exception:
+            return False
+        raw_output_details.update(render_raw_output_details(self.raw_output_state))
+        pending_lines = self.raw_output_pending_lines()
+        if self.raw_output_needs_tail_reset(len(pending_lines)):
+            self.reset_raw_output_log_to_tail(
+                raw_output_log,
+                auto_scroll=auto_scroll,
+            )
+            return True
+        if not pending_lines:
+            return True
+        lines_to_write = pending_lines[:MAX_RAW_OUTPUT_APPEND_PER_REFRESH]
+        self.write_raw_output_log_lines(
+            raw_output_log,
+            [render_raw_output_line(line) for line in lines_to_write],
+            auto_scroll=auto_scroll,
+        )
+        self.raw_output_displayed_until_seq = lines_to_write[-1].seq
+        return True
+
+    def refresh_dirty_raw_output_view(self) -> None:
+        if not self.raw_output_dirty or self.active_view != "output":
+            return
+        if self.refresh_raw_output_view(auto_scroll=True):
+            self.raw_output_dirty = not self.raw_output_display_is_synchronized()
+
+    def refresh_raw_output_if_visible(self, *, auto_scroll: bool = True) -> None:
+        if self.active_view != "output":
+            return
+        if self.refresh_raw_output_view(auto_scroll=auto_scroll):
+            self.raw_output_dirty = not self.raw_output_display_is_synchronized()
+
+    def refresh_review_view(self, *, auto_scroll: bool = False) -> None:
+        if self.run_in_progress:
+            self.query_one("#review-details", Static).update("Review")
+            self.query_one("#review-markdown", Static).update(
+                "Run in progress. Review output will be available after completion if review is enabled."
+            )
+        elif self.latest_execution_kind == "run_all":
+            selection = select_latest_run_all_review_artifact(
+                self.latest_run_all_metadata
+            )
+            self.query_one("#review-details", Static).update(
+                render_run_all_review_details(selection)
+            )
+            markdown_text, error = load_review_markdown(selection)
+            self.query_one("#review-markdown", Static).update(
+                markdown_text or error or selection.message or ""
+            )
+        else:
+            selection = select_latest_review_artifact(self.latest_run_metadata)
+            self.query_one("#review-details", Static).update(
+                render_review_details(self.latest_run_metadata, selection)
+            )
+            markdown_text, error = load_review_markdown(selection)
+            self.query_one("#review-markdown", Static).update(
+                markdown_text or error or selection.message or ""
+            )
+        if auto_scroll:
+            review_scroll = self.query_one("#review-scroll", ScrollableContainer)
+            review_scroll.scroll_home(animate=False)
+
+    def refresh_summary_view(self, *, auto_scroll: bool = False) -> None:
+        self.query_one("#summary-details", Static).update("Summary")
+        self.query_one("#summary-text", Static).update(
+            render_latest_summary_view(
+                run_in_progress=self.run_in_progress,
+                latest_execution_kind=self.latest_execution_kind,
+                latest_run_metadata=self.latest_run_metadata,
+                latest_run_all_metadata=self.latest_run_all_metadata,
+                last_run=self.last_run_result,
+                loaded_view=self.loaded_view,
+            )
+        )
+        if auto_scroll:
+            summary_scroll = self.query_one("#summary-scroll", ScrollableContainer)
+            summary_scroll.scroll_home(animate=False)
+
+    def update_raw_output_status(self, message: str) -> None:
+        self.raw_output_state.status = message
+        self.raw_output_dirty = True
+
+    def append_raw_output(self, stream: str, text: str) -> None:
+        append_raw_output_line(self.raw_output_state, stream, text)
+        self.raw_output_dirty = True
+
+    def update_control_state(self) -> None:
+        has_selected_item = (
+            self.loaded_view is not None and self.loaded_view.selected is not None
+        )
+        run_all_checked = self.query_one("#run-all", Checkbox).value
+        run_button = self.query_one("#run-pass-button", Button)
+        stop_button = self.query_one("#stop-after-pass-button", Button)
+        run_button.label = "Run All" if run_all_checked else "Run Pass"
+        stop_button.label = (
+            "Stop Requested" if self.run_all_stop_requested else "Stop After Pass"
+        )
+        controls_disabled = self.run_in_progress
+        for selector, widget_type in [
+            ("#plan-path", Input),
+            ("#load", Button),
+            ("#browse", Button),
+            ("#run-all", Checkbox),
+            ("#max-passes", Input),
+            ("#review-after-pass", Checkbox),
+            ("#fix-after-review", Checkbox),
+            ("#commit-after-pass", Checkbox),
+            ("#commit-prefix", Input),
+            ("#copy-to-run-dir", Checkbox),
+            ("#run-dir", Input),
+            ("#inhibit-sleep", Checkbox),
+            ("#codex-bin", Input),
+        ]:
+            self.query_one(selector, widget_type).disabled = controls_disabled
+        run_button.disabled = controls_disabled or not has_selected_item
+        stop_button.disabled = not (
+            self.run_in_progress
+            and self.current_run_mode == "run_all"
+            and not self.run_all_stop_requested
+        )
+
+    async def drain_subprocess_stream(
+        self, stream: asyncio.StreamReader | None, stream_name: str
+    ) -> int:
+        if stream is None:
+            return 0
+        line_count = 0
+        while True:
+            line = await stream.readline()
+            if not line:
+                return line_count
+            text = line.decode("utf-8", errors="replace").rstrip("\r\n")
+            self.append_raw_output(stream_name, text)
+            line_count += 1
+
+    async def run_selected_pass(
+        self,
+        plan_path: str,
+        selected_id: str,
+        options: plan_executor.TuiOptions,
+        result_json_path: Path | None = None,
+        *,
+        mode: Literal["one_pass", "run_all"] = "one_pass",
+        run_all_result_json_path: Path | None = None,
+        run_all_stop_file_path: Path | None = None,
+    ) -> None:
+        return_code: int | None = None
+        failed = False
+        failure_message: str | None = None
+        if mode == "one_pass":
+            result_json_path = result_json_path or TUI_RESULT_JSON_PATH
+            run_all_result_json_path = None
+            run_all_stop_file_path = None
+        else:
+            result_json_path = None
+            run_all_result_json_path = (
+                run_all_result_json_path or TUI_RUN_ALL_RESULT_JSON_PATH
+            )
+            run_all_stop_file_path = (
+                run_all_stop_file_path or TUI_RUN_ALL_STOP_FILE_PATH
+            )
+        self.current_result_json_path = result_json_path
+        self.current_run_all_result_json_path = run_all_result_json_path
+        self.current_run_all_stop_file_path = (
+            run_all_stop_file_path if mode == "run_all" else None
+        )
+        self.latest_execution_kind = mode
+        if mode == "one_pass":
+            self.latest_run_all_metadata = None
+        else:
+            self.latest_run_metadata = None
+        self.refresh_summary_view(auto_scroll=False)
+        if self.active_run is None:
+            selected_title = selected_id
+            if self.loaded_view is not None and self.loaded_view.selected is not None:
+                selected_title = self.loaded_view.selected.title
+            self.active_run = ActiveRunSnapshot(
+                selected_id=selected_id,
+                selected_title=selected_title,
+                started_at=datetime.now(),
+                options_summary=summarize_tui_options(options),
+                codex_bin=options.codex_bin,
+                mode=mode,
+                max_passes=options.max_passes if mode == "run_all" else None,
+            )
+            self.render_selection_panel()
+            self.refresh_global_run_indicator()
+        self.append_log(
+            f"Starting run-all with max passes {options.max_passes}."
+            if mode == "run_all"
+            else f"Starting pass {selected_id}."
+        )
+        try:
+            if mode == "run_all":
+                self.run_all_stop_requested = False
+                if not self.clear_run_all_stop_file():
+                    failed = True
+                    failure_message = "failed to clear stale stop request"
+                    self.update_run_status("Failed")
+                    self.update_raw_output_status(f"Failed: {failure_message}")
+                    return
+            argv = plan_executor.build_tui_subprocess_argv(
+                plan_path,
+                options,
+                mode=mode,
+                result_json_path=result_json_path,
+                run_all_result_json_path=run_all_result_json_path,
+                run_all_stop_file_path=run_all_stop_file_path,
+            )
+            active_run = self.active_run
+            selected_title = (
+                active_run.selected_title if active_run is not None else selected_id
+            )
+            reset_raw_output_state(
+                self.raw_output_state,
+                selected_id="run-all" if mode == "run_all" else selected_id,
+                selected_title="" if mode == "run_all" else selected_title,
+                command=shlex.join(argv),
+                status="Running all" if mode == "run_all" else "Running",
+            )
+            self.reset_raw_output_display(clear_widget=self.active_view == "output")
+            self.raw_output_dirty = True
+            self.refresh_raw_output_if_visible(auto_scroll=False)
+            if result_json_path is not None:
+                try:
+                    result_json_path.unlink(missing_ok=True)
+                except OSError as exc:
+                    self.append_log(f"Could not clear prior result metadata: {exc}")
+            stale_paths = []
+            if mode == "one_pass":
+                stale_paths.append(TUI_RUN_ALL_RESULT_JSON_PATH)
+            else:
+                stale_paths.extend([TUI_RESULT_JSON_PATH, TUI_RUN_ALL_RESULT_JSON_PATH])
+            for stale_path in stale_paths:
+                try:
+                    stale_path.unlink(missing_ok=True)
+                except OSError as exc:
+                    self.append_log(f"Could not clear prior result metadata: {exc}")
+            process = await asyncio.create_subprocess_exec(
+                *argv,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            self.run_process = process
+            stdout_task = asyncio.create_task(
+                self.drain_subprocess_stream(process.stdout, "stdout")
+            )
+            stderr_task = asyncio.create_task(
+                self.drain_subprocess_stream(process.stderr, "stderr")
+            )
+            return_code = await process.wait()
+            await asyncio.gather(stdout_task, stderr_task)
+            if mode == "one_pass" and result_json_path is not None:
+                self.latest_run_metadata = load_latest_run_metadata(result_json_path)
+            if mode == "run_all" and run_all_result_json_path is not None:
+                self.latest_run_all_metadata = load_latest_run_all_metadata(
+                    run_all_result_json_path
+                )
+            self.refresh_review_view(auto_scroll=False)
+            self.refresh_summary_view(auto_scroll=False)
+            if return_code == 0:
+                self.update_run_status(f"Finished with return code {return_code}")
+                self.update_raw_output_status(f"Finished with return code {return_code}")
+            else:
+                self.update_run_status(f"Failed with return code {return_code}")
+                self.update_raw_output_status(f"Failed with return code {return_code}")
+            self.append_log(f"Runner exited with return code {return_code}.")
+        except Exception as exc:
+            failed = True
+            failure_message = str(exc)
+            if return_code is None:
+                self.update_run_status("Failed")
+                self.update_raw_output_status(f"Failed: {failure_message}")
+            else:
+                self.update_run_status(f"Failed with return code {return_code}")
+                self.update_raw_output_status(f"Failed with return code {return_code}")
+            self.append_raw_output("runner", f"Failed: {failure_message}")
+            self.append_log(f"Run failed: {exc}")
+        finally:
+            self.refresh_raw_output_if_visible(auto_scroll=True)
+            active_run = self.active_run
+            if active_run is not None:
+                self.last_run_result = LastRunResult(
+                    selected_id=active_run.selected_id,
+                    selected_title=active_run.selected_title,
+                    finished_at=datetime.now(),
+                    return_code=return_code,
+                    failure_message=failure_message,
+                    mode=mode,
+                )
+            self.run_in_progress = False
+            self.run_process = None
+            self.current_run_selected_id = None
+            self.current_run_started_at = None
+            self.current_run_mode = None
+            self.current_result_json_path = None
+            self.current_run_all_result_json_path = None
+            self.current_run_all_stop_file_path = None
+            self.active_run = None
+            if mode == "run_all":
+                self.cleanup_run_all_stop_file()
+            self.run_all_stop_requested = False
+            self.refresh_global_run_indicator()
+            self.refresh_review_view(auto_scroll=False)
+            self.refresh_summary_view(auto_scroll=False)
+            try:
+                if self.load_plan(plan_path, log_load=False, preserve_last_run=True):
+                    reloaded_id = (
+                        self.loaded_view.selected.id
+                        if self.loaded_view is not None and self.loaded_view.selected is not None
+                        else None
+                    )
+                    if reloaded_id is None:
+                        self.append_log("Reloaded plan. No selected item.")
+                    else:
+                        self.append_log(f"Reloaded plan. Selected {reloaded_id}.")
+                else:
+                    self.append_log("Reload failed after run.")
+            except Exception as exc:
+                failed = True
+                self.append_log(f"Reload failed after run: {exc}")
+                self.loaded_view = None
+                self.current_load_error = str(exc)
+                if self.last_run_result is not None:
+                    self.last_run_result.reload_error = str(exc)
+                self.render_invalid_plan(str(exc))
+                self.update_command_preview()
+            if failed:
+                self.append_log("Run failed.")
+            if failed and return_code is None:
+                self.update_run_status("Failed")
+            elif return_code is None and not failed:
+                self.update_run_status("Idle")
+            if self.quit_after_run:
+                self.exit()
+            else:
+                if self.safe_quit_dialog_open:
+                    self.safe_quit_dialog_open = False
+                    self.pop_screen()
+                self.update_control_state()
+
+    def current_options(self) -> plan_executor.TuiOptions:
+        max_passes_text = self.query_one("#max-passes", Input).value.strip()
+        try:
+            max_passes = plan_executor.positive_int(max_passes_text)
+        except Exception:
+            max_passes = 10
+        run_dir = self.query_one("#run-dir", Input).value.strip() or None
+        return plan_executor.TuiOptions(
+            run_all=self.query_one("#run-all", Checkbox).value,
+            max_passes=max_passes,
+            review_after_pass=self.query_one("#review-after-pass", Checkbox).value,
+            fix_after_review=self.query_one("#fix-after-review", Checkbox).value,
+            commit_after_pass=self.query_one("#commit-after-pass", Checkbox).value,
+            commit_prefix=self.query_one("#commit-prefix", Input).value.strip() or "plan",
+            copy_to_run_dir=self.query_one("#copy-to-run-dir", Checkbox).value,
+            run_dir=run_dir,
+            inhibit_sleep=self.query_one("#inhibit-sleep", Checkbox).value,
+            codex_bin=self.query_one("#codex-bin", Input).value.strip() or "codex",
+        )
+
+    def append_log(self, message: str) -> None:
+        stamp = datetime.now().strftime("%H:%M:%S")
+        line = f"[{stamp}] {message}"
+        self.log_lines.append(line)
+        self.log_lines = self.log_lines[-200:]
+        self.query_one("#log", Static).update(render_recent_log_lines(self.log_lines))
+
+
+def run_tui(initial_plan_path: str | None = None) -> int:
+    PlanExecutorTui(initial_plan_path).run()
+    return 0
