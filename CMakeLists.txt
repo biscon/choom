@@ -121,6 +121,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_serialization_tests
             tests/SectorTopologySerializationTests.cpp
+            sources/sector_demo/SectorAuthoringGraph.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologySerialization.cpp
             sources/sector_demo/SectorTopologyValidation.cpp

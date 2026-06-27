@@ -212,6 +212,15 @@ bool LoadText(const std::string& text, SectorTopologyMap& map, std::string& erro
     return game::LoadSectorTopologyMapFromJsonString(text, map, &error);
 }
 
+bool LoadAuthoringText(
+        const std::string& text,
+        game::SectorAuthoringDocument& document,
+        std::string& error)
+{
+    error.clear();
+    return game::LoadSectorAuthoringDocumentFromJsonString(text, document, &error);
+}
+
 std::string SaveText(const SectorTopologyMap& map)
 {
     std::string text;
@@ -219,6 +228,31 @@ std::string SaveText(const SectorTopologyMap& map)
     Check(game::SaveSectorTopologyMapToJsonString(map, text, &error), "test map serializes");
     Check(error.empty(), "successful serialization clears error");
     return text;
+}
+
+std::string SaveAuthoringText(const game::SectorAuthoringDocument& document)
+{
+    std::string text;
+    std::string error;
+    Check(game::SaveSectorAuthoringDocumentToJsonString(document, text, &error),
+          "test authoring document serializes");
+    Check(error.empty(), "successful authoring serialization clears error");
+    return text;
+}
+
+game::SectorAuthoringDocument MakeAuthoringDocumentFromMap(const SectorTopologyMap& map)
+{
+    game::SectorAuthoringDocument document;
+    document.graph = game::ImportSectorTopologyMapToAuthoringGraph(map);
+    document.mapData.texturesById = map.texturesById;
+    document.mapData.staticLights = map.staticLights;
+    document.mapData.previewSettings = map.previewSettings;
+    document.mapData.skySettings = map.skySettings;
+    document.mapData.directionalLight = map.directionalLight;
+    document.mapData.lightmapSettings = map.lightmapSettings;
+    document.mapData.bakedLightmap = map.bakedLightmap;
+    document.derivation = game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
+    return document;
 }
 
 void ExpectRejected(const Json& json, const char* description)
@@ -1559,6 +1593,181 @@ void TestOppositeSidedefLookup()
           "one-sided linedef reports no opposite sidedef");
 }
 
+void TestGraphNativeEmptyAndLooseGraphRoundTrip()
+{
+    game::SectorAuthoringDocument empty;
+    const Json emptySaved = Json::parse(SaveAuthoringText(empty));
+    Check(emptySaved["formatVersion"] == 3, "graph-native format version is written");
+    Check(emptySaved["topology"] == "authoringGraph", "graph-native topology marker is written");
+    Check(emptySaved.contains("authoringGraph"), "graph-native source graph is written");
+    Check(!emptySaved.contains("vertices")
+                  && !emptySaved.contains("linedefs")
+                  && !emptySaved.contains("sidedefs")
+                  && !emptySaved.contains("sectors"),
+          "graph-native save does not require strict topology arrays");
+
+    game::SectorAuthoringDocument loaded;
+    std::string error = "stale";
+    Check(LoadAuthoringText(emptySaved.dump(), loaded, error), "empty graph-native document loads");
+    Check(error.empty(), "successful graph-native load clears error");
+    Check(loaded.graph.vertices.empty()
+                  && loaded.graph.lines.empty()
+                  && loaded.graph.lineSides.empty()
+                  && loaded.graph.faceAnchors.empty(),
+          "empty graph round-trips");
+    Check(!loaded.derivation.success && !loaded.derivation.diagnostics.empty(),
+          "empty graph loads with derivation diagnostics instead of failing parse");
+
+    game::SectorAuthoringDocument loose;
+    loose.graph.vertices.push_back(game::SectorAuthoringVertex{1, 0, 0});
+    loose.graph.vertices.push_back(game::SectorAuthoringVertex{2, 32, 0});
+    loose.graph.lines.push_back(game::SectorAuthoringLine{7, 1, 2});
+    const std::string looseText = SaveAuthoringText(loose);
+    Check(LoadAuthoringText(looseText, loaded, error), "loose line graph-native document loads");
+    Check(loaded.graph.lines.size() == 1 && loaded.graph.lines[0].id == 7,
+          "loose line source graph round-trips");
+    Check(!loaded.derivation.success && !loaded.derivation.diagnostics.empty(),
+          "loose line graph reports diagnostics after load");
+}
+
+void TestGraphNativeInvalidGraphAndTransactionalFailure()
+{
+    game::SectorAuthoringDocument invalid;
+    invalid.graph.vertices.push_back(game::SectorAuthoringVertex{1, 0, 0});
+    invalid.graph.lines.push_back(game::SectorAuthoringLine{3, 1, 99});
+    const std::string invalidText = SaveAuthoringText(invalid);
+
+    game::SectorAuthoringDocument loaded;
+    std::string error;
+    Check(LoadAuthoringText(invalidText, loaded, error),
+          "invalid authoring references load as graph data");
+    Check(!loaded.derivation.success && !loaded.derivation.diagnostics.empty(),
+          "invalid authoring references produce load-time derivation diagnostics");
+    Check(loaded.graph.lines.size() == 1 && loaded.graph.lines[0].endVertexId == 99,
+          "invalid source graph is still preserved after load");
+
+    game::SectorAuthoringDocument output;
+    output.graph.vertices.push_back(game::SectorAuthoringVertex{42, 1, 2});
+    Json malformed = Json::parse(invalidText);
+    malformed["authoringGraph"]["vertices"] = Json::object();
+    Check(!LoadAuthoringText(malformed.dump(), output, error), "malformed graph-native load fails");
+    Check(!error.empty(), "malformed graph-native load reports an error");
+    Check(output.graph.vertices.size() == 1 && output.graph.vertices[0].id == 42,
+          "failed graph-native load leaves output document unchanged");
+}
+
+void TestGraphNativeValidGraphDerivesTopologyAndProperties()
+{
+    SectorTopologyMap source = MakeSquare();
+    source.lineDefs[0].flags.blocksPlayer = true;
+    source.sideDefs[0].wall = MakePart("wall", 4.0f, 5.0f, 6.0f, 7.0f);
+    source.sideDefs[0].middle = MakePart("wall", 2.0f, 3.0f, 4.0f, 5.0f);
+    source.sectors[0].name = "atrium";
+    source.sectors[0].ceilingSky = true;
+    source.sectors[0].floorZ = -4.0f;
+    source.sectors[0].ceilingZ = 30.0f;
+    source.sectors[0].ambientIntensity = 0.5f;
+
+    const game::SectorAuthoringDocument original = MakeAuthoringDocumentFromMap(source);
+    Check(original.derivation.success, "imported square graph derives before save");
+    const Json saved = Json::parse(SaveAuthoringText(original));
+    Check(saved["authoringGraph"]["lineSides"][0].contains("middle"),
+          "authoring side middle settings are persisted");
+    Check(saved["authoringGraph"]["faceAnchors"][0]["ceilingSky"] == true,
+          "face anchor ceilingSky is persisted");
+    Check(!saved.contains("bakedLightmap"),
+          "graph-native save omits baked lightmap metadata until currentness can be proven");
+
+    game::SectorAuthoringDocument loaded;
+    std::string error;
+    Check(LoadAuthoringText(saved.dump(), loaded, error), "valid graph-native document loads");
+    Check(loaded.derivation.success, "valid graph regenerates derived topology on load");
+    Check(loaded.derivation.topology.sectors.size() == 1
+                  && loaded.derivation.topology.lineDefs.size() == 4,
+          "derived topology is regenerated from graph-native source");
+    const game::SectorTopologyLineDef* line = game::FindSectorTopologyLineDef(loaded.derivation.topology, 1);
+    Check(line != nullptr && line->flags.blocksPlayer,
+          "authoring linedef flags project after graph-native load");
+    const game::SectorTopologySideDef* side = game::FindSectorTopologySideDef(
+            loaded.derivation.topology,
+            loaded.derivation.topology.lineDefs[0].frontSideDefId);
+    Check(side != nullptr && side->wall.uv.scale.x == 4.0f && side->middle.textureId == "wall",
+          "authoring side materials project after graph-native load");
+    const game::SectorTopologySector* sector =
+            game::FindSectorTopologySector(loaded.derivation.topology, 1);
+    Check(sector != nullptr && sector->name == "atrium" && sector->ceilingSky
+                  && Near(sector->floorZ, -4.0f)
+                  && Near(sector->ambientIntensity, 0.5f),
+          "face anchor properties project after graph-native load");
+}
+
+void TestGraphNativeMapLevelRoundTrip()
+{
+    SectorTopologyMap source = MakeSquare();
+    source.texturesById.emplace("sky", SectorTextureDefinition{
+            "sky", "textures/sky.png", SectorTextureFilter::Trilinear});
+    source.staticLights.push_back(SectorTopologyStaticPointLight{
+            9,
+            Vector3{1.0f, 2.0f, 3.0f},
+            Color{10, 20, 30, 255},
+            2.0f,
+            32.0f,
+            1.0f
+    });
+    source.previewSettings.walkSpeed = 9.0f;
+    source.skySettings.textureId = "sky";
+    source.skySettings.yawOffsetDegrees = 17.0f;
+    source.directionalLight.enabled = true;
+    source.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
+    source.directionalLight.intensity = 1.5f;
+    source.lightmapSettings.ambientOcclusionStrength = 0.25f;
+    source.bakedLightmap.path = "stale.png";
+    source.bakedLightmap.width = 128;
+    source.bakedLightmap.height = 128;
+    source.bakedLightmap.sourceHash = "old";
+
+    const game::SectorAuthoringDocument original = MakeAuthoringDocumentFromMap(source);
+    const Json saved = Json::parse(SaveAuthoringText(original));
+    Check(saved["textures"].contains("sky"), "graph-native texture registry is persisted");
+    Check(saved["staticLights"][0]["id"] == 9, "graph-native static lights are persisted");
+    Check(saved["previewSettings"]["walkSpeed"] == 9.0f, "graph-native preview settings are persisted");
+    Check(saved["skySettings"]["textureId"] == "sky", "graph-native sky settings are persisted");
+    Check(saved["directionalLight"]["enabled"] == true,
+          "graph-native directional light settings are persisted");
+    Check(saved["lightmapSettings"]["ambientOcclusionStrength"] == 0.25f,
+          "graph-native bake settings are persisted");
+    Check(!saved.contains("bakedLightmap"), "graph-native save clears stale baked metadata");
+
+    game::SectorAuthoringDocument loaded;
+    std::string error;
+    Check(LoadAuthoringText(saved.dump(), loaded, error), "graph-native map-level data loads");
+    Check(loaded.mapData.texturesById.count("sky") == 1
+                  && loaded.mapData.staticLights.size() == 1
+                  && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
+                  && loaded.mapData.skySettings.textureId == "sky"
+                  && loaded.mapData.directionalLight.enabled
+                  && Near(loaded.mapData.lightmapSettings.ambientOcclusionStrength, 0.25f),
+          "graph-native map-level fields round-trip");
+    Check(loaded.derivation.success
+                  && loaded.derivation.topology.texturesById.count("sky") == 1
+                  && loaded.derivation.topology.staticLights.size() == 1
+                  && loaded.derivation.topology.skySettings.textureId == "sky",
+          "derived topology receives map-level fields after load");
+    Check(loaded.derivation.topology.bakedLightmap.path.empty(),
+          "derived topology starts with cleared baked lightmap metadata");
+}
+
+void TestGraphNativeLegacyImportPathStillWorks()
+{
+    const SectorTopologyMap source = MakeAdjacentSquares();
+    const game::SectorAuthoringGraph graph = game::ImportSectorTopologyMapToAuthoringGraph(source);
+    const game::SectorAuthoringDerivationResult derived =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    Check(derived.success, "topology-v2 import path still derives");
+    Check(derived.topology.sectors.size() == source.sectors.size(),
+          "topology-v2 import path preserves basic sector count");
+}
+
 void TestFileApi()
 {
     const std::filesystem::path path =
@@ -1605,6 +1814,11 @@ int main()
     TestStaticLightHelpers();
     TestIndependentFrontBackSidedefEdits();
     TestOppositeSidedefLookup();
+    TestGraphNativeEmptyAndLooseGraphRoundTrip();
+    TestGraphNativeInvalidGraphAndTransactionalFailure();
+    TestGraphNativeValidGraphDerivesTopologyAndProperties();
+    TestGraphNativeMapLevelRoundTrip();
+    TestGraphNativeLegacyImportPathStillWorks();
     TestFileApi();
 
     if (failures != 0) {

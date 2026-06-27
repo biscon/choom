@@ -67,7 +67,7 @@ Suggested path:
       "id": "phase_08_graph_native_save_load",
       "title": "Add graph-native save/load format",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {
