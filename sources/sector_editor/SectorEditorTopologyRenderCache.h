@@ -13,6 +13,7 @@ struct SectorEditorTopologyDrawContext {
     Vector2 viewCenter = {};
     float viewZoom = 1.0f;
     bool showSectorIds = false;
+    bool derivedTopologyStale = false;
     SectorEditorTool currentTool = SectorEditorTool::Select;
     TopologySelectionKind selectionKind = TopologySelectionKind::None;
     int selectedSectorId = -1;
@@ -25,6 +26,8 @@ struct SectorEditorTopologyDrawContext {
 
 SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         const SectorTopologyMap& map,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
         uint64_t revision);
 
 void DrawCachedTopologySectors(
@@ -37,6 +40,12 @@ void DrawCachedTopologyVertices(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context);
 void DrawCachedTopologyStaticLights(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context);
+void DrawCachedAuthoringGraphOverlay(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context);
+void DrawCachedAuthoringDiagnostics(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context);
 

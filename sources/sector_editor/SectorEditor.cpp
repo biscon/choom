@@ -3657,6 +3657,8 @@ void SectorEditor::EnsureTopologyRenderCache()
             || state.topologyRenderCache.revision != state.topologyRenderRevision) {
         state.topologyRenderCache = BuildSectorEditorTopologyRenderCache(
                 state.topologyMap,
+                state.authoringGraph,
+                state.authoringDerivation,
                 state.topologyRenderRevision);
         state.topologyRenderWarning = state.topologyRenderCache.warning;
     }
@@ -3677,6 +3679,7 @@ void SectorEditor::DrawTopologyDocument()
             state.viewCenter,
             state.viewZoom,
             state.showSectorIds,
+            state.authoringDerivedTopologyStale,
             state.currentTool,
             state.topologySelectionKind,
             state.selectedTopologySectorId,
@@ -3691,6 +3694,8 @@ void SectorEditor::DrawTopologyDocument()
     DrawTopologySelectedLineHighlight();
     DrawCachedTopologyLineDefs(state.topologyRenderCache, drawContext);
     DrawCachedTopologyVertices(state.topologyRenderCache, drawContext);
+    DrawCachedAuthoringGraphOverlay(state.topologyRenderCache, drawContext);
+    DrawCachedAuthoringDiagnostics(state.topologyRenderCache, drawContext);
     DrawVertexMoveOverlay();
     DrawPendingTopologyVertexMerge();
     DrawPendingTopologyLineSplitAtPoint();
@@ -3705,6 +3710,15 @@ void SectorEditor::DrawTopologyDocument()
                 state.topologyRenderWarning.c_str(),
                 static_cast<int>(canvasRect.x + 16.0f),
                 static_cast<int>(canvasRect.y + 14.0f),
+                18,
+                Color{236, 196, 92, 255}
+        );
+    }
+    if (state.authoringDerivedTopologyStale) {
+        DrawText(
+                "Authoring graph changed; derived sector fills are stale",
+                static_cast<int>(canvasRect.x + 16.0f),
+                static_cast<int>(canvasRect.y + 64.0f),
                 18,
                 Color{236, 196, 92, 255}
         );

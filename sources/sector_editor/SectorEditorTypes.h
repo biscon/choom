@@ -375,6 +375,32 @@ struct CachedTopologyLightDraw {
     float sourceRadiusPixelsAtZoomOne = 0.0f;
 };
 
+struct CachedAuthoringVertexDraw {
+    int vertexId = -1;
+    SectorTopologyCoordPoint point = {};
+    Vector2 map = {};
+};
+
+struct CachedAuthoringLineDraw {
+    int lineId = -1;
+    Vector2 start = {};
+    Vector2 end = {};
+    bool validEndpoints = false;
+    bool hasPartialEndpoint = false;
+    Vector2 partialEndpoint = {};
+};
+
+struct CachedAuthoringDiagnosticDraw {
+    SectorAuthoringDerivationDiagnosticKind kind =
+            SectorAuthoringDerivationDiagnosticKind::AuthoringReference;
+    SectorAuthoringValidationSeverity severity = SectorAuthoringValidationSeverity::Error;
+    int objectId = -1;
+    int relatedObjectId = -1;
+    Vector2 map = {};
+    bool hasPosition = false;
+    std::string message;
+};
+
 struct SectorEditorTopologyRenderCache {
     bool valid = false;
     uint64_t revision = 0;
@@ -383,6 +409,9 @@ struct SectorEditorTopologyRenderCache {
     std::vector<CachedTopologyLineDraw> lineDefs;
     std::vector<CachedTopologyVertexDraw> vertices;
     std::vector<CachedTopologyLightDraw> staticLights;
+    std::vector<CachedAuthoringLineDraw> authoringLines;
+    std::vector<CachedAuthoringVertexDraw> authoringVertices;
+    std::vector<CachedAuthoringDiagnosticDraw> authoringDiagnostics;
 };
 
 struct SectorEditorState {

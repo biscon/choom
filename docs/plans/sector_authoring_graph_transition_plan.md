@@ -81,7 +81,7 @@ Suggested path:
       "id": "phase_10_authoring_overlay_rendering",
       "title": "Render authoring graph overlay and diagnostics in 2D",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {

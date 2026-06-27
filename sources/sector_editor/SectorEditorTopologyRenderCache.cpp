@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -26,6 +27,134 @@ Vector2 CachedMapToScreen(const SectorEditorTopologyDrawContext& context, Vector
             context.canvasRect.y + context.canvasRect.height * 0.5f
                     + (canvasWorld.y - context.viewCenter.y) * context.viewZoom
     };
+}
+
+Vector2 AuthoringVertexToMap(const SectorAuthoringVertex& vertex)
+{
+    return Vector2{
+            SectorCoordToVisibleAuthoring(vertex.x),
+            SectorCoordToVisibleAuthoring(vertex.y)
+    };
+}
+
+Vector2 AuthoringFaceAnchorToMap(const SectorAuthoringFaceAnchor& anchor)
+{
+    return Vector2{
+            SectorCoordToVisibleAuthoring(anchor.x),
+            SectorCoordToVisibleAuthoring(anchor.y)
+    };
+}
+
+bool FindAuthoringLineMidpoint(
+        const SectorAuthoringGraph& graph,
+        int lineId,
+        Vector2& outMap)
+{
+    const SectorAuthoringLine* line = FindSectorAuthoringLine(graph, lineId);
+    if (line == nullptr) {
+        return false;
+    }
+
+    const SectorAuthoringVertex* start = FindSectorAuthoringVertex(graph, line->startVertexId);
+    const SectorAuthoringVertex* end = FindSectorAuthoringVertex(graph, line->endVertexId);
+    if (start == nullptr && end == nullptr) {
+        return false;
+    }
+    if (start == nullptr || end == nullptr) {
+        outMap = AuthoringVertexToMap(start == nullptr ? *end : *start);
+        return true;
+    }
+
+    const Vector2 a = AuthoringVertexToMap(*start);
+    const Vector2 b = AuthoringVertexToMap(*end);
+    outMap = Vector2{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
+    return true;
+}
+
+bool FindAuthoringDiagnosticPosition(
+        const SectorAuthoringGraph& graph,
+        const SectorAuthoringDerivationDiagnostic& diagnostic,
+        Vector2& outMap)
+{
+    const auto findLinePosition = [&]() {
+        return FindAuthoringLineMidpoint(graph, diagnostic.objectId, outMap)
+                || FindAuthoringLineMidpoint(graph, diagnostic.relatedObjectId, outMap);
+    };
+    const auto findAnchorPosition = [&]() {
+        if (const SectorAuthoringFaceAnchor* anchor =
+                    FindSectorAuthoringFaceAnchor(graph, diagnostic.objectId)) {
+            outMap = AuthoringFaceAnchorToMap(*anchor);
+            return true;
+        }
+        return false;
+    };
+    const auto findVertexPosition = [&]() {
+        if (const SectorAuthoringVertex* vertex =
+                    FindSectorAuthoringVertex(graph, diagnostic.objectId)) {
+            outMap = AuthoringVertexToMap(*vertex);
+            return true;
+        }
+        return false;
+    };
+
+    switch (diagnostic.kind) {
+    case SectorAuthoringDerivationDiagnosticKind::DanglingLine:
+    case SectorAuthoringDerivationDiagnosticKind::ZeroLengthLine:
+    case SectorAuthoringDerivationDiagnosticKind::DuplicateLine:
+    case SectorAuthoringDerivationDiagnosticKind::CollinearOverlap:
+    case SectorAuthoringDerivationDiagnosticKind::NearMiss:
+    case SectorAuthoringDerivationDiagnosticKind::InvalidSideProjection:
+    case SectorAuthoringDerivationDiagnosticKind::Planarization:
+        return findLinePosition() || findVertexPosition() || findAnchorPosition();
+    case SectorAuthoringDerivationDiagnosticKind::AmbiguousFaceAnchor:
+    case SectorAuthoringDerivationDiagnosticKind::UnresolvedFaceAnchor:
+        return findAnchorPosition() || findLinePosition() || findVertexPosition();
+    case SectorAuthoringDerivationDiagnosticKind::AuthoringReference:
+    case SectorAuthoringDerivationDiagnosticKind::FaceExtraction:
+    case SectorAuthoringDerivationDiagnosticKind::TinySliverFace:
+    case SectorAuthoringDerivationDiagnosticKind::NonIntegerVertex:
+    case SectorAuthoringDerivationDiagnosticKind::InvalidTopology:
+        break;
+    }
+
+    if (findVertexPosition() || findLinePosition() || findAnchorPosition()) {
+        return true;
+    }
+    return false;
+}
+
+SectorAuthoringDerivationDiagnosticKind ReferenceIssueKind(
+        SectorAuthoringObjectKind objectKind)
+{
+    return objectKind == SectorAuthoringObjectKind::Side
+            ? SectorAuthoringDerivationDiagnosticKind::InvalidSideProjection
+            : SectorAuthoringDerivationDiagnosticKind::AuthoringReference;
+}
+
+SectorAuthoringDerivationDiagnostic MakeReferenceDiagnostic(
+        const SectorAuthoringValidationIssue& issue)
+{
+    SectorAuthoringDerivationDiagnostic diagnostic;
+    diagnostic.severity = issue.severity;
+    diagnostic.kind = ReferenceIssueKind(issue.objectKind);
+    diagnostic.objectId = issue.objectId;
+    diagnostic.message = issue.message;
+    return diagnostic;
+}
+
+void AppendCachedAuthoringDiagnostic(
+        const SectorAuthoringGraph& graph,
+        const SectorAuthoringDerivationDiagnostic& diagnostic,
+        std::vector<CachedAuthoringDiagnosticDraw>& diagnostics)
+{
+    CachedAuthoringDiagnosticDraw cached;
+    cached.kind = diagnostic.kind;
+    cached.severity = diagnostic.severity;
+    cached.objectId = diagnostic.objectId;
+    cached.relatedObjectId = diagnostic.relatedObjectId;
+    cached.message = diagnostic.message;
+    cached.hasPosition = FindAuthoringDiagnosticPosition(graph, diagnostic, cached.map);
+    diagnostics.push_back(std::move(cached));
 }
 
 void DrawCachedTopologySector(
@@ -68,10 +197,51 @@ void DrawCachedTopologySector(
 
 SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         const SectorTopologyMap& map,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
         uint64_t revision)
 {
     SectorEditorTopologyRenderCache cache;
     cache.revision = revision;
+
+    cache.authoringVertices.reserve(authoringGraph.vertices.size());
+    for (const SectorAuthoringVertex& vertex : authoringGraph.vertices) {
+        CachedAuthoringVertexDraw cached;
+        cached.vertexId = vertex.id;
+        cached.point = SectorTopologyCoordPoint{vertex.x, vertex.y};
+        cached.map = AuthoringVertexToMap(vertex);
+        cache.authoringVertices.push_back(cached);
+    }
+
+    cache.authoringLines.reserve(authoringGraph.lines.size());
+    for (const SectorAuthoringLine& line : authoringGraph.lines) {
+        CachedAuthoringLineDraw cached;
+        cached.lineId = line.id;
+        const SectorAuthoringVertex* start = FindSectorAuthoringVertex(authoringGraph, line.startVertexId);
+        const SectorAuthoringVertex* end = FindSectorAuthoringVertex(authoringGraph, line.endVertexId);
+        cached.validEndpoints = start != nullptr && end != nullptr;
+        if (cached.validEndpoints) {
+            cached.start = AuthoringVertexToMap(*start);
+            cached.end = AuthoringVertexToMap(*end);
+        } else if (start != nullptr || end != nullptr) {
+            cached.hasPartialEndpoint = true;
+            cached.partialEndpoint = AuthoringVertexToMap(start == nullptr ? *end : *start);
+        }
+        cache.authoringLines.push_back(cached);
+    }
+
+    const std::vector<SectorAuthoringValidationIssue> referenceIssues =
+            ValidateSectorAuthoringGraphReferences(authoringGraph);
+    cache.authoringDiagnostics.reserve(referenceIssues.size() + authoringDerivation.diagnostics.size());
+    for (const SectorAuthoringValidationIssue& issue : referenceIssues) {
+        AppendCachedAuthoringDiagnostic(
+                authoringGraph,
+                MakeReferenceDiagnostic(issue),
+                cache.authoringDiagnostics);
+    }
+    for (const SectorAuthoringDerivationDiagnostic& diagnostic : authoringDerivation.diagnostics) {
+        AppendCachedAuthoringDiagnostic(authoringGraph, diagnostic, cache.authoringDiagnostics);
+    }
 
     const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(map);
     const auto issues = ValidateSectorTopologyMap(map);
@@ -241,8 +411,12 @@ void DrawCachedTopologySectors(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context)
 {
-    const Color fill = Color{82, 112, 154, 42};
-    const Color outline = Color{116, 139, 174, 235};
+    const Color fill = context.derivedTopologyStale
+            ? Color{214, 152, 58, 26}
+            : Color{82, 112, 154, 42};
+    const Color outline = context.derivedTopologyStale
+            ? Color{214, 152, 58, 150}
+            : Color{116, 139, 174, 235};
     const Color selectedFill = Color{72, 220, 128, 38};
     const Color selectedOutline = Color{86, 232, 142, 135};
 
@@ -257,6 +431,85 @@ void DrawCachedTopologySectors(
     }
     if (selectedCachedSector != nullptr) {
         DrawCachedTopologySector(*selectedCachedSector, context, selectedFill, selectedOutline, 10.0f);
+    }
+}
+
+void DrawCachedAuthoringGraphOverlay(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context)
+{
+    const Color lineColor = Color{248, 216, 108, 245};
+    const Color lineShadow = Color{20, 24, 32, 220};
+    const Color warningColor = Color{236, 92, 92, 245};
+    const Color vertexFill = Color{255, 242, 178, 255};
+    const Color vertexOutline = Color{22, 26, 34, 245};
+
+    for (const CachedAuthoringLineDraw& line : cache.authoringLines) {
+        if (!line.validEndpoints) {
+            if (line.hasPartialEndpoint) {
+                const Vector2 point = CachedMapToScreen(context, line.partialEndpoint);
+                DrawCircleLines(
+                        static_cast<int>(std::round(point.x)),
+                        static_cast<int>(std::round(point.y)),
+                        13.0f,
+                        warningColor);
+            }
+            continue;
+        }
+
+        const Vector2 a = CachedMapToScreen(context, line.start);
+        const Vector2 b = CachedMapToScreen(context, line.end);
+        DrawLineEx(a, b, 5.0f, lineShadow);
+        DrawLineEx(a, b, 2.5f, lineColor);
+    }
+
+    for (const CachedAuthoringVertexDraw& vertex : cache.authoringVertices) {
+        const Vector2 screen = CachedMapToScreen(context, vertex.map);
+        DrawCircleV(screen, 6.0f, vertexOutline);
+        DrawCircleV(screen, 3.5f, vertexFill);
+    }
+}
+
+void DrawCachedAuthoringDiagnostics(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context)
+{
+    const Color errorFill = Color{238, 84, 84, 230};
+    const Color warningFill = Color{236, 196, 92, 230};
+    const Color outline = Color{22, 26, 34, 250};
+
+    int unpositionedCount = 0;
+    for (const CachedAuthoringDiagnosticDraw& diagnostic : cache.authoringDiagnostics) {
+        if (!diagnostic.hasPosition) {
+            ++unpositionedCount;
+            continue;
+        }
+
+        const Vector2 center = CachedMapToScreen(context, diagnostic.map);
+        const Color fill = diagnostic.severity == SectorAuthoringValidationSeverity::Warning
+                ? warningFill
+                : errorFill;
+        DrawCircleV(center, 8.0f, outline);
+        DrawCircleV(center, 5.0f, fill);
+        DrawLineEx(
+                Vector2{center.x - 5.0f, center.y - 5.0f},
+                Vector2{center.x + 5.0f, center.y + 5.0f},
+                2.0f,
+                outline);
+        DrawLineEx(
+                Vector2{center.x + 5.0f, center.y - 5.0f},
+                Vector2{center.x - 5.0f, center.y + 5.0f},
+                2.0f,
+                outline);
+    }
+
+    if (unpositionedCount > 0) {
+        DrawText(
+                TextFormat("%d authoring diagnostic(s) have no map position", unpositionedCount),
+                static_cast<int>(context.canvasRect.x + 16.0f),
+                static_cast<int>(context.canvasRect.y + 40.0f),
+                18,
+                warningFill);
     }
 }
 

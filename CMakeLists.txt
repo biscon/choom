@@ -109,6 +109,8 @@ if(BUILD_TESTING)
     add_executable(sector_authoring_graph_tests
             tests/SectorAuthoringGraphTests.cpp
             sources/sector_editor/SectorEditorAuthoringState.cpp
+            sources/sector_editor/SectorEditorHelpers.cpp
+            sources/sector_editor/SectorEditorTopologyRenderCache.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp
             sources/sector_demo/SectorTextureTypes.cpp
@@ -118,6 +120,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorTopologyValidation.cpp
     )
     target_include_directories(sector_authoring_graph_tests PRIVATE sources)
+    target_compile_definitions(sector_authoring_graph_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(sector_authoring_graph_tests PRIVATE raylib)
     add_test(NAME sector_authoring_graph COMMAND sector_authoring_graph_tests)
 

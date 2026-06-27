@@ -2,6 +2,7 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorTopologySerialization.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
+#include "sector_editor/SectorEditorTopologyRenderCache.h"
 
 #include <algorithm>
 #include <iostream>
@@ -1567,6 +1568,92 @@ void TestEditorAuthoringGraphMutationMarksDirtyAndStale()
           "graph mutation bumps topology render revision");
 }
 
+void TestAuthoringOverlayRenderCacheIncludesLooseGraph()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringVertexWithId(graph, 2, 64, 0);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+
+    game::SectorAuthoringDerivationResult derivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    Check(!derivation.success, "loose authoring line has no valid derived topology");
+
+    const game::SectorEditorTopologyRenderCache cache =
+            game::BuildSectorEditorTopologyRenderCache(
+                    game::SectorTopologyMap{},
+                    graph,
+                    derivation,
+                    7);
+
+    Check(cache.valid, "authoring overlay cache builds without valid derived topology");
+    Check(cache.revision == 7, "authoring overlay cache stores revision");
+    Check(cache.sectors.empty(), "authoring overlay cache does not require derived sector fills");
+    Check(cache.authoringVertices.size() == 2, "authoring overlay cache includes authoring vertices");
+    Check(cache.authoringLines.size() == 1, "authoring overlay cache includes loose authoring line");
+    if (!cache.authoringLines.empty()) {
+        Check(cache.authoringLines.front().lineId == 10, "authoring overlay cache preserves line ID");
+        Check(cache.authoringLines.front().validEndpoints, "authoring overlay cache resolves loose line endpoints");
+    }
+}
+
+void TestAuthoringDiagnosticRenderCacheDoesNotRequireDerivedTopology()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringVertexWithId(graph, 2, 64, 0);
+    AddAuthoringVertexWithId(graph, 3, 64, 64);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+    AddAuthoringLineWithId(graph, 11, 2, 3);
+
+    game::SectorAuthoringDerivationResult derivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    Check(!derivation.success, "open authoring graph fails derivation for diagnostic cache test");
+
+    const game::SectorEditorTopologyRenderCache cache =
+            game::BuildSectorEditorTopologyRenderCache(
+                    game::SectorTopologyMap{},
+                    graph,
+                    derivation,
+                    8);
+
+    Check(!cache.authoringDiagnostics.empty(),
+          "authoring diagnostic cache includes failed-derivation diagnostics");
+    bool foundPositionedDiagnostic = false;
+    for (const game::CachedAuthoringDiagnosticDraw& diagnostic : cache.authoringDiagnostics) {
+        if (diagnostic.hasPosition) {
+            foundPositionedDiagnostic = true;
+            break;
+        }
+    }
+    Check(foundPositionedDiagnostic,
+          "authoring diagnostic cache maps at least one diagnostic to an authoring graph position");
+}
+
+void TestAuthoringOverlayRenderCacheIncludesReferenceDiagnostics()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringLineWithId(graph, 10, 1, 99);
+
+    const game::SectorEditorTopologyRenderCache cache =
+            game::BuildSectorEditorTopologyRenderCache(
+                    game::SectorTopologyMap{},
+                    graph,
+                    game::SectorAuthoringDerivationResult{},
+                    9);
+
+    Check(cache.authoringLines.size() == 1, "authoring overlay cache includes line with missing endpoint");
+    if (!cache.authoringLines.empty()) {
+        Check(!cache.authoringLines.front().validEndpoints,
+              "authoring overlay cache marks missing endpoint line invalid");
+        Check(cache.authoringLines.front().hasPartialEndpoint,
+              "authoring overlay cache keeps visible partial endpoint for invalid line");
+    }
+    Check(!cache.authoringDiagnostics.empty(),
+          "authoring diagnostic cache includes reference validation diagnostics");
+}
+
 void TestEditorAuthoringSuccessfulDerivationUpdatesState()
 {
     game::SectorEditorState state;
@@ -1704,6 +1791,9 @@ int main()
     TestDeriveUnresolvedAnchorPreservesAuthoringProperties();
     TestDerivedTopologyBuildsGeometry();
     TestEditorAuthoringGraphMutationMarksDirtyAndStale();
+    TestAuthoringOverlayRenderCacheIncludesLooseGraph();
+    TestAuthoringDiagnosticRenderCacheDoesNotRequireDerivedTopology();
+    TestAuthoringOverlayRenderCacheIncludesReferenceDiagnostics();
     TestEditorAuthoringSuccessfulDerivationUpdatesState();
     TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics();
     TestEditorAuthoringLastValidTopologyIsNotPersisted();
