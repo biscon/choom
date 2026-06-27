@@ -152,12 +152,21 @@ void RefreshSectorEditorGameplaySectorAndVerticalContext(SectorEditorState& stat
         return;
     }
 
+    const SectorFpsControllerConfig normalizedConfig =
+            NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
     state.fpsControllerState.currentSectorId =
-            state.sectorCollisionWorld.FindSectorContainingPointPreferCurrent(
+            state.sectorCollisionWorld.FindSectorForPlayerFootprint(
                     Vector2{
                             state.fpsControllerState.feetPosition.x,
                             state.fpsControllerState.feetPosition.z},
-                    state.fpsControllerState.currentSectorId);
+                    state.fpsControllerState.currentSectorId,
+                    state.fpsControllerState.feetPosition.y,
+                    state.fpsControllerState.grounded,
+                    SectorCollisionMoveConfig{
+                            normalizedConfig.playerRadius,
+                            normalizedConfig.playerHeight,
+                            normalizedConfig.stepHeight,
+                            4});
     state.previewCollisionSectorId = state.fpsControllerState.currentSectorId;
 }
 

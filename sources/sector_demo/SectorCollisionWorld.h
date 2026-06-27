@@ -82,6 +82,12 @@ public:
 
     int FindSectorContainingPoint(Vector2 xz) const;
     int FindSectorContainingPointPreferCurrent(Vector2 xz, int currentSectorId) const;
+    int FindSectorForPlayerFootprint(
+            Vector2 xz,
+            int currentSectorId,
+            float feetY,
+            bool grounded,
+            const SectorCollisionMoveConfig& config) const;
     SectorCollisionMoveResult ResolveMovement(
             const SectorCollisionMoveState& moveState,
             Vector2 desiredDelta,

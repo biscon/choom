@@ -341,7 +341,26 @@ void TestDownwardPortalVerticalTransitions()
     Check(fpsState.grounded, "same-height portal remains grounded");
 }
 
-void TestDownwardPortalDoesNotApplyRadiusNudge()
+game::SectorFpsVerticalResult UpdateVerticalForMoveResult(
+        const game::SectorCollisionWorld& world,
+        const game::SectorCollisionMoveResult& moveResult,
+        float feetY)
+{
+    game::SectorCollisionHeights heights;
+    Check(world.GetSectorFloorCeiling(moveResult.currentSectorId, &heights),
+          "move result sector heights are available");
+    game::SectorFpsControllerState fpsState;
+    fpsState.feetPosition = Vector3{moveResult.positionXZ.x, feetY, moveResult.positionXZ.y};
+    fpsState.currentSectorId = moveResult.currentSectorId;
+    fpsState.grounded = true;
+    return game::UpdateSectorFpsVerticalPhysics(
+            fpsState,
+            game::SectorFpsControllerConfig{},
+            game::SectorFpsVerticalContext{true, heights.floorZ, heights.ceilingZ},
+            0.0f);
+}
+
+void TestDownwardPortalFootprintCommit()
 {
     const game::SectorCollisionWorld world = BuildWorld(MakeAdjacent(4.0f, 0.0f));
     const float portalX = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).x;
@@ -349,14 +368,16 @@ void TestDownwardPortalDoesNotApplyRadiusNudge()
     constexpr float startInset = 0.01f;
     const float feetY = game::SectorAuthoringToWorldDistance(4.0f);
 
-    for (float radius : {0.25f, 0.5f, 1.5f}) {
+    for (float radius : {0.5f, 1.5f}) {
         const Vector2 start{portalX - startInset, z};
-        const Vector2 delta{radius * 0.75f, 0.0f};
-        const Vector2 expected{start.x + delta.x, start.y + delta.y};
-        const game::SectorCollisionMoveResult moveResult = Move(
+        const Vector2 beforeClearanceDelta{radius * 0.75f, 0.0f};
+        const Vector2 beforeClearanceExpected{
+                start.x + beforeClearanceDelta.x,
+                start.y + beforeClearanceDelta.y};
+        game::SectorCollisionMoveResult moveResult = Move(
                 world,
                 start,
-                delta,
+                beforeClearanceDelta,
                 10,
                 true,
                 feetY,
@@ -364,29 +385,117 @@ void TestDownwardPortalDoesNotApplyRadiusNudge()
                 1.6f,
                 radius);
 
-        Check(moveResult.currentSectorId == 20,
-              "large downward portal crossing reaches lower sector");
-        Check(Near(moveResult.positionXZ.x, expected.x)
-                      && Near(moveResult.positionXZ.y, expected.y),
-              "large downward portal crossing preserves requested horizontal movement");
+        Check(moveResult.currentSectorId == 10,
+              "large downward portal waits for radius clearance before sector commit");
+        Check(Near(moveResult.positionXZ.x, beforeClearanceExpected.x)
+                      && Near(moveResult.positionXZ.y, beforeClearanceExpected.y),
+              "large downward portal before clearance preserves requested horizontal movement");
+        game::SectorFpsVerticalResult verticalResult =
+                UpdateVerticalForMoveResult(world, moveResult, feetY);
+        Check(verticalResult.transition == game::SectorFpsVerticalTransition::StayedGrounded,
+              "large downward portal before clearance stays supported by upper sector");
 
-        game::SectorCollisionHeights heights;
-        Check(world.GetSectorFloorCeiling(moveResult.currentSectorId, &heights),
-              "large downward portal regression destination heights are available");
-        game::SectorFpsControllerState fpsState;
-        fpsState.feetPosition = Vector3{moveResult.positionXZ.x, feetY, moveResult.positionXZ.y};
-        fpsState.currentSectorId = moveResult.currentSectorId;
-        fpsState.grounded = true;
-        const game::SectorFpsVerticalResult verticalResult =
-                game::UpdateSectorFpsVerticalPhysics(
-                        fpsState,
-                        game::SectorFpsControllerConfig{},
-                        game::SectorFpsVerticalContext{true, heights.floorZ, heights.ceilingZ},
-                        0.0f);
+        const Vector2 afterClearanceDelta{radius + 0.02f, 0.0f};
+        const Vector2 afterClearanceExpected{
+                start.x + afterClearanceDelta.x,
+                start.y + afterClearanceDelta.y};
+        moveResult = Move(
+                world,
+                start,
+                afterClearanceDelta,
+                10,
+                true,
+                feetY,
+                0.25f,
+                1.6f,
+                radius);
+        Check(moveResult.currentSectorId == 20,
+              "large downward portal commits after radius clearance");
+        Check(Near(moveResult.positionXZ.x, afterClearanceExpected.x)
+                      && Near(moveResult.positionXZ.y, afterClearanceExpected.y),
+              "large downward portal after clearance preserves requested horizontal movement");
+        verticalResult = UpdateVerticalForMoveResult(world, moveResult, feetY);
         Check(verticalResult.transition == game::SectorFpsVerticalTransition::StartedDrop,
-              "large downward portal regression starts falling immediately");
-        Check(!fpsState.grounded, "large downward portal regression clears grounded");
+              "large downward portal after clearance starts falling");
     }
+}
+
+void TestDownwardPortalOffAxisFootprintCommit()
+{
+    const game::SectorCollisionWorld world = BuildWorld(MakeAdjacent(4.0f, 0.0f));
+    const float portalX = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).x;
+    const float z = game::SectorCoordToWorldPosition2(Coord(28), Coord(28)).y;
+    const float feetY = game::SectorAuthoringToWorldDistance(4.0f);
+    const float radius = 0.5f;
+    const Vector2 start{portalX - 0.01f, z};
+
+    Vector2 delta{radius * 0.75f, 0.35f};
+    Vector2 expected{start.x + delta.x, start.y + delta.y};
+    game::SectorCollisionMoveResult moveResult = Move(
+            world,
+            start,
+            delta,
+            10,
+            true,
+            feetY,
+            0.25f,
+            1.6f,
+            radius);
+    Check(moveResult.currentSectorId == 10,
+          "off-axis downward portal waits for radius clearance before sector commit");
+    Check(Near(moveResult.positionXZ.x, expected.x)
+                  && Near(moveResult.positionXZ.y, expected.y),
+          "off-axis downward portal before clearance has no destination snap");
+
+    delta = Vector2{radius + 0.02f, 0.35f};
+    expected = Vector2{start.x + delta.x, start.y + delta.y};
+    moveResult = Move(
+            world,
+            start,
+            delta,
+            10,
+            true,
+            feetY,
+            0.25f,
+            1.6f,
+            radius);
+    Check(moveResult.currentSectorId == 20,
+          "off-axis downward portal commits after radius clearance");
+    Check(Near(moveResult.positionXZ.x, expected.x)
+                  && Near(moveResult.positionXZ.y, expected.y),
+          "off-axis downward portal after clearance has no destination snap");
+    const game::SectorFpsVerticalResult verticalResult =
+            UpdateVerticalForMoveResult(world, moveResult, feetY);
+    Check(verticalResult.transition == game::SectorFpsVerticalTransition::StartedDrop,
+          "off-axis downward portal after clearance starts falling");
+}
+
+void TestDownwardPortalFootprintLookupWaitsAfterBarelyCrossing()
+{
+    const game::SectorCollisionWorld world = BuildWorld(MakeAdjacent(4.0f, 0.0f));
+    const float portalX = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).x;
+    const float z = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).y;
+    const float feetY = game::SectorAuthoringToWorldDistance(4.0f);
+    const float radius = 1.5f;
+    const game::SectorCollisionMoveConfig config{radius, 1.6f, 0.25f, 4};
+
+    int sectorId = world.FindSectorForPlayerFootprint(
+            Vector2{portalX + 0.01f, z},
+            10,
+            feetY,
+            true,
+            config);
+    Check(sectorId == 10,
+          "footprint lookup keeps upper sector after barely crossed downward portal");
+
+    sectorId = world.FindSectorForPlayerFootprint(
+            Vector2{portalX + radius + 0.01f, z},
+            10,
+            feetY,
+            true,
+            config);
+    Check(sectorId == 20,
+          "footprint lookup commits lower sector after radius clearance");
 }
 
 void TestLowerSectorNearReversePortalDoesNotApplyRadiusNudge()
@@ -529,7 +638,9 @@ int main()
     TestBlocksPlayerPortalMovement();
     TestMiddleTexturePortalMovement();
     TestDownwardPortalVerticalTransitions();
-    TestDownwardPortalDoesNotApplyRadiusNudge();
+    TestDownwardPortalFootprintCommit();
+    TestDownwardPortalOffAxisFootprintCommit();
+    TestDownwardPortalFootprintLookupWaitsAfterBarelyCrossing();
     TestLowerSectorNearReversePortalDoesNotApplyRadiusNudge();
     TestAirbornePortalRules();
     TestJumpingPlayerCannotAutoStepThroughPortal();

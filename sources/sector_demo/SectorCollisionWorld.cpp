@@ -359,6 +359,29 @@ bool ShouldApplyRadiusCorrectionForBlockedEdge(
     return Dot(remaining, inward) < -CollisionMoveEpsilon;
 }
 
+bool ProjectPointToSegmentRange(
+        Vector2 point,
+        Vector2 a,
+        Vector2 b,
+        float* outT)
+{
+    const float lengthSquared = DistanceSquared(a, b);
+    if (!(lengthSquared > CollisionMoveEpsilon) || !std::isfinite(lengthSquared)) {
+        return false;
+    }
+
+    const float t = Dot(Subtract(point, a), Subtract(b, a)) / lengthSquared;
+    const float length = std::sqrt(lengthSquared);
+    const float tolerance = CollisionPointEpsilon / length;
+    if (t < -tolerance || t > 1.0f + tolerance) {
+        return false;
+    }
+    if (outT != nullptr) {
+        *outT = t;
+    }
+    return true;
+}
+
 } // namespace
 
 Vector2 GetSectorCollisionEdgeInwardNormal(const SectorCollisionEdge& edge)
@@ -535,6 +558,72 @@ int SectorCollisionWorld::FindSectorContainingPointPreferCurrent(
     return FindSectorContainingPoint(xz);
 }
 
+int SectorCollisionWorld::FindSectorForPlayerFootprint(
+        Vector2 xz,
+        int currentSectorId,
+        float feetY,
+        bool grounded,
+        const SectorCollisionMoveConfig& moveConfig) const
+{
+    const int pointSectorId = FindSectorContainingPointPreferCurrent(xz, currentSectorId);
+    if (pointSectorId == 0 || pointSectorId == currentSectorId || !grounded) {
+        return pointSectorId;
+    }
+
+    const SectorCollisionMoveConfig config = NormalizeMoveConfig(moveConfig);
+    SectorCollisionHeights currentHeights;
+    SectorCollisionHeights candidateHeights;
+    if (!GetSectorFloorCeiling(currentSectorId, &currentHeights)
+            || !GetSectorFloorCeiling(pointSectorId, &candidateHeights)) {
+        return pointSectorId;
+    }
+
+    (void)feetY;
+    const float drop = currentHeights.floorZ - candidateHeights.floorZ;
+    if (drop <= config.stepHeight + CollisionMoveEpsilon) {
+        return pointSectorId;
+    }
+
+    const std::vector<SectorCollisionEdge>* edges = GetSectorEdges(currentSectorId);
+    if (edges == nullptr) {
+        return pointSectorId;
+    }
+
+    const SectorCollisionEdge* bestEdge = nullptr;
+    float bestAbsSignedDistance = 0.0f;
+    float bestClearance = 0.0f;
+    for (const SectorCollisionEdge& edge : *edges) {
+        if (edge.kind != SectorCollisionEdgeKind::Portal
+                || edge.neighborSectorId != pointSectorId) {
+            continue;
+        }
+        if (!ProjectPointToSegmentRange(xz, edge.a, edge.b, nullptr)) {
+            continue;
+        }
+
+        const Vector2 inward = GetSectorCollisionEdgeInwardNormal(edge);
+        if (LengthSquared(inward) <= CollisionMoveEpsilon) {
+            continue;
+        }
+        const Vector2 destinationNormal = Scale(inward, -1.0f);
+        const float clearance = Dot(Subtract(xz, edge.a), destinationNormal);
+        const float absSignedDistance = std::fabs(clearance);
+        if (bestEdge == nullptr || absSignedDistance < bestAbsSignedDistance) {
+            bestEdge = &edge;
+            bestAbsSignedDistance = absSignedDistance;
+            bestClearance = clearance;
+        }
+    }
+
+    if (bestEdge == nullptr) {
+        return pointSectorId;
+    }
+    if (bestClearance >= config.radius + CollisionMoveEpsilon) {
+        return pointSectorId;
+    }
+    return currentSectorId;
+}
+
 SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
         const SectorCollisionMoveState& moveState,
         Vector2 desiredDelta,
@@ -642,7 +731,12 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
         }
 
         const int resolvedSectorId =
-                FindSectorContainingPointPreferCurrent(candidate, result.currentSectorId);
+                FindSectorForPlayerFootprint(
+                        candidate,
+                        result.currentSectorId,
+                        moveState.feetY,
+                        moveState.grounded,
+                        config);
         if (resolvedSectorId == 0) {
             result.positionXZ = previousPosition;
             result.currentSectorId = previousSectorId;
