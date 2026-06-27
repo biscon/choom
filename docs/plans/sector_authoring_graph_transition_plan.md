@@ -88,8 +88,50 @@ Suggested path:
       "id": "phase_11_minimal_authoring_tools",
       "title": "Add minimal authoring line and vertex tools",
       "type": "phase",
-      "status": "Planned",
+      "status": "In Progress",
       "parent": null
+    },
+    {
+      "id": "phase_11a_authoring_selection_state",
+      "title": "Add authoring graph selection and edit helper state",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_11_minimal_authoring_tools"
+    },
+    {
+      "id": "phase_11b_draw_authoring_line_tool",
+      "title": "Add authoring line drawing in the existing 2D editor",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_11_minimal_authoring_tools"
+    },
+    {
+      "id": "phase_11c_select_delete_authoring_line",
+      "title": "Add authoring line picking, selection, and delete",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_11_minimal_authoring_tools"
+    },
+    {
+      "id": "phase_11d_select_move_delete_authoring_vertex",
+      "title": "Add authoring vertex picking, movement, and safe delete",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_11_minimal_authoring_tools"
+    },
+    {
+      "id": "phase_11e_authoring_derivation_after_edits",
+      "title": "Refresh derivation and cache state after authoring graph edits",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_11_minimal_authoring_tools"
+    },
+    {
+      "id": "phase_11f_tools_pane_integration",
+      "title": "Integrate minimal authoring tools into the existing tools pane",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_11_minimal_authoring_tools"
     },
     {
       "id": "phase_12_preview_and_bake_gating",
@@ -903,6 +945,57 @@ If UI implementation is too broad, split into child passes:
 * select/move vertex in existing 2D editor
 * derivation after edits
 * existing tools pane integration
+
+Split execution note:
+
+`phase_11_minimal_authoring_tools` is intentionally split before implementation
+because the full phase spans editor selection state, mouse-driven drawing,
+picking, movement, deletion, derivation refresh, cache invalidation, tool-panel
+integration, and tests. Execute exactly one child pass at a time.
+
+Child passes:
+
+* `phase_11a_authoring_selection_state`
+  * add transient editor state for selected/hovered authoring line and vertex
+  * add small pure helpers for authoring line/vertex lookup or picking inputs if
+    needed
+  * do not add mouse mutation tools yet
+  * tests: selection/helper state can represent line and vertex targets without
+    mutating `SectorTopologyMap`
+* `phase_11b_draw_authoring_line_tool`
+  * add mouse-driven line creation in the existing 2D viewport using grid snap
+    and existing status conventions
+  * graph edits must mark the document dirty and invalidate cached 2D editor
+    state through existing authoring/topology invalidation helpers
+  * do not implement delete or vertex movement yet
+  * tests: add/draw helper creates vertices/lines, permits loose lines, and does
+    not directly mutate `SectorTopologyMap`
+* `phase_11c_select_delete_authoring_line`
+  * add authoring line picking/selection in the existing 2D editor flow
+  * add deletion for selected authoring lines
+  * graph edits must mark dirty and stale derived topology
+  * tests: picking/delete helpers update only the graph and invalidate derivation
+* `phase_11d_select_move_delete_authoring_vertex`
+  * add authoring vertex picking/selection
+  * add vertex drag/move using existing mouse/grid conventions
+  * add clear safe-delete behavior for authoring vertices
+  * tests: moving a vertex updates connected lines through vertex coordinates,
+    delete behavior is explicit, and graph edits invalidate derivation
+* `phase_11e_authoring_derivation_after_edits`
+  * connect completed graph edits to the existing derivation refresh hook or a
+    clear explicit update hook used by the editor
+  * successful derivation updates current derived topology only through the
+    derivation path
+  * failed derivation keeps the graph editable and records diagnostics
+  * tests: crossing-line derivation can produce expected derived faces when the
+    helper is invoked, and failures do not replace last valid derived topology
+* `phase_11f_tools_pane_integration`
+  * expose the minimal authoring tools through the existing tools pane/tool
+    selection pattern
+  * avoid mixing old closed-sector topology mutation tools confusingly with graph
+    tools
+  * do not remove existing picker/inspector infrastructure
+  * tests: existing tool helper naming/help behavior remains valid where tested
 
 Verification:
 
