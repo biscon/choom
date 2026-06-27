@@ -1,6 +1,7 @@
 #include "sector_demo/SectorAuthoringGraph.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorTopologySerialization.h"
+#include "sector_demo/SectorUnits.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
@@ -1013,7 +1014,7 @@ void TestExtractFacesNestedDisconnectedLoopsAreDeferred()
           "nested disconnected loops produce an ambiguous topology diagnostic");
 }
 
-void TestExtractFacesDisconnectedClosedLoopsAreDeferred()
+void TestExtractDisconnectedClosedLoopsProducesFaces()
 {
     const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}, {128, 0}, {192, 0}, {192, 64}, {128, 64}},
@@ -1021,9 +1022,27 @@ void TestExtractFacesDisconnectedClosedLoopsAreDeferred()
 
     const game::SectorAuthoringFaceExtractionResult result = ExtractFacesFromGraph(graph);
 
-    Check(result.faces.empty(), "disconnected closed loops are not returned as independent guessed faces");
-    Check(HasFaceDiagnostic(result.diagnostics, game::SectorAuthoringFaceDiagnosticKind::AmbiguousTopology),
-          "disconnected closed loops produce an ambiguous topology diagnostic");
+    Check(result.faces.size() == 2, "disconnected closed loops are returned as independent faces");
+    Check(result.diagnostics.empty(), "disconnected closed loops produce no face diagnostics");
+}
+
+void TestExtractDisconnectedClosedLoopsWithDanglingLineReportsOnlyDanglingLine()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64},
+             {128, 0}, {192, 0}, {192, 64}, {128, 64},
+             {224, 0}, {256, 0}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1},
+             {5, 6}, {6, 7}, {7, 8}, {8, 5},
+             {9, 10}});
+
+    const game::SectorAuthoringFaceExtractionResult result = ExtractFacesFromGraph(graph);
+
+    Check(result.faces.size() == 2, "dangling line does not corrupt disconnected closed loop faces");
+    Check(HasFaceDiagnostic(result.diagnostics, game::SectorAuthoringFaceDiagnosticKind::DanglingEdge),
+          "dangling line in disconnected graph reports dangling diagnostic");
+    Check(!HasFaceDiagnostic(result.diagnostics, game::SectorAuthoringFaceDiagnosticKind::AmbiguousTopology),
+          "dangling line in disconnected graph does not report ambiguous topology");
 }
 
 void CheckDerivedTopologyIsValid(
@@ -1090,6 +1109,26 @@ void TestDeriveCrossingDiagonals()
     CheckDerivedTopologyIsValid(result, "crossing diagonals derive valid topology");
     Check(result.topology.vertices.size() == 5, "crossing diagonals derive inserted intersection vertex");
     Check(result.topology.sectors.size() == 4, "crossing diagonals derive four sectors after planarization");
+}
+
+void TestDeriveDisconnectedClosedLoopsProducesSectors()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}, {128, 0}, {192, 0}, {192, 64}, {128, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {5, 6}, {6, 7}, {7, 8}, {8, 5}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "disconnected closed loops derive valid topology");
+    Check(result.topology.sectors.size() == 2, "disconnected closed loops derive two sectors");
+    Check(result.mapping.sectors.size() == 2, "disconnected closed loops record two sector mappings");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(result.topology, geometry, &error),
+          "disconnected closed loops derived topology builds generated geometry");
+    Check(!geometry.surfaces.empty(), "disconnected closed loops generate surfaces");
 }
 
 void TestDeriveNonIntegerIntersectionFails()
@@ -1262,6 +1301,34 @@ void TestDeriveDanglingLineDiagnosticUsesAuthoringLineId()
         Check(diagnostic->relatedObjectId == danglingPlanarEdgeId,
               "dangling line diagnostic keeps internal planar edge ID as related data");
     }
+}
+
+void TestDeriveDisconnectedClosedLoopsWithDanglingLineFailsCleanly()
+{
+    const int danglingLineId = 18;
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64},
+             {128, 0}, {192, 0}, {192, 64}, {128, 64},
+             {224, 0}, {256, 0}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1},
+             {5, 6}, {6, 7}, {7, 8}, {8, 5},
+             {9, 10}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    Check(!result.success, "disconnected loops plus dangling line fail derivation");
+    Check(result.topology.sectors.empty(), "dangling disconnected graph returns no half-valid topology");
+    Check(result.mapping.sectors.empty(), "dangling disconnected graph returns no half-valid mapping");
+    Check(HasDerivationDiagnosticFor(
+                  result.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::DanglingLine,
+                  danglingLineId),
+          "dangling disconnected graph reports dangling authoring line ID");
+    Check(!HasDerivationDiagnostic(
+                  result.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::FaceExtraction),
+          "dangling disconnected graph does not report generic face extraction ambiguity");
 }
 
 void TestDeriveSplitLineMapping()
@@ -1552,6 +1619,54 @@ void TestDerivedTopologyBuildsGeometry()
     Check(game::BuildSectorGeneratedGeometry(result.topology, geometry, &error),
           "derived topology builds generated geometry");
     Check(!geometry.surfaces.empty(), "derived topology generates surfaces");
+}
+
+void TestFreshDerivedTopologyUsesDefaultMaterials()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    CheckDerivedTopologyIsValid(result, "fresh material default derivation input is valid");
+
+    Check(result.topology.sectors.size() == 1, "fresh material default graph derives one sector");
+    if (!result.topology.sectors.empty()) {
+        const game::SectorTopologySector& sector = result.topology.sectors.front();
+        Check(sector.floorTextureId == "floor", "fresh derived sector gets default floor texture");
+        Check(sector.ceilingTextureId == "ceiling", "fresh derived sector gets default ceiling texture");
+        Check(sector.defaultWall.textureId == "wall", "fresh derived sector gets default wall texture");
+        Check(sector.defaultLower.textureId == "wall", "fresh derived sector gets default lower wall texture");
+        Check(sector.defaultUpper.textureId == "wall", "fresh derived sector gets default upper wall texture");
+    }
+
+    for (const game::SectorTopologySideDef& sideDef : result.topology.sideDefs) {
+        Check(sideDef.wall.textureId == "wall", "fresh derived sidedef gets default wall texture");
+        Check(sideDef.lower.textureId == "wall", "fresh derived sidedef gets default lower wall texture");
+        Check(sideDef.upper.textureId == "wall", "fresh derived sidedef gets default upper wall texture");
+    }
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(result.topology, geometry, &error),
+          "fresh derived default-material topology builds generated geometry");
+    bool sawFloor = false;
+    bool sawCeiling = false;
+    bool sawWall = false;
+    bool sawEmptyTexture = false;
+    for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
+        sawEmptyTexture = sawEmptyTexture || surface.textureId.empty();
+        sawFloor = sawFloor || (surface.ref.kind == game::SectorGeneratedSurfaceKind::Floor
+                && surface.textureId == "floor");
+        sawCeiling = sawCeiling || (surface.ref.kind == game::SectorGeneratedSurfaceKind::Ceiling
+                && surface.textureId == "ceiling");
+        sawWall = sawWall || (surface.ref.kind == game::SectorGeneratedSurfaceKind::Wall
+                && surface.textureId == "wall");
+    }
+    Check(!sawEmptyTexture, "fresh derived generated geometry surfaces have non-empty textures");
+    Check(sawFloor, "fresh derived generated geometry has default floor texture");
+    Check(sawCeiling, "fresh derived generated geometry has default ceiling texture");
+    Check(sawWall, "fresh derived generated geometry has default wall texture");
 }
 
 void TestEditorAuthoringGraphMutationMarksDirtyAndStale()
@@ -2009,6 +2124,10 @@ void TestEditorAuthoringVertexPickingFindsNearestValidVertex()
     AddAuthoringVertexWithId(graph, 20, 0, 0);
     AddAuthoringVertexWithId(graph, 10, 64, 0);
 
+    constexpr float testViewZoom = 48.0f;
+    const float practicalPickDistance = game::SectorWorldToAuthoringDistance(
+            game::ScreenVertexSnapPixels / testViewZoom);
+
     int vertexId = -1;
     game::SectorTopologyCoordPoint point{};
     Check(game::FindSectorEditorAuthoringVertexNearMapPoint(
@@ -2022,10 +2141,21 @@ void TestEditorAuthoringVertexPickingFindsNearestValidVertex()
           "authoring vertex picking returns nearest vertex ID and point");
 
     vertexId = -1;
+    Check(game::FindSectorEditorAuthoringVertexNearMapPoint(
+                  graph,
+                  Vector2{game::SectorCoordToVisibleAuthoring(64), 1.0f},
+                  practicalPickDistance,
+                  &vertexId,
+                  &point),
+          "authoring vertex picking succeeds within practical screen-space radius");
+    Check(vertexId == 10 && point.x == 64 && point.y == 0,
+          "authoring practical radius picking returns nearest vertex ID and point");
+
+    vertexId = -1;
     Check(!game::FindSectorEditorAuthoringVertexNearMapPoint(
                   graph,
                   Vector2{game::SectorCoordToVisibleAuthoring(32), 4.0f},
-                  0.25f,
+                  practicalPickDistance,
                   &vertexId),
           "authoring vertex picking rejects points outside threshold");
     Check(vertexId == -1, "authoring vertex picking leaves output unchanged on miss");
@@ -2044,6 +2174,10 @@ void TestEditorAuthoringSelectionPickingPrefersVerticesThenLines()
     AddAuthoringVertexWithId(graph, 2, 64, 0);
     AddAuthoringLineWithId(graph, 10, 1, 2);
 
+    constexpr float testViewZoom = 48.0f;
+    const float practicalPickDistance = game::SectorWorldToAuthoringDistance(
+            game::ScreenVertexSnapPixels / testViewZoom);
+
     game::SectorAuthoringSelectionTarget target;
     game::SectorTopologyCoordPoint vertexPoint{};
     Check(game::FindSectorEditorAuthoringSelectionNearMapPoint(
@@ -2061,6 +2195,22 @@ void TestEditorAuthoringSelectionPickingPrefersVerticesThenLines()
           "authoring selection picking returns the picked vertex point");
 
     target = game::SectorAuthoringSelectionTarget{};
+    vertexPoint = game::SectorTopologyCoordPoint{};
+    Check(game::FindSectorEditorAuthoringSelectionNearMapPoint(
+                  graph,
+                  Vector2{1.0f, 0.0f},
+                  practicalPickDistance,
+                  practicalPickDistance,
+                  &target,
+                  &vertexPoint),
+          "authoring selection practical radius finds an authoring target");
+    Check(target.kind == game::SectorAuthoringSelectionKind::Vertex
+                  && target.vertexId == 1,
+          "authoring selection practical radius prefers vertex over nearby line");
+    Check(vertexPoint.x == 0 && vertexPoint.y == 0,
+          "authoring selection practical radius returns picked vertex point");
+
+    target = game::SectorAuthoringSelectionTarget{};
     Check(game::FindSectorEditorAuthoringSelectionNearMapPoint(
                   graph,
                   Vector2{game::SectorCoordToVisibleAuthoring(32), 0.0f},
@@ -2073,12 +2223,24 @@ void TestEditorAuthoringSelectionPickingPrefersVerticesThenLines()
                   && target.vertexId == -1,
           "authoring selection picking returns only authoring line targets");
 
+    target = game::SectorAuthoringSelectionTarget{};
+    Check(game::FindSectorEditorAuthoringSelectionNearMapPoint(
+                  graph,
+                  Vector2{game::SectorCoordToVisibleAuthoring(32), 1.0f},
+                  0.25f,
+                  practicalPickDistance,
+                  &target),
+          "authoring selection picking finds line outside vertex tolerance");
+    Check(target.kind == game::SectorAuthoringSelectionKind::Line
+                  && target.lineId == 10,
+          "authoring selection line fallback works outside vertex tolerance");
+
     target = game::MakeSectorAuthoringLineSelectionTarget(10);
     Check(!game::FindSectorEditorAuthoringSelectionNearMapPoint(
                   graph,
                   Vector2{game::SectorCoordToVisibleAuthoring(32), 4.0f},
-                  0.25f,
-                  0.25f,
+                  practicalPickDistance,
+                  practicalPickDistance,
                   &target),
           "authoring selection picking misses empty space");
     Check(target.kind == game::SectorAuthoringSelectionKind::None,
@@ -2421,16 +2583,19 @@ int main()
     TestExtractFacesRejectsOuterFace();
     TestExtractFacesSliverThreshold();
     TestExtractFacesNestedDisconnectedLoopsAreDeferred();
-    TestExtractFacesDisconnectedClosedLoopsAreDeferred();
+    TestExtractDisconnectedClosedLoopsProducesFaces();
+    TestExtractDisconnectedClosedLoopsWithDanglingLineReportsOnlyDanglingLine();
     TestDeriveSingleSquare();
     TestDeriveAdjacentSquares();
     TestDeriveCrossingDiagonals();
+    TestDeriveDisconnectedClosedLoopsProducesSectors();
     TestDeriveNonIntegerIntersectionFails();
     TestDeriveSquareWithMixedLineDirections();
     TestDeriveOpenGraphFails();
     TestDeriveDuplicateLinesFail();
     TestDeriveDiagnosticsUseSpecificKindsAndSources();
     TestDeriveDanglingLineDiagnosticUsesAuthoringLineId();
+    TestDeriveDisconnectedClosedLoopsWithDanglingLineFailsCleanly();
     TestDeriveSplitLineMapping();
     TestDeriveFaceAnchorMapping();
     TestDeriveFaceAnchorDiagnostics();
@@ -2440,6 +2605,7 @@ int main()
     TestDeriveSplitLineDuplicatesProjectedProperties();
     TestDeriveUnresolvedAnchorPreservesAuthoringProperties();
     TestDerivedTopologyBuildsGeometry();
+    TestFreshDerivedTopologyUsesDefaultMaterials();
     TestEditorAuthoringGraphMutationMarksDirtyAndStale();
     TestAuthoringOverlayRenderCacheIncludesLooseGraph();
     TestAuthoringDiagnosticRenderCacheDoesNotRequireDerivedTopology();

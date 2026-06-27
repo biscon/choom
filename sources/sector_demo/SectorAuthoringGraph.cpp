@@ -741,32 +741,101 @@ SectorAuthoringFaceBoundaryEdge MakeFaceBoundaryEdge(
     return boundaryEdge;
 }
 
+bool PlanarPointIsOnSegment(
+        double px,
+        double py,
+        double ax,
+        double ay,
+        double bx,
+        double by)
+{
+    constexpr double epsilon = 1.0e-9;
+    const double cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+    if (std::fabs(cross) > epsilon) {
+        return false;
+    }
+    return px >= std::min(ax, bx) - epsilon && px <= std::max(ax, bx) + epsilon
+            && py >= std::min(ay, by) - epsilon && py <= std::max(ay, by) + epsilon;
+}
+
+bool FaceContainsPlanarPoint(
+        const SectorAuthoringPlanarizationResult& planar,
+        const SectorAuthoringExtractedFace& face,
+        const SectorAuthoringPlanarPoint& point)
+{
+    if (face.boundary.size() < 3) {
+        return false;
+    }
+
+    const double px = PlanarPointX(point);
+    const double py = PlanarPointY(point);
+    bool inside = false;
+    for (const SectorAuthoringFaceBoundaryEdge& boundary : face.boundary) {
+        const SectorAuthoringPlanarVertex* start = FindPlanarVertex(planar, boundary.startVertexId);
+        const SectorAuthoringPlanarVertex* end = FindPlanarVertex(planar, boundary.endVertexId);
+        if (start == nullptr || end == nullptr) {
+            continue;
+        }
+
+        const double ax = PlanarPointX(start->point);
+        const double ay = PlanarPointY(start->point);
+        const double bx = PlanarPointX(end->point);
+        const double by = PlanarPointY(end->point);
+        if (PlanarPointIsOnSegment(px, py, ax, ay, bx, by)) {
+            return true;
+        }
+        if (((ay > py) != (by > py))
+                && (px < (bx - ax) * (py - ay) / (by - ay) + ax)) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
 bool HasUnsupportedDisconnectedClosedFaces(
+        const SectorAuthoringPlanarizationResult& planar,
         const std::vector<CandidateExtractedFace>& candidateFaces,
         SectorAuthoringFaceExtractionResult& result)
 {
-    if (candidateFaces.empty()) {
+    if (candidateFaces.size() < 2) {
         return false;
     }
 
-    std::set<int> faceComponentIds;
-    for (const CandidateExtractedFace& candidate : candidateFaces) {
-        faceComponentIds.insert(candidate.componentId);
-    }
-    if (faceComponentIds.size() <= 1) {
-        return false;
+    for (std::size_t lhsIndex = 0; lhsIndex < candidateFaces.size(); ++lhsIndex) {
+        for (std::size_t rhsIndex = lhsIndex + 1; rhsIndex < candidateFaces.size(); ++rhsIndex) {
+            const CandidateExtractedFace& lhs = candidateFaces[lhsIndex];
+            const CandidateExtractedFace& rhs = candidateFaces[rhsIndex];
+            if (lhs.componentId == rhs.componentId
+                    || lhs.face.boundary.empty()
+                    || rhs.face.boundary.empty()) {
+                continue;
+            }
+
+            const SectorAuthoringPlanarVertex* lhsStart =
+                    FindPlanarVertex(planar, lhs.face.boundary.front().startVertexId);
+            const SectorAuthoringPlanarVertex* rhsStart =
+                    FindPlanarVertex(planar, rhs.face.boundary.front().startVertexId);
+            const bool lhsInsideRhs = lhsStart != nullptr
+                    && FaceContainsPlanarPoint(planar, rhs.face, lhsStart->point);
+            const bool rhsInsideLhs = rhsStart != nullptr
+                    && FaceContainsPlanarPoint(planar, lhs.face, rhsStart->point);
+            if (!lhsInsideRhs && !rhsInsideLhs) {
+                continue;
+            }
+
+            const SectorAuthoringExtractedFace& diagnosticFace =
+                    lhsInsideRhs ? lhs.face : rhs.face;
+            AddFaceDiagnostic(
+                    result.diagnostics,
+                    SectorAuthoringFaceDiagnosticKind::AmbiguousTopology,
+                    diagnosticFace.boundary.front().planarEdgeId,
+                    diagnosticFace.boundary.front().startVertexId,
+                    "Nested disconnected loops and hole candidates are deferred for a later authoring-graph phase");
+            return true;
+        }
     }
 
-    const SectorAuthoringExtractedFace& firstFace = candidateFaces.front().face;
-    const int firstPlanarEdgeId = firstFace.boundary.empty() ? -1 : firstFace.boundary.front().planarEdgeId;
-    const int firstVertexId = firstFace.boundary.empty() ? -1 : firstFace.boundary.front().startVertexId;
-    AddFaceDiagnostic(
-            result.diagnostics,
-            SectorAuthoringFaceDiagnosticKind::AmbiguousTopology,
-            firstPlanarEdgeId,
-            firstVertexId,
-            "Disconnected closed loops and hole candidates are deferred for a later authoring-graph phase");
-    return true;
+    return false;
 }
 
 void AddDerivationDiagnostic(
@@ -1073,6 +1142,11 @@ void CopyFaceDefaultsToTopologySector(
 {
     sector.id = topologySectorId;
     sector.name = "Sector " + std::to_string(face.id);
+    sector.floorTextureId = "floor";
+    sector.ceilingTextureId = "ceiling";
+    sector.defaultWall.textureId = "wall";
+    sector.defaultLower.textureId = "wall";
+    sector.defaultUpper.textureId = "wall";
 }
 
 int AllocateDerivedSectorId(
@@ -1193,6 +1267,11 @@ void BuildDerivedTopologyFacesAndLines(
             sideDef.lineDefId = lineIt->second;
             sideDef.side = boundaryEdge.sourceSide;
             sideDef.sectorId = sectorIt->second;
+            if (const SectorTopologySector* sector = FindSectorTopologySector(topology, sideDef.sectorId)) {
+                sideDef.wall = sector->defaultWall;
+                sideDef.lower = sector->defaultLower;
+                sideDef.upper = sector->defaultUpper;
+            }
             if (const SectorAuthoringLineSide* authoringSide = FindSectorAuthoringLineSide(
                         graph,
                         SectorAuthoringSideId{boundaryEdge.sourceLineId, boundaryEdge.sourceSide})) {
@@ -1755,7 +1834,7 @@ SectorAuthoringFaceExtractionResult ExtractSectorAuthoringFaces(
         }
     }
 
-    if (HasUnsupportedDisconnectedClosedFaces(candidateFaces, result)) {
+    if (HasUnsupportedDisconnectedClosedFaces(planar, candidateFaces, result)) {
         return result;
     }
 

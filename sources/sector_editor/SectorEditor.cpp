@@ -6911,7 +6911,8 @@ bool SectorEditor::FindTopologyLineNearScreenPoint(
 int SectorEditor::FindAuthoringLineNearScreenPoint(Vector2 screenPoint) const
 {
     int lineId = -1;
-    const float maxDistance = ScreenEdgePickPixels / std::max(1.0f, state.viewZoom);
+    const float maxDistance = SectorWorldToAuthoringDistance(
+            ScreenEdgePickPixels / std::max(1.0f, state.viewZoom));
     if (!FindSectorEditorAuthoringLineNearMapPoint(
                 state.authoringGraph,
                 ScreenToMap(screenPoint),
@@ -6929,13 +6930,36 @@ bool SectorEditor::FindAuthoringVertexNearScreenPoint(
 {
     outVertexId = -1;
     outPoint = SectorTopologyCoordPoint{};
-    const float maxDistance = ScreenVertexSnapPixels / std::max(1.0f, state.viewZoom);
-    return FindSectorEditorAuthoringVertexNearMapPoint(
-            state.authoringGraph,
-            ScreenToMap(screenPoint),
-            maxDistance,
-            &outVertexId,
-            &outPoint);
+
+    float bestDistance2 = ScreenVertexSnapPixels * ScreenVertexSnapPixels;
+    int bestVertexId = -1;
+    SectorTopologyCoordPoint bestPoint{};
+    for (const SectorAuthoringVertex& vertex : state.authoringGraph.vertices) {
+        const Vector2 screenVertex = MapToScreen(Vector2{
+                SectorCoordToVisibleAuthoring(vertex.x),
+                SectorCoordToVisibleAuthoring(vertex.y)});
+        const float dx = screenVertex.x - screenPoint.x;
+        const float dy = screenVertex.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 > bestDistance2) {
+            continue;
+        }
+        if (bestVertexId >= 0
+                && std::fabs(distance2 - bestDistance2) <= 0.001f
+                && vertex.id >= bestVertexId) {
+            continue;
+        }
+        bestDistance2 = distance2;
+        bestVertexId = vertex.id;
+        bestPoint = SectorTopologyCoordPoint{vertex.x, vertex.y};
+    }
+
+    if (bestVertexId < 0) {
+        return false;
+    }
+    outVertexId = bestVertexId;
+    outPoint = bestPoint;
+    return true;
 }
 
 bool SectorEditor::FindAuthoringSelectionNearScreenPoint(
@@ -6943,15 +6967,30 @@ bool SectorEditor::FindAuthoringSelectionNearScreenPoint(
         SectorAuthoringSelectionTarget& outTarget,
         SectorTopologyCoordPoint& outVertexPoint) const
 {
-    const float vertexMaxDistance = ScreenVertexSnapPixels / std::max(1.0f, state.viewZoom);
-    const float lineMaxDistance = ScreenEdgePickPixels / std::max(1.0f, state.viewZoom);
-    return FindSectorEditorAuthoringSelectionNearMapPoint(
-            state.authoringGraph,
-            ScreenToMap(screenPoint),
-            vertexMaxDistance,
-            lineMaxDistance,
-            &outTarget,
-            &outVertexPoint);
+    int vertexId = -1;
+    SectorTopologyCoordPoint vertexPoint{};
+    if (FindAuthoringVertexNearScreenPoint(screenPoint, vertexId, vertexPoint)) {
+        outTarget = MakeSectorAuthoringVertexSelectionTarget(vertexId);
+        outVertexPoint = vertexPoint;
+        return true;
+    }
+
+    const float lineMaxDistance = SectorWorldToAuthoringDistance(
+            ScreenEdgePickPixels / std::max(1.0f, state.viewZoom));
+    int lineId = -1;
+    if (FindSectorEditorAuthoringLineNearMapPoint(
+                state.authoringGraph,
+                ScreenToMap(screenPoint),
+                lineMaxDistance,
+                &lineId)) {
+        outTarget = MakeSectorAuthoringLineSelectionTarget(lineId);
+        outVertexPoint = SectorTopologyCoordPoint{};
+        return true;
+    }
+
+    outTarget = SectorAuthoringSelectionTarget{};
+    outVertexPoint = SectorTopologyCoordPoint{};
+    return false;
 }
 
 void SectorEditor::SelectTopologySector(int sectorId)
