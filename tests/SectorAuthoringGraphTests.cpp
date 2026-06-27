@@ -1,4 +1,5 @@
 #include "sector_demo/SectorAuthoringGraph.h"
+#include "sector_demo/SectorGeneratedGeometry.h"
 
 #include <algorithm>
 #include <iostream>
@@ -57,6 +58,30 @@ bool HasPlanarDiagnostic(
     return false;
 }
 
+bool HasFaceDiagnostic(
+        const std::vector<game::SectorAuthoringFaceDiagnostic>& diagnostics,
+        game::SectorAuthoringFaceDiagnosticKind kind)
+{
+    for (const game::SectorAuthoringFaceDiagnostic& diagnostic : diagnostics) {
+        if (diagnostic.kind == kind) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool HasDerivationDiagnostic(
+        const std::vector<game::SectorAuthoringDerivationDiagnostic>& diagnostics,
+        game::SectorAuthoringDerivationDiagnosticKind kind)
+{
+    for (const game::SectorAuthoringDerivationDiagnostic& diagnostic : diagnostics) {
+        if (diagnostic.kind == kind) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void AddAuthoringVertexWithId(game::SectorAuthoringGraph& graph, int id, game::SectorCoord x, game::SectorCoord y)
 {
     graph.vertices.push_back(game::SectorAuthoringVertex{id, x, y});
@@ -88,6 +113,28 @@ game::SectorAuthoringGraph MakeGraphFromLines(
                 10 + static_cast<int>(index / 2),
                 static_cast<int>(index) + 1,
                 static_cast<int>(index) + 2);
+    }
+    return graph;
+}
+
+game::SectorAuthoringGraph MakeGraphFromConnectedLines(
+        const std::vector<std::pair<game::SectorCoord, game::SectorCoord>>& vertices,
+        const std::vector<std::pair<int, int>>& lines)
+{
+    game::SectorAuthoringGraph graph;
+    for (std::size_t index = 0; index < vertices.size(); ++index) {
+        AddAuthoringVertexWithId(
+                graph,
+                static_cast<int>(index) + 1,
+                vertices[index].first,
+                vertices[index].second);
+    }
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        AddAuthoringLineWithId(
+                graph,
+                10 + static_cast<int>(index),
+                lines[index].first,
+                lines[index].second);
     }
     return graph;
 }
@@ -127,6 +174,13 @@ int CountPlanarEdgesForLine(const game::SectorAuthoringPlanarizationResult& resu
         }
     }
     return count;
+}
+
+game::SectorAuthoringFaceExtractionResult ExtractFacesFromGraph(const game::SectorAuthoringGraph& graph)
+{
+    const game::SectorAuthoringPlanarizationResult planar = game::PlanarizeSectorAuthoringGraph(graph);
+    Check(planar.diagnostics.empty(), "face extraction test graph planarizes without diagnostics");
+    return game::ExtractSectorAuthoringFaces(planar);
 }
 
 game::SectorTopologyWallPartSettings WallPart(
@@ -754,6 +808,323 @@ void TestPlanarizeMetadataMapping()
     }
 }
 
+void TestExtractFacesSingleSquare()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+
+    const game::SectorAuthoringFaceExtractionResult result = ExtractFacesFromGraph(graph);
+
+    Check(result.faces.size() == 1, "single square produces one bounded face");
+    Check(result.faces[0].boundary.size() == 4, "single square face has four boundary edges");
+    Check(result.faces[0].signedArea > 0.0, "single square face has deterministic positive winding");
+    Check(result.diagnostics.empty(), "single square produces no face diagnostics");
+    for (const game::SectorAuthoringFaceBoundaryEdge& edge : result.faces[0].boundary) {
+        Check(edge.sourceLineId >= 10 && edge.sourceLineId <= 13, "face boundary preserves source line mapping");
+        Check(edge.sourceSide == game::SectorTopologySideKind::Front, "CCW square maps bounded face to front sides");
+    }
+}
+
+void TestExtractFacesAdjacentSquares()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
+
+    const game::SectorAuthoringFaceExtractionResult result = ExtractFacesFromGraph(graph);
+
+    Check(result.faces.size() == 2, "two adjacent squares produce two bounded faces");
+    Check(result.diagnostics.empty(), "two adjacent squares produce no face diagnostics");
+    Check(result.faces[0].id == 1 && result.faces[1].id == 2, "adjacent square face IDs are deterministic");
+}
+
+void TestExtractFacesRectangleCutByLine()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {128, 0}, {128, 64}, {0, 64}, {64, 0}, {64, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {5, 6}});
+
+    const game::SectorAuthoringFaceExtractionResult result = ExtractFacesFromGraph(graph);
+
+    Check(result.faces.size() == 2, "rectangle cut by a boundary-to-boundary line produces two faces");
+    Check(result.diagnostics.empty(), "rectangle cut by line produces no face diagnostics");
+}
+
+void TestExtractFacesCrossingDiagonals()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {1, 3}, {2, 4}});
+
+    const game::SectorAuthoringPlanarizationResult planar = game::PlanarizeSectorAuthoringGraph(graph);
+    const game::SectorAuthoringFaceExtractionResult result = game::ExtractSectorAuthoringFaces(planar);
+
+    Check(planar.diagnostics.empty(), "crossing diagonals planarize without diagnostics");
+    Check(result.faces.size() == 4, "crossing diagonals in a square produce four bounded faces");
+    Check(result.diagnostics.empty(), "crossing diagonals produce no face diagnostics");
+}
+
+void TestExtractFacesOpenChainDiagnostics()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {128, 64}},
+            {{1, 2}, {2, 3}, {3, 4}});
+
+    const game::SectorAuthoringFaceExtractionResult result = ExtractFacesFromGraph(graph);
+
+    Check(result.faces.empty(), "open chain produces no bounded faces");
+    Check(HasFaceDiagnostic(result.diagnostics, game::SectorAuthoringFaceDiagnosticKind::DanglingEdge),
+          "open chain produces dangling edge diagnostics");
+}
+
+void TestExtractFacesDanglingLineDoesNotCorruptSquare()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}, {96, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {3, 5}});
+
+    const game::SectorAuthoringFaceExtractionResult result = ExtractFacesFromGraph(graph);
+
+    Check(result.faces.size() == 1, "dangling line attached to square keeps the square face");
+    Check(HasFaceDiagnostic(result.diagnostics, game::SectorAuthoringFaceDiagnosticKind::DanglingEdge),
+          "dangling line attached to square produces dangling edge diagnostic");
+}
+
+void TestExtractFacesRejectsOuterFace()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+
+    const game::SectorAuthoringFaceExtractionResult result = ExtractFacesFromGraph(graph);
+
+    Check(result.faces.size() == 1, "outer face is not returned as a bounded face");
+}
+
+void TestExtractFacesSliverThreshold()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {1, 0}, {0, 1}},
+            {{1, 2}, {2, 3}, {3, 1}});
+
+    const game::SectorAuthoringFaceExtractionResult result = ExtractFacesFromGraph(graph);
+
+    Check(result.faces.empty(), "sub-grid sliver triangle is not returned as a face");
+    Check(HasFaceDiagnostic(result.diagnostics, game::SectorAuthoringFaceDiagnosticKind::TinySliverFace),
+          "sub-grid sliver triangle produces a sliver diagnostic");
+}
+
+void TestExtractFacesNestedDisconnectedLoopsAreDeferred()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {128, 0}, {128, 128}, {0, 128}, {32, 32}, {96, 32}, {96, 96}, {32, 96}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {5, 6}, {6, 7}, {7, 8}, {8, 5}});
+
+    const game::SectorAuthoringFaceExtractionResult result = ExtractFacesFromGraph(graph);
+
+    Check(result.faces.empty(), "nested disconnected loops are not returned as guessed faces");
+    Check(HasFaceDiagnostic(result.diagnostics, game::SectorAuthoringFaceDiagnosticKind::AmbiguousTopology),
+          "nested disconnected loops produce an ambiguous topology diagnostic");
+}
+
+void TestExtractFacesDisconnectedClosedLoopsAreDeferred()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}, {128, 0}, {192, 0}, {192, 64}, {128, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {5, 6}, {6, 7}, {7, 8}, {8, 5}});
+
+    const game::SectorAuthoringFaceExtractionResult result = ExtractFacesFromGraph(graph);
+
+    Check(result.faces.empty(), "disconnected closed loops are not returned as independent guessed faces");
+    Check(HasFaceDiagnostic(result.diagnostics, game::SectorAuthoringFaceDiagnosticKind::AmbiguousTopology),
+          "disconnected closed loops produce an ambiguous topology diagnostic");
+}
+
+void CheckDerivedTopologyIsValid(
+        const game::SectorAuthoringDerivationResult& result,
+        const char* description)
+{
+    Check(result.success, description);
+    Check(result.diagnostics.empty(), description);
+    Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(result.topology)),
+          description);
+}
+
+void TestDeriveSingleSquare()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "single square derives valid topology");
+    Check(result.topology.vertices.size() == 4, "single square derives four vertices");
+    Check(result.topology.lineDefs.size() == 4, "single square derives four linedefs");
+    Check(result.topology.sideDefs.size() == 4, "single square derives four sidedefs");
+    Check(result.topology.sectors.size() == 1, "single square derives one sector");
+    Check(result.mapping.vertices.size() == 4, "single square records vertex mapping");
+    Check(result.mapping.lines.size() == 4, "single square records line mapping");
+    Check(result.mapping.sides.size() == 4, "single square records side mapping");
+    Check(result.mapping.sectors.size() == 1, "single square records sector mapping");
+}
+
+void TestDeriveAdjacentSquares()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "adjacent squares derive valid topology");
+    Check(result.topology.sectors.size() == 2, "adjacent squares derive two sectors");
+    Check(result.topology.lineDefs.size() == 7, "adjacent squares share one derived linedef");
+
+    int twoSidedLineCount = 0;
+    for (const game::SectorTopologyLineDef& lineDef : result.topology.lineDefs) {
+        if (lineDef.frontSideDefId > 0 && lineDef.backSideDefId > 0) {
+            ++twoSidedLineCount;
+        }
+    }
+    Check(twoSidedLineCount == 1, "adjacent squares derive one two-sided linedef");
+}
+
+void TestDeriveCrossingDiagonals()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {1, 3}, {2, 4}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "crossing diagonals derive valid topology");
+    Check(result.topology.vertices.size() == 5, "crossing diagonals derive inserted intersection vertex");
+    Check(result.topology.sectors.size() == 4, "crossing diagonals derive four sectors after planarization");
+}
+
+void TestDeriveNonIntegerIntersectionFails()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}, {64, 33}},
+            {{1, 2}, {2, 5}, {5, 3}, {3, 4}, {4, 1}, {1, 5}, {4, 2}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    bool hasNonIntegerPlanarVertex = false;
+    for (const game::SectorAuthoringPlanarVertex& vertex : result.planar.vertices) {
+        if (!game::SectorAuthoringPlanarRationalIsInteger(vertex.point.x)
+                || !game::SectorAuthoringPlanarRationalIsInteger(vertex.point.y)) {
+            hasNonIntegerPlanarVertex = true;
+            break;
+        }
+    }
+
+    Check(!result.success, "non-integer intersection fails derivation");
+    Check(result.topology.vertices.empty(), "non-integer intersection returns no half-valid topology vertices");
+    Check(result.topology.lineDefs.empty(), "non-integer intersection returns no half-valid topology linedefs");
+    Check(result.topology.sideDefs.empty(), "non-integer intersection returns no half-valid topology sidedefs");
+    Check(result.topology.sectors.empty(), "non-integer intersection returns no half-valid topology sectors");
+    Check(result.mapping.vertices.empty(), "non-integer intersection returns no half-valid vertex mapping");
+    Check(result.mapping.lines.empty(), "non-integer intersection returns no half-valid line mapping");
+    Check(result.mapping.sides.empty(), "non-integer intersection returns no half-valid side mapping");
+    Check(result.mapping.sectors.empty(), "non-integer intersection returns no half-valid sector mapping");
+    Check(result.planar.diagnostics.empty(), "non-integer intersection is not rejected during planarization");
+    Check(!result.faces.faces.empty(), "non-integer intersection reaches face extraction before failing");
+    Check(result.faces.diagnostics.empty(), "non-integer intersection is not rejected during face extraction");
+    Check(hasNonIntegerPlanarVertex, "non-integer intersection keeps fractional planar vertex coordinates");
+    Check(HasDerivationDiagnostic(
+                  result.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::NonIntegerVertex),
+          "non-integer intersection reports non-integer vertex diagnostic");
+}
+
+void TestDeriveSquareWithMixedLineDirections()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {3, 2}, {3, 4}, {4, 1}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "mixed-direction square derives valid topology");
+    Check(result.topology.vertices.size() == 4, "mixed-direction square derives four vertices");
+    Check(result.topology.lineDefs.size() == 4, "mixed-direction square derives four linedefs");
+    Check(result.topology.sideDefs.size() == 4, "mixed-direction square derives four sidedefs");
+    Check(result.topology.sectors.size() == 1, "mixed-direction square derives one sector");
+
+    bool hasBackBoundarySide = false;
+    for (const game::SectorTopologyLineDef& lineDef : result.topology.lineDefs) {
+        const bool hasFront = lineDef.frontSideDefId > 0;
+        const bool hasBack = lineDef.backSideDefId > 0;
+        Check(hasFront != hasBack, "mixed-direction square derives exactly one side per boundary linedef");
+        hasBackBoundarySide = hasBackBoundarySide || hasBack;
+    }
+    Check(hasBackBoundarySide, "mixed-direction square keeps reversed authored edge on back side");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(result.topology, geometry, &error),
+          "mixed-direction square derived topology builds generated geometry");
+    Check(!geometry.surfaces.empty(), "mixed-direction square derived topology generates surfaces");
+}
+
+void TestDeriveOpenGraphFails()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}},
+            {{1, 2}, {2, 3}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    Check(!result.success, "open graph fails derivation");
+    Check(result.topology.sectors.empty(), "open graph does not return half-valid topology");
+    Check(HasDerivationDiagnostic(
+                  result.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::FaceExtraction),
+          "open graph reports face extraction diagnostic");
+}
+
+void TestDeriveDuplicateLinesFail()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromLines({
+            {0, 0}, {32, 0},
+            {32, 0}, {0, 0}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    Check(!result.success, "duplicate line graph fails derivation");
+    Check(result.topology.lineDefs.empty(), "duplicate line graph returns no derived linedefs");
+    Check(HasDerivationDiagnostic(
+                  result.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::Planarization),
+          "duplicate line graph reports planarization diagnostic");
+}
+
+void TestDerivedTopologyBuildsGeometry()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    CheckDerivedTopologyIsValid(result, "geometry derivation input is valid");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(result.topology, geometry, &error),
+          "derived topology builds generated geometry");
+    Check(!geometry.surfaces.empty(), "derived topology generates surfaces");
+}
+
 } // namespace
 
 int main()
@@ -782,6 +1153,24 @@ int main()
     TestPlanarizeZeroLengthLineDiagnostic();
     TestPlanarizeNearMissDiagnostic();
     TestPlanarizeMetadataMapping();
+    TestExtractFacesSingleSquare();
+    TestExtractFacesAdjacentSquares();
+    TestExtractFacesRectangleCutByLine();
+    TestExtractFacesCrossingDiagonals();
+    TestExtractFacesOpenChainDiagnostics();
+    TestExtractFacesDanglingLineDoesNotCorruptSquare();
+    TestExtractFacesRejectsOuterFace();
+    TestExtractFacesSliverThreshold();
+    TestExtractFacesNestedDisconnectedLoopsAreDeferred();
+    TestExtractFacesDisconnectedClosedLoopsAreDeferred();
+    TestDeriveSingleSquare();
+    TestDeriveAdjacentSquares();
+    TestDeriveCrossingDiagonals();
+    TestDeriveNonIntegerIntersectionFails();
+    TestDeriveSquareWithMixedLineDirections();
+    TestDeriveOpenGraphFails();
+    TestDeriveDuplicateLinesFail();
+    TestDerivedTopologyBuildsGeometry();
 
     if (failures != 0) {
         std::cerr << failures << " authoring graph test(s) failed\n";

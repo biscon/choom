@@ -39,14 +39,14 @@ Suggested path:
       "id": "phase_04_face_extraction",
       "title": "Add closed face extraction from planar graph",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {
       "id": "phase_05_basic_topology_derivation",
       "title": "Derive basic SectorTopologyMap from authoring graph",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {

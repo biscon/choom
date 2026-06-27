@@ -140,6 +140,95 @@ struct SectorAuthoringPlanarizationResult {
     std::vector<SectorAuthoringPlanarDiagnostic> diagnostics;
 };
 
+struct SectorAuthoringFaceBoundaryEdge {
+    int planarEdgeId = -1;
+    int startVertexId = -1;
+    int endVertexId = -1;
+    int sourceLineId = -1;
+    SectorTopologySideKind sourceSide = SectorTopologySideKind::Front;
+};
+
+struct SectorAuthoringExtractedFace {
+    int id = -1;
+    std::vector<SectorAuthoringFaceBoundaryEdge> boundary;
+    double signedArea = 0.0;
+};
+
+enum class SectorAuthoringFaceDiagnosticKind {
+    MissingVertex,
+    DuplicateEdge,
+    DanglingEdge,
+    TinySliverFace,
+    AmbiguousTopology
+};
+
+struct SectorAuthoringFaceDiagnostic {
+    SectorAuthoringValidationSeverity severity = SectorAuthoringValidationSeverity::Error;
+    SectorAuthoringFaceDiagnosticKind kind = SectorAuthoringFaceDiagnosticKind::MissingVertex;
+    int planarEdgeId = -1;
+    int vertexId = -1;
+    std::string message;
+};
+
+struct SectorAuthoringFaceExtractionResult {
+    std::vector<SectorAuthoringExtractedFace> faces;
+    std::vector<SectorAuthoringFaceDiagnostic> diagnostics;
+};
+
+enum class SectorAuthoringDerivationDiagnosticKind {
+    AuthoringReference,
+    Planarization,
+    FaceExtraction,
+    NonIntegerVertex,
+    InvalidTopology
+};
+
+struct SectorAuthoringDerivationDiagnostic {
+    SectorAuthoringValidationSeverity severity = SectorAuthoringValidationSeverity::Error;
+    SectorAuthoringDerivationDiagnosticKind kind = SectorAuthoringDerivationDiagnosticKind::AuthoringReference;
+    int objectId = -1;
+    std::string message;
+};
+
+struct SectorAuthoringDerivedVertexMapping {
+    int planarVertexId = -1;
+    int authoringVertexId = -1;
+    int topologyVertexId = -1;
+};
+
+struct SectorAuthoringDerivedLineMapping {
+    int planarEdgeId = -1;
+    int authoringLineId = -1;
+    int topologyLineDefId = -1;
+};
+
+struct SectorAuthoringDerivedSideMapping {
+    int authoringLineId = -1;
+    SectorTopologySideKind authoringSide = SectorTopologySideKind::Front;
+    int topologySideDefId = -1;
+};
+
+struct SectorAuthoringDerivedSectorMapping {
+    int extractedFaceId = -1;
+    int topologySectorId = -1;
+};
+
+struct SectorAuthoringDerivationMapping {
+    std::vector<SectorAuthoringDerivedVertexMapping> vertices;
+    std::vector<SectorAuthoringDerivedLineMapping> lines;
+    std::vector<SectorAuthoringDerivedSideMapping> sides;
+    std::vector<SectorAuthoringDerivedSectorMapping> sectors;
+};
+
+struct SectorAuthoringDerivationResult {
+    bool success = false;
+    SectorTopologyMap topology;
+    SectorAuthoringPlanarizationResult planar;
+    SectorAuthoringFaceExtractionResult faces;
+    std::vector<SectorAuthoringDerivationDiagnostic> diagnostics;
+    SectorAuthoringDerivationMapping mapping;
+};
+
 bool IsValidSectorAuthoringId(int id);
 
 int AllocateSectorAuthoringVertexId(const SectorAuthoringGraph& graph);
@@ -195,6 +284,12 @@ bool SectorAuthoringPlanarRationalIsInteger(SectorAuthoringPlanarRational value)
 SectorCoord SectorAuthoringPlanarRationalToSectorCoord(SectorAuthoringPlanarRational value);
 
 SectorAuthoringPlanarizationResult PlanarizeSectorAuthoringGraph(
+        const SectorAuthoringGraph& graph);
+
+SectorAuthoringFaceExtractionResult ExtractSectorAuthoringFaces(
+        const SectorAuthoringPlanarizationResult& planar);
+
+SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
         const SectorAuthoringGraph& graph);
 
 SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopologyMap& map);
