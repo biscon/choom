@@ -3,6 +3,8 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "sector_editor/SectorEditorMaterialActions.h"
+#include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_demo/SectorMeshPreview.h"
 #include "sector_demo/SectorTopologyCreation.h"
@@ -88,18 +90,9 @@ private:
     void DrawGrid() const;
     void InvalidateTopologyRenderCache();
     void EnsureTopologyRenderCache();
-    void RebuildTopologyRenderCache();
     void DrawTopologyDocument();
-    void DrawCachedTopologySector(
-            const CachedTopologySectorDraw& sector,
-            Color fill,
-            Color outline,
-            float outlineThickness = 2.0f) const;
     void DrawTopologySelectedLineHighlight() const;
-    void DrawTopologyLineDefs() const;
-    void DrawTopologyVertices() const;
     void DrawTopologySnapCrosshair() const;
-    void DrawStaticLights() const;
     void DrawPendingSector() const;
     void DrawVertexMoveOverlay() const;
     void DrawPendingTopologyVertexMerge() const;
@@ -134,16 +127,6 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
-    bool DrawTopologySectorInspector(
-            engine::UIContext& ui,
-            const engine::UIConfig& config,
-            engine::Input& input,
-            engine::AssetManager& assets,
-            engine::FontHandle font,
-            engine::UIScrollAreaResult scroll,
-            float contentW,
-            float rowH,
-            float gap);
     bool DrawTopologySideDefInspector(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -246,7 +229,7 @@ private:
     bool HasDocumentModalOpen() const;
     bool TryEnterPreview3D(engine::AssetManager& assets, engine::UIContext& ui);
     void LeavePreview3D();
-    SectorMeshPreviewPose ActivePreviewPose() const;
+    SectorViewPose ActivePreviewPose() const;
     void ApplyGameplayPoseToPreview();
     void TogglePreviewControlMode();
     bool RebuildSectorCollisionWorld();
@@ -313,7 +296,9 @@ private:
     bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialU(TopologySurfaceEditTarget target, TopologyUAlignDirection direction, engine::AssetManager* assets, TopologyMaterialLayer layer);
+    bool FinishMaterialActionResult(const SectorEditorMaterialActionResult& result, engine::AssetManager* assets);
     bool FinishTopologyMaterialMutation(const char* status, engine::AssetManager* assets);
+    bool FinishTopologyActionResult(const SectorEditorTopologyActionResult& result);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
     bool SplitSelectedTopologyLineDef();
     bool DissolveSelectedTopologyVertex();

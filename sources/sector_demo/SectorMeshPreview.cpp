@@ -22,10 +22,6 @@ namespace game {
 
 namespace {
 
-constexpr float MouseSensitivity = 0.0030f;
-constexpr float MoveSpeed = 5.0f;
-constexpr float PitchLimit = 1.45f;
-constexpr int MouseLookWarmupFrames = 2;
 constexpr bool BloomEnabled = true;
 constexpr float BloomStrength = 0.5f;
 constexpr float BloomLdrIntensityScale = 10.0f;
@@ -389,6 +385,15 @@ bool SectorMeshPreview::Rebuild(
         const char* scopeName,
         std::string& error)
 {
+    return RebuildRendererResources(assets, map, scopeName, error);
+}
+
+bool SectorMeshPreview::RebuildRendererResources(
+        engine::AssetManager& assets,
+        const SectorTopologyMap& map,
+        const char* scopeName,
+        std::string& error)
+{
     Shutdown(assets);
     error.clear();
 
@@ -520,17 +525,20 @@ bool SectorMeshPreview::Rebuild(
     }
     yawRadians = 0.0f;
     pitchRadians = 0.0f;
-    mouseLookEnabled = true;
     camera.fovy = 75.0f;
     camera.projection = CAMERA_PERSPECTIVE;
     UpdateCamera();
 
     initialized = true;
-    Enter();
     return true;
 }
 
 void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
+{
+    ShutdownRendererResources(assets);
+}
+
+void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
 {
     generatedGeometry = {};
     if (!initialized
@@ -543,7 +551,6 @@ void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
         return;
     }
 
-    Leave();
     UnloadBloomResources();
     UnloadSkyCylinderMesh();
     UnloadSectorMeshes(meshes);
@@ -572,92 +579,12 @@ void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
     initialized = false;
 }
 
-void SectorMeshPreview::Enter()
-{
-    if (!initialized) {
-        return;
-    }
-
-    mouseLookEnabled = true;
-    mouseLookWarmupFrames = MouseLookWarmupFrames;
-    DisableCursor();
-}
-
-void SectorMeshPreview::Leave()
-{
-    EnableCursor();
-}
-
-void SectorMeshPreview::Update(engine::Input& input, float dt)
-{
-    if (!initialized) {
-        return;
-    }
-
-    input.ForEachEvent(
-            engine::InputEventType::KeyPressed,
-            true,
-            [this](engine::InputEvent& event) {
-                if (event.key.key != KEY_F11) {
-                    return;
-                }
-
-                mouseLookEnabled = !mouseLookEnabled;
-                if (mouseLookEnabled) {
-                    mouseLookWarmupFrames = MouseLookWarmupFrames;
-                    DisableCursor();
-                } else {
-                    EnableCursor();
-                }
-                engine::ConsumeEvent(event);
-            }
-    );
-
-    if (mouseLookEnabled) {
-        if (mouseLookWarmupFrames > 0) {
-            --mouseLookWarmupFrames;
-        } else {
-            const Vector2 mouseDelta = input.MouseDelta();
-            yawRadians += mouseDelta.x * MouseSensitivity;
-            pitchRadians -= mouseDelta.y * MouseSensitivity;
-            pitchRadians = Clamp(pitchRadians, -PitchLimit, PitchLimit);
-        }
-    }
-
-    if (mouseLookEnabled) {
-        Vector3 forward{std::cos(yawRadians), 0.0f, std::sin(yawRadians)};
-        Vector3 right{-forward.z, 0.0f, forward.x};
-        Vector3 movement{};
-
-        if (input.IsKeyDown(KEY_W)) {
-            movement = Vector3Add(movement, forward);
-        }
-        if (input.IsKeyDown(KEY_S)) {
-            movement = Vector3Subtract(movement, forward);
-        }
-        if (input.IsKeyDown(KEY_D)) {
-            movement = Vector3Add(movement, right);
-        }
-        if (input.IsKeyDown(KEY_A)) {
-            movement = Vector3Subtract(movement, right);
-        }
-        if (input.IsKeyDown(KEY_SPACE)) {
-            movement.y += 1.0f;
-        }
-        if (input.IsKeyDown(KEY_LEFT_CONTROL) || input.IsKeyDown(KEY_RIGHT_CONTROL)) {
-            movement.y -= 1.0f;
-        }
-
-        if (Vector3LengthSqr(movement) > 0.0001f) {
-            movement = Vector3Normalize(movement);
-            position = Vector3Add(position, Vector3Scale(movement, MoveSpeed * dt));
-        }
-    }
-
-    UpdateCamera();
-}
-
 void SectorMeshPreview::Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion)
+{
+    DrawScene(assets, useBakedAmbientOcclusion);
+}
+
+void SectorMeshPreview::DrawScene(engine::AssetManager& assets, bool useBakedAmbientOcclusion)
 {
     if (!initialized) {
         return;
@@ -927,6 +854,11 @@ void SectorMeshPreview::DrawSkyCylinder(const Texture2D& texture)
 
 void SectorMeshPreview::ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
 {
+    ApplyEmissiveDecalBloomToScene(assets, sceneTarget);
+}
+
+void SectorMeshPreview::ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
+{
     if (!initialized || !BloomEnabled || sceneTarget.texture.id == 0) {
         return;
     }
@@ -1012,12 +944,22 @@ void SectorMeshPreview::ApplyEmissiveDecalBloom(engine::AssetManager& assets, Re
     EndTextureMode();
 }
 
-SectorMeshPreviewPose SectorMeshPreview::Pose() const
+SectorViewPose SectorMeshPreview::Pose() const
 {
-    return SectorMeshPreviewPose{position, yawRadians, pitchRadians};
+    return RendererPose();
 }
 
-void SectorMeshPreview::ApplyPose(const SectorMeshPreviewPose& pose)
+SectorViewPose SectorMeshPreview::RendererPose() const
+{
+    return SectorViewPose{position, yawRadians, pitchRadians};
+}
+
+void SectorMeshPreview::ApplyPose(const SectorViewPose& pose)
+{
+    ApplyRendererPose(pose);
+}
+
+void SectorMeshPreview::ApplyRendererPose(const SectorViewPose& pose)
 {
     position = pose.position;
     yawRadians = pose.yawRadians;
@@ -1025,27 +967,22 @@ void SectorMeshPreview::ApplyPose(const SectorMeshPreviewPose& pose)
     UpdateCamera();
 }
 
-void SectorMeshPreview::SetMouseLookEnabled(bool enabled)
+float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const
 {
-    if (!initialized) {
-        return;
-    }
-
-    mouseLookEnabled = enabled;
-    if (mouseLookEnabled) {
-        mouseLookWarmupFrames = MouseLookWarmupFrames;
-        DisableCursor();
-    } else {
-        EnableCursor();
-    }
+    return RendererAssetProgress(assets);
 }
 
-float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const
+float SectorMeshPreview::RendererAssetProgress(engine::AssetManager& assets) const
 {
     return engine::IsNull(assetScope) ? 1.0f : assets.GetScopeProgress(assetScope);
 }
 
 const char* SectorMeshPreview::LightmapStatusText() const
+{
+    return RendererLightmapStatusText();
+}
+
+const char* SectorMeshPreview::RendererLightmapStatusText() const
 {
     return SectorLightmapStatusText(static_cast<SectorLightmapStatus>(lightmapStatus));
 }

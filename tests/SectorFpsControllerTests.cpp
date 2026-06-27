@@ -43,7 +43,7 @@ void TestPoseConversions()
 {
     game::SectorFpsControllerConfig config;
     config.eyeHeight = 1.2f;
-    game::SectorMeshPreviewPose cameraPose{Vector3{10.0f, 2.2f, 3.0f}, 0.25f, -0.5f};
+    game::SectorViewPose cameraPose{Vector3{10.0f, 2.2f, 3.0f}, 0.25f, -0.5f};
     const game::SectorFpsControllerState state =
             game::SectorFpsControllerStateFromCameraPose(cameraPose, config);
     Check(Near(state.feetPosition, Vector3{10.0f, 1.0f, 3.0f}),
@@ -73,7 +73,7 @@ void TestVisualStepSmoothingCapturesSteppedUpContinuity()
             config,
             game::DefaultSectorFpsStepSmoothingRate(),
             0.016f);
-    const game::SectorMeshPreviewPose visualPose =
+    const game::SectorViewPose visualPose =
             game::SectorFpsControllerVisualPose(state, config, offset);
 
     Check(Near(offset, -0.2f), "stepped-up smoothing captures negative continuity offset");
@@ -100,7 +100,7 @@ void TestVisualStepSmoothingCapturesSnappedDownContinuity()
             config,
             game::DefaultSectorFpsStepSmoothingRate(),
             0.016f);
-    const game::SectorMeshPreviewPose visualPose =
+    const game::SectorViewPose visualPose =
             game::SectorFpsControllerVisualPose(state, config, offset);
 
     Check(Near(offset, 0.2f), "snapped-down smoothing captures positive continuity offset");
@@ -223,7 +223,7 @@ void TestHeadBobVisualOnlyPoseLayer()
     const float visualStepOffsetY = 0.15f;
     const Vector3 headBobOffset{0.02f, -0.01f, 0.03f};
     const float landingDipOffsetY = -0.06f;
-    const game::SectorMeshPreviewPose pose =
+    const game::SectorViewPose pose =
             game::SectorFpsControllerVisualPose(
                     state,
                     config,

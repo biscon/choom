@@ -120,13 +120,34 @@
         "textureId": "wall",
         "uv": {
           "scale": [
-            1.0,
+            2.0,
             1.0
           ],
           "offset": [
             0.0,
             0.0
           ]
+        },
+        "decal": {
+          "textureId": "biker_chick",
+          "uv": {
+            "scale": [
+              0.25,
+              0.6666666865348816
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "opacity": 1.0,
+          "emissive": true,
+          "tint": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "bloomIntensity": 1.0
         }
       },
       "lower": {
@@ -227,8 +248,8 @@
             1.0
           ],
           "offset": [
-            0.0,
-            0.0
+            8.0,
+            -1.5
           ]
         }
       },
@@ -265,7 +286,7 @@
       "side": "front",
       "sectorId": 10,
       "wall": {
-        "textureId": "wall",
+        "textureId": "ceiling",
         "uv": {
           "scale": [
             1.0,
@@ -317,8 +338,8 @@
             1.0
           ],
           "offset": [
-            0.0,
-            0.0
+            4.0,
+            -1.5
           ]
         }
       },
@@ -362,8 +383,8 @@
             1.0
           ],
           "offset": [
-            0.0,
-            0.0
+            8.0,
+            -1.5
           ]
         }
       },
@@ -408,7 +429,7 @@
           ],
           "offset": [
             0.0,
-            0.0
+            -1.5
           ]
         }
       },
@@ -491,7 +512,7 @@
       "name": "left_room",
       "floorZ": 0.0,
       "ceilingZ": 24.0,
-      "floorTextureId": "floor",
+      "floorTextureId": "wall",
       "ceilingTextureId": "ceiling",
       "floorUv": {
         "scale": [
@@ -669,12 +690,29 @@
     "playerRadius": 0.25,
     "playerHeight": 1.75,
     "stepHeight": 0.25,
-    "jumpHeight": 0.6000000238418579
+    "jumpHeight": 0.6000000238418579,
+    "headBobStrength": 0.019999999552965164,
+    "headBobFrequency": 2.0
+  },
+  "directionalLight": {
+    "enabled": false,
+    "directionToLight": [
+      -0.38533732295036316,
+      0.8807710409164429,
+      -0.275240957736969
+    ],
+    "color": {
+      "r": 255,
+      "g": 244,
+      "b": 214,
+      "a": 255
+    },
+    "intensity": 1.0
   },
   "bakedLightmap": {
     "path": "assets/levels/middle_texture_test/middle_texture_test.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "c8b2f6e5b2690e10"
+    "sourceHash": "5b90fe428b9370da"
   }
 }

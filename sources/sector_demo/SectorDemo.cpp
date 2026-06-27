@@ -21,29 +21,40 @@ bool SectorDemo::Init(engine::AssetManager& assets, const char* mapPath)
         return false;
     }
 
-    if (!preview.Rebuild(assets, map, "sector_demo", error)) {
+    if (!preview.RebuildRendererResources(assets, map, "sector_demo", error)) {
         std::fprintf(stderr, "[SectorDemo ERROR] %s\n", error.c_str());
         return false;
     }
 
+    ResetSectorFreeflyController(freeflyController, preview.RendererPose());
+    EnterSectorFreeflyController(freeflyController);
+    preview.ApplyRendererPose(freeflyController.pose);
     initialized = true;
     return true;
 }
 
 void SectorDemo::Shutdown(engine::AssetManager& assets)
 {
-    preview.Shutdown(assets);
+    if (initialized) {
+        LeaveSectorFreeflyController();
+    }
+    preview.ShutdownRendererResources(assets);
     initialized = false;
 }
 
 void SectorDemo::Update(engine::Input& input, float dt)
 {
-    preview.Update(input, dt);
+    if (!initialized) {
+        return;
+    }
+
+    UpdateSectorFreeflyController(freeflyController, input, dt);
+    preview.ApplyRendererPose(freeflyController.pose);
 }
 
 void SectorDemo::Render(engine::AssetManager& assets)
 {
-    preview.Render(assets);
+    preview.DrawScene(assets);
 }
 
 void SectorDemo::RenderOverlay(engine::AssetManager& assets)
@@ -63,7 +74,7 @@ void SectorDemo::RenderOverlay(engine::AssetManager& assets)
                     position.z,
                     preview.SectorCount(),
                     preview.BatchCount(),
-                    preview.AssetProgress(assets) * 100.0f
+                    preview.RendererAssetProgress(assets) * 100.0f
             ),
             40,
             106,

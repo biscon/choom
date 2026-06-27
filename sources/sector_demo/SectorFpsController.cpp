@@ -107,18 +107,18 @@ Vector3 SectorFpsControllerEyePosition(
     return Vector3Add(state.feetPosition, Vector3{0.0f, normalized.eyeHeight, 0.0f});
 }
 
-SectorMeshPreviewPose SectorFpsControllerPose(
+SectorViewPose SectorFpsControllerPose(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config)
 {
-    return SectorMeshPreviewPose{
+    return SectorViewPose{
             SectorFpsControllerEyePosition(state, config),
             state.yawRadians,
             ClampSectorFpsPitch(state.pitchRadians)
     };
 }
 
-SectorMeshPreviewPose SectorFpsControllerVisualPose(
+SectorViewPose SectorFpsControllerVisualPose(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
         float visualStepOffsetY)
@@ -130,7 +130,7 @@ SectorMeshPreviewPose SectorFpsControllerVisualPose(
             Vector3{});
 }
 
-SectorMeshPreviewPose SectorFpsControllerVisualPose(
+SectorViewPose SectorFpsControllerVisualPose(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
         float visualStepOffsetY,
@@ -144,14 +144,14 @@ SectorMeshPreviewPose SectorFpsControllerVisualPose(
             0.0f);
 }
 
-SectorMeshPreviewPose SectorFpsControllerVisualPose(
+SectorViewPose SectorFpsControllerVisualPose(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
         float visualStepOffsetY,
         Vector3 headBobOffset,
         float landingDipOffsetY)
 {
-    SectorMeshPreviewPose pose = SectorFpsControllerPose(state, config);
+    SectorViewPose pose = SectorFpsControllerPose(state, config);
     pose.position.y += visualStepOffsetY;
     pose.position = Vector3Add(pose.position, headBobOffset);
     pose.position.y += landingDipOffsetY;
@@ -159,7 +159,7 @@ SectorMeshPreviewPose SectorFpsControllerVisualPose(
 }
 
 SectorFpsControllerState SectorFpsControllerStateFromCameraPose(
-        const SectorMeshPreviewPose& pose,
+        const SectorViewPose& pose,
         const SectorFpsControllerConfig& config)
 {
     const SectorFpsControllerConfig normalized = NormalizeSectorFpsControllerConfig(config);

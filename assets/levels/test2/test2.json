@@ -91,13 +91,13 @@
   "vertices": [
     {
       "id": 1,
-      "x": -512,
-      "y": -640
+      "x": -384,
+      "y": -512
     },
     {
       "id": 2,
       "x": 512,
-      "y": -640
+      "y": -512
     },
     {
       "id": 3,
@@ -506,13 +506,13 @@
     },
     {
       "id": 86,
-      "x": 6304,
-      "y": -544
+      "x": 6272,
+      "y": -256
     },
     {
       "id": 87,
-      "x": 6144,
-      "y": 512
+      "x": 6272,
+      "y": 256
     },
     {
       "id": 88,
@@ -563,16 +563,194 @@
       "id": 97,
       "x": 3872,
       "y": -160
+    },
+    {
+      "id": 98,
+      "x": 512,
+      "y": 896
+    },
+    {
+      "id": 99,
+      "x": 512,
+      "y": 1152
+    },
+    {
+      "id": 100,
+      "x": 0,
+      "y": 1152
+    },
+    {
+      "id": 101,
+      "x": 0,
+      "y": 896
+    },
+    {
+      "id": 102,
+      "x": 384,
+      "y": 896
+    },
+    {
+      "id": 103,
+      "x": 384,
+      "y": 1152
+    },
+    {
+      "id": 104,
+      "x": 256,
+      "y": 896
+    },
+    {
+      "id": 105,
+      "x": 256,
+      "y": 1152
+    },
+    {
+      "id": 106,
+      "x": 128,
+      "y": 896
+    },
+    {
+      "id": 107,
+      "x": 128,
+      "y": 1152
+    },
+    {
+      "id": 108,
+      "x": -256,
+      "y": -640
+    },
+    {
+      "id": 110,
+      "x": -256,
+      "y": -128
+    },
+    {
+      "id": 111,
+      "x": 128,
+      "y": -128
+    },
+    {
+      "id": 112,
+      "x": -256,
+      "y": -256
+    },
+    {
+      "id": 113,
+      "x": -256,
+      "y": -384
+    },
+    {
+      "id": 114,
+      "x": -256,
+      "y": -512
+    },
+    {
+      "id": 115,
+      "x": 128,
+      "y": -256
+    },
+    {
+      "id": 116,
+      "x": 128,
+      "y": -384
+    },
+    {
+      "id": 117,
+      "x": 128,
+      "y": -512
+    },
+    {
+      "id": 118,
+      "x": 512,
+      "y": -640
+    },
+    {
+      "id": 119,
+      "x": 128,
+      "y": -640
+    },
+    {
+      "id": 120,
+      "x": -256,
+      "y": -1280
+    },
+    {
+      "id": 121,
+      "x": 128,
+      "y": -1280
+    },
+    {
+      "id": 122,
+      "x": 384,
+      "y": -512
+    },
+    {
+      "id": 123,
+      "x": 384,
+      "y": -640
+    },
+    {
+      "id": 124,
+      "x": 4992,
+      "y": -256
+    },
+    {
+      "id": 125,
+      "x": 4992,
+      "y": 256
+    },
+    {
+      "id": 126,
+      "x": 5056,
+      "y": -256
+    },
+    {
+      "id": 127,
+      "x": 5056,
+      "y": 256
+    },
+    {
+      "id": 128,
+      "x": 5120,
+      "y": -256
+    },
+    {
+      "id": 129,
+      "x": 5120,
+      "y": 256
+    },
+    {
+      "id": 130,
+      "x": 5184,
+      "y": -256
+    },
+    {
+      "id": 131,
+      "x": 5184,
+      "y": 256
+    },
+    {
+      "id": 132,
+      "x": 5248,
+      "y": 256
+    },
+    {
+      "id": 133,
+      "x": 5248,
+      "y": -256
+    },
+    {
+      "id": 134,
+      "x": 5504,
+      "y": -256
+    },
+    {
+      "id": 135,
+      "x": 5504,
+      "y": 256
     }
   ],
   "linedefs": [
-    {
-      "id": 1,
-      "startVertexId": 1,
-      "endVertexId": 2,
-      "frontSideDefId": 1,
-      "backSideDefId": -1
-    },
     {
       "id": 3,
       "startVertexId": 3,
@@ -581,25 +759,11 @@
       "backSideDefId": -1
     },
     {
-      "id": 5,
-      "startVertexId": 2,
-      "endVertexId": 5,
-      "frontSideDefId": 5,
-      "backSideDefId": -1
-    },
-    {
       "id": 7,
       "startVertexId": 6,
       "endVertexId": 7,
       "frontSideDefId": 7,
       "backSideDefId": 10
-    },
-    {
-      "id": 8,
-      "startVertexId": 7,
-      "endVertexId": 3,
-      "frontSideDefId": 8,
-      "backSideDefId": -1
     },
     {
       "id": 9,
@@ -952,13 +1116,6 @@
       "backSideDefId": -1
     },
     {
-      "id": 73,
-      "startVertexId": 2,
-      "endVertexId": 58,
-      "frontSideDefId": 108,
-      "backSideDefId": 110
-    },
-    {
       "id": 75,
       "startVertexId": 58,
       "endVertexId": 59,
@@ -1242,13 +1399,6 @@
       "backSideDefId": -1
     },
     {
-      "id": 123,
-      "startVertexId": 86,
-      "endVertexId": 87,
-      "frontSideDefId": 173,
-      "backSideDefId": -1
-    },
-    {
       "id": 124,
       "startVertexId": 87,
       "endVertexId": 88,
@@ -1331,54 +1481,415 @@
       "endVertexId": 78,
       "frontSideDefId": 186,
       "backSideDefId": -1
+    },
+    {
+      "id": 137,
+      "startVertexId": 98,
+      "endVertexId": 3,
+      "frontSideDefId": 188,
+      "backSideDefId": -1
+    },
+    {
+      "id": 138,
+      "startVertexId": 7,
+      "endVertexId": 99,
+      "frontSideDefId": 189,
+      "backSideDefId": -1
+    },
+    {
+      "id": 139,
+      "startVertexId": 99,
+      "endVertexId": 98,
+      "frontSideDefId": 190,
+      "backSideDefId": 194
+    },
+    {
+      "id": 141,
+      "startVertexId": 100,
+      "endVertexId": 101,
+      "frontSideDefId": 192,
+      "backSideDefId": -1
+    },
+    {
+      "id": 144,
+      "startVertexId": 102,
+      "endVertexId": 98,
+      "frontSideDefId": 196,
+      "backSideDefId": -1
+    },
+    {
+      "id": 145,
+      "startVertexId": 99,
+      "endVertexId": 103,
+      "frontSideDefId": 197,
+      "backSideDefId": -1
+    },
+    {
+      "id": 147,
+      "startVertexId": 103,
+      "endVertexId": 102,
+      "frontSideDefId": 199,
+      "backSideDefId": 200
+    },
+    {
+      "id": 149,
+      "startVertexId": 104,
+      "endVertexId": 102,
+      "frontSideDefId": 202,
+      "backSideDefId": -1
+    },
+    {
+      "id": 150,
+      "startVertexId": 103,
+      "endVertexId": 105,
+      "frontSideDefId": 203,
+      "backSideDefId": -1
+    },
+    {
+      "id": 152,
+      "startVertexId": 105,
+      "endVertexId": 104,
+      "frontSideDefId": 205,
+      "backSideDefId": 206
+    },
+    {
+      "id": 153,
+      "startVertexId": 101,
+      "endVertexId": 106,
+      "frontSideDefId": 207,
+      "backSideDefId": -1
+    },
+    {
+      "id": 154,
+      "startVertexId": 106,
+      "endVertexId": 104,
+      "frontSideDefId": 208,
+      "backSideDefId": -1
+    },
+    {
+      "id": 155,
+      "startVertexId": 105,
+      "endVertexId": 107,
+      "frontSideDefId": 209,
+      "backSideDefId": -1
+    },
+    {
+      "id": 156,
+      "startVertexId": 107,
+      "endVertexId": 100,
+      "frontSideDefId": 210,
+      "backSideDefId": -1
+    },
+    {
+      "id": 157,
+      "startVertexId": 107,
+      "endVertexId": 106,
+      "frontSideDefId": 211,
+      "backSideDefId": 212
+    },
+    {
+      "id": 158,
+      "startVertexId": 1,
+      "endVertexId": 108,
+      "frontSideDefId": 213,
+      "backSideDefId": -1
+    },
+    {
+      "id": 164,
+      "startVertexId": 110,
+      "endVertexId": 111,
+      "frontSideDefId": 219,
+      "backSideDefId": 235
+    },
+    {
+      "id": 167,
+      "startVertexId": 112,
+      "endVertexId": 110,
+      "frontSideDefId": 222,
+      "backSideDefId": 236
+    },
+    {
+      "id": 169,
+      "startVertexId": 113,
+      "endVertexId": 112,
+      "frontSideDefId": 224,
+      "backSideDefId": 240
+    },
+    {
+      "id": 170,
+      "startVertexId": 108,
+      "endVertexId": 114,
+      "frontSideDefId": 225,
+      "backSideDefId": 261
+    },
+    {
+      "id": 171,
+      "startVertexId": 114,
+      "endVertexId": 113,
+      "frontSideDefId": 226,
+      "backSideDefId": 244
+    },
+    {
+      "id": 172,
+      "startVertexId": 111,
+      "endVertexId": 115,
+      "frontSideDefId": 227,
+      "backSideDefId": 234
+    },
+    {
+      "id": 174,
+      "startVertexId": 115,
+      "endVertexId": 116,
+      "frontSideDefId": 229,
+      "backSideDefId": 238
+    },
+    {
+      "id": 176,
+      "startVertexId": 116,
+      "endVertexId": 117,
+      "frontSideDefId": 231,
+      "backSideDefId": 242
+    },
+    {
+      "id": 178,
+      "startVertexId": 112,
+      "endVertexId": 115,
+      "frontSideDefId": 233,
+      "backSideDefId": 239
+    },
+    {
+      "id": 179,
+      "startVertexId": 113,
+      "endVertexId": 116,
+      "frontSideDefId": 237,
+      "backSideDefId": 243
+    },
+    {
+      "id": 180,
+      "startVertexId": 114,
+      "endVertexId": 117,
+      "frontSideDefId": 241,
+      "backSideDefId": 260
+    },
+    {
+      "id": 184,
+      "startVertexId": 2,
+      "endVertexId": 58,
+      "frontSideDefId": 250,
+      "backSideDefId": 251
+    },
+    {
+      "id": 185,
+      "startVertexId": 2,
+      "endVertexId": 118,
+      "frontSideDefId": 252,
+      "backSideDefId": 273
+    },
+    {
+      "id": 186,
+      "startVertexId": 118,
+      "endVertexId": 5,
+      "frontSideDefId": 253,
+      "backSideDefId": -1
+    },
+    {
+      "id": 188,
+      "startVertexId": 117,
+      "endVertexId": 119,
+      "frontSideDefId": 271,
+      "backSideDefId": 259
+    },
+    {
+      "id": 189,
+      "startVertexId": 108,
+      "endVertexId": 119,
+      "frontSideDefId": 258,
+      "backSideDefId": 265
+    },
+    {
+      "id": 190,
+      "startVertexId": 108,
+      "endVertexId": 120,
+      "frontSideDefId": 262,
+      "backSideDefId": -1
+    },
+    {
+      "id": 191,
+      "startVertexId": 120,
+      "endVertexId": 121,
+      "frontSideDefId": 263,
+      "backSideDefId": -1
+    },
+    {
+      "id": 192,
+      "startVertexId": 121,
+      "endVertexId": 119,
+      "frontSideDefId": 264,
+      "backSideDefId": -1
+    },
+    {
+      "id": 193,
+      "startVertexId": 2,
+      "endVertexId": 122,
+      "frontSideDefId": 274,
+      "backSideDefId": 266
+    },
+    {
+      "id": 194,
+      "startVertexId": 122,
+      "endVertexId": 117,
+      "frontSideDefId": 270,
+      "backSideDefId": 267
+    },
+    {
+      "id": 195,
+      "startVertexId": 119,
+      "endVertexId": 123,
+      "frontSideDefId": 268,
+      "backSideDefId": -1
+    },
+    {
+      "id": 196,
+      "startVertexId": 123,
+      "endVertexId": 122,
+      "frontSideDefId": 269,
+      "backSideDefId": 275
+    },
+    {
+      "id": 197,
+      "startVertexId": 123,
+      "endVertexId": 118,
+      "frontSideDefId": 272,
+      "backSideDefId": -1
+    },
+    {
+      "id": 200,
+      "startVertexId": 124,
+      "endVertexId": 125,
+      "frontSideDefId": 278,
+      "backSideDefId": 287
+    },
+    {
+      "id": 203,
+      "startVertexId": 126,
+      "endVertexId": 124,
+      "frontSideDefId": 281,
+      "backSideDefId": 284
+    },
+    {
+      "id": 204,
+      "startVertexId": 125,
+      "endVertexId": 127,
+      "frontSideDefId": 282,
+      "backSideDefId": 286
+    },
+    {
+      "id": 206,
+      "startVertexId": 126,
+      "endVertexId": 127,
+      "frontSideDefId": 285,
+      "backSideDefId": 295
+    },
+    {
+      "id": 208,
+      "startVertexId": 128,
+      "endVertexId": 126,
+      "frontSideDefId": 289,
+      "backSideDefId": 292
+    },
+    {
+      "id": 209,
+      "startVertexId": 127,
+      "endVertexId": 129,
+      "frontSideDefId": 290,
+      "backSideDefId": 294
+    },
+    {
+      "id": 211,
+      "startVertexId": 128,
+      "endVertexId": 129,
+      "frontSideDefId": 293,
+      "backSideDefId": 307
+    },
+    {
+      "id": 213,
+      "startVertexId": 130,
+      "endVertexId": 128,
+      "frontSideDefId": 297,
+      "backSideDefId": 304
+    },
+    {
+      "id": 214,
+      "startVertexId": 129,
+      "endVertexId": 131,
+      "frontSideDefId": 298,
+      "backSideDefId": 306
+    },
+    {
+      "id": 216,
+      "startVertexId": 131,
+      "endVertexId": 132,
+      "frontSideDefId": 300,
+      "backSideDefId": 310
+    },
+    {
+      "id": 219,
+      "startVertexId": 133,
+      "endVertexId": 130,
+      "frontSideDefId": 303,
+      "backSideDefId": 308
+    },
+    {
+      "id": 220,
+      "startVertexId": 130,
+      "endVertexId": 131,
+      "frontSideDefId": 305,
+      "backSideDefId": 311
+    },
+    {
+      "id": 221,
+      "startVertexId": 133,
+      "endVertexId": 132,
+      "frontSideDefId": 309,
+      "backSideDefId": 319
+    },
+    {
+      "id": 222,
+      "startVertexId": 86,
+      "endVertexId": 134,
+      "frontSideDefId": 312,
+      "backSideDefId": -1
+    },
+    {
+      "id": 223,
+      "startVertexId": 134,
+      "endVertexId": 133,
+      "frontSideDefId": 313,
+      "backSideDefId": 316
+    },
+    {
+      "id": 224,
+      "startVertexId": 132,
+      "endVertexId": 135,
+      "frontSideDefId": 314,
+      "backSideDefId": 318
+    },
+    {
+      "id": 225,
+      "startVertexId": 135,
+      "endVertexId": 87,
+      "frontSideDefId": 315,
+      "backSideDefId": -1
+    },
+    {
+      "id": 226,
+      "startVertexId": 134,
+      "endVertexId": 135,
+      "frontSideDefId": 317,
+      "backSideDefId": -1
     }
   ],
   "sidedefs": [
-    {
-      "id": 1,
-      "lineDefId": 1,
-      "side": "front",
-      "sectorId": 1,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            8.0,
-            -1.75
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "step_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "upper_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
     {
       "id": 3,
       "lineDefId": 3,
@@ -1394,51 +1905,6 @@
           "offset": [
             0.0,
             -1.75
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "step_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "upper_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 5,
-      "lineDefId": 5,
-      "side": "front",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            -3.125
           ]
         }
       },
@@ -1510,51 +1976,6 @@
           "offset": [
             -4.0,
             -3.125
-          ]
-        }
-      }
-    },
-    {
-      "id": 8,
-      "lineDefId": 8,
-      "side": "front",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            -3.125
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "step_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "upper_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
           ]
         }
       }
@@ -5403,96 +5824,6 @@
       }
     },
     {
-      "id": 108,
-      "lineDefId": 73,
-      "side": "front",
-      "sectorId": 1,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "step_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "upper_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 110,
-      "lineDefId": 73,
-      "side": "back",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "step_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "upper_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            -9.5,
-            -3.125
-          ]
-        }
-      }
-    },
-    {
       "id": 112,
       "lineDefId": 75,
       "side": "front",
@@ -7867,51 +8198,6 @@
       }
     },
     {
-      "id": 173,
-      "lineDefId": 123,
-      "side": "front",
-      "sectorId": 21,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            12.330810546875,
-            -6.25
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "step_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "upper_wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
       "id": 174,
       "lineDefId": 124,
       "side": "front",
@@ -8466,6 +8752,4281 @@
           "offset": [
             0.25,
             -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 188,
+      "lineDefId": 137,
+      "side": "front",
+      "sectorId": 2,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            -3.125
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 189,
+      "lineDefId": 138,
+      "side": "front",
+      "sectorId": 2,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            -3.125
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 190,
+      "lineDefId": 139,
+      "side": "front",
+      "sectorId": 2,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            -3.125
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 192,
+      "lineDefId": 141,
+      "side": "front",
+      "sectorId": 25,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 194,
+      "lineDefId": 139,
+      "side": "back",
+      "sectorId": 22,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 196,
+      "lineDefId": 144,
+      "side": "front",
+      "sectorId": 22,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 197,
+      "lineDefId": 145,
+      "side": "front",
+      "sectorId": 22,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 199,
+      "lineDefId": 147,
+      "side": "front",
+      "sectorId": 22,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 200,
+      "lineDefId": 147,
+      "side": "back",
+      "sectorId": 23,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 202,
+      "lineDefId": 149,
+      "side": "front",
+      "sectorId": 23,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 203,
+      "lineDefId": 150,
+      "side": "front",
+      "sectorId": 23,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 205,
+      "lineDefId": 152,
+      "side": "front",
+      "sectorId": 23,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 206,
+      "lineDefId": 152,
+      "side": "back",
+      "sectorId": 24,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 207,
+      "lineDefId": 153,
+      "side": "front",
+      "sectorId": 25,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 208,
+      "lineDefId": 154,
+      "side": "front",
+      "sectorId": 24,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 209,
+      "lineDefId": 155,
+      "side": "front",
+      "sectorId": 24,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 210,
+      "lineDefId": 156,
+      "side": "front",
+      "sectorId": 25,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 211,
+      "lineDefId": 157,
+      "side": "front",
+      "sectorId": 24,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 212,
+      "lineDefId": 157,
+      "side": "back",
+      "sectorId": 25,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 213,
+      "lineDefId": 158,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            8.0,
+            -1.75
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 219,
+      "lineDefId": 164,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            8.0,
+            -1.75
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 222,
+      "lineDefId": 167,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            8.0,
+            -1.75
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            3.0,
+            0.6875
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 224,
+      "lineDefId": 169,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            8.0,
+            -1.75
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            2.5,
+            0.5
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 225,
+      "lineDefId": 170,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            8.0,
+            -1.75
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            1.5,
+            0.125
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 226,
+      "lineDefId": 171,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            8.0,
+            -1.75
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            2.0,
+            0.3125
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 227,
+      "lineDefId": 172,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            8.0,
+            -1.75
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            -0.5,
+            0.6875
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 229,
+      "lineDefId": 174,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            8.0,
+            -1.75
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.5
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 231,
+      "lineDefId": 176,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            8.0,
+            -1.75
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.5,
+            0.3125
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 233,
+      "lineDefId": 178,
+      "side": "front",
+      "sectorId": 26,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 234,
+      "lineDefId": 172,
+      "side": "back",
+      "sectorId": 26,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 235,
+      "lineDefId": 164,
+      "side": "back",
+      "sectorId": 26,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 236,
+      "lineDefId": 167,
+      "side": "back",
+      "sectorId": 26,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 237,
+      "lineDefId": 179,
+      "side": "front",
+      "sectorId": 27,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 238,
+      "lineDefId": 174,
+      "side": "back",
+      "sectorId": 27,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 239,
+      "lineDefId": 178,
+      "side": "back",
+      "sectorId": 27,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 240,
+      "lineDefId": 169,
+      "side": "back",
+      "sectorId": 27,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 241,
+      "lineDefId": 180,
+      "side": "front",
+      "sectorId": 28,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.125
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 242,
+      "lineDefId": 176,
+      "side": "back",
+      "sectorId": 28,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 243,
+      "lineDefId": 179,
+      "side": "back",
+      "sectorId": 28,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 244,
+      "lineDefId": 171,
+      "side": "back",
+      "sectorId": 28,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 250,
+      "lineDefId": 184,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.5,
+            -0.3125
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 251,
+      "lineDefId": 184,
+      "side": "back",
+      "sectorId": 2,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            -9.5,
+            -3.125
+          ]
+        }
+      }
+    },
+    {
+      "id": 252,
+      "lineDefId": 185,
+      "side": "front",
+      "sectorId": 2,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            -3.125
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 253,
+      "lineDefId": 186,
+      "side": "front",
+      "sectorId": 2,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            -3.125
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 258,
+      "lineDefId": 189,
+      "side": "front",
+      "sectorId": 30,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 259,
+      "lineDefId": 188,
+      "side": "back",
+      "sectorId": 30,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 260,
+      "lineDefId": 180,
+      "side": "back",
+      "sectorId": 30,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 261,
+      "lineDefId": 170,
+      "side": "back",
+      "sectorId": 30,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 262,
+      "lineDefId": 190,
+      "side": "front",
+      "sectorId": 31,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 263,
+      "lineDefId": 191,
+      "side": "front",
+      "sectorId": 31,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 264,
+      "lineDefId": 192,
+      "side": "front",
+      "sectorId": 31,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 265,
+      "lineDefId": 189,
+      "side": "back",
+      "sectorId": 31,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 266,
+      "lineDefId": 193,
+      "side": "back",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            8.0,
+            -1.75
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            -0.0625
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 267,
+      "lineDefId": 194,
+      "side": "back",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            8.0,
+            -1.75
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.125
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 268,
+      "lineDefId": 195,
+      "side": "front",
+      "sectorId": 32,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 269,
+      "lineDefId": 196,
+      "side": "front",
+      "sectorId": 32,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 270,
+      "lineDefId": 194,
+      "side": "front",
+      "sectorId": 32,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 271,
+      "lineDefId": 188,
+      "side": "front",
+      "sectorId": 32,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 272,
+      "lineDefId": 197,
+      "side": "front",
+      "sectorId": 33,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 273,
+      "lineDefId": 185,
+      "side": "back",
+      "sectorId": 33,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            -0.3125
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 274,
+      "lineDefId": 193,
+      "side": "front",
+      "sectorId": 33,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 275,
+      "lineDefId": 196,
+      "side": "back",
+      "sectorId": 33,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 278,
+      "lineDefId": 200,
+      "side": "front",
+      "sectorId": 21,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            12.330810546875,
+            -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 281,
+      "lineDefId": 203,
+      "side": "front",
+      "sectorId": 21,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            12.330810546875,
+            -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 282,
+      "lineDefId": 204,
+      "side": "front",
+      "sectorId": 21,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            12.330810546875,
+            -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 284,
+      "lineDefId": 203,
+      "side": "back",
+      "sectorId": 34,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 285,
+      "lineDefId": 206,
+      "side": "front",
+      "sectorId": 34,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 286,
+      "lineDefId": 204,
+      "side": "back",
+      "sectorId": 34,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 287,
+      "lineDefId": 200,
+      "side": "back",
+      "sectorId": 34,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 289,
+      "lineDefId": 208,
+      "side": "front",
+      "sectorId": 21,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            12.330810546875,
+            -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 290,
+      "lineDefId": 209,
+      "side": "front",
+      "sectorId": 21,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            12.330810546875,
+            -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 292,
+      "lineDefId": 208,
+      "side": "back",
+      "sectorId": 35,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 293,
+      "lineDefId": 211,
+      "side": "front",
+      "sectorId": 35,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 294,
+      "lineDefId": 209,
+      "side": "back",
+      "sectorId": 35,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 295,
+      "lineDefId": 206,
+      "side": "back",
+      "sectorId": 35,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 297,
+      "lineDefId": 213,
+      "side": "front",
+      "sectorId": 21,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            12.330810546875,
+            -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 298,
+      "lineDefId": 214,
+      "side": "front",
+      "sectorId": 21,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            12.330810546875,
+            -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 300,
+      "lineDefId": 216,
+      "side": "front",
+      "sectorId": 21,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            12.330810546875,
+            -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 303,
+      "lineDefId": 219,
+      "side": "front",
+      "sectorId": 21,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            12.330810546875,
+            -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 304,
+      "lineDefId": 213,
+      "side": "back",
+      "sectorId": 36,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 305,
+      "lineDefId": 220,
+      "side": "front",
+      "sectorId": 36,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 306,
+      "lineDefId": 214,
+      "side": "back",
+      "sectorId": 36,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 307,
+      "lineDefId": 211,
+      "side": "back",
+      "sectorId": 36,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 308,
+      "lineDefId": 219,
+      "side": "back",
+      "sectorId": 37,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 309,
+      "lineDefId": 221,
+      "side": "front",
+      "sectorId": 37,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 310,
+      "lineDefId": 216,
+      "side": "back",
+      "sectorId": 37,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 311,
+      "lineDefId": 220,
+      "side": "back",
+      "sectorId": 37,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 312,
+      "lineDefId": 222,
+      "side": "front",
+      "sectorId": 21,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            12.330810546875,
+            -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 313,
+      "lineDefId": 223,
+      "side": "front",
+      "sectorId": 21,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            12.330810546875,
+            -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 314,
+      "lineDefId": 224,
+      "side": "front",
+      "sectorId": 21,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            12.330810546875,
+            -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 315,
+      "lineDefId": 225,
+      "side": "front",
+      "sectorId": 21,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            12.330810546875,
+            -6.25
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 316,
+      "lineDefId": 223,
+      "side": "back",
+      "sectorId": 38,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 317,
+      "lineDefId": 226,
+      "side": "front",
+      "sectorId": 38,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 318,
+      "lineDefId": 224,
+      "side": "back",
+      "sectorId": 38,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 319,
+      "lineDefId": 221,
+      "side": "back",
+      "sectorId": 38,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
           ]
         }
       },
@@ -9999,6 +14560,1195 @@
         }
       },
       "ceilingSky": true
+    },
+    {
+      "id": 22,
+      "name": "sector_021",
+      "floorZ": 5.0,
+      "ceilingZ": 35.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 1.0,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 23,
+      "name": "sector_022",
+      "floorZ": 8.0,
+      "ceilingZ": 38.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 1.0,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 24,
+      "name": "sector_023",
+      "floorZ": 11.0,
+      "ceilingZ": 41.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 1.0,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 25,
+      "name": "sector_024",
+      "floorZ": 14.0,
+      "ceilingZ": 44.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 1.0,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 26,
+      "name": "sector_025",
+      "floorZ": -11.0,
+      "ceilingZ": 28.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.20000000298023224,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 27,
+      "name": "sector_026",
+      "floorZ": -8.0,
+      "ceilingZ": 28.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.20000000298023224,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 28,
+      "name": "sector_027",
+      "floorZ": -5.0,
+      "ceilingZ": 28.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.20000000298023224,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 30,
+      "name": "sector_029",
+      "floorZ": -2.0,
+      "ceilingZ": 28.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.20000000298023224,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 31,
+      "name": "sector_030",
+      "floorZ": 1.0,
+      "ceilingZ": 24.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.20000000298023224,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 32,
+      "name": "sector_028",
+      "floorZ": -2.0,
+      "ceilingZ": 28.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.20000000298023224,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 33,
+      "name": "sector_031",
+      "floorZ": 1.0,
+      "ceilingZ": 28.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.20000000298023224,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 34,
+      "name": "sector_032",
+      "floorZ": 3.0,
+      "ceilingZ": 50.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.800000011920929,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "ceilingSky": true
+    },
+    {
+      "id": 35,
+      "name": "sector_033",
+      "floorZ": 6.0,
+      "ceilingZ": 50.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.800000011920929,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "ceilingSky": true
+    },
+    {
+      "id": 36,
+      "name": "sector_034",
+      "floorZ": 9.0,
+      "ceilingZ": 50.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.800000011920929,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "ceilingSky": true
+    },
+    {
+      "id": 37,
+      "name": "sector_035",
+      "floorZ": 12.0,
+      "ceilingZ": 50.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.800000011920929,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "ceilingSky": true
+    },
+    {
+      "id": 38,
+      "name": "sector_036",
+      "floorZ": 15.0,
+      "ceilingZ": 50.0,
+      "floorTextureId": "floor",
+      "ceilingTextureId": "ceiling",
+      "floorUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ceilingUv": {
+        "scale": [
+          1.0,
+          1.0
+        ],
+        "offset": [
+          0.0,
+          0.0
+        ]
+      },
+      "ambientColor": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "ambientIntensity": 0.800000011920929,
+      "defaultWall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultLower": {
+        "textureId": "step_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "defaultUpper": {
+        "textureId": "upper_wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "ceilingSky": true
     }
   ],
   "staticLights": [
@@ -10022,9 +15772,9 @@
     {
       "id": 2,
       "position": [
-        -24.0,
+        -0.0,
         10.399999618530273,
-        -32.0
+        -0.0
       ],
       "radius": 80.0,
       "sourceRadius": 2.0,
@@ -10103,6 +15853,23 @@
         "b": 35,
         "a": 255
       }
+    },
+    {
+      "id": 7,
+      "position": [
+        -4.0,
+        15.399999618530273,
+        -72.0
+      ],
+      "radius": 64.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
     }
   ],
   "lightmapSettings": {
@@ -10112,12 +15879,12 @@
     "indirectBounceStrength": 0.20000000298023224
   },
   "previewSettings": {
-    "walkSpeed": 3.0,
+    "walkSpeed": 3.5,
     "runSpeed": 6.0,
     "mouseSensitivity": 0.5,
     "eyeHeight": 1.600000023841858,
     "gravity": 20.0,
-    "playerRadius": 0.25,
+    "playerRadius": 0.5,
     "playerHeight": 1.75,
     "stepHeight": 0.4000000059604645,
     "jumpHeight": 1.0,
@@ -10155,6 +15922,6 @@
     "path": "assets/levels/test2/test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "6a56405edd4450de"
+    "sourceHash": "2e06877337ed6c1c"
   }
 }

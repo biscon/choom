@@ -1,9 +1,9 @@
 #pragma once
 
 #include "engine/assets/AssetManager.h"
-#include "engine/input/Input.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorMeshTypes.h"
+#include "sector_demo/SectorViewPose.h"
 
 #include <raylib.h>
 
@@ -14,12 +14,6 @@ namespace game {
 
 struct SectorTopologyMap;
 
-struct SectorMeshPreviewPose {
-    Vector3 position = {};
-    float yawRadians = 0.0f;
-    float pitchRadians = 0.0f;
-};
-
 class SectorMeshPreview {
 public:
     bool Rebuild(
@@ -27,28 +21,37 @@ public:
             const SectorTopologyMap& map,
             const char* scopeName,
             std::string& error);
+    bool RebuildRendererResources(
+            engine::AssetManager& assets,
+            const SectorTopologyMap& map,
+            const char* scopeName,
+            std::string& error);
     void Shutdown(engine::AssetManager& assets);
+    void ShutdownRendererResources(engine::AssetManager& assets);
 
-    void Enter();
-    void Leave();
-
-    void Update(engine::Input& input, float dt);
     void Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
+    void DrawScene(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
     void ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
+    void ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
 
     bool IsReady() const { return initialized; }
-    bool IsMouseLookEnabled() const { return mouseLookEnabled; }
+    bool IsRendererReady() const { return IsReady(); }
     Vector3 Position() const { return position; }
     const Camera3D& Camera() const { return camera; }
-    SectorMeshPreviewPose Pose() const;
-    void ApplyPose(const SectorMeshPreviewPose& pose);
-    void SetMouseLookEnabled(bool enabled);
+    const Camera3D& RenderCamera() const { return Camera(); }
+    SectorViewPose Pose() const;
+    SectorViewPose RendererPose() const;
+    void ApplyPose(const SectorViewPose& pose);
+    void ApplyRendererPose(const SectorViewPose& pose);
     size_t SectorCount() const { return sectorCount; }
     size_t BatchCount() const { return meshes.batches.size(); }
     int TriangleCount() const { return meshes.triangleCount; }
     const SectorGeneratedGeometry& GeneratedGeometry() const { return generatedGeometry; }
+    const SectorGeneratedGeometry& RenderedGeometry() const { return GeneratedGeometry(); }
     float AssetProgress(engine::AssetManager& assets) const;
+    float RendererAssetProgress(engine::AssetManager& assets) const;
     const char* LightmapStatusText() const;
+    const char* RendererLightmapStatusText() const;
 
 private:
     static std::string ResolveAssetPath(const std::string& path);
@@ -109,8 +112,6 @@ private:
     int bloomTargetHeight = 0;
     int lightmapStatus = 0;
     bool initialized = false;
-    bool mouseLookEnabled = true;
-    int mouseLookWarmupFrames = 0;
     size_t sectorCount = 0;
 
     Camera3D camera = {};

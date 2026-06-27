@@ -1,7 +1,7 @@
 #pragma once
 
-#include "sector_demo/SectorMeshPreview.h"
 #include "sector_demo/SectorTopologyMap.h"
+#include "sector_demo/SectorViewPose.h"
 
 #include <raylib.h>
 
@@ -90,26 +90,26 @@ float ClampSectorFpsPitch(float pitchRadians);
 Vector3 SectorFpsControllerEyePosition(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config);
-SectorMeshPreviewPose SectorFpsControllerPose(
+SectorViewPose SectorFpsControllerPose(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config);
-SectorMeshPreviewPose SectorFpsControllerVisualPose(
+SectorViewPose SectorFpsControllerVisualPose(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
         float visualStepOffsetY);
-SectorMeshPreviewPose SectorFpsControllerVisualPose(
+SectorViewPose SectorFpsControllerVisualPose(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
         float visualStepOffsetY,
         Vector3 headBobOffset);
-SectorMeshPreviewPose SectorFpsControllerVisualPose(
+SectorViewPose SectorFpsControllerVisualPose(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
         float visualStepOffsetY,
         Vector3 headBobOffset,
         float landingDipOffsetY);
 SectorFpsControllerState SectorFpsControllerStateFromCameraPose(
-        const SectorMeshPreviewPose& pose,
+        const SectorViewPose& pose,
         const SectorFpsControllerConfig& config);
 bool SectorFpsTransitionStartsVisualStepSmoothing(SectorFpsVerticalTransition transition);
 bool SectorFpsTransitionClearsVisualStepSmoothing(SectorFpsVerticalTransition transition);
