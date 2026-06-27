@@ -143,12 +143,13 @@ game::SectorCollisionMoveResult Move(
         bool grounded,
         float feetY = 0.0f,
         float stepHeight = 0.25f,
-        float playerHeight = 1.6f)
+        float playerHeight = 1.6f,
+        float radius = 0.25f)
 {
     return world.ResolveMovement(
             game::SectorCollisionMoveState{position, feetY, sectorId, grounded},
             delta,
-            game::SectorCollisionMoveConfig{0.25f, playerHeight, stepHeight, 4});
+            game::SectorCollisionMoveConfig{radius, playerHeight, stepHeight, 4});
 }
 
 void TestBlockingWallStopsAndSlides()
@@ -340,6 +341,94 @@ void TestDownwardPortalVerticalTransitions()
     Check(fpsState.grounded, "same-height portal remains grounded");
 }
 
+void TestDownwardPortalDoesNotApplyRadiusNudge()
+{
+    const game::SectorCollisionWorld world = BuildWorld(MakeAdjacent(4.0f, 0.0f));
+    const float portalX = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).x;
+    const float z = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).y;
+    constexpr float startInset = 0.01f;
+    const float feetY = game::SectorAuthoringToWorldDistance(4.0f);
+
+    for (float radius : {0.25f, 0.5f, 1.5f}) {
+        const Vector2 start{portalX - startInset, z};
+        const Vector2 delta{radius * 0.75f, 0.0f};
+        const Vector2 expected{start.x + delta.x, start.y + delta.y};
+        const game::SectorCollisionMoveResult moveResult = Move(
+                world,
+                start,
+                delta,
+                10,
+                true,
+                feetY,
+                0.25f,
+                1.6f,
+                radius);
+
+        Check(moveResult.currentSectorId == 20,
+              "large downward portal crossing reaches lower sector");
+        Check(Near(moveResult.positionXZ.x, expected.x)
+                      && Near(moveResult.positionXZ.y, expected.y),
+              "large downward portal crossing preserves requested horizontal movement");
+
+        game::SectorCollisionHeights heights;
+        Check(world.GetSectorFloorCeiling(moveResult.currentSectorId, &heights),
+              "large downward portal regression destination heights are available");
+        game::SectorFpsControllerState fpsState;
+        fpsState.feetPosition = Vector3{moveResult.positionXZ.x, feetY, moveResult.positionXZ.y};
+        fpsState.currentSectorId = moveResult.currentSectorId;
+        fpsState.grounded = true;
+        const game::SectorFpsVerticalResult verticalResult =
+                game::UpdateSectorFpsVerticalPhysics(
+                        fpsState,
+                        game::SectorFpsControllerConfig{},
+                        game::SectorFpsVerticalContext{true, heights.floorZ, heights.ceilingZ},
+                        0.0f);
+        Check(verticalResult.transition == game::SectorFpsVerticalTransition::StartedDrop,
+              "large downward portal regression starts falling immediately");
+        Check(!fpsState.grounded, "large downward portal regression clears grounded");
+    }
+}
+
+void TestLowerSectorNearReversePortalDoesNotApplyRadiusNudge()
+{
+    const game::SectorCollisionWorld world = BuildWorld(MakeAdjacent(4.0f, 0.0f));
+    const float portalX = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).x;
+    const float z = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).y;
+    const float feetY = game::SectorAuthoringToWorldDistance(4.0f);
+    const float radius = 1.5f;
+    const Vector2 start{portalX + 0.01f, z};
+
+    game::SectorCollisionMoveResult result = Move(
+            world,
+            start,
+            Vector2{},
+            20,
+            true,
+            feetY,
+            0.25f,
+            1.6f,
+            radius);
+    Check(result.currentSectorId == 20, "zero movement near reverse step portal keeps lower sector");
+    Check(Near(result.positionXZ.x, start.x) && Near(result.positionXZ.y, start.y),
+          "zero movement near reverse step portal does not apply radius nudge");
+
+    const Vector2 tinyAway{0.0002f, 0.0f};
+    result = Move(
+            world,
+            start,
+            tinyAway,
+            20,
+            true,
+            feetY,
+            0.25f,
+            1.6f,
+            radius);
+    Check(result.currentSectorId == 20, "tiny inward movement near reverse step portal keeps lower sector");
+    Check(Near(result.positionXZ.x, start.x + tinyAway.x)
+                  && Near(result.positionXZ.y, start.y + tinyAway.y),
+          "tiny inward movement near reverse step portal does not apply radius nudge");
+}
+
 void TestAirbornePortalRules()
 {
     const Vector2 start = game::SectorCoordToWorldPosition2(Coord(60), Coord(32));
@@ -393,6 +482,31 @@ void TestJumpingPlayerCannotAutoStepThroughPortal()
           "grounded player can still step through higher-floor portal within step height");
 }
 
+void TestLowerSectorMovementIntoTooHighPortalStillBlocks()
+{
+    const game::SectorCollisionWorld world = BuildWorld(MakeAdjacent(4.0f, 0.0f));
+    const float portalX = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).x;
+    const float z = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).y;
+    const float feetY = game::SectorAuthoringToWorldDistance(4.0f);
+    const float radius = 1.5f;
+    const Vector2 start{portalX + radius + 0.1f, z};
+    const game::SectorCollisionMoveResult result = Move(
+            world,
+            start,
+            Vector2{-0.75f, 0.0f},
+            20,
+            true,
+            feetY,
+            0.25f,
+            1.6f,
+            radius);
+
+    Check(result.currentSectorId == 20 && result.blockedByStep,
+          "movement from lower sector into too-high portal is still blocked by step");
+    Check(result.positionXZ.x >= portalX + radius - 0.001f,
+          "too-high reverse portal still applies radius clearance when moving into it");
+}
+
 void TestSectorFallbackAndBoundary()
 {
     const game::SectorCollisionWorld world = BuildWorld(MakeSquare());
@@ -415,8 +529,11 @@ int main()
     TestBlocksPlayerPortalMovement();
     TestMiddleTexturePortalMovement();
     TestDownwardPortalVerticalTransitions();
+    TestDownwardPortalDoesNotApplyRadiusNudge();
+    TestLowerSectorNearReversePortalDoesNotApplyRadiusNudge();
     TestAirbornePortalRules();
     TestJumpingPlayerCannotAutoStepThroughPortal();
+    TestLowerSectorMovementIntoTooHighPortalStillBlocks();
     TestSectorFallbackAndBoundary();
     if (failures == 0) {
         std::puts("Sector collision movement tests passed");

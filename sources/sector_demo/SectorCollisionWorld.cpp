@@ -347,6 +347,18 @@ PortalBlockReason PortalBlockReasonForMove(
     return PortalBlockReason::None;
 }
 
+bool ShouldApplyRadiusCorrectionForBlockedEdge(
+        PortalBlockReason portalReason,
+        Vector2 remaining,
+        Vector2 inward)
+{
+    if (portalReason != PortalBlockReason::Step) {
+        return true;
+    }
+
+    return Dot(remaining, inward) < -CollisionMoveEpsilon;
+}
+
 } // namespace
 
 Vector2 GetSectorCollisionEdgeInwardNormal(const SectorCollisionEdge& edge)
@@ -602,6 +614,9 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
                     normal = inward;
                 }
                 if (LengthSquared(normal) <= CollisionMoveEpsilon) {
+                    continue;
+                }
+                if (!ShouldApplyRadiusCorrectionForBlockedEdge(portalReason, remaining, inward)) {
                     continue;
                 }
 
