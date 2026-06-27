@@ -1,5 +1,7 @@
 #include "sector_demo/SectorAuthoringGraph.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
+#include "sector_demo/SectorTopologySerialization.h"
+#include "sector_editor/SectorEditorAuthoringState.h"
 
 #include <algorithm>
 #include <iostream>
@@ -1545,6 +1547,106 @@ void TestDerivedTopologyBuildsGeometry()
     Check(!geometry.surfaces.empty(), "derived topology generates surfaces");
 }
 
+void TestEditorAuthoringGraphMutationMarksDirtyAndStale()
+{
+    game::SectorEditorState state;
+    game::InitializeSectorEditorAuthoringStateFromTopology(state, game::SectorTopologyMap{});
+    const uint64_t originalRevision = state.topologyRenderRevision;
+
+    int firstVertexId = -1;
+    Check(game::AddSectorAuthoringVertex(state.authoringGraph, 0, 0, &firstVertexId),
+          "editor authoring mutation test adds vertex");
+    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed");
+
+    Check(state.topologyDocumentDirty, "graph mutation marks document dirty");
+    Check(state.authoringDerivedTopologyStale, "graph mutation marks derived topology stale");
+    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidNoDerived,
+          "graph mutation without last valid topology has invalid/no-derived state");
+    Check(!state.topologyRenderCache.valid, "graph mutation invalidates topology render cache");
+    Check(state.topologyRenderRevision == originalRevision + 1,
+          "graph mutation bumps topology render revision");
+}
+
+void TestEditorAuthoringSuccessfulDerivationUpdatesState()
+{
+    game::SectorEditorState state;
+    state.topologyMap.texturesById.emplace("wall", game::SectorTextureDefinition{"wall", "assets/images/wall.png"});
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring square changed");
+
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "successful editor derivation returns true");
+    Check(state.authoringDerivation.success, "successful editor derivation stores successful result");
+    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
+          "successful editor derivation marks state current");
+    Check(!state.authoringDerivedTopologyStale, "successful editor derivation clears stale flag");
+    Check(state.lastValidAuthoringDerivedTopology.has_value(),
+          "successful editor derivation stores memory-only last-valid topology");
+    Check(state.topologyMap.sectors.size() == 1,
+          "successful editor derivation updates current derived topology");
+    Check(state.authoringDerivation.mapping.sectors.size() == 1,
+          "successful editor derivation preserves mapping for editor state");
+    Check(state.topologyMap.texturesById.find("wall") != state.topologyMap.texturesById.end(),
+          "successful editor derivation preserves map-level texture data");
+}
+
+void TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "failed editor derivation setup creates last valid topology");
+    const game::SectorTopologyMap lastValid = state.topologyMap;
+
+    const int addedLineId = 99;
+    AddAuthoringVertexWithId(state.authoringGraph, 5, 128, 0);
+    AddAuthoringLineWithId(state.authoringGraph, addedLineId, 2, 5);
+    game::MarkSectorEditorAuthoringGraphEdited(state, "dangling authoring line added");
+
+    Check(!game::RefreshSectorEditorAuthoringDerivation(state),
+          "failed editor derivation returns false");
+    Check(!state.authoringDerivation.success, "failed editor derivation stores failed result");
+    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidLastValid,
+          "failed editor derivation keeps invalid/last-valid state");
+    Check(state.authoringDerivedTopologyStale, "failed editor derivation leaves stale flag set");
+    Check(!state.authoringDerivation.diagnostics.empty(),
+          "failed editor derivation records diagnostics");
+    Check(game::FindSectorAuthoringLine(state.authoringGraph, addedLineId) != nullptr,
+          "failed editor derivation keeps edited graph data");
+    Check(state.topologyMap.sectors.size() == lastValid.sectors.size(),
+          "failed editor derivation keeps current topology unchanged");
+    Check(state.lastValidAuthoringDerivedTopology.has_value(),
+          "failed editor derivation keeps memory-only last-valid topology");
+}
+
+void TestEditorAuthoringLastValidTopologyIsNotPersisted()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "last-valid persistence setup derives topology");
+
+    game::SectorAuthoringDocument document;
+    document.graph = state.authoringGraph;
+    document.mapData = state.topologyMap;
+    document.derivation = state.authoringDerivation;
+
+    std::string json;
+    std::string error;
+    Check(game::SaveSectorAuthoringDocumentToJsonString(document, json, &error),
+          "authoring document serializes without editor last-valid state");
+    Check(json.find("lastValid") == std::string::npos,
+          "serialized authoring document omits editor last-valid topology");
+    Check(json.find("authoringGraph") != std::string::npos,
+          "serialized authoring document keeps authoring graph source");
+}
+
 } // namespace
 
 int main()
@@ -1601,6 +1703,10 @@ int main()
     TestDeriveSplitLineDuplicatesProjectedProperties();
     TestDeriveUnresolvedAnchorPreservesAuthoringProperties();
     TestDerivedTopologyBuildsGeometry();
+    TestEditorAuthoringGraphMutationMarksDirtyAndStale();
+    TestEditorAuthoringSuccessfulDerivationUpdatesState();
+    TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics();
+    TestEditorAuthoringLastValidTopologyIsNotPersisted();
 
     if (failures != 0) {
         std::cerr << failures << " authoring graph test(s) failed\n";

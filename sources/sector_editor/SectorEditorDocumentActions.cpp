@@ -1,5 +1,6 @@
 #include "sector_editor/SectorEditorDocumentActions.h"
 
+#include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorTopologySerialization.h"
@@ -78,6 +79,7 @@ SectorTopologyMap CreateEmptySectorTopologyDocument()
 void ResetEditorTopologyDocumentState(SectorEditorState& state)
 {
     state.topologyMap = CreateEmptySectorTopologyDocument();
+    InitializeSectorEditorAuthoringStateFromTopology(state, state.topologyMap);
     state.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             state.topologyMap.previewSettings);
     state.topologyDocumentInitialized = true;

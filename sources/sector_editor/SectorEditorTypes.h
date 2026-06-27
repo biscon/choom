@@ -2,6 +2,7 @@
 
 #include "engine/ui/UI.h"
 #include "sector_demo/SectorCollisionWorld.h"
+#include "sector_demo/SectorAuthoringGraph.h"
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorFreeflyController.h"
 #include "sector_demo/SectorLightmap.h"
@@ -48,6 +49,13 @@ enum class SectorEditorMode {
 enum class SectorPreviewControlMode {
     FreeFly,
     Gameplay
+};
+
+enum class SectorEditorAuthoringDerivationState {
+    InvalidNoDerived,
+    ValidCurrent,
+    ValidStale,
+    InvalidLastValid
 };
 
 struct PendingSectorDraw {
@@ -379,6 +387,13 @@ struct SectorEditorTopologyRenderCache {
 
 struct SectorEditorState {
     SectorTopologyMap topologyMap;
+    SectorAuthoringGraph authoringGraph;
+    SectorAuthoringDerivationResult authoringDerivation;
+    std::optional<SectorTopologyMap> lastValidAuthoringDerivedTopology;
+    SectorEditorAuthoringDerivationState authoringDerivationState =
+            SectorEditorAuthoringDerivationState::InvalidNoDerived;
+    bool authoringDerivedTopologyStale = true;
+    std::string authoringDerivationStatus;
     bool topologyDocumentInitialized = false;
     bool topologyDocumentDirty = false;
     std::string topologyDocumentStatus;

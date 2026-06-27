@@ -2,6 +2,7 @@
 
 #include "engine/assets/TextureLoadFlags.h"
 #include "engine/input/InputEvents.h"
+#include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorDocumentActions.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorLightInspector.h"
@@ -5821,6 +5822,7 @@ bool SectorEditor::LoadLevel(
     CancelVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     state.topologyMap = std::move(loaded);
+    InitializeSectorEditorAuthoringStateFromTopology(state, state.topologyMap);
     InvalidateTopologyRenderCache();
     state.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             state.topologyMap.previewSettings);

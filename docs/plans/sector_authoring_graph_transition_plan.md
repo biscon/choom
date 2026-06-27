@@ -74,7 +74,7 @@ Suggested path:
       "id": "phase_09_editor_state_integration",
       "title": "Integrate authoring graph and derivation status into editor state",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {
