@@ -6,7 +6,85 @@
 
 #include <raylib.h>
 
+#include <algorithm>
+
 namespace game {
+
+inline constexpr float SectorEditorInspectorTextureActionHeight = 36.0f;
+inline constexpr float SectorEditorInspectorTextureValueHeight = 30.0f;
+inline constexpr float SectorEditorInspectorTextureValueIndent = 12.0f;
+inline constexpr float SectorEditorInspectorCompactInputLabelWidth = 82.0f;
+inline constexpr float SectorEditorInspectorCompactInputWidth = 104.0f;
+
+struct SectorEditorInspectorTextureRowLayout {
+    Rectangle labelRect = {};
+    Rectangle clearButtonRect = {};
+    Rectangle pickerButtonRect = {};
+    Rectangle valueRect = {};
+    float height = 0.0f;
+};
+
+struct SectorEditorInspectorNumericRowLayout {
+    Rectangle labelRect = {};
+    Rectangle inputRect = {};
+};
+
+inline float SectorEditorInspectorTextureRowHeight()
+{
+    return SectorEditorInspectorTextureActionHeight
+            + 2.0f
+            + SectorEditorInspectorTextureValueHeight;
+}
+
+inline SectorEditorInspectorTextureRowLayout BuildSectorEditorInspectorTextureRowLayout(
+        float y,
+        float contentW,
+        float gap,
+        float pickerButtonW,
+        float clearButtonW)
+{
+    SectorEditorInspectorTextureRowLayout layout;
+    layout.height = SectorEditorInspectorTextureRowHeight();
+    layout.pickerButtonRect = Rectangle{
+            std::max(0.0f, contentW - pickerButtonW),
+            y,
+            pickerButtonW,
+            SectorEditorInspectorTextureActionHeight};
+    if (clearButtonW > 0.0f) {
+        layout.clearButtonRect = Rectangle{
+                std::max(0.0f, contentW - pickerButtonW - gap - clearButtonW),
+                y,
+                clearButtonW,
+                SectorEditorInspectorTextureActionHeight};
+    }
+    const float actionStartX = clearButtonW > 0.0f
+            ? layout.clearButtonRect.x
+            : layout.pickerButtonRect.x;
+    layout.labelRect = Rectangle{
+            0.0f,
+            y,
+            std::max(0.0f, actionStartX - gap),
+            SectorEditorInspectorTextureActionHeight};
+    layout.valueRect = Rectangle{
+            SectorEditorInspectorTextureValueIndent,
+            y + SectorEditorInspectorTextureActionHeight + 2.0f,
+            std::max(0.0f, contentW - SectorEditorInspectorTextureValueIndent),
+            SectorEditorInspectorTextureValueHeight};
+    return layout;
+}
+
+inline SectorEditorInspectorNumericRowLayout BuildSectorEditorInspectorCompactNumericRowLayout(
+        float y,
+        float contentW,
+        float rowH)
+{
+    const float inputW = std::min(
+            SectorEditorInspectorCompactInputWidth,
+            std::max(0.0f, contentW - SectorEditorInspectorCompactInputLabelWidth));
+    return SectorEditorInspectorNumericRowLayout{
+            Rectangle{0.0f, y, SectorEditorInspectorCompactInputLabelWidth, rowH},
+            Rectangle{SectorEditorInspectorCompactInputLabelWidth, y, inputW, rowH}};
+}
 
 struct SectorEditorFloatInputResult {
     bool changed = false;

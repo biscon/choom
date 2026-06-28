@@ -53,6 +53,107 @@ bool IsFlatTopologySurfaceTarget(TopologySurfaceEditTarget target)
             || target.kind == TopologySurfaceEditTargetKind::SectorCeiling;
 }
 
+float AuthoringInspectorTextureRowTotalHeight(float gap)
+{
+    return SectorEditorInspectorTextureRowHeight() + gap;
+}
+
+float AuthoringInspectorAssignedDecalControlsHeight(bool emissive, float rowH, float gap, bool includeTintAndFit)
+{
+    float height = 0.0f;
+    height += rowH + gap;
+    height += 36.0f + gap;
+    if (emissive) {
+        height += rowH + gap;
+    }
+    if (includeTintAndFit) {
+        height += rowH + gap;
+        height += 36.0f + gap;
+    }
+    return height;
+}
+
+float AuthoringInspectorDecalBlockHeight(
+        const SectorTopologyDecalLayer& decal,
+        float rowH,
+        float gap,
+        bool includeTintAndFit)
+{
+    float height = AuthoringInspectorTextureRowTotalHeight(gap);
+    if (!decal.textureId.empty()) {
+        height += AuthoringInspectorAssignedDecalControlsHeight(
+                decal.emissive,
+                rowH,
+                gap,
+                includeTintAndFit);
+    }
+    return height;
+}
+
+float AuthoringLineInspectorContentHeight(
+        const SectorAuthoringLine& line,
+        const SectorAuthoringGraph& graph,
+        float rowH,
+        float gap)
+{
+    float height = 0.0f;
+    height += 38.0f;
+    height += 32.0f;
+    height += 36.0f + gap;
+
+    const auto addSideSection = [&](SectorTopologySideKind sideKind) {
+        height += 18.0f;
+        height += 30.0f;
+        height += AuthoringInspectorTextureRowTotalHeight(gap) * 4.0f;
+
+        const SectorAuthoringLineSide* side =
+                FindSectorAuthoringLineSide(graph, SectorAuthoringSideId{line.id, sideKind});
+        const SectorTopologyDecalLayer emptyDecal;
+        const SectorTopologyDecalLayer& wallDecal =
+                side != nullptr ? side->wall.decal : emptyDecal;
+        const SectorTopologyDecalLayer& lowerDecal =
+                side != nullptr ? side->lower.decal : emptyDecal;
+        const SectorTopologyDecalLayer& upperDecal =
+                side != nullptr ? side->upper.decal : emptyDecal;
+        height += AuthoringInspectorDecalBlockHeight(wallDecal, rowH, gap, true);
+        height += AuthoringInspectorDecalBlockHeight(lowerDecal, rowH, gap, true);
+        height += AuthoringInspectorDecalBlockHeight(upperDecal, rowH, gap, true);
+    };
+
+    addSideSection(SectorTopologySideKind::Front);
+    addSideSection(SectorTopologySideKind::Back);
+    height += rowH + gap;
+    return height;
+}
+
+float AuthoringFaceInspectorContentHeight(
+        const SectorAuthoringFaceAnchor& anchor,
+        float rowH,
+        float gap)
+{
+    float height = 0.0f;
+    height += 38.0f;
+    height += 32.0f;
+    height += (rowH + gap) * 2.0f;
+    height += rowH + gap;
+
+    height += 18.0f;
+    height += 30.0f;
+    height += rowH + gap;
+    height += (rowH + gap) * 3.0f;
+
+    height += 18.0f;
+    height += 30.0f;
+    height += AuthoringInspectorTextureRowTotalHeight(gap) * 5.0f;
+    height += AuthoringInspectorDecalBlockHeight(anchor.floorDecal, rowH, gap, true);
+    height += AuthoringInspectorDecalBlockHeight(anchor.ceilingDecal, rowH, gap, true);
+    height += AuthoringInspectorDecalBlockHeight(anchor.defaultWall.decal, rowH, gap, false);
+    height += AuthoringInspectorDecalBlockHeight(anchor.defaultLower.decal, rowH, gap, false);
+    height += AuthoringInspectorDecalBlockHeight(anchor.defaultUpper.decal, rowH, gap, false);
+    height += rowH + gap;
+    return height;
+}
+
 } // namespace
 
 bool SectorEditor::Init(engine::AssetManager& assets)
@@ -4972,10 +5073,10 @@ void SectorEditor::DrawSectorsPanel(
             return InspectedVertexInspectorContentHeight();
         }
         if (selectedAuthoringLine != nullptr) {
-            return 1800.0f;
+            return AuthoringLineInspectorContentHeight(*selectedAuthoringLine, state.authoringGraph, rowH, gap);
         }
         if (selectedAuthoringFaceAnchor != nullptr) {
-            return 1500.0f;
+            return AuthoringFaceInspectorContentHeight(*selectedAuthoringFaceAnchor, rowH, gap);
         }
         if (selectedAuthoringVertex != nullptr) {
             return 120.0f;
@@ -5511,17 +5612,17 @@ void SectorEditor::DrawSectorsPanel(
                                 const float buttonW = 38.0f;
                                 const bool canClear = part == TopologyWallPart::Middle;
                                 const float clearW = canClear ? 58.0f : 0.0f;
-                                const float labelColumnW = 74.0f;
                                 const std::string textureId = textureForPart(part);
-                                const Rectangle row{0.0f, y, contentW, 36.0f};
+                                const SectorEditorInspectorTextureRowLayout row =
+                                        BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
                                 const bool missing = !textureId.empty()
                                         && FindSectorTopologyTexture(state.topologyMap, textureId) == nullptr;
-                                engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+                                engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                                 engine::Text(
                                         ui,
                                         config,
                                         assets,
-                                        Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - clearW - gap * (canClear ? 2.0f : 1.0f), row.height},
+                                        row.valueRect,
                                         font,
                                         textureId.empty() ? "<none>" : textureId.c_str(),
                                         engine::UITextJustify::Left,
@@ -5533,7 +5634,7 @@ void SectorEditor::DrawSectorsPanel(
                                                 input,
                                                 assets,
                                                 TextFormat("%s_%s_clear", idPrefix, suffix),
-                                                Rectangle{row.x + row.width - buttonW - clearW - gap, row.y, clearW, row.height},
+                                                row.clearButtonRect,
                                                 font,
                                                 "Clear")) {
                                     mutateSide(
@@ -5554,7 +5655,7 @@ void SectorEditor::DrawSectorsPanel(
                                             input,
                                             assets,
                                             TextFormat("%s_%s", idPrefix, suffix),
-                                            Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height},
+                                            row.pickerButtonRect,
                                             font,
                                             ">")) {
                                     if (!OpenAuthoringSideTexturePickerById(
@@ -5572,16 +5673,16 @@ void SectorEditor::DrawSectorsPanel(
                                 const SectorTopologyDecalLayer decal = decalForPart(part);
                                 const float buttonW = 38.0f;
                                 const float clearW = 92.0f;
-                                const float labelColumnW = 90.0f;
-                                const Rectangle row{0.0f, y, contentW, 36.0f};
+                                const SectorEditorInspectorTextureRowLayout row =
+                                        BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
                                 const bool missing = !decal.textureId.empty()
                                         && FindSectorTopologyTexture(state.topologyMap, decal.textureId) == nullptr;
-                                engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, title, engine::UITextJustify::Left, config.mutedTextColor);
+                                engine::Text(ui, config, assets, row.labelRect, font, title, engine::UITextJustify::Left, config.mutedTextColor);
                                 engine::Text(
                                         ui,
                                         config,
                                         assets,
-                                        Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - clearW - gap * 2.0f, row.height},
+                                        row.valueRect,
                                         font,
                                         decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
                                         engine::UITextJustify::Left,
@@ -5592,7 +5693,7 @@ void SectorEditor::DrawSectorsPanel(
                                             input,
                                             assets,
                                             TextFormat("%s_%s_clear_decal", idPrefix, suffix),
-                                            Rectangle{row.x + row.width - buttonW - clearW - gap, row.y, clearW, row.height},
+                                            row.clearButtonRect,
                                             font,
                                             "Clear")) {
                                     mutateSide(
@@ -5613,7 +5714,7 @@ void SectorEditor::DrawSectorsPanel(
                                             input,
                                             assets,
                                             TextFormat("%s_%s_pick_decal", idPrefix, suffix),
-                                            Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height},
+                                            row.pickerButtonRect,
                                             font,
                                             ">")) {
                                     if (!OpenAuthoringSideTexturePickerById(
@@ -5630,6 +5731,8 @@ void SectorEditor::DrawSectorsPanel(
                                     return;
                                 }
 
+                                const SectorEditorInspectorNumericRowLayout opacityLayout =
+                                        BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
                                 const SectorEditorFloatInputResult opacityResult = DrawLabeledFloatInput(
                                         ui,
                                         config,
@@ -5638,8 +5741,8 @@ void SectorEditor::DrawSectorsPanel(
                                         font,
                                         TextFormat("%s_%s_decal_opacity", idPrefix, suffix),
                                         "Opacity:",
-                                        Rectangle{0.0f, y, 82.0f, rowH},
-                                        Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                                        opacityLayout.labelRect,
+                                        opacityLayout.inputRect,
                                         engine::UITextJustify::Left,
                                         decal.opacity,
                                         uiState.topologySideDefDecalOpacityInput,
@@ -5687,6 +5790,8 @@ void SectorEditor::DrawSectorsPanel(
                                 y += 36.0f + gap;
 
                                 if (decal.emissive) {
+                                    const SectorEditorInspectorNumericRowLayout bloomLayout =
+                                            BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
                                     const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
                                             ui,
                                             config,
@@ -5695,8 +5800,8 @@ void SectorEditor::DrawSectorsPanel(
                                             font,
                                             TextFormat("%s_%s_decal_bloom", idPrefix, suffix),
                                             "Bloom:",
-                                            Rectangle{0.0f, y, 82.0f, rowH},
-                                            Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                                            bloomLayout.labelRect,
+                                            bloomLayout.inputRect,
                                             engine::UITextJustify::Left,
                                             decal.bloomIntensity,
                                             uiState.topologySideDefDecalBloomIntensityInput,
@@ -5952,20 +6057,20 @@ void SectorEditor::DrawSectorsPanel(
 
         const auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologySectorTextureField field) {
             const float buttonW = 38.0f;
-            const float labelColumnW = 92.0f;
-            const Rectangle row{0.0f, y, contentW, 36.0f};
+            const SectorEditorInspectorTextureRowLayout row =
+                    BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, 0.0f);
             const bool missing = !textureId.empty() && FindSectorTopologyTexture(state.topologyMap, textureId) == nullptr;
-            engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+            engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
             engine::Text(
                     ui,
                     config,
                     assets,
-                    Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
+                    row.valueRect,
                     font,
                     textureId.empty() ? "<none>" : textureId.c_str(),
                     engine::UITextJustify::Left,
                     missing ? config.invalidColor : config.mutedTextColor);
-            if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
+            if (engine::Button(ui, config, input, assets, id, row.pickerButtonRect, font, ">")) {
                 if (!OpenAuthoringFaceAnchorTexturePickerById(
                             state,
                             faceAnchorId,
@@ -6005,16 +6110,16 @@ void SectorEditor::DrawSectorsPanel(
                 [&](const char* idPrefix, const char* label, const SectorTopologyDecalLayer& decal, TopologySectorTextureField field, int inputIndex) {
                     const float buttonW = 38.0f;
                     const float clearW = 92.0f;
-                    const float labelColumnW = 92.0f;
-                    const Rectangle row{0.0f, y, contentW, 36.0f};
+                    const SectorEditorInspectorTextureRowLayout row =
+                            BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
                     const bool missing = !decal.textureId.empty()
                             && FindSectorTopologyTexture(state.topologyMap, decal.textureId) == nullptr;
-                    engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+                    engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                     engine::Text(
                             ui,
                             config,
                             assets,
-                            Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - clearW - gap * 2.0f, row.height},
+                            row.valueRect,
                             font,
                             decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
                             engine::UITextJustify::Left,
@@ -6025,7 +6130,7 @@ void SectorEditor::DrawSectorsPanel(
                                 input,
                                 assets,
                                 TextFormat("%s_clear", idPrefix),
-                                Rectangle{row.x + row.width - buttonW - clearW - gap, row.y, clearW, row.height},
+                                row.clearButtonRect,
                                 font,
                                 "Clear")) {
                         mutateFaceAnchor(
@@ -6050,7 +6155,7 @@ void SectorEditor::DrawSectorsPanel(
                                 input,
                                 assets,
                                 TextFormat("%s_pick", idPrefix),
-                                Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height},
+                                row.pickerButtonRect,
                                 font,
                                 ">")) {
                         if (!OpenAuthoringFaceAnchorTexturePickerById(
@@ -6067,6 +6172,8 @@ void SectorEditor::DrawSectorsPanel(
                         return;
                     }
 
+                    const SectorEditorInspectorNumericRowLayout opacityLayout =
+                            BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
                     const SectorEditorFloatInputResult opacityResult = DrawLabeledFloatInput(
                             ui,
                             config,
@@ -6075,8 +6182,8 @@ void SectorEditor::DrawSectorsPanel(
                             font,
                             TextFormat("%s_opacity", idPrefix),
                             "Opacity:",
-                            Rectangle{0.0f, y, 82.0f, rowH},
-                            Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                            opacityLayout.labelRect,
+                            opacityLayout.inputRect,
                             engine::UITextJustify::Left,
                             decal.opacity,
                             uiState.topologySectorDecalOpacityInputs[inputIndex],
@@ -6126,6 +6233,8 @@ void SectorEditor::DrawSectorsPanel(
                     y += 36.0f + gap;
 
                     if (decal.emissive) {
+                        const SectorEditorInspectorNumericRowLayout bloomLayout =
+                                BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
                         const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
                                 ui,
                                 config,
@@ -6134,8 +6243,8 @@ void SectorEditor::DrawSectorsPanel(
                                 font,
                                 TextFormat("%s_bloom", idPrefix),
                                 "Bloom:",
-                                Rectangle{0.0f, y, 82.0f, rowH},
-                                Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                                bloomLayout.labelRect,
+                                bloomLayout.inputRect,
                                 engine::UITextJustify::Left,
                                 decal.bloomIntensity,
                                 uiState.topologySectorDecalBloomIntensityInputs[inputIndex],
@@ -6204,16 +6313,16 @@ void SectorEditor::DrawSectorsPanel(
                 [&](const char* idPrefix, const char* label, const SectorTopologyDecalLayer& decal, TopologySectorTextureField field, int inputIndex) {
                     const float buttonW = 38.0f;
                     const float clearW = 92.0f;
-                    const float labelColumnW = 92.0f;
-                    const Rectangle row{0.0f, y, contentW, 36.0f};
+                    const SectorEditorInspectorTextureRowLayout row =
+                            BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
                     const bool missing = !decal.textureId.empty()
                             && FindSectorTopologyTexture(state.topologyMap, decal.textureId) == nullptr;
-                    engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+                    engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                     engine::Text(
                             ui,
                             config,
                             assets,
-                            Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - clearW - gap * 2.0f, row.height},
+                            row.valueRect,
                             font,
                             decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
                             engine::UITextJustify::Left,
@@ -6236,7 +6345,7 @@ void SectorEditor::DrawSectorsPanel(
                                 input,
                                 assets,
                                 TextFormat("%s_clear", idPrefix),
-                                Rectangle{row.x + row.width - buttonW - clearW - gap, row.y, clearW, row.height},
+                                row.clearButtonRect,
                                 font,
                                 "Clear")) {
                         mutateFaceAnchor(
@@ -6256,7 +6365,7 @@ void SectorEditor::DrawSectorsPanel(
                                 input,
                                 assets,
                                 TextFormat("%s_pick", idPrefix),
-                                Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height},
+                                row.pickerButtonRect,
                                 font,
                                 ">")) {
                         if (!OpenAuthoringFaceAnchorTexturePickerById(
@@ -6273,6 +6382,8 @@ void SectorEditor::DrawSectorsPanel(
                         return;
                     }
 
+                    const SectorEditorInspectorNumericRowLayout opacityLayout =
+                            BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
                     const SectorEditorFloatInputResult opacityResult = DrawLabeledFloatInput(
                             ui,
                             config,
@@ -6281,8 +6392,8 @@ void SectorEditor::DrawSectorsPanel(
                             font,
                             TextFormat("%s_opacity", idPrefix),
                             "Opacity:",
-                            Rectangle{0.0f, y, 82.0f, rowH},
-                            Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                            opacityLayout.labelRect,
+                            opacityLayout.inputRect,
                             engine::UITextJustify::Left,
                             decal.opacity,
                             uiState.topologySectorDecalOpacityInputs[inputIndex],
@@ -6328,6 +6439,8 @@ void SectorEditor::DrawSectorsPanel(
                     y += 36.0f + gap;
 
                     if (decal.emissive) {
+                        const SectorEditorInspectorNumericRowLayout bloomLayout =
+                                BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
                         const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
                                 ui,
                                 config,
@@ -6336,8 +6449,8 @@ void SectorEditor::DrawSectorsPanel(
                                 font,
                                 TextFormat("%s_bloom", idPrefix),
                                 "Bloom:",
-                                Rectangle{0.0f, y, 82.0f, rowH},
-                                Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                                bloomLayout.labelRect,
+                                bloomLayout.inputRect,
                                 engine::UITextJustify::Left,
                                 decal.bloomIntensity,
                                 uiState.topologySectorDecalBloomIntensityInputs[inputIndex],

@@ -232,6 +232,13 @@ if(BUILD_TESTING)
     target_include_directories(sector_sky_cylinder_tests PRIVATE sources)
     target_link_libraries(sector_sky_cylinder_tests PRIVATE raylib)
     add_test(NAME sector_sky_cylinder COMMAND sector_sky_cylinder_tests)
+
+    add_executable(sector_editor_ui_layout_tests
+            tests/SectorEditorUiLayoutTests.cpp
+    )
+    target_include_directories(sector_editor_ui_layout_tests PRIVATE sources)
+    target_link_libraries(sector_editor_ui_layout_tests PRIVATE raylib)
+    add_test(NAME sector_editor_ui_layout COMMAND sector_editor_ui_layout_tests)
 endif()
 
 # -------------------------------
