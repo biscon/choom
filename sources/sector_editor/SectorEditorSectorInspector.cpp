@@ -158,12 +158,7 @@ bool DrawTopologySectorInspector(
             if (!std::isfinite(nextFloor) || !std::isfinite(nextCeiling) || nextCeiling <= nextFloor) {
                 callbacks.setStatusText("Invalid topology sector heights: ceiling must be greater than floor");
             } else {
-                if (floorField) {
-                    sector.floorZ = result.value;
-                } else {
-                    sector.ceilingZ = result.value;
-                }
-                callbacks.markTopologyDocumentEdited(TextFormat("Updated topology sector %d height", sector.id));
+                callbacks.applySectorHeights(nextFloor, nextCeiling);
             }
         }
         y += rowH + gap;
@@ -183,8 +178,7 @@ bool DrawTopologySectorInspector(
                 font,
                 "Ceiling Sky",
                 ceilingSky)) {
-        sector.ceilingSky = ceilingSky;
-        callbacks.markTopologyDocumentEdited(TextFormat("Updated topology sector %d ceiling sky", sector.id));
+        callbacks.applySectorCeilingSky(ceilingSky);
     }
     y += rowH + gap;
 
@@ -211,8 +205,7 @@ bool DrawTopologySectorInspector(
             1.0f,
             3);
     if (ambientResult.changed && ambientResult.value != sector.ambientIntensity) {
-        sector.ambientIntensity = ambientResult.value;
-        callbacks.markTopologyDocumentEdited("Updated topology sector ambient intensity");
+        callbacks.applySectorAmbientIntensity(ambientResult.value);
     }
     y += rowH + gap;
 
@@ -231,9 +224,14 @@ bool DrawTopologySectorInspector(
                 channel,
                 inputState);
         if (result.changed && result.channel != channel) {
-            channel = result.channel;
-            sector.ambientColor.a = 255;
-            callbacks.markTopologyDocumentEdited("Updated topology sector ambient color");
+            Color nextColor = sector.ambientColor;
+            unsigned char& nextChannel =
+                    &channel == &sector.ambientColor.r ? nextColor.r
+                    : &channel == &sector.ambientColor.g ? nextColor.g
+                    : nextColor.b;
+            nextChannel = result.channel;
+            nextColor.a = 255;
+            callbacks.applySectorAmbientColor(nextColor);
         }
         y += rowH + gap;
     };
@@ -292,9 +290,19 @@ bool DrawTopologySectorInspector(
                     maxValue,
                     3);
             if (result.changed && result.value != value && result.finite) {
+                const SectorTopologyUvSettings previousUv = uv;
                 applyValue(result.value);
+                const SectorTopologyUvSettings nextUv = uv;
+                uv = previousUv;
                 state.topologyRenderWarning.clear();
-                callbacks.markTopologyDocumentEdited(TextFormat("Updated topology sector %d UV", sector.id));
+                const TopologySectorTextureField field =
+                        stateOffset == 0 ? TopologySectorTextureField::Floor
+                        : stateOffset == 4 ? TopologySectorTextureField::Ceiling
+                        : stateOffset == 8 ? TopologySectorTextureField::DefaultWall
+                        : stateOffset == 12 ? TopologySectorTextureField::DefaultLower
+                        : stateOffset == 16 ? TopologySectorTextureField::DefaultUpper
+                        : TopologySectorTextureField::None;
+                callbacks.applySectorUv(field, nextUv);
             }
         };
 

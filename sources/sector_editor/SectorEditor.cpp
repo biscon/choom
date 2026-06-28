@@ -2370,15 +2370,42 @@ bool SectorEditor::FinishTopologyActionResult(const SectorEditorTopologyActionRe
 
 bool SectorEditor::SetLineDefBlocksPlayer(int lineDefId, bool blocksPlayer)
 {
-    const SectorEditorTopologyActionResult result = game::SetPortalBlocksPlayer(
-            state.topologyMap,
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, lineDefId);
+    if (lineDef == nullptr) {
+        statusText = "Selected linedef is no longer valid.";
+        return false;
+    }
+    if (lineDef->frontSideDefId == -1 || lineDef->backSideDefId == -1) {
+        statusText = "Blocks Player is only editable on two-sided portals.";
+        return false;
+    }
+
+    const int authoringLineId =
+            FindSectorEditorAuthoringLineIdForTopologyLineDef(state, lineDefId);
+    const SectorAuthoringLine* authoringLine =
+            FindSectorAuthoringLine(state.authoringGraph, authoringLineId);
+    if (authoringLine == nullptr) {
+        statusText = "Blocks Player unavailable: selected linedef has no authoring line mapping.";
+        return false;
+    }
+    if (authoringLine->flags.blocksPlayer == blocksPlayer) {
+        return true;
+    }
+
+    const bool changed = MutateSectorEditorAuthoringLineForTopologyLineDef(
+            state,
             lineDefId,
-            blocksPlayer);
-    const bool changed = FinishTopologyActionResult(result);
+            blocksPlayer
+                    ? "Enabled player blocking on authoring portal."
+                    : "Disabled player blocking on authoring portal.",
+            [blocksPlayer](SectorAuthoringLine& line) {
+                line.flags.blocksPlayer = blocksPlayer;
+                return true;
+            });
     if (changed) {
         RebuildSectorCollisionWorld();
     }
-    return changed || result.status.empty();
+    return changed;
 }
 
 void SectorEditor::ClearTransientTopologyEditStateAfterGeometryChange()
@@ -2448,6 +2475,43 @@ bool SectorEditor::TryRenameSelectedTopologySector()
     const std::string newName = uiState.selectedSectorIdBuffer;
     if (newName == sector->name) {
         uiState.idEditError.clear();
+        return true;
+    }
+
+    const bool hasAuthoringGraph =
+            !state.authoringGraph.vertices.empty()
+            || !state.authoringGraph.lines.empty()
+            || !state.authoringGraph.lineSides.empty()
+            || !state.authoringGraph.faceAnchors.empty();
+    if (hasAuthoringGraph
+            && (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+                    || state.authoringDerivedTopologyStale
+                    || !state.authoringDerivation.success)) {
+        uiState.idEditError = "Sector name edit unavailable: derived topology is not current";
+        statusText = uiState.idEditError;
+        return true;
+    }
+
+    const bool hasFaceAnchorMapping =
+            FindSectorEditorAuthoringFaceAnchorIdForTopologySector(state, sector->id) >= 0;
+    if (hasFaceAnchorMapping) {
+        MutateSectorEditorAuthoringFaceAnchorForTopologySector(
+                state,
+                sector->id,
+                TextFormat("Renamed authoring face anchor %d", sector->id),
+                [&newName](SectorAuthoringFaceAnchor& anchor) {
+                    if (anchor.name == newName) {
+                        return false;
+                    }
+                    anchor.name = newName;
+                    return true;
+                });
+        uiState.idEditError.clear();
+        return true;
+    }
+    if (hasAuthoringGraph) {
+        uiState.idEditError = "Sector name edit unavailable: selected sector has no face anchor mapping";
+        statusText = uiState.idEditError;
         return true;
     }
 
@@ -3392,6 +3456,9 @@ void SectorEditor::DrawPreviewUvPanel(
         state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
         return;
     }
+    if (!EnsureSelectedSurface3DAuthoringMappingCurrent()) {
+        return;
+    }
 
     const TopologySurfaceEditTarget target = state.selectedTopologySurface3D;
     const bool targetIsMiddle = IsMiddleTopologyEditTarget(target.kind);
@@ -3575,6 +3642,9 @@ void SectorEditor::DrawPreviewUvPanel(
         if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
                 || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
             OpenTopologyTexturePicker(target.sectorId, TopologyEditTargetSectorTextureField(target.kind), layer);
+            if (state.texturePicker.open && HasAuthoringGraphData()) {
+                state.texturePicker.authoringSurface3DFlatTarget = true;
+            }
         } else {
             OpenTopologySideDefTexturePicker(target.sideDefId, TopologyEditTargetWallPart(target.kind), layer);
         }
@@ -4886,6 +4956,64 @@ void SectorEditor::DrawSectorsPanel(
     float y = 0.0f;
 
     if (hasSelectedTopologySector) {
+        const auto hasAuthoringGraph = [this]() {
+            return !state.authoringGraph.vertices.empty()
+                    || !state.authoringGraph.lines.empty()
+                    || !state.authoringGraph.lineSides.empty()
+                    || !state.authoringGraph.faceAnchors.empty();
+        };
+        const auto selectedAuthoringFaceAnchorUnavailable = [this, hasAuthoringGraph]() {
+            const SectorTopologySector* selectedSector = SelectedTopologySector();
+            if (selectedSector == nullptr || !hasAuthoringGraph()) {
+                return false;
+            }
+            if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+                    || state.authoringDerivedTopologyStale
+                    || !state.authoringDerivation.success) {
+                return true;
+            }
+            return FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
+                           state,
+                           selectedSector->id) < 0;
+        };
+        const auto reportAuthoringFaceAnchorUnavailable = [this]() {
+            const char* message =
+                    "Sector property edit unavailable: selected sector has no current face anchor mapping";
+            statusText = message;
+            return true;
+        };
+        const auto mutateSelectedAuthoringFaceAnchor =
+                [this](const char* status, const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate) {
+                    const SectorTopologySector* selectedSector = SelectedTopologySector();
+                    if (selectedSector == nullptr) {
+                        return false;
+                    }
+                    if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+                            || state.authoringDerivedTopologyStale
+                            || !state.authoringDerivation.success) {
+                        return false;
+                    }
+                    if (FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
+                                state,
+                                selectedSector->id) < 0) {
+                        return false;
+                    }
+                    MutateSectorEditorAuthoringFaceAnchorForTopologySector(
+                            state,
+                            selectedSector->id,
+                            status,
+                            mutate);
+                    return true;
+                };
+        const auto mutateSelectedTopologySector =
+                [this](const char* status, const std::function<bool(SectorTopologySector&)>& mutate) {
+                    SectorTopologySector* selectedSector = SelectedTopologySector();
+                    if (selectedSector == nullptr || !mutate || !mutate(*selectedSector)) {
+                        return false;
+                    }
+                    MarkTopologyDocumentEdited(status);
+                    return true;
+                };
         const SectorEditorSectorInspectorCallbacks callbacks{
                 [this]() { return TryRenameSelectedTopologySector(); },
                 [this]() { OpenDeleteSelectedTopologySectorConfirmation(); },
@@ -4893,6 +5021,203 @@ void SectorEditor::DrawSectorsPanel(
                 [this]() { StartPendingTopologySectorCut(); },
                 [this](const char* status) { statusText = status != nullptr ? status : ""; },
                 [this](const char* status) { MarkTopologyDocumentEdited(status); },
+                [mutateSelectedAuthoringFaceAnchor,
+                 mutateSelectedTopologySector,
+                 selectedAuthoringFaceAnchorUnavailable,
+                 reportAuthoringFaceAnchorUnavailable](
+                        float floorZ,
+                        float ceilingZ) {
+                    const char* status = "Updated sector height";
+                    if (mutateSelectedAuthoringFaceAnchor(
+                                status,
+                                [floorZ, ceilingZ](SectorAuthoringFaceAnchor& anchor) {
+                                    if (anchor.floorZ == floorZ && anchor.ceilingZ == ceilingZ) {
+                                        return false;
+                                    }
+                                    anchor.floorZ = floorZ;
+                                    anchor.ceilingZ = ceilingZ;
+                                    return true;
+                                })) {
+                        return true;
+                    }
+                    if (selectedAuthoringFaceAnchorUnavailable()) {
+                        return reportAuthoringFaceAnchorUnavailable();
+                    }
+                    return mutateSelectedTopologySector(
+                            status,
+                            [floorZ, ceilingZ](SectorTopologySector& sector) {
+                                if (sector.floorZ == floorZ && sector.ceilingZ == ceilingZ) {
+                                    return false;
+                                }
+                                sector.floorZ = floorZ;
+                                sector.ceilingZ = ceilingZ;
+                                return true;
+                            });
+                },
+                [mutateSelectedAuthoringFaceAnchor,
+                 mutateSelectedTopologySector,
+                 selectedAuthoringFaceAnchorUnavailable,
+                 reportAuthoringFaceAnchorUnavailable](bool ceilingSky) {
+                    const char* status = "Updated sector ceiling sky";
+                    if (mutateSelectedAuthoringFaceAnchor(
+                                status,
+                                [ceilingSky](SectorAuthoringFaceAnchor& anchor) {
+                                    if (anchor.ceilingSky == ceilingSky) {
+                                        return false;
+                                    }
+                                    anchor.ceilingSky = ceilingSky;
+                                    return true;
+                                })) {
+                        return true;
+                    }
+                    if (selectedAuthoringFaceAnchorUnavailable()) {
+                        return reportAuthoringFaceAnchorUnavailable();
+                    }
+                    return mutateSelectedTopologySector(
+                            status,
+                            [ceilingSky](SectorTopologySector& sector) {
+                                if (sector.ceilingSky == ceilingSky) {
+                                    return false;
+                                }
+                                sector.ceilingSky = ceilingSky;
+                                return true;
+                            });
+                },
+                [mutateSelectedAuthoringFaceAnchor,
+                 mutateSelectedTopologySector,
+                 selectedAuthoringFaceAnchorUnavailable,
+                 reportAuthoringFaceAnchorUnavailable](float intensity) {
+                    const char* status = "Updated sector ambient intensity";
+                    if (mutateSelectedAuthoringFaceAnchor(
+                                status,
+                                [intensity](SectorAuthoringFaceAnchor& anchor) {
+                                    if (anchor.ambientIntensity == intensity) {
+                                        return false;
+                                    }
+                                    anchor.ambientIntensity = intensity;
+                                    return true;
+                                })) {
+                        return true;
+                    }
+                    if (selectedAuthoringFaceAnchorUnavailable()) {
+                        return reportAuthoringFaceAnchorUnavailable();
+                    }
+                    return mutateSelectedTopologySector(
+                            status,
+                            [intensity](SectorTopologySector& sector) {
+                                if (sector.ambientIntensity == intensity) {
+                                    return false;
+                                }
+                                sector.ambientIntensity = intensity;
+                                return true;
+                            });
+                },
+                [mutateSelectedAuthoringFaceAnchor,
+                 mutateSelectedTopologySector,
+                 selectedAuthoringFaceAnchorUnavailable,
+                 reportAuthoringFaceAnchorUnavailable](Color color) {
+                    const char* status = "Updated sector ambient color";
+                    if (mutateSelectedAuthoringFaceAnchor(
+                                status,
+                                [color](SectorAuthoringFaceAnchor& anchor) {
+                                    if (anchor.ambientColor.r == color.r
+                                            && anchor.ambientColor.g == color.g
+                                            && anchor.ambientColor.b == color.b
+                                            && anchor.ambientColor.a == color.a) {
+                                        return false;
+                                    }
+                                    anchor.ambientColor = color;
+                                    return true;
+                                })) {
+                        return true;
+                    }
+                    if (selectedAuthoringFaceAnchorUnavailable()) {
+                        return reportAuthoringFaceAnchorUnavailable();
+                    }
+                    return mutateSelectedTopologySector(
+                            status,
+                            [color](SectorTopologySector& sector) {
+                                if (sector.ambientColor.r == color.r
+                                        && sector.ambientColor.g == color.g
+                                        && sector.ambientColor.b == color.b
+                                        && sector.ambientColor.a == color.a) {
+                                    return false;
+                                }
+                                sector.ambientColor = color;
+                                return true;
+                            });
+                },
+                [mutateSelectedAuthoringFaceAnchor,
+                 mutateSelectedTopologySector,
+                 selectedAuthoringFaceAnchorUnavailable,
+                 reportAuthoringFaceAnchorUnavailable](
+                        TopologySectorTextureField field,
+                        const SectorTopologyUvSettings& uv) {
+                    const char* status = "Updated sector UV";
+                    const auto applyAnchorUv =
+                            [field, uv](SectorAuthoringFaceAnchor& anchor) {
+                                SectorTopologyUvSettings* target = nullptr;
+                                switch (field) {
+                                case TopologySectorTextureField::Floor:
+                                    target = &anchor.floorUv;
+                                    break;
+                                case TopologySectorTextureField::Ceiling:
+                                    target = &anchor.ceilingUv;
+                                    break;
+                                case TopologySectorTextureField::DefaultWall:
+                                    target = &anchor.defaultWall.uv;
+                                    break;
+                                case TopologySectorTextureField::DefaultLower:
+                                    target = &anchor.defaultLower.uv;
+                                    break;
+                                case TopologySectorTextureField::DefaultUpper:
+                                    target = &anchor.defaultUpper.uv;
+                                    break;
+                                case TopologySectorTextureField::None:
+                                    break;
+                                }
+                                if (target == nullptr) {
+                                    return false;
+                                }
+                                *target = uv;
+                                return true;
+                    };
+                    if (mutateSelectedAuthoringFaceAnchor(status, applyAnchorUv)) {
+                        return true;
+                    }
+                    if (selectedAuthoringFaceAnchorUnavailable()) {
+                        return reportAuthoringFaceAnchorUnavailable();
+                    }
+                    return mutateSelectedTopologySector(
+                            status,
+                            [field, uv](SectorTopologySector& sector) {
+                                SectorTopologyUvSettings* target = nullptr;
+                                switch (field) {
+                                case TopologySectorTextureField::Floor:
+                                    target = &sector.floorUv;
+                                    break;
+                                case TopologySectorTextureField::Ceiling:
+                                    target = &sector.ceilingUv;
+                                    break;
+                                case TopologySectorTextureField::DefaultWall:
+                                    target = &sector.defaultWall.uv;
+                                    break;
+                                case TopologySectorTextureField::DefaultLower:
+                                    target = &sector.defaultLower.uv;
+                                    break;
+                                case TopologySectorTextureField::DefaultUpper:
+                                    target = &sector.defaultUpper.uv;
+                                    break;
+                                case TopologySectorTextureField::None:
+                                    break;
+                                }
+                                if (target == nullptr) {
+                                    return false;
+                                }
+                                *target = uv;
+                                return true;
+                            });
+                },
                 [this](int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer) {
                     OpenTopologyTexturePicker(sectorId, field, layer);
                 },
@@ -7178,6 +7503,20 @@ void SectorEditor::SelectSurface3D(SectorSurfaceRef surface)
         state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
         return;
     }
+    if (HasAuthoringGraphData()) {
+        SectorEditorAuthoringSurfaceTarget authoringTarget;
+        std::string unavailableStatus;
+        if (!ResolveSectorEditorAuthoringSurfaceTarget(
+                    state,
+                    surface,
+                    authoringTarget,
+                    &unavailableStatus)) {
+            state.selectedSurface3D = SectorSurfaceRef{};
+            state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+            statusText = unavailableStatus;
+            return;
+        }
+    }
 
     if (!SameSurfaceRef(state.selectedSurface3D, surface)) {
         ResetSurface3DUiState();
@@ -7351,6 +7690,190 @@ bool SectorEditor::DeleteSelectedAuthoringVertex()
     return true;
 }
 
+bool SectorEditor::HasAuthoringGraphData() const
+{
+    return !state.authoringGraph.vertices.empty()
+            || !state.authoringGraph.lines.empty()
+            || !state.authoringGraph.lineSides.empty()
+            || !state.authoringGraph.faceAnchors.empty();
+}
+
+bool SectorEditor::IsSelectedSurface3DFlatTarget(TopologySurfaceEditTarget target) const
+{
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor) {
+        return state.selectedSurface3D.kind == SectorSurfaceKind::Floor
+                && state.selectedSurface3D.topologySectorId == target.sectorId;
+    }
+    if (target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        return state.selectedSurface3D.kind == SectorSurfaceKind::Ceiling
+                && state.selectedSurface3D.topologySectorId == target.sectorId;
+    }
+    return false;
+}
+
+bool SectorEditor::EnsureSelectedSurface3DAuthoringMappingCurrent()
+{
+    std::string unavailableStatus;
+    if (ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
+                state,
+                &unavailableStatus)) {
+        return true;
+    }
+    ResetSurface3DUiState();
+    statusText = unavailableStatus;
+    return false;
+}
+
+bool SectorEditor::FinishAuthoringSideMaterialActionResult(
+        TopologySurfaceEditTarget target,
+        const SectorEditorMaterialActionResult& result,
+        const SectorTopologyMap& editedTopology,
+        engine::AssetManager* assets)
+{
+    if (!result.changed) {
+        if (!result.status.empty()) {
+            statusText = result.status;
+        }
+        return false;
+    }
+
+    const SectorTopologySideDef* editedSideDef =
+            FindSectorTopologySideDef(editedTopology, target.sideDefId);
+    if (editedSideDef == nullptr) {
+        statusText = "Selected authoring side material target is no longer valid.";
+        return false;
+    }
+
+    if (result.resetSurface3DUi) {
+        ResetSurface3DUiState();
+    }
+    if (result.resetSectorUvInputs) {
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+    }
+    if (result.resetSideDefUvInputs) {
+        for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+    }
+    if (result.resetDecalInputs) {
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalOpacityInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalBloomIntensityInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+        uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
+        uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
+        uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
+        uiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+    }
+    if (result.closeDecalTintModal) {
+        state.decalTintModal = DecalTintModalState{};
+    }
+
+    state.topologyRenderWarning.clear();
+    const bool refreshed = MutateSectorEditorAuthoringSideForTopologySideDef(
+            state,
+            target.sideDefId,
+            result.status.c_str(),
+            [editedSideDef](SectorAuthoringLineSide& side) {
+                side.wall = editedSideDef->wall;
+                side.lower = editedSideDef->lower;
+                side.upper = editedSideDef->upper;
+                side.middle = editedSideDef->middle;
+                return true;
+            });
+    if (!refreshed) {
+        statusText = "Wall material edit unavailable: selected sidedef has no authoring side mapping";
+    }
+    if (assets != nullptr && refreshed && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return refreshed;
+}
+
+bool SectorEditor::ApplyAuthoringSideMaterialAction(
+        TopologySurfaceEditTarget target,
+        engine::AssetManager* assets,
+        const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action)
+{
+    if (!IsWallTopologyEditTarget(target.kind) || !HasAuthoringGraphData()) {
+        return false;
+    }
+    if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+            || state.authoringDerivedTopologyStale
+            || !state.authoringDerivation.success) {
+        statusText = "Wall material edit unavailable: derived topology is not current";
+        return true;
+    }
+    SectorAuthoringSideId sideId;
+    if (!FindSectorEditorAuthoringSideIdForTopologySideDef(
+                state,
+                target.sideDefId,
+                sideId)) {
+        statusText = "Wall material edit unavailable: selected sidedef has no authoring side mapping";
+        return true;
+    }
+    if (!action) {
+        return false;
+    }
+
+    SectorTopologyMap editedTopology = state.topologyMap;
+    return FinishAuthoringSideMaterialActionResult(
+            target,
+            action(editedTopology),
+            editedTopology,
+            assets);
+}
+
+bool SectorEditor::ApplyAuthoringFaceAnchorFlatMaterialAction(
+        TopologySurfaceEditTarget target,
+        engine::AssetManager* assets,
+        const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action)
+{
+    SectorEditorAuthoringFlatMaterialActionResult result;
+    if (!game::ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
+                state,
+                state.selectedSurface3D,
+                target,
+                action,
+                &result)) {
+        return false;
+    }
+
+    if (result.materialResult.resetSurface3DUi) {
+        ResetSurface3DUiState();
+    }
+    if (result.materialResult.resetSectorUvInputs) {
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+    }
+    if (result.materialResult.resetDecalInputs) {
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalOpacityInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalBloomIntensityInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+        uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
+        uiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+    }
+    if (result.materialResult.closeDecalTintModal) {
+        state.decalTintModal = DecalTintModalState{};
+    }
+
+    if (!result.status.empty()) {
+        statusText = result.status;
+    }
+    if (assets != nullptr && result.changed && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
+        RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
+}
+
 const SectorTopologyDecalLayer* SectorEditor::DecalForSurface(TopologySurfaceEditTarget target) const
 {
     return game::DecalForMaterialSurface(state.topologyMap, target);
@@ -7402,6 +7925,22 @@ bool SectorEditor::CopyTopologyMaterial(TopologySurfaceEditTarget target)
 
 bool SectorEditor::PasteTopologyMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                &assets,
+                [this, target](SectorTopologyMap& map) {
+                    return game::PasteMaterialSurface(map, target, state.copiedTopologyMaterial);
+                });
+    }
+    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                &assets,
+                [this, target](SectorTopologyMap& map) {
+                    return game::PasteMaterialSurface(map, target, state.copiedTopologyMaterial);
+                });
+    }
     return FinishMaterialActionResult(
             game::PasteMaterialSurface(state.topologyMap, target, state.copiedTopologyMaterial),
             &assets);
@@ -7414,6 +7953,36 @@ bool SectorEditor::ApplySurface3DUvValue(
         float value,
         engine::AssetManager& assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        const SectorSurfaceKind surfaceKind = state.selectedSurface3D.kind;
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                &assets,
+                [target, layer, component, value, surfaceKind](SectorTopologyMap& map) {
+                    return game::ApplySurfaceUvValue(
+                            map,
+                            target,
+                            layer,
+                            surfaceKind,
+                            component,
+                            value);
+                });
+    }
+    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+        const SectorSurfaceKind surfaceKind = state.selectedSurface3D.kind;
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                &assets,
+                [target, layer, component, value, surfaceKind](SectorTopologyMap& map) {
+                    return game::ApplySurfaceUvValue(
+                            map,
+                            target,
+                            layer,
+                            surfaceKind,
+                            component,
+                            value);
+                });
+    }
     return FinishMaterialActionResult(
             game::ApplySurfaceUvValue(
                     state.topologyMap,
@@ -7430,6 +7999,22 @@ bool SectorEditor::ApplySurfaceDecalOpacity(
         float opacity,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, opacity](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalOpacity(map, target, opacity);
+                });
+    }
+    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target, opacity](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalOpacity(map, target, opacity);
+                });
+    }
     return FinishMaterialActionResult(game::ApplySurfaceDecalOpacity(state.topologyMap, target, opacity), assets);
 }
 
@@ -7438,6 +8023,22 @@ bool SectorEditor::ApplySurfaceDecalEmissive(
         bool emissive,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, emissive](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalEmissive(map, target, emissive);
+                });
+    }
+    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target, emissive](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalEmissive(map, target, emissive);
+                });
+    }
     return FinishMaterialActionResult(game::ApplySurfaceDecalEmissive(state.topologyMap, target, emissive), assets);
 }
 
@@ -7446,6 +8047,22 @@ bool SectorEditor::ApplySurfaceDecalTint(
         Vector3 tint,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, tint](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalTint(map, target, tint);
+                });
+    }
+    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target, tint](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalTint(map, target, tint);
+                });
+    }
     return FinishMaterialActionResult(game::ApplySurfaceDecalTint(state.topologyMap, target, tint), assets);
 }
 
@@ -7454,6 +8071,22 @@ bool SectorEditor::ApplySurfaceDecalBloomIntensity(
         float bloomIntensity,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, bloomIntensity](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalBloomIntensity(map, target, bloomIntensity);
+                });
+    }
+    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target, bloomIntensity](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalBloomIntensity(map, target, bloomIntensity);
+                });
+    }
     return FinishMaterialActionResult(
             game::ApplySurfaceDecalBloomIntensity(state.topologyMap, target, bloomIntensity),
             assets);
@@ -7475,6 +8108,22 @@ bool SectorEditor::ClearSurfaceDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target](SectorTopologyMap& map) {
+                    return game::ClearSurfaceDecal(map, target);
+                });
+    }
+    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target](SectorTopologyMap& map) {
+                    return game::ClearSurfaceDecal(map, target);
+                });
+    }
     return FinishMaterialActionResult(game::ClearSurfaceDecal(state.topologyMap, target), assets);
 }
 
@@ -7482,6 +8131,14 @@ bool SectorEditor::ClearMiddleTexture(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target](SectorTopologyMap& map) {
+                    return game::ClearMiddleTexture(map, target);
+                });
+    }
     return FinishMaterialActionResult(game::ClearMiddleTexture(state.topologyMap, target), assets);
 }
 
@@ -7490,6 +8147,24 @@ bool SectorEditor::ResetSurface3DUv(
         TopologyMaterialLayer layer,
         engine::AssetManager& assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        const SectorSurfaceKind surfaceKind = state.selectedSurface3D.kind;
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                &assets,
+                [target, layer, surfaceKind](SectorTopologyMap& map) {
+                    return game::ResetSurfaceUv(map, target, layer, surfaceKind);
+                });
+    }
+    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+        const SectorSurfaceKind surfaceKind = state.selectedSurface3D.kind;
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                &assets,
+                [target, layer, surfaceKind](SectorTopologyMap& map) {
+                    return game::ResetSurfaceUv(map, target, layer, surfaceKind);
+                });
+    }
     return FinishMaterialActionResult(
             game::ResetSurfaceUv(state.topologyMap, target, layer, state.selectedSurface3D.kind),
             &assets);
@@ -7499,6 +8174,22 @@ bool SectorEditor::FitSelectedDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target](SectorTopologyMap& map) {
+                    return game::FitSelectedDecal(map, target);
+                });
+    }
+    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target](SectorTopologyMap& map) {
+                    return game::FitSelectedDecal(map, target);
+                });
+    }
     return FinishMaterialActionResult(game::FitSelectedDecal(state.topologyMap, target), assets);
 }
 
@@ -7506,6 +8197,14 @@ bool SectorEditor::FitSelectedFlatDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
+    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target](SectorTopologyMap& map) {
+                    return game::FitSelectedFlatDecal(map, target);
+                });
+    }
     return FinishMaterialActionResult(game::FitSelectedFlatDecal(state.topologyMap, target), assets);
 }
 
@@ -7515,6 +8214,14 @@ bool SectorEditor::FitSelectedWallMaterial(
         engine::AssetManager* assets,
         TopologyMaterialLayer layer)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, mode, layer](SectorTopologyMap& map) {
+                    return game::FitSelectedWallMaterial(map, target, mode, layer);
+                });
+    }
     return FinishMaterialActionResult(
             game::FitSelectedWallMaterial(state.topologyMap, target, mode, layer),
             assets);
@@ -7525,6 +8232,14 @@ bool SectorEditor::AlignSelectedWallMaterialVertical(
         engine::AssetManager* assets,
         TopologyMaterialLayer layer)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, layer](SectorTopologyMap& map) {
+                    return game::AlignSelectedWallMaterialVertical(map, target, layer);
+                });
+    }
     return FinishMaterialActionResult(
             game::AlignSelectedWallMaterialVertical(state.topologyMap, target, layer),
             assets);
@@ -7536,6 +8251,14 @@ bool SectorEditor::AlignSelectedWallMaterialU(
         engine::AssetManager* assets,
         TopologyMaterialLayer layer)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, direction, layer](SectorTopologyMap& map) {
+                    return game::AlignSelectedWallMaterialU(map, target, direction, layer);
+                });
+    }
     return FinishMaterialActionResult(
             game::AlignSelectedWallMaterialU(state.topologyMap, target, direction, layer),
             assets);
@@ -7783,7 +8506,138 @@ void SectorEditor::OpenMapSkyTexturePicker()
 
 void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
 {
+    const bool routeAuthoringSideMaterial =
+            HasAuthoringGraphData()
+            && state.texturePicker.open
+            && state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef;
+    const bool routeAuthoringFlatMaterial =
+            HasAuthoringGraphData()
+            && state.texturePicker.open
+            && state.texturePicker.authoringSurface3DFlatTarget
+            && state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::Sector
+            && (state.texturePicker.topologyField == TopologySectorTextureField::Floor
+                    || state.texturePicker.topologyField == TopologySectorTextureField::Ceiling);
+    const int authoringSideDefId = routeAuthoringSideMaterial
+            ? state.texturePicker.topologySideDefId
+            : -1;
+    const TopologyMaterialLayer authoringPickerLayer = routeAuthoringSideMaterial
+            ? state.texturePicker.topologyLayer
+            : TopologyMaterialLayer::Base;
+    TopologySurfaceEditTarget authoringSideTarget;
+    TopologySurfaceEditTarget authoringFlatTarget;
+    SectorSurfaceRef authoringFlatSurface;
+    SectorTopologyMap topologyBeforePicker;
+    if (routeAuthoringSideMaterial || routeAuthoringFlatMaterial) {
+        if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+                || state.authoringDerivedTopologyStale
+                || !state.authoringDerivation.success) {
+            statusText = routeAuthoringSideMaterial
+                    ? "Wall material edit unavailable: derived topology is not current"
+                    : "3D surface edit unavailable: derived topology is not current";
+            state.texturePicker = TexturePickerState{};
+            return;
+        }
+    }
+    if (routeAuthoringSideMaterial) {
+        SectorAuthoringSideId sideId;
+        if (!FindSectorEditorAuthoringSideIdForTopologySideDef(
+                    state,
+                    authoringSideDefId,
+                    sideId)) {
+            statusText = "Wall material edit unavailable: selected sidedef has no authoring side mapping";
+            state.texturePicker = TexturePickerState{};
+            return;
+        }
+        topologyBeforePicker = state.topologyMap;
+        const SectorTopologySideDef* sideDef =
+                FindSectorTopologySideDef(state.topologyMap, authoringSideDefId);
+        if (sideDef != nullptr) {
+            switch (state.texturePicker.topologyWallPart) {
+                case TopologyWallPart::Wall:
+                    authoringSideTarget.kind = TopologySurfaceEditTargetKind::SideDefWall;
+                    break;
+                case TopologyWallPart::Lower:
+                    authoringSideTarget.kind = TopologySurfaceEditTargetKind::SideDefLower;
+                    break;
+                case TopologyWallPart::Upper:
+                    authoringSideTarget.kind = TopologySurfaceEditTargetKind::SideDefUpper;
+                    break;
+                case TopologyWallPart::Middle:
+                    authoringSideTarget.kind = TopologySurfaceEditTargetKind::SideDefMiddle;
+                    break;
+            }
+            authoringSideTarget.sectorId = sideDef->sectorId;
+            authoringSideTarget.lineDefId = sideDef->lineDefId;
+            authoringSideTarget.sideDefId = sideDef->id;
+            authoringSideTarget.side = sideDef->side;
+        }
+    }
+    if (routeAuthoringFlatMaterial) {
+        authoringFlatTarget.kind = state.texturePicker.topologyField == TopologySectorTextureField::Floor
+                ? TopologySurfaceEditTargetKind::SectorFloor
+                : TopologySurfaceEditTargetKind::SectorCeiling;
+        authoringFlatTarget.sectorId = state.texturePicker.topologySectorId;
+        authoringFlatSurface.kind = state.texturePicker.topologyField == TopologySectorTextureField::Floor
+                ? SectorSurfaceKind::Floor
+                : SectorSurfaceKind::Ceiling;
+        authoringFlatSurface.topologySectorId = state.texturePicker.topologySectorId;
+
+        SectorEditorAuthoringSurfaceTarget surfaceTarget;
+        std::string unavailableStatus;
+        if (!ResolveSectorEditorAuthoringSurfaceTarget(
+                    state,
+                    authoringFlatSurface,
+                    surfaceTarget,
+                    &unavailableStatus)
+                || surfaceTarget.kind != SectorEditorAuthoringSurfaceTargetKind::FaceAnchor) {
+            statusText = unavailableStatus.empty()
+                    ? "3D flat surface edit unavailable: selected surface has no face anchor mapping"
+                    : unavailableStatus;
+            state.texturePicker = TexturePickerState{};
+            return;
+        }
+        topologyBeforePicker = state.topologyMap;
+    }
+
     const SectorEditorTexturePickerApplyResult result = game::ApplyTexturePickerSelection(state);
+    if (routeAuthoringSideMaterial) {
+        const SectorTopologyMap editedTopology = state.topologyMap;
+        state.topologyMap = topologyBeforePicker;
+        if (result.changed) {
+            SectorEditorMaterialActionResult materialResult;
+            materialResult.changed = true;
+            materialResult.status = result.status;
+            materialResult.resetSideDefUvInputs = true;
+            materialResult.resetDecalInputs = authoringPickerLayer == TopologyMaterialLayer::Decal;
+            FinishAuthoringSideMaterialActionResult(
+                    authoringSideTarget,
+                    materialResult,
+                    editedTopology,
+                    &assets);
+        }
+        return;
+    }
+    if (routeAuthoringFlatMaterial) {
+        const SectorTopologyMap editedTopology = state.topologyMap;
+        state.topologyMap = topologyBeforePicker;
+        if (result.changed) {
+            ApplyAuthoringFaceAnchorFlatMaterialAction(
+                    authoringFlatTarget,
+                    &assets,
+                    [authoringFlatTarget, editedTopology, result](SectorTopologyMap& map) {
+                        map = editedTopology;
+                        SectorEditorMaterialActionResult materialResult;
+                        materialResult.changed = true;
+                        materialResult.status = result.status;
+                        materialResult.resetSurface3DUi = true;
+                        materialResult.resetSectorUvInputs = true;
+                        materialResult.resetDecalInputs = true;
+                        return materialResult;
+                    });
+        }
+        return;
+    }
+
     if (result.changed) {
         if (result.useMaterialMutationFinish) {
             FinishTopologyMaterialMutation(result.status.c_str(), &assets);

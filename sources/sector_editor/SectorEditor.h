@@ -12,6 +12,7 @@
 
 #include <raylib.h>
 
+#include <functional>
 #include <string>
 
 namespace game {
@@ -321,6 +322,22 @@ private:
     bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialU(TopologySurfaceEditTarget target, TopologyUAlignDirection direction, engine::AssetManager* assets, TopologyMaterialLayer layer);
+    bool HasAuthoringGraphData() const;
+    bool IsSelectedSurface3DFlatTarget(TopologySurfaceEditTarget target) const;
+    bool EnsureSelectedSurface3DAuthoringMappingCurrent();
+    bool ApplyAuthoringSideMaterialAction(
+            TopologySurfaceEditTarget target,
+            engine::AssetManager* assets,
+            const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action);
+    bool ApplyAuthoringFaceAnchorFlatMaterialAction(
+            TopologySurfaceEditTarget target,
+            engine::AssetManager* assets,
+            const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action);
+    bool FinishAuthoringSideMaterialActionResult(
+            TopologySurfaceEditTarget target,
+            const SectorEditorMaterialActionResult& result,
+            const SectorTopologyMap& editedTopology,
+            engine::AssetManager* assets);
     bool FinishMaterialActionResult(const SectorEditorMaterialActionResult& result, engine::AssetManager* assets);
     bool FinishTopologyMaterialMutation(const char* status, engine::AssetManager* assets);
     bool FinishTopologyActionResult(const SectorEditorTopologyActionResult& result);

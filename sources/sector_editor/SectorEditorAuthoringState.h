@@ -1,6 +1,10 @@
 #pragma once
 
+#include "sector_editor/SectorEditorMaterialActions.h"
 #include "sector_editor/SectorEditorTypes.h"
+
+#include <functional>
+#include <string>
 
 namespace game {
 
@@ -71,6 +75,73 @@ void InitializeSectorEditorAuthoringStateFromTopology(
 void MarkSectorEditorAuthoringGraphEdited(
         SectorEditorState& state,
         const char* status);
+
+int FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
+        const SectorEditorState& state,
+        int topologySectorId);
+
+bool FindSectorEditorAuthoringSideIdForTopologySideDef(
+        const SectorEditorState& state,
+        int topologySideDefId,
+        SectorAuthoringSideId& outSideId);
+
+int FindSectorEditorAuthoringLineIdForTopologyLineDef(
+        const SectorEditorState& state,
+        int topologyLineDefId);
+
+enum class SectorEditorAuthoringSurfaceTargetKind {
+    None,
+    FaceAnchor,
+    Side
+};
+
+struct SectorEditorAuthoringSurfaceTarget {
+    SectorEditorAuthoringSurfaceTargetKind kind = SectorEditorAuthoringSurfaceTargetKind::None;
+    int faceAnchorId = -1;
+    SectorAuthoringSideId side;
+};
+
+bool ResolveSectorEditorAuthoringSurfaceTarget(
+        const SectorEditorState& state,
+        SectorSurfaceRef surface,
+        SectorEditorAuthoringSurfaceTarget& outTarget,
+        std::string* outStatus = nullptr);
+
+bool ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
+        SectorEditorState& state,
+        std::string* outStatus = nullptr);
+
+struct SectorEditorAuthoringFlatMaterialActionResult {
+    bool handled = false;
+    bool changed = false;
+    SectorEditorMaterialActionResult materialResult;
+    std::string status;
+};
+
+bool ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
+        SectorEditorState& state,
+        SectorSurfaceRef surface,
+        TopologySurfaceEditTarget target,
+        const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action,
+        SectorEditorAuthoringFlatMaterialActionResult* outResult = nullptr);
+
+bool MutateSectorEditorAuthoringFaceAnchorForTopologySector(
+        SectorEditorState& state,
+        int topologySectorId,
+        const char* status,
+        const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate);
+
+bool MutateSectorEditorAuthoringSideForTopologySideDef(
+        SectorEditorState& state,
+        int topologySideDefId,
+        const char* status,
+        const std::function<bool(SectorAuthoringLineSide&)>& mutate);
+
+bool MutateSectorEditorAuthoringLineForTopologyLineDef(
+        SectorEditorState& state,
+        int topologyLineDefId,
+        const char* status,
+        const std::function<bool(SectorAuthoringLine&)>& mutate);
 
 bool RefreshSectorEditorAuthoringDerivation(
         SectorEditorState& state,

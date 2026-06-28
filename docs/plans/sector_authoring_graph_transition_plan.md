@@ -158,28 +158,28 @@ Suggested path:
       "id": "phase_13a_face_anchor_inspector_writes",
       "title": "Port sector property inspector writes to face anchors",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_13_inspector_porting"
     },
     {
       "id": "phase_13b_authoring_side_material_writes",
       "title": "Port sidedef and wall material writes to authoring sides",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_13_inspector_porting"
     },
     {
       "id": "phase_13c_authoring_line_flag_writes",
       "title": "Port linedef flag writes to authoring lines",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_13_inspector_porting"
     },
     {
       "id": "phase_13d_3d_surface_authoring_mapping",
       "title": "Map 3D selected surfaces back to authoring anchors",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_13_inspector_porting"
     },
     {

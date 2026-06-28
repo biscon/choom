@@ -1,13 +1,39 @@
 #include "sector_editor/SectorEditorAuthoringState.h"
 
+#include "sector_editor/SectorEditorHelpers.h"
+
 #include <raylib.h>
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 #include <utility>
 
 namespace game {
 namespace {
+
+bool HasAuthoringGraphData(const SectorEditorState& state)
+{
+    return !state.authoringGraph.vertices.empty()
+            || !state.authoringGraph.lines.empty()
+            || !state.authoringGraph.lineSides.empty()
+            || !state.authoringGraph.faceAnchors.empty();
+}
+
+bool IsFlatSurfaceEditTarget(TopologySurfaceEditTargetKind kind)
+{
+    return kind == TopologySurfaceEditTargetKind::SectorFloor
+            || kind == TopologySurfaceEditTargetKind::SectorCeiling;
+}
+
+bool SameSectorSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b)
+{
+    return a.kind == b.kind
+            && a.topologySectorId == b.topologySectorId
+            && a.topologyLineDefId == b.topologyLineDefId
+            && a.topologySideDefId == b.topologySideDefId
+            && a.topologySide == b.topologySide;
+}
 
 void CopyEditorMapLevelFields(SectorTopologyMap& target, const SectorTopologyMap& source)
 {
@@ -580,6 +606,388 @@ void MarkSectorEditorAuthoringGraphEdited(
             : status;
     state.topologyDocumentStatus = state.authoringDerivationStatus;
     InvalidateEditorTopologyRenderCache(state);
+}
+
+int FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
+        const SectorEditorState& state,
+        int topologySectorId)
+{
+    if (!IsValidSectorTopologyId(topologySectorId)) {
+        return -1;
+    }
+
+    for (const SectorAuthoringDerivedSectorMapping& mapping
+            : state.authoringDerivation.mapping.sectors) {
+        if (mapping.topologySectorId == topologySectorId
+                && IsValidSectorAuthoringId(mapping.faceAnchorId)
+                && FindSectorAuthoringFaceAnchor(
+                        state.authoringGraph,
+                        mapping.faceAnchorId) != nullptr) {
+            return mapping.faceAnchorId;
+        }
+    }
+    return -1;
+}
+
+bool FindSectorEditorAuthoringSideIdForTopologySideDef(
+        const SectorEditorState& state,
+        int topologySideDefId,
+        SectorAuthoringSideId& outSideId)
+{
+    outSideId = SectorAuthoringSideId{};
+    if (!IsValidSectorTopologyId(topologySideDefId)) {
+        return false;
+    }
+
+    for (const SectorAuthoringDerivedSideMapping& mapping
+            : state.authoringDerivation.mapping.sides) {
+        if (mapping.topologySideDefId == topologySideDefId
+                && IsValidSectorAuthoringId(mapping.authoringLineId)
+                && FindSectorAuthoringLine(
+                        state.authoringGraph,
+                        mapping.authoringLineId) != nullptr) {
+            outSideId = SectorAuthoringSideId{mapping.authoringLineId, mapping.authoringSide};
+            return true;
+        }
+    }
+    return false;
+}
+
+int FindSectorEditorAuthoringLineIdForTopologyLineDef(
+        const SectorEditorState& state,
+        int topologyLineDefId)
+{
+    if (!IsValidSectorTopologyId(topologyLineDefId)) {
+        return -1;
+    }
+
+    for (const SectorAuthoringDerivedLineMapping& mapping
+            : state.authoringDerivation.mapping.lines) {
+        if (mapping.topologyLineDefId == topologyLineDefId
+                && IsValidSectorAuthoringId(mapping.authoringLineId)
+                && FindSectorAuthoringLine(
+                        state.authoringGraph,
+                        mapping.authoringLineId) != nullptr) {
+            return mapping.authoringLineId;
+        }
+    }
+    return -1;
+}
+
+bool ResolveSectorEditorAuthoringSurfaceTarget(
+        const SectorEditorState& state,
+        SectorSurfaceRef surface,
+        SectorEditorAuthoringSurfaceTarget& outTarget,
+        std::string* outStatus)
+{
+    outTarget = SectorEditorAuthoringSurfaceTarget{};
+    const auto fail = [outStatus](const char* status) {
+        if (outStatus != nullptr) {
+            *outStatus = status;
+        }
+        return false;
+    };
+
+    if (surface.kind == SectorSurfaceKind::None) {
+        return fail("3D surface edit unavailable: no selected surface");
+    }
+    if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+            || state.authoringDerivedTopologyStale
+            || !state.authoringDerivation.success) {
+        return fail("3D surface edit unavailable: derived topology is not current");
+    }
+
+    if (IsWallSurface(surface.kind)) {
+        const SectorTopologySideDef* sideDef =
+                FindSectorTopologySideDef(state.topologyMap, surface.topologySideDefId);
+        if (sideDef == nullptr
+                || sideDef->lineDefId != surface.topologyLineDefId
+                || sideDef->side != surface.topologySide
+                || (surface.kind == SectorSurfaceKind::Middle
+                        && !IsTopologyMiddleEligible(state.topologyMap, sideDef))) {
+            return fail("3D surface edit unavailable: selected sidedef is not current");
+        }
+
+        bool found = false;
+        SectorAuthoringSideId resolvedSide;
+        for (const SectorAuthoringDerivedSideMapping& mapping
+                : state.authoringDerivation.mapping.sides) {
+            if (mapping.topologySideDefId != surface.topologySideDefId) {
+                continue;
+            }
+            if (!IsValidSectorAuthoringId(mapping.authoringLineId)
+                    || FindSectorAuthoringLine(
+                            state.authoringGraph,
+                            mapping.authoringLineId) == nullptr) {
+                continue;
+            }
+            const SectorAuthoringSideId candidate{mapping.authoringLineId, mapping.authoringSide};
+            if (found && (resolvedSide.lineId != candidate.lineId
+                    || resolvedSide.side != candidate.side)) {
+                return fail("3D surface edit unavailable: selected sidedef has ambiguous authoring mapping");
+            }
+            resolvedSide = candidate;
+            found = true;
+        }
+        if (!found) {
+            return fail("3D surface edit unavailable: selected sidedef has no authoring side mapping");
+        }
+
+        outTarget.kind = SectorEditorAuthoringSurfaceTargetKind::Side;
+        outTarget.side = resolvedSide;
+        return true;
+    }
+
+    if (FindSectorTopologySector(state.topologyMap, surface.topologySectorId) == nullptr) {
+        return fail("3D surface edit unavailable: selected sector is not current");
+    }
+
+    bool found = false;
+    int resolvedFaceAnchorId = -1;
+    for (const SectorAuthoringDerivedSectorMapping& mapping
+            : state.authoringDerivation.mapping.sectors) {
+        if (mapping.topologySectorId != surface.topologySectorId) {
+            continue;
+        }
+        if (!IsValidSectorAuthoringId(mapping.faceAnchorId)
+                || FindSectorAuthoringFaceAnchor(
+                        state.authoringGraph,
+                        mapping.faceAnchorId) == nullptr) {
+            continue;
+        }
+        if (found && resolvedFaceAnchorId != mapping.faceAnchorId) {
+            return fail("3D surface edit unavailable: selected sector has ambiguous face anchor mapping");
+        }
+        resolvedFaceAnchorId = mapping.faceAnchorId;
+        found = true;
+    }
+    if (!found) {
+        return fail("3D surface edit unavailable: selected sector has no face anchor mapping");
+    }
+
+    outTarget.kind = SectorEditorAuthoringSurfaceTargetKind::FaceAnchor;
+    outTarget.faceAnchorId = resolvedFaceAnchorId;
+    return true;
+}
+
+bool ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
+        SectorEditorState& state,
+        std::string* outStatus)
+{
+    if (outStatus != nullptr) {
+        outStatus->clear();
+    }
+
+    if (!HasAuthoringGraphData(state) || state.selectedSurface3D.kind == SectorSurfaceKind::None) {
+        return true;
+    }
+
+    SectorEditorAuthoringSurfaceTarget authoringTarget;
+    std::string status;
+    if (ResolveSectorEditorAuthoringSurfaceTarget(
+                state,
+                state.selectedSurface3D,
+                authoringTarget,
+                &status)) {
+        return true;
+    }
+
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    if (outStatus != nullptr) {
+        *outStatus = status;
+    }
+    return false;
+}
+
+bool ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
+        SectorEditorState& state,
+        SectorSurfaceRef surface,
+        TopologySurfaceEditTarget target,
+        const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action,
+        SectorEditorAuthoringFlatMaterialActionResult* outResult)
+{
+    SectorEditorAuthoringFlatMaterialActionResult result;
+    const auto finish = [&result, outResult](bool returnValue) {
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
+        return returnValue;
+    };
+
+    if (!HasAuthoringGraphData(state) || !IsFlatSurfaceEditTarget(target.kind)) {
+        return finish(false);
+    }
+
+    result.handled = true;
+    if (!action) {
+        result.status = "Flat material edit unavailable.";
+        return finish(true);
+    }
+
+    SectorEditorAuthoringSurfaceTarget authoringTarget;
+    std::string unavailableStatus;
+    if (!ResolveSectorEditorAuthoringSurfaceTarget(
+                state,
+                surface,
+                authoringTarget,
+                &unavailableStatus)
+            || authoringTarget.kind != SectorEditorAuthoringSurfaceTargetKind::FaceAnchor) {
+        if (state.selectedSurface3D.kind != SectorSurfaceKind::None
+                && SameSectorSurfaceRef(state.selectedSurface3D, surface)) {
+            state.selectedSurface3D = SectorSurfaceRef{};
+            state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+        }
+        result.status = unavailableStatus.empty()
+                ? "3D flat surface edit unavailable: selected surface has no face anchor mapping"
+                : unavailableStatus;
+        return finish(true);
+    }
+
+    SectorTopologyMap editedTopology = state.topologyMap;
+    result.materialResult = action(editedTopology);
+    result.status = result.materialResult.status;
+    if (!result.materialResult.changed) {
+        return finish(true);
+    }
+
+    const SectorTopologySector* editedSector =
+            FindSectorTopologySector(editedTopology, target.sectorId);
+    if (editedSector == nullptr) {
+        result.status = "3D flat surface edit unavailable: selected sector is no longer valid";
+        result.materialResult.changed = false;
+        return finish(true);
+    }
+
+    const char* status = result.materialResult.status.empty()
+            ? "Updated authoring face anchor material"
+            : result.materialResult.status.c_str();
+    const bool refreshed = MutateSectorEditorAuthoringFaceAnchorForTopologySector(
+            state,
+            target.sectorId,
+            status,
+            [target, editedSector](SectorAuthoringFaceAnchor& anchor) {
+                if (target.kind == TopologySurfaceEditTargetKind::SectorFloor) {
+                    anchor.floorTextureId = editedSector->floorTextureId;
+                    anchor.floorUv = editedSector->floorUv;
+                    anchor.floorDecal = editedSector->floorDecal;
+                } else if (target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+                    anchor.ceilingTextureId = editedSector->ceilingTextureId;
+                    anchor.ceilingUv = editedSector->ceilingUv;
+                    anchor.ceilingDecal = editedSector->ceilingDecal;
+                } else {
+                    return false;
+                }
+                return true;
+            });
+    result.changed = refreshed;
+    if (!refreshed) {
+        result.status = "3D flat surface edit unavailable: selected sector has no face anchor mapping";
+    }
+    return finish(true);
+}
+
+bool MutateSectorEditorAuthoringFaceAnchorForTopologySector(
+        SectorEditorState& state,
+        int topologySectorId,
+        const char* status,
+        const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate)
+{
+    if (!mutate) {
+        return false;
+    }
+
+    const int faceAnchorId =
+            FindSectorEditorAuthoringFaceAnchorIdForTopologySector(state, topologySectorId);
+    SectorAuthoringFaceAnchor* anchor =
+            FindSectorAuthoringFaceAnchor(state.authoringGraph, faceAnchorId);
+    if (anchor == nullptr) {
+        return false;
+    }
+
+    if (!mutate(*anchor)) {
+        return false;
+    }
+
+    MarkSectorEditorAuthoringGraphEdited(state, status);
+    return RefreshSectorEditorAuthoringDerivation(
+            state,
+            status,
+            "Updated authoring face anchor; derivation failed");
+}
+
+bool MutateSectorEditorAuthoringSideForTopologySideDef(
+        SectorEditorState& state,
+        int topologySideDefId,
+        const char* status,
+        const std::function<bool(SectorAuthoringLineSide&)>& mutate)
+{
+    if (!mutate) {
+        return false;
+    }
+
+    SectorAuthoringSideId sideId;
+    if (!FindSectorEditorAuthoringSideIdForTopologySideDef(
+                state,
+                topologySideDefId,
+                sideId)) {
+        return false;
+    }
+
+    SectorAuthoringLineSide* side = FindSectorAuthoringLineSide(state.authoringGraph, sideId);
+    if (side == nullptr) {
+        const SectorTopologySideDef* topologySide =
+                FindSectorTopologySideDef(state.topologyMap, topologySideDefId);
+        SectorAuthoringLineSide newSide;
+        newSide.id = sideId;
+        if (topologySide != nullptr) {
+            newSide.wall = topologySide->wall;
+            newSide.lower = topologySide->lower;
+            newSide.upper = topologySide->upper;
+            newSide.middle = topologySide->middle;
+        }
+        state.authoringGraph.lineSides.push_back(newSide);
+        side = &state.authoringGraph.lineSides.back();
+    }
+
+    if (!mutate(*side)) {
+        return false;
+    }
+
+    MarkSectorEditorAuthoringGraphEdited(state, status);
+    return RefreshSectorEditorAuthoringDerivation(
+            state,
+            status,
+            "Updated authoring side material; derivation failed");
+}
+
+bool MutateSectorEditorAuthoringLineForTopologyLineDef(
+        SectorEditorState& state,
+        int topologyLineDefId,
+        const char* status,
+        const std::function<bool(SectorAuthoringLine&)>& mutate)
+{
+    if (!mutate) {
+        return false;
+    }
+
+    const int authoringLineId =
+            FindSectorEditorAuthoringLineIdForTopologyLineDef(state, topologyLineDefId);
+    SectorAuthoringLine* line =
+            FindSectorAuthoringLine(state.authoringGraph, authoringLineId);
+    if (line == nullptr) {
+        return false;
+    }
+
+    if (!mutate(*line)) {
+        return false;
+    }
+
+    MarkSectorEditorAuthoringGraphEdited(state, status);
+    return RefreshSectorEditorAuthoringDerivation(
+            state,
+            status,
+            "Updated authoring line flags; derivation failed");
 }
 
 bool RefreshSectorEditorAuthoringDerivation(

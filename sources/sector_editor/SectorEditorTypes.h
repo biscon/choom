@@ -195,6 +195,7 @@ struct TopologyMaterialPayload {
 struct TexturePickerState {
     bool open = false;
     bool rebuildPreviewOnApply = false;
+    bool authoringSurface3DFlatTarget = false;
     TopologyTexturePickerTargetKind topologyTargetKind = TopologyTexturePickerTargetKind::None;
     TopologyMaterialLayer topologyLayer = TopologyMaterialLayer::Base;
     TopologySectorTextureField topologyField = TopologySectorTextureField::None;
