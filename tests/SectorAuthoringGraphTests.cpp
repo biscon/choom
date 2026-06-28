@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iostream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -158,6 +159,13 @@ bool TextContains(const char* text, const char* expected)
     return text != nullptr && std::string{text}.find(expected) != std::string::npos;
 }
 
+Vector2 VisibleAuthoringPoint(game::SectorCoord x, game::SectorCoord y)
+{
+    return Vector2{
+            game::SectorCoordToVisibleAuthoring(x),
+            game::SectorCoordToVisibleAuthoring(y)};
+}
+
 void SelectTextureInPicker(game::TexturePickerState& picker, const std::string& textureId);
 
 game::SectorAuthoringGraph MakeGraphFromLines(
@@ -267,6 +275,25 @@ const game::SectorAuthoringPlanarVertex* FindPlanarVertexAt(
         }
     }
     return nullptr;
+}
+
+bool AllDerivedSectorsHaveExactlyOneValidFaceAnchorMapping(
+        const game::SectorAuthoringGraph& graph,
+        const game::SectorAuthoringDerivationResult& result)
+{
+    for (const game::SectorTopologySector& sector : result.topology.sectors) {
+        int count = 0;
+        for (const game::SectorAuthoringDerivedSectorMapping& mapping : result.mapping.sectors) {
+            if (mapping.topologySectorId == sector.id
+                    && game::FindSectorAuthoringFaceAnchor(graph, mapping.faceAnchorId) != nullptr) {
+                ++count;
+            }
+        }
+        if (count != 1) {
+            return false;
+        }
+    }
+    return true;
 }
 
 int CountPlanarEdgesForLine(const game::SectorAuthoringPlanarizationResult& result, int lineId)
@@ -2013,6 +2040,147 @@ void TestFreshDerivedTopologyUsesDefaultMaterials()
     Check(sawWall, "fresh derived generated geometry has default wall texture");
 }
 
+void TestEditorAuthoringRefreshSynthesizedOuterSectorGetsDefaultMaterials()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "fresh outer refresh synthesizes and derives valid topology");
+    Check(state.authoringGraph.faceAnchors.size() == 1,
+          "fresh outer refresh synthesizes one face anchor");
+    const game::SectorAuthoringFaceAnchor* anchor = state.authoringGraph.faceAnchors.empty()
+            ? nullptr
+            : &state.authoringGraph.faceAnchors.front();
+    Check(anchor != nullptr && anchor->name == "Sector 1",
+          "fresh outer synthesized anchor gets first generated label");
+    Check(anchor != nullptr
+                  && !anchor->floorTextureId.empty()
+                  && !anchor->ceilingTextureId.empty()
+                  && !anchor->defaultWall.textureId.empty()
+                  && !anchor->defaultLower.textureId.empty()
+                  && !anchor->defaultUpper.textureId.empty(),
+          "fresh outer synthesized anchor gets non-empty default materials");
+    Check(anchor != nullptr
+                  && anchor->floorTextureId == "floor"
+                  && anchor->ceilingTextureId == "ceiling"
+                  && anchor->defaultWall.textureId == "wall"
+                  && anchor->defaultLower.textureId == "wall"
+                  && anchor->defaultUpper.textureId == "wall",
+          "fresh outer synthesized anchor uses normal graph-authored defaults");
+    Check(AllDerivedSectorsHaveExactlyOneValidFaceAnchorMapping(
+                  state.authoringGraph,
+                  state.authoringDerivation),
+          "fresh outer synthesized anchor maps to derived sector");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(state.topologyMap, geometry, &error),
+          "fresh outer reconciled topology builds generated geometry");
+    bool sawEmptyTexture = false;
+    for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
+        sawEmptyTexture = sawEmptyTexture || surface.textureId.empty();
+    }
+    Check(!sawEmptyTexture,
+          "fresh outer reconciled generated geometry does not rely on empty texture IDs");
+}
+
+void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {128, 0}, {128, 128}, {0, 128}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "outer-only anchor preservation setup derives valid topology");
+    Check(state.authoringGraph.faceAnchors.size() == 1,
+          "outer-only anchor preservation setup synthesizes one anchor");
+    if (state.authoringGraph.faceAnchors.empty()) {
+        return;
+    }
+
+    const int outerAnchorId = state.authoringGraph.faceAnchors.front().id;
+    game::SectorAuthoringFaceAnchor* outerAnchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, outerAnchorId);
+    Check(outerAnchor != nullptr, "outer anchor exists before adding inner loop");
+    if (outerAnchor == nullptr) {
+        return;
+    }
+    outerAnchor->name = "Sector 1";
+    outerAnchor->floorZ = -6.0f;
+    outerAnchor->ceilingZ = 42.0f;
+    outerAnchor->floorTextureId = "outer_floor";
+    outerAnchor->ceilingTextureId = "outer_ceiling";
+    outerAnchor->defaultWall = WallPart("outer_wall", 1.0f, 2.0f, 3.0f, 4.0f);
+    outerAnchor->defaultLower = WallPart("outer_lower", 2.0f, 3.0f, 4.0f, 5.0f);
+    outerAnchor->defaultUpper = WallPart("outer_upper", 3.0f, 4.0f, 5.0f, 6.0f);
+
+    AddAuthoringVertexWithId(state.authoringGraph, 5, 32, 32);
+    AddAuthoringVertexWithId(state.authoringGraph, 6, 96, 32);
+    AddAuthoringVertexWithId(state.authoringGraph, 7, 96, 96);
+    AddAuthoringVertexWithId(state.authoringGraph, 8, 32, 96);
+    AddAuthoringLineWithId(state.authoringGraph, 14, 5, 6);
+    AddAuthoringLineWithId(state.authoringGraph, 15, 6, 7);
+    AddAuthoringLineWithId(state.authoringGraph, 16, 7, 8);
+    AddAuthoringLineWithId(state.authoringGraph, 17, 8, 5);
+
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "adding inner loop reconciles and derives valid topology");
+    Check(state.authoringGraph.faceAnchors.size() == 2,
+          "adding inner loop synthesizes only one new face anchor");
+
+    const game::SectorAuthoringFaceAnchor* preservedOuter =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, outerAnchorId);
+    Check(preservedOuter != nullptr && preservedOuter->name == "Sector 1",
+          "outer anchor keeps original generated label");
+    Check(preservedOuter != nullptr
+                  && preservedOuter->floorZ == -6.0f
+                  && preservedOuter->ceilingZ == 42.0f
+                  && preservedOuter->floorTextureId == "outer_floor"
+                  && preservedOuter->ceilingTextureId == "outer_ceiling"
+                  && preservedOuter->defaultWall.textureId == "outer_wall"
+                  && preservedOuter->defaultLower.textureId == "outer_lower"
+                  && preservedOuter->defaultUpper.textureId == "outer_upper",
+          "outer anchor keeps material and height properties");
+
+    game::SectorAuthoringSelectionTarget outerTarget;
+    game::SectorAuthoringSelectionTarget innerTarget;
+    Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                  state,
+                  VisibleAuthoringPoint(16, 16),
+                  0.25f,
+                  0.25f,
+                  &outerTarget),
+          "outer ring point selects an authoring face after adding inner loop");
+    Check(outerTarget.kind == game::SectorAuthoringSelectionKind::FaceAnchor
+                  && outerTarget.faceAnchorId == outerAnchorId,
+          "outer ring point still selects original outer anchor");
+    Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                  state,
+                  VisibleAuthoringPoint(64, 64),
+                  0.25f,
+                  0.25f,
+                  &innerTarget),
+          "inner face point selects an authoring face after adding inner loop");
+    Check(innerTarget.kind == game::SectorAuthoringSelectionKind::FaceAnchor
+                  && innerTarget.faceAnchorId != outerAnchorId,
+          "inner face point selects newly synthesized anchor");
+
+    const game::SectorAuthoringFaceAnchor* innerAnchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, innerTarget.faceAnchorId);
+    Check(innerAnchor != nullptr && innerAnchor->name == "Sector 2",
+          "inner synthesized anchor gets next generated label");
+    Check(innerAnchor != nullptr
+                  && !innerAnchor->floorTextureId.empty()
+                  && !innerAnchor->ceilingTextureId.empty()
+                  && !innerAnchor->defaultWall.textureId.empty()
+                  && !innerAnchor->defaultLower.textureId.empty()
+                  && !innerAnchor->defaultUpper.textureId.empty(),
+          "inner synthesized anchor gets valid material defaults");
+}
+
 void TestEditorAuthoringGraphMutationMarksDirtyAndStale()
 {
     game::SectorEditorState state;
@@ -3112,6 +3280,314 @@ void TestEditorAuthoringFacePointSelectionRequiresCurrentUnambiguousMapping()
           "point inside derived face selection fails closed with ambiguous mapping");
     Check(status.find("ambiguous face anchor mapping") != std::string::npos,
           "ambiguous point face selection reports ambiguous mapping");
+}
+
+void TestEditorAuthoringNestedFacePointSelectionChoosesDeepestAnchor()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeNestedRectangleGraph(4);
+    AddFaceAnchor(state.authoringGraph, 200, 16, 16, "outer");
+    AddFaceAnchor(state.authoringGraph, 201, 48, 48, "middle");
+    AddFaceAnchor(state.authoringGraph, 202, 80, 80, "inner");
+    AddFaceAnchor(state.authoringGraph, 203, 128, 128, "deepest");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "nested point face selection setup derives valid topology");
+
+    const auto expectFace = [&](game::SectorCoord x, game::SectorCoord y, int expectedAnchorId, const char* description) {
+        game::SectorAuthoringSelectionTarget target;
+        std::string status;
+        Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                      state,
+                      VisibleAuthoringPoint(x, y),
+                      0.25f,
+                      0.25f,
+                      &target,
+                      nullptr,
+                      &status),
+              description);
+        Check(target.kind == game::SectorAuthoringSelectionKind::FaceAnchor
+                      && target.faceAnchorId == expectedAnchorId,
+              TextFormat("%s returns expected face anchor", description));
+        Check(state.topologySelectionKind == game::TopologySelectionKind::None,
+              TextFormat("%s does not use topology selection", description));
+    };
+
+    expectFace(16, 16, 200, "point in outer nested ring selects outer anchor");
+    expectFace(48, 48, 201, "point in first nested face selects middle anchor");
+    expectFace(80, 80, 202, "point in second nested face selects inner anchor");
+    expectFace(128, 128, 203, "point in deepest nested face selects deepest anchor");
+
+    game::SectorAuthoringSelectionTarget target;
+    Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                  state,
+                  VisibleAuthoringPoint(0, 0),
+                  0.25f,
+                  0.25f,
+                  &target),
+          "nested point face selection keeps vertex priority over face");
+    Check(target.kind == game::SectorAuthoringSelectionKind::Vertex
+                  && target.vertexId == 1,
+          "nested point face selection returns vertex before face");
+}
+
+void TestEditorAuthoringSiblingNestedFacePointSelectionChoosesIndependentAnchors()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {256, 0}, {256, 256}, {0, 256},
+             {32, 32}, {96, 32}, {96, 96}, {32, 96},
+             {160, 32}, {224, 32}, {224, 96}, {160, 96}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1},
+             {5, 6}, {6, 7}, {7, 8}, {8, 5},
+             {9, 10}, {10, 11}, {11, 12}, {12, 9}});
+    AddFaceAnchor(state.authoringGraph, 200, 16, 16, "outer");
+    AddFaceAnchor(state.authoringGraph, 201, 64, 64, "left");
+    AddFaceAnchor(state.authoringGraph, 202, 192, 64, "right");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "sibling point face selection setup derives valid topology");
+
+    const auto expectFace = [&](game::SectorCoord x, game::SectorCoord y, int expectedAnchorId, const char* description) {
+        game::SectorAuthoringSelectionTarget target;
+        std::string status;
+        Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                      state,
+                      VisibleAuthoringPoint(x, y),
+                      0.25f,
+                      0.25f,
+                      &target,
+                      nullptr,
+                      &status),
+              description);
+        Check(target.kind == game::SectorAuthoringSelectionKind::FaceAnchor
+                      && target.faceAnchorId == expectedAnchorId,
+              TextFormat("%s returns expected face anchor", description));
+    };
+
+    expectFace(16, 16, 200, "point in sibling parent area selects outer anchor");
+    expectFace(64, 64, 201, "point in left sibling nested face selects left anchor");
+    expectFace(192, 64, 202, "point in right sibling nested face selects right anchor");
+}
+
+void TestEditorAuthoringRefreshSynthesizesMissingNestedFaceAnchors()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {128, 0}, {128, 128}, {0, 128},
+             {32, 32}, {96, 32}, {96, 96}, {32, 96}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1},
+             {5, 6}, {6, 7}, {7, 8}, {8, 5}});
+    AddFaceAnchor(state.authoringGraph, 200, 16, 16, "outer");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "missing nested face anchor setup reconciles and derives valid topology");
+    Check(state.authoringGraph.faceAnchors.size() == 2,
+          "missing nested face anchor reconciliation adds exactly one anchor");
+    Check(AllDerivedSectorsHaveExactlyOneValidFaceAnchorMapping(
+                  state.authoringGraph,
+                  state.authoringDerivation),
+          "missing nested face anchor reconciliation maps every visible sector once");
+    Check(state.topologyDocumentDirty,
+          "missing nested face anchor reconciliation marks document dirty");
+    Check(state.hasUnsavedChanges,
+          "missing nested face anchor reconciliation marks unsaved changes");
+
+    game::SectorAuthoringSelectionTarget target;
+    std::string status;
+    Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                  state,
+                  VisibleAuthoringPoint(64, 64),
+                  0.25f,
+                  0.25f,
+                  &target,
+                  nullptr,
+                  &status),
+          "point inside reconciled nested face selects synthesized anchor");
+    Check(target.kind == game::SectorAuthoringSelectionKind::FaceAnchor
+                  && target.faceAnchorId != 200,
+          "reconciled nested face selection returns synthesized face anchor");
+}
+
+void TestEditorAuthoringRefreshSynthesizesSiblingFaceAnchorsWithUniqueLabels()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {256, 0}, {256, 256}, {0, 256},
+             {32, 32}, {96, 32}, {96, 96}, {32, 96},
+             {160, 32}, {224, 32}, {224, 96}, {160, 96}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1},
+             {5, 6}, {6, 7}, {7, 8}, {8, 5},
+             {9, 10}, {10, 11}, {11, 12}, {12, 9}});
+
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "sibling missing face anchor refresh reconciles and derives valid topology");
+    Check(state.authoringGraph.faceAnchors.size() == 3,
+          "sibling missing face anchor reconciliation adds one anchor per visible face");
+    Check(AllDerivedSectorsHaveExactlyOneValidFaceAnchorMapping(
+                  state.authoringGraph,
+                  state.authoringDerivation),
+          "sibling missing face anchor reconciliation maps every visible sector once");
+
+    std::set<std::string> labels;
+    for (const game::SectorAuthoringFaceAnchor& anchor : state.authoringGraph.faceAnchors) {
+        Check(labels.insert(anchor.name).second,
+              "sibling synthesized face anchors have unique labels");
+    }
+    Check(labels.find("Sector 1") != labels.end()
+                  && labels.find("Sector 2") != labels.end()
+                  && labels.find("Sector 3") != labels.end(),
+          "sibling synthesized face anchors use deterministic generated labels");
+
+    std::set<int> selectedAnchorIds;
+    const auto expectFace = [&](game::SectorCoord x, game::SectorCoord y, const char* description) {
+        game::SectorAuthoringSelectionTarget target;
+        Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                      state,
+                      VisibleAuthoringPoint(x, y),
+                      0.25f,
+                      0.25f,
+                      &target),
+              description);
+        Check(target.kind == game::SectorAuthoringSelectionKind::FaceAnchor,
+              TextFormat("%s returns face anchor selection", description));
+        if (target.kind == game::SectorAuthoringSelectionKind::FaceAnchor) {
+            selectedAnchorIds.insert(target.faceAnchorId);
+        }
+    };
+    expectFace(16, 16, "reconciled sibling parent area selects synthesized anchor");
+    expectFace(64, 64, "reconciled left sibling area selects synthesized anchor");
+    expectFace(192, 64, "reconciled right sibling area selects synthesized anchor");
+    Check(selectedAnchorIds.size() == 3,
+          "reconciled sibling face selection resolves each visible face to a distinct anchor");
+}
+
+void TestEditorAuthoringRefreshDoesNotSynthesizeForInvalidDerivation()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}},
+            {{1, 2}, {2, 3}});
+    const std::size_t originalAnchorCount = state.authoringGraph.faceAnchors.size();
+
+    Check(!game::RefreshSectorEditorAuthoringDerivation(state),
+          "invalid authoring graph refresh fails");
+    Check(state.authoringGraph.faceAnchors.size() == originalAnchorCount,
+          "invalid authoring graph refresh does not synthesize face anchors");
+}
+
+void TestEditorAuthoringRefreshPreservesUnresolvedExistingAnchors()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "custom-room");
+    AddFaceAnchor(state.authoringGraph, 201, 512, 512, "custom-unresolved");
+    const std::size_t originalAnchorCount = state.authoringGraph.faceAnchors.size();
+
+    Check(!game::RefreshSectorEditorAuthoringDerivation(state),
+          "unresolved existing anchor refresh fails");
+    Check(state.authoringGraph.faceAnchors.size() == originalAnchorCount,
+          "unresolved existing anchor refresh does not delete or synthesize anchors");
+    const game::SectorAuthoringFaceAnchor* unresolved =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 201);
+    Check(unresolved != nullptr
+                  && unresolved->name == "custom-unresolved"
+                  && unresolved->x == 512
+                  && unresolved->y == 512,
+          "unresolved existing anchor is preserved unchanged");
+}
+
+void TestDeriveGeneratedFaceLabelsAreUnique()
+{
+    game::SectorAuthoringGraph graph = MakeNestedRectangleGraph(3);
+    AddFaceAnchor(graph, 200, 16, 16, "Sector 1");
+    AddFaceAnchor(graph, 201, 48, 48, "Sector 1");
+    AddFaceAnchor(graph, 202, 96, 96, "custom");
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "duplicate generated label derivation is valid");
+    std::set<std::string> labels;
+    for (const game::SectorTopologySector& sector : result.topology.sectors) {
+        Check(labels.insert(sector.name).second,
+              "derived generated/default sector labels are unique");
+    }
+    const game::SectorTopologySector* outer = game::FindSectorTopologySector(result.topology, 200);
+    const game::SectorTopologySector* middle = game::FindSectorTopologySector(result.topology, 201);
+    const game::SectorTopologySector* inner = game::FindSectorTopologySector(result.topology, 202);
+    Check(outer != nullptr && outer->name == "Sector 1",
+          "first generated/default sector label is preserved");
+    Check(middle != nullptr && middle->name == "Sector 2",
+          "duplicate generated/default sector label is repaired deterministically");
+    Check(inner != nullptr && inner->name == "custom",
+          "custom face label is preserved");
+}
+
+void TestDeriveGeneratedFallbackLabelsSkipExistingNames()
+{
+    game::SectorAuthoringGraph graph = MakeNestedRectangleGraph(2);
+    AddFaceAnchor(graph, 200, 16, 16, "Sector 1");
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "generated fallback label derivation is valid");
+    const game::SectorTopologySector* outer = game::FindSectorTopologySector(result.topology, 200);
+    Check(outer != nullptr && outer->name == "Sector 1",
+          "existing generated/default label is preserved");
+
+    bool foundSkippedFallback = false;
+    for (const game::SectorTopologySector& sector : result.topology.sectors) {
+        if (sector.id != 200 && sector.name == "Sector 2") {
+            foundSkippedFallback = true;
+        }
+    }
+    Check(foundSkippedFallback,
+          "generated fallback labels skip existing generated/default names");
+}
+
+void TestEditorAuthoringRefreshPreservesCustomAndImportedLabels()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeNestedRectangleGraph(4);
+    AddFaceAnchor(state.authoringGraph, 200, 16, 16, "Kitchen");
+    AddFaceAnchor(state.authoringGraph, 201, 48, 48, "Sector 1");
+    AddFaceAnchor(state.authoringGraph, 202, 80, 80, "Sector 7");
+
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "custom/imported label reconciliation derives valid topology");
+    Check(state.authoringGraph.faceAnchors.size() == 4,
+          "custom/imported label reconciliation synthesizes one missing anchor");
+
+    const game::SectorAuthoringFaceAnchor* kitchen =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    const game::SectorAuthoringFaceAnchor* importedSector1 =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 201);
+    const game::SectorAuthoringFaceAnchor* importedSector7 =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 202);
+    Check(kitchen != nullptr && kitchen->name == "Kitchen",
+          "custom label Kitchen is preserved");
+    Check(importedSector1 != nullptr && importedSector1->name == "Sector 1",
+          "existing imported/generated-looking label Sector 1 is preserved");
+    Check(importedSector7 != nullptr && importedSector7->name == "Sector 7",
+          "existing imported/generated-looking label Sector 7 is preserved");
+
+    bool foundSector2 = false;
+    bool renamedExisting = false;
+    for (const game::SectorAuthoringFaceAnchor& anchor : state.authoringGraph.faceAnchors) {
+        if (anchor.id == 200 || anchor.id == 201 || anchor.id == 202) {
+            renamedExisting = renamedExisting
+                    || (anchor.id == 200 && anchor.name != "Kitchen")
+                    || (anchor.id == 201 && anchor.name != "Sector 1")
+                    || (anchor.id == 202 && anchor.name != "Sector 7");
+            continue;
+        }
+        foundSector2 = foundSector2 || anchor.name == "Sector 2";
+    }
+    Check(!renamedExisting,
+          "custom/imported label reconciliation does not broadly rename existing anchors");
+    Check(foundSector2,
+          "new generated label skips existing Sector 1 and Sector 7 labels");
 }
 
 void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailable()
@@ -4829,6 +5305,8 @@ int main()
     TestDeriveUnresolvedAnchorPreservesAuthoringProperties();
     TestDerivedTopologyBuildsGeometry();
     TestFreshDerivedTopologyUsesDefaultMaterials();
+    TestEditorAuthoringRefreshSynthesizedOuterSectorGetsDefaultMaterials();
+    TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor();
     TestEditorAuthoringGraphMutationMarksDirtyAndStale();
     TestAuthoringOverlayRenderCacheIncludesLooseGraph();
     TestAuthoringDiagnosticRenderCacheDoesNotRequireDerivedTopology();
@@ -4856,6 +5334,15 @@ int main()
     TestEditorSelectedAuthoringLineSideMaterialWritesWithoutTopologySelection();
     TestEditorSelectedFaceAnchorPropertiesWriteWithoutTopologySelection();
     TestEditorAuthoringFacePointSelectionRequiresCurrentUnambiguousMapping();
+    TestEditorAuthoringNestedFacePointSelectionChoosesDeepestAnchor();
+    TestEditorAuthoringSiblingNestedFacePointSelectionChoosesIndependentAnchors();
+    TestEditorAuthoringRefreshSynthesizesMissingNestedFaceAnchors();
+    TestEditorAuthoringRefreshSynthesizesSiblingFaceAnchorsWithUniqueLabels();
+    TestEditorAuthoringRefreshDoesNotSynthesizeForInvalidDerivation();
+    TestEditorAuthoringRefreshPreservesUnresolvedExistingAnchors();
+    TestDeriveGeneratedFaceLabelsAreUnique();
+    TestDeriveGeneratedFallbackLabelsSkipExistingNames();
+    TestEditorAuthoringRefreshPreservesCustomAndImportedLabels();
     TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailable();
     TestEditorAuthoringSurfaceMappingResolvesFlatSurfaceToFaceAnchor();
     TestEditorAuthoringSurfaceMappingResolvesWallSurfaceToAuthoringSide();

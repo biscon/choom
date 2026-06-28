@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -256,6 +258,24 @@ bool PointInTopologyLoop(
     return StrictPointInPolygon(point, points) || PointOnPolygonBoundary(point, points);
 }
 
+bool PointStrictlyInTopologyLoop(
+        const SectorTopologyMap& map,
+        Vector2 mapPoint,
+        const SectorTopologyLoop& loop)
+{
+    std::vector<SectorPoint> points;
+    points.reserve(loop.vertexIds.size());
+    for (int vertexId : loop.vertexIds) {
+        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(map, vertexId);
+        if (vertex == nullptr) {
+            return false;
+        }
+        points.push_back(Vector2ToSectorPoint(SectorTopologyVertexToMap(*vertex)));
+    }
+
+    return StrictPointInPolygon(Vector2ToSectorPoint(mapPoint), points);
+}
+
 bool PointInTopologySector(
         const SectorTopologyMap& map,
         const SectorTopologyIndexes& indexes,
@@ -276,6 +296,386 @@ bool PointInTopologySector(
         }
     }
     return true;
+}
+
+bool PointStrictlyInTopologySector(
+        const SectorTopologyMap& map,
+        const SectorTopologyIndexes& indexes,
+        Vector2 mapPoint,
+        int sectorId)
+{
+    SectorTopologyLoopSet loops;
+    std::vector<SectorTopologyValidationIssue> loopIssues;
+    if (!ExtractSectorTopologyLoops(map, indexes, sectorId, loops, &loopIssues)) {
+        return false;
+    }
+    if (!PointStrictlyInTopologyLoop(map, mapPoint, loops.outer)) {
+        return false;
+    }
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        if (PointInTopologyLoop(map, mapPoint, hole)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TryComputeTopologySectorArea(
+        const SectorTopologyMap& map,
+        const SectorTopologyIndexes& indexes,
+        int sectorId,
+        double* outArea)
+{
+    if (outArea != nullptr) {
+        *outArea = 0.0;
+    }
+
+    SectorTopologyLoopSet loops;
+    std::vector<SectorTopologyValidationIssue> loopIssues;
+    if (!ExtractSectorTopologyLoops(map, indexes, sectorId, loops, &loopIssues)) {
+        return false;
+    }
+
+    double area = std::fabs(static_cast<double>(loops.outer.signedAreaTwice)) * 0.5;
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        area -= std::fabs(static_cast<double>(hole.signedAreaTwice)) * 0.5;
+    }
+    if (area <= 0.0) {
+        return false;
+    }
+
+    if (outArea != nullptr) {
+        *outArea = area;
+    }
+    return true;
+}
+
+bool FindUniqueMappedFaceAnchorForTopologySector(
+        const SectorEditorState& state,
+        int topologySectorId,
+        int* outFaceAnchorId,
+        std::string* outStatus)
+{
+    if (outFaceAnchorId != nullptr) {
+        *outFaceAnchorId = -1;
+    }
+
+    int faceAnchorId = -1;
+    int anchorMatchCount = 0;
+    for (const SectorAuthoringDerivedSectorMapping& mapping
+            : state.authoringDerivation.mapping.sectors) {
+        if (mapping.topologySectorId != topologySectorId
+                || !IsValidSectorAuthoringId(mapping.faceAnchorId)
+                || FindSectorAuthoringFaceAnchor(state.authoringGraph, mapping.faceAnchorId) == nullptr) {
+            continue;
+        }
+        faceAnchorId = mapping.faceAnchorId;
+        ++anchorMatchCount;
+    }
+
+    if (anchorMatchCount == 0) {
+        if (outStatus != nullptr) {
+            *outStatus = "Authoring face selection unavailable: derived face has no face anchor mapping";
+        }
+        return false;
+    }
+    if (anchorMatchCount > 1) {
+        if (outStatus != nullptr) {
+            *outStatus = "Authoring face selection unavailable: derived face has ambiguous face anchor mapping";
+        }
+        return false;
+    }
+
+    if (outFaceAnchorId != nullptr) {
+        *outFaceAnchorId = faceAnchorId;
+    }
+    return true;
+}
+
+bool IsGeneratedSectorName(const std::string& name)
+{
+    constexpr const char* prefix = "Sector ";
+    constexpr std::size_t prefixLength = 7;
+    if (name.size() <= prefixLength || name.compare(0, prefixLength, prefix) != 0) {
+        return false;
+    }
+    for (std::size_t i = prefixLength; i < name.size(); ++i) {
+        if (name[i] < '0' || name[i] > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string AllocateGeneratedFaceAnchorName(const SectorAuthoringGraph& graph)
+{
+    std::set<std::string> usedNames;
+    for (const SectorAuthoringFaceAnchor& anchor : graph.faceAnchors) {
+        if (!anchor.name.empty()) {
+            usedNames.insert(anchor.name);
+        }
+    }
+
+    for (int id = 1; id < 10000; ++id) {
+        const std::string candidate = "Sector " + std::to_string(id);
+        if (usedNames.find(candidate) == usedNames.end()) {
+            return candidate;
+        }
+    }
+    return "Sector " + std::to_string(graph.faceAnchors.size() + 1);
+}
+
+bool TryFindInteriorPointForTopologySector(
+        const SectorTopologyMap& map,
+        const SectorTopologyIndexes& indexes,
+        int topologySectorId,
+        SectorTopologyCoordPoint* outPoint)
+{
+    if (outPoint != nullptr) {
+        *outPoint = SectorTopologyCoordPoint{};
+    }
+
+    SectorTopologyLoopSet loops;
+    std::vector<SectorTopologyValidationIssue> loopIssues;
+    if (!ExtractSectorTopologyLoops(map, indexes, topologySectorId, loops, &loopIssues)
+            || loops.outer.vertexIds.empty()) {
+        return false;
+    }
+
+    SectorCoord minX = 0;
+    SectorCoord maxX = 0;
+    SectorCoord minY = 0;
+    SectorCoord maxY = 0;
+    bool hasBounds = false;
+    for (int vertexId : loops.outer.vertexIds) {
+        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(map, vertexId);
+        if (vertex == nullptr) {
+            return false;
+        }
+        if (!hasBounds) {
+            minX = maxX = vertex->x;
+            minY = maxY = vertex->y;
+            hasBounds = true;
+        } else {
+            minX = std::min(minX, vertex->x);
+            maxX = std::max(maxX, vertex->x);
+            minY = std::min(minY, vertex->y);
+            maxY = std::max(maxY, vertex->y);
+        }
+    }
+    if (!hasBounds || minX >= maxX || minY >= maxY) {
+        return false;
+    }
+
+    const auto tryPoint = [&](SectorCoord x, SectorCoord y, SectorTopologyCoordPoint* point) {
+        const Vector2 mapPoint{
+                SectorCoordToVisibleAuthoring(x),
+                SectorCoordToVisibleAuthoring(y)};
+        if (!PointStrictlyInTopologySector(map, indexes, mapPoint, topologySectorId)) {
+            return false;
+        }
+        if (point != nullptr) {
+            point->x = x;
+            point->y = y;
+        }
+        return true;
+    };
+
+    constexpr int divisions = 32;
+    for (int yIndex = 1; yIndex < divisions; ++yIndex) {
+        const SectorCoord y = static_cast<SectorCoord>(
+                static_cast<int64_t>(minY)
+                + (static_cast<int64_t>(maxY) - static_cast<int64_t>(minY)) * yIndex / divisions);
+        for (int xOffset = 0; xOffset < divisions - 1; ++xOffset) {
+            const int xIndex = ((yIndex * 13 + xOffset * 7) % (divisions - 1)) + 1;
+            const SectorCoord x = static_cast<SectorCoord>(
+                    static_cast<int64_t>(minX)
+                    + (static_cast<int64_t>(maxX) - static_cast<int64_t>(minX)) * xIndex / divisions);
+            if (tryPoint(x, y, outPoint)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool MappingHasValidFaceAnchor(
+        const SectorAuthoringGraph& graph,
+        const SectorAuthoringDerivedSectorMapping& mapping)
+{
+    return IsValidSectorAuthoringId(mapping.faceAnchorId)
+            && FindSectorAuthoringFaceAnchor(graph, mapping.faceAnchorId) != nullptr;
+}
+
+bool AllDerivedSectorsHaveUniqueFaceAnchorMappings(
+        const SectorAuthoringGraph& graph,
+        const SectorAuthoringDerivationResult& result)
+{
+    for (const SectorTopologySector& sector : result.topology.sectors) {
+        int matchCount = 0;
+        for (const SectorAuthoringDerivedSectorMapping& mapping : result.mapping.sectors) {
+            if (mapping.topologySectorId == sector.id
+                    && MappingHasValidFaceAnchor(graph, mapping)) {
+                ++matchCount;
+            }
+        }
+        if (matchCount != 1) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void CopyTopologySectorDefaultsToFaceAnchor(
+        const SectorTopologySector& sector,
+        SectorAuthoringFaceAnchor& anchor)
+{
+    anchor.floorZ = sector.floorZ;
+    anchor.ceilingZ = sector.ceilingZ;
+    anchor.floorTextureId = sector.floorTextureId;
+    anchor.ceilingTextureId = sector.ceilingTextureId;
+    anchor.ceilingSky = sector.ceilingSky;
+    anchor.floorUv = sector.floorUv;
+    anchor.ceilingUv = sector.ceilingUv;
+    anchor.floorDecal = sector.floorDecal;
+    anchor.ceilingDecal = sector.ceilingDecal;
+    anchor.ambientColor = sector.ambientColor;
+    anchor.ambientIntensity = sector.ambientIntensity;
+    anchor.defaultWall = sector.defaultWall;
+    anchor.defaultLower = sector.defaultLower;
+    anchor.defaultUpper = sector.defaultUpper;
+}
+
+std::vector<int> FindTopologySectorsContainingAnchorPoint(
+        const SectorTopologyMap& map,
+        const SectorTopologyIndexes& indexes,
+        const SectorAuthoringFaceAnchor& anchor)
+{
+    const Vector2 mapPoint{
+            SectorCoordToVisibleAuthoring(anchor.x),
+            SectorCoordToVisibleAuthoring(anchor.y)};
+
+    std::vector<int> sectorIds;
+    for (const SectorTopologySector& sector : map.sectors) {
+        if (PointStrictlyInTopologySector(map, indexes, mapPoint, sector.id)) {
+            sectorIds.push_back(sector.id);
+        }
+    }
+    return sectorIds;
+}
+
+bool BuildExistingFaceAnchorClaims(
+        const SectorAuthoringGraph& graph,
+        const SectorAuthoringDerivationResult& result,
+        const SectorTopologyIndexes& indexes,
+        std::map<int, int>& claimedAnchorIdBySectorId)
+{
+    claimedAnchorIdBySectorId.clear();
+
+    std::set<int> claimedAnchorIds;
+    for (const SectorAuthoringDerivedSectorMapping& mapping : result.mapping.sectors) {
+        if (!MappingHasValidFaceAnchor(graph, mapping)) {
+            continue;
+        }
+        const auto inserted = claimedAnchorIdBySectorId.emplace(
+                mapping.topologySectorId,
+                mapping.faceAnchorId);
+        if (!inserted.second && inserted.first->second != mapping.faceAnchorId) {
+            return false;
+        }
+        claimedAnchorIds.insert(mapping.faceAnchorId);
+    }
+
+    for (const SectorAuthoringFaceAnchor& anchor : graph.faceAnchors) {
+        if (!IsValidSectorAuthoringId(anchor.id)
+                || claimedAnchorIds.find(anchor.id) != claimedAnchorIds.end()) {
+            continue;
+        }
+
+        const std::vector<int> containingSectorIds =
+                FindTopologySectorsContainingAnchorPoint(result.topology, indexes, anchor);
+        if (containingSectorIds.empty()) {
+            continue;
+        }
+        if (containingSectorIds.size() > 1) {
+            return false;
+        }
+
+        const int sectorId = containingSectorIds.front();
+        const auto inserted = claimedAnchorIdBySectorId.emplace(sectorId, anchor.id);
+        if (!inserted.second && inserted.first->second != anchor.id) {
+            return false;
+        }
+        claimedAnchorIds.insert(anchor.id);
+    }
+
+    return true;
+}
+
+bool ReconcileMissingDerivedFaceAnchors(
+        SectorEditorState& state,
+        const SectorAuthoringDerivationResult& result,
+        int* outAddedCount,
+        bool* outFailed)
+{
+    if (outAddedCount != nullptr) {
+        *outAddedCount = 0;
+    }
+    if (outFailed != nullptr) {
+        *outFailed = false;
+    }
+    if (!result.success) {
+        return false;
+    }
+
+    const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(result.topology);
+    std::map<int, int> claimedAnchorIdBySectorId;
+    if (!BuildExistingFaceAnchorClaims(state.authoringGraph, result, indexes, claimedAnchorIdBySectorId)) {
+        if (outFailed != nullptr) {
+            *outFailed = true;
+        }
+        return false;
+    }
+
+    int addedCount = 0;
+    for (const SectorTopologySector& sector : result.topology.sectors) {
+        bool hasMappingForSector = false;
+        for (const SectorAuthoringDerivedSectorMapping& mapping : result.mapping.sectors) {
+            if (mapping.topologySectorId != sector.id) {
+                continue;
+            }
+            hasMappingForSector = true;
+        }
+        if (claimedAnchorIdBySectorId.find(sector.id) != claimedAnchorIdBySectorId.end()) {
+            continue;
+        }
+        if (!hasMappingForSector) {
+            continue;
+        }
+
+        SectorTopologyCoordPoint anchorPoint{};
+        if (!TryFindInteriorPointForTopologySector(result.topology, indexes, sector.id, &anchorPoint)) {
+            continue;
+        }
+
+        SectorAuthoringFaceAnchor anchor;
+        anchor.id = AllocateSectorAuthoringFaceAnchorId(state.authoringGraph);
+        if (!IsValidSectorAuthoringId(anchor.id)) {
+            continue;
+        }
+        anchor.name = AllocateGeneratedFaceAnchorName(state.authoringGraph);
+        anchor.x = anchorPoint.x;
+        anchor.y = anchorPoint.y;
+        CopyTopologySectorDefaultsToFaceAnchor(sector, anchor);
+        state.authoringGraph.faceAnchors.push_back(std::move(anchor));
+        ++addedCount;
+    }
+
+    if (outAddedCount != nullptr) {
+        *outAddedCount = addedCount;
+    }
+    return addedCount > 0;
 }
 
 } // namespace
@@ -629,59 +1029,67 @@ bool FindSectorEditorAuthoringFaceAnchorAtMapPoint(
     }
 
     const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(state.topologyMap);
-    int topologySectorId = -1;
-    int sectorMatchCount = 0;
+    int bestFaceAnchorId = -1;
+    int bestTopologySectorId = -1;
+    double bestArea = 0.0;
+    bool foundCandidate = false;
+    bool foundContainingSector = false;
+    std::string mappingStatus;
     for (const SectorTopologySector& sector : state.topologyMap.sectors) {
         if (!PointInTopologySector(state.topologyMap, indexes, mapPoint, sector.id)) {
             continue;
         }
-        ++sectorMatchCount;
-        if (topologySectorId < 0 || sector.id < topologySectorId) {
-            topologySectorId = sector.id;
-        }
-    }
+        foundContainingSector = true;
 
-    if (sectorMatchCount == 0) {
-        if (outStatus != nullptr) {
-            *outStatus = "Authoring face selection unavailable: no derived face under cursor";
-        }
-        return false;
-    }
-    if (sectorMatchCount > 1) {
-        if (outStatus != nullptr) {
-            *outStatus = "Authoring face selection unavailable: derived face under cursor is ambiguous";
-        }
-        return false;
-    }
-
-    int faceAnchorId = -1;
-    int anchorMatchCount = 0;
-    for (const SectorAuthoringDerivedSectorMapping& mapping
-            : state.authoringDerivation.mapping.sectors) {
-        if (mapping.topologySectorId != topologySectorId
-                || !IsValidSectorAuthoringId(mapping.faceAnchorId)
-                || FindSectorAuthoringFaceAnchor(state.authoringGraph, mapping.faceAnchorId) == nullptr) {
+        int faceAnchorId = -1;
+        std::string candidateMappingStatus;
+        if (!FindUniqueMappedFaceAnchorForTopologySector(
+                    state,
+                    sector.id,
+                    &faceAnchorId,
+                    &candidateMappingStatus)) {
+            if (candidateMappingStatus.find("ambiguous") != std::string::npos) {
+                if (outStatus != nullptr) {
+                    *outStatus = candidateMappingStatus;
+                }
+                return false;
+            }
+            if (mappingStatus.empty()) {
+                mappingStatus = candidateMappingStatus;
+            }
             continue;
         }
-        faceAnchorId = mapping.faceAnchorId;
-        ++anchorMatchCount;
+
+        double area = 0.0;
+        if (!TryComputeTopologySectorArea(state.topologyMap, indexes, sector.id, &area)) {
+            continue;
+        }
+
+        if (!foundCandidate
+                || area < bestArea
+                || (area == bestArea && sector.id < bestTopologySectorId)) {
+            bestFaceAnchorId = faceAnchorId;
+            bestTopologySectorId = sector.id;
+            bestArea = area;
+            foundCandidate = true;
+        }
     }
 
-    if (anchorMatchCount == 0) {
+    if (!foundCandidate) {
         if (outStatus != nullptr) {
-            *outStatus = "Authoring face selection unavailable: derived face has no face anchor mapping";
-        }
-        return false;
-    }
-    if (anchorMatchCount > 1) {
-        if (outStatus != nullptr) {
-            *outStatus = "Authoring face selection unavailable: derived face has ambiguous face anchor mapping";
+            if (!foundContainingSector) {
+                *outStatus = "Authoring face selection unavailable: no derived face under cursor";
+            } else if (!mappingStatus.empty()) {
+                *outStatus = mappingStatus;
+            } else {
+                *outStatus = "Authoring face selection unavailable: derived face under cursor is invalid";
+            }
         }
         return false;
     }
 
     if (outFaceAnchorId != nullptr) {
-        *outFaceAnchorId = faceAnchorId;
+        *outFaceAnchorId = bestFaceAnchorId;
     }
     return true;
 }
@@ -1466,6 +1874,44 @@ bool RefreshSectorEditorAuthoringDerivation(
     SectorAuthoringDerivationResult result =
             DeriveSectorTopologyMapFromAuthoringGraph(state.authoringGraph);
     if (result.success) {
+        int reconciledAnchorCount = 0;
+        bool reconciliationFailed = false;
+        if (ReconcileMissingDerivedFaceAnchors(
+                    state,
+                    result,
+                    &reconciledAnchorCount,
+                    &reconciliationFailed)) {
+            MarkSectorEditorAuthoringGraphEdited(
+                    state,
+                    TextFormat("Added %d generated authoring face anchor%s",
+                            reconciledAnchorCount,
+                            reconciledAnchorCount == 1 ? "" : "s"));
+            result = DeriveSectorTopologyMapFromAuthoringGraph(state.authoringGraph);
+            if (!result.success
+                    || !AllDerivedSectorsHaveUniqueFaceAnchorMappings(state.authoringGraph, result)) {
+                state.authoringDerivation = std::move(result);
+                state.authoringDerivedTopologyStale = true;
+                state.authoringDerivationState = state.lastValidAuthoringDerivedTopology.has_value()
+                        ? SectorEditorAuthoringDerivationState::InvalidLastValid
+                        : SectorEditorAuthoringDerivationState::InvalidNoDerived;
+                state.authoringDerivationStatus =
+                        "Authoring graph: generated face-anchor reconciliation failed";
+                state.topologyDocumentStatus = state.authoringDerivationStatus;
+                InvalidateEditorTopologyRenderCacheIfNeeded(state);
+                return false;
+            }
+        } else if (reconciliationFailed) {
+            state.authoringDerivation = std::move(result);
+            state.authoringDerivedTopologyStale = true;
+            state.authoringDerivationState = state.lastValidAuthoringDerivedTopology.has_value()
+                    ? SectorEditorAuthoringDerivationState::InvalidLastValid
+                    : SectorEditorAuthoringDerivationState::InvalidNoDerived;
+            state.authoringDerivationStatus =
+                    "Authoring graph: generated face-anchor reconciliation failed";
+            state.topologyDocumentStatus = state.authoringDerivationStatus;
+            InvalidateEditorTopologyRenderCacheIfNeeded(state);
+            return false;
+        }
         CopyEditorMapLevelFields(result.topology, state.topologyMap);
         state.topologyMap = result.topology;
         state.lastValidAuthoringDerivedTopology = result.topology;

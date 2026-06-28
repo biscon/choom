@@ -58,6 +58,52 @@ T* FindById(std::vector<T>& values, int id)
     return nullptr;
 }
 
+bool IsGeneratedSectorName(const std::string& name)
+{
+    constexpr const char* prefix = "Sector ";
+    constexpr std::size_t prefixLength = 7;
+    if (name.size() <= prefixLength || name.compare(0, prefixLength, prefix) != 0) {
+        return false;
+    }
+    for (std::size_t i = prefixLength; i < name.size(); ++i) {
+        if (name[i] < '0' || name[i] > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string NextGeneratedSectorName(const std::set<std::string>& usedNames)
+{
+    for (int id = 1; id < 10000; ++id) {
+        const std::string candidate = "Sector " + std::to_string(id);
+        if (usedNames.find(candidate) == usedNames.end()) {
+            return candidate;
+        }
+    }
+    return "Sector " + std::to_string(usedNames.size() + 1);
+}
+
+std::string ResolveDerivedSectorName(
+        const std::string& requestedName,
+        std::set<std::string>& usedNames)
+{
+    if (!requestedName.empty()
+            && !IsGeneratedSectorName(requestedName)) {
+        usedNames.insert(requestedName);
+        return requestedName;
+    }
+
+    if (!requestedName.empty()
+            && usedNames.insert(requestedName).second) {
+        return requestedName;
+    }
+
+    const std::string generatedName = NextGeneratedSectorName(usedNames);
+    usedNames.insert(generatedName);
+    return generatedName;
+}
+
 void AddIssue(
         std::vector<SectorAuthoringValidationIssue>& issues,
         SectorAuthoringObjectKind objectKind,
@@ -1368,6 +1414,15 @@ void BuildDerivedTopologyFacesAndLines(
             reservedSectorIds.insert(entry.second);
         }
     }
+    std::set<std::string> reservedFaceAnchorNames;
+    for (const auto& entry : faceAnchorIdsByFaceId) {
+        if (const SectorAuthoringFaceAnchor* anchor = FindSectorAuthoringFaceAnchor(graph, entry.second)) {
+            if (!anchor->name.empty()) {
+                reservedFaceAnchorNames.insert(anchor->name);
+            }
+        }
+    }
+    std::set<std::string> usedSectorNames;
     int nextGeneratedSectorId = 1;
     for (const SectorAuthoringExtractedFace& face : faces.faces) {
         int faceAnchorId = -1;
@@ -1383,8 +1438,17 @@ void BuildDerivedTopologyFacesAndLines(
                 reservedSectorIds,
                 &nextGeneratedSectorId);
         CopyFaceDefaultsToTopologySector(face, topologySectorId, sector);
-        if (const SectorAuthoringFaceAnchor* anchor = FindSectorAuthoringFaceAnchor(graph, faceAnchorId)) {
+        const SectorAuthoringFaceAnchor* anchor = FindSectorAuthoringFaceAnchor(graph, faceAnchorId);
+        if (anchor != nullptr) {
             CopyFaceAnchorPropertiesToTopologySector(*anchor, sector);
+        }
+        if (anchor != nullptr) {
+            sector.name = ResolveDerivedSectorName(sector.name, usedSectorNames);
+        } else {
+            std::set<std::string> unavailableNames = usedSectorNames;
+            unavailableNames.insert(reservedFaceAnchorNames.begin(), reservedFaceAnchorNames.end());
+            sector.name = NextGeneratedSectorName(unavailableNames);
+            usedSectorNames.insert(sector.name);
         }
         topologySectorIdsByFaceId[face.id] = sector.id;
         topology.sectors.push_back(sector);
