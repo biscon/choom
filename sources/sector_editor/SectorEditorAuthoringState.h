@@ -151,6 +151,9 @@ bool ResolveSectorEditorAuthoringSurfaceTarget(
         SectorEditorAuthoringSurfaceTarget& outTarget,
         std::string* outStatus = nullptr);
 
+SectorAuthoringSelectionTarget MakeSectorEditorAuthoringSelectionTargetForSurfaceTarget(
+        SectorEditorAuthoringSurfaceTarget target);
+
 bool ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
         SectorEditorState& state,
         std::string* outStatus = nullptr);

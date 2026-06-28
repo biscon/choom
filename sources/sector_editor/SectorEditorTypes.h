@@ -428,6 +428,12 @@ struct CachedAuthoringLineDraw {
     Vector2 partialEndpoint = {};
 };
 
+struct CachedAuthoringFaceHighlightDraw {
+    int faceAnchorId = -1;
+    int topologySectorId = -1;
+    std::vector<CachedTopologyOutlineSegment> outlineSegments;
+};
+
 struct CachedAuthoringDiagnosticDraw {
     SectorAuthoringDerivationDiagnosticKind kind =
             SectorAuthoringDerivationDiagnosticKind::AuthoringReference;
@@ -449,6 +455,7 @@ struct SectorEditorTopologyRenderCache {
     std::vector<CachedTopologyLightDraw> staticLights;
     std::vector<CachedAuthoringLineDraw> authoringLines;
     std::vector<CachedAuthoringVertexDraw> authoringVertices;
+    std::vector<CachedAuthoringFaceHighlightDraw> authoringFaceHighlights;
     std::vector<CachedAuthoringDiagnosticDraw> authoringDiagnostics;
 };
 

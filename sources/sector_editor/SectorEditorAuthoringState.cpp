@@ -1589,6 +1589,18 @@ bool ResolveSectorEditorAuthoringSurfaceTarget(
     return true;
 }
 
+SectorAuthoringSelectionTarget MakeSectorEditorAuthoringSelectionTargetForSurfaceTarget(
+        SectorEditorAuthoringSurfaceTarget target)
+{
+    if (target.kind == SectorEditorAuthoringSurfaceTargetKind::Side) {
+        return MakeSectorAuthoringLineSelectionTarget(target.side.lineId);
+    }
+    if (target.kind == SectorEditorAuthoringSurfaceTargetKind::FaceAnchor) {
+        return MakeSectorAuthoringFaceAnchorSelectionTarget(target.faceAnchorId);
+    }
+    return EmptyAuthoringSelectionTarget();
+}
+
 bool ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
         SectorEditorState& state,
         std::string* outStatus)

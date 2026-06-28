@@ -2397,6 +2397,130 @@ void TestAuthoringOverlayRenderCacheIncludesReferenceDiagnostics()
           "authoring diagnostic cache includes reference validation diagnostics");
 }
 
+void TestAuthoringOverlaySuppressesLegacyTopologySelectionHighlights()
+{
+    Check(!game::ShouldDrawLegacyTopologySelectionHighlight(true, game::TopologySelectionKind::LineDef),
+          "authoring overlay suppresses legacy selected edge highlight");
+    Check(!game::ShouldDrawLegacyTopologySelectionHighlight(true, game::TopologySelectionKind::SideDef),
+          "authoring overlay suppresses legacy selected side highlight");
+    Check(!game::ShouldDrawLegacyTopologySelectionHighlight(true, game::TopologySelectionKind::Sector),
+          "authoring overlay suppresses legacy selected sector highlight");
+    Check(!game::ShouldDrawLegacyTopologySelectionHighlight(true, game::TopologySelectionKind::Vertex),
+          "authoring overlay suppresses legacy selected vertex highlight");
+    Check(game::ShouldDrawLegacyTopologySelectionHighlight(false, game::TopologySelectionKind::LineDef),
+          "legacy selected edge highlight remains available without authoring graph data");
+}
+
+void TestAuthoringOverlaySelectionHighlightDecisions()
+{
+    game::SectorAuthoringSelectionTarget lineTarget =
+            game::MakeSectorAuthoringLineSelectionTarget(10);
+    game::SectorAuthoringSelectionTarget vertexTarget =
+            game::MakeSectorAuthoringVertexSelectionTarget(2);
+
+    Check(game::ShouldDrawAuthoringLineSelectionHighlight(lineTarget, 10),
+          "authoring overlay requests selected line highlight");
+    Check(!game::ShouldDrawAuthoringLineSelectionHighlight(lineTarget, 11),
+          "authoring overlay line highlight requires selected line ID");
+    Check(game::ShouldDrawAuthoringVertexSelectionHighlight(vertexTarget, 2),
+          "authoring overlay requests selected vertex highlight");
+    Check(!game::ShouldDrawAuthoringVertexSelectionHighlight(vertexTarget, 1),
+          "authoring overlay vertex highlight requires selected vertex ID");
+}
+
+void TestAuthoringOverlayFaceAnchorHighlightResolvesVisibleBoundary()
+{
+    game::SectorAuthoringGraph graph = MakeNestedRectangleGraph(3);
+    AddFaceAnchor(graph, 200, 16, 16, "outer");
+    AddFaceAnchor(graph, 201, 48, 48, "ring");
+    AddFaceAnchor(graph, 202, 96, 96, "inner");
+
+    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
+    const game::SectorEditorTopologyRenderCache cache =
+            game::BuildSectorEditorTopologyRenderCache(
+                    state.topologyMap,
+                    state.authoringGraph,
+                    state.authoringDerivation,
+                    10);
+
+    const game::CachedAuthoringFaceHighlightDraw* outer =
+            game::FindCachedAuthoringFaceHighlight(cache, 200);
+    const game::CachedAuthoringFaceHighlightDraw* ring =
+            game::FindCachedAuthoringFaceHighlight(cache, 201);
+    const game::CachedAuthoringFaceHighlightDraw* inner =
+            game::FindCachedAuthoringFaceHighlight(cache, 202);
+    Check(outer != nullptr, "outer face anchor resolves highlight geometry");
+    Check(ring != nullptr, "ring face anchor resolves highlight geometry");
+    Check(inner != nullptr, "inner face anchor resolves highlight geometry");
+    if (outer == nullptr || ring == nullptr || inner == nullptr) {
+        return;
+    }
+
+    Check(outer->topologySectorId != ring->topologySectorId
+                  && ring->topologySectorId != inner->topologySectorId,
+          "nested face anchors resolve to distinct visible faces");
+    Check(ring->topologySectorId != inner->topologySectorId,
+          "ring face highlight does not resolve to child face");
+
+    bool ringHasHoleBoundary = false;
+    for (const game::CachedTopologyOutlineSegment& segment : ring->outlineSegments) {
+        if (segment.hole) {
+            ringHasHoleBoundary = true;
+            break;
+        }
+    }
+    Check(ringHasHoleBoundary, "ring face highlight includes available hole boundary");
+
+    game::SectorEditorTopologyDrawContext context;
+    context.selectedAuthoring = game::MakeSectorAuthoringFaceAnchorSelectionTarget(201);
+    Check(game::ShouldDrawAuthoringFaceSelectionHighlight(cache, context, 201),
+          "authoring overlay requests selected face-boundary highlight");
+}
+
+void TestAuthoringOverlayFaceAnchorHighlightFailsClosedWithoutCurrentMapping()
+{
+    game::SectorAuthoringGraph graph = MakeNestedRectangleGraph(2);
+    AddFaceAnchor(graph, 200, 16, 16, "outer");
+    AddFaceAnchor(graph, 201, 64, 64, "inner");
+
+    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
+    game::SectorEditorTopologyRenderCache cache =
+            game::BuildSectorEditorTopologyRenderCache(
+                    state.topologyMap,
+                    state.authoringGraph,
+                    state.authoringDerivation,
+                    11);
+
+    game::SectorEditorTopologyDrawContext context;
+    context.selectedAuthoring = game::MakeSectorAuthoringFaceAnchorSelectionTarget(200);
+    context.derivedTopologyStale = true;
+    Check(!game::ShouldDrawAuthoringFaceSelectionHighlight(cache, context, 200),
+          "stale authoring derivation suppresses face-boundary highlight");
+
+    game::SectorAuthoringDerivationResult missingMapping = state.authoringDerivation;
+    missingMapping.mapping.sectors.clear();
+    cache = game::BuildSectorEditorTopologyRenderCache(
+            state.topologyMap,
+            state.authoringGraph,
+            missingMapping,
+            12);
+    context.derivedTopologyStale = false;
+    Check(game::FindCachedAuthoringFaceHighlight(cache, 200) == nullptr,
+          "missing face-anchor mapping resolves no face highlight geometry");
+    Check(!game::ShouldDrawAuthoringFaceSelectionHighlight(cache, context, 200),
+          "missing face-anchor mapping does not fall back to topology selection");
+
+    game::SectorAuthoringDerivationResult ambiguousMapping = state.authoringDerivation;
+    ambiguousMapping.mapping.sectors.push_back(ambiguousMapping.mapping.sectors.front());
+    cache = game::BuildSectorEditorTopologyRenderCache(
+            state.topologyMap,
+            state.authoringGraph,
+            ambiguousMapping,
+            13);
+    Check(game::FindCachedAuthoringFaceHighlight(cache, 200) == nullptr,
+          "ambiguous face-anchor mapping resolves no face highlight geometry");
+}
+
 void TestEditorAuthoringSuccessfulDerivationUpdatesState()
 {
     game::SectorEditorState state;
@@ -3790,7 +3914,21 @@ void TestEditorAuthoringSurfaceMappingResolvesFlatSurfaceToFaceAnchor()
     Check(target.kind == game::SectorEditorAuthoringSurfaceTargetKind::FaceAnchor
                   && target.faceAnchorId == 200,
           "3D flat surface mapping returns selected face anchor ID");
+    const game::SectorAuthoringSelectionTarget selection =
+            game::MakeSectorEditorAuthoringSelectionTargetForSurfaceTarget(target);
+    Check(selection.kind == game::SectorAuthoringSelectionKind::FaceAnchor
+                  && selection.faceAnchorId == 200,
+          "3D flat surface mapping converts to authoring face-anchor selection");
     Check(status.empty(), "successful 3D flat surface mapping leaves status empty");
+
+    surface.kind = game::SectorSurfaceKind::Ceiling;
+    Check(game::ResolveSectorEditorAuthoringSurfaceTarget(state, surface, target, &status),
+          "3D ceiling surface resolves to authoring face anchor");
+    const game::SectorAuthoringSelectionTarget ceilingSelection =
+            game::MakeSectorEditorAuthoringSelectionTargetForSurfaceTarget(target);
+    Check(ceilingSelection.kind == game::SectorAuthoringSelectionKind::FaceAnchor
+                  && ceilingSelection.faceAnchorId == 200,
+          "3D ceiling surface mapping converts to authoring face-anchor selection");
 }
 
 void TestEditorAuthoringSurfaceMappingResolvesWallSurfaceToAuthoringSide()
@@ -3827,6 +3965,12 @@ void TestEditorAuthoringSurfaceMappingResolvesWallSurfaceToAuthoringSide()
                   && target.side.lineId == 10
                   && target.side.side == game::SectorTopologySideKind::Front,
           "3D wall surface mapping returns authoring line side identity");
+    const game::SectorAuthoringSelectionTarget selection =
+            game::MakeSectorEditorAuthoringSelectionTargetForSurfaceTarget(target);
+    Check(selection.kind == game::SectorAuthoringSelectionKind::Line
+                  && selection.lineId == 10
+                  && selection.faceAnchorId == -1,
+          "3D wall surface mapping converts to authoring line selection");
     Check(status.empty(), "successful 3D wall surface mapping leaves status empty");
 }
 
@@ -5817,6 +5961,10 @@ int main()
     TestAuthoringOverlayRenderCacheIncludesLooseGraph();
     TestAuthoringDiagnosticRenderCacheDoesNotRequireDerivedTopology();
     TestAuthoringOverlayRenderCacheIncludesReferenceDiagnostics();
+    TestAuthoringOverlaySuppressesLegacyTopologySelectionHighlights();
+    TestAuthoringOverlaySelectionHighlightDecisions();
+    TestAuthoringOverlayFaceAnchorHighlightResolvesVisibleBoundary();
+    TestAuthoringOverlayFaceAnchorHighlightFailsClosedWithoutCurrentMapping();
     TestEditorAuthoringSuccessfulDerivationUpdatesState();
     TestEditorAuthoringFaceAnchorInspectorWritesProjectAfterDerivation();
     TestEditorAuthoringFaceAnchorInspectorWriteDoesNotDirectlyMutateDerivedTopology();

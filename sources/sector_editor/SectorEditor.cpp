@@ -4187,6 +4187,9 @@ void SectorEditor::DrawTopologyDocument()
     EnsureTopologyRenderCache();
 
     ClearStaleTopologySelection();
+    const bool hasAuthoringGraph = HasAuthoringGraphData();
+    const bool drawLegacyTopologySelection =
+            ShouldDrawLegacyTopologySelectionHighlight(hasAuthoringGraph, state.topologySelectionKind);
     const SectorEditorTopologyDrawContext drawContext{
             canvasRect,
             state.viewCenter,
@@ -4194,10 +4197,10 @@ void SectorEditor::DrawTopologyDocument()
             state.showSectorIds,
             state.authoringDerivedTopologyStale,
             state.currentTool,
-            state.topologySelectionKind,
-            state.selectedTopologySectorId,
-            state.selectedTopologyVertexId,
-            state.selectedTopologyLightId,
+            drawLegacyTopologySelection ? state.topologySelectionKind : TopologySelectionKind::None,
+            drawLegacyTopologySelection ? state.selectedTopologySectorId : -1,
+            drawLegacyTopologySelection ? state.selectedTopologyVertexId : -1,
+            drawLegacyTopologySelection ? state.selectedTopologyLightId : -1,
             state.hasHoveredVertex,
             state.hoveredTopologyVertexId,
             state.hoveredTopologyLightId,
@@ -4206,7 +4209,9 @@ void SectorEditor::DrawTopologyDocument()
     };
     DrawCachedTopologySectors(state.topologyRenderCache, drawContext);
 
-    DrawTopologySelectedLineHighlight();
+    if (drawLegacyTopologySelection) {
+        DrawTopologySelectedLineHighlight();
+    }
     DrawCachedTopologyLineDefs(state.topologyRenderCache, drawContext);
     DrawCachedTopologyVertices(state.topologyRenderCache, drawContext);
     DrawCachedAuthoringGraphOverlay(state.topologyRenderCache, drawContext);
@@ -8819,8 +8824,9 @@ void SectorEditor::SelectSurface3D(SectorSurfaceRef surface)
         state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
         return;
     }
-    if (HasAuthoringGraphData()) {
-        SectorEditorAuthoringSurfaceTarget authoringTarget;
+    SectorEditorAuthoringSurfaceTarget authoringTarget;
+    const bool hasAuthoringGraph = HasAuthoringGraphData();
+    if (hasAuthoringGraph) {
         std::string unavailableStatus;
         if (!ResolveSectorEditorAuthoringSurfaceTarget(
                     state,
@@ -8844,6 +8850,15 @@ void SectorEditor::SelectSurface3D(SectorSurfaceRef surface)
                 SurfaceKindToTopologyWallPart(surface.kind));
     } else {
         SelectTopologySector(surface.topologySectorId);
+    }
+    if (hasAuthoringGraph) {
+        const SectorAuthoringSelectionTarget authoringSelection =
+                MakeSectorEditorAuthoringSelectionTargetForSurfaceTarget(authoringTarget);
+        if (authoringSelection.kind == SectorAuthoringSelectionKind::Line) {
+            SelectSectorEditorAuthoringLine(state, authoringSelection.lineId);
+        } else if (authoringSelection.kind == SectorAuthoringSelectionKind::FaceAnchor) {
+            SelectSectorEditorAuthoringFaceAnchor(state, authoringSelection.faceAnchorId);
+        }
     }
     state.selectedSurface3D = surface;
     state.selectedTopologySurface3D = target;

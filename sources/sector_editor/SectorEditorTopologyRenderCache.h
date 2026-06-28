@@ -51,4 +51,25 @@ void DrawCachedAuthoringDiagnostics(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context);
 
+bool ShouldDrawLegacyTopologySelectionHighlight(
+        bool hasAuthoringGraphData,
+        TopologySelectionKind selectionKind);
+
+bool ShouldDrawAuthoringLineSelectionHighlight(
+        SectorAuthoringSelectionTarget selectedAuthoring,
+        int lineId);
+
+bool ShouldDrawAuthoringVertexSelectionHighlight(
+        SectorAuthoringSelectionTarget selectedAuthoring,
+        int vertexId);
+
+bool ShouldDrawAuthoringFaceSelectionHighlight(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        int faceAnchorId);
+
+const CachedAuthoringFaceHighlightDraw* FindCachedAuthoringFaceHighlight(
+        const SectorEditorTopologyRenderCache& cache,
+        int faceAnchorId);
+
 } // namespace game
