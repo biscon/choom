@@ -8,6 +8,7 @@
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <iostream>
 #include <string>
@@ -23,6 +24,16 @@ void Check(bool condition, const char* description)
         std::cerr << "FAILED: " << description << '\n';
         ++failures;
     }
+}
+
+bool Near(float a, float b)
+{
+    return std::fabs(a - b) < 0.0001f;
+}
+
+bool Near(Vector3 a, Vector3 b)
+{
+    return Near(a.x, b.x) && Near(a.y, b.y) && Near(a.z, b.z);
 }
 
 bool HasIssueFor(
@@ -2549,6 +2560,347 @@ void TestEditorSelectedAuthoringLineInspectorTargetDoesNotNeedTopologySelection(
           "selected authoring line inspector target validates against authoring graph");
 }
 
+void TestEditorMappedTopologySideSelectionUsesAuthoringInspectorTarget()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "mapped side inspector target setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "mapped side inspector target setup finds derived sidedef");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    state.topologySelectionKind = game::TopologySelectionKind::SideDef;
+    state.selectedTopologySideDefId = sideDef->id;
+    state.selectedTopologyLineDefId = sideDef->lineDefId;
+    state.selectedTopologySideKind = sideDef->side;
+
+    const game::SectorEditorInspectorTarget target =
+            game::ResolveSectorEditorInspectorTarget(state);
+    Check(target.kind == game::SectorEditorInspectorTargetKind::AuthoringLine,
+          "mapped topology side selection resolves to authoring inspector");
+    Check(target.lineId == 10
+                  && target.side.lineId == 10
+                  && target.side.side == game::SectorTopologySideKind::Front,
+          "mapped topology side inspector target keeps authoring side identity");
+}
+
+void TestEditorMappedTopologySectorSelectionUsesAuthoringInspectorTarget()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "mapped sector inspector target setup derives valid topology");
+
+    state.topologySelectionKind = game::TopologySelectionKind::Sector;
+    state.selectedTopologySectorId = 200;
+
+    const game::SectorEditorInspectorTarget target =
+            game::ResolveSectorEditorInspectorTarget(state);
+    Check(target.kind == game::SectorEditorInspectorTargetKind::AuthoringFaceAnchor,
+          "mapped topology sector selection resolves to authoring face inspector");
+    Check(target.faceAnchorId == 200,
+          "mapped topology sector inspector target keeps face anchor ID");
+}
+
+void TestEditorMappedTopologyMissingOrStaleMappingDoesNotUseLegacyInspectorTarget()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "stale inspector target setup derives valid topology");
+
+    state.topologySelectionKind = game::TopologySelectionKind::Sector;
+    state.selectedTopologySectorId = 200;
+    game::MarkSectorEditorAuthoringGraphEdited(state, "stale mapping for inspector target test");
+
+    game::SectorEditorInspectorTarget target =
+            game::ResolveSectorEditorInspectorTarget(state);
+    Check(target.kind == game::SectorEditorInspectorTargetKind::AuthoringUnavailable,
+          "stale mapped topology selection resolves to unavailable authoring target");
+    Check(target.status.find("not current") != std::string::npos,
+          "stale mapped topology selection reports stale mapping");
+
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "missing mapping inspector target setup rederives current topology");
+    state.authoringDerivation.mapping.sectors.clear();
+    target = game::ResolveSectorEditorInspectorTarget(state);
+    Check(target.kind == game::SectorEditorInspectorTargetKind::AuthoringUnavailable,
+          "missing mapped topology selection resolves to unavailable authoring target");
+    Check(target.status.find("no face anchor mapping") != std::string::npos,
+          "missing mapped topology selection reports missing mapping");
+}
+
+void TestEditorAuthoringSideClearMiddleAndDecalProjectsAfterDerivation()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.middle.textureId = "bars";
+    side.wall.decal.textureId = "poster";
+    side.wall.decal.opacity = 0.5f;
+    state.authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "authoring side clear setup derives valid topology");
+
+    Check(game::MutateSectorEditorAuthoringSideById(
+                  state,
+                  side.id,
+                  "Cleared authoring side optional materials",
+                  [](game::SectorAuthoringLineSide& editedSide) {
+                      editedSide.middle = game::SectorTopologyWallPartSettings{};
+                      game::ResetDecalLayer(editedSide.wall.decal);
+                      return true;
+                  }),
+          "authoring side clear optional material mutation succeeds");
+
+    const game::SectorAuthoringLineSide* authoringSide =
+            game::FindSectorAuthoringLineSide(state.authoringGraph, side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(authoringSide != nullptr
+                  && authoringSide->middle.textureId.empty()
+                  && authoringSide->wall.decal.textureId.empty(),
+          "authoring side clear updates authoring metadata");
+    Check(projectedSideDef != nullptr
+                  && projectedSideDef->middle.textureId.empty()
+                  && projectedSideDef->wall.decal.textureId.empty(),
+          "authoring side clear projects to derived sidedef");
+}
+
+void TestEditorAuthoringFaceClearDecalProjectsAfterDerivation()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    Check(anchor != nullptr, "authoring face clear setup has anchor");
+    if (anchor == nullptr) {
+        return;
+    }
+    anchor->floorDecal.textureId = "floor_mark";
+    anchor->floorDecal.opacity = 0.25f;
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "authoring face clear setup derives valid topology");
+
+    Check(game::MutateSectorEditorAuthoringFaceAnchorById(
+                  state,
+                  200,
+                  "Cleared authoring face decal",
+                  [](game::SectorAuthoringFaceAnchor& editedAnchor) {
+                      game::ResetDecalLayer(editedAnchor.floorDecal);
+                      return true;
+                  }),
+          "authoring face clear decal mutation succeeds");
+
+    const game::SectorAuthoringFaceAnchor* updatedAnchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    const game::SectorTopologySector* projectedSector =
+            game::FindSectorTopologySector(state.topologyMap, 200);
+    Check(updatedAnchor != nullptr && updatedAnchor->floorDecal.textureId.empty(),
+          "authoring face clear decal updates face anchor");
+    Check(projectedSector != nullptr && projectedSector->floorDecal.textureId.empty(),
+          "authoring face clear decal projects to derived sector");
+}
+
+void TestEditorAuthoringSideDecalPropertyEditProjectsAfterDerivation()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall.decal.textureId = "poster";
+    state.authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "authoring side decal property setup derives valid topology");
+
+    Check(game::MutateSectorEditorAuthoringSideById(
+                  state,
+                  side.id,
+                  "Updated authoring side decal opacity",
+                  [](game::SectorAuthoringLineSide& editedSide) {
+                      editedSide.wall.decal.opacity = 0.35f;
+                      editedSide.wall.decal.tint = Vector3{0.2f, 0.4f, 0.6f};
+                      return true;
+                  }),
+          "authoring side decal property mutation succeeds");
+
+    const game::SectorAuthoringLineSide* authoringSide =
+            game::FindSectorAuthoringLineSide(state.authoringGraph, side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(authoringSide != nullptr
+                  && authoringSide->wall.decal.opacity == 0.35f
+                  && Near(authoringSide->wall.decal.tint, Vector3{0.2f, 0.4f, 0.6f}),
+          "authoring side decal property edit updates authoring side");
+    Check(projectedSideDef != nullptr
+                  && projectedSideDef->wall.decal.opacity == 0.35f
+                  && Near(projectedSideDef->wall.decal.tint, Vector3{0.2f, 0.4f, 0.6f}),
+          "authoring side decal property edit projects to derived sidedef");
+}
+
+void TestEditorAuthoringFaceDecalPropertyEditProjectsAfterDerivation()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    Check(anchor != nullptr, "authoring face decal property setup has anchor");
+    if (anchor == nullptr) {
+        return;
+    }
+    anchor->floorDecal.textureId = "floor_mark";
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "authoring face decal property setup derives valid topology");
+
+    Check(game::MutateSectorEditorAuthoringFaceAnchorById(
+                  state,
+                  200,
+                  "Updated authoring face decal opacity",
+                  [](game::SectorAuthoringFaceAnchor& editedAnchor) {
+                      editedAnchor.floorDecal.opacity = 0.45f;
+                      editedAnchor.floorDecal.tint = Vector3{0.7f, 0.5f, 0.3f};
+                      return true;
+                  }),
+          "authoring face decal property mutation succeeds");
+
+    const game::SectorAuthoringFaceAnchor* updatedAnchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    const game::SectorTopologySector* projectedSector =
+            game::FindSectorTopologySector(state.topologyMap, 200);
+    Check(updatedAnchor != nullptr
+                  && updatedAnchor->floorDecal.opacity == 0.45f
+                  && Near(updatedAnchor->floorDecal.tint, Vector3{0.7f, 0.5f, 0.3f}),
+          "authoring face decal property edit updates face anchor");
+    Check(projectedSector != nullptr
+                  && projectedSector->floorDecal.opacity == 0.45f
+                  && Near(projectedSector->floorDecal.tint, Vector3{0.7f, 0.5f, 0.3f}),
+          "authoring face decal property edit projects to derived sector");
+}
+
+void TestEditorAuthoringFaceDefaultDecalTexturePickerWritesThroughAnchor()
+{
+    game::SectorEditorState state;
+    state.topologyMap.texturesById.emplace("default_poster", game::SectorTextureDefinition{"default_poster", "default_poster.png"});
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "authoring face default decal picker setup derives valid topology");
+
+    Check(game::OpenAuthoringFaceAnchorTexturePickerById(
+                  state,
+                  200,
+                  game::TopologySectorTextureField::DefaultWall,
+                  game::TopologyMaterialLayer::Decal),
+          "authoring face default wall decal picker opens");
+    SelectTextureInPicker(state.texturePicker, "default_poster");
+    const game::SectorEditorTexturePickerApplyResult result =
+            game::ApplyAuthoringTexturePickerSelection(state);
+
+    const game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    const game::SectorTopologySector* sector =
+            game::FindSectorTopologySector(state.topologyMap, 200);
+    Check(result.changed, "authoring face default wall decal picker reports change");
+    Check(anchor != nullptr && anchor->defaultWall.decal.textureId == "default_poster",
+          "authoring face default wall decal picker writes face anchor");
+    Check(sector != nullptr && sector->defaultWall.decal.textureId == "default_poster",
+          "authoring face default wall decal picker projects to derived sector defaults");
+}
+
+void TestEditorSurface3DMappedPanelLabelMentionsAuthoringAndDerivedIds()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "3D label setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "3D label setup finds derived side");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    const game::SectorSurfaceRef wallSurface{
+            game::SectorSurfaceKind::Wall,
+            sideDef->sectorId,
+            sideDef->lineDefId,
+            sideDef->id,
+            sideDef->side};
+    const game::TopologySurfaceEditTarget wallTarget{
+            game::TopologySurfaceEditTargetKind::SideDefWall,
+            sideDef->sectorId,
+            sideDef->lineDefId,
+            sideDef->id,
+            sideDef->side};
+    const std::string wallLabel =
+            game::BuildSectorEditorSurface3DTargetLabel(state, wallSurface, wallTarget);
+    Check(wallLabel.find("Authoring Side") != std::string::npos,
+          "mapped 3D wall label identifies authoring side");
+    Check(wallLabel.find("derived sideDef") != std::string::npos
+                  && wallLabel.find("line") != std::string::npos,
+          "mapped 3D wall label keeps derived IDs");
+
+    const game::SectorSurfaceRef floorSurface{
+            game::SectorSurfaceKind::Floor,
+            200,
+            -1,
+            -1,
+            game::SectorTopologySideKind::Front};
+    const game::TopologySurfaceEditTarget floorTarget{
+            game::TopologySurfaceEditTargetKind::SectorFloor,
+            200,
+            -1,
+            -1,
+            game::SectorTopologySideKind::Front};
+    const std::string floorLabel =
+            game::BuildSectorEditorSurface3DTargetLabel(state, floorSurface, floorTarget);
+    Check(floorLabel.find("Authoring Floor") != std::string::npos,
+          "mapped 3D floor label identifies authoring floor");
+    Check(floorLabel.find("derived sector 200") != std::string::npos,
+          "mapped 3D floor label keeps derived sector ID");
+}
+
 void TestEditorSelectedAuthoringLineBlocksPlayerWritesWithoutTopologySelection()
 {
     game::SectorEditorState state;
@@ -4491,6 +4843,15 @@ int main()
     TestEditorAuthoringLineFlagInspectorWritesProjectToSplitDerivedLineDefs();
     TestEditorAuthoringLineFlagInspectorWriteDoesNotDirectlyMutateDerivedTopology();
     TestEditorSelectedAuthoringLineInspectorTargetDoesNotNeedTopologySelection();
+    TestEditorMappedTopologySideSelectionUsesAuthoringInspectorTarget();
+    TestEditorMappedTopologySectorSelectionUsesAuthoringInspectorTarget();
+    TestEditorMappedTopologyMissingOrStaleMappingDoesNotUseLegacyInspectorTarget();
+    TestEditorAuthoringSideClearMiddleAndDecalProjectsAfterDerivation();
+    TestEditorAuthoringFaceClearDecalProjectsAfterDerivation();
+    TestEditorAuthoringSideDecalPropertyEditProjectsAfterDerivation();
+    TestEditorAuthoringFaceDecalPropertyEditProjectsAfterDerivation();
+    TestEditorAuthoringFaceDefaultDecalTexturePickerWritesThroughAnchor();
+    TestEditorSurface3DMappedPanelLabelMentionsAuthoringAndDerivedIds();
     TestEditorSelectedAuthoringLineBlocksPlayerWritesWithoutTopologySelection();
     TestEditorSelectedAuthoringLineSideMaterialWritesWithoutTopologySelection();
     TestEditorSelectedFaceAnchorPropertiesWriteWithoutTopologySelection();

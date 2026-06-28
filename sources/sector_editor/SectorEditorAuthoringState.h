@@ -108,6 +108,31 @@ int FindSectorEditorAuthoringLineIdForTopologyLineDef(
         const SectorEditorState& state,
         int topologyLineDefId);
 
+enum class SectorEditorInspectorTargetKind {
+    None,
+    AuthoringLine,
+    AuthoringFaceAnchor,
+    AuthoringVertex,
+    AuthoringUnavailable,
+    LegacyTopology
+};
+
+struct SectorEditorInspectorTarget {
+    SectorEditorInspectorTargetKind kind = SectorEditorInspectorTargetKind::None;
+    int lineId = -1;
+    int faceAnchorId = -1;
+    int vertexId = -1;
+    SectorAuthoringSideId side;
+    std::string status;
+};
+
+SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(const SectorEditorState& state);
+
+std::string BuildSectorEditorSurface3DTargetLabel(
+        const SectorEditorState& state,
+        SectorSurfaceRef surface,
+        TopologySurfaceEditTarget target);
+
 enum class SectorEditorAuthoringSurfaceTargetKind {
     None,
     FaceAnchor,

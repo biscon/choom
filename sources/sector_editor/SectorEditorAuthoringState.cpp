@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -106,6 +107,134 @@ bool CanUseCurrentAuthoringDerivedTopology(
 
     setMessage("no valid derived topology is available");
     return false;
+}
+
+bool CurrentAuthoringDerivationAvailable(const SectorEditorState& state)
+{
+    return state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
+            && !state.authoringDerivedTopologyStale
+            && state.authoringDerivation.success;
+}
+
+SectorEditorInspectorTarget UnavailableInspectorTarget(const char* status)
+{
+    SectorEditorInspectorTarget target;
+    target.kind = SectorEditorInspectorTargetKind::AuthoringUnavailable;
+    target.status = status == nullptr ? "" : status;
+    return target;
+}
+
+SectorEditorInspectorTarget ResolveMappedTopologySectorInspectorTarget(
+        const SectorEditorState& state,
+        int topologySectorId)
+{
+    if (!CurrentAuthoringDerivationAvailable(state)) {
+        return UnavailableInspectorTarget("Authoring inspector unavailable: derived topology is not current");
+    }
+    if (FindSectorTopologySector(state.topologyMap, topologySectorId) == nullptr) {
+        return UnavailableInspectorTarget("Authoring inspector unavailable: selected sector is not current");
+    }
+
+    bool found = false;
+    int faceAnchorId = -1;
+    for (const SectorAuthoringDerivedSectorMapping& mapping : state.authoringDerivation.mapping.sectors) {
+        if (mapping.topologySectorId != topologySectorId) {
+            continue;
+        }
+        if (!IsValidSectorAuthoringId(mapping.faceAnchorId)
+                || FindSectorAuthoringFaceAnchor(state.authoringGraph, mapping.faceAnchorId) == nullptr) {
+            continue;
+        }
+        if (found && faceAnchorId != mapping.faceAnchorId) {
+            return UnavailableInspectorTarget("Authoring inspector unavailable: selected sector has ambiguous face anchor mapping");
+        }
+        faceAnchorId = mapping.faceAnchorId;
+        found = true;
+    }
+    if (!found) {
+        return UnavailableInspectorTarget("Authoring inspector unavailable: selected sector has no face anchor mapping");
+    }
+
+    SectorEditorInspectorTarget target;
+    target.kind = SectorEditorInspectorTargetKind::AuthoringFaceAnchor;
+    target.faceAnchorId = faceAnchorId;
+    return target;
+}
+
+SectorEditorInspectorTarget ResolveMappedTopologySideInspectorTarget(
+        const SectorEditorState& state,
+        int topologySideDefId)
+{
+    if (!CurrentAuthoringDerivationAvailable(state)) {
+        return UnavailableInspectorTarget("Authoring inspector unavailable: derived topology is not current");
+    }
+    if (FindSectorTopologySideDef(state.topologyMap, topologySideDefId) == nullptr) {
+        return UnavailableInspectorTarget("Authoring inspector unavailable: selected sidedef is not current");
+    }
+
+    bool found = false;
+    SectorAuthoringSideId sideId;
+    for (const SectorAuthoringDerivedSideMapping& mapping : state.authoringDerivation.mapping.sides) {
+        if (mapping.topologySideDefId != topologySideDefId) {
+            continue;
+        }
+        if (!IsValidSectorAuthoringId(mapping.authoringLineId)
+                || FindSectorAuthoringLine(state.authoringGraph, mapping.authoringLineId) == nullptr) {
+            continue;
+        }
+        const SectorAuthoringSideId candidate{mapping.authoringLineId, mapping.authoringSide};
+        if (found && (sideId.lineId != candidate.lineId || sideId.side != candidate.side)) {
+            return UnavailableInspectorTarget("Authoring inspector unavailable: selected sidedef has ambiguous authoring side mapping");
+        }
+        sideId = candidate;
+        found = true;
+    }
+    if (!found) {
+        return UnavailableInspectorTarget("Authoring inspector unavailable: selected sidedef has no authoring side mapping");
+    }
+
+    SectorEditorInspectorTarget target;
+    target.kind = SectorEditorInspectorTargetKind::AuthoringLine;
+    target.lineId = sideId.lineId;
+    target.side = sideId;
+    return target;
+}
+
+SectorEditorInspectorTarget ResolveMappedTopologyLineInspectorTarget(
+        const SectorEditorState& state,
+        int topologyLineDefId)
+{
+    if (!CurrentAuthoringDerivationAvailable(state)) {
+        return UnavailableInspectorTarget("Authoring inspector unavailable: derived topology is not current");
+    }
+    if (FindSectorTopologyLineDef(state.topologyMap, topologyLineDefId) == nullptr) {
+        return UnavailableInspectorTarget("Authoring inspector unavailable: selected linedef is not current");
+    }
+
+    bool found = false;
+    int authoringLineId = -1;
+    for (const SectorAuthoringDerivedLineMapping& mapping : state.authoringDerivation.mapping.lines) {
+        if (mapping.topologyLineDefId != topologyLineDefId) {
+            continue;
+        }
+        if (!IsValidSectorAuthoringId(mapping.authoringLineId)
+                || FindSectorAuthoringLine(state.authoringGraph, mapping.authoringLineId) == nullptr) {
+            continue;
+        }
+        if (found && authoringLineId != mapping.authoringLineId) {
+            return UnavailableInspectorTarget("Authoring inspector unavailable: selected linedef has ambiguous authoring line mapping");
+        }
+        authoringLineId = mapping.authoringLineId;
+        found = true;
+    }
+    if (!found) {
+        return UnavailableInspectorTarget("Authoring inspector unavailable: selected linedef has no authoring line mapping");
+    }
+
+    SectorEditorInspectorTarget target;
+    target.kind = SectorEditorInspectorTargetKind::AuthoringLine;
+    target.lineId = authoringLineId;
+    return target;
 }
 
 bool PointInTopologyLoop(
@@ -871,6 +1000,89 @@ int FindSectorEditorAuthoringLineIdForTopologyLineDef(
         }
     }
     return -1;
+}
+
+SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(const SectorEditorState& state)
+{
+    if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
+            && FindSectorAuthoringLine(state.authoringGraph, state.selectedAuthoring.lineId) != nullptr) {
+        SectorEditorInspectorTarget target;
+        target.kind = SectorEditorInspectorTargetKind::AuthoringLine;
+        target.lineId = state.selectedAuthoring.lineId;
+        return target;
+    }
+    if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
+            && FindSectorAuthoringFaceAnchor(state.authoringGraph, state.selectedAuthoring.faceAnchorId) != nullptr) {
+        SectorEditorInspectorTarget target;
+        target.kind = SectorEditorInspectorTargetKind::AuthoringFaceAnchor;
+        target.faceAnchorId = state.selectedAuthoring.faceAnchorId;
+        return target;
+    }
+    if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex
+            && FindSectorAuthoringVertex(state.authoringGraph, state.selectedAuthoring.vertexId) != nullptr) {
+        SectorEditorInspectorTarget target;
+        target.kind = SectorEditorInspectorTargetKind::AuthoringVertex;
+        target.vertexId = state.selectedAuthoring.vertexId;
+        return target;
+    }
+
+    if (!HasAuthoringGraphData(state)) {
+        SectorEditorInspectorTarget target;
+        target.kind = SectorEditorInspectorTargetKind::LegacyTopology;
+        return target;
+    }
+
+    if (state.topologySelectionKind == TopologySelectionKind::Sector
+            && IsValidSectorTopologyId(state.selectedTopologySectorId)) {
+        return ResolveMappedTopologySectorInspectorTarget(state, state.selectedTopologySectorId);
+    }
+    if (state.topologySelectionKind == TopologySelectionKind::SideDef
+            && IsValidSectorTopologyId(state.selectedTopologySideDefId)) {
+        return ResolveMappedTopologySideInspectorTarget(state, state.selectedTopologySideDefId);
+    }
+    if (state.topologySelectionKind == TopologySelectionKind::LineDef
+            && IsValidSectorTopologyId(state.selectedTopologyLineDefId)) {
+        return ResolveMappedTopologyLineInspectorTarget(state, state.selectedTopologyLineDefId);
+    }
+
+    return SectorEditorInspectorTarget{};
+}
+
+std::string BuildSectorEditorSurface3DTargetLabel(
+        const SectorEditorState& state,
+        SectorSurfaceRef surface,
+        TopologySurfaceEditTarget target)
+{
+    SectorEditorAuthoringSurfaceTarget authoringTarget;
+    std::string status;
+    const bool mapped = HasAuthoringGraphData(state)
+            && ResolveSectorEditorAuthoringSurfaceTarget(state, surface, authoringTarget, &status);
+
+    std::ostringstream label;
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        if (mapped && authoringTarget.kind == SectorEditorAuthoringSurfaceTargetKind::FaceAnchor) {
+            label << (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                            ? "Authoring Floor"
+                            : "Authoring Ceiling")
+                  << " | derived sector " << target.sectorId;
+            return label.str();
+        }
+        label << (target.kind == TopologySurfaceEditTargetKind::SectorFloor ? "Floor" : "Ceiling")
+              << " | sector " << target.sectorId;
+        return label.str();
+    }
+
+    if (mapped && authoringTarget.kind == SectorEditorAuthoringSurfaceTargetKind::Side) {
+        label << "Authoring Side | derived sideDef " << target.sideDefId
+              << " line " << target.lineDefId;
+        return label.str();
+    }
+
+    label << SurfaceKindName(surface.kind)
+          << " | sideDef " << target.sideDefId
+          << " line " << target.lineDefId;
+    return label.str();
 }
 
 bool ResolveSectorEditorAuthoringSurfaceTarget(

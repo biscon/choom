@@ -45,6 +45,16 @@
 
 namespace game {
 
+namespace {
+
+bool IsFlatTopologySurfaceTarget(TopologySurfaceEditTarget target)
+{
+    return target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling;
+}
+
+} // namespace
+
 bool SectorEditor::Init(engine::AssetManager& assets)
 {
     Shutdown(assets);
@@ -3516,6 +3526,7 @@ void SectorEditor::DrawPreviewUvPanel(
                 sideDef->id,
                 sideDef->lineDefId);
     }
+    targetLabel = BuildSectorEditorSurface3DTargetLabel(state, state.selectedSurface3D, target);
 
     const float margin = 18.0f;
     const float top = panel.y + margin;
@@ -4908,17 +4919,21 @@ void SectorEditor::DrawSectorsPanel(
     const bool hasSelectedTopologyLineDef = state.topologySelectionKind == TopologySelectionKind::LineDef
             && SelectedTopologyLineDef() != nullptr;
     const bool hasSelectedLight = SelectedTopologyLight() != nullptr;
+    const SectorEditorInspectorTarget inspectorTarget = ResolveSectorEditorInspectorTarget(state);
+    const bool allowLegacyTopologyInspector =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::LegacyTopology
+            || inspectorTarget.kind == SectorEditorInspectorTargetKind::None;
     const SectorAuthoringLine* selectedAuthoringLine =
-            state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
-            ? FindSectorAuthoringLine(state.authoringGraph, state.selectedAuthoring.lineId)
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringLine
+            ? FindSectorAuthoringLine(state.authoringGraph, inspectorTarget.lineId)
             : nullptr;
     const SectorAuthoringFaceAnchor* selectedAuthoringFaceAnchor =
-            state.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
-            ? FindSectorAuthoringFaceAnchor(state.authoringGraph, state.selectedAuthoring.faceAnchorId)
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringFaceAnchor
+            ? FindSectorAuthoringFaceAnchor(state.authoringGraph, inspectorTarget.faceAnchorId)
             : nullptr;
     const SectorAuthoringVertex* selectedAuthoringVertex =
-            state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex
-            ? FindSectorAuthoringVertex(state.authoringGraph, state.selectedAuthoring.vertexId)
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringVertex
+            ? FindSectorAuthoringVertex(state.authoringGraph, inspectorTarget.vertexId)
             : nullptr;
     const SectorTopologyVertex* inspectedVertex = FindSectorTopologyVertex(
             state.topologyMap,
@@ -4935,29 +4950,32 @@ void SectorEditor::DrawSectorsPanel(
     const float gap = 8.0f;
     const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
     const auto inspectorContentHeight = [&]() {
+        if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
+            return 120.0f;
+        }
         if (hasSelectedLight) {
             return StaticLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
         }
-        if (hasSelectedTopologySector) {
+        if (hasSelectedTopologySector && allowLegacyTopologyInspector) {
             return SectorInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
         }
-        if (hasSelectedTopologyVertex) {
+        if (hasSelectedTopologyVertex && allowLegacyTopologyInspector) {
             return SelectedVertexInspectorContentHeight();
         }
-        if (hasSelectedTopologySideDef) {
+        if (hasSelectedTopologySideDef && allowLegacyTopologyInspector) {
             return 1240.0f;
         }
-        if (hasSelectedTopologyLineDef) {
+        if (hasSelectedTopologyLineDef && allowLegacyTopologyInspector) {
             return 218.0f;
         }
         if (hasInspectedVertex || state.pendingTopologyVertexMerge.active) {
             return InspectedVertexInspectorContentHeight();
         }
         if (selectedAuthoringLine != nullptr) {
-            return 560.0f;
+            return 1800.0f;
         }
         if (selectedAuthoringFaceAnchor != nullptr) {
-            return 900.0f;
+            return 1500.0f;
         }
         if (selectedAuthoringVertex != nullptr) {
             return 120.0f;
@@ -4979,7 +4997,34 @@ void SectorEditor::DrawSectorsPanel(
     const float contentW = scroll.viewport.width;
     float y = 0.0f;
 
-    if (hasSelectedTopologySector) {
+    if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                "Authoring Inspector",
+                engine::UITextJustify::Left,
+                config.textColor);
+        y += 38.0f;
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 64.0f},
+                font,
+                inspectorTarget.status.empty()
+                        ? "Mapped authoring target is unavailable."
+                        : inspectorTarget.status.c_str(),
+                engine::UITextJustify::Left,
+                config.invalidColor);
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return;
+    }
+
+    if (hasSelectedTopologySector && allowLegacyTopologyInspector) {
         const auto hasAuthoringGraph = [this]() {
             return !state.authoringGraph.vertices.empty()
                     || !state.authoringGraph.lines.empty()
@@ -5282,7 +5327,7 @@ void SectorEditor::DrawSectorsPanel(
         }
     }
 
-    if (hasSelectedTopologySideDef || hasSelectedTopologyLineDef) {
+    if (allowLegacyTopologyInspector && (hasSelectedTopologySideDef || hasSelectedTopologyLineDef)) {
         if (DrawTopologySideDefInspector(ui, config, input, assets, font, scroll, contentW, rowH, gap)) {
             engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
             engine::EndPanel(ui, config, panel);
@@ -5319,7 +5364,9 @@ void SectorEditor::DrawSectorsPanel(
         return;
     }
 
-    if (hasSelectedTopologyVertex || hasInspectedVertex || state.pendingTopologyVertexMerge.active) {
+    if ((allowLegacyTopologyInspector && hasSelectedTopologyVertex)
+            || hasInspectedVertex
+            || state.pendingTopologyVertexMerge.active) {
         const SectorEditorVertexInspectorCallbacks callbacks{
                 [this](const char* message) { CancelPendingTopologyVertexMerge(message); },
                 [this]() { return DissolveSelectedTopologyVertex(); },
@@ -5426,9 +5473,44 @@ void SectorEditor::DrawSectorsPanel(
                         }
                         return TopologyWallPartSettingsFor(*authoringSide, part).textureId;
                     };
+                    const auto decalForPart = [authoringSide](TopologyWallPart part) -> SectorTopologyDecalLayer {
+                        if (authoringSide == nullptr) {
+                            return SectorTopologyDecalLayer{};
+                        }
+                        return TopologyWallPartSettingsFor(*authoringSide, part).decal;
+                    };
+                    const auto mappedTargetForPart = [this, sideId](TopologyWallPart part, TopologySurfaceEditTarget& outTarget) {
+                        if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+                                || state.authoringDerivedTopologyStale
+                                || !state.authoringDerivation.success) {
+                            return false;
+                        }
+                        for (const SectorAuthoringDerivedSideMapping& mapping : state.authoringDerivation.mapping.sides) {
+                            if (mapping.authoringLineId != sideId.lineId || mapping.authoringSide != sideId.side) {
+                                continue;
+                            }
+                            const SectorTopologySideDef* sideDef =
+                                    FindSectorTopologySideDef(state.topologyMap, mapping.topologySideDefId);
+                            if (sideDef == nullptr) {
+                                continue;
+                            }
+                            outTarget.kind = TopologyWallPartEditTargetKind(part);
+                            outTarget.sectorId = sideDef->sectorId;
+                            outTarget.lineDefId = sideDef->lineDefId;
+                            outTarget.sideDefId = sideDef->id;
+                            outTarget.side = sideDef->side;
+                            return true;
+                        }
+                        return false;
+                    };
+                    const auto mutateSide = [this, sideId](const char* status, const std::function<bool(SectorAuthoringLineSide&)>& mutate) {
+                        return MutateSectorEditorAuthoringSideById(state, sideId, status, mutate);
+                    };
                     const auto drawTextureRow =
                             [&](const char* suffix, const char* label, TopologyWallPart part) {
                                 const float buttonW = 38.0f;
+                                const bool canClear = part == TopologyWallPart::Middle;
+                                const float clearW = canClear ? 58.0f : 0.0f;
                                 const float labelColumnW = 74.0f;
                                 const std::string textureId = textureForPart(part);
                                 const Rectangle row{0.0f, y, contentW, 36.0f};
@@ -5439,11 +5521,33 @@ void SectorEditor::DrawSectorsPanel(
                                         ui,
                                         config,
                                         assets,
-                                        Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
+                                        Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - clearW - gap * (canClear ? 2.0f : 1.0f), row.height},
                                         font,
                                         textureId.empty() ? "<none>" : textureId.c_str(),
                                         engine::UITextJustify::Left,
                                         missing ? config.invalidColor : config.mutedTextColor);
+                                if (canClear
+                                        && engine::Button(
+                                                ui,
+                                                config,
+                                                input,
+                                                assets,
+                                                TextFormat("%s_%s_clear", idPrefix, suffix),
+                                                Rectangle{row.x + row.width - buttonW - clearW - gap, row.y, clearW, row.height},
+                                                font,
+                                                "Clear")) {
+                                    mutateSide(
+                                            "Cleared authoring middle texture",
+                                            [part](SectorAuthoringLineSide& side) {
+                                                SectorTopologyWallPartSettings& settings =
+                                                        TopologyWallPartSettingsFor(side, part);
+                                                if (IsDefaultWallPartSettings(settings)) {
+                                                    return false;
+                                                }
+                                                settings = SectorTopologyWallPartSettings{};
+                                                return true;
+                                            });
+                                }
                                 if (engine::Button(
                                             ui,
                                             config,
@@ -5463,10 +5567,206 @@ void SectorEditor::DrawSectorsPanel(
                                 }
                                 y += row.height + gap;
                             };
+                    const auto drawDecalControls =
+                            [&](const char* suffix, const char* title, TopologyWallPart part) {
+                                const SectorTopologyDecalLayer decal = decalForPart(part);
+                                const float buttonW = 38.0f;
+                                const float clearW = 92.0f;
+                                const float labelColumnW = 90.0f;
+                                const Rectangle row{0.0f, y, contentW, 36.0f};
+                                const bool missing = !decal.textureId.empty()
+                                        && FindSectorTopologyTexture(state.topologyMap, decal.textureId) == nullptr;
+                                engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, title, engine::UITextJustify::Left, config.mutedTextColor);
+                                engine::Text(
+                                        ui,
+                                        config,
+                                        assets,
+                                        Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - clearW - gap * 2.0f, row.height},
+                                        font,
+                                        decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
+                                        engine::UITextJustify::Left,
+                                        missing ? config.invalidColor : config.mutedTextColor);
+                                if (engine::Button(
+                                            ui,
+                                            config,
+                                            input,
+                                            assets,
+                                            TextFormat("%s_%s_clear_decal", idPrefix, suffix),
+                                            Rectangle{row.x + row.width - buttonW - clearW - gap, row.y, clearW, row.height},
+                                            font,
+                                            "Clear")) {
+                                    mutateSide(
+                                            "Cleared authoring side decal",
+                                            [part](SectorAuthoringLineSide& side) {
+                                                SectorTopologyDecalLayer& target =
+                                                        TopologyWallPartSettingsFor(side, part).decal;
+                                                if (IsDefaultDecalLayer(target)) {
+                                                    return false;
+                                                }
+                                                ResetDecalLayer(target);
+                                                return true;
+                                            });
+                                }
+                                if (engine::Button(
+                                            ui,
+                                            config,
+                                            input,
+                                            assets,
+                                            TextFormat("%s_%s_pick_decal", idPrefix, suffix),
+                                            Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height},
+                                            font,
+                                            ">")) {
+                                    if (!OpenAuthoringSideTexturePickerById(
+                                                state,
+                                                sideId,
+                                                part,
+                                                TopologyMaterialLayer::Decal)) {
+                                        statusText = "Authoring side decal picker unavailable: derived mapping is not current";
+                                    }
+                                }
+                                y += row.height + gap;
+
+                                if (decal.textureId.empty()) {
+                                    return;
+                                }
+
+                                const SectorEditorFloatInputResult opacityResult = DrawLabeledFloatInput(
+                                        ui,
+                                        config,
+                                        input,
+                                        assets,
+                                        font,
+                                        TextFormat("%s_%s_decal_opacity", idPrefix, suffix),
+                                        "Opacity:",
+                                        Rectangle{0.0f, y, 82.0f, rowH},
+                                        Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                                        engine::UITextJustify::Left,
+                                        decal.opacity,
+                                        uiState.topologySideDefDecalOpacityInput,
+                                        0.0f,
+                                        1.0f,
+                                        3);
+                                if (opacityResult.changed && opacityResult.value != decal.opacity && opacityResult.finite) {
+                                    mutateSide(
+                                            "Updated authoring side decal opacity",
+                                            [part, value = opacityResult.value](SectorAuthoringLineSide& side) {
+                                                SectorTopologyDecalLayer& target =
+                                                        TopologyWallPartSettingsFor(side, part).decal;
+                                                if (target.textureId.empty() || target.opacity == value) {
+                                                    return false;
+                                                }
+                                                target.opacity = value;
+                                                return true;
+                                            });
+                                }
+                                y += rowH + gap;
+
+                                bool emissive = decal.emissive;
+                                if (engine::Checkbox(
+                                            ui,
+                                            config,
+                                            input,
+                                            assets,
+                                            TextFormat("%s_%s_decal_emissive", idPrefix, suffix),
+                                            Rectangle{0.0f, y, contentW, 36.0f},
+                                            font,
+                                            "Emissive",
+                                            emissive)) {
+                                    mutateSide(
+                                            "Updated authoring side decal emissive",
+                                            [part, emissive](SectorAuthoringLineSide& side) {
+                                                SectorTopologyDecalLayer& target =
+                                                        TopologyWallPartSettingsFor(side, part).decal;
+                                                if (target.textureId.empty() || target.emissive == emissive) {
+                                                    return false;
+                                                }
+                                                target.emissive = emissive;
+                                                return true;
+                                            });
+                                }
+                                y += 36.0f + gap;
+
+                                if (decal.emissive) {
+                                    const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
+                                            ui,
+                                            config,
+                                            input,
+                                            assets,
+                                            font,
+                                            TextFormat("%s_%s_decal_bloom", idPrefix, suffix),
+                                            "Bloom:",
+                                            Rectangle{0.0f, y, 82.0f, rowH},
+                                            Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                                            engine::UITextJustify::Left,
+                                            decal.bloomIntensity,
+                                            uiState.topologySideDefDecalBloomIntensityInput,
+                                            0.0f,
+                                            10.0f,
+                                            3);
+                                    if (bloomResult.changed && bloomResult.value != decal.bloomIntensity && bloomResult.finite) {
+                                        mutateSide(
+                                                "Updated authoring side decal bloom intensity",
+                                                [part, value = bloomResult.value](SectorAuthoringLineSide& side) {
+                                                    SectorTopologyDecalLayer& target =
+                                                            TopologyWallPartSettingsFor(side, part).decal;
+                                                    if (target.textureId.empty() || target.bloomIntensity == value) {
+                                                        return false;
+                                                    }
+                                                    target.bloomIntensity = value;
+                                                    return true;
+                                                });
+                                    }
+                                    y += rowH + gap;
+                                }
+
+                                engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Tint:", engine::UITextJustify::Left, config.mutedTextColor);
+                                const Rectangle swatchLocal{82.0f, y + 3.0f, 56.0f, rowH - 6.0f};
+                                if (engine::Button(
+                                            ui,
+                                            config,
+                                            input,
+                                            assets,
+                                            TextFormat("%s_%s_decal_tint", idPrefix, suffix),
+                                            swatchLocal,
+                                            font,
+                                            "")) {
+                                    TopologySurfaceEditTarget target;
+                                    if (mappedTargetForPart(part, target)) {
+                                        OpenDecalTintModal(target);
+                                    } else {
+                                        statusText = "Authoring side decal tint unavailable: derived mapping is not current";
+                                    }
+                                }
+                                const Rectangle swatchScreen{
+                                        scroll.viewport.x + swatchLocal.x,
+                                        scroll.viewport.y - uiState.inspectorScroll.offset.y + swatchLocal.y,
+                                        swatchLocal.width,
+                                        swatchLocal.height};
+                                DrawColorSwatch(config, swatchScreen, DecalTintPreviewColor(decal.tint), config.borderThickness);
+                                y += rowH + gap;
+
+                                TopologySurfaceEditTarget fitTarget;
+                                if (mappedTargetForPart(part, fitTarget)
+                                        && engine::Button(
+                                                ui,
+                                                config,
+                                                input,
+                                                assets,
+                                                TextFormat("%s_%s_fit_decal", idPrefix, suffix),
+                                                Rectangle{0.0f, y, contentW, 36.0f},
+                                                font,
+                                                "Fit Decal")) {
+                                    FitSelectedDecal(fitTarget, &assets);
+                                }
+                                y += 36.0f + gap;
+                            };
                     drawTextureRow("wall", "Wall:", TopologyWallPart::Wall);
                     drawTextureRow("lower", "Lower:", TopologyWallPart::Lower);
                     drawTextureRow("upper", "Upper:", TopologyWallPart::Upper);
                     drawTextureRow("middle", "Middle:", TopologyWallPart::Middle);
+                    drawDecalControls("wall", "Wall Decal:", TopologyWallPart::Wall);
+                    drawDecalControls("lower", "Lower Decal:", TopologyWallPart::Lower);
+                    drawDecalControls("upper", "Upper Decal:", TopologyWallPart::Upper);
                 };
 
         drawAuthoringSideSection(SectorTopologySideKind::Front, "Front Side", "sector_editor_authoring_front_side");
@@ -5676,6 +5976,389 @@ void SectorEditor::DrawSectorsPanel(
             }
             y += row.height + gap;
         };
+        const auto mappedFlatTargetForField = [this, faceAnchorId](TopologySectorTextureField field, TopologySurfaceEditTarget& outTarget) {
+            if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+                    || state.authoringDerivedTopologyStale
+                    || !state.authoringDerivation.success) {
+                return false;
+            }
+            for (const SectorAuthoringDerivedSectorMapping& mapping : state.authoringDerivation.mapping.sectors) {
+                if (mapping.faceAnchorId != faceAnchorId) {
+                    continue;
+                }
+                if (FindSectorTopologySector(state.topologyMap, mapping.topologySectorId) == nullptr) {
+                    continue;
+                }
+                if (field == TopologySectorTextureField::Floor) {
+                    outTarget.kind = TopologySurfaceEditTargetKind::SectorFloor;
+                } else if (field == TopologySectorTextureField::Ceiling) {
+                    outTarget.kind = TopologySurfaceEditTargetKind::SectorCeiling;
+                } else {
+                    return false;
+                }
+                outTarget.sectorId = mapping.topologySectorId;
+                return true;
+            }
+            return false;
+        };
+        const auto drawFlatDecalControls =
+                [&](const char* idPrefix, const char* label, const SectorTopologyDecalLayer& decal, TopologySectorTextureField field, int inputIndex) {
+                    const float buttonW = 38.0f;
+                    const float clearW = 92.0f;
+                    const float labelColumnW = 92.0f;
+                    const Rectangle row{0.0f, y, contentW, 36.0f};
+                    const bool missing = !decal.textureId.empty()
+                            && FindSectorTopologyTexture(state.topologyMap, decal.textureId) == nullptr;
+                    engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+                    engine::Text(
+                            ui,
+                            config,
+                            assets,
+                            Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - clearW - gap * 2.0f, row.height},
+                            font,
+                            decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
+                            engine::UITextJustify::Left,
+                            missing ? config.invalidColor : config.mutedTextColor);
+                    if (engine::Button(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_clear", idPrefix),
+                                Rectangle{row.x + row.width - buttonW - clearW - gap, row.y, clearW, row.height},
+                                font,
+                                "Clear")) {
+                        mutateFaceAnchor(
+                                "Cleared authoring face decal",
+                                [field](SectorAuthoringFaceAnchor& anchor) {
+                                    SectorTopologyDecalLayer* target = nullptr;
+                                    if (field == TopologySectorTextureField::Floor) {
+                                        target = &anchor.floorDecal;
+                                    } else if (field == TopologySectorTextureField::Ceiling) {
+                                        target = &anchor.ceilingDecal;
+                                    }
+                                    if (target == nullptr || IsDefaultDecalLayer(*target)) {
+                                        return false;
+                                    }
+                                    ResetDecalLayer(*target);
+                                    return true;
+                                });
+                    }
+                    if (engine::Button(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_pick", idPrefix),
+                                Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height},
+                                font,
+                                ">")) {
+                        if (!OpenAuthoringFaceAnchorTexturePickerById(
+                                    state,
+                                    faceAnchorId,
+                                    field,
+                                    TopologyMaterialLayer::Decal)) {
+                            statusText = "Authoring face decal picker unavailable: derived mapping is not current";
+                        }
+                    }
+                    y += row.height + gap;
+
+                    if (decal.textureId.empty()) {
+                        return;
+                    }
+
+                    const SectorEditorFloatInputResult opacityResult = DrawLabeledFloatInput(
+                            ui,
+                            config,
+                            input,
+                            assets,
+                            font,
+                            TextFormat("%s_opacity", idPrefix),
+                            "Opacity:",
+                            Rectangle{0.0f, y, 82.0f, rowH},
+                            Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                            engine::UITextJustify::Left,
+                            decal.opacity,
+                            uiState.topologySectorDecalOpacityInputs[inputIndex],
+                            0.0f,
+                            1.0f,
+                            3);
+                    if (opacityResult.changed && opacityResult.value != decal.opacity && opacityResult.finite) {
+                        mutateFaceAnchor(
+                                "Updated authoring face decal opacity",
+                                [field, value = opacityResult.value](SectorAuthoringFaceAnchor& anchor) {
+                                    SectorTopologyDecalLayer* target = field == TopologySectorTextureField::Floor
+                                            ? &anchor.floorDecal
+                                            : &anchor.ceilingDecal;
+                                    if (target->textureId.empty() || target->opacity == value) {
+                                        return false;
+                                    }
+                                    target->opacity = value;
+                                    return true;
+                                });
+                    }
+                    y += rowH + gap;
+
+                    bool emissive = decal.emissive;
+                    if (engine::Checkbox(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_emissive", idPrefix),
+                                Rectangle{0.0f, y, contentW, 36.0f},
+                                font,
+                                "Emissive",
+                                emissive)) {
+                        mutateFaceAnchor(
+                                "Updated authoring face decal emissive",
+                                [field, emissive](SectorAuthoringFaceAnchor& anchor) {
+                                    SectorTopologyDecalLayer* target = field == TopologySectorTextureField::Floor
+                                            ? &anchor.floorDecal
+                                            : &anchor.ceilingDecal;
+                                    if (target->textureId.empty() || target->emissive == emissive) {
+                                        return false;
+                                    }
+                                    target->emissive = emissive;
+                                    return true;
+                                });
+                    }
+                    y += 36.0f + gap;
+
+                    if (decal.emissive) {
+                        const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                font,
+                                TextFormat("%s_bloom", idPrefix),
+                                "Bloom:",
+                                Rectangle{0.0f, y, 82.0f, rowH},
+                                Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                                engine::UITextJustify::Left,
+                                decal.bloomIntensity,
+                                uiState.topologySectorDecalBloomIntensityInputs[inputIndex],
+                                0.0f,
+                                10.0f,
+                                3);
+                        if (bloomResult.changed && bloomResult.value != decal.bloomIntensity && bloomResult.finite) {
+                            mutateFaceAnchor(
+                                    "Updated authoring face decal bloom intensity",
+                                    [field, value = bloomResult.value](SectorAuthoringFaceAnchor& anchor) {
+                                        SectorTopologyDecalLayer* target = field == TopologySectorTextureField::Floor
+                                                ? &anchor.floorDecal
+                                                : &anchor.ceilingDecal;
+                                        if (target->textureId.empty() || target->bloomIntensity == value) {
+                                            return false;
+                                        }
+                                        target->bloomIntensity = value;
+                                        return true;
+                                    });
+                        }
+                        y += rowH + gap;
+                    }
+
+                    engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Tint:", engine::UITextJustify::Left, config.mutedTextColor);
+                    const Rectangle swatchLocal{82.0f, y + 3.0f, 56.0f, rowH - 6.0f};
+                    if (engine::Button(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_tint", idPrefix),
+                                swatchLocal,
+                                font,
+                                "")) {
+                        TopologySurfaceEditTarget target;
+                        if (mappedFlatTargetForField(field, target)) {
+                            OpenDecalTintModal(target);
+                        } else {
+                            statusText = "Authoring face decal tint unavailable: derived mapping is not current";
+                        }
+                    }
+                    const Rectangle swatchScreen{
+                            scroll.viewport.x + swatchLocal.x,
+                            scroll.viewport.y - uiState.inspectorScroll.offset.y + swatchLocal.y,
+                            swatchLocal.width,
+                            swatchLocal.height};
+                    DrawColorSwatch(config, swatchScreen, DecalTintPreviewColor(decal.tint), config.borderThickness);
+                    y += rowH + gap;
+
+                    TopologySurfaceEditTarget fitTarget;
+                    if (mappedFlatTargetForField(field, fitTarget)
+                            && engine::Button(
+                                    ui,
+                                    config,
+                                    input,
+                                    assets,
+                                    TextFormat("%s_fit", idPrefix),
+                                    Rectangle{0.0f, y, contentW, 36.0f},
+                                    font,
+                                    "Fit Decal")) {
+                        FitSelectedDecal(fitTarget, &assets);
+                    }
+                    y += 36.0f + gap;
+                };
+        const auto drawDefaultDecalControls =
+                [&](const char* idPrefix, const char* label, const SectorTopologyDecalLayer& decal, TopologySectorTextureField field, int inputIndex) {
+                    const float buttonW = 38.0f;
+                    const float clearW = 92.0f;
+                    const float labelColumnW = 92.0f;
+                    const Rectangle row{0.0f, y, contentW, 36.0f};
+                    const bool missing = !decal.textureId.empty()
+                            && FindSectorTopologyTexture(state.topologyMap, decal.textureId) == nullptr;
+                    engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+                    engine::Text(
+                            ui,
+                            config,
+                            assets,
+                            Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - clearW - gap * 2.0f, row.height},
+                            font,
+                            decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
+                            engine::UITextJustify::Left,
+                            missing ? config.invalidColor : config.mutedTextColor);
+                    auto defaultDecalForField = [field](SectorAuthoringFaceAnchor& anchor) -> SectorTopologyDecalLayer* {
+                        if (field == TopologySectorTextureField::DefaultWall) {
+                            return &anchor.defaultWall.decal;
+                        }
+                        if (field == TopologySectorTextureField::DefaultLower) {
+                            return &anchor.defaultLower.decal;
+                        }
+                        if (field == TopologySectorTextureField::DefaultUpper) {
+                            return &anchor.defaultUpper.decal;
+                        }
+                        return nullptr;
+                    };
+                    if (engine::Button(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_clear", idPrefix),
+                                Rectangle{row.x + row.width - buttonW - clearW - gap, row.y, clearW, row.height},
+                                font,
+                                "Clear")) {
+                        mutateFaceAnchor(
+                                "Cleared authoring default decal",
+                                [defaultDecalForField](SectorAuthoringFaceAnchor& anchor) {
+                                    SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
+                                    if (target == nullptr || IsDefaultDecalLayer(*target)) {
+                                        return false;
+                                    }
+                                    ResetDecalLayer(*target);
+                                    return true;
+                                });
+                    }
+                    if (engine::Button(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_pick", idPrefix),
+                                Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height},
+                                font,
+                                ">")) {
+                        if (!OpenAuthoringFaceAnchorTexturePickerById(
+                                    state,
+                                    faceAnchorId,
+                                    field,
+                                    TopologyMaterialLayer::Decal)) {
+                            statusText = "Authoring default decal picker unavailable: derived mapping is not current";
+                        }
+                    }
+                    y += row.height + gap;
+
+                    if (decal.textureId.empty()) {
+                        return;
+                    }
+
+                    const SectorEditorFloatInputResult opacityResult = DrawLabeledFloatInput(
+                            ui,
+                            config,
+                            input,
+                            assets,
+                            font,
+                            TextFormat("%s_opacity", idPrefix),
+                            "Opacity:",
+                            Rectangle{0.0f, y, 82.0f, rowH},
+                            Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                            engine::UITextJustify::Left,
+                            decal.opacity,
+                            uiState.topologySectorDecalOpacityInputs[inputIndex],
+                            0.0f,
+                            1.0f,
+                            3);
+                    if (opacityResult.changed && opacityResult.value != decal.opacity && opacityResult.finite) {
+                        mutateFaceAnchor(
+                                "Updated authoring default decal opacity",
+                                [defaultDecalForField, value = opacityResult.value](SectorAuthoringFaceAnchor& anchor) {
+                                    SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
+                                    if (target == nullptr || target->textureId.empty() || target->opacity == value) {
+                                        return false;
+                                    }
+                                    target->opacity = value;
+                                    return true;
+                                });
+                    }
+                    y += rowH + gap;
+
+                    bool emissive = decal.emissive;
+                    if (engine::Checkbox(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_emissive", idPrefix),
+                                Rectangle{0.0f, y, contentW, 36.0f},
+                                font,
+                                "Emissive",
+                                emissive)) {
+                        mutateFaceAnchor(
+                                "Updated authoring default decal emissive",
+                                [defaultDecalForField, emissive](SectorAuthoringFaceAnchor& anchor) {
+                                    SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
+                                    if (target == nullptr || target->textureId.empty() || target->emissive == emissive) {
+                                        return false;
+                                    }
+                                    target->emissive = emissive;
+                                    return true;
+                                });
+                    }
+                    y += 36.0f + gap;
+
+                    if (decal.emissive) {
+                        const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                font,
+                                TextFormat("%s_bloom", idPrefix),
+                                "Bloom:",
+                                Rectangle{0.0f, y, 82.0f, rowH},
+                                Rectangle{82.0f, y, contentW - 82.0f, rowH},
+                                engine::UITextJustify::Left,
+                                decal.bloomIntensity,
+                                uiState.topologySectorDecalBloomIntensityInputs[inputIndex],
+                                0.0f,
+                                10.0f,
+                                3);
+                        if (bloomResult.changed && bloomResult.value != decal.bloomIntensity && bloomResult.finite) {
+                            mutateFaceAnchor(
+                                    "Updated authoring default decal bloom intensity",
+                                    [defaultDecalForField, value = bloomResult.value](SectorAuthoringFaceAnchor& anchor) {
+                                        SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
+                                        if (target == nullptr || target->textureId.empty() || target->bloomIntensity == value) {
+                                            return false;
+                                        }
+                                        target->bloomIntensity = value;
+                                        return true;
+                                    });
+                        }
+                        y += rowH + gap;
+                    }
+                };
 
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
         y += 18.0f;
@@ -5686,6 +6369,11 @@ void SectorEditor::DrawSectorsPanel(
         drawTextureRow("sector_editor_authoring_face_pick_default_wall", "Wall:", selectedAuthoringFaceAnchor->defaultWall.textureId, TopologySectorTextureField::DefaultWall);
         drawTextureRow("sector_editor_authoring_face_pick_default_lower", "Lower:", selectedAuthoringFaceAnchor->defaultLower.textureId, TopologySectorTextureField::DefaultLower);
         drawTextureRow("sector_editor_authoring_face_pick_default_upper", "Upper:", selectedAuthoringFaceAnchor->defaultUpper.textureId, TopologySectorTextureField::DefaultUpper);
+        drawFlatDecalControls("sector_editor_authoring_face_floor_decal", "Floor Decal:", selectedAuthoringFaceAnchor->floorDecal, TopologySectorTextureField::Floor, 0);
+        drawFlatDecalControls("sector_editor_authoring_face_ceiling_decal", "Ceiling Decal:", selectedAuthoringFaceAnchor->ceilingDecal, TopologySectorTextureField::Ceiling, 1);
+        drawDefaultDecalControls("sector_editor_authoring_face_default_wall_decal", "Wall Decal:", selectedAuthoringFaceAnchor->defaultWall.decal, TopologySectorTextureField::DefaultWall, 0);
+        drawDefaultDecalControls("sector_editor_authoring_face_default_lower_decal", "Lower Decal:", selectedAuthoringFaceAnchor->defaultLower.decal, TopologySectorTextureField::DefaultLower, 1);
+        drawDefaultDecalControls("sector_editor_authoring_face_default_upper_decal", "Upper Decal:", selectedAuthoringFaceAnchor->defaultUpper.decal, TopologySectorTextureField::DefaultUpper, 0);
 
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
@@ -8243,10 +8931,21 @@ bool SectorEditor::ApplyAuthoringFaceAnchorFlatMaterialAction(
         engine::AssetManager* assets,
         const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action)
 {
+    SectorSurfaceRef surface = state.selectedSurface3D;
+    if (!IsSelectedSurface3DFlatTarget(target)
+            && (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                    || target.kind == TopologySurfaceEditTargetKind::SectorCeiling)) {
+        surface = SectorSurfaceRef{};
+        surface.kind = target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? SectorSurfaceKind::Floor
+                : SectorSurfaceKind::Ceiling;
+        surface.topologySectorId = target.sectorId;
+    }
+
     SectorEditorAuthoringFlatMaterialActionResult result;
     if (!game::ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
                 state,
-                state.selectedSurface3D,
+                surface,
                 target,
                 action,
                 &result)) {
@@ -8343,7 +9042,7 @@ bool SectorEditor::PasteTopologyMaterial(TopologySurfaceEditTarget target, engin
                     return game::PasteMaterialSurface(map, target, state.copiedTopologyMaterial);
                 });
     }
-    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
         return ApplyAuthoringFaceAnchorFlatMaterialAction(
                 target,
                 &assets,
@@ -8378,7 +9077,7 @@ bool SectorEditor::ApplySurface3DUvValue(
                             value);
                 });
     }
-    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
         const SectorSurfaceKind surfaceKind = state.selectedSurface3D.kind;
         return ApplyAuthoringFaceAnchorFlatMaterialAction(
                 target,
@@ -8417,7 +9116,7 @@ bool SectorEditor::ApplySurfaceDecalOpacity(
                     return game::ApplySurfaceDecalOpacity(map, target, opacity);
                 });
     }
-    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
         return ApplyAuthoringFaceAnchorFlatMaterialAction(
                 target,
                 assets,
@@ -8441,7 +9140,7 @@ bool SectorEditor::ApplySurfaceDecalEmissive(
                     return game::ApplySurfaceDecalEmissive(map, target, emissive);
                 });
     }
-    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
         return ApplyAuthoringFaceAnchorFlatMaterialAction(
                 target,
                 assets,
@@ -8465,7 +9164,7 @@ bool SectorEditor::ApplySurfaceDecalTint(
                     return game::ApplySurfaceDecalTint(map, target, tint);
                 });
     }
-    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
         return ApplyAuthoringFaceAnchorFlatMaterialAction(
                 target,
                 assets,
@@ -8489,7 +9188,7 @@ bool SectorEditor::ApplySurfaceDecalBloomIntensity(
                     return game::ApplySurfaceDecalBloomIntensity(map, target, bloomIntensity);
                 });
     }
-    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
         return ApplyAuthoringFaceAnchorFlatMaterialAction(
                 target,
                 assets,
@@ -8526,7 +9225,7 @@ bool SectorEditor::ClearSurfaceDecal(
                     return game::ClearSurfaceDecal(map, target);
                 });
     }
-    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
         return ApplyAuthoringFaceAnchorFlatMaterialAction(
                 target,
                 assets,
@@ -8566,7 +9265,7 @@ bool SectorEditor::ResetSurface3DUv(
                     return game::ResetSurfaceUv(map, target, layer, surfaceKind);
                 });
     }
-    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
         const SectorSurfaceKind surfaceKind = state.selectedSurface3D.kind;
         return ApplyAuthoringFaceAnchorFlatMaterialAction(
                 target,
@@ -8592,7 +9291,7 @@ bool SectorEditor::FitSelectedDecal(
                     return game::FitSelectedDecal(map, target);
                 });
     }
-    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
         return ApplyAuthoringFaceAnchorFlatMaterialAction(
                 target,
                 assets,
@@ -8607,7 +9306,7 @@ bool SectorEditor::FitSelectedFlatDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
-    if (IsSelectedSurface3DFlatTarget(target) && HasAuthoringGraphData()) {
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
         return ApplyAuthoringFaceAnchorFlatMaterialAction(
                 target,
                 assets,

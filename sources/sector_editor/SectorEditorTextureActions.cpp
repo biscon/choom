@@ -124,6 +124,15 @@ bool ResolveDirectAuthoringFaceAnchorPickerTarget(
     return true;
 }
 
+bool IsAuthoringFaceAnchorDecalTextureField(TopologySectorTextureField field)
+{
+    return field == TopologySectorTextureField::Floor
+            || field == TopologySectorTextureField::Ceiling
+            || field == TopologySectorTextureField::DefaultWall
+            || field == TopologySectorTextureField::DefaultLower
+            || field == TopologySectorTextureField::DefaultUpper;
+}
+
 bool ResolveAuthoringSidePickerTarget(
         const SectorEditorState& state,
         const TexturePickerState& picker,
@@ -453,9 +462,18 @@ std::string CurrentTextureForPickerTarget(const SectorEditorState& state)
                 return state.texturePicker.topologyLayer == TopologyMaterialLayer::Decal
                         ? anchor->ceilingDecal.textureId
                         : anchor->ceilingTextureId;
-            case TopologySectorTextureField::DefaultWall: return anchor->defaultWall.textureId;
-            case TopologySectorTextureField::DefaultLower: return anchor->defaultLower.textureId;
-            case TopologySectorTextureField::DefaultUpper: return anchor->defaultUpper.textureId;
+            case TopologySectorTextureField::DefaultWall:
+                return state.texturePicker.topologyLayer == TopologyMaterialLayer::Decal
+                        ? anchor->defaultWall.decal.textureId
+                        : anchor->defaultWall.textureId;
+            case TopologySectorTextureField::DefaultLower:
+                return state.texturePicker.topologyLayer == TopologyMaterialLayer::Decal
+                        ? anchor->defaultLower.decal.textureId
+                        : anchor->defaultLower.textureId;
+            case TopologySectorTextureField::DefaultUpper:
+                return state.texturePicker.topologyLayer == TopologyMaterialLayer::Decal
+                        ? anchor->defaultUpper.decal.textureId
+                        : anchor->defaultUpper.textureId;
             case TopologySectorTextureField::None: break;
         }
         return std::string{};
@@ -494,8 +512,7 @@ bool OpenTopologyTexturePicker(
     if (FindSectorTopologySector(state.topologyMap, sectorId) == nullptr
             || field == TopologySectorTextureField::None
             || (layer == TopologyMaterialLayer::Decal
-                    && field != TopologySectorTextureField::Floor
-                    && field != TopologySectorTextureField::Ceiling)) {
+                    && !IsAuthoringFaceAnchorDecalTextureField(field))) {
         picker = TexturePickerState{};
         return false;
     }
@@ -557,8 +574,7 @@ bool OpenAuthoringFaceAnchorTexturePicker(
             || FindSectorEditorAuthoringFaceAnchorIdForTopologySector(state, topologySectorId) < 0
             || field == TopologySectorTextureField::None
             || (layer == TopologyMaterialLayer::Decal
-                    && field != TopologySectorTextureField::Floor
-                    && field != TopologySectorTextureField::Ceiling)) {
+                    && !IsAuthoringFaceAnchorDecalTextureField(field))) {
         picker = TexturePickerState{};
         return false;
     }
@@ -591,8 +607,7 @@ bool OpenAuthoringFaceAnchorTexturePickerById(
             || FindSectorAuthoringFaceAnchor(state.authoringGraph, faceAnchorId) == nullptr
             || field == TopologySectorTextureField::None
             || (layer == TopologyMaterialLayer::Decal
-                    && field != TopologySectorTextureField::Floor
-                    && field != TopologySectorTextureField::Ceiling)) {
+                    && !IsAuthoringFaceAnchorDecalTextureField(field))) {
         picker = TexturePickerState{};
         return false;
     }
@@ -814,18 +829,39 @@ SectorEditorTexturePickerApplyResult ApplyAuthoringTexturePickerSelection(Sector
                                 }
                                 return true;
                             case TopologySectorTextureField::DefaultWall:
+                                if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+                                    if (anchor.defaultWall.decal.textureId == selectedTexture) {
+                                        return false;
+                                    }
+                                    anchor.defaultWall.decal.textureId = selectedTexture;
+                                    return true;
+                                }
                                 if (anchor.defaultWall.textureId == selectedTexture) {
                                     return false;
                                 }
                                 anchor.defaultWall.textureId = selectedTexture;
                                 return true;
                             case TopologySectorTextureField::DefaultLower:
+                                if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+                                    if (anchor.defaultLower.decal.textureId == selectedTexture) {
+                                        return false;
+                                    }
+                                    anchor.defaultLower.decal.textureId = selectedTexture;
+                                    return true;
+                                }
                                 if (anchor.defaultLower.textureId == selectedTexture) {
                                     return false;
                                 }
                                 anchor.defaultLower.textureId = selectedTexture;
                                 return true;
                             case TopologySectorTextureField::DefaultUpper:
+                                if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+                                    if (anchor.defaultUpper.decal.textureId == selectedTexture) {
+                                        return false;
+                                    }
+                                    anchor.defaultUpper.decal.textureId = selectedTexture;
+                                    return true;
+                                }
                                 if (anchor.defaultUpper.textureId == selectedTexture) {
                                     return false;
                                 }

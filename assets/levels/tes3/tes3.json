@@ -3,6 +3,10 @@
   "topology": "linedef",
   "coordSubdivisions": 16,
   "textures": {
+    "biker_chick": {
+      "path": "assets/images/biker_chick.png",
+      "filter": "anisotropic8x"
+    },
     "ceiling": {
       "path": "assets/images/ceiling.png",
       "filter": "anisotropic8x"
@@ -36,8 +40,8 @@
     },
     {
       "id": 2,
-      "x": 2432,
-      "y": 128
+      "x": 1920,
+      "y": 256
     },
     {
       "id": 3,
@@ -88,112 +92,139 @@
       "id": 12,
       "x": 2432,
       "y": 1280
+    },
+    {
+      "id": 13,
+      "x": 1152,
+      "y": 128
+    },
+    {
+      "id": 14,
+      "x": 1408,
+      "y": 128
     }
   ],
   "linedefs": [
     {
       "id": 1,
-      "startVertexId": 1,
-      "endVertexId": 2,
+      "startVertexId": 2,
+      "endVertexId": 11,
       "frontSideDefId": 1,
       "backSideDefId": -1
     },
     {
       "id": 2,
-      "startVertexId": 2,
-      "endVertexId": 11,
-      "frontSideDefId": 2,
-      "backSideDefId": -1
+      "startVertexId": 11,
+      "endVertexId": 12,
+      "frontSideDefId": 11,
+      "backSideDefId": 15,
+      "flags": {
+        "blocksPlayer": true
+      }
     },
     {
       "id": 3,
-      "startVertexId": 11,
-      "endVertexId": 12,
-      "frontSideDefId": 9,
-      "backSideDefId": 13
+      "startVertexId": 12,
+      "endVertexId": 3,
+      "frontSideDefId": 5,
+      "backSideDefId": -1
     },
     {
       "id": 4,
-      "startVertexId": 12,
-      "endVertexId": 3,
+      "startVertexId": 3,
+      "endVertexId": 4,
       "frontSideDefId": 6,
       "backSideDefId": -1
     },
     {
       "id": 5,
-      "startVertexId": 3,
-      "endVertexId": 4,
+      "startVertexId": 4,
+      "endVertexId": 1,
       "frontSideDefId": 7,
       "backSideDefId": -1
     },
     {
       "id": 6,
-      "startVertexId": 4,
-      "endVertexId": 1,
-      "frontSideDefId": 8,
-      "backSideDefId": -1
-    },
-    {
-      "id": 7,
       "startVertexId": 5,
       "endVertexId": 6,
-      "frontSideDefId": 11,
-      "backSideDefId": 4
-    },
-    {
-      "id": 8,
-      "startVertexId": 6,
-      "endVertexId": 11,
-      "frontSideDefId": 12,
+      "frontSideDefId": 13,
       "backSideDefId": 3
     },
     {
-      "id": 9,
+      "id": 7,
+      "startVertexId": 6,
+      "endVertexId": 11,
+      "frontSideDefId": 14,
+      "backSideDefId": 2
+    },
+    {
+      "id": 8,
       "startVertexId": 11,
       "endVertexId": 7,
-      "frontSideDefId": 14,
-      "backSideDefId": -1
-    },
-    {
-      "id": 10,
-      "startVertexId": 7,
-      "endVertexId": 8,
-      "frontSideDefId": 15,
-      "backSideDefId": 17
-    },
-    {
-      "id": 11,
-      "startVertexId": 8,
-      "endVertexId": 12,
       "frontSideDefId": 16,
       "backSideDefId": -1
     },
     {
-      "id": 12,
-      "startVertexId": 12,
-      "endVertexId": 5,
-      "frontSideDefId": 10,
-      "backSideDefId": 5
+      "id": 9,
+      "startVertexId": 7,
+      "endVertexId": 8,
+      "frontSideDefId": 17,
+      "backSideDefId": 19
     },
     {
-      "id": 13,
-      "startVertexId": 7,
-      "endVertexId": 9,
+      "id": 10,
+      "startVertexId": 8,
+      "endVertexId": 12,
       "frontSideDefId": 18,
       "backSideDefId": -1
     },
     {
-      "id": 14,
+      "id": 11,
+      "startVertexId": 12,
+      "endVertexId": 5,
+      "frontSideDefId": 12,
+      "backSideDefId": 4
+    },
+    {
+      "id": 12,
+      "startVertexId": 7,
+      "endVertexId": 9,
+      "frontSideDefId": 20,
+      "backSideDefId": -1
+    },
+    {
+      "id": 13,
       "startVertexId": 9,
       "endVertexId": 10,
-      "frontSideDefId": 19,
+      "frontSideDefId": 21,
+      "backSideDefId": -1
+    },
+    {
+      "id": 14,
+      "startVertexId": 10,
+      "endVertexId": 8,
+      "frontSideDefId": 22,
       "backSideDefId": -1
     },
     {
       "id": 15,
-      "startVertexId": 10,
-      "endVertexId": 8,
-      "frontSideDefId": 20,
+      "startVertexId": 1,
+      "endVertexId": 13,
+      "frontSideDefId": 8,
+      "backSideDefId": -1
+    },
+    {
+      "id": 16,
+      "startVertexId": 13,
+      "endVertexId": 14,
+      "frontSideDefId": 9,
+      "backSideDefId": -1
+    },
+    {
+      "id": 17,
+      "startVertexId": 14,
+      "endVertexId": 2,
+      "frontSideDefId": 10,
       "backSideDefId": -1
     }
   ],
@@ -245,96 +276,6 @@
     },
     {
       "id": 2,
-      "lineDefId": 2,
-      "side": "front",
-      "sectorId": 1,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 3,
-      "lineDefId": 8,
-      "side": "back",
-      "sectorId": 1,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 4,
       "lineDefId": 7,
       "side": "back",
       "sectorId": 1,
@@ -379,9 +320,99 @@
       }
     },
     {
-      "id": 5,
-      "lineDefId": 12,
+      "id": 3,
+      "lineDefId": 6,
       "side": "back",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "lineDefId": 11,
+      "side": "back",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 5,
+      "lineDefId": 3,
+      "side": "front",
       "sectorId": 1,
       "wall": {
         "textureId": "wall",
@@ -515,7 +546,7 @@
     },
     {
       "id": 8,
-      "lineDefId": 6,
+      "lineDefId": 15,
       "side": "front",
       "sectorId": 1,
       "wall": {
@@ -560,7 +591,118 @@
     },
     {
       "id": 9,
-      "lineDefId": 3,
+      "lineDefId": 16,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            3.5,
+            0.0
+          ]
+        },
+        "decal": {
+          "textureId": "biker_chick",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.5
+            ]
+          },
+          "opacity": 1.0,
+          "emissive": true,
+          "tint": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "bloomIntensity": 2.0
+        }
+      },
+      "lower": {
+        "textureId": "",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 10,
+      "lineDefId": 17,
+      "side": "front",
+      "sectorId": 1,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 11,
+      "lineDefId": 2,
       "side": "front",
       "sectorId": 2,
       "wall": {
@@ -617,98 +759,8 @@
       }
     },
     {
-      "id": 10,
-      "lineDefId": 12,
-      "side": "front",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 11,
-      "lineDefId": 7,
-      "side": "front",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
       "id": 12,
-      "lineDefId": 8,
+      "lineDefId": 11,
       "side": "front",
       "sectorId": 2,
       "wall": {
@@ -753,7 +805,97 @@
     },
     {
       "id": 13,
-      "lineDefId": 3,
+      "lineDefId": 6,
+      "side": "front",
+      "sectorId": 2,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 14,
+      "lineDefId": 7,
+      "side": "front",
+      "sectorId": 2,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 15,
+      "lineDefId": 2,
       "side": "back",
       "sectorId": 3,
       "wall": {
@@ -797,98 +939,8 @@
       }
     },
     {
-      "id": 14,
-      "lineDefId": 9,
-      "side": "front",
-      "sectorId": 3,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 15,
-      "lineDefId": 10,
-      "side": "front",
-      "sectorId": 3,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
       "id": 16,
-      "lineDefId": 11,
+      "lineDefId": 8,
       "side": "front",
       "sectorId": 3,
       "wall": {
@@ -933,7 +985,97 @@
     },
     {
       "id": 17,
+      "lineDefId": 9,
+      "side": "front",
+      "sectorId": 3,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 18,
       "lineDefId": 10,
+      "side": "front",
+      "sectorId": 3,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 19,
+      "lineDefId": 9,
       "side": "back",
       "sectorId": 4,
       "wall": {
@@ -977,7 +1119,52 @@
       }
     },
     {
-      "id": 18,
+      "id": 20,
+      "lineDefId": 12,
+      "side": "front",
+      "sectorId": 4,
+      "wall": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "lower": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "upper": {
+        "textureId": "wall",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "id": 21,
       "lineDefId": 13,
       "side": "front",
       "sectorId": 4,
@@ -1022,53 +1209,8 @@
       }
     },
     {
-      "id": 19,
+      "id": 22,
       "lineDefId": 14,
-      "side": "front",
-      "sectorId": 4,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 20,
-      "lineDefId": 15,
       "side": "front",
       "sectorId": 4,
       "wall": {
@@ -1117,7 +1259,7 @@
       "id": 1,
       "name": "Sector 1",
       "floorZ": 0.0,
-      "ceilingZ": 24.0,
+      "ceilingZ": 34.0,
       "floorTextureId": "floor",
       "ceilingTextureId": "ceiling",
       "floorUv": {
@@ -1146,7 +1288,7 @@
         "b": 255,
         "a": 255
       },
-      "ambientIntensity": 1.0,
+      "ambientIntensity": 0.4000000059604645,
       "defaultWall": {
         "textureId": "wall",
         "uv": {
@@ -1410,7 +1552,25 @@
       }
     }
   ],
-  "staticLights": [],
+  "staticLights": [
+    {
+      "id": 1,
+      "position": [
+        80.0,
+        14.399999618530273,
+        64.0
+      ],
+      "radius": 80.0,
+      "sourceRadius": 4.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    }
+  ],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
     "ambientOcclusionStrength": 0.550000011920929,
@@ -1418,15 +1578,15 @@
     "indirectBounceStrength": 0.20000000298023224
   },
   "previewSettings": {
-    "walkSpeed": 6.0,
-    "runSpeed": 12.0,
+    "walkSpeed": 4.5,
+    "runSpeed": 7.0,
     "mouseSensitivity": 1.0,
-    "eyeHeight": 1.2000000476837158,
+    "eyeHeight": 1.600000023841858,
     "gravity": 25.0,
-    "playerRadius": 0.25,
-    "playerHeight": 1.600000023841858,
+    "playerRadius": 0.5,
+    "playerHeight": 1.75,
     "stepHeight": 0.25,
-    "jumpHeight": 0.6000000238418579,
+    "jumpHeight": 1.0,
     "headBobStrength": 0.019999999552965164,
     "headBobFrequency": 2.0
   },
@@ -1444,5 +1604,11 @@
       "a": 255
     },
     "intensity": 1.0
+  },
+  "bakedLightmap": {
+    "path": "assets/levels/tes3/tes3.lightmap.png",
+    "width": 2048,
+    "height": 2048,
+    "sourceHash": "76c5d8073fac944f"
   }
 }
