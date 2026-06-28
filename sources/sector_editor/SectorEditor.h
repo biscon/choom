@@ -292,6 +292,7 @@ private:
     bool DeleteSelectedAuthoringLine();
     void SelectAuthoringVertex(int vertexId);
     bool DeleteSelectedAuthoringVertex();
+    void SelectAuthoringFaceAnchor(int faceAnchorId);
     void SelectSurface3D(SectorSurfaceRef surface);
     bool IsValidSurfaceRef(SectorSurfaceRef surface) const;
     bool SameSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b) const;

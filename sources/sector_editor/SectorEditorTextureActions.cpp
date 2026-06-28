@@ -90,6 +90,40 @@ bool ResolveAuthoringFaceAnchorPickerTarget(
     return true;
 }
 
+bool ResolveDirectAuthoringFaceAnchorPickerTarget(
+        const SectorEditorState& state,
+        const TexturePickerState& picker,
+        std::string& outStatus)
+{
+    outStatus.clear();
+
+    if (!HasCurrentAuthoringDerivation(state)) {
+        outStatus = "Authoring face texture edit unavailable: derived topology is not current";
+        return false;
+    }
+    if (FindSectorAuthoringFaceAnchor(state.authoringGraph, picker.authoringFaceAnchorId) == nullptr) {
+        outStatus = "Authoring face texture edit unavailable: selected face anchor is not current";
+        return false;
+    }
+
+    int matchCount = 0;
+    for (const SectorAuthoringDerivedSectorMapping& mapping
+            : state.authoringDerivation.mapping.sectors) {
+        if (mapping.faceAnchorId == picker.authoringFaceAnchorId) {
+            ++matchCount;
+        }
+    }
+    if (matchCount == 0) {
+        outStatus = "Authoring face texture edit unavailable: selected face anchor has no current derived mapping";
+        return false;
+    }
+    if (matchCount > 1) {
+        outStatus = "Authoring face texture edit unavailable: selected face anchor mapping is ambiguous";
+        return false;
+    }
+    return true;
+}
+
 bool ResolveAuthoringSidePickerTarget(
         const SectorEditorState& state,
         const TexturePickerState& picker,
@@ -135,6 +169,37 @@ bool ResolveAuthoringSidePickerTarget(
     }
     if (matchCount > 1) {
         outStatus = "Authoring side texture edit unavailable: selected sidedef has ambiguous authoring side mapping";
+        return false;
+    }
+    return true;
+}
+
+bool ResolveDirectAuthoringSidePickerTarget(
+        const SectorEditorState& state,
+        const TexturePickerState& picker,
+        std::string& outStatus)
+{
+    outStatus.clear();
+
+    if (!HasCurrentAuthoringDerivation(state)) {
+        outStatus = "Authoring side texture edit unavailable: derived topology is not current";
+        return false;
+    }
+    if (FindSectorAuthoringLine(state.authoringGraph, picker.authoringLineId) == nullptr) {
+        outStatus = "Authoring side texture edit unavailable: selected authoring line is not current";
+        return false;
+    }
+
+    int matchCount = 0;
+    for (const SectorAuthoringDerivedSideMapping& mapping
+            : state.authoringDerivation.mapping.sides) {
+        if (mapping.authoringLineId == picker.authoringLineId
+                && mapping.authoringSide == picker.authoringSide) {
+            ++matchCount;
+        }
+    }
+    if (matchCount == 0) {
+        outStatus = "Authoring side texture edit unavailable: selected authoring side has no current derived mapping";
         return false;
     }
     return true;
@@ -324,11 +389,16 @@ std::string CurrentTextureForPickerTarget(const SectorEditorState& state)
 
     if (IsSidePickerTarget(state.texturePicker.topologyTargetKind)) {
         if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringSide) {
-            SectorAuthoringSideId sideId;
-            if (FindSectorEditorAuthoringSideIdForTopologySideDef(
+            SectorAuthoringSideId sideId{
+                    state.texturePicker.authoringLineId,
+                    state.texturePicker.authoringSide};
+            if (!IsValidSectorAuthoringId(sideId.lineId)) {
+                FindSectorEditorAuthoringSideIdForTopologySideDef(
                         state,
                         state.texturePicker.topologySideDefId,
-                        sideId)) {
+                        sideId);
+            }
+            if (IsValidSectorAuthoringId(sideId.lineId)) {
                 const SectorAuthoringLineSide* authoringSide =
                         FindSectorAuthoringLineSide(state.authoringGraph, sideId);
                 if (authoringSide != nullptr) {
@@ -363,9 +433,12 @@ std::string CurrentTextureForPickerTarget(const SectorEditorState& state)
     }
 
     if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringFaceAnchor) {
-        const int faceAnchorId = FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
-                state,
-                state.texturePicker.topologySectorId);
+        int faceAnchorId = state.texturePicker.authoringFaceAnchorId;
+        if (!IsValidSectorAuthoringId(faceAnchorId)) {
+            faceAnchorId = FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
+                    state,
+                    state.texturePicker.topologySectorId);
+        }
         const SectorAuthoringFaceAnchor* anchor =
                 FindSectorAuthoringFaceAnchor(state.authoringGraph, faceAnchorId);
         if (anchor == nullptr) {
@@ -499,6 +572,49 @@ bool OpenAuthoringFaceAnchorTexturePicker(
     picker.topologyField = field;
     picker.topologySideDefId = -1;
     picker.topologyWallPart = TopologyWallPart::Wall;
+    picker.authoringFaceAnchorId = -1;
+    picker.authoringLineId = -1;
+    picker.authoringSide = SectorTopologySideKind::Front;
+
+    PopulateTexturePickerOptions(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
+    return true;
+}
+
+bool OpenAuthoringFaceAnchorTexturePickerById(
+        SectorEditorState& state,
+        int faceAnchorId,
+        TopologySectorTextureField field,
+        TopologyMaterialLayer layer)
+{
+    TexturePickerState& picker = state.texturePicker;
+    if (!HasCurrentAuthoringDerivation(state)
+            || FindSectorAuthoringFaceAnchor(state.authoringGraph, faceAnchorId) == nullptr
+            || field == TopologySectorTextureField::None
+            || (layer == TopologyMaterialLayer::Decal
+                    && field != TopologySectorTextureField::Floor
+                    && field != TopologySectorTextureField::Ceiling)) {
+        picker = TexturePickerState{};
+        return false;
+    }
+
+    picker.open = true;
+    picker.rebuildPreviewOnApply = false;
+    picker.authoringSurface3DFlatTarget = false;
+    picker.topologyTargetKind = TopologyTexturePickerTargetKind::AuthoringFaceAnchor;
+    picker.topologyLayer = layer;
+    picker.topologySectorId = -1;
+    picker.topologyField = field;
+    picker.topologySideDefId = -1;
+    picker.topologyWallPart = TopologyWallPart::Wall;
+    picker.authoringFaceAnchorId = faceAnchorId;
+    picker.authoringLineId = -1;
+    picker.authoringSide = SectorTopologySideKind::Front;
+
+    std::string status;
+    if (!ResolveDirectAuthoringFaceAnchorPickerTarget(state, picker, status)) {
+        picker = TexturePickerState{};
+        return false;
+    }
 
     PopulateTexturePickerOptions(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
     return true;
@@ -536,6 +652,47 @@ bool OpenAuthoringSideTexturePicker(
     picker.topologyField = TopologySectorTextureField::None;
     picker.topologySideDefId = topologySideDefId;
     picker.topologyWallPart = wallPart;
+    picker.authoringFaceAnchorId = -1;
+    picker.authoringLineId = -1;
+    picker.authoringSide = SectorTopologySideKind::Front;
+
+    PopulateTexturePickerOptions(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
+    return true;
+}
+
+bool OpenAuthoringSideTexturePickerById(
+        SectorEditorState& state,
+        SectorAuthoringSideId sideId,
+        TopologyWallPart wallPart,
+        TopologyMaterialLayer layer)
+{
+    TexturePickerState& picker = state.texturePicker;
+    if (!HasCurrentAuthoringDerivation(state)
+            || FindSectorAuthoringLine(state.authoringGraph, sideId.lineId) == nullptr) {
+        picker = TexturePickerState{};
+        return false;
+    }
+
+    picker.open = true;
+    picker.rebuildPreviewOnApply = false;
+    picker.authoringSurface3DFlatTarget = false;
+    picker.topologyTargetKind = TopologyTexturePickerTargetKind::AuthoringSide;
+    picker.topologyLayer = wallPart == TopologyWallPart::Middle
+            ? TopologyMaterialLayer::Base
+            : layer;
+    picker.topologySectorId = -1;
+    picker.topologyField = TopologySectorTextureField::None;
+    picker.topologySideDefId = -1;
+    picker.topologyWallPart = wallPart;
+    picker.authoringFaceAnchorId = -1;
+    picker.authoringLineId = sideId.lineId;
+    picker.authoringSide = sideId.side;
+
+    std::string status;
+    if (!ResolveDirectAuthoringSidePickerTarget(state, picker, status)) {
+        picker = TexturePickerState{};
+        return false;
+    }
 
     PopulateTexturePickerOptions(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
     return true;
@@ -618,6 +775,73 @@ SectorEditorTexturePickerApplyResult ApplyAuthoringTexturePickerSelection(Sector
     result.rebuildPreviewOnApply = picker.rebuildPreviewOnApply;
 
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringFaceAnchor) {
+        if (IsValidSectorAuthoringId(picker.authoringFaceAnchorId)) {
+            if (!ResolveDirectAuthoringFaceAnchorPickerTarget(state, picker, result.status)) {
+                return closeAndReturn();
+            }
+
+            const char* status = "Updated authoring face texture";
+            if (MutateSectorEditorAuthoringFaceAnchorById(
+                        state,
+                        picker.authoringFaceAnchorId,
+                        status,
+                        [picker, selectedTexture](SectorAuthoringFaceAnchor& anchor) {
+                            switch (picker.topologyField) {
+                            case TopologySectorTextureField::Floor:
+                                if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+                                    if (anchor.floorDecal.textureId == selectedTexture) {
+                                        return false;
+                                    }
+                                    anchor.floorDecal.textureId = selectedTexture;
+                                } else {
+                                    if (anchor.floorTextureId == selectedTexture) {
+                                        return false;
+                                    }
+                                    anchor.floorTextureId = selectedTexture;
+                                }
+                                return true;
+                            case TopologySectorTextureField::Ceiling:
+                                if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+                                    if (anchor.ceilingDecal.textureId == selectedTexture) {
+                                        return false;
+                                    }
+                                    anchor.ceilingDecal.textureId = selectedTexture;
+                                } else {
+                                    if (anchor.ceilingTextureId == selectedTexture) {
+                                        return false;
+                                    }
+                                    anchor.ceilingTextureId = selectedTexture;
+                                }
+                                return true;
+                            case TopologySectorTextureField::DefaultWall:
+                                if (anchor.defaultWall.textureId == selectedTexture) {
+                                    return false;
+                                }
+                                anchor.defaultWall.textureId = selectedTexture;
+                                return true;
+                            case TopologySectorTextureField::DefaultLower:
+                                if (anchor.defaultLower.textureId == selectedTexture) {
+                                    return false;
+                                }
+                                anchor.defaultLower.textureId = selectedTexture;
+                                return true;
+                            case TopologySectorTextureField::DefaultUpper:
+                                if (anchor.defaultUpper.textureId == selectedTexture) {
+                                    return false;
+                                }
+                                anchor.defaultUpper.textureId = selectedTexture;
+                                return true;
+                            case TopologySectorTextureField::None:
+                                break;
+                            }
+                            return false;
+                        })) {
+                result.changed = true;
+                result.status = status;
+            }
+            return closeAndReturn();
+        }
+
         if (!ResolveAuthoringFaceAnchorPickerTarget(state, picker, result.status)) {
             return closeAndReturn();
         }
@@ -672,6 +896,37 @@ SectorEditorTexturePickerApplyResult ApplyAuthoringTexturePickerSelection(Sector
                         return false;
                     })) {
             result.changed = false;
+        }
+        return closeAndReturn();
+    }
+
+    if (IsValidSectorAuthoringId(picker.authoringLineId)) {
+        if (!ResolveDirectAuthoringSidePickerTarget(state, picker, result.status)) {
+            return closeAndReturn();
+        }
+
+        const TopologyMaterialLayer layer = picker.topologyWallPart == TopologyWallPart::Middle
+                ? TopologyMaterialLayer::Base
+                : picker.topologyLayer;
+        const char* status = "Updated authoring side texture";
+        if (MutateSectorEditorAuthoringSideById(
+                    state,
+                    SectorAuthoringSideId{picker.authoringLineId, picker.authoringSide},
+                    status,
+                    [picker, layer, selectedTexture](SectorAuthoringLineSide& side) {
+                        SectorTopologyWallPartSettings& part =
+                                TopologyWallPartSettingsFor(side, picker.topologyWallPart);
+                        std::string& target = layer == TopologyMaterialLayer::Decal
+                                ? part.decal.textureId
+                                : part.textureId;
+                        if (target == selectedTexture) {
+                            return false;
+                        }
+                        target = selectedTexture;
+                        return true;
+                    })) {
+            result.changed = true;
+            result.status = status;
         }
         return closeAndReturn();
     }

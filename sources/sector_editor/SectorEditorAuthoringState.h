@@ -10,6 +10,7 @@ namespace game {
 
 SectorAuthoringSelectionTarget MakeSectorAuthoringLineSelectionTarget(int lineId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringVertexSelectionTarget(int vertexId);
+SectorAuthoringSelectionTarget MakeSectorAuthoringFaceAnchorSelectionTarget(int faceAnchorId);
 
 bool SectorAuthoringSelectionTargetsEqual(
         SectorAuthoringSelectionTarget lhs,
@@ -22,6 +23,7 @@ bool IsSectorAuthoringSelectionTargetValid(
 void ClearSectorEditorAuthoringSelection(SectorEditorState& state);
 bool SelectSectorEditorAuthoringLine(SectorEditorState& state, int lineId);
 bool SelectSectorEditorAuthoringVertex(SectorEditorState& state, int vertexId);
+bool SelectSectorEditorAuthoringFaceAnchor(SectorEditorState& state, int faceAnchorId);
 
 void ClearSectorEditorAuthoringHover(SectorEditorState& state);
 bool SetHoveredSectorEditorAuthoringLine(SectorEditorState& state, int lineId);
@@ -54,6 +56,21 @@ bool FindSectorEditorAuthoringSelectionNearMapPoint(
         float lineMaxDistance,
         SectorAuthoringSelectionTarget* outTarget = nullptr,
         SectorTopologyCoordPoint* outVertexPoint = nullptr);
+
+bool FindSectorEditorAuthoringFaceAnchorAtMapPoint(
+        const SectorEditorState& state,
+        Vector2 mapPoint,
+        int* outFaceAnchorId = nullptr,
+        std::string* outStatus = nullptr);
+
+bool FindSectorEditorAuthoringSelectionAtMapPoint(
+        const SectorEditorState& state,
+        Vector2 mapPoint,
+        float vertexMaxDistance,
+        float lineMaxDistance,
+        SectorAuthoringSelectionTarget* outTarget = nullptr,
+        SectorTopologyCoordPoint* outVertexPoint = nullptr,
+        std::string* outStatus = nullptr);
 
 bool AddSectorEditorAuthoringLineSegment(
         SectorEditorState& state,
@@ -133,15 +150,33 @@ bool MutateSectorEditorAuthoringFaceAnchorForTopologySector(
         const char* status,
         const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate);
 
+bool MutateSectorEditorAuthoringFaceAnchorById(
+        SectorEditorState& state,
+        int faceAnchorId,
+        const char* status,
+        const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate);
+
 bool MutateSectorEditorAuthoringSideForTopologySideDef(
         SectorEditorState& state,
         int topologySideDefId,
         const char* status,
         const std::function<bool(SectorAuthoringLineSide&)>& mutate);
 
+bool MutateSectorEditorAuthoringSideById(
+        SectorEditorState& state,
+        SectorAuthoringSideId sideId,
+        const char* status,
+        const std::function<bool(SectorAuthoringLineSide&)>& mutate);
+
 bool MutateSectorEditorAuthoringLineForTopologyLineDef(
         SectorEditorState& state,
         int topologyLineDefId,
+        const char* status,
+        const std::function<bool(SectorAuthoringLine&)>& mutate);
+
+bool MutateSectorEditorAuthoringLineById(
+        SectorEditorState& state,
+        int lineId,
         const char* status,
         const std::function<bool(SectorAuthoringLine&)>& mutate);
 

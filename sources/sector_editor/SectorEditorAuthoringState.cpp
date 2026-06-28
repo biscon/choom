@@ -8,6 +8,7 @@
 #include <cmath>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace game {
 
@@ -107,6 +108,47 @@ bool CanUseCurrentAuthoringDerivedTopology(
     return false;
 }
 
+bool PointInTopologyLoop(
+        const SectorTopologyMap& map,
+        Vector2 mapPoint,
+        const SectorTopologyLoop& loop)
+{
+    std::vector<SectorPoint> points;
+    points.reserve(loop.vertexIds.size());
+    for (int vertexId : loop.vertexIds) {
+        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(map, vertexId);
+        if (vertex == nullptr) {
+            return false;
+        }
+        points.push_back(Vector2ToSectorPoint(SectorTopologyVertexToMap(*vertex)));
+    }
+
+    const SectorPoint point = Vector2ToSectorPoint(mapPoint);
+    return StrictPointInPolygon(point, points) || PointOnPolygonBoundary(point, points);
+}
+
+bool PointInTopologySector(
+        const SectorTopologyMap& map,
+        const SectorTopologyIndexes& indexes,
+        Vector2 mapPoint,
+        int sectorId)
+{
+    SectorTopologyLoopSet loops;
+    std::vector<SectorTopologyValidationIssue> loopIssues;
+    if (!ExtractSectorTopologyLoops(map, indexes, sectorId, loops, &loopIssues)) {
+        return false;
+    }
+    if (!PointInTopologyLoop(map, mapPoint, loops.outer)) {
+        return false;
+    }
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        if (PointInTopologyLoop(map, mapPoint, hole)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 SectorAuthoringSelectionTarget MakeSectorAuthoringLineSelectionTarget(int lineId)
@@ -129,13 +171,24 @@ SectorAuthoringSelectionTarget MakeSectorAuthoringVertexSelectionTarget(int vert
     return target;
 }
 
+SectorAuthoringSelectionTarget MakeSectorAuthoringFaceAnchorSelectionTarget(int faceAnchorId)
+{
+    SectorAuthoringSelectionTarget target;
+    if (IsValidSectorAuthoringId(faceAnchorId)) {
+        target.kind = SectorAuthoringSelectionKind::FaceAnchor;
+        target.faceAnchorId = faceAnchorId;
+    }
+    return target;
+}
+
 bool SectorAuthoringSelectionTargetsEqual(
         SectorAuthoringSelectionTarget lhs,
         SectorAuthoringSelectionTarget rhs)
 {
     return lhs.kind == rhs.kind
             && lhs.lineId == rhs.lineId
-            && lhs.vertexId == rhs.vertexId;
+            && lhs.vertexId == rhs.vertexId
+            && lhs.faceAnchorId == rhs.faceAnchorId;
 }
 
 bool IsSectorAuthoringSelectionTargetValid(
@@ -144,13 +197,19 @@ bool IsSectorAuthoringSelectionTargetValid(
 {
     switch (target.kind) {
     case SectorAuthoringSelectionKind::None:
-        return target.lineId == -1 && target.vertexId == -1;
+        return target.lineId == -1 && target.vertexId == -1 && target.faceAnchorId == -1;
     case SectorAuthoringSelectionKind::Line:
         return target.vertexId == -1
+                && target.faceAnchorId == -1
                 && FindSectorAuthoringLine(graph, target.lineId) != nullptr;
     case SectorAuthoringSelectionKind::Vertex:
         return target.lineId == -1
+                && target.faceAnchorId == -1
                 && FindSectorAuthoringVertex(graph, target.vertexId) != nullptr;
+    case SectorAuthoringSelectionKind::FaceAnchor:
+        return target.lineId == -1
+                && target.vertexId == -1
+                && FindSectorAuthoringFaceAnchor(graph, target.faceAnchorId) != nullptr;
     }
     return false;
 }
@@ -178,6 +237,19 @@ bool SelectSectorEditorAuthoringVertex(SectorEditorState& state, int vertexId)
     const SectorAuthoringSelectionTarget target =
             MakeSectorAuthoringVertexSelectionTarget(vertexId);
     if (target.kind != SectorAuthoringSelectionKind::Vertex
+            || !IsSectorAuthoringSelectionTargetValid(state.authoringGraph, target)) {
+        return false;
+    }
+
+    state.selectedAuthoring = target;
+    return true;
+}
+
+bool SelectSectorEditorAuthoringFaceAnchor(SectorEditorState& state, int faceAnchorId)
+{
+    const SectorAuthoringSelectionTarget target =
+            MakeSectorAuthoringFaceAnchorSelectionTarget(faceAnchorId);
+    if (target.kind != SectorAuthoringSelectionKind::FaceAnchor
             || !IsSectorAuthoringSelectionTargetValid(state.authoringGraph, target)) {
         return false;
     }
@@ -390,6 +462,132 @@ bool FindSectorEditorAuthoringSelectionNearMapPoint(
                 &lineId)) {
         if (outTarget != nullptr) {
             *outTarget = MakeSectorAuthoringLineSelectionTarget(lineId);
+        }
+        if (outVertexPoint != nullptr) {
+            *outVertexPoint = SectorTopologyCoordPoint{};
+        }
+        return true;
+    }
+
+    if (outTarget != nullptr) {
+        *outTarget = EmptyAuthoringSelectionTarget();
+    }
+    if (outVertexPoint != nullptr) {
+        *outVertexPoint = SectorTopologyCoordPoint{};
+    }
+    return false;
+}
+
+bool FindSectorEditorAuthoringFaceAnchorAtMapPoint(
+        const SectorEditorState& state,
+        Vector2 mapPoint,
+        int* outFaceAnchorId,
+        std::string* outStatus)
+{
+    if (outFaceAnchorId != nullptr) {
+        *outFaceAnchorId = -1;
+    }
+    if (outStatus != nullptr) {
+        outStatus->clear();
+    }
+
+    std::string message;
+    if (!CanUseCurrentAuthoringDerivedTopology(state, "Authoring face selection", &message)) {
+        if (outStatus != nullptr) {
+            *outStatus = message;
+        }
+        return false;
+    }
+
+    const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(state.topologyMap);
+    int topologySectorId = -1;
+    int sectorMatchCount = 0;
+    for (const SectorTopologySector& sector : state.topologyMap.sectors) {
+        if (!PointInTopologySector(state.topologyMap, indexes, mapPoint, sector.id)) {
+            continue;
+        }
+        ++sectorMatchCount;
+        if (topologySectorId < 0 || sector.id < topologySectorId) {
+            topologySectorId = sector.id;
+        }
+    }
+
+    if (sectorMatchCount == 0) {
+        if (outStatus != nullptr) {
+            *outStatus = "Authoring face selection unavailable: no derived face under cursor";
+        }
+        return false;
+    }
+    if (sectorMatchCount > 1) {
+        if (outStatus != nullptr) {
+            *outStatus = "Authoring face selection unavailable: derived face under cursor is ambiguous";
+        }
+        return false;
+    }
+
+    int faceAnchorId = -1;
+    int anchorMatchCount = 0;
+    for (const SectorAuthoringDerivedSectorMapping& mapping
+            : state.authoringDerivation.mapping.sectors) {
+        if (mapping.topologySectorId != topologySectorId
+                || !IsValidSectorAuthoringId(mapping.faceAnchorId)
+                || FindSectorAuthoringFaceAnchor(state.authoringGraph, mapping.faceAnchorId) == nullptr) {
+            continue;
+        }
+        faceAnchorId = mapping.faceAnchorId;
+        ++anchorMatchCount;
+    }
+
+    if (anchorMatchCount == 0) {
+        if (outStatus != nullptr) {
+            *outStatus = "Authoring face selection unavailable: derived face has no face anchor mapping";
+        }
+        return false;
+    }
+    if (anchorMatchCount > 1) {
+        if (outStatus != nullptr) {
+            *outStatus = "Authoring face selection unavailable: derived face has ambiguous face anchor mapping";
+        }
+        return false;
+    }
+
+    if (outFaceAnchorId != nullptr) {
+        *outFaceAnchorId = faceAnchorId;
+    }
+    return true;
+}
+
+bool FindSectorEditorAuthoringSelectionAtMapPoint(
+        const SectorEditorState& state,
+        Vector2 mapPoint,
+        float vertexMaxDistance,
+        float lineMaxDistance,
+        SectorAuthoringSelectionTarget* outTarget,
+        SectorTopologyCoordPoint* outVertexPoint,
+        std::string* outStatus)
+{
+    if (outStatus != nullptr) {
+        outStatus->clear();
+    }
+
+    if (FindSectorEditorAuthoringSelectionNearMapPoint(
+                state.authoringGraph,
+                mapPoint,
+                vertexMaxDistance,
+                lineMaxDistance,
+                outTarget,
+                outVertexPoint)) {
+        return true;
+    }
+
+    int faceAnchorId = -1;
+    if (FindSectorEditorAuthoringFaceAnchorAtMapPoint(
+                state,
+                mapPoint,
+                &faceAnchorId,
+                outStatus)) {
+        if (outTarget != nullptr) {
+            *outTarget = MakeSectorAuthoringFaceAnchorSelectionTarget(faceAnchorId);
         }
         if (outVertexPoint != nullptr) {
             *outVertexPoint = SectorTopologyCoordPoint{};
@@ -900,6 +1098,19 @@ bool MutateSectorEditorAuthoringFaceAnchorForTopologySector(
 
     const int faceAnchorId =
             FindSectorEditorAuthoringFaceAnchorIdForTopologySector(state, topologySectorId);
+    return MutateSectorEditorAuthoringFaceAnchorById(state, faceAnchorId, status, mutate);
+}
+
+bool MutateSectorEditorAuthoringFaceAnchorById(
+        SectorEditorState& state,
+        int faceAnchorId,
+        const char* status,
+        const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate)
+{
+    if (!mutate) {
+        return false;
+    }
+
     SectorAuthoringFaceAnchor* anchor =
             FindSectorAuthoringFaceAnchor(state.authoringGraph, faceAnchorId);
     if (anchor == nullptr) {
@@ -962,6 +1173,37 @@ bool MutateSectorEditorAuthoringSideForTopologySideDef(
             "Updated authoring side material; derivation failed");
 }
 
+bool MutateSectorEditorAuthoringSideById(
+        SectorEditorState& state,
+        SectorAuthoringSideId sideId,
+        const char* status,
+        const std::function<bool(SectorAuthoringLineSide&)>& mutate)
+{
+    if (!mutate
+            || !IsValidSectorAuthoringId(sideId.lineId)
+            || FindSectorAuthoringLine(state.authoringGraph, sideId.lineId) == nullptr) {
+        return false;
+    }
+
+    SectorAuthoringLineSide* side = FindSectorAuthoringLineSide(state.authoringGraph, sideId);
+    if (side == nullptr) {
+        SectorAuthoringLineSide newSide;
+        newSide.id = sideId;
+        state.authoringGraph.lineSides.push_back(newSide);
+        side = &state.authoringGraph.lineSides.back();
+    }
+
+    if (!mutate(*side)) {
+        return false;
+    }
+
+    MarkSectorEditorAuthoringGraphEdited(state, status);
+    return RefreshSectorEditorAuthoringDerivation(
+            state,
+            status,
+            "Updated authoring side material; derivation failed");
+}
+
 bool MutateSectorEditorAuthoringLineForTopologyLineDef(
         SectorEditorState& state,
         int topologyLineDefId,
@@ -974,8 +1216,21 @@ bool MutateSectorEditorAuthoringLineForTopologyLineDef(
 
     const int authoringLineId =
             FindSectorEditorAuthoringLineIdForTopologyLineDef(state, topologyLineDefId);
+    return MutateSectorEditorAuthoringLineById(state, authoringLineId, status, mutate);
+}
+
+bool MutateSectorEditorAuthoringLineById(
+        SectorEditorState& state,
+        int lineId,
+        const char* status,
+        const std::function<bool(SectorAuthoringLine&)>& mutate)
+{
+    if (!mutate) {
+        return false;
+    }
+
     SectorAuthoringLine* line =
-            FindSectorAuthoringLine(state.authoringGraph, authoringLineId);
+            FindSectorAuthoringLine(state.authoringGraph, lineId);
     if (line == nullptr) {
         return false;
     }

@@ -11,6 +11,10 @@
       "path": "assets/images/floor.png",
       "filter": "anisotropic8x"
     },
+    "metal_bars_01": {
+      "path": "assets/images/middle/metal_bars_01.png",
+      "filter": "anisotropic8x"
+    },
     "step_wall": {
       "path": "assets/images/wall.png",
       "filter": "anisotropic8x"
@@ -597,6 +601,19 @@
             0.0
           ]
         }
+      },
+      "middle": {
+        "textureId": "metal_bars_01",
+        "uv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
       }
     },
     {
@@ -1173,7 +1190,7 @@
     {
       "id": 2,
       "name": "Sector 2",
-      "floorZ": 0.0,
+      "floorZ": 1.0,
       "ceilingZ": 24.0,
       "floorTextureId": "floor",
       "ceilingTextureId": "ceiling",
@@ -1247,7 +1264,7 @@
     {
       "id": 3,
       "name": "Sector 3",
-      "floorZ": 0.0,
+      "floorZ": 1.0,
       "ceilingZ": 24.0,
       "floorTextureId": "floor",
       "ceilingTextureId": "ceiling",
@@ -1412,5 +1429,20 @@
     "jumpHeight": 0.6000000238418579,
     "headBobStrength": 0.019999999552965164,
     "headBobFrequency": 2.0
+  },
+  "directionalLight": {
+    "enabled": false,
+    "directionToLight": [
+      -0.38533732295036316,
+      0.8807710409164429,
+      -0.275240957736969
+    ],
+    "color": {
+      "r": 255,
+      "g": 244,
+      "b": 214,
+      "a": 255
+    },
+    "intensity": 1.0
   }
 }

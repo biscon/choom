@@ -791,6 +791,9 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         } else if (target.kind == SectorAuthoringSelectionKind::Line) {
                             SelectAuthoringLine(target.lineId);
                             statusText = TextFormat("Selected authoring line %d", target.lineId);
+                        } else if (target.kind == SectorAuthoringSelectionKind::FaceAnchor) {
+                            SelectAuthoringFaceAnchor(target.faceAnchorId);
+                            statusText = TextFormat("Selected authoring face anchor %d", target.faceAnchorId);
                         }
                         engine::ConsumeEvent(event);
                         return;
@@ -4905,6 +4908,18 @@ void SectorEditor::DrawSectorsPanel(
     const bool hasSelectedTopologyLineDef = state.topologySelectionKind == TopologySelectionKind::LineDef
             && SelectedTopologyLineDef() != nullptr;
     const bool hasSelectedLight = SelectedTopologyLight() != nullptr;
+    const SectorAuthoringLine* selectedAuthoringLine =
+            state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
+            ? FindSectorAuthoringLine(state.authoringGraph, state.selectedAuthoring.lineId)
+            : nullptr;
+    const SectorAuthoringFaceAnchor* selectedAuthoringFaceAnchor =
+            state.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
+            ? FindSectorAuthoringFaceAnchor(state.authoringGraph, state.selectedAuthoring.faceAnchorId)
+            : nullptr;
+    const SectorAuthoringVertex* selectedAuthoringVertex =
+            state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex
+            ? FindSectorAuthoringVertex(state.authoringGraph, state.selectedAuthoring.vertexId)
+            : nullptr;
     const SectorTopologyVertex* inspectedVertex = FindSectorTopologyVertex(
             state.topologyMap,
             state.inspectedTopologyVertexId);
@@ -4937,6 +4952,15 @@ void SectorEditor::DrawSectorsPanel(
         }
         if (hasInspectedVertex || state.pendingTopologyVertexMerge.active) {
             return InspectedVertexInspectorContentHeight();
+        }
+        if (selectedAuthoringLine != nullptr) {
+            return 560.0f;
+        }
+        if (selectedAuthoringFaceAnchor != nullptr) {
+            return 900.0f;
+        }
+        if (selectedAuthoringVertex != nullptr) {
+            return 120.0f;
         }
         return 42.0f;
     };
@@ -5315,6 +5339,382 @@ void SectorEditor::DrawSectorsPanel(
                 hasSelectedTopologyVertex,
                 state,
                 callbacks);
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return;
+    }
+
+    if (selectedAuthoringLine != nullptr) {
+        const SectorAuthoringVertex* start =
+                FindSectorAuthoringVertex(state.authoringGraph, selectedAuthoringLine->startVertexId);
+        const SectorAuthoringVertex* end =
+                FindSectorAuthoringVertex(state.authoringGraph, selectedAuthoringLine->endVertexId);
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                TextFormat("Authoring Line: %d", selectedAuthoringLine->id),
+                engine::UITextJustify::Left,
+                config.textColor);
+        y += 38.0f;
+
+        if (start != nullptr && end != nullptr) {
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 30.0f},
+                    font,
+                    TextFormat(
+                            "From %.2f, %.2f  To %.2f, %.2f",
+                            SectorCoordToVisibleAuthoring(start->x),
+                            SectorCoordToVisibleAuthoring(start->y),
+                            SectorCoordToVisibleAuthoring(end->x),
+                            SectorCoordToVisibleAuthoring(end->y)),
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
+            y += 32.0f;
+        } else {
+            engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Line endpoints are invalid", engine::UITextJustify::Left, config.invalidColor);
+            y += 32.0f;
+        }
+
+        bool blocksPlayer = selectedAuthoringLine->flags.blocksPlayer;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_authoring_line_blocks_player",
+                    Rectangle{0.0f, y, contentW, 36.0f},
+                    font,
+                    "Blocks Player",
+                    blocksPlayer)) {
+            const int lineId = selectedAuthoringLine->id;
+            MutateSectorEditorAuthoringLineById(
+                    state,
+                    lineId,
+                    "Updated authoring line flags",
+                    [blocksPlayer](SectorAuthoringLine& line) {
+                        if (line.flags.blocksPlayer == blocksPlayer) {
+                            return false;
+                        }
+                        line.flags.blocksPlayer = blocksPlayer;
+                        return true;
+                    });
+            engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+            engine::EndPanel(ui, config, panel);
+            return;
+        }
+        y += 36.0f + gap;
+
+        const auto drawAuthoringSideSection =
+                [&](SectorTopologySideKind sideKind, const char* title, const char* idPrefix) {
+                    engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
+                    y += 18.0f;
+                    engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, title, engine::UITextJustify::Left, config.textColor);
+                    y += 30.0f;
+
+                    const SectorAuthoringSideId sideId{selectedAuthoringLine->id, sideKind};
+                    const SectorAuthoringLineSide* authoringSide =
+                            FindSectorAuthoringLineSide(state.authoringGraph, sideId);
+                    const auto textureForPart = [authoringSide](TopologyWallPart part) -> std::string {
+                        if (authoringSide == nullptr) {
+                            return std::string{};
+                        }
+                        return TopologyWallPartSettingsFor(*authoringSide, part).textureId;
+                    };
+                    const auto drawTextureRow =
+                            [&](const char* suffix, const char* label, TopologyWallPart part) {
+                                const float buttonW = 38.0f;
+                                const float labelColumnW = 74.0f;
+                                const std::string textureId = textureForPart(part);
+                                const Rectangle row{0.0f, y, contentW, 36.0f};
+                                const bool missing = !textureId.empty()
+                                        && FindSectorTopologyTexture(state.topologyMap, textureId) == nullptr;
+                                engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+                                engine::Text(
+                                        ui,
+                                        config,
+                                        assets,
+                                        Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
+                                        font,
+                                        textureId.empty() ? "<none>" : textureId.c_str(),
+                                        engine::UITextJustify::Left,
+                                        missing ? config.invalidColor : config.mutedTextColor);
+                                if (engine::Button(
+                                            ui,
+                                            config,
+                                            input,
+                                            assets,
+                                            TextFormat("%s_%s", idPrefix, suffix),
+                                            Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height},
+                                            font,
+                                            ">")) {
+                                    if (!OpenAuthoringSideTexturePickerById(
+                                                state,
+                                                sideId,
+                                                part,
+                                                TopologyMaterialLayer::Base)) {
+                                        statusText = "Authoring side texture picker unavailable: derived mapping is not current";
+                                    }
+                                }
+                                y += row.height + gap;
+                            };
+                    drawTextureRow("wall", "Wall:", TopologyWallPart::Wall);
+                    drawTextureRow("lower", "Lower:", TopologyWallPart::Lower);
+                    drawTextureRow("upper", "Upper:", TopologyWallPart::Upper);
+                    drawTextureRow("middle", "Middle:", TopologyWallPart::Middle);
+                };
+
+        drawAuthoringSideSection(SectorTopologySideKind::Front, "Front Side", "sector_editor_authoring_front_side");
+        drawAuthoringSideSection(SectorTopologySideKind::Back, "Back Side", "sector_editor_authoring_back_side");
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return;
+    }
+
+    if (selectedAuthoringFaceAnchor != nullptr) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                TextFormat("Authoring Face: %d", selectedAuthoringFaceAnchor->id),
+                engine::UITextJustify::Left,
+                config.textColor);
+        y += 38.0f;
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 30.0f},
+                font,
+                TextFormat(
+                        "Anchor %.2f, %.2f",
+                        SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->x),
+                        SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->y)),
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        y += 32.0f;
+
+        const float labelW = 92.0f;
+        const float numberFieldW = 112.0f;
+        const int faceAnchorId = selectedAuthoringFaceAnchor->id;
+        const auto mutateFaceAnchor =
+                [this, faceAnchorId](const char* status, const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate) {
+                    return MutateSectorEditorAuthoringFaceAnchorById(state, faceAnchorId, status, mutate);
+                };
+
+        auto drawHeight = [&](const char* id, const char* label, float current, engine::UIFloatInputState& inputState, bool floorField) {
+            const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    id,
+                    label,
+                    Rectangle{0.0f, y, labelW, rowH},
+                    Rectangle{labelW, y, numberFieldW, rowH},
+                    engine::UITextJustify::Right,
+                    current,
+                    inputState,
+                    -512.0f,
+                    512.0f,
+                    2);
+            if (result.changed && result.value != current) {
+                const float nextFloor = floorField ? result.value : selectedAuthoringFaceAnchor->floorZ;
+                const float nextCeiling = floorField ? selectedAuthoringFaceAnchor->ceilingZ : result.value;
+                if (!std::isfinite(nextFloor) || !std::isfinite(nextCeiling) || nextCeiling <= nextFloor) {
+                    statusText = "Invalid authoring face heights: ceiling must be greater than floor";
+                } else {
+                    mutateFaceAnchor(
+                            "Updated authoring face height",
+                            [nextFloor, nextCeiling](SectorAuthoringFaceAnchor& anchor) {
+                                if (anchor.floorZ == nextFloor && anchor.ceilingZ == nextCeiling) {
+                                    return false;
+                                }
+                                anchor.floorZ = nextFloor;
+                                anchor.ceilingZ = nextCeiling;
+                                return true;
+                            });
+                }
+            }
+            y += rowH + gap;
+        };
+        drawHeight("sector_editor_authoring_face_floor", "Floor:", selectedAuthoringFaceAnchor->floorZ, uiState.floorInput, true);
+        drawHeight("sector_editor_authoring_face_ceiling", "Ceiling:", selectedAuthoringFaceAnchor->ceilingZ, uiState.ceilingInput, false);
+
+        bool ceilingSky = selectedAuthoringFaceAnchor->ceilingSky;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_authoring_face_ceiling_sky",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font,
+                    "Ceiling Sky",
+                    ceilingSky)) {
+            mutateFaceAnchor(
+                    "Updated authoring face ceiling sky",
+                    [ceilingSky](SectorAuthoringFaceAnchor& anchor) {
+                        if (anchor.ceilingSky == ceilingSky) {
+                            return false;
+                        }
+                        anchor.ceilingSky = ceilingSky;
+                        return true;
+                    });
+        }
+        y += rowH + gap;
+
+        engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
+        y += 18.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Lighting", engine::UITextJustify::Left, config.textColor);
+        y += 30.0f;
+
+        const float ambientIntensity = std::clamp(selectedAuthoringFaceAnchor->ambientIntensity, 0.0f, 1.0f);
+        const SectorEditorFloatInputResult ambientResult = DrawLabeledFloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                "sector_editor_authoring_face_ambient_intensity",
+                "Intensity:",
+                Rectangle{0.0f, y, labelW, rowH},
+                Rectangle{labelW, y, numberFieldW, rowH},
+                engine::UITextJustify::Right,
+                ambientIntensity,
+                uiState.ambientIntensityInput,
+                0.0f,
+                1.0f,
+                3);
+        if (ambientResult.changed && ambientResult.value != selectedAuthoringFaceAnchor->ambientIntensity) {
+            mutateFaceAnchor(
+                    "Updated authoring face ambient intensity",
+                    [value = ambientResult.value](SectorAuthoringFaceAnchor& anchor) {
+                        if (anchor.ambientIntensity == value) {
+                            return false;
+                        }
+                        anchor.ambientIntensity = value;
+                        return true;
+                    });
+        }
+        y += rowH + gap;
+
+        auto drawAmbientChannel = [&](const char* id, const char* label, unsigned char current, engine::UIIntInputState& inputState, int channel) {
+            const SectorEditorRgb8InputResult result = DrawRgb8ChannelInput(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    id,
+                    label,
+                    Rectangle{0.0f, y, labelW, rowH},
+                    Rectangle{labelW, y, contentW - labelW, rowH},
+                    engine::UITextJustify::Right,
+                    current,
+                    inputState);
+            if (result.changed && result.channel != current) {
+                mutateFaceAnchor(
+                        "Updated authoring face ambient color",
+                        [channel, value = result.channel](SectorAuthoringFaceAnchor& anchor) {
+                            Color next = anchor.ambientColor;
+                            if (channel == 0) {
+                                next.r = value;
+                            } else if (channel == 1) {
+                                next.g = value;
+                            } else {
+                                next.b = value;
+                            }
+                            next.a = 255;
+                            if (anchor.ambientColor.r == next.r
+                                    && anchor.ambientColor.g == next.g
+                                    && anchor.ambientColor.b == next.b
+                                    && anchor.ambientColor.a == next.a) {
+                                return false;
+                            }
+                            anchor.ambientColor = next;
+                            return true;
+                        });
+            }
+            y += rowH + gap;
+        };
+        drawAmbientChannel("sector_editor_authoring_face_ambient_r", "R:", selectedAuthoringFaceAnchor->ambientColor.r, uiState.ambientRedInput, 0);
+        drawAmbientChannel("sector_editor_authoring_face_ambient_g", "G:", selectedAuthoringFaceAnchor->ambientColor.g, uiState.ambientGreenInput, 1);
+        drawAmbientChannel("sector_editor_authoring_face_ambient_b", "B:", selectedAuthoringFaceAnchor->ambientColor.b, uiState.ambientBlueInput, 2);
+
+        const auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologySectorTextureField field) {
+            const float buttonW = 38.0f;
+            const float labelColumnW = 92.0f;
+            const Rectangle row{0.0f, y, contentW, 36.0f};
+            const bool missing = !textureId.empty() && FindSectorTopologyTexture(state.topologyMap, textureId) == nullptr;
+            engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
+                    font,
+                    textureId.empty() ? "<none>" : textureId.c_str(),
+                    engine::UITextJustify::Left,
+                    missing ? config.invalidColor : config.mutedTextColor);
+            if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
+                if (!OpenAuthoringFaceAnchorTexturePickerById(
+                            state,
+                            faceAnchorId,
+                            field,
+                            TopologyMaterialLayer::Base)) {
+                    statusText = "Authoring face texture picker unavailable: derived mapping is not current";
+                }
+            }
+            y += row.height + gap;
+        };
+
+        engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
+        y += 18.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Materials", engine::UITextJustify::Left, config.textColor);
+        y += 30.0f;
+        drawTextureRow("sector_editor_authoring_face_pick_floor", "Floor:", selectedAuthoringFaceAnchor->floorTextureId, TopologySectorTextureField::Floor);
+        drawTextureRow("sector_editor_authoring_face_pick_ceiling", "Ceiling:", selectedAuthoringFaceAnchor->ceilingTextureId, TopologySectorTextureField::Ceiling);
+        drawTextureRow("sector_editor_authoring_face_pick_default_wall", "Wall:", selectedAuthoringFaceAnchor->defaultWall.textureId, TopologySectorTextureField::DefaultWall);
+        drawTextureRow("sector_editor_authoring_face_pick_default_lower", "Lower:", selectedAuthoringFaceAnchor->defaultLower.textureId, TopologySectorTextureField::DefaultLower);
+        drawTextureRow("sector_editor_authoring_face_pick_default_upper", "Upper:", selectedAuthoringFaceAnchor->defaultUpper.textureId, TopologySectorTextureField::DefaultUpper);
+
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return;
+    }
+
+    if (selectedAuthoringVertex != nullptr) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                TextFormat("Authoring Vertex: %d", selectedAuthoringVertex->id),
+                engine::UITextJustify::Left,
+                config.textColor);
+        y += 38.0f;
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 30.0f},
+                font,
+                TextFormat(
+                        "%.2f, %.2f",
+                        SectorCoordToVisibleAuthoring(selectedAuthoringVertex->x),
+                        SectorCoordToVisibleAuthoring(selectedAuthoringVertex->y)),
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return;
@@ -6531,6 +6931,8 @@ void SectorEditor::DrawStatusPanel(
         selectedLabel = TextFormat("authoring line %d", state.selectedAuthoring.lineId);
     } else if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex) {
         selectedLabel = TextFormat("authoring vertex %d", state.selectedAuthoring.vertexId);
+    } else if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor) {
+        selectedLabel = TextFormat("authoring face anchor %d", state.selectedAuthoring.faceAnchorId);
     }
 
     std::string pendingText;
@@ -7304,30 +7706,17 @@ bool SectorEditor::FindAuthoringSelectionNearScreenPoint(
         SectorAuthoringSelectionTarget& outTarget,
         SectorTopologyCoordPoint& outVertexPoint) const
 {
-    int vertexId = -1;
-    SectorTopologyCoordPoint vertexPoint{};
-    if (FindAuthoringVertexNearScreenPoint(screenPoint, vertexId, vertexPoint)) {
-        outTarget = MakeSectorAuthoringVertexSelectionTarget(vertexId);
-        outVertexPoint = vertexPoint;
-        return true;
-    }
-
+    const float vertexMaxDistance = SectorWorldToAuthoringDistance(
+            ScreenVertexSnapPixels / std::max(1.0f, state.viewZoom));
     const float lineMaxDistance = SectorWorldToAuthoringDistance(
             ScreenEdgePickPixels / std::max(1.0f, state.viewZoom));
-    int lineId = -1;
-    if (FindSectorEditorAuthoringLineNearMapPoint(
-                state.authoringGraph,
-                ScreenToMap(screenPoint),
-                lineMaxDistance,
-                &lineId)) {
-        outTarget = MakeSectorAuthoringLineSelectionTarget(lineId);
-        outVertexPoint = SectorTopologyCoordPoint{};
-        return true;
-    }
-
-    outTarget = SectorAuthoringSelectionTarget{};
-    outVertexPoint = SectorTopologyCoordPoint{};
-    return false;
+    return FindSectorEditorAuthoringSelectionAtMapPoint(
+            state,
+            ScreenToMap(screenPoint),
+            vertexMaxDistance,
+            lineMaxDistance,
+            &outTarget,
+            &outVertexPoint);
 }
 
 void SectorEditor::SelectTopologySector(int sectorId)
@@ -7674,6 +8063,27 @@ void SectorEditor::SelectAuthoringVertex(int vertexId)
     ClearSelection();
     SelectSectorEditorAuthoringVertex(state, vertexId);
     uiState.inspectorScroll.offset = Vector2{};
+}
+
+void SectorEditor::SelectAuthoringFaceAnchor(int faceAnchorId)
+{
+    if (FindSectorAuthoringFaceAnchor(state.authoringGraph, faceAnchorId) == nullptr) {
+        ClearSelection();
+        return;
+    }
+
+    ClearSelection();
+    SelectSectorEditorAuthoringFaceAnchor(state, faceAnchorId);
+    uiState.inspectorScroll.offset = Vector2{};
+    uiState.floorInput = engine::UIFloatInputState{};
+    uiState.ceilingInput = engine::UIFloatInputState{};
+    uiState.ambientIntensityInput = engine::UIFloatInputState{};
+    uiState.ambientRedInput = engine::UIIntInputState{};
+    uiState.ambientGreenInput = engine::UIIntInputState{};
+    uiState.ambientBlueInput = engine::UIIntInputState{};
+    for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
 }
 
 bool SectorEditor::DeleteSelectedAuthoringVertex()

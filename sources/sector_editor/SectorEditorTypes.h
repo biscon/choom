@@ -103,13 +103,15 @@ enum class TopologySelectionKind {
 enum class SectorAuthoringSelectionKind {
     None,
     Line,
-    Vertex
+    Vertex,
+    FaceAnchor
 };
 
 struct SectorAuthoringSelectionTarget {
     SectorAuthoringSelectionKind kind = SectorAuthoringSelectionKind::None;
     int lineId = -1;
     int vertexId = -1;
+    int faceAnchorId = -1;
 };
 
 enum class TopologyWallPart {
@@ -204,6 +206,9 @@ struct TexturePickerState {
     int topologySectorId = -1;
     int topologySideDefId = -1;
     TopologyWallPart topologyWallPart = TopologyWallPart::Wall;
+    int authoringFaceAnchorId = -1;
+    int authoringLineId = -1;
+    SectorTopologySideKind authoringSide = SectorTopologySideKind::Front;
     int selectedTextureIndex = -1;
     engine::UIScrollState scroll;
     std::vector<std::string> textureIds;

@@ -147,6 +147,8 @@ bool TextContains(const char* text, const char* expected)
     return text != nullptr && std::string{text}.find(expected) != std::string::npos;
 }
 
+void SelectTextureInPicker(game::TexturePickerState& picker, const std::string& textureId);
+
 game::SectorAuthoringGraph MakeGraphFromLines(
         const std::vector<std::pair<game::SectorCoord, game::SectorCoord>>& endpoints)
 {
@@ -2527,6 +2529,308 @@ void TestEditorAuthoringLineFlagInspectorWriteDoesNotDirectlyMutateDerivedTopolo
           "failed line flag inspector write leaves derived topology stale");
 }
 
+void TestEditorSelectedAuthoringLineInspectorTargetDoesNotNeedTopologySelection()
+{
+    game::SectorEditorState state;
+    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
+    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+
+    Check(game::SelectSectorEditorAuthoringLine(state, 10),
+          "selected authoring line inspector target setup selects line");
+    Check(state.topologySelectionKind == game::TopologySelectionKind::None
+                  && state.selectedTopologyLineDefId == -1
+                  && state.selectedTopologySideDefId == -1,
+          "selected authoring line inspector target does not require topology selection");
+    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Line
+                  && state.selectedAuthoring.lineId == 10,
+          "selected authoring line inspector target stores authoring line ID");
+    Check(game::IsSectorAuthoringSelectionTargetValid(state.authoringGraph, state.selectedAuthoring),
+          "selected authoring line inspector target validates against authoring graph");
+}
+
+void TestEditorSelectedAuthoringLineBlocksPlayerWritesWithoutTopologySelection()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "selected line blocksPlayer direct write setup derives valid topology");
+    Check(game::SelectSectorEditorAuthoringLine(state, 11),
+          "selected line blocksPlayer direct write selects authoring line");
+
+    state.topologySelectionKind = game::TopologySelectionKind::None;
+    state.selectedTopologyLineDefId = -1;
+    state.selectedTopologySideDefId = -1;
+
+    Check(game::MutateSectorEditorAuthoringLineById(
+                  state,
+                  state.selectedAuthoring.lineId,
+                  "Updated selected authoring line flags",
+                  [](game::SectorAuthoringLine& line) {
+                      line.flags.blocksPlayer = true;
+                      return true;
+                  }),
+          "selected line blocksPlayer direct write succeeds without topology selection");
+
+    const game::SectorAuthoringLine* authoringLine =
+            game::FindSectorAuthoringLine(state.authoringGraph, 11);
+    const game::SectorTopologyLineDef* projectedLineDef =
+            FindDerivedLineDefForAuthoringLine(state.authoringDerivation, 11);
+    Check(authoringLine != nullptr && authoringLine->flags.blocksPlayer,
+          "selected line blocksPlayer direct write updates authoring source");
+    Check(projectedLineDef != nullptr && projectedLineDef->flags.blocksPlayer,
+          "selected line blocksPlayer direct write refreshes projected derived linedef");
+    Check(state.topologySelectionKind == game::TopologySelectionKind::None
+                  && state.selectedTopologyLineDefId == -1
+                  && state.selectedTopologySideDefId == -1,
+          "selected line blocksPlayer direct write does not create topology selection");
+}
+
+void TestEditorSelectedAuthoringLineSideMaterialWritesWithoutTopologySelection()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {1, 3}, {2, 4}});
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "selected side direct material write setup derives valid topology");
+    Check(game::SelectSectorEditorAuthoringLine(state, 14),
+          "selected side direct material write selects source line");
+
+    state.topologySelectionKind = game::TopologySelectionKind::None;
+    state.selectedTopologyLineDefId = -1;
+    state.selectedTopologySideDefId = -1;
+
+    Check(game::MutateSectorEditorAuthoringSideById(
+                  state,
+                  game::SectorAuthoringSideId{14, game::SectorTopologySideKind::Front},
+                  "Updated selected authoring side material",
+                  [](game::SectorAuthoringLineSide& side) {
+                      side.wall = WallPart("direct_selected_wall", 2.0f, 3.0f, 4.0f, 5.0f);
+                      return true;
+                  }),
+          "selected side direct material write succeeds without topology selection");
+
+    const game::SectorAuthoringLineSide* authoringSide =
+            game::FindSectorAuthoringLineSide(
+                    state.authoringGraph,
+                    game::SectorAuthoringSideId{14, game::SectorTopologySideKind::Front});
+    Check(authoringSide != nullptr && authoringSide->wall.textureId == "direct_selected_wall",
+          "selected side direct material write updates authoring side metadata");
+
+    int projectedCount = 0;
+    for (const game::SectorAuthoringDerivedSideMapping& mapping : state.authoringDerivation.mapping.sides) {
+        if (mapping.authoringLineId != 14
+                || mapping.authoringSide != game::SectorTopologySideKind::Front) {
+            continue;
+        }
+        const game::SectorTopologySideDef* sideDef =
+                game::FindSectorTopologySideDef(state.topologyMap, mapping.topologySideDefId);
+        Check(sideDef != nullptr && sideDef->wall.textureId == "direct_selected_wall",
+              "selected side direct material write projects to split derived sidedef");
+        ++projectedCount;
+    }
+    Check(projectedCount == 2,
+          "selected side direct material write preserves split-line projection");
+    Check(state.topologySelectionKind == game::TopologySelectionKind::None
+                  && state.selectedTopologyLineDefId == -1
+                  && state.selectedTopologySideDefId == -1,
+          "selected side direct material write does not create topology selection");
+}
+
+void TestEditorSelectedFaceAnchorPropertiesWriteWithoutTopologySelection()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "selected face direct property write setup derives valid topology");
+    Check(game::SelectSectorEditorAuthoringFaceAnchor(state, 200),
+          "selected face direct property write selects face anchor");
+
+    state.topologySelectionKind = game::TopologySelectionKind::None;
+    state.selectedTopologySectorId = -1;
+
+    Check(game::MutateSectorEditorAuthoringFaceAnchorById(
+                  state,
+                  state.selectedAuthoring.faceAnchorId,
+                  "Updated selected authoring face properties",
+                  [](game::SectorAuthoringFaceAnchor& anchor) {
+                      anchor.floorZ = -4.0f;
+                      anchor.ceilingZ = 48.0f;
+                      anchor.ceilingSky = true;
+                      anchor.ambientIntensity = 0.25f;
+                      anchor.ambientColor = Color{10, 20, 30, 255};
+                      return true;
+                  }),
+          "selected face direct property write succeeds without topology sector selection");
+
+    const game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    const game::SectorTopologySector* sector =
+            game::FindSectorTopologySector(state.topologyMap, 200);
+    Check(anchor != nullptr && anchor->floorZ == -4.0f && anchor->ceilingSky,
+          "selected face direct property write updates authoring source");
+    Check(sector != nullptr
+                  && sector->floorZ == -4.0f
+                  && sector->ceilingZ == 48.0f
+                  && sector->ceilingSky
+                  && sector->ambientColor.g == 20
+                  && sector->ambientIntensity == 0.25f,
+          "selected face direct property write refreshes derived sector");
+    Check(state.topologySelectionKind == game::TopologySelectionKind::None
+                  && state.selectedTopologySectorId == -1,
+          "selected face direct property write does not create topology sector selection");
+}
+
+void TestEditorAuthoringFacePointSelectionRequiresCurrentUnambiguousMapping()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "point face-anchor selection setup derives valid topology");
+
+    game::SectorAuthoringSelectionTarget target;
+    std::string status;
+    Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                  state,
+                  Vector2{game::SectorCoordToVisibleAuthoring(32), game::SectorCoordToVisibleAuthoring(32)},
+                  0.25f,
+                  0.25f,
+                  &target,
+                  nullptr,
+                  &status),
+          "point inside derived face resolves authoring selection target");
+    Check(target.kind == game::SectorAuthoringSelectionKind::FaceAnchor
+                  && target.faceAnchorId == 200,
+          "point inside derived face resolves expected face anchor ID");
+
+    game::SectorEditorState staleState = state;
+    game::MarkSectorEditorAuthoringGraphEdited(staleState, "authoring graph changed before face selection");
+    target = game::SectorAuthoringSelectionTarget{};
+    status.clear();
+    Check(!game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                  staleState,
+                  Vector2{game::SectorCoordToVisibleAuthoring(32), game::SectorCoordToVisibleAuthoring(32)},
+                  0.25f,
+                  0.25f,
+                  &target,
+                  nullptr,
+                  &status),
+          "point inside derived face selection fails closed when derivation is stale");
+    Check(target.kind == game::SectorAuthoringSelectionKind::None,
+          "stale point face selection leaves no authoring target");
+    Check(status.find("requires current valid derived topology") != std::string::npos,
+          "stale point face selection reports current-derivation requirement");
+
+    game::SectorEditorState missingState = state;
+    missingState.authoringDerivation.mapping.sectors.clear();
+    status.clear();
+    Check(!game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                  missingState,
+                  Vector2{game::SectorCoordToVisibleAuthoring(32), game::SectorCoordToVisibleAuthoring(32)},
+                  0.25f,
+                  0.25f,
+                  &target,
+                  nullptr,
+                  &status),
+          "point inside derived face selection fails closed with missing mapping");
+    Check(status.find("no face anchor mapping") != std::string::npos,
+          "missing point face selection reports missing mapping");
+
+    game::SectorEditorState ambiguousState = state;
+    ambiguousState.authoringDerivation.mapping.sectors.push_back(
+            ambiguousState.authoringDerivation.mapping.sectors.front());
+    status.clear();
+    Check(!game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                  ambiguousState,
+                  Vector2{game::SectorCoordToVisibleAuthoring(32), game::SectorCoordToVisibleAuthoring(32)},
+                  0.25f,
+                  0.25f,
+                  &target,
+                  nullptr,
+                  &status),
+          "point inside derived face selection fails closed with ambiguous mapping");
+    Check(status.find("ambiguous face anchor mapping") != std::string::npos,
+          "ambiguous point face selection reports ambiguous mapping");
+}
+
+void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailable()
+{
+    game::SectorEditorState state;
+    state.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
+    state.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
+    state.topologyMap.texturesById.emplace("old_floor", game::SectorTextureDefinition{"old_floor", "old_floor.png"});
+    state.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    if (anchor != nullptr) {
+        anchor->floorTextureId = "old_floor";
+    }
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall.textureId = "old_wall";
+    state.authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "direct authoring picker fail-closed setup derives valid topology");
+
+    Check(game::OpenAuthoringSideTexturePickerById(
+                  state,
+                  game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front},
+                  game::TopologyWallPart::Wall,
+                  game::TopologyMaterialLayer::Base),
+          "direct authoring side picker opens while mapping is current");
+    SelectTextureInPicker(state.texturePicker, "new_wall");
+    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed after direct side picker open");
+    const game::SectorEditorTexturePickerApplyResult staleSideResult =
+            game::ApplyAuthoringTexturePickerSelection(state);
+    const game::SectorAuthoringLineSide* afterStaleSide =
+            game::FindSectorAuthoringLineSide(
+                    state.authoringGraph,
+                    game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front});
+    Check(!staleSideResult.changed,
+          "direct authoring side picker apply fails closed when derivation becomes stale");
+    Check(staleSideResult.status.find("derived topology is not current") != std::string::npos,
+          "direct stale side picker reports current mapping requirement");
+    Check(afterStaleSide != nullptr && afterStaleSide->wall.textureId == "old_wall",
+          "direct stale side picker does not mutate authoring side");
+
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "direct picker fail-closed setup restores current derivation");
+    state.authoringDerivation.mapping.sectors.clear();
+    Check(!game::OpenAuthoringFaceAnchorTexturePickerById(
+                  state,
+                  200,
+                  game::TopologySectorTextureField::Floor,
+                  game::TopologyMaterialLayer::Base),
+          "direct authoring face picker fails closed with missing mapping");
+    Check(!state.texturePicker.open,
+          "direct authoring face picker missing mapping leaves picker closed");
+
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "direct picker fail-closed setup restores current derivation again");
+    state.authoringDerivation.mapping.sectors.push_back(state.authoringDerivation.mapping.sectors.front());
+    Check(!game::OpenAuthoringFaceAnchorTexturePickerById(
+                  state,
+                  200,
+                  game::TopologySectorTextureField::Floor,
+                  game::TopologyMaterialLayer::Base),
+          "direct authoring face picker fails closed with ambiguous mapping");
+    Check(!state.texturePicker.open,
+          "direct authoring face picker ambiguous mapping leaves picker closed");
+}
+
 void TestEditorAuthoringSurfaceMappingResolvesFlatSurfaceToFaceAnchor()
 {
     game::SectorEditorState state;
@@ -4186,6 +4490,12 @@ int main()
     TestEditorAuthoringLineFlagInspectorWritesProjectAfterDerivation();
     TestEditorAuthoringLineFlagInspectorWritesProjectToSplitDerivedLineDefs();
     TestEditorAuthoringLineFlagInspectorWriteDoesNotDirectlyMutateDerivedTopology();
+    TestEditorSelectedAuthoringLineInspectorTargetDoesNotNeedTopologySelection();
+    TestEditorSelectedAuthoringLineBlocksPlayerWritesWithoutTopologySelection();
+    TestEditorSelectedAuthoringLineSideMaterialWritesWithoutTopologySelection();
+    TestEditorSelectedFaceAnchorPropertiesWriteWithoutTopologySelection();
+    TestEditorAuthoringFacePointSelectionRequiresCurrentUnambiguousMapping();
+    TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailable();
     TestEditorAuthoringSurfaceMappingResolvesFlatSurfaceToFaceAnchor();
     TestEditorAuthoringSurfaceMappingResolvesWallSurfaceToAuthoringSide();
     TestEditorAuthoringSurfaceMappingBlocksStaleDerivedTopology();
