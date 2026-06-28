@@ -237,6 +237,8 @@ struct FaceContainmentInfo {
     std::map<int, int> depthByFaceId;
 };
 
+constexpr int maxSupportedNestedFaceDepth = 8;
+
 bool SamePhysicalSegment(const PlanarSourceLine& lhs, const PlanarSourceLine& rhs)
 {
     return (lhs.start->x == rhs.start->x && lhs.start->y == rhs.start->y
@@ -1124,7 +1126,7 @@ void AddUnsupportedNestedFaceDiagnostics(
     for (const SectorAuthoringExtractedFace& face : faces.faces) {
         const auto depthIt = containment.depthByFaceId.find(face.id);
         const int depth = depthIt == containment.depthByFaceId.end() ? 0 : depthIt->second;
-        if (depth <= 1) {
+        if (depth <= maxSupportedNestedFaceDepth) {
             continue;
         }
 
@@ -1133,7 +1135,8 @@ void AddUnsupportedNestedFaceDiagnostics(
                 diagnostics,
                 SectorAuthoringDerivationDiagnosticKind::FaceExtraction,
                 objectId,
-                "Nested authoring loops deeper than one level are not supported");
+                "Nested authoring loop depth exceeds the supported maximum of "
+                        + std::to_string(maxSupportedNestedFaceDepth));
     }
 }
 

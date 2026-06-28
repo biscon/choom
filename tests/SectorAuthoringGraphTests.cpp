@@ -87,6 +87,19 @@ bool HasDerivationDiagnostic(
     return false;
 }
 
+bool HasDerivationDiagnosticMessageContaining(
+        const std::vector<game::SectorAuthoringDerivationDiagnostic>& diagnostics,
+        game::SectorAuthoringDerivationDiagnosticKind kind,
+        const std::string& messageText)
+{
+    for (const game::SectorAuthoringDerivationDiagnostic& diagnostic : diagnostics) {
+        if (diagnostic.kind == kind && diagnostic.message.find(messageText) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool HasDerivationDiagnosticFor(
         const std::vector<game::SectorAuthoringDerivationDiagnostic>& diagnostics,
         game::SectorAuthoringDerivationDiagnosticKind kind,
@@ -173,6 +186,46 @@ game::SectorAuthoringGraph MakeGraphFromConnectedLines(
                 lines[index].second);
     }
     return graph;
+}
+
+game::SectorAuthoringGraph MakeNestedRectangleGraph(int rectangleCount)
+{
+    game::SectorAuthoringGraph graph;
+    std::vector<std::pair<game::SectorCoord, game::SectorCoord>> vertices;
+    std::vector<std::pair<int, int>> lines;
+    vertices.reserve(static_cast<std::size_t>(rectangleCount) * 4);
+    lines.reserve(static_cast<std::size_t>(rectangleCount) * 4);
+
+    for (int rectangleIndex = 0; rectangleIndex < rectangleCount; ++rectangleIndex) {
+        const game::SectorCoord inset = static_cast<game::SectorCoord>(rectangleIndex * 32);
+        const game::SectorCoord extent = static_cast<game::SectorCoord>(rectangleCount * 64 - inset);
+        const int firstVertexId = static_cast<int>(vertices.size()) + 1;
+        vertices.push_back({inset, inset});
+        vertices.push_back({extent, inset});
+        vertices.push_back({extent, extent});
+        vertices.push_back({inset, extent});
+        lines.push_back({firstVertexId, firstVertexId + 1});
+        lines.push_back({firstVertexId + 1, firstVertexId + 2});
+        lines.push_back({firstVertexId + 2, firstVertexId + 3});
+        lines.push_back({firstVertexId + 3, firstVertexId});
+    }
+
+    return MakeGraphFromConnectedLines(vertices, lines);
+}
+
+void AddFaceAnchor(
+        game::SectorAuthoringGraph& graph,
+        int id,
+        game::SectorCoord x,
+        game::SectorCoord y,
+        const std::string& name)
+{
+    game::SectorAuthoringFaceAnchor anchor;
+    anchor.id = id;
+    anchor.x = x;
+    anchor.y = y;
+    anchor.name = name;
+    graph.faceAnchors.push_back(anchor);
 }
 
 bool PointEqualsInteger(
@@ -1054,6 +1107,17 @@ void CheckDerivedTopologyIsValid(
           description);
 }
 
+std::size_t CountSectorHoles(
+        const game::SectorTopologyMap& topology,
+        int sectorId,
+        const char* description)
+{
+    game::SectorTopologyLoopSet loops;
+    std::vector<game::SectorTopologyValidationIssue> issues;
+    Check(game::ExtractSectorTopologyLoops(topology, sectorId, loops, &issues), description);
+    return loops.holes.size();
+}
+
 void TestDeriveSingleSquare()
 {
     const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
@@ -1245,25 +1309,134 @@ void TestDeriveNestedLoopFaceAnchorsResolveThroughHoles()
           "inner anchored sector exists");
 }
 
-void TestDeriveHoleInsideHoleFailsWithDiagnostic()
+void TestNestedLoopsDepthTwoDerivesValidTopology()
 {
-    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
-            {{0, 0}, {192, 0}, {192, 192}, {0, 192},
-             {32, 32}, {160, 32}, {160, 160}, {32, 160},
-             {64, 64}, {128, 64}, {128, 128}, {64, 128}},
-            {{1, 2}, {2, 3}, {3, 4}, {4, 1},
-             {5, 6}, {6, 7}, {7, 8}, {8, 5},
-             {9, 10}, {10, 11}, {11, 12}, {12, 9}});
+    game::SectorAuthoringGraph graph = MakeNestedRectangleGraph(3);
+    AddFaceAnchor(graph, 200, 16, 16, "outer");
+    AddFaceAnchor(graph, 201, 48, 48, "middle");
+    AddFaceAnchor(graph, 202, 96, 96, "inner");
 
     const game::SectorAuthoringDerivationResult result =
             game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
 
-    Check(!result.success, "hole-inside-hole graph is deferred");
-    Check(result.topology.sectors.empty(), "hole-inside-hole graph returns no half-valid topology");
+    CheckDerivedTopologyIsValid(result, "depth-two nested loops derive valid topology");
+    Check(result.topology.sectors.size() == 3, "depth-two nested loops derive three sectors");
+    Check(result.mapping.sectors.size() == 3, "depth-two nested loops record three sector mappings");
+    Check(CountSectorHoles(result.topology, 200, "depth-two outer sector extracts loops") == 1,
+          "depth-two outer sector has only the middle loop as a direct hole");
+    Check(CountSectorHoles(result.topology, 201, "depth-two middle sector extracts loops") == 1,
+          "depth-two middle sector has only the inner loop as a direct hole");
+    Check(CountSectorHoles(result.topology, 202, "depth-two inner sector extracts loops") == 0,
+          "depth-two inner sector has no descendant holes");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(result.topology, geometry, &error),
+          "depth-two nested loop derived topology builds generated geometry");
+    Check(!geometry.surfaces.empty(), "depth-two nested loop derived topology generates surfaces");
+}
+
+void TestNestedLoopsDepthThreeDerivesValidTopology()
+{
+    game::SectorAuthoringGraph graph = MakeNestedRectangleGraph(4);
+    AddFaceAnchor(graph, 200, 16, 16, "outer");
+    AddFaceAnchor(graph, 201, 48, 48, "middle");
+    AddFaceAnchor(graph, 202, 80, 80, "inner");
+    AddFaceAnchor(graph, 203, 128, 128, "deepest");
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "depth-three nested loops derive valid topology");
+    Check(result.topology.sectors.size() == 4, "depth-three nested loops derive four sectors");
+    Check(CountSectorHoles(result.topology, 200, "depth-three outer sector extracts loops") == 1,
+          "depth-three outer sector has one direct hole");
+    Check(CountSectorHoles(result.topology, 201, "depth-three second sector extracts loops") == 1,
+          "depth-three second sector has one direct hole");
+    Check(CountSectorHoles(result.topology, 202, "depth-three third sector extracts loops") == 1,
+          "depth-three third sector has one direct hole");
+    Check(CountSectorHoles(result.topology, 203, "depth-three deepest sector extracts loops") == 0,
+          "depth-three deepest sector has no holes");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(result.topology, geometry, &error),
+          "depth-three nested loop derived topology builds generated geometry");
+}
+
+void TestNestedLoopFaceAnchorsResolveToDeepestContainingSector()
+{
+    game::SectorAuthoringGraph graph = MakeNestedRectangleGraph(3);
+    AddFaceAnchor(graph, 200, 16, 16, "outer");
+    AddFaceAnchor(graph, 201, 48, 48, "middle");
+    AddFaceAnchor(graph, 202, 96, 96, "inner");
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "nested loop deepest anchor resolution derives valid topology");
+    const game::SectorAuthoringDerivedSectorMapping* outerMapping =
+            FindSectorMappingForAnchor(result.mapping, 200);
+    const game::SectorAuthoringDerivedSectorMapping* middleMapping =
+            FindSectorMappingForAnchor(result.mapping, 201);
+    const game::SectorAuthoringDerivedSectorMapping* innerMapping =
+            FindSectorMappingForAnchor(result.mapping, 202);
+    Check(outerMapping != nullptr && outerMapping->topologySectorId == 200,
+          "outer nested-loop anchor maps to outer sector");
+    Check(middleMapping != nullptr && middleMapping->topologySectorId == 201,
+          "middle nested-loop anchor maps to middle sector");
+    Check(innerMapping != nullptr && innerMapping->topologySectorId == 202,
+          "inner nested-loop anchor maps to deepest sector");
+
+    game::SectorAuthoringGraph ambiguousGraph = MakeNestedRectangleGraph(3);
+    AddFaceAnchor(ambiguousGraph, 300, 48, 48, "middle-a");
+    AddFaceAnchor(ambiguousGraph, 301, 56, 56, "middle-b");
+    const game::SectorAuthoringDerivationResult ambiguousResult =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(ambiguousGraph);
+    Check(!ambiguousResult.success, "multiple anchors in one nested face fail derivation cleanly");
     Check(HasDerivationDiagnostic(
+                  ambiguousResult.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::AmbiguousFaceAnchor),
+          "multiple anchors in one nested face report ambiguous face anchor diagnostic");
+}
+
+void TestNestedLoopDirectChildHolesOnly()
+{
+    game::SectorAuthoringGraph graph = MakeNestedRectangleGraph(4);
+    AddFaceAnchor(graph, 200, 16, 16, "outer");
+    AddFaceAnchor(graph, 201, 48, 48, "middle");
+    AddFaceAnchor(graph, 202, 80, 80, "inner");
+    AddFaceAnchor(graph, 203, 128, 128, "deepest");
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "direct-child nested loop derivation is valid");
+    Check(CountSectorHoles(result.topology, 200, "direct-child outer sector extracts loops") == 1,
+          "direct-child outer sector does not receive all descendants as holes");
+    Check(CountSectorHoles(result.topology, 201, "direct-child middle sector extracts loops") == 1,
+          "direct-child middle sector receives only its child as a hole");
+    Check(CountSectorHoles(result.topology, 202, "direct-child inner sector extracts loops") == 1,
+          "direct-child inner sector receives only its child as a hole");
+    Check(CountSectorHoles(result.topology, 203, "direct-child deepest sector extracts loops") == 0,
+          "direct-child deepest sector has no holes");
+}
+
+void TestNestedLoopDepthLimitReportsDiagnostic()
+{
+    const game::SectorAuthoringGraph graph = MakeNestedRectangleGraph(10);
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    Check(!result.success, "nested loop beyond supported depth fails derivation");
+    Check(result.topology.sectors.empty(), "nested loop beyond supported depth returns no half-valid topology");
+    Check(result.mapping.sectors.empty(), "nested loop beyond supported depth returns no half-valid mapping");
+    Check(HasDerivationDiagnosticMessageContaining(
                   result.diagnostics,
-                  game::SectorAuthoringDerivationDiagnosticKind::FaceExtraction),
-          "hole-inside-hole graph reports face extraction diagnostic");
+                  game::SectorAuthoringDerivationDiagnosticKind::FaceExtraction,
+                  "supported maximum of 8"),
+          "nested loop beyond supported depth reports the supported maximum");
 }
 
 void TestDeriveOverlappingNestedLoopsProduceDiagnostics()
@@ -2573,6 +2746,51 @@ void TestEditorAuthoringMoveVertexUpdatesConnectedLinesAndInvalidates()
           "unchanged authoring vertex move does not invalidate again");
 }
 
+void TestEditorAuthoringMoveNestedLoopVertexRederivesValidTopology()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeNestedRectangleGraph(3);
+    AddFaceAnchor(state.authoringGraph, 200, 16, 16, "outer");
+    AddFaceAnchor(state.authoringGraph, 201, 48, 48, "middle");
+    AddFaceAnchor(state.authoringGraph, 202, 96, 96, "inner");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "nested authoring move setup derives valid topology");
+    Check(state.authoringDerivation.success, "nested authoring move setup stores successful derivation");
+    Check(state.topologyMap.sectors.size() == 3, "nested authoring move setup derives three sectors");
+    const uint64_t originalRevision = state.topologyRenderRevision;
+
+    Check(game::MoveSectorEditorAuthoringVertex(
+                  state,
+                  6,
+                  game::SectorTopologyCoordPoint{152, 40}),
+          "nested authoring move helper moves a nested-loop vertex");
+
+    const game::SectorAuthoringVertex* moved =
+            game::FindSectorAuthoringVertex(state.authoringGraph, 6);
+    Check(moved != nullptr && moved->x == 152 && moved->y == 40,
+          "nested authoring move updates nested-loop vertex coordinates");
+    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
+          "nested authoring move re-derives current topology");
+    Check(!state.authoringDerivedTopologyStale,
+          "nested authoring move leaves derived topology current after refresh");
+    Check(state.authoringDerivation.success,
+          "nested authoring move stores successful recursive derivation");
+    Check(state.topologyMap.sectors.size() == 3,
+          "nested authoring move keeps three derived sectors");
+    Check(CountSectorHoles(state.topologyMap, 200, "moved nested outer sector extracts loops") == 1,
+          "moved nested outer sector keeps one direct hole");
+    Check(CountSectorHoles(state.topologyMap, 201, "moved nested middle sector extracts loops") == 1,
+          "moved nested middle sector keeps one direct hole");
+    Check(CountSectorHoles(state.topologyMap, 202, "moved nested inner sector extracts loops") == 0,
+          "moved nested inner sector keeps no holes");
+    Check(state.topologyDocumentDirty, "nested authoring move marks document dirty");
+    Check(state.hasUnsavedChanges, "nested authoring move marks unsaved changes");
+    Check(!state.topologyRenderCache.valid,
+          "nested authoring move invalidates cached editor topology rendering");
+    Check(state.topologyRenderRevision == originalRevision + 1,
+          "nested authoring move bumps topology render revision once");
+}
+
 void TestEditorAuthoringDeleteConnectedVertexIsExplicitlyRejected()
 {
     game::SectorEditorState state;
@@ -2856,7 +3074,11 @@ int main()
     TestDeriveNestedLoopCreatesHoleTopology();
     TestDeriveNestedLoopProjectsInnerBoundaryProperties();
     TestDeriveNestedLoopFaceAnchorsResolveThroughHoles();
-    TestDeriveHoleInsideHoleFailsWithDiagnostic();
+    TestNestedLoopsDepthTwoDerivesValidTopology();
+    TestNestedLoopsDepthThreeDerivesValidTopology();
+    TestNestedLoopFaceAnchorsResolveToDeepestContainingSector();
+    TestNestedLoopDirectChildHolesOnly();
+    TestNestedLoopDepthLimitReportsDiagnostic();
     TestDeriveOverlappingNestedLoopsProduceDiagnostics();
     TestDeriveNonIntegerIntersectionFails();
     TestDeriveSquareWithMixedLineDirections();
@@ -2896,6 +3118,7 @@ int main()
     TestEditorAuthoringVertexPickingFindsNearestValidVertex();
     TestEditorAuthoringSelectionPickingPrefersVerticesThenLines();
     TestEditorAuthoringMoveVertexUpdatesConnectedLinesAndInvalidates();
+    TestEditorAuthoringMoveNestedLoopVertexRederivesValidTopology();
     TestEditorAuthoringDeleteConnectedVertexIsExplicitlyRejected();
     TestEditorAuthoringDeleteIsolatedVertexOnlyMutatesGraphAndInvalidates();
     TestEditorAuthoringEditsRefreshValidCrossingDerivation();
