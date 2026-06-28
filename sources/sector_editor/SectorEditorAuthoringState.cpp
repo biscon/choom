@@ -5,6 +5,7 @@
 #include <raylib.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <map>
 #include <set>
@@ -1203,6 +1204,88 @@ bool AddSectorEditorAuthoringLineSegment(
             state,
             TextFormat("Added authoring line %d; derived topology current", lineId),
             TextFormat("Added authoring line %d; derivation failed", lineId));
+    return true;
+}
+
+bool CreateSectorAuthoringRectangle(
+        SectorAuthoringGraph& graph,
+        SectorTopologyCoordPoint firstCorner,
+        SectorTopologyCoordPoint oppositeCorner,
+        SectorEditorAuthoringRectangleResult* outResult)
+{
+    const SectorCoord minX = std::min(firstCorner.x, oppositeCorner.x);
+    const SectorCoord maxX = std::max(firstCorner.x, oppositeCorner.x);
+    const SectorCoord minY = std::min(firstCorner.y, oppositeCorner.y);
+    const SectorCoord maxY = std::max(firstCorner.y, oppositeCorner.y);
+    if (minX == maxX || minY == maxY) {
+        return false;
+    }
+
+    SectorAuthoringGraph candidate = graph;
+    SectorEditorAuthoringRectangleResult result;
+    const std::array<SectorTopologyCoordPoint, 4> corners{{
+            {minX, minY},
+            {maxX, minY},
+            {maxX, maxY},
+            {minX, maxY}
+    }};
+
+    for (std::size_t index = 0; index < corners.size(); ++index) {
+        int vertexId = -1;
+        if (!FindSectorAuthoringVertexAtPoint(candidate, corners[index], &vertexId)) {
+            if (!AddSectorAuthoringVertex(
+                        candidate,
+                        corners[index].x,
+                        corners[index].y,
+                        &vertexId)) {
+                return false;
+            }
+        }
+        result.vertexIds[index] = vertexId;
+    }
+
+    for (std::size_t index = 0; index < corners.size(); ++index) {
+        int lineId = -1;
+        if (!AddSectorAuthoringLine(
+                    candidate,
+                    result.vertexIds[index],
+                    result.vertexIds[(index + 1) % corners.size()],
+                    &lineId)) {
+            return false;
+        }
+        result.lineIds[index] = lineId;
+    }
+
+    graph = std::move(candidate);
+    if (outResult != nullptr) {
+        *outResult = result;
+    }
+    return true;
+}
+
+bool AddSectorEditorAuthoringRectangle(
+        SectorEditorState& state,
+        SectorTopologyCoordPoint firstCorner,
+        SectorTopologyCoordPoint oppositeCorner,
+        SectorEditorAuthoringRectangleResult* outResult)
+{
+    SectorEditorAuthoringRectangleResult result;
+    if (!CreateSectorAuthoringRectangle(
+                state.authoringGraph,
+                firstCorner,
+                oppositeCorner,
+                &result)) {
+        return false;
+    }
+
+    MarkSectorEditorAuthoringGraphEdited(state, "Created authoring rectangle");
+    RefreshSectorEditorAuthoringDerivation(
+            state,
+            "Created authoring rectangle; derived topology current",
+            "Created authoring rectangle; derivation failed");
+    if (outResult != nullptr) {
+        *outResult = result;
+    }
     return true;
 }
 

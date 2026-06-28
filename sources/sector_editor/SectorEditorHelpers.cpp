@@ -381,6 +381,7 @@ const char* ToolName(SectorEditorTool tool)
     switch (tool) {
         case SectorEditorTool::Select: return "Select";
         case SectorEditorTool::AuthoringLine: return "Authoring Line";
+        case SectorEditorTool::AuthoringRectangle: return "Rectangle";
         case SectorEditorTool::AuthoringMove: return "Move Vertex";
         case SectorEditorTool::Light: return "Light";
         case SectorEditorTool::Move: return "Move";
@@ -392,6 +393,7 @@ bool IsGraphAuthoringTool(SectorEditorTool tool)
 {
     return tool == SectorEditorTool::Select
             || tool == SectorEditorTool::AuthoringLine
+            || tool == SectorEditorTool::AuthoringRectangle
             || tool == SectorEditorTool::AuthoringMove;
 }
 
@@ -721,6 +723,7 @@ const char* ToolHelpText(SectorEditorTool tool)
     switch (tool) {
         case SectorEditorTool::Select: return "Select: click authoring lines or vertices";
         case SectorEditorTool::AuthoringLine: return "Authoring line: click snapped points to create authoring lines, right click/Esc cancels";
+        case SectorEditorTool::AuthoringRectangle: return "Rectangle: click first corner, then opposite corner, right click/Esc cancels";
         case SectorEditorTool::AuthoringMove: return "Move Vertex: drag authoring vertices";
         case SectorEditorTool::Light: return "Light: click inside a sector to place, or drag an existing baked static point light";
         case SectorEditorTool::Move: return "Legacy move: unavailable in graph-authoritative mode; use Move Vertex for authoring vertices";

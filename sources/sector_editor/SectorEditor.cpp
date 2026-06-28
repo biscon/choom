@@ -185,6 +185,7 @@ void SectorEditor::Update(engine::Input& input, float dt)
         CancelAuthoringVertexDrag(nullptr);
         CancelLightDrag(nullptr);
         CancelPendingAuthoringLine(nullptr);
+        CancelPendingAuthoringRectangle(nullptr);
         return;
     }
 
@@ -378,7 +379,8 @@ Vector2 SectorEditor::SnapMapPoint(Vector2 map) const
             std::round(map.y / grid) * grid
     };
 
-    if (state.currentTool != SectorEditorTool::AuthoringLine) {
+    if (state.currentTool != SectorEditorTool::AuthoringLine
+            && state.currentTool != SectorEditorTool::AuthoringRectangle) {
         return snapped;
     }
 
@@ -389,7 +391,8 @@ Vector2 SectorEditor::SnapMapPoint(Vector2 map) const
     float bestDistance2 = threshold * threshold;
     bool found = false;
     Vector2 best = snapped;
-    if (state.currentTool == SectorEditorTool::AuthoringLine) {
+    if (state.currentTool == SectorEditorTool::AuthoringLine
+            || state.currentTool == SectorEditorTool::AuthoringRectangle) {
         for (const SectorAuthoringVertex& authoringVertex : state.authoringGraph.vertices) {
             const Vector2 vertex{
                     SectorCoordToVisibleAuthoring(authoringVertex.x),
@@ -454,6 +457,13 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
 {
     state.rawMouseMap = ScreenToMap(input.MousePosition());
     state.snappedMouseMap = SnapMapPoint(state.rawMouseMap);
+    if (state.pendingAuthoringRectangle.active) {
+        std::string error;
+        SectorTopologyCoordPoint currentCorner;
+        if (ToTopologyCoordPoint(CurrentSnappedSectorPoint(), currentCorner, error)) {
+            state.pendingAuthoringRectangle.currentCorner = currentCorner;
+        }
+    }
     state.hasHoveredVertex = false;
     state.hoveredTopologyLightId = -1;
     state.hoveredTopologyVertexId = -1;
@@ -533,6 +543,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         CancelLightDrag("Cancelled light move");
                     } else if (state.pendingAuthoringLine.active) {
                         CancelPendingAuthoringLine("Cancelled authoring line");
+                    } else if (state.pendingAuthoringRectangle.active) {
+                        CancelPendingAuthoringRectangle("Rectangle cancelled");
                     } else if (state.selectedTopologyLightId >= 0
                             || state.topologySelectionKind != TopologySelectionKind::None
                             || state.selectedAuthoring.kind != SectorAuthoringSelectionKind::None) {
@@ -737,10 +749,17 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
-                if (event.mouseClick.button == MOUSE_RIGHT_BUTTON && state.pendingAuthoringLine.active) {
-                    CancelPendingAuthoringLine("Cancelled authoring line");
-                    engine::ConsumeEvent(event);
-                    return;
+                if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
+                    if (state.pendingAuthoringLine.active) {
+                        CancelPendingAuthoringLine("Cancelled authoring line");
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+                    if (state.pendingAuthoringRectangle.active) {
+                        CancelPendingAuthoringRectangle("Rectangle cancelled");
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
                 }
 
                 if (event.mouseClick.button != MOUSE_LEFT_BUTTON) {
@@ -776,6 +795,12 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
 
                 if (state.currentTool == SectorEditorTool::AuthoringLine) {
                     AddAuthoringLinePoint(CurrentSnappedSectorPoint());
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
+                if (state.currentTool == SectorEditorTool::AuthoringRectangle) {
+                    AddAuthoringRectanglePoint(CurrentSnappedSectorPoint());
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -1120,6 +1145,14 @@ void SectorEditor::CancelPendingAuthoringLine(const char* message)
     }
 }
 
+void SectorEditor::CancelPendingAuthoringRectangle(const char* message)
+{
+    state.pendingAuthoringRectangle = PendingAuthoringRectangleDraw{};
+    if (message != nullptr && message[0] != '\0') {
+        statusText = message;
+    }
+}
+
 void SectorEditor::AddAuthoringLinePoint(SectorPoint point)
 {
     ClearTopologySelectionOnly();
@@ -1159,6 +1192,45 @@ void SectorEditor::AddAuthoringLinePoint(SectorPoint point)
     ClearSelection();
     SelectSectorEditorAuthoringLine(state, lineId);
     statusText = TextFormat("Added authoring line %d", lineId);
+}
+
+void SectorEditor::AddAuthoringRectanglePoint(SectorPoint point)
+{
+    ClearTopologySelectionOnly();
+
+    std::string error;
+    SectorTopologyCoordPoint topologyPoint;
+    if (!ToTopologyCoordPoint(point, topologyPoint, error)) {
+        state.pendingAuthoringRectangle.errorMessage = error;
+        statusText = error;
+        return;
+    }
+
+    if (!state.pendingAuthoringRectangle.active) {
+        state.pendingAuthoringRectangle.active = true;
+        state.pendingAuthoringRectangle.firstCorner = topologyPoint;
+        state.pendingAuthoringRectangle.currentCorner = topologyPoint;
+        state.pendingAuthoringRectangle.errorMessage.clear();
+        statusText = "Rectangle: click opposite corner, right click/Esc cancels";
+        return;
+    }
+
+    SectorEditorAuthoringRectangleResult result;
+    if (!AddSectorEditorAuthoringRectangle(
+                state,
+                state.pendingAuthoringRectangle.firstCorner,
+                topologyPoint,
+                &result)) {
+        state.pendingAuthoringRectangle.currentCorner = topologyPoint;
+        state.pendingAuthoringRectangle.errorMessage = "Rectangle needs non-zero width and height";
+        statusText = state.pendingAuthoringRectangle.errorMessage;
+        return;
+    }
+
+    state.pendingAuthoringRectangle = PendingAuthoringRectangleDraw{};
+    ClearSelection();
+    SelectSectorEditorAuthoringLine(state, result.lineIds[0]);
+    statusText = "Created authoring rectangle";
 }
 
 SectorPoint SectorEditor::CurrentSnappedSectorPoint() const
@@ -2827,6 +2899,7 @@ void SectorEditor::DrawTopologyDocument()
     DrawCachedTopologyStaticLights(state.topologyRenderCache, drawContext);
     DrawLightMoveOverlay();
     DrawPendingAuthoringLine();
+    DrawPendingAuthoringRectangle();
     DrawTopologySnapCrosshair();
 
     if (!state.topologyRenderWarning.empty()) {
@@ -2903,7 +2976,9 @@ void SectorEditor::DrawTopologySnapCrosshair() const
     }
 
     const bool useCanonicalSectorPoint = state.currentTool == SectorEditorTool::AuthoringLine
-            || state.pendingAuthoringLine.active;
+            || state.currentTool == SectorEditorTool::AuthoringRectangle
+            || state.pendingAuthoringLine.active
+            || state.pendingAuthoringRectangle.active;
     const Vector2 snap = useCanonicalSectorPoint
             ? MapToScreen(SectorPointToVector2(CurrentSnappedSectorPoint()))
             : MapToScreen(state.snappedMouseMap);
@@ -2935,6 +3010,60 @@ void SectorEditor::DrawPendingAuthoringLine() const
     DrawCircleLines(
             static_cast<int>(std::round(startScreen.x)),
             static_cast<int>(std::round(startScreen.y)),
+            8.0f,
+            Color{20, 24, 32, 255});
+    DrawCircleV(cursorScreen, 5.0f, cursorColor);
+    DrawCircleLines(
+            static_cast<int>(std::round(cursorScreen.x)),
+            static_cast<int>(std::round(cursorScreen.y)),
+            7.5f,
+            Color{20, 24, 32, 255});
+}
+
+void SectorEditor::DrawPendingAuthoringRectangle() const
+{
+    if (!state.pendingAuthoringRectangle.active) {
+        return;
+    }
+
+    const SectorPoint first = SectorTopologyCoordPointToSectorPoint(
+            state.pendingAuthoringRectangle.firstCorner);
+    const SectorPoint cursor = SectorTopologyCoordPointToSectorPoint(
+            state.pendingAuthoringRectangle.currentCorner);
+    const bool invalid = first.x == cursor.x
+            || first.y == cursor.y
+            || !state.pendingAuthoringRectangle.errorMessage.empty();
+    const Color lineColor = invalid ? Color{220, 88, 88, 190} : Color{122, 220, 244, 205};
+    const Color firstColor = Color{245, 226, 154, 255};
+    const Color cursorColor = invalid ? Color{220, 88, 88, 255} : Color{120, 230, 154, 255};
+
+    const float minX = std::min(first.x, cursor.x);
+    const float maxX = std::max(first.x, cursor.x);
+    const float minY = std::min(first.y, cursor.y);
+    const float maxY = std::max(first.y, cursor.y);
+    const Vector2 a = MapToScreen(Vector2{minX, minY});
+    const Vector2 b = MapToScreen(Vector2{maxX, minY});
+    const Vector2 c = MapToScreen(Vector2{maxX, maxY});
+    const Vector2 d = MapToScreen(Vector2{minX, maxY});
+    if (!invalid) {
+        DrawLineEx(a, b, 3.0f, lineColor);
+        DrawLineEx(b, c, 3.0f, lineColor);
+        DrawLineEx(c, d, 3.0f, lineColor);
+        DrawLineEx(d, a, 3.0f, lineColor);
+    } else if (!SamePoint(first, cursor)) {
+        DrawLineEx(
+                MapToScreen(SectorPointToVector2(first)),
+                MapToScreen(SectorPointToVector2(cursor)),
+                3.0f,
+                lineColor);
+    }
+
+    const Vector2 firstScreen = MapToScreen(SectorPointToVector2(first));
+    const Vector2 cursorScreen = MapToScreen(SectorPointToVector2(cursor));
+    DrawCircleV(firstScreen, 5.5f, firstColor);
+    DrawCircleLines(
+            static_cast<int>(std::round(firstScreen.x)),
+            static_cast<int>(std::round(firstScreen.y)),
             8.0f,
             Color{20, 24, 32, 255});
     DrawCircleV(cursorScreen, 5.0f, cursorColor);
@@ -3182,6 +3311,9 @@ void SectorEditor::DrawToolsPanel(
         if (state.pendingAuthoringLine.active && tool != SectorEditorTool::AuthoringLine) {
             CancelPendingAuthoringLine("Cancelled authoring line");
         }
+        if (state.pendingAuthoringRectangle.active && tool != SectorEditorTool::AuthoringRectangle) {
+            CancelPendingAuthoringRectangle("Rectangle cancelled");
+        }
         if (state.authoringVertexDrag.active && tool != SectorEditorTool::AuthoringMove) {
             CancelAuthoringVertexDrag("Cancelled authoring vertex move");
         }
@@ -3198,6 +3330,7 @@ void SectorEditor::DrawToolsPanel(
     const SectorEditorTool graphTools[] = {
             SectorEditorTool::Select,
             SectorEditorTool::AuthoringLine,
+            SectorEditorTool::AuthoringRectangle,
             SectorEditorTool::AuthoringMove
     };
     for (SectorEditorTool tool : graphTools) {
@@ -6088,6 +6221,8 @@ void SectorEditor::DrawStatusPanel(
     std::string pendingText;
     if (state.pendingAuthoringLine.active) {
         pendingText = " | authoring line";
+    } else if (state.pendingAuthoringRectangle.active) {
+        pendingText = " | rectangle";
     } else if (state.authoringVertexDrag.active) {
         pendingText = " | authoring vertex move";
     }

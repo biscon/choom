@@ -4925,6 +4925,182 @@ void TestEditorAuthoringLineDrawHelperReusesVerticesAndRejectsZeroLength()
           "authoring line draw helper zero-length rejection does not mutate derived topology");
 }
 
+void TestAuthoringRectangleHelperCreatesClosedLoop()
+{
+    game::SectorAuthoringGraph graph;
+    game::SectorEditorAuthoringRectangleResult result;
+
+    Check(game::CreateSectorAuthoringRectangle(
+                  graph,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{10, 6},
+                  &result),
+          "authoring rectangle helper creates a rectangle");
+    Check(graph.vertices.size() == 4, "authoring rectangle helper creates four vertices");
+    Check(graph.lines.size() == 4, "authoring rectangle helper creates four lines");
+
+    const game::SectorCoord expectedX[4] = {0, 10, 10, 0};
+    const game::SectorCoord expectedY[4] = {0, 0, 6, 6};
+    for (int index = 0; index < 4; ++index) {
+        const game::SectorAuthoringVertex* vertex =
+                game::FindSectorAuthoringVertex(graph, result.vertexIds[index]);
+        Check(vertex != nullptr && vertex->id > 0,
+              "authoring rectangle helper returns stable positive vertex IDs");
+        Check(vertex != nullptr && vertex->x == expectedX[index] && vertex->y == expectedY[index],
+              "authoring rectangle helper uses deterministic min/max corner order");
+
+        const game::SectorAuthoringLine* line =
+                game::FindSectorAuthoringLine(graph, result.lineIds[index]);
+        Check(line != nullptr && line->id > 0,
+              "authoring rectangle helper returns stable positive line IDs");
+        Check(line != nullptr
+                      && line->startVertexId == result.vertexIds[index]
+                      && line->endVertexId == result.vertexIds[(index + 1) % 4],
+              "authoring rectangle helper connects a closed loop in deterministic order");
+    }
+
+    Check(!game::HasSectorAuthoringValidationErrors(
+                  game::ValidateSectorAuthoringGraphReferences(graph)),
+          "authoring rectangle helper leaves graph references valid");
+}
+
+void TestAuthoringRectangleHelperReversedDragIsDeterministic()
+{
+    game::SectorAuthoringGraph graph;
+    game::SectorEditorAuthoringRectangleResult result;
+
+    Check(game::CreateSectorAuthoringRectangle(
+                  graph,
+                  game::SectorTopologyCoordPoint{10, 6},
+                  game::SectorTopologyCoordPoint{0, 0},
+                  &result),
+          "authoring rectangle helper accepts reversed drag direction");
+
+    const game::SectorCoord expectedX[4] = {0, 10, 10, 0};
+    const game::SectorCoord expectedY[4] = {0, 0, 6, 6};
+    for (int index = 0; index < 4; ++index) {
+        const game::SectorAuthoringVertex* vertex =
+                game::FindSectorAuthoringVertex(graph, result.vertexIds[index]);
+        Check(vertex != nullptr && vertex->x == expectedX[index] && vertex->y == expectedY[index],
+              "authoring rectangle helper normalizes reversed rectangle coordinates");
+        const game::SectorAuthoringLine* line =
+                game::FindSectorAuthoringLine(graph, result.lineIds[index]);
+        Check(line != nullptr
+                      && line->startVertexId == result.vertexIds[index]
+                      && line->endVertexId == result.vertexIds[(index + 1) % 4],
+              "authoring rectangle helper preserves deterministic line orientation after reversed drag");
+    }
+}
+
+void TestAuthoringRectangleHelperRejectsZeroSize()
+{
+    const game::SectorTopologyCoordPoint cases[3][2] = {
+            {{0, 0}, {0, 0}},
+            {{0, 0}, {0, 6}},
+            {{0, 0}, {10, 0}}
+    };
+
+    for (const auto& testCase : cases) {
+        game::SectorAuthoringGraph graph;
+        Check(!game::CreateSectorAuthoringRectangle(graph, testCase[0], testCase[1]),
+              "authoring rectangle helper rejects zero-width or zero-height rectangles");
+        Check(graph.vertices.empty() && graph.lines.empty(),
+              "rejected zero-size authoring rectangle leaves graph unchanged");
+    }
+}
+
+void TestAuthoringRectangleHelperDerivesValidTopology()
+{
+    game::SectorEditorState state;
+    game::InitializeSectorEditorAuthoringStateFromTopology(state, game::SectorTopologyMap{});
+
+    Check(game::AddSectorEditorAuthoringRectangle(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64}),
+          "authoring rectangle editor helper commits rectangle");
+    Check(state.authoringDerivation.success,
+          "authoring rectangle derives valid topology through editor refresh");
+    Check(!game::HasSectorTopologyValidationErrors(
+                  game::ValidateSectorTopologyMap(state.topologyMap)),
+          "authoring rectangle derived topology validates");
+    Check(state.authoringGraph.faceAnchors.size() == 1,
+          "authoring rectangle reconciliation synthesizes a face anchor");
+    const game::SectorAuthoringFaceAnchor* anchor = state.authoringGraph.faceAnchors.empty()
+            ? nullptr
+            : &state.authoringGraph.faceAnchors.front();
+    Check(anchor != nullptr
+                  && anchor->floorTextureId == "floor"
+                  && anchor->ceilingTextureId == "ceiling"
+                  && anchor->defaultWall.textureId == "wall",
+          "authoring rectangle synthesized face anchor gets normal default materials");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(state.topologyMap, geometry, &error),
+          "authoring rectangle derived topology builds generated geometry");
+    Check(!geometry.surfaces.empty(),
+          "authoring rectangle derived topology produces generated surfaces");
+}
+
+void TestAuthoringNestedRectanglesDeriveThroughExistingBehavior()
+{
+    game::SectorEditorState state;
+    game::InitializeSectorEditorAuthoringStateFromTopology(state, game::SectorTopologyMap{});
+
+    Check(game::AddSectorEditorAuthoringRectangle(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{128, 128}),
+          "nested rectangle test commits outer rectangle");
+    Check(game::AddSectorEditorAuthoringRectangle(
+                  state,
+                  game::SectorTopologyCoordPoint{32, 32},
+                  game::SectorTopologyCoordPoint{96, 96}),
+          "nested rectangle test commits inner rectangle");
+
+    Check(state.authoringDerivation.success,
+          "nested rectangles derive through existing nested-loop behavior");
+    Check(!game::HasSectorTopologyValidationErrors(
+                  game::ValidateSectorTopologyMap(state.topologyMap)),
+          "nested rectangle derived topology validates");
+    Check(state.authoringGraph.faceAnchors.size() == 2,
+          "nested rectangle reconciliation synthesizes expected face anchors");
+    Check(state.topologyMap.sectors.size() == 2,
+          "nested rectangles produce expected visible faces");
+}
+
+void TestEditorAuthoringRectangleCommitMarksDirtyAndReusesVertices()
+{
+    game::SectorEditorState state;
+    AddAuthoringVertexWithId(state.authoringGraph, 7, 0, 0);
+    const uint64_t originalRevision = state.topologyRenderRevision;
+
+    game::SectorEditorAuthoringRectangleResult result;
+    Check(game::AddSectorEditorAuthoringRectangle(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &result),
+          "authoring rectangle editor helper commits a rectangle");
+
+    Check(state.authoringGraph.vertices.size() == 4,
+          "authoring rectangle editor helper reuses an existing corner vertex");
+    Check(result.vertexIds[0] == 7,
+          "authoring rectangle editor helper records reused first corner vertex");
+    Check(state.authoringGraph.lines.size() == 4,
+          "authoring rectangle editor helper creates four authoring lines");
+    Check(state.topologyDocumentDirty,
+          "authoring rectangle editor helper marks document dirty");
+    Check(!state.authoringDerivedTopologyStale
+                  && state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
+          "authoring rectangle editor helper refreshes derivation through existing edit path");
+    Check(!state.topologyRenderCache.valid,
+          "authoring rectangle editor helper invalidates cached editor topology rendering");
+    Check(state.topologyRenderRevision > originalRevision,
+          "authoring rectangle editor helper bumps topology render revision");
+}
+
 void TestEditorAuthoringLinePickingFindsNearestValidLine()
 {
     game::SectorAuthoringGraph graph;
@@ -5451,6 +5627,12 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "select is classified as a graph-authoring tool");
     Check(game::IsGraphAuthoringTool(game::SectorEditorTool::AuthoringLine),
           "authoring line is classified as a graph-authoring tool");
+    Check(TextContains(game::ToolName(game::SectorEditorTool::AuthoringRectangle), "Rectangle"),
+          "rectangle tool name is exposed as a graph tool");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::AuthoringRectangle), "opposite corner"),
+          "rectangle tool help describes corner-driven rectangle creation");
+    Check(game::IsGraphAuthoringTool(game::SectorEditorTool::AuthoringRectangle),
+          "rectangle is classified as a graph-authoring tool");
     Check(game::IsGraphAuthoringTool(game::SectorEditorTool::AuthoringMove),
           "authoring move is classified as a graph-authoring tool");
 
@@ -5464,6 +5646,8 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "select remains available in graph-authoritative mode");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::AuthoringLine),
           "authoring line remains available in graph-authoritative mode");
+    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::AuthoringRectangle),
+          "rectangle remains available in graph-authoritative mode");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::AuthoringMove),
           "authoring move remains available in graph-authoritative mode");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::Light),
@@ -6015,6 +6199,12 @@ int main()
     TestEditorAuthoringHoverAndPruneUseGraphValidity();
     TestEditorAuthoringLineDrawHelperCreatesLooseLineAndMarksDirty();
     TestEditorAuthoringLineDrawHelperReusesVerticesAndRejectsZeroLength();
+    TestAuthoringRectangleHelperCreatesClosedLoop();
+    TestAuthoringRectangleHelperReversedDragIsDeterministic();
+    TestAuthoringRectangleHelperRejectsZeroSize();
+    TestAuthoringRectangleHelperDerivesValidTopology();
+    TestAuthoringNestedRectanglesDeriveThroughExistingBehavior();
+    TestEditorAuthoringRectangleCommitMarksDirtyAndReusesVertices();
     TestEditorAuthoringLinePickingFindsNearestValidLine();
     TestEditorAuthoringDeleteSelectedLineOnlyMutatesGraphAndInvalidates();
     TestEditorAuthoringVertexPickingFindsNearestValidVertex();

@@ -78,6 +78,23 @@ bool AddSectorEditorAuthoringLineSegment(
         SectorTopologyCoordPoint end,
         int* outLineId = nullptr);
 
+struct SectorEditorAuthoringRectangleResult {
+    int vertexIds[4] = {-1, -1, -1, -1};
+    int lineIds[4] = {-1, -1, -1, -1};
+};
+
+bool CreateSectorAuthoringRectangle(
+        SectorAuthoringGraph& graph,
+        SectorTopologyCoordPoint firstCorner,
+        SectorTopologyCoordPoint oppositeCorner,
+        SectorEditorAuthoringRectangleResult* outResult = nullptr);
+
+bool AddSectorEditorAuthoringRectangle(
+        SectorEditorState& state,
+        SectorTopologyCoordPoint firstCorner,
+        SectorTopologyCoordPoint oppositeCorner,
+        SectorEditorAuthoringRectangleResult* outResult = nullptr);
+
 bool DeleteSectorEditorSelectedAuthoringLine(SectorEditorState& state);
 bool MoveSectorEditorAuthoringVertex(
         SectorEditorState& state,

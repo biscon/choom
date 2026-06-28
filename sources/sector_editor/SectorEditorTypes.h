@@ -30,6 +30,7 @@ namespace game {
 enum class SectorEditorTool {
     Select,
     AuthoringLine,
+    AuthoringRectangle,
     AuthoringMove,
     Light,
     Move
@@ -56,6 +57,13 @@ struct PendingAuthoringLineDraw {
     bool active = false;
     SectorTopologyCoordPoint startPoint = {};
     int startVertexId = -1;
+    std::string errorMessage;
+};
+
+struct PendingAuthoringRectangleDraw {
+    bool active = false;
+    SectorTopologyCoordPoint firstCorner = {};
+    SectorTopologyCoordPoint currentCorner = {};
     std::string errorMessage;
 };
 
@@ -435,6 +443,7 @@ struct SectorEditorState {
     Vector2 rawMouseMap = {0.0f, 0.0f};
 
     PendingAuthoringLineDraw pendingAuthoringLine;
+    PendingAuthoringRectangleDraw pendingAuthoringRectangle;
     AuthoringVertexDragState authoringVertexDrag;
     LightDragState lightDrag;
     float defaultSectorFloorZ = 0.0f;
