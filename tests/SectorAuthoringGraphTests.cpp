@@ -3,21 +3,27 @@
 #include "sector_demo/SectorTopologySerialization.h"
 #include "sector_demo/SectorUnits.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
+#include "sector_editor/SectorEditorDocumentActions.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
+#include "util/json.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
 namespace {
 
 int failures = 0;
+using Json = nlohmann::ordered_json;
 
 void Check(bool condition, const char* description)
 {
@@ -25,6 +31,27 @@ void Check(bool condition, const char* description)
         std::cerr << "FAILED: " << description << '\n';
         ++failures;
     }
+}
+
+std::filesystem::path TempJsonPath(const char* name)
+{
+    return std::filesystem::temp_directory_path() / name;
+}
+
+void WriteTextFile(const std::filesystem::path& path, const std::string& text)
+{
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    file.write(text.data(), static_cast<std::streamsize>(text.size()));
+    Check(static_cast<bool>(file), TextFormat("wrote temp file %s", path.string().c_str()));
+}
+
+std::string ReadTextFile(const std::filesystem::path& path)
+{
+    std::ifstream file(path, std::ios::binary);
+    std::ostringstream contents;
+    contents << file.rdbuf();
+    Check(static_cast<bool>(file) || file.eof(), TextFormat("read temp file %s", path.string().c_str()));
+    return contents.str();
 }
 
 bool Near(float a, float b)
@@ -249,6 +276,80 @@ void AddFaceAnchor(
     anchor.y = y;
     anchor.name = name;
     graph.faceAnchors.push_back(anchor);
+}
+
+game::SectorEditorState MakeEditorStateWithAuthoringGraph(
+        const game::SectorAuthoringGraph& graph,
+        bool refreshDerivation = true)
+{
+    game::SectorEditorState state;
+    state.topologyMap = game::CreateEmptySectorTopologyDocument();
+    state.authoringGraph = graph;
+    if (refreshDerivation) {
+        game::RefreshSectorEditorAuthoringDerivation(state);
+    }
+    return state;
+}
+
+game::LevelPaths MakeTempLevelPaths(const char* name)
+{
+    game::LevelPaths paths;
+    paths.directoryPath = std::filesystem::temp_directory_path();
+    paths.jsonFilePath = paths.directoryPath / name;
+    paths.lightmapFilePath = paths.directoryPath / "unused.lightmap.png";
+    paths.jsonAssetPath = paths.jsonFilePath.string();
+    paths.lightmapAssetPath = paths.lightmapFilePath.string();
+    return paths;
+}
+
+Json SaveEditorStateToJson(
+        const game::SectorEditorState& state,
+        const char* fileName,
+        std::string* outText = nullptr)
+{
+    const game::LevelPaths paths = MakeTempLevelPaths(fileName);
+    std::error_code removeError;
+    std::filesystem::remove(paths.jsonFilePath, removeError);
+
+    std::string error;
+    Check(game::SaveSectorEditorAuthoringDocument(paths, state, error),
+          TextFormat("editor authoring save succeeds for %s", fileName));
+    Check(error.empty(), "successful editor authoring save clears error");
+    const std::string text = ReadTextFile(paths.jsonFilePath);
+    if (outText != nullptr) {
+        *outText = text;
+    }
+    std::filesystem::remove(paths.jsonFilePath, removeError);
+    return Json::parse(text);
+}
+
+game::SectorEditorState MakeEditorStateFromLoadedDocument(
+        const game::SectorEditorLoadedDocument& loaded,
+        bool* outDerivationCurrent = nullptr)
+{
+    game::SectorEditorState state;
+    if (loaded.format == game::SectorEditorDocumentFormat::TopologyV2Import) {
+        state.topologyMap = loaded.mapData;
+        game::InitializeSectorEditorAuthoringStateFromTopology(state, state.topologyMap);
+        if (outDerivationCurrent != nullptr) {
+            *outDerivationCurrent =
+                    state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
+                    && !state.authoringDerivedTopologyStale
+                    && state.authoringDerivation.success;
+        }
+        return state;
+    }
+
+    state.topologyMap = loaded.mapData;
+    state.authoringGraph = loaded.authoringGraph;
+    const bool refreshed = game::RefreshSectorEditorAuthoringDerivation(state);
+    if (outDerivationCurrent != nullptr) {
+        *outDerivationCurrent = refreshed
+                && state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
+                && !state.authoringDerivedTopologyStale
+                && state.authoringDerivation.success;
+    }
+    return state;
 }
 
 bool PointEqualsInteger(
@@ -5258,6 +5359,339 @@ void TestEditorAuthoringLastValidTopologyIsNotPersisted()
           "serialized authoring document keeps authoring graph source");
 }
 
+void TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(graph, 200, 32, 32, "room");
+    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
+    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
+                  && !state.authoringDerivedTopologyStale,
+          "valid graph-authored save setup is current");
+
+    std::string savedText;
+    const Json saved = SaveEditorStateToJson(
+            state,
+            "sector_editor_graph_native_valid_save_test.json",
+            &savedText);
+    Check(saved["formatVersion"] == 3, "editor save writes graph-native format version");
+    Check(saved["topology"] == "authoringGraph", "editor save writes graph-native topology marker");
+    Check(saved.contains("authoringGraph"), "editor save writes authoring graph source");
+    Check(saved["authoringGraph"]["faceAnchors"].size() == 1,
+          "editor save writes authoring face anchors");
+    Check(!saved.contains("vertices")
+                  && !saved.contains("linedefs")
+                  && !saved.contains("sidedefs")
+                  && !saved.contains("sectors"),
+          "editor save does not write topology-v2 root arrays");
+
+    const std::filesystem::path path =
+            TempJsonPath("sector_editor_graph_native_valid_reload_test.json");
+    WriteTextFile(path, savedText);
+    game::SectorEditorLoadedDocument loaded;
+    std::string error;
+    Check(game::LoadSectorEditorDocumentFromAsset(path.string(), loaded, error),
+          "graph-native editor document reloads");
+    Check(loaded.format == game::SectorEditorDocumentFormat::AuthoringGraph,
+          "graph-native reload reports authoring route");
+    bool current = false;
+    const game::SectorEditorState loadedState =
+            MakeEditorStateFromLoadedDocument(loaded, &current);
+    Check(current, "valid graph-native reload derives valid/current");
+    Check(loadedState.authoringGraph.faceAnchors.size() == 1
+                  && loadedState.authoringGraph.faceAnchors[0].name == "room",
+          "valid graph-native reload preserves face anchor label");
+    std::error_code removeError;
+    std::filesystem::remove(path, removeError);
+}
+
+void TestEditorAuthoringDocumentSavePreservesInvalidGraphAndReloadDiagnostics()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringLineWithId(graph, 10, 1, 99);
+    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph, false);
+    game::MarkSectorEditorAuthoringGraphEdited(state, "invalid authoring graph for save test");
+
+    std::string savedText;
+    const Json saved = SaveEditorStateToJson(
+            state,
+            "sector_editor_graph_native_invalid_save_test.json",
+            &savedText);
+    Check(saved["formatVersion"] == 3, "invalid editor graph save writes graph-native version");
+    Check(saved["topology"] == "authoringGraph", "invalid editor graph save writes graph-native marker");
+    Check(saved["authoringGraph"]["lines"].size() == 1,
+          "invalid editor graph save preserves dangling line");
+    Check(saved["authoringGraph"]["lines"][0]["endVertexId"] == 99,
+          "invalid editor graph save preserves invalid reference");
+
+    const std::filesystem::path path =
+            TempJsonPath("sector_editor_graph_native_invalid_reload_test.json");
+    WriteTextFile(path, savedText);
+    game::SectorEditorLoadedDocument loaded;
+    std::string error;
+    Check(game::LoadSectorEditorDocumentFromAsset(path.string(), loaded, error),
+          "invalid graph-native editor document reloads as source data");
+    Check(loaded.format == game::SectorEditorDocumentFormat::AuthoringGraph,
+          "invalid graph-native reload reports authoring route");
+    Check(loaded.authoringGraph.lines.size() == 1
+                  && loaded.authoringGraph.lines[0].endVertexId == 99,
+          "invalid graph-native reload preserves dangling authoring line");
+
+    bool current = true;
+    const game::SectorEditorState loadedState =
+            MakeEditorStateFromLoadedDocument(loaded, &current);
+    Check(!current, "invalid graph-native reload is not valid/current");
+    Check(loadedState.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidNoDerived
+                  && loadedState.authoringDerivedTopologyStale
+                  && !loadedState.authoringDerivation.diagnostics.empty(),
+          "invalid graph-native reload reports derivation diagnostics");
+    std::error_code removeError;
+    std::filesystem::remove(path, removeError);
+}
+
+void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
+{
+    const game::SectorTopologyMap source = MakeSingleSectorSquareMap();
+    std::string topologyText;
+    std::string error;
+    Check(game::SaveSectorTopologyMapToJsonString(source, topologyText, &error),
+          "legacy topology fixture serializes");
+    const std::filesystem::path path =
+            TempJsonPath("sector_editor_legacy_topology_import_test.json");
+    WriteTextFile(path, topologyText);
+
+    game::SectorEditorLoadedDocument loaded;
+    Check(game::LoadSectorEditorDocumentFromAsset(path.string(), loaded, error),
+          "legacy topology-v2 editor load succeeds");
+    Check(loaded.format == game::SectorEditorDocumentFormat::TopologyV2Import,
+          "legacy topology-v2 load reports import route");
+    const game::SectorEditorState state = MakeEditorStateFromLoadedDocument(loaded);
+    Check(game::HasAuthoringGraphData(state), "legacy topology import synthesizes authoring graph");
+    Check(state.authoringDerivation.success, "legacy topology import derives authoring graph");
+
+    const Json saved = SaveEditorStateToJson(
+            state,
+            "sector_editor_legacy_import_save_graph_native_test.json");
+    Check(saved["formatVersion"] == 3, "save after topology-v2 import writes graph-native version");
+    Check(saved["topology"] == "authoringGraph",
+          "save after topology-v2 import writes graph-native marker");
+    Check(saved.contains("authoringGraph"), "save after topology-v2 import writes authoring graph");
+    std::error_code removeError;
+    std::filesystem::remove(path, removeError);
+}
+
+void TestEditorGraphNativeNestedRoundTripPreservesAnchorsMaterialsAndSelection()
+{
+    game::SectorAuthoringGraph graph = MakeNestedRectangleGraph(3);
+    AddFaceAnchor(graph, 200, 16, 16, "outer");
+    AddFaceAnchor(graph, 201, 48, 48, "middle");
+    AddFaceAnchor(graph, 202, 96, 96, "inner");
+    if (game::SectorAuthoringFaceAnchor* outer = game::FindSectorAuthoringFaceAnchor(graph, 200)) {
+        outer->defaultWall = WallPart("outer_wall", 1.0f, 2.0f, 3.0f, 4.0f);
+    }
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall = WallPart("line_wall", 2.0f, 3.0f, 4.0f, 5.0f);
+    graph.lineSides.push_back(side);
+
+    const game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
+    std::string savedText;
+    SaveEditorStateToJson(
+            state,
+            "sector_editor_nested_graph_native_save_test.json",
+            &savedText);
+    const std::filesystem::path path =
+            TempJsonPath("sector_editor_nested_graph_native_reload_test.json");
+    WriteTextFile(path, savedText);
+
+    game::SectorEditorLoadedDocument loaded;
+    std::string error;
+    Check(game::LoadSectorEditorDocumentFromAsset(path.string(), loaded, error),
+          "nested graph-native document loads");
+    bool current = false;
+    const game::SectorEditorState loadedState =
+            MakeEditorStateFromLoadedDocument(loaded, &current);
+    Check(current, "nested graph-native reload derives valid/current");
+    Check(!game::HasSectorTopologyValidationErrors(
+                  game::ValidateSectorTopologyMap(loadedState.topologyMap)),
+          "nested graph-native reload validates derived topology");
+
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(loadedState.topologyMap, geometry, &error),
+          "nested graph-native reload builds generated geometry");
+    Check(loadedState.authoringGraph.faceAnchors.size() == 3,
+          "nested graph-native reload preserves face anchors");
+    std::set<std::string> labels;
+    for (const game::SectorAuthoringFaceAnchor& anchor : loadedState.authoringGraph.faceAnchors) {
+        Check(labels.insert(anchor.name).second, "nested graph-native labels remain unique");
+    }
+    const game::SectorAuthoringFaceAnchor* outer =
+            game::FindSectorAuthoringFaceAnchor(loadedState.authoringGraph, 200);
+    Check(outer != nullptr && outer->defaultWall.textureId == "outer_wall",
+          "nested graph-native reload preserves face material");
+    const game::SectorAuthoringLineSide* loadedSide =
+            game::FindSectorAuthoringLineSide(
+                    loadedState.authoringGraph,
+                    game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front});
+    Check(loadedSide != nullptr && loadedSide->wall.textureId == "line_wall",
+          "nested graph-native reload preserves side material");
+
+    const auto expectFace = [&](game::SectorCoord x, game::SectorCoord y, int expectedAnchorId, const char* description) {
+        game::SectorAuthoringSelectionTarget target;
+        Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                      loadedState,
+                      VisibleAuthoringPoint(x, y),
+                      0.25f,
+                      0.25f,
+                      &target),
+              description);
+        Check(target.kind == game::SectorAuthoringSelectionKind::FaceAnchor
+                      && target.faceAnchorId == expectedAnchorId,
+              TextFormat("%s resolves expected anchor", description));
+    };
+    expectFace(16, 16, 200, "nested outer face selection after reload");
+    expectFace(48, 48, 201, "nested middle face selection after reload");
+    expectFace(96, 96, 202, "nested inner face selection after reload");
+    std::error_code removeError;
+    std::filesystem::remove(path, removeError);
+}
+
+void TestEditorGraphNativeSiblingHolesRoundTripPreservesSelection()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {256, 0}, {256, 256}, {0, 256},
+             {32, 32}, {96, 32}, {96, 96}, {32, 96},
+             {160, 32}, {224, 32}, {224, 96}, {160, 96}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1},
+             {5, 6}, {6, 7}, {7, 8}, {8, 5},
+             {9, 10}, {10, 11}, {11, 12}, {12, 9}});
+    AddFaceAnchor(graph, 200, 16, 16, "outer");
+    AddFaceAnchor(graph, 201, 64, 64, "left");
+    AddFaceAnchor(graph, 202, 192, 64, "right");
+    if (game::SectorAuthoringFaceAnchor* left = game::FindSectorAuthoringFaceAnchor(graph, 201)) {
+        left->defaultWall = WallPart("left_wall", 1.0f, 1.0f, 0.0f, 0.0f);
+    }
+
+    const game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
+    std::string savedText;
+    SaveEditorStateToJson(
+            state,
+            "sector_editor_sibling_graph_native_save_test.json",
+            &savedText);
+    const std::filesystem::path path =
+            TempJsonPath("sector_editor_sibling_graph_native_reload_test.json");
+    WriteTextFile(path, savedText);
+
+    game::SectorEditorLoadedDocument loaded;
+    std::string error;
+    Check(game::LoadSectorEditorDocumentFromAsset(path.string(), loaded, error),
+          "sibling holes graph-native document loads");
+    bool current = false;
+    const game::SectorEditorState loadedState =
+            MakeEditorStateFromLoadedDocument(loaded, &current);
+    Check(current, "sibling holes graph-native reload derives valid/current");
+    Check(AllDerivedSectorsHaveExactlyOneValidFaceAnchorMapping(
+                  loadedState.authoringGraph,
+                  loadedState.authoringDerivation),
+          "sibling holes graph-native reload maps each visible face to one anchor");
+
+    std::set<std::string> labels;
+    for (const game::SectorAuthoringFaceAnchor& anchor : loadedState.authoringGraph.faceAnchors) {
+        Check(labels.insert(anchor.name).second, "sibling holes labels remain unique");
+    }
+    const game::SectorAuthoringFaceAnchor* left =
+            game::FindSectorAuthoringFaceAnchor(loadedState.authoringGraph, 201);
+    Check(left != nullptr && left->defaultWall.textureId == "left_wall",
+          "sibling holes graph-native reload preserves material");
+
+    const auto expectFace = [&](game::SectorCoord x, game::SectorCoord y, int expectedAnchorId, const char* description) {
+        game::SectorAuthoringSelectionTarget target;
+        Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                      loadedState,
+                      VisibleAuthoringPoint(x, y),
+                      0.25f,
+                      0.25f,
+                      &target),
+              description);
+        Check(target.kind == game::SectorAuthoringSelectionKind::FaceAnchor
+                      && target.faceAnchorId == expectedAnchorId,
+              TextFormat("%s resolves expected anchor", description));
+    };
+    expectFace(16, 16, 200, "sibling outer face selection after reload");
+    expectFace(64, 64, 201, "sibling left face selection after reload");
+    expectFace(192, 64, 202, "sibling right face selection after reload");
+    std::error_code removeError;
+    std::filesystem::remove(path, removeError);
+}
+
+void TestEditorGraphNativeMapLevelDataRoundTrip()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(graph, 200, 32, 32, "room");
+    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
+    state.topologyMap.texturesById.emplace("sky", game::SectorTextureDefinition{
+            "sky", "textures/sky.png", game::SectorTextureFilter::Trilinear});
+    state.topologyMap.staticLights.push_back(game::SectorTopologyStaticPointLight{
+            9,
+            Vector3{1.0f, 2.0f, 3.0f},
+            Color{10, 20, 30, 255},
+            2.0f,
+            32.0f,
+            1.0f
+    });
+    state.topologyMap.previewSettings.walkSpeed = 9.0f;
+    state.topologyMap.skySettings.textureId = "sky";
+    state.topologyMap.skySettings.yawOffsetDegrees = 17.0f;
+    state.topologyMap.directionalLight.enabled = true;
+    state.topologyMap.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
+    state.topologyMap.directionalLight.intensity = 1.5f;
+    state.topologyMap.lightmapSettings.ambientOcclusionStrength = 0.25f;
+
+    std::string savedText;
+    const Json saved = SaveEditorStateToJson(
+            state,
+            "sector_editor_map_level_graph_native_save_test.json",
+            &savedText);
+    Check(saved["textures"].contains("sky"), "editor graph-native save persists texture registry");
+    Check(saved["staticLights"][0]["id"] == 9, "editor graph-native save persists static light");
+    Check(saved["previewSettings"]["walkSpeed"] == 9.0f,
+          "editor graph-native save persists preview settings");
+    Check(saved["skySettings"]["textureId"] == "sky", "editor graph-native save persists sky settings");
+    Check(saved["directionalLight"]["enabled"] == true,
+          "editor graph-native save persists directional light");
+    Check(saved["lightmapSettings"]["ambientOcclusionStrength"] == 0.25f,
+          "editor graph-native save persists lightmap settings");
+
+    const std::filesystem::path path =
+            TempJsonPath("sector_editor_map_level_graph_native_reload_test.json");
+    WriteTextFile(path, savedText);
+    game::SectorEditorLoadedDocument loaded;
+    std::string error;
+    Check(game::LoadSectorEditorDocumentFromAsset(path.string(), loaded, error),
+          "editor graph-native map-level document reloads");
+    Check(loaded.mapData.texturesById.count("sky") == 1
+                  && loaded.mapData.staticLights.size() == 1
+                  && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
+                  && loaded.mapData.skySettings.textureId == "sky"
+                  && loaded.mapData.directionalLight.enabled
+                  && Near(loaded.mapData.lightmapSettings.ambientOcclusionStrength, 0.25f),
+          "editor graph-native load preserves map-level fields");
+    bool current = false;
+    const game::SectorEditorState loadedState =
+            MakeEditorStateFromLoadedDocument(loaded, &current);
+    Check(current
+                  && loadedState.topologyMap.texturesById.count("sky") == 1
+                  && loadedState.topologyMap.staticLights.size() == 1
+                  && loadedState.topologyMap.skySettings.textureId == "sky",
+          "editor graph-native derivation receives map-level fields after load");
+    std::error_code removeError;
+    std::filesystem::remove(path, removeError);
+}
+
 } // namespace
 
 int main()
@@ -5405,6 +5839,12 @@ int main()
     TestEditorAuthoringFailedRefreshDoesNotReplaceLastValidTopology();
     TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools();
     TestEditorAuthoringLastValidTopologyIsNotPersisted();
+    TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent();
+    TestEditorAuthoringDocumentSavePreservesInvalidGraphAndReloadDiagnostics();
+    TestEditorLegacyTopologyImportThenSaveWritesGraphNative();
+    TestEditorGraphNativeNestedRoundTripPreservesAnchorsMaterialsAndSelection();
+    TestEditorGraphNativeSiblingHolesRoundTripPreservesSelection();
+    TestEditorGraphNativeMapLevelDataRoundTrip();
 
     if (failures != 0) {
         std::cerr << failures << " authoring graph test(s) failed\n";

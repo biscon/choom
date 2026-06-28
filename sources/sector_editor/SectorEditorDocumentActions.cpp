@@ -4,11 +4,14 @@
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorTopologySerialization.h"
+#include "util/json.hpp"
 
 #include <raylib.h>
 
 #include <algorithm>
 #include <cstdio>
+#include <fstream>
+#include <sstream>
 #include <system_error>
 #include <utility>
 
@@ -50,6 +53,8 @@ bool BuildLevelPaths(const std::string& name, LevelPaths& paths, std::string& er
 
 namespace {
 
+using Json = nlohmann::ordered_json;
+
 template<typename TextureMap>
 void PopulateDefaultSectorTextures(TextureMap& texturesById)
 {
@@ -65,6 +70,85 @@ void PopulateDefaultSectorTextures(TextureMap& texturesById)
     addTexture("ceiling", "assets/images/ceiling.png");
     addTexture("step_wall", "assets/images/wall.png");
     addTexture("upper_wall", "assets/images/wall.png");
+}
+
+bool ReadTextFile(const std::string& filePath, std::string& outText, std::string& errorMessage)
+{
+    std::ifstream file(filePath, std::ios::binary);
+    if (!file) {
+        errorMessage = TextFormat("Failed to open level JSON: %s", filePath.c_str());
+        return false;
+    }
+
+    std::ostringstream contents;
+    contents << file.rdbuf();
+    if (!file.good() && !file.eof()) {
+        errorMessage = TextFormat("Failed to read level JSON: %s", filePath.c_str());
+        return false;
+    }
+
+    outText = contents.str();
+    errorMessage.clear();
+    return true;
+}
+
+SectorEditorDocumentFormat DetectSectorEditorDocumentFormat(
+        const std::string& jsonText,
+        std::string& errorMessage)
+{
+    try {
+        const Json root = Json::parse(jsonText);
+        if (!root.is_object()) {
+            errorMessage = "Level JSON root must be an object";
+            return SectorEditorDocumentFormat::Unknown;
+        }
+
+        const auto versionIt = root.find("formatVersion");
+        const auto topologyIt = root.find("topology");
+        if (versionIt == root.end() || topologyIt == root.end()) {
+            errorMessage = "Level JSON is missing formatVersion or topology";
+            return SectorEditorDocumentFormat::Unknown;
+        }
+        if (!versionIt->is_number_integer() || !topologyIt->is_string()) {
+            errorMessage = "Level JSON has invalid formatVersion or topology marker";
+            return SectorEditorDocumentFormat::Unknown;
+        }
+
+        const int version = versionIt->get<int>();
+        const std::string topology = topologyIt->get<std::string>();
+        if (version == 3 && topology == "authoringGraph") {
+            errorMessage.clear();
+            return SectorEditorDocumentFormat::AuthoringGraph;
+        }
+        if (version == 2 && topology == "linedef") {
+            errorMessage.clear();
+            return SectorEditorDocumentFormat::TopologyV2Import;
+        }
+
+        errorMessage = TextFormat(
+                "Unsupported level document format: formatVersion %d, topology '%s'",
+                version,
+                topology.c_str());
+        return SectorEditorDocumentFormat::Unknown;
+    } catch (const std::exception& exception) {
+        errorMessage = TextFormat("Could not parse level JSON: %s", exception.what());
+        return SectorEditorDocumentFormat::Unknown;
+    }
+}
+
+SectorAuthoringDocument BuildSectorAuthoringDocumentFromEditorState(
+        const SectorEditorState& state)
+{
+    SectorAuthoringDocument document;
+    document.graph = state.authoringGraph;
+    document.mapData = state.topologyMap;
+    document.mapData.vertices.clear();
+    document.mapData.lineDefs.clear();
+    document.mapData.sideDefs.clear();
+    document.mapData.sectors.clear();
+    document.mapData.bakedLightmap = {};
+    document.derivation = state.authoringDerivation;
+    return document;
 }
 
 } // namespace
@@ -190,21 +274,57 @@ void OpenLoadLevelModalState(LoadLevelModalState& modalState)
     RefreshLoadLevelModalState(modalState);
 }
 
-bool LoadSectorTopologyDocumentFromAsset(
+bool LoadSectorEditorDocumentFromAsset(
         const std::string& jsonAssetPath,
-        SectorTopologyMap& outMap,
+        SectorEditorLoadedDocument& outDocument,
         std::string& errorMessage)
 {
-    std::string loadError;
+    outDocument = SectorEditorLoadedDocument{};
     const std::string filePath = ResolveEditorAssetPath(jsonAssetPath);
-    if (!LoadSectorTopologyMap(filePath.c_str(), outMap, &loadError)) {
-        errorMessage = loadError.empty()
-                ? "Topology v2 load failed"
-                : TextFormat("Topology v2 load failed: %s", loadError.c_str());
+
+    std::string jsonText;
+    if (!ReadTextFile(filePath, jsonText, errorMessage)) {
         return false;
     }
-    errorMessage.clear();
-    return true;
+
+    const SectorEditorDocumentFormat format =
+            DetectSectorEditorDocumentFormat(jsonText, errorMessage);
+    if (format == SectorEditorDocumentFormat::AuthoringGraph) {
+        SectorAuthoringDocument document;
+        std::string loadError;
+        if (!LoadSectorAuthoringDocumentFromJsonString(jsonText, document, &loadError)) {
+            errorMessage = loadError.empty()
+                    ? "Authoring graph load failed"
+                    : TextFormat("Authoring graph load failed: %s", loadError.c_str());
+            return false;
+        }
+        outDocument.format = format;
+        outDocument.mapData = std::move(document.mapData);
+        outDocument.authoringGraph = std::move(document.graph);
+        errorMessage.clear();
+        return true;
+    }
+
+    if (format == SectorEditorDocumentFormat::TopologyV2Import) {
+        SectorTopologyMap map;
+        std::string loadError;
+        if (!LoadSectorTopologyMapFromJsonString(jsonText, map, &loadError)) {
+            errorMessage = loadError.empty()
+                    ? "Topology v2 load failed"
+                    : TextFormat("Topology v2 load failed: %s", loadError.c_str());
+            return false;
+        }
+        outDocument.format = format;
+        outDocument.mapData = map;
+        outDocument.authoringGraph = ImportSectorTopologyMapToAuthoringGraph(map);
+        errorMessage.clear();
+        return true;
+    }
+
+    if (errorMessage.empty()) {
+        errorMessage = "Unsupported level document format";
+    }
+    return false;
 }
 
 bool PrepareSaveLevelPlan(
@@ -247,16 +367,24 @@ bool EnsureSaveLevelDirectory(const LevelPaths& paths, std::string& errorMessage
     return true;
 }
 
-bool SaveSectorTopologyDocument(
+bool SaveSectorEditorAuthoringDocument(
         const LevelPaths& paths,
-        const SectorTopologyMap& map,
+        const SectorEditorState& state,
         std::string& errorMessage)
 {
+    if (!HasAuthoringGraphData(state)) {
+        errorMessage = "Cannot save authoring graph document: no authoring graph data";
+        return false;
+    }
+
+    const SectorAuthoringDocument document =
+            BuildSectorAuthoringDocumentFromEditorState(state);
+
     std::string saveError;
-    if (!SaveSectorTopologyMap(paths.jsonFilePath.string().c_str(), map, &saveError)) {
+    if (!SaveSectorAuthoringDocument(paths.jsonFilePath.string().c_str(), document, &saveError)) {
         errorMessage = saveError.empty()
-                ? "Could not write topology level JSON"
-                : TextFormat("Could not write topology level JSON: %s", saveError.c_str());
+                ? "Could not write authoring graph level JSON"
+                : TextFormat("Could not write authoring graph level JSON: %s", saveError.c_str());
         return false;
     }
     errorMessage.clear();

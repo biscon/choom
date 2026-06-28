@@ -1,6 +1,6 @@
 {
-  "formatVersion": 2,
-  "topology": "linedef",
+  "formatVersion": 3,
+  "topology": "authoringGraph",
   "coordSubdivisions": 16,
   "textures": {
     "biker_chick": {
@@ -32,1280 +32,6 @@
       "filter": "anisotropic8x"
     }
   },
-  "vertices": [
-    {
-      "id": 1,
-      "x": 512,
-      "y": 384
-    },
-    {
-      "id": 2,
-      "x": 1664,
-      "y": 384
-    },
-    {
-      "id": 3,
-      "x": 1664,
-      "y": 1920
-    },
-    {
-      "id": 4,
-      "x": 512,
-      "y": 1920
-    },
-    {
-      "id": 5,
-      "x": 768,
-      "y": 768
-    },
-    {
-      "id": 6,
-      "x": 1408,
-      "y": 768
-    },
-    {
-      "id": 7,
-      "x": 1408,
-      "y": 1536
-    },
-    {
-      "id": 8,
-      "x": 768,
-      "y": 1536
-    },
-    {
-      "id": 9,
-      "x": 896,
-      "y": 896
-    },
-    {
-      "id": 10,
-      "x": 1280,
-      "y": 896
-    },
-    {
-      "id": 11,
-      "x": 1152,
-      "y": 1408
-    },
-    {
-      "id": 12,
-      "x": 1024,
-      "y": 1408
-    }
-  ],
-  "linedefs": [
-    {
-      "id": 1,
-      "startVertexId": 1,
-      "endVertexId": 2,
-      "frontSideDefId": 1,
-      "backSideDefId": -1
-    },
-    {
-      "id": 2,
-      "startVertexId": 2,
-      "endVertexId": 3,
-      "frontSideDefId": 2,
-      "backSideDefId": -1
-    },
-    {
-      "id": 3,
-      "startVertexId": 3,
-      "endVertexId": 4,
-      "frontSideDefId": 3,
-      "backSideDefId": -1
-    },
-    {
-      "id": 4,
-      "startVertexId": 4,
-      "endVertexId": 1,
-      "frontSideDefId": 4,
-      "backSideDefId": -1
-    },
-    {
-      "id": 5,
-      "startVertexId": 5,
-      "endVertexId": 6,
-      "frontSideDefId": 9,
-      "backSideDefId": 5
-    },
-    {
-      "id": 6,
-      "startVertexId": 6,
-      "endVertexId": 7,
-      "frontSideDefId": 10,
-      "backSideDefId": 6
-    },
-    {
-      "id": 7,
-      "startVertexId": 7,
-      "endVertexId": 8,
-      "frontSideDefId": 11,
-      "backSideDefId": 7
-    },
-    {
-      "id": 8,
-      "startVertexId": 8,
-      "endVertexId": 5,
-      "frontSideDefId": 12,
-      "backSideDefId": 8
-    },
-    {
-      "id": 9,
-      "startVertexId": 9,
-      "endVertexId": 10,
-      "frontSideDefId": 17,
-      "backSideDefId": 13
-    },
-    {
-      "id": 10,
-      "startVertexId": 10,
-      "endVertexId": 11,
-      "frontSideDefId": 18,
-      "backSideDefId": 14
-    },
-    {
-      "id": 11,
-      "startVertexId": 11,
-      "endVertexId": 12,
-      "frontSideDefId": 19,
-      "backSideDefId": 15
-    },
-    {
-      "id": 12,
-      "startVertexId": 12,
-      "endVertexId": 9,
-      "frontSideDefId": 20,
-      "backSideDefId": 16
-    }
-  ],
-  "sidedefs": [
-    {
-      "id": 1,
-      "lineDefId": 1,
-      "side": "front",
-      "sectorId": 1,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 2,
-      "lineDefId": 2,
-      "side": "front",
-      "sectorId": 1,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 3,
-      "lineDefId": 3,
-      "side": "front",
-      "sectorId": 1,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 4,
-      "lineDefId": 4,
-      "side": "front",
-      "sectorId": 1,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 5,
-      "lineDefId": 5,
-      "side": "back",
-      "sectorId": 1,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 6,
-      "lineDefId": 6,
-      "side": "back",
-      "sectorId": 1,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 7,
-      "lineDefId": 7,
-      "side": "back",
-      "sectorId": 1,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 8,
-      "lineDefId": 8,
-      "side": "back",
-      "sectorId": 1,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 9,
-      "lineDefId": 5,
-      "side": "front",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 10,
-      "lineDefId": 6,
-      "side": "front",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 11,
-      "lineDefId": 7,
-      "side": "front",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 12,
-      "lineDefId": 8,
-      "side": "front",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 13,
-      "lineDefId": 9,
-      "side": "back",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 14,
-      "lineDefId": 10,
-      "side": "back",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            -0.375
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 15,
-      "lineDefId": 11,
-      "side": "back",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            2.0615527629852295,
-            -0.375
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 16,
-      "lineDefId": 12,
-      "side": "back",
-      "sectorId": 2,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 17,
-      "lineDefId": 9,
-      "side": "front",
-      "sectorId": 3,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 18,
-      "lineDefId": 10,
-      "side": "front",
-      "sectorId": 3,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 19,
-      "lineDefId": 11,
-      "side": "front",
-      "sectorId": 3,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 20,
-      "lineDefId": 12,
-      "side": "front",
-      "sectorId": 3,
-      "wall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "lower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "upper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    }
-  ],
-  "sectors": [
-    {
-      "id": 1,
-      "name": "Sector 1",
-      "floorZ": 0.0,
-      "ceilingZ": 24.0,
-      "floorTextureId": "floor",
-      "ceilingTextureId": "ceiling",
-      "floorUv": {
-        "scale": [
-          1.0,
-          1.0
-        ],
-        "offset": [
-          0.0,
-          0.0
-        ]
-      },
-      "ceilingUv": {
-        "scale": [
-          1.0,
-          1.0
-        ],
-        "offset": [
-          0.0,
-          0.0
-        ]
-      },
-      "ambientColor": {
-        "r": 255,
-        "g": 255,
-        "b": 255,
-        "a": 255
-      },
-      "ambientIntensity": 0.30000001192092896,
-      "defaultWall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "defaultLower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "defaultUpper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 2,
-      "name": "Sector 2",
-      "floorZ": 2.0,
-      "ceilingZ": 22.0,
-      "floorTextureId": "floor",
-      "ceilingTextureId": "ceiling",
-      "floorUv": {
-        "scale": [
-          1.0,
-          1.0
-        ],
-        "offset": [
-          0.0,
-          0.0
-        ]
-      },
-      "ceilingUv": {
-        "scale": [
-          1.0,
-          1.0
-        ],
-        "offset": [
-          0.0,
-          0.0
-        ]
-      },
-      "ambientColor": {
-        "r": 255,
-        "g": 255,
-        "b": 255,
-        "a": 255
-      },
-      "ambientIntensity": 0.30000001192092896,
-      "defaultWall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "defaultLower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "defaultUpper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    },
-    {
-      "id": 3,
-      "name": "Sector 3",
-      "floorZ": 6.0,
-      "ceilingZ": 18.0,
-      "floorTextureId": "floor",
-      "ceilingTextureId": "ceiling",
-      "floorUv": {
-        "scale": [
-          1.0,
-          1.0
-        ],
-        "offset": [
-          0.0,
-          0.0
-        ]
-      },
-      "ceilingUv": {
-        "scale": [
-          1.0,
-          1.0
-        ],
-        "offset": [
-          0.0,
-          0.0
-        ]
-      },
-      "ambientColor": {
-        "r": 255,
-        "g": 255,
-        "b": 255,
-        "a": 255
-      },
-      "ambientIntensity": 0.30000001192092896,
-      "defaultWall": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "defaultLower": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "defaultUpper": {
-        "textureId": "wall",
-        "uv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        }
-      }
-    }
-  ],
   "staticLights": [
     {
       "id": 1,
@@ -1343,5 +69,1238 @@
     "jumpHeight": 0.6000000238418579,
     "headBobStrength": 0.019999999552965164,
     "headBobFrequency": 2.0
+  },
+  "directionalLight": {
+    "enabled": false,
+    "directionToLight": [
+      -0.38533732295036316,
+      0.8807710409164429,
+      -0.275240957736969
+    ],
+    "color": {
+      "r": 255,
+      "g": 244,
+      "b": 214,
+      "a": 255
+    },
+    "intensity": 1.0
+  },
+  "authoringGraph": {
+    "vertices": [
+      {
+        "id": 1,
+        "x": 512,
+        "y": 384
+      },
+      {
+        "id": 2,
+        "x": 1664,
+        "y": 384
+      },
+      {
+        "id": 3,
+        "x": 1664,
+        "y": 1920
+      },
+      {
+        "id": 4,
+        "x": 512,
+        "y": 1920
+      },
+      {
+        "id": 5,
+        "x": 768,
+        "y": 768
+      },
+      {
+        "id": 6,
+        "x": 1408,
+        "y": 768
+      },
+      {
+        "id": 7,
+        "x": 1408,
+        "y": 1536
+      },
+      {
+        "id": 8,
+        "x": 768,
+        "y": 1536
+      },
+      {
+        "id": 9,
+        "x": 896,
+        "y": 896
+      },
+      {
+        "id": 10,
+        "x": 1280,
+        "y": 896
+      },
+      {
+        "id": 11,
+        "x": 1152,
+        "y": 1408
+      },
+      {
+        "id": 12,
+        "x": 1024,
+        "y": 1408
+      }
+    ],
+    "lines": [
+      {
+        "id": 1,
+        "startVertexId": 1,
+        "endVertexId": 2
+      },
+      {
+        "id": 2,
+        "startVertexId": 2,
+        "endVertexId": 3
+      },
+      {
+        "id": 3,
+        "startVertexId": 3,
+        "endVertexId": 4
+      },
+      {
+        "id": 4,
+        "startVertexId": 4,
+        "endVertexId": 1
+      },
+      {
+        "id": 5,
+        "startVertexId": 5,
+        "endVertexId": 6
+      },
+      {
+        "id": 6,
+        "startVertexId": 6,
+        "endVertexId": 7
+      },
+      {
+        "id": 7,
+        "startVertexId": 7,
+        "endVertexId": 8
+      },
+      {
+        "id": 8,
+        "startVertexId": 8,
+        "endVertexId": 5
+      },
+      {
+        "id": 9,
+        "startVertexId": 9,
+        "endVertexId": 10
+      },
+      {
+        "id": 10,
+        "startVertexId": 10,
+        "endVertexId": 11
+      },
+      {
+        "id": 11,
+        "startVertexId": 11,
+        "endVertexId": 12
+      },
+      {
+        "id": 12,
+        "startVertexId": 12,
+        "endVertexId": 9
+      }
+    ],
+    "lineSides": [
+      {
+        "lineId": 1,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 2,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 3,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 4,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 5,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 5,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 6,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 6,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 7,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 7,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 8,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 8,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 9,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 9,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 10,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 10,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.375
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 11,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 11,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              2.0615527629852295,
+              -0.375
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 12,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 12,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      }
+    ],
+    "faceAnchors": [
+      {
+        "id": 1,
+        "name": "Sector 1",
+        "x": 1088,
+        "y": 1152,
+        "floorZ": 0.0,
+        "ceilingZ": 24.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.30000001192092896,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 2,
+        "name": "Sector 2",
+        "x": 1088,
+        "y": 1152,
+        "floorZ": 2.0,
+        "ceilingZ": 22.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.30000001192092896,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 3,
+        "name": "Sector 3",
+        "x": 1088,
+        "y": 1152,
+        "floorZ": 6.0,
+        "ceilingZ": 18.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.30000001192092896,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      }
+    ]
   }
 }

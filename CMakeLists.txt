@@ -109,9 +109,11 @@ if(BUILD_TESTING)
     add_executable(sector_authoring_graph_tests
             tests/SectorAuthoringGraphTests.cpp
             sources/sector_editor/SectorEditorAuthoringState.cpp
+            sources/sector_editor/SectorEditorDocumentActions.cpp
             sources/sector_editor/SectorEditorHelpers.cpp
             sources/sector_editor/SectorEditorTextureActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
+            sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp
             sources/sector_demo/SectorTextureTypes.cpp

@@ -7890,8 +7890,8 @@ bool SectorEditor::LoadLevel(
         const std::string& jsonAssetPath)
 {
     const bool hadPendingSplit = state.pendingTopologyLineSplitAtPoint.active;
-    SectorTopologyMap loaded;
-    if (!LoadSectorTopologyDocumentFromAsset(jsonAssetPath, loaded, state.loadLevelModal.errorMessage)) {
+    SectorEditorLoadedDocument loaded;
+    if (!LoadSectorEditorDocumentFromAsset(jsonAssetPath, loaded, state.loadLevelModal.errorMessage)) {
         statusText = state.loadLevelModal.errorMessage;
         return false;
     }
@@ -7904,14 +7904,40 @@ bool SectorEditor::LoadLevel(
     CancelVertexDrag(nullptr);
     CancelAuthoringVertexDrag(nullptr);
     CancelLightDrag(nullptr);
-    state.topologyMap = std::move(loaded);
-    InitializeSectorEditorAuthoringStateFromTopology(state, state.topologyMap);
+    bool loadedAuthoringGraph = false;
+    bool authoringDerivationCurrent = false;
+    if (loaded.format == SectorEditorDocumentFormat::AuthoringGraph) {
+        loadedAuthoringGraph = true;
+        state.topologyMap = std::move(loaded.mapData);
+        state.authoringGraph = std::move(loaded.authoringGraph);
+        state.authoringDerivation = SectorAuthoringDerivationResult{};
+        state.lastValidAuthoringDerivedTopology.reset();
+        state.authoringDerivationState = SectorEditorAuthoringDerivationState::InvalidNoDerived;
+        state.authoringDerivedTopologyStale = true;
+        const std::string successStatus = TextFormat(
+                "Authoring graph: loaded %s; derived topology current",
+                jsonAssetPath.c_str());
+        const std::string failureStatus = TextFormat(
+                "Authoring graph: loaded %s; derivation failed",
+                jsonAssetPath.c_str());
+        authoringDerivationCurrent = RefreshSectorEditorAuthoringDerivation(
+                state,
+                successStatus.c_str(),
+                failureStatus.c_str());
+    } else {
+        state.topologyMap = std::move(loaded.mapData);
+        InitializeSectorEditorAuthoringStateFromTopology(state, state.topologyMap);
+    }
     InvalidateTopologyRenderCache();
     state.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             state.topologyMap.previewSettings);
     state.topologyDocumentInitialized = true;
     state.topologyDocumentDirty = false;
-    state.topologyDocumentStatus = TextFormat("Topology document: loaded %s", jsonAssetPath.c_str());
+    if (!loadedAuthoringGraph) {
+        state.topologyDocumentStatus = TextFormat(
+                "Topology document: imported legacy topology %s",
+                jsonAssetPath.c_str());
+    }
     state.currentLevelName = levelName;
     state.currentLevelPath = jsonAssetPath;
     state.hasCurrentLevelPath = true;
@@ -7935,9 +7961,18 @@ bool SectorEditor::LoadLevel(
     state.lightDrag = LightDragState{};
     RefreshDefaultTextures();
     RefreshEditorTextureAssets(assets);
-    statusText = hadPendingSplit
-            ? TextFormat("Loaded topology %s; split at point cancelled", jsonAssetPath.c_str())
-            : TextFormat("Loaded topology %s", jsonAssetPath.c_str());
+    if (loadedAuthoringGraph) {
+        const char* loadedText = authoringDerivationCurrent
+                ? "Loaded authoring graph"
+                : "Loaded authoring graph with derivation diagnostics";
+        statusText = hadPendingSplit
+                ? TextFormat("%s %s; split at point cancelled", loadedText, jsonAssetPath.c_str())
+                : TextFormat("%s %s", loadedText, jsonAssetPath.c_str());
+    } else {
+        statusText = hadPendingSplit
+                ? TextFormat("Imported legacy topology %s; split at point cancelled", jsonAssetPath.c_str())
+                : TextFormat("Imported legacy topology %s", jsonAssetPath.c_str());
+    }
     return true;
 }
 
@@ -8016,7 +8051,7 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
         return false;
     }
 
-    if (!SaveSectorTopologyDocument(savePlan.paths, state.topologyMap, modal.errorMessage)) {
+    if (!SaveSectorEditorAuthoringDocument(savePlan.paths, state, modal.errorMessage)) {
         statusText = TextFormat("Save failed: %s", savePlan.paths.jsonAssetPath.c_str());
         return false;
     }
@@ -8027,11 +8062,11 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
     state.hasUnsavedChanges = false;
     state.topologyDocumentInitialized = true;
     state.topologyDocumentDirty = false;
-    state.topologyDocumentStatus = TextFormat("Topology document: saved %s", savePlan.paths.jsonAssetPath.c_str());
+    state.topologyDocumentStatus = TextFormat("Authoring graph: saved %s", savePlan.paths.jsonAssetPath.c_str());
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
     state.decalTintModal = DecalTintModalState{};
-    statusText = TextFormat("Saved topology %s", savePlan.paths.jsonAssetPath.c_str());
+    statusText = TextFormat("Saved authoring graph %s", savePlan.paths.jsonAssetPath.c_str());
     return true;
 }
 
