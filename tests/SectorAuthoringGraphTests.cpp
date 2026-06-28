@@ -1831,6 +1831,114 @@ void TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics()
           "failed editor derivation keeps memory-only last-valid topology");
 }
 
+void TestEditorAuthoringPreviewAndBakeGateAllowsCurrentDerivedTopology()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "preview gate setup derives a valid topology");
+
+    std::string previewMessage = "not cleared";
+    Check(game::CanUseCurrentAuthoringDerivedTopologyForPreview(state, &previewMessage),
+          "preview gate allows current valid derived topology");
+    Check(previewMessage.empty(), "preview gate clears message when allowed");
+
+    std::string bakeMessage = "not cleared";
+    Check(game::CanUseCurrentAuthoringDerivedTopologyForLightmapBake(state, &bakeMessage),
+          "bake gate allows current valid derived topology");
+    Check(bakeMessage.empty(), "bake gate clears message when allowed");
+    Check(!state.topologyMap.sectors.empty(), "allowed gate still uses derived topology map");
+}
+
+void TestEditorAuthoringPreviewAndBakeGateRejectsInvalidNoDerived()
+{
+    game::SectorEditorState state;
+    std::string previewMessage;
+    Check(!game::CanUseCurrentAuthoringDerivedTopologyForPreview(state, &previewMessage),
+          "preview gate rejects invalid/no-derived graph");
+    Check(previewMessage.find("no valid derived topology") != std::string::npos,
+          "preview gate reports missing derived topology");
+
+    std::string bakeMessage;
+    Check(!game::CanUseCurrentAuthoringDerivedTopologyForLightmapBake(state, &bakeMessage),
+          "bake gate rejects invalid/no-derived graph");
+    Check(bakeMessage.find("no valid derived topology") != std::string::npos,
+          "bake gate reports missing derived topology");
+}
+
+void TestEditorAuthoringPreviewAndBakeGateRejectsStaleDerivedTopology()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "stale gate setup derives a valid topology");
+    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph edited for stale gate test");
+
+    std::string previewMessage;
+    Check(!game::CanUseCurrentAuthoringDerivedTopologyForPreview(state, &previewMessage),
+          "preview gate rejects stale derived topology");
+    Check(previewMessage.find("re-derive") != std::string::npos,
+          "preview gate reports stale derivation");
+
+    std::string bakeMessage;
+    Check(!game::CanUseCurrentAuthoringDerivedTopologyForLightmapBake(state, &bakeMessage),
+          "bake gate rejects stale derived topology");
+    Check(bakeMessage.find("re-derive") != std::string::npos,
+          "bake gate reports stale derivation");
+}
+
+void TestEditorAuthoringPreviewAndBakeGateRejectsFailedDerivation()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "failed gate setup creates last valid topology");
+    AddAuthoringVertexWithId(state.authoringGraph, 5, 128, 0);
+    AddAuthoringLineWithId(state.authoringGraph, 99, 2, 5);
+    game::MarkSectorEditorAuthoringGraphEdited(state, "dangling authoring line added");
+    Check(!game::RefreshSectorEditorAuthoringDerivation(state),
+          "failed gate setup records failed derivation");
+
+    std::string previewMessage;
+    Check(!game::CanUseCurrentAuthoringDerivedTopologyForPreview(state, &previewMessage),
+          "preview gate rejects failed derivation without crashing");
+    Check(previewMessage.find("derivation failed") != std::string::npos,
+          "preview gate reports failed derivation");
+
+    std::string bakeMessage;
+    Check(!game::CanUseCurrentAuthoringDerivedTopologyForLightmapBake(state, &bakeMessage),
+          "bake gate rejects failed derivation without crashing");
+    Check(bakeMessage.find("derivation failed") != std::string::npos,
+          "bake gate reports failed derivation");
+}
+
+void TestEditorAuthoringSuccessfulDerivationClearsBakedLightmapMetadata()
+{
+    game::SectorEditorState state;
+    state.topologyMap.bakedLightmap.path = "assets/levels/test/lightmap.png";
+    state.topologyMap.bakedLightmap.width = 128;
+    state.topologyMap.bakedLightmap.height = 128;
+    state.topologyMap.bakedLightmap.sourceHash = "old-hash";
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "lightmap stale setup derives valid topology");
+    Check(state.topologyMap.bakedLightmap.path.empty(),
+          "successful derivation clears baked lightmap path");
+    Check(state.topologyMap.bakedLightmap.width == 0 && state.topologyMap.bakedLightmap.height == 0,
+          "successful derivation clears baked lightmap dimensions");
+    Check(state.topologyMap.bakedLightmap.sourceHash.empty(),
+          "successful derivation clears baked lightmap source hash");
+}
+
 void TestEditorAuthoringSelectionTargetsRepresentLineAndVertex()
 {
     game::SectorEditorState state;
@@ -2612,6 +2720,11 @@ int main()
     TestAuthoringOverlayRenderCacheIncludesReferenceDiagnostics();
     TestEditorAuthoringSuccessfulDerivationUpdatesState();
     TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics();
+    TestEditorAuthoringPreviewAndBakeGateAllowsCurrentDerivedTopology();
+    TestEditorAuthoringPreviewAndBakeGateRejectsInvalidNoDerived();
+    TestEditorAuthoringPreviewAndBakeGateRejectsStaleDerivedTopology();
+    TestEditorAuthoringPreviewAndBakeGateRejectsFailedDerivation();
+    TestEditorAuthoringSuccessfulDerivationClearsBakedLightmapMetadata();
     TestEditorAuthoringSelectionTargetsRepresentLineAndVertex();
     TestEditorAuthoringSelectionHelpersSetClearAndRejectMissingTargets();
     TestEditorAuthoringHoverAndPruneUseGraphValidity();

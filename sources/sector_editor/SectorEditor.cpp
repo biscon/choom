@@ -2617,6 +2617,12 @@ bool SectorEditor::StartLightmapBake()
         return false;
     }
 
+    std::string gateMessage;
+    if (!CanUseCurrentAuthoringDerivedTopologyForLightmapBake(state, &gateMessage)) {
+        statusText = gateMessage.empty() ? "Bake failed: derived topology is not current" : gateMessage;
+        return false;
+    }
+
     if (state.topologyMap.sectors.empty()) {
         statusText = "Bake failed: no sectors";
         return false;
@@ -6447,6 +6453,12 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
     ui.focusedId = 0;
     uiState.keyboardCaptured = false;
 
+    std::string gateMessage;
+    if (!CanUseCurrentAuthoringDerivedTopologyForPreview(state, &gateMessage)) {
+        statusText = gateMessage.empty() ? "3D mode failed: derived topology is not current" : gateMessage;
+        return false;
+    }
+
     std::string error;
     if (!preview.RebuildRendererResources(assets, state.topologyMap, "sector_editor_preview", error)) {
         state.sectorCollisionWorldValid = false;
@@ -7532,6 +7544,12 @@ bool SectorEditor::AlignSelectedWallMaterialU(
 bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& assets)
 {
     if (!preview.IsRendererReady()) {
+        return false;
+    }
+
+    std::string gateMessage;
+    if (!CanUseCurrentAuthoringDerivedTopologyForPreview(state, &gateMessage)) {
+        statusText = gateMessage.empty() ? "3D mode rebuild failed: derived topology is not current" : gateMessage;
         return false;
     }
 

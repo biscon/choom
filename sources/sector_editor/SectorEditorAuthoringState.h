@@ -77,4 +77,12 @@ bool RefreshSectorEditorAuthoringDerivation(
         const char* successStatus = nullptr,
         const char* failureStatus = nullptr);
 
+bool CanUseCurrentAuthoringDerivedTopologyForPreview(
+        const SectorEditorState& state,
+        std::string* outMessage = nullptr);
+
+bool CanUseCurrentAuthoringDerivedTopologyForLightmapBake(
+        const SectorEditorState& state,
+        std::string* outMessage = nullptr);
+
 } // namespace game

@@ -137,7 +137,7 @@ Suggested path:
       "id": "phase_12_preview_and_bake_gating",
       "title": "Gate preview and bake through current derived topology",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {

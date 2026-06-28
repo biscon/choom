@@ -40,6 +40,46 @@ SectorAuthoringSelectionTarget EmptyAuthoringSelectionTarget()
     return SectorAuthoringSelectionTarget{};
 }
 
+bool CanUseCurrentAuthoringDerivedTopology(
+        const SectorEditorState& state,
+        const char* action,
+        std::string* outMessage)
+{
+    const auto setMessage = [outMessage, action](const char* reason) {
+        if (outMessage != nullptr) {
+            *outMessage = TextFormat("%s requires current valid derived topology: %s", action, reason);
+        }
+    };
+
+    if (state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
+            && !state.authoringDerivedTopologyStale
+            && state.authoringDerivation.success) {
+        if (outMessage != nullptr) {
+            outMessage->clear();
+        }
+        return true;
+    }
+
+    if (state.authoringDerivationState == SectorEditorAuthoringDerivationState::InvalidLastValid) {
+        setMessage("latest derivation failed; fix authoring diagnostics first");
+        return false;
+    }
+
+    if (state.authoringDerivationState == SectorEditorAuthoringDerivationState::InvalidNoDerived) {
+        setMessage("no valid derived topology is available");
+        return false;
+    }
+
+    if (state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidStale
+            || state.authoringDerivedTopologyStale) {
+        setMessage("authoring graph changed; re-derive before using runtime topology");
+        return false;
+    }
+
+    setMessage("no valid derived topology is available");
+    return false;
+}
+
 } // namespace
 
 SectorAuthoringSelectionTarget MakeSectorAuthoringLineSelectionTarget(int lineId)
@@ -576,6 +616,20 @@ bool RefreshSectorEditorAuthoringDerivation(
     state.topologyDocumentStatus = state.authoringDerivationStatus;
     InvalidateEditorTopologyRenderCacheIfNeeded(state);
     return false;
+}
+
+bool CanUseCurrentAuthoringDerivedTopologyForPreview(
+        const SectorEditorState& state,
+        std::string* outMessage)
+{
+    return CanUseCurrentAuthoringDerivedTopology(state, "3D preview", outMessage);
+}
+
+bool CanUseCurrentAuthoringDerivedTopologyForLightmapBake(
+        const SectorEditorState& state,
+        std::string* outMessage)
+{
+    return CanUseCurrentAuthoringDerivedTopology(state, "Lightmap bake", outMessage);
 }
 
 } // namespace game
