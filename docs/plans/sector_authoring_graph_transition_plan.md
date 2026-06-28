@@ -151,8 +151,43 @@ Suggested path:
       "id": "phase_13_inspector_porting",
       "title": "Port inspectors and material editing to authoring anchors",
       "type": "phase",
-      "status": "Planned",
+      "status": "In Progress",
       "parent": null
+    },
+    {
+      "id": "phase_13a_face_anchor_inspector_writes",
+      "title": "Port sector property inspector writes to face anchors",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_13_inspector_porting"
+    },
+    {
+      "id": "phase_13b_authoring_side_material_writes",
+      "title": "Port sidedef and wall material writes to authoring sides",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_13_inspector_porting"
+    },
+    {
+      "id": "phase_13c_authoring_line_flag_writes",
+      "title": "Port linedef flag writes to authoring lines",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_13_inspector_porting"
+    },
+    {
+      "id": "phase_13d_3d_surface_authoring_mapping",
+      "title": "Map 3D selected surfaces back to authoring anchors",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_13_inspector_porting"
+    },
+    {
+      "id": "phase_13e_texture_picker_reuse_cleanup",
+      "title": "Keep texture picker and import workflows reusable for authoring targets",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_13_inspector_porting"
     },
     {
       "id": "phase_14_legacy_tool_retirement",
@@ -1239,6 +1274,61 @@ If too broad, split into child passes:
 * line flag writes
 * 3D surface ref to authoring mapping
 * texture picker reuse/cleanup
+
+Split execution note:
+
+`phase_13_inspector_porting` is split before implementation because the full
+phase spans multiple inspector data targets, material picker plumbing, line flag
+editing, 3D surface-to-authoring remapping, unavailable/stale mapping behavior,
+and tests. Execute exactly one child pass at a time.
+
+Child passes:
+
+* `phase_13a_face_anchor_inspector_writes`
+  * port sector/floor/ceiling property inspector writes to
+    `SectorAuthoringFaceAnchor` / room anchor data
+  * graph edits must mark the document dirty, stale derived topology, and
+    invalidate cached 2D editor state through existing authoring/topology
+    invalidation helpers
+  * do not port direct topology mutation buttons such as Delete Sector, Insert
+    Sector Inside, or Cut Sector
+  * tests: editing face anchor properties changes the projected derived sector
+    after derivation and does not directly mutate derived topology as the source
+* `phase_13b_authoring_side_material_writes`
+  * port sidedef wall/lower/upper/middle material writes to authoring side
+    metadata
+  * keep the existing material inspector and texture picker style where practical
+  * graph edits must mark the document dirty, stale derived topology, and
+    invalidate cached 2D editor state
+  * tests: editing authoring side material changes projected derived sidedefs
+    after derivation, including split-line projection where covered by existing
+    derivation mapping
+* `phase_13c_authoring_line_flag_writes`
+  * port linedef flag writes such as `blocksPlayer` to authoring line metadata
+  * do not add doors, specials, or unrelated portal behavior
+  * graph edits must mark the document dirty, stale derived topology, and
+    invalidate cached 2D editor state
+  * tests: editing an authoring line flag changes derived linedef flags after
+    derivation and collision/runtime consumers still receive only derived
+    topology
+* `phase_13d_3d_surface_authoring_mapping`
+  * map selected derived 3D surface refs back to authoring face anchors or
+    authoring sides before enabling inspector edits
+  * if mapping is missing, stale, or ambiguous, report the inspector target as
+    unavailable instead of mutating derived topology
+  * do not change generated geometry, collision, or preview rendering beyond the
+    narrow mapping integration required for inspector targeting
+  * tests: 3D selected surface refs resolve to authoring anchors where mapping
+    exists, and stale/missing mappings block edits cleanly
+* `phase_13e_texture_picker_reuse_cleanup`
+  * keep texture picker and import texture workflows reusable for authoring face
+    and side targets
+  * preserve map-level texture registry behavior; texture registry changes do
+    not by themselves require 2D topology render-cache invalidation unless the
+    cache starts storing texture/material display state
+  * avoid broad UI replacement or unrelated material-system cleanup
+  * tests: picker/material helper behavior remains valid for authoring inspector
+    targets and existing map-level import behavior is preserved
 
 Verification:
 
