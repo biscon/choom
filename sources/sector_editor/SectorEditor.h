@@ -60,8 +60,17 @@ private:
     void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingAuthoringLine(const char* message);
     void CancelPendingAuthoringRectangle(const char* message);
+    void CancelPendingAuthoringInsertVertex(const char* message);
+    void BeginPendingAuthoringInsertVertex(int lineId);
     void AddAuthoringLinePoint(SectorPoint point);
     void AddAuthoringRectanglePoint(SectorPoint point);
+    bool TryResolveAuthoringInsertVertexPoint(
+            int lineId,
+            Vector2 mapPoint,
+            SectorTopologyCoordPoint& outPoint,
+            std::string& error) const;
+    void UpdatePendingAuthoringInsertVertex(Vector2 mapPoint);
+    void CommitAuthoringInsertVertex(Vector2 screenPoint);
     SectorPoint CurrentSnappedSectorPoint() const;
     bool ToTopologyCoordPoint(SectorPoint point, SectorTopologyCoordPoint& outPoint, std::string& error) const;
     bool ToCanonicalSectorPoint(SectorPoint point, SectorPoint& outPoint, std::string& error) const;
@@ -74,6 +83,7 @@ private:
     void DrawTopologySnapCrosshair() const;
     void DrawPendingAuthoringLine() const;
     void DrawPendingAuthoringRectangle() const;
+    void DrawPendingAuthoringInsertVertex() const;
     void DrawAuthoringVertexMoveOverlay() const;
     void DrawLightMoveOverlay() const;
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;

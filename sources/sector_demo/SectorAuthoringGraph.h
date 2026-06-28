@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sector_demo/SectorTopologyCreation.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <cstdint>
@@ -243,6 +244,23 @@ struct SectorAuthoringDerivationResult {
     SectorAuthoringDerivationMapping mapping;
 };
 
+enum class SectorAuthoringInsertVertexStatus {
+    Inserted,
+    InvalidLine,
+    InvalidEndpoint,
+    OffLine,
+    Endpoint,
+    IdAllocationFailed
+};
+
+struct SectorAuthoringInsertVertexResult {
+    SectorAuthoringInsertVertexStatus status = SectorAuthoringInsertVertexStatus::InvalidLine;
+    int vertexId = -1;
+    int firstLineId = -1;
+    int secondLineId = -1;
+    bool reusedExistingVertex = false;
+};
+
 bool IsValidSectorAuthoringId(int id);
 
 int AllocateSectorAuthoringVertexId(const SectorAuthoringGraph& graph);
@@ -281,6 +299,12 @@ bool AddSectorAuthoringLine(
         int startVertexId,
         int endVertexId,
         int* outLineId = nullptr);
+
+bool InsertSectorAuthoringVertexOnLine(
+        SectorAuthoringGraph& graph,
+        int lineId,
+        SectorTopologyCoordPoint point,
+        SectorAuthoringInsertVertexResult* outResult = nullptr);
 
 std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferences(
         const SectorAuthoringGraph& graph);

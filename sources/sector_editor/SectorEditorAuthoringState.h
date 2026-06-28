@@ -95,6 +95,12 @@ bool AddSectorEditorAuthoringRectangle(
         SectorTopologyCoordPoint oppositeCorner,
         SectorEditorAuthoringRectangleResult* outResult = nullptr);
 
+bool InsertSectorEditorAuthoringVertexOnLine(
+        SectorEditorState& state,
+        int lineId,
+        SectorTopologyCoordPoint point,
+        SectorAuthoringInsertVertexResult* outResult = nullptr);
+
 bool DeleteSectorEditorSelectedAuthoringLine(SectorEditorState& state);
 bool MoveSectorEditorAuthoringVertex(
         SectorEditorState& state,

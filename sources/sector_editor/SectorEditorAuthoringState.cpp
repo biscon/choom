@@ -1289,6 +1289,33 @@ bool AddSectorEditorAuthoringRectangle(
     return true;
 }
 
+bool InsertSectorEditorAuthoringVertexOnLine(
+        SectorEditorState& state,
+        int lineId,
+        SectorTopologyCoordPoint point,
+        SectorAuthoringInsertVertexResult* outResult)
+{
+    SectorAuthoringInsertVertexResult result;
+    if (!InsertSectorAuthoringVertexOnLine(state.authoringGraph, lineId, point, &result)) {
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
+        return false;
+    }
+
+    PruneSectorEditorAuthoringSelectionToGraph(state);
+    SelectSectorEditorAuthoringVertex(state, result.vertexId);
+    MarkSectorEditorAuthoringGraphEdited(state, "Inserted vertex on authoring line");
+    RefreshSectorEditorAuthoringDerivation(
+            state,
+            "Inserted vertex on authoring line; derived topology current",
+            "Inserted vertex on authoring line; derivation failed");
+    if (outResult != nullptr) {
+        *outResult = result;
+    }
+    return true;
+}
+
 bool MoveSectorEditorAuthoringVertex(
         SectorEditorState& state,
         int vertexId,

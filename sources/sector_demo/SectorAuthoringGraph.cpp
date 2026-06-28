@@ -314,6 +314,33 @@ bool PointOnSegmentInclusive(
             && std::min(start.y, end.y) <= point.y && point.y <= std::max(start.y, end.y);
 }
 
+bool PointOnSegmentInclusive(
+        SectorTopologyCoordPoint point,
+        const SectorAuthoringVertex& start,
+        const SectorAuthoringVertex& end)
+{
+    SectorAuthoringVertex pointVertex;
+    pointVertex.x = point.x;
+    pointVertex.y = point.y;
+    return PointOnSegmentInclusive(pointVertex, start, end);
+}
+
+bool FindAuthoringVertexIdAtPoint(
+        const SectorAuthoringGraph& graph,
+        SectorTopologyCoordPoint point,
+        int* outVertexId)
+{
+    for (const SectorAuthoringVertex& vertex : graph.vertices) {
+        if (vertex.x == point.x && vertex.y == point.y) {
+            if (outVertexId != nullptr) {
+                *outVertexId = vertex.id;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 bool CollinearSegmentsOverlapBeyondEndpoint(
         const PlanarSourceLine& lhs,
         const PlanarSourceLine& rhs)
@@ -1683,6 +1710,162 @@ bool AddSectorAuthoringLine(
 
     if (outLineId != nullptr) {
         *outLineId = id;
+    }
+    return true;
+}
+
+bool InsertSectorAuthoringVertexOnLine(
+        SectorAuthoringGraph& graph,
+        int lineId,
+        SectorTopologyCoordPoint point,
+        SectorAuthoringInsertVertexResult* outResult)
+{
+    SectorAuthoringInsertVertexResult result;
+    result.status = SectorAuthoringInsertVertexStatus::InvalidLine;
+
+    const SectorAuthoringLine* originalLine = FindSectorAuthoringLine(graph, lineId);
+    if (originalLine == nullptr) {
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
+        return false;
+    }
+
+    const SectorAuthoringVertex* start =
+            FindSectorAuthoringVertex(graph, originalLine->startVertexId);
+    const SectorAuthoringVertex* end =
+            FindSectorAuthoringVertex(graph, originalLine->endVertexId);
+    if (start == nullptr || end == nullptr || originalLine->startVertexId == originalLine->endVertexId) {
+        result.status = SectorAuthoringInsertVertexStatus::InvalidEndpoint;
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
+        return false;
+    }
+
+    if (!PointOnSegmentInclusive(point, *start, *end)) {
+        result.status = SectorAuthoringInsertVertexStatus::OffLine;
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
+        return false;
+    }
+
+    if ((point.x == start->x && point.y == start->y)
+            || (point.x == end->x && point.y == end->y)) {
+        result.status = SectorAuthoringInsertVertexStatus::Endpoint;
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
+        return false;
+    }
+
+    SectorAuthoringGraph candidate = graph;
+    SectorAuthoringLine* candidateLine = FindSectorAuthoringLine(candidate, lineId);
+    if (candidateLine == nullptr) {
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
+        return false;
+    }
+    const SectorAuthoringLine lineCopy = *candidateLine;
+
+    std::vector<SectorAuthoringLineSide> sideCopies;
+    for (const SectorAuthoringLineSide& side : candidate.lineSides) {
+        if (side.id.lineId == lineId) {
+            sideCopies.push_back(side);
+        }
+    }
+
+    int insertedVertexId = -1;
+    if (FindAuthoringVertexIdAtPoint(candidate, point, &insertedVertexId)) {
+        if (insertedVertexId == lineCopy.startVertexId || insertedVertexId == lineCopy.endVertexId) {
+            result.status = SectorAuthoringInsertVertexStatus::Endpoint;
+            if (outResult != nullptr) {
+                *outResult = result;
+            }
+            return false;
+        }
+        result.reusedExistingVertex = true;
+    } else {
+        insertedVertexId = AllocateSectorAuthoringVertexId(candidate);
+        if (!IsValidSectorAuthoringId(insertedVertexId)) {
+            result.status = SectorAuthoringInsertVertexStatus::IdAllocationFailed;
+            if (outResult != nullptr) {
+                *outResult = result;
+            }
+            return false;
+        }
+        SectorAuthoringVertex vertex;
+        vertex.id = insertedVertexId;
+        vertex.x = point.x;
+        vertex.y = point.y;
+        candidate.vertices.push_back(vertex);
+        result.reusedExistingVertex = false;
+    }
+
+    const int firstLineId = AllocateSectorAuthoringLineId(candidate);
+    if (!IsValidSectorAuthoringId(firstLineId)) {
+        result.status = SectorAuthoringInsertVertexStatus::IdAllocationFailed;
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
+        return false;
+    }
+    SectorAuthoringLine firstLine = lineCopy;
+    firstLine.id = firstLineId;
+    firstLine.startVertexId = lineCopy.startVertexId;
+    firstLine.endVertexId = insertedVertexId;
+    candidate.lines.push_back(firstLine);
+
+    const int secondLineId = AllocateSectorAuthoringLineId(candidate);
+    if (!IsValidSectorAuthoringId(secondLineId)) {
+        result.status = SectorAuthoringInsertVertexStatus::IdAllocationFailed;
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
+        return false;
+    }
+    SectorAuthoringLine secondLine = lineCopy;
+    secondLine.id = secondLineId;
+    secondLine.startVertexId = insertedVertexId;
+    secondLine.endVertexId = lineCopy.endVertexId;
+    candidate.lines.push_back(secondLine);
+
+    candidate.lines.erase(
+            std::remove_if(
+                    candidate.lines.begin(),
+                    candidate.lines.end(),
+                    [lineId](const SectorAuthoringLine& line) {
+                        return line.id == lineId;
+                    }),
+            candidate.lines.end());
+    candidate.lineSides.erase(
+            std::remove_if(
+                    candidate.lineSides.begin(),
+                    candidate.lineSides.end(),
+                    [lineId](const SectorAuthoringLineSide& side) {
+                        return side.id.lineId == lineId;
+                    }),
+            candidate.lineSides.end());
+
+    for (const SectorAuthoringLineSide& oldSide : sideCopies) {
+        SectorAuthoringLineSide firstSide = oldSide;
+        firstSide.id.lineId = firstLineId;
+        candidate.lineSides.push_back(firstSide);
+
+        SectorAuthoringLineSide secondSide = oldSide;
+        secondSide.id.lineId = secondLineId;
+        candidate.lineSides.push_back(secondSide);
+    }
+
+    result.status = SectorAuthoringInsertVertexStatus::Inserted;
+    result.vertexId = insertedVertexId;
+    result.firstLineId = firstLineId;
+    result.secondLineId = secondLineId;
+    graph = std::move(candidate);
+    if (outResult != nullptr) {
+        *outResult = result;
     }
     return true;
 }

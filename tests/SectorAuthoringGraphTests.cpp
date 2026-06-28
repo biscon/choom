@@ -4925,6 +4925,290 @@ void TestEditorAuthoringLineDrawHelperReusesVerticesAndRejectsZeroLength()
           "authoring line draw helper zero-length rejection does not mutate derived topology");
 }
 
+const game::SectorAuthoringLine* FindAuthoringLineWithEndpoints(
+        const game::SectorAuthoringGraph& graph,
+        int startVertexId,
+        int endVertexId)
+{
+    for (const game::SectorAuthoringLine& line : graph.lines) {
+        if (line.startVertexId == startVertexId && line.endVertexId == endVertexId) {
+            return &line;
+        }
+    }
+    return nullptr;
+}
+
+int CountAuthoringVerticesAt(
+        const game::SectorAuthoringGraph& graph,
+        game::SectorCoord x,
+        game::SectorCoord y)
+{
+    int count = 0;
+    for (const game::SectorAuthoringVertex& vertex : graph.vertices) {
+        if (vertex.x == x && vertex.y == y) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+void CheckSplitLineAtPoint(
+        game::SectorCoord ax,
+        game::SectorCoord ay,
+        game::SectorCoord bx,
+        game::SectorCoord by,
+        game::SectorCoord vx,
+        game::SectorCoord vy,
+        const char* description)
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, ax, ay);
+    AddAuthoringVertexWithId(graph, 2, bx, by);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+
+    game::SectorAuthoringInsertVertexResult result;
+    Check(game::InsertSectorAuthoringVertexOnLine(
+                  graph,
+                  10,
+                  game::SectorTopologyCoordPoint{vx, vy},
+                  &result),
+          description);
+    Check(result.status == game::SectorAuthoringInsertVertexStatus::Inserted,
+          "split authoring line reports inserted status");
+    Check(result.vertexId > 0 && result.firstLineId > 0 && result.secondLineId > 0,
+          "split authoring line returns stable positive IDs");
+    Check(game::FindSectorAuthoringLine(graph, 10) == nullptr,
+          "split authoring line removes original line");
+
+    const game::SectorAuthoringVertex* vertex =
+            game::FindSectorAuthoringVertex(graph, result.vertexId);
+    Check(vertex != nullptr && vertex->x == vx && vertex->y == vy,
+          "split authoring line creates vertex at expected point");
+    Check(FindAuthoringLineWithEndpoints(graph, 1, result.vertexId) != nullptr,
+          "split authoring line creates first child preserving orientation");
+    Check(FindAuthoringLineWithEndpoints(graph, result.vertexId, 2) != nullptr,
+          "split authoring line creates second child preserving orientation");
+    Check(!game::HasSectorAuthoringValidationErrors(
+                  game::ValidateSectorAuthoringGraphReferences(graph)),
+          "split authoring line leaves graph references valid");
+}
+
+void TestInsertVertexSplitsHorizontalVerticalAndDiagonalLines()
+{
+    CheckSplitLineAtPoint(0, 0, 10, 0, 4, 0, "insert vertex splits horizontal authoring line");
+    CheckSplitLineAtPoint(2, 0, 2, 10, 2, 6, "insert vertex splits vertical authoring line");
+    CheckSplitLineAtPoint(0, 0, 10, 10, 4, 4, "insert vertex splits diagonal authoring line at exact grid point");
+}
+
+void TestInsertVertexRejectsOffLineAndEndpoints()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringVertexWithId(graph, 2, 10, 10);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+
+    const game::SectorAuthoringGraph original = graph;
+    game::SectorAuthoringInsertVertexResult result;
+    Check(!game::InsertSectorAuthoringVertexOnLine(
+                  graph,
+                  10,
+                  game::SectorTopologyCoordPoint{4, 5},
+                  &result),
+          "insert vertex rejects off-line point");
+    Check(result.status == game::SectorAuthoringInsertVertexStatus::OffLine,
+          "off-line insert reports off-line status");
+    Check(graph.vertices.size() == original.vertices.size()
+                  && graph.lines.size() == original.lines.size()
+                  && CountAuthoringVerticesAt(graph, 4, 5) == 0,
+          "off-line insert leaves graph unchanged and creates no off-line vertex");
+
+    Check(!game::InsertSectorAuthoringVertexOnLine(
+                  graph,
+                  10,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  &result),
+          "insert vertex rejects start endpoint");
+    Check(result.status == game::SectorAuthoringInsertVertexStatus::Endpoint,
+          "start endpoint insert reports endpoint status");
+    Check(!game::InsertSectorAuthoringVertexOnLine(
+                  graph,
+                  10,
+                  game::SectorTopologyCoordPoint{10, 10},
+                  &result),
+          "insert vertex rejects end endpoint");
+    Check(result.status == game::SectorAuthoringInsertVertexStatus::Endpoint,
+          "end endpoint insert reports endpoint status");
+    Check(graph.vertices.size() == original.vertices.size()
+                  && graph.lines.size() == original.lines.size(),
+          "endpoint insert leaves graph unchanged");
+}
+
+void TestInsertVertexReusesExistingInteriorVertex()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringVertexWithId(graph, 2, 10, 0);
+    AddAuthoringVertexWithId(graph, 7, 4, 0);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+
+    game::SectorAuthoringInsertVertexResult result;
+    Check(game::InsertSectorAuthoringVertexOnLine(
+                  graph,
+                  10,
+                  game::SectorTopologyCoordPoint{4, 0},
+                  &result),
+          "insert vertex reuses existing interior vertex");
+    Check(result.vertexId == 7 && result.reusedExistingVertex,
+          "insert vertex reports reused existing vertex ID");
+    Check(CountAuthoringVerticesAt(graph, 4, 0) == 1,
+          "insert vertex does not create duplicate vertex at reused coordinate");
+    Check(FindAuthoringLineWithEndpoints(graph, 1, 7) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, 7, 2) != nullptr,
+          "insert vertex splits through reused vertex");
+}
+
+void TestInsertVertexCopiesLineFlagsSpecialAndSideMaterials()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringVertexWithId(graph, 2, 16, 0);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+    game::SectorAuthoringLine* line = game::FindSectorAuthoringLine(graph, 10);
+    Check(line != nullptr, "line exists for metadata split test");
+    line->flags.blocksPlayer = true;
+    line->special.type = 12;
+    line->special.tag = "door";
+
+    game::SectorAuthoringLineSide front;
+    front.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    front.wall = WallPart("front_wall", 1.0f, 2.0f, 3.0f, 4.0f);
+    front.lower = WallPart("front_lower", 2.0f, 3.0f, 4.0f, 5.0f);
+    front.upper = WallPart("front_upper", 3.0f, 4.0f, 5.0f, 6.0f);
+    front.middle = WallPart("front_middle", 4.0f, 5.0f, 6.0f, 7.0f);
+    game::SectorAuthoringLineSide back;
+    back.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Back};
+    back.wall = WallPart("back_wall", 1.5f, 2.5f, 3.5f, 4.5f);
+    back.lower = WallPart("back_lower", 2.5f, 3.5f, 4.5f, 5.5f);
+    back.upper = WallPart("back_upper", 3.5f, 4.5f, 5.5f, 6.5f);
+    back.middle = WallPart("back_middle", 4.5f, 5.5f, 6.5f, 7.5f);
+    graph.lineSides.push_back(front);
+    graph.lineSides.push_back(back);
+
+    game::SectorAuthoringInsertVertexResult result;
+    Check(game::InsertSectorAuthoringVertexOnLine(
+                  graph,
+                  10,
+                  game::SectorTopologyCoordPoint{8, 0},
+                  &result),
+          "insert vertex copies line metadata and side materials");
+    Check(game::FindSectorAuthoringLineSide(
+                  graph,
+                  game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front}) == nullptr
+                  && game::FindSectorAuthoringLineSide(
+                          graph,
+                          game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Back}) == nullptr,
+          "insert vertex removes active side metadata for old line");
+
+    const int childIds[2] = {result.firstLineId, result.secondLineId};
+    for (int childId : childIds) {
+        const game::SectorAuthoringLine* child = game::FindSectorAuthoringLine(graph, childId);
+        Check(child != nullptr && child->flags.blocksPlayer,
+              "insert vertex copies blocksPlayer flag to child line");
+        Check(child != nullptr && child->special.type == 12 && child->special.tag == "door",
+              "insert vertex copies line special metadata to child line");
+        const game::SectorAuthoringLineSide* childFront = game::FindSectorAuthoringLineSide(
+                graph,
+                game::SectorAuthoringSideId{childId, game::SectorTopologySideKind::Front});
+        const game::SectorAuthoringLineSide* childBack = game::FindSectorAuthoringLineSide(
+                graph,
+                game::SectorAuthoringSideId{childId, game::SectorTopologySideKind::Back});
+        Check(childFront != nullptr && childBack != nullptr,
+              "insert vertex copies both child side metadata records");
+        if (childFront != nullptr) {
+            CheckWallPartCopied(childFront->wall, front.wall, "insert vertex copies front wall material");
+            CheckWallPartCopied(childFront->lower, front.lower, "insert vertex copies front lower material");
+            CheckWallPartCopied(childFront->upper, front.upper, "insert vertex copies front upper material");
+            CheckWallPartCopied(childFront->middle, front.middle, "insert vertex copies front middle material");
+        }
+        if (childBack != nullptr) {
+            CheckWallPartCopied(childBack->wall, back.wall, "insert vertex copies back wall material");
+            CheckWallPartCopied(childBack->lower, back.lower, "insert vertex copies back lower material");
+            CheckWallPartCopied(childBack->upper, back.upper, "insert vertex copies back upper material");
+            CheckWallPartCopied(childBack->middle, back.middle, "insert vertex copies back middle material");
+        }
+    }
+}
+
+void TestInsertVertexDerivationStillWorksForRectangle()
+{
+    game::SectorAuthoringGraph graph;
+    game::SectorEditorAuthoringRectangleResult rectangle;
+    Check(game::CreateSectorAuthoringRectangle(
+                  graph,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &rectangle),
+          "insert vertex derivation test creates rectangle");
+
+    game::SectorAuthoringInsertVertexResult insert;
+    Check(game::InsertSectorAuthoringVertexOnLine(
+                  graph,
+                  rectangle.lineIds[0],
+                  game::SectorTopologyCoordPoint{32, 0},
+                  &insert),
+          "insert vertex splits rectangle edge");
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    Check(result.success, "rectangle with inserted edge vertex derives successfully");
+    Check(!game::HasSectorTopologyValidationErrors(
+                  game::ValidateSectorTopologyMap(result.topology)),
+          "rectangle with inserted edge vertex validates");
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(result.topology, geometry, &error),
+          "rectangle with inserted edge vertex builds generated geometry");
+}
+
+void TestEditorAuthoringInsertVertexMarksDirtyInvalidatesAndSelectsVertex()
+{
+    game::SectorEditorState state;
+    game::InitializeSectorEditorAuthoringStateFromTopology(state, game::SectorTopologyMap{});
+    game::SectorEditorAuthoringRectangleResult rectangle;
+    Check(game::AddSectorEditorAuthoringRectangle(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &rectangle),
+          "editor insert vertex wrapper setup creates rectangle");
+    state.topologyDocumentDirty = false;
+    state.hasUnsavedChanges = false;
+    state.topologyRenderCache.valid = true;
+    const uint64_t originalRevision = state.topologyRenderRevision;
+    const std::size_t originalTopologyLineCount = state.topologyMap.lineDefs.size();
+
+    game::SectorAuthoringInsertVertexResult result;
+    Check(game::InsertSectorEditorAuthoringVertexOnLine(
+                  state,
+                  rectangle.lineIds[0],
+                  game::SectorTopologyCoordPoint{32, 0},
+                  &result),
+          "editor insert vertex wrapper splits selected authoring line");
+    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
+                  && state.selectedAuthoring.vertexId == result.vertexId,
+          "editor insert vertex wrapper selects inserted vertex");
+    Check(state.topologyDocumentDirty && state.hasUnsavedChanges,
+          "editor insert vertex wrapper marks document dirty and unsaved");
+    Check(!state.topologyRenderCache.valid
+                  && state.topologyRenderRevision == originalRevision + 1,
+          "editor insert vertex wrapper invalidates topology render cache");
+    Check(state.authoringDerivation.success
+                  && state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
+                  && !state.authoringDerivedTopologyStale,
+          "editor insert vertex wrapper refreshes derivation through authoring path");
+    Check(state.topologyMap.lineDefs.size() == originalTopologyLineCount + 1,
+          "editor insert vertex wrapper updates derived topology only through derivation refresh");
+}
+
 void TestAuthoringRectangleHelperCreatesClosedLoop()
 {
     game::SectorAuthoringGraph graph;
@@ -5633,6 +5917,12 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "rectangle tool help describes corner-driven rectangle creation");
     Check(game::IsGraphAuthoringTool(game::SectorEditorTool::AuthoringRectangle),
           "rectangle is classified as a graph-authoring tool");
+    Check(TextContains(game::ToolName(game::SectorEditorTool::AuthoringInsertVertex), "Insert Vertex"),
+          "insert vertex tool name is exposed as a graph tool");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::AuthoringInsertVertex), "authoring line"),
+          "insert vertex tool help describes splitting authoring lines");
+    Check(game::IsGraphAuthoringTool(game::SectorEditorTool::AuthoringInsertVertex),
+          "insert vertex is classified as a graph-authoring tool");
     Check(game::IsGraphAuthoringTool(game::SectorEditorTool::AuthoringMove),
           "authoring move is classified as a graph-authoring tool");
 
@@ -6199,6 +6489,12 @@ int main()
     TestEditorAuthoringHoverAndPruneUseGraphValidity();
     TestEditorAuthoringLineDrawHelperCreatesLooseLineAndMarksDirty();
     TestEditorAuthoringLineDrawHelperReusesVerticesAndRejectsZeroLength();
+    TestInsertVertexSplitsHorizontalVerticalAndDiagonalLines();
+    TestInsertVertexRejectsOffLineAndEndpoints();
+    TestInsertVertexReusesExistingInteriorVertex();
+    TestInsertVertexCopiesLineFlagsSpecialAndSideMaterials();
+    TestInsertVertexDerivationStillWorksForRectangle();
+    TestEditorAuthoringInsertVertexMarksDirtyInvalidatesAndSelectsVertex();
     TestAuthoringRectangleHelperCreatesClosedLoop();
     TestAuthoringRectangleHelperReversedDragIsDeterministic();
     TestAuthoringRectangleHelperRejectsZeroSize();

@@ -31,6 +31,7 @@ enum class SectorEditorTool {
     Select,
     AuthoringLine,
     AuthoringRectangle,
+    AuthoringInsertVertex,
     AuthoringMove,
     Light,
     Move
@@ -64,6 +65,14 @@ struct PendingAuthoringRectangleDraw {
     bool active = false;
     SectorTopologyCoordPoint firstCorner = {};
     SectorTopologyCoordPoint currentCorner = {};
+    std::string errorMessage;
+};
+
+struct PendingAuthoringInsertVertex {
+    bool active = false;
+    int lineId = -1;
+    SectorTopologyCoordPoint previewPoint = {};
+    bool hasPreviewPoint = false;
     std::string errorMessage;
 };
 
@@ -444,6 +453,7 @@ struct SectorEditorState {
 
     PendingAuthoringLineDraw pendingAuthoringLine;
     PendingAuthoringRectangleDraw pendingAuthoringRectangle;
+    PendingAuthoringInsertVertex pendingAuthoringInsertVertex;
     AuthoringVertexDragState authoringVertexDrag;
     LightDragState lightDrag;
     float defaultSectorFloorZ = 0.0f;
