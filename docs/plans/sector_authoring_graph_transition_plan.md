@@ -200,8 +200,78 @@ Suggested path:
       "id": "phase_15_cleanup_docs_and_tests",
       "title": "Cleanup, documentation, and final regression pass",
       "type": "phase",
-      "status": "Planned",
+      "status": "In Progress",
       "parent": null
+    },
+    {
+      "id": "phase_15a_authoring_workflow_docs",
+      "title": "Document source/derived authoring workflow",
+      "type": "pass",
+      "status": "Completed",
+      "parent": "phase_15_cleanup_docs_and_tests"
+    },
+    {
+      "id": "phase_15b_audit_implementation_notes",
+      "title": "Update topology audit/design implementation notes",
+      "type": "pass",
+      "status": "Completed",
+      "parent": "phase_15_cleanup_docs_and_tests"
+    },
+    {
+      "id": "phase_15c_legacy_cleanup_survey",
+      "title": "Survey obsolete direct-topology and legacy paths",
+      "type": "pass",
+      "status": "Completed",
+      "parent": "phase_15_cleanup_docs_and_tests"
+    },
+    {
+      "id": "phase_15d_targeted_legacy_cleanup",
+      "title": "Remove or clearly mark selected obsolete legacy paths",
+      "type": "pass",
+      "status": "Completed",
+      "parent": "phase_15_cleanup_docs_and_tests"
+    },
+    {
+      "id": "phase_15d_01_legacy_inspector_status_cleanup",
+      "title": "Reduce retired direct-topology inspector actions to clear unavailable status",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_15_cleanup_docs_and_tests"
+    },
+    {
+      "id": "phase_15d_02_pending_direct_topology_state_cleanup",
+      "title": "Remove unused pending direct-topology editor interaction state",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_15_cleanup_docs_and_tests"
+    },
+    {
+      "id": "phase_15d_03_editor_topology_action_wrapper_cleanup",
+      "title": "Remove or dev-mark unused direct-topology editor action wrappers",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_15_cleanup_docs_and_tests"
+    },
+    {
+      "id": "phase_15d_04_legacy_tool_enum_ui_cleanup",
+      "title": "Remove or further demote unavailable legacy tool enum and UI remnants",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_15_cleanup_docs_and_tests"
+    },
+    {
+      "id": "phase_15e_regression_coverage_audit",
+      "title": "Audit regression coverage for the authoring workflow",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_15_cleanup_docs_and_tests"
+    },
+    {
+      "id": "phase_15f_final_verification_and_completion",
+      "title": "Run final verification and close the transition plan",
+      "type": "pass",
+      "status": "Planned",
+      "parent": "phase_15_cleanup_docs_and_tests"
     }
   ]
 }
@@ -1490,6 +1560,157 @@ git status --short
 ```
 
 Manual user-only smoke suggestions may be documented, but Codex must not execute them.
+
+If this phase is selected as a single unit, split it before implementation into
+focused child passes and stop after updating the execution state. Suggested
+child passes:
+
+* `phase_15a_authoring_workflow_docs`
+  * add or update a concise editor topology/authoring graph note under `docs/`
+  * document `AuthoringGraph` as the source of truth and `SectorTopologyMap` as
+    the derived/runtime product
+  * document graph-native save behavior, invalid graph states, derivation
+    diagnostics, auto-splitting, preview/bake gating, and old tool replacements
+  * include manual user-only smoke suggestions; do not perform GUI automation
+  * avoid code cleanup in this pass
+* `phase_15b_audit_implementation_notes`
+  * update the topology audit/design docs with short implementation notes where
+    they differ from the completed implementation
+  * keep historical audit context intact; prefer dated or clearly scoped notes
+    over rewriting the original audits wholesale
+  * avoid production code changes in this pass
+* `phase_15c_legacy_cleanup_survey`
+  * identify remaining obsolete direct-topology UI paths, legacy helpers, and
+    compatibility/import helpers after graph-authoritative mode
+  * record which paths are still active, which are dev/import-only, and which are
+    safe candidates for removal
+  * update the plan or docs with the survey result; do not remove code in this
+    pass
+
+Phase 15c survey result (2026-06-28):
+
+* Active graph-authoritative paths to keep:
+  * `sources/sector_editor/SectorEditorAuthoringState.*` remains the authoring
+    edit/refresh bridge; graph mutations mark derived topology stale and refresh
+    the validated `SectorTopologyMap` through derivation.
+  * `sources/sector_demo/SectorAuthoringGraph.*` remains the source model,
+    planarization, face extraction, property projection, diagnostics, mapping,
+    graph-native serialization, and topology-v2 import implementation.
+  * map-level texture, static light, preview, sky, directional-light, and
+    lightmap settings still live on `state.topologyMap` / graph-native document
+    map data and remain active shared editor/runtime data, not legacy cleanup
+    targets.
+  * preview, collision, generated geometry, 3D picking, and lightmap code still
+    consume validated derived topology; this is intentional runtime boundary
+    code, not obsolete direct-authoring code.
+* Dev/import-only or compatibility paths to keep clearly named:
+  * `LoadSectorTopologyDocumentFromAsset()` fallback in
+    `sources/sector_editor/SectorEditor.cpp` imports old topology-v2 documents
+    into authoring state and reports "Imported legacy topology"; keep as a useful
+    bootstrap/dev compatibility path unless a later cleanup explicitly removes
+    old topology-v2 import.
+  * `ImportSectorTopologyToAuthoringGraph()` and related tests are legacy import
+    support, but still useful for old fixture conversion and regression coverage.
+  * `SaveSectorEditorAuthoringDocument()` is the normal graph-native save path
+    and should not be treated as compatibility code.
+* Safe candidates for targeted legacy cleanup or stronger dev-only marking in
+  `phase_15d_targeted_legacy_cleanup`:
+  * closed polygon creation wrappers in
+    `sources/sector_editor/SectorEditorTopologyActions.*`
+    (`CreateTopologySector`, `InsertTopologySectorInside`) are obsolete for
+    normal graph-authoritative editing. They can be removed from normal editor
+    UI paths or retained only behind legacy/import tests if still needed by
+    topology unit fixtures.
+  * retired direct mutation wrappers in
+    `SectorEditorTopologyActions.*` (`DeleteTopologySector`, `CutTopologySector`,
+    `JoinTopologySectors`, `SplitTopologyLineDef`,
+    `SplitTopologyLineDefAtPoint`, `DissolveTopologyVertex`, and topology vertex
+    move/merge wrappers) are blocked in graph-authoritative UI. They are safe
+    cleanup candidates only where no non-GUI topology tests or legacy import
+    utilities still call them.
+  * pending direct-topology interaction state and methods in
+    `sources/sector_editor/SectorEditor.*`,
+    `sources/sector_editor/SectorEditor.h`, and
+    `sources/sector_editor/SectorEditorTypes.h`
+    (`PendingSectorDraw`, `PendingTopologyLineSplitAtPoint`,
+    `PendingTopologySectorCut`, topology vertex drag/merge flows, and associated
+    draw/update/commit helpers) are normal-editor legacy remnants. Remove only
+    after confirming the tools pane, inspectors, and tests no longer need the
+    pending state for legacy-only flows.
+  * inspector text/buttons that only report retired actions
+    (`Delete Sector`, `Insert Sector Inside`, `Cut Sector`, `Split Linedef`,
+    `Split At Point`, `Join Sectors`, `Dissolve Vertex`, `Merge Into`) can be
+    reduced further if `phase_15d` keeps an equivalent clear status message for
+    unavailable legacy actions.
+  * `SectorEditorTool::Sector`, `InsertSectorInside`, `Move`, and `Erase` remain
+    unavailable in graph-authoritative mode and are marked legacy in helper text
+    and tests. They are cleanup candidates if removing their enum/UI remnants
+    does not disturb layout tests or saved/editor state assumptions.
+* Not safe to remove as part of generic legacy cleanup:
+  * `sources/sector_demo/SectorTopologyCreation.*` and
+    `sources/sector_demo/SectorTopologyEdit.*` are direct-topology backends, but
+    they still have focused non-GUI tests and may remain useful as strict
+    topology utility/regression coverage. Treat them as reusable topology
+    helpers unless `phase_15d` identifies specific editor-only wrappers with no
+    remaining callers.
+  * topology validation, loop extraction, generated geometry, collision,
+    lightmap hash/bake/layout, and serialization helpers for strict topology are
+    still required by derived/runtime consumers.
+* Cache, collision, and lightmap notes for future cleanup:
+  * any removed editor mutation path must preserve the authoring edit path's
+    document-edited and 2D cache invalidation behavior; over-invalidation remains
+    acceptable.
+  * this survey did not change collision, sector lookup, camera, physics, or
+    lightmap source-hash behavior.
+* `phase_15d_targeted_legacy_cleanup`
+  * remove only legacy paths already identified as safe by
+    `phase_15c_legacy_cleanup_survey`
+  * keep useful dev/import helpers if clearly named
+  * preserve graph-authoritative editor behavior, cache invalidation, preview
+    gating, save/load behavior, collision, and lightmap source-hash behavior
+  * add or adjust focused tests only for removed/marked behavior
+  * the cleanup survey has been flattened into runner-compatible phase-15
+    sibling passes. Execute `phase_15d_01` through `phase_15d_04` directly
+    under `phase_15_cleanup_docs_and_tests`, in order, before `phase_15e`.
+* `phase_15d_01_legacy_inspector_status_cleanup`
+  * reduce or remove inspector text/buttons that only expose retired
+    direct-topology actions, while preserving clear unavailable-action status
+    messages in graph-authoritative mode
+  * do not remove graph-native inspectors, texture picker behavior, or
+    authoring-anchor material/property writes
+  * run the phase verification checklist
+* `phase_15d_02_pending_direct_topology_state_cleanup`
+  * remove pending direct-topology interaction state and helpers only after
+    confirming normal tools pane, inspectors, and tests no longer call them
+  * preserve authoring edit refresh, document-edited behavior, and 2D
+    render-cache invalidation paths
+  * run the phase verification checklist
+* `phase_15d_03_editor_topology_action_wrapper_cleanup`
+  * remove or clearly dev-mark obsolete direct-topology editor action wrappers
+    only when there are no remaining non-GUI topology tests, import helpers, or
+    reusable strict-topology utility callers that need them
+  * keep `SectorTopologyCreation.*`, `SectorTopologyEdit.*`, topology
+    validation, loop extraction, serialization, generated geometry, collision,
+    and lightmap helpers unless a specific unused editor-only wrapper is proven
+    removable
+  * run the phase verification checklist
+* `phase_15d_04_legacy_tool_enum_ui_cleanup`
+  * remove or further demote unavailable legacy tool enum/UI remnants only if
+    doing so does not disturb current editor layout tests, saved/editor state
+    assumptions, or graph-native tool availability
+  * keep the existing editor application, tools pane style, authoring line tool,
+    authoring selection, and graph diagnostics workflow
+  * run the phase verification checklist
+* `phase_15e_regression_coverage_audit`
+  * compare existing tests against the regression checklist in this phase
+  * add narrow non-GUI tests only for clear gaps in the main authoring workflow
+  * do not add `xdotool`, screenshot, GUI automation, or interactive editor
+    launch tests
+* `phase_15f_final_verification_and_completion`
+  * run the full verification checklist
+  * verify manual smoke instructions are documented for the user
+  * mark phase 15 child passes and parent phase completed only when all child
+    passes are complete and the transition completion criteria are satisfied
 
 Completion criteria:
 

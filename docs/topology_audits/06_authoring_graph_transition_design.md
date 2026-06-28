@@ -14,6 +14,17 @@ Consequences:
 Implementation notes:
   Treat this as a source-model change, not a mesh/collision/lightmap rewrite. Build the graph and derivation path first, then move editor tools over in phases.
 
+Implementation status note (2026-06-28):
+  The transition has implemented the core source/derived split described here.
+  `SectorAuthoringGraph` is the graph-authoritative editor source, graph-native
+  saves use `formatVersion: 3` with `topology: "authoringGraph"`, derivation
+  regenerates a validated `SectorTopologyMap` with diagnostics and mapping, and
+  preview/bake entry points require current valid derivation. Runtime collision,
+  sector lookup, and physics still consume derived topology; this pass did not
+  change gameplay/collision/camera behavior. Lightmap source-hash behavior also
+  remains topology-based; graph edits or derivation changes stale or clear baked
+  metadata instead of introducing logical-surface hash redesign.
+
 ## Non-Goals
 
 Decision:
@@ -400,6 +411,13 @@ Implementation notes:
   10. Project properties and inspector editing through line, side, and face anchors.
   11. Switch preview, bake, and save to the derived-from-authoring path.
   12. Remove or demote the old closed-sector authoring path once graph tools cover the needed workflow.
+
+Implementation note (2026-06-28):
+  The runner plan split several broad steps into smaller passes during
+  execution. In particular, minimal authoring tools, inspector porting, and the
+  final cleanup/docs/test phase were executed as child passes rather than one
+  monolithic step. This note records execution shape only; the architectural
+  decisions above remain current.
 
 ## Open Questions
 

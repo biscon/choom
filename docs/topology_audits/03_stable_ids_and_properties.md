@@ -6,6 +6,15 @@ If editable sectors are later re-derived from a loose line graph, the hard part 
 
 The current schema is topology v2 / linedef-based in `sources/sector_demo/SectorTopologyTypes.h` and `sources/sector_demo/SectorTopologyMap.h`. JSON persistence in `sources/sector_demo/SectorTopologySerialization.cpp` writes vertices, linedefs, sidedefs, sectors, static lights, texture definitions, lightmap settings, preview settings, sky settings, directional light, and baked lightmap metadata. `ComputeSectorLightmapSourceHash()` in `sources/sector_demo/SectorLightmap.cpp` also hashes most geometry, material, static light, directional light, and ID fields, so re-derivation that changes IDs can make an otherwise visually equivalent bake stale.
 
+Implementation note (2026-06-28): The implemented model makes authoring IDs the
+durable persisted identities: vertices, lines, `(lineId, side)` authoring sides,
+and face anchors own editable intent. Derivation records mappings to topology
+vertices, linedefs, sidedefs, and sectors, but derived IDs remain generated
+runtime IDs. Lightmap source-hash behavior was not redesigned; derivation or
+authoring edits that change hash-sensitive derived topology, `ceilingSky`,
+directional light, static lights, bake settings, or bake-relevant materials
+stale or clear baked metadata instead of pretending an old bake is current.
+
 ## Current ID Model
 
 IDs are stable positive integers. `IsValidSectorTopologyId()` in `SectorTopologyMap.cpp` accepts `id > 0`, and `AllocateSectorTopologyVertexId()`, `AllocateSectorTopologyLineDefId()`, `AllocateSectorTopologySideDefId()`, `AllocateSectorTopologySectorId()`, and `AllocateSectorTopologyStaticLightId()` allocate `max(existing id) + 1`.

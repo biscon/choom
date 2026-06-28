@@ -6,6 +6,14 @@ Old/current levels can keep loading if the future authoring graph is added addit
 
 The safest migration path is to keep `SectorTopologyMap` as the loadable derived topology, add an optional authoring graph section later, and synthesize an initial authoring graph from topology v2 when that section is absent. Saving both authoring graph and derived topology during the migration window is lower risk than switching immediately to authoring-only files, because mesh, collision, preview, selection, and lightmap code already consume validated `SectorTopologyMap`.
 
+Implementation note (2026-06-28): The completed transition intentionally chose
+the cleaner breaking policy from the later design document instead of this
+audit's safest two-track compatibility path. Graph-native authoring documents
+use `formatVersion: 3` and `topology: "authoringGraph"` and do not require
+persisted topology-v2 `vertices`/`linedefs`/`sidedefs`/`sectors` arrays. A
+one-way topology-v2-to-authoring import remains available as bootstrap/dev
+compatibility for valid old maps, not as the normal source-of-truth model.
+
 ## Current Serialized Format
 
 `ParseMap()` in `SectorTopologySerialization.cpp` requires:

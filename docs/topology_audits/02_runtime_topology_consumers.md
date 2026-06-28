@@ -6,6 +6,13 @@ Runtime-facing sector systems already consume `SectorTopologyMap` as validated, 
 
 Most runtime consumers should be able to keep consuming a derived `SectorTopologyMap` unchanged if a future permissive authoring graph is added. The main requirement is that derivation produces the same valid topology contract before mesh generation, collision, lightmap layout/bake, preview rendering, and 3D surface editing run.
 
+Implementation note (2026-06-28): The transition followed this consumer
+boundary. Mesh generation, collision, generated 3D surfaces, and lightmap
+systems continue to consume validated derived `SectorTopologyMap` data rather
+than `SectorAuthoringGraph`. Editor preview and lightmap bake entry points are
+gated on a current valid authoring derivation, so invalid or stale graph states
+do not enter runtime-like consumers.
+
 ## Runtime Topology Contract Today
 
 - `SectorTopologyMap` in `sources/sector_demo/SectorTopologyMap.h` is the shared runtime/editor topology container: textures, vertices, linedefs, sidedefs, sectors, static lights, preview settings, sky settings, directional light, lightmap settings, and baked lightmap metadata.

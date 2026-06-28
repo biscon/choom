@@ -6,6 +6,13 @@ The current editor document is already a topology v2 `SectorTopologyMap`, not th
 
 Loose lines would need to live outside the current persisted/runtime topology contract or be treated as invalid editor-only data. Today, `ValidateSectorTopologyMap()` and `ExtractSectorTopologyLoops()` reject open, branching, self-intersecting, zero-area, overlapping, or partially connected sector boundaries, and save/load and preview rebuild paths depend on that valid topology contract.
 
+Implementation note (2026-06-28): This audit is historical context for the
+pre-transition editor. The implemented graph-authoritative workflow now keeps
+loose, open, crossing, and otherwise invalid authoring state in
+`SectorAuthoringGraph`; `SectorTopologyMap` remains the strict derived product.
+Normal authoring tools no longer need to force work-in-progress geometry through
+closed-polygon topology mutation.
+
 ## Editable Source Of Truth Today
 
 - `SectorEditorState::topologyMap` in `sources/sector_editor/SectorEditorTypes.h` is the editable document. It stores `SectorTopologyMap`, plus selection IDs, pending sector draw state, pending line split/merge/cut state, drag state, and cached render revision state.

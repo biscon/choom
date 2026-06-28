@@ -6,6 +6,14 @@ The current topology model is already Doom-like at the runtime/derived level: `S
 
 A future authoring graph should likely keep Doom-like vertices, linedefs, directed sides, and line metadata, but it should not require every line to have a sector-owned sidedef or every sector to extract into closed loops while the user is drawing. The current `SectorTopologyMap` should remain the derived topology consumed by mesh, collision, preview, lightmap, and 3D selection until a separate implementation plan says otherwise.
 
+Implementation note (2026-06-28): `SectorAuthoringGraph` has been implemented
+with stable authoring vertices, directed authoring lines, line-level flags and
+future special data, authoring sides identified by `(lineId, side)`, and
+face anchors carrying sector-like properties. Derivation planarizes and
+auto-splits normal crossings, T-junctions, and endpoint-on-segment cases,
+extracts faces, projects properties, validates the derived `SectorTopologyMap`,
+and records diagnostics and authoring-to-derived mappings.
+
 ## Current Topology Model
 
 `SectorTopologyVertex` stores a stable positive `id` plus exact integer `SectorCoord` `x`/`y`. Coordinates use `SectorCoordSubdivisions == 16`, and validation rejects invalid IDs and degenerate linedef endpoints.
@@ -93,6 +101,12 @@ Derived validation should continue using `ValidateSectorTopologyMap()` and `Extr
 Editor mutation wrappers should continue to own document-edited/cache invalidation behavior. Existing topology mutations call `MarkTopologyDocumentEdited()` / `InvalidateTopologyRenderCache()` from `SectorEditor.cpp`; future authoring graph mutations need an equivalent path and should invalidate any cached derived 2D render data when visible graph or derived topology changes.
 
 Serialization should not save invalid data through `SerializeMap()` because `ValidateForSerialization()` requires valid topology. If authoring graph persistence is added later, it should have its own validation/defaulting rules while preserving current topology v2 compatibility.
+
+Implementation note (2026-06-28): Authoring graph persistence was added as a
+graph-native document path rather than through `SerializeMap()`. New authoring
+documents use root `formatVersion: 3` and `topology: "authoringGraph"`, persist
+the permissive graph plus map-level data, and regenerate derived topology on
+load when possible.
 
 ## Property Anchoring Options
 
