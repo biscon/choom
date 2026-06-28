@@ -1001,7 +1001,7 @@ void TestExtractFacesSliverThreshold()
           "sub-grid sliver triangle produces a sliver diagnostic");
 }
 
-void TestExtractFacesNestedDisconnectedLoopsAreDeferred()
+void TestExtractFacesNestedDisconnectedLoopsProducesContainedFaces()
 {
     const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
             {{0, 0}, {128, 0}, {128, 128}, {0, 128}, {32, 32}, {96, 32}, {96, 96}, {32, 96}},
@@ -1009,9 +1009,8 @@ void TestExtractFacesNestedDisconnectedLoopsAreDeferred()
 
     const game::SectorAuthoringFaceExtractionResult result = ExtractFacesFromGraph(graph);
 
-    Check(result.faces.empty(), "nested disconnected loops are not returned as guessed faces");
-    Check(HasFaceDiagnostic(result.diagnostics, game::SectorAuthoringFaceDiagnosticKind::AmbiguousTopology),
-          "nested disconnected loops produce an ambiguous topology diagnostic");
+    Check(result.faces.size() == 2, "nested disconnected loops are returned as contained faces");
+    Check(result.diagnostics.empty(), "supported nested disconnected loops produce no face diagnostics");
 }
 
 void TestExtractDisconnectedClosedLoopsProducesFaces()
@@ -1129,6 +1128,163 @@ void TestDeriveDisconnectedClosedLoopsProducesSectors()
     Check(game::BuildSectorGeneratedGeometry(result.topology, geometry, &error),
           "disconnected closed loops derived topology builds generated geometry");
     Check(!geometry.surfaces.empty(), "disconnected closed loops generate surfaces");
+}
+
+void TestDeriveNestedLoopCreatesHoleTopology()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {128, 0}, {128, 128}, {0, 128}, {32, 32}, {96, 32}, {96, 96}, {32, 96}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {5, 6}, {6, 7}, {7, 8}, {8, 5}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "nested loop derives valid topology");
+    Check(result.topology.sectors.size() == 2, "nested loop derives outer and contained sectors");
+    Check(result.topology.lineDefs.size() == 8, "nested loop keeps eight physical boundary linedefs");
+    Check(result.mapping.sectors.size() == 2, "nested loop records sector mappings");
+
+    int sectorWithHoleCount = 0;
+    int twoSidedLineCount = 0;
+    for (const game::SectorTopologySector& sector : result.topology.sectors) {
+        game::SectorTopologyLoopSet loops;
+        std::vector<game::SectorTopologyValidationIssue> issues;
+        Check(game::ExtractSectorTopologyLoops(result.topology, sector.id, loops, &issues),
+              "nested loop sector extracts topology loops");
+        if (!loops.holes.empty()) {
+            ++sectorWithHoleCount;
+            Check(loops.holes.size() == 1, "nested loop outer sector has one hole loop");
+        }
+    }
+    for (const game::SectorTopologyLineDef& lineDef : result.topology.lineDefs) {
+        if (lineDef.frontSideDefId > 0 && lineDef.backSideDefId > 0) {
+            ++twoSidedLineCount;
+        }
+    }
+    Check(sectorWithHoleCount == 1, "nested loop derives exactly one sector with a hole");
+    Check(twoSidedLineCount == 4, "nested loop inner boundary derives four two-sided linedefs");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(result.topology, geometry, &error),
+          "nested loop derived topology builds generated geometry");
+    Check(!geometry.surfaces.empty(), "nested loop derived topology generates surfaces");
+}
+
+void TestDeriveNestedLoopProjectsInnerBoundaryProperties()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {128, 0}, {128, 128}, {0, 128}, {32, 32}, {96, 32}, {96, 96}, {32, 96}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {5, 6}, {6, 7}, {7, 8}, {8, 5}});
+    if (game::SectorAuthoringLine* innerLine = game::FindSectorAuthoringLine(graph, 14)) {
+        innerLine->flags.blocksPlayer = true;
+    }
+    game::SectorAuthoringLineSide innerFront;
+    innerFront.id = game::SectorAuthoringSideId{14, game::SectorTopologySideKind::Front};
+    innerFront.wall = WallPart("inner_front_wall", 1.0f, 2.0f, 3.0f, 4.0f);
+    graph.lineSides.push_back(innerFront);
+    game::SectorAuthoringLineSide innerBack;
+    innerBack.id = game::SectorAuthoringSideId{14, game::SectorTopologySideKind::Back};
+    innerBack.wall = WallPart("inner_back_wall", 5.0f, 6.0f, 7.0f, 8.0f);
+    graph.lineSides.push_back(innerBack);
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "nested loop property projection derives valid topology");
+    const game::SectorTopologyLineDef* lineDef = FindDerivedLineDefForAuthoringLine(result, 14);
+    Check(lineDef != nullptr && lineDef->flags.blocksPlayer,
+          "nested loop inner authoring line flag projects to shared linedef");
+    const game::SectorTopologySideDef* frontSide = FindDerivedSideDefForAuthoringSide(
+            result,
+            14,
+            game::SectorTopologySideKind::Front);
+    const game::SectorTopologySideDef* backSide = FindDerivedSideDefForAuthoringSide(
+            result,
+            14,
+            game::SectorTopologySideKind::Back);
+    Check(frontSide != nullptr && frontSide->wall.textureId == "inner_front_wall",
+          "nested loop front side material projects to contained boundary side");
+    Check(backSide != nullptr && backSide->wall.textureId == "inner_back_wall",
+          "nested loop back side material projects to outer hole boundary side");
+}
+
+void TestDeriveNestedLoopFaceAnchorsResolveThroughHoles()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {128, 0}, {128, 128}, {0, 128}, {32, 32}, {96, 32}, {96, 96}, {32, 96}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {5, 6}, {6, 7}, {7, 8}, {8, 5}});
+    game::SectorAuthoringFaceAnchor outerAnchor;
+    outerAnchor.id = 200;
+    outerAnchor.x = 16;
+    outerAnchor.y = 16;
+    outerAnchor.name = "outer";
+    graph.faceAnchors.push_back(outerAnchor);
+    game::SectorAuthoringFaceAnchor innerAnchor;
+    innerAnchor.id = 201;
+    innerAnchor.x = 64;
+    innerAnchor.y = 64;
+    innerAnchor.name = "inner";
+    graph.faceAnchors.push_back(innerAnchor);
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "nested loop anchored derivation is valid");
+    const game::SectorAuthoringDerivedSectorMapping* outerMapping =
+            FindSectorMappingForAnchor(result.mapping, 200);
+    const game::SectorAuthoringDerivedSectorMapping* innerMapping =
+            FindSectorMappingForAnchor(result.mapping, 201);
+    Check(outerMapping != nullptr && outerMapping->topologySectorId == 200,
+          "outer nested-loop anchor maps to outer sector");
+    Check(innerMapping != nullptr && innerMapping->topologySectorId == 201,
+          "inner nested-loop anchor maps to contained sector");
+    Check(game::FindSectorTopologySector(result.topology, 200) != nullptr,
+          "outer anchored sector exists");
+    Check(game::FindSectorTopologySector(result.topology, 201) != nullptr,
+          "inner anchored sector exists");
+}
+
+void TestDeriveHoleInsideHoleFailsWithDiagnostic()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {192, 0}, {192, 192}, {0, 192},
+             {32, 32}, {160, 32}, {160, 160}, {32, 160},
+             {64, 64}, {128, 64}, {128, 128}, {64, 128}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1},
+             {5, 6}, {6, 7}, {7, 8}, {8, 5},
+             {9, 10}, {10, 11}, {11, 12}, {12, 9}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    Check(!result.success, "hole-inside-hole graph is deferred");
+    Check(result.topology.sectors.empty(), "hole-inside-hole graph returns no half-valid topology");
+    Check(HasDerivationDiagnostic(
+                  result.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::FaceExtraction),
+          "hole-inside-hole graph reports face extraction diagnostic");
+}
+
+void TestDeriveOverlappingNestedLoopsProduceDiagnostics()
+{
+    const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {192, 0}, {192, 192}, {0, 192},
+             {32, 32}, {96, 32}, {96, 96}, {32, 96},
+             {64, 32}, {128, 32}, {128, 96}, {64, 96}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1},
+             {5, 6}, {6, 7}, {7, 8}, {8, 5},
+             {9, 10}, {10, 11}, {11, 12}, {12, 9}});
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    Check(!result.success, "overlapping nested loops fail derivation");
+    Check(result.topology.sectors.empty(), "overlapping nested loops return no half-valid topology");
+    Check(HasDerivationDiagnostic(
+                  result.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::CollinearOverlap),
+          "overlapping nested loops report overlap diagnostics");
 }
 
 void TestDeriveNonIntegerIntersectionFails()
@@ -2690,13 +2846,18 @@ int main()
     TestExtractFacesDanglingLineDoesNotCorruptSquare();
     TestExtractFacesRejectsOuterFace();
     TestExtractFacesSliverThreshold();
-    TestExtractFacesNestedDisconnectedLoopsAreDeferred();
+    TestExtractFacesNestedDisconnectedLoopsProducesContainedFaces();
     TestExtractDisconnectedClosedLoopsProducesFaces();
     TestExtractDisconnectedClosedLoopsWithDanglingLineReportsOnlyDanglingLine();
     TestDeriveSingleSquare();
     TestDeriveAdjacentSquares();
     TestDeriveCrossingDiagonals();
     TestDeriveDisconnectedClosedLoopsProducesSectors();
+    TestDeriveNestedLoopCreatesHoleTopology();
+    TestDeriveNestedLoopProjectsInnerBoundaryProperties();
+    TestDeriveNestedLoopFaceAnchorsResolveThroughHoles();
+    TestDeriveHoleInsideHoleFailsWithDiagnostic();
+    TestDeriveOverlappingNestedLoopsProduceDiagnostics();
     TestDeriveNonIntegerIntersectionFails();
     TestDeriveSquareWithMixedLineDirections();
     TestDeriveOpenGraphFails();

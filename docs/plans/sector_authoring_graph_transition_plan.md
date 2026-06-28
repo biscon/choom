@@ -144,7 +144,7 @@ Suggested path:
       "id": "phase_12b_nested_loops_and_holes",
       "title": "Support nested authoring loops, holes, and island diagnostics",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {

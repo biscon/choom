@@ -231,6 +231,12 @@ struct CandidateExtractedFace {
     int componentId = -1;
 };
 
+struct FaceContainmentInfo {
+    std::map<int, int> parentFaceIdByFaceId;
+    std::map<int, std::vector<int>> childFaceIdsByFaceId;
+    std::map<int, int> depthByFaceId;
+};
+
 bool SamePhysicalSegment(const PlanarSourceLine& lhs, const PlanarSourceLine& rhs)
 {
     return (lhs.start->x == rhs.start->x && lhs.start->y == rhs.start->y
@@ -792,50 +798,37 @@ bool FaceContainsPlanarPoint(
     return inside;
 }
 
-bool HasUnsupportedDisconnectedClosedFaces(
+bool FaceStrictlyContainsPoint(
         const SectorAuthoringPlanarizationResult& planar,
-        const std::vector<CandidateExtractedFace>& candidateFaces,
-        SectorAuthoringFaceExtractionResult& result)
+        const SectorAuthoringExtractedFace& face,
+        double px,
+        double py)
 {
-    if (candidateFaces.size() < 2) {
+    if (face.boundary.size() < 3) {
         return false;
     }
 
-    for (std::size_t lhsIndex = 0; lhsIndex < candidateFaces.size(); ++lhsIndex) {
-        for (std::size_t rhsIndex = lhsIndex + 1; rhsIndex < candidateFaces.size(); ++rhsIndex) {
-            const CandidateExtractedFace& lhs = candidateFaces[lhsIndex];
-            const CandidateExtractedFace& rhs = candidateFaces[rhsIndex];
-            if (lhs.componentId == rhs.componentId
-                    || lhs.face.boundary.empty()
-                    || rhs.face.boundary.empty()) {
-                continue;
-            }
+    bool inside = false;
+    for (const SectorAuthoringFaceBoundaryEdge& boundary : face.boundary) {
+        const SectorAuthoringPlanarVertex* start = FindPlanarVertex(planar, boundary.startVertexId);
+        const SectorAuthoringPlanarVertex* end = FindPlanarVertex(planar, boundary.endVertexId);
+        if (start == nullptr || end == nullptr) {
+            continue;
+        }
 
-            const SectorAuthoringPlanarVertex* lhsStart =
-                    FindPlanarVertex(planar, lhs.face.boundary.front().startVertexId);
-            const SectorAuthoringPlanarVertex* rhsStart =
-                    FindPlanarVertex(planar, rhs.face.boundary.front().startVertexId);
-            const bool lhsInsideRhs = lhsStart != nullptr
-                    && FaceContainsPlanarPoint(planar, rhs.face, lhsStart->point);
-            const bool rhsInsideLhs = rhsStart != nullptr
-                    && FaceContainsPlanarPoint(planar, lhs.face, rhsStart->point);
-            if (!lhsInsideRhs && !rhsInsideLhs) {
-                continue;
-            }
-
-            const SectorAuthoringExtractedFace& diagnosticFace =
-                    lhsInsideRhs ? lhs.face : rhs.face;
-            AddFaceDiagnostic(
-                    result.diagnostics,
-                    SectorAuthoringFaceDiagnosticKind::AmbiguousTopology,
-                    diagnosticFace.boundary.front().planarEdgeId,
-                    diagnosticFace.boundary.front().startVertexId,
-                    "Nested disconnected loops and hole candidates are deferred for a later authoring-graph phase");
-            return true;
+        const double ax = PlanarPointX(start->point);
+        const double ay = PlanarPointY(start->point);
+        const double bx = PlanarPointX(end->point);
+        const double by = PlanarPointY(end->point);
+        if (PlanarPointIsOnSegment(px, py, ax, ay, bx, by)) {
+            return false;
+        }
+        if (((ay > py) != (by > py))
+                && (px < (bx - ax) * (py - ay) / (by - ay) + ax)) {
+            inside = !inside;
         }
     }
-
-    return false;
+    return inside;
 }
 
 void AddDerivationDiagnostic(
@@ -1029,17 +1022,166 @@ bool FaceContainsAnchorPoint(
     return inside;
 }
 
+bool FaceContainsFace(
+        const SectorAuthoringPlanarizationResult& planar,
+        const SectorAuthoringExtractedFace& container,
+        const SectorAuthoringExtractedFace& contained)
+{
+    if (container.id == contained.id || contained.boundary.empty()) {
+        return false;
+    }
+
+    int pointCount = 0;
+    for (const SectorAuthoringFaceBoundaryEdge& boundary : contained.boundary) {
+        const SectorAuthoringPlanarVertex* vertex = FindPlanarVertex(planar, boundary.startVertexId);
+        if (vertex == nullptr) {
+            continue;
+        }
+        if (!FaceStrictlyContainsPoint(
+                    planar,
+                    container,
+                    PlanarPointX(vertex->point),
+                    PlanarPointY(vertex->point))) {
+            return false;
+        }
+        ++pointCount;
+    }
+    return pointCount > 0;
+}
+
+double FaceAreaById(const SectorAuthoringFaceExtractionResult& faces, int faceId)
+{
+    for (const SectorAuthoringExtractedFace& face : faces.faces) {
+        if (face.id == faceId) {
+            return face.signedArea;
+        }
+    }
+    return 0.0;
+}
+
+FaceContainmentInfo BuildFaceContainmentInfo(
+        const SectorAuthoringPlanarizationResult& planar,
+        const SectorAuthoringFaceExtractionResult& faces)
+{
+    FaceContainmentInfo info;
+    for (const SectorAuthoringExtractedFace& face : faces.faces) {
+        int parentFaceId = -1;
+        double parentArea = std::numeric_limits<double>::max();
+        for (const SectorAuthoringExtractedFace& candidateParent : faces.faces) {
+            if (!FaceContainsFace(planar, candidateParent, face)) {
+                continue;
+            }
+            if (candidateParent.signedArea < parentArea) {
+                parentArea = candidateParent.signedArea;
+                parentFaceId = candidateParent.id;
+            }
+        }
+        if (parentFaceId > 0) {
+            info.parentFaceIdByFaceId[face.id] = parentFaceId;
+            info.childFaceIdsByFaceId[parentFaceId].push_back(face.id);
+        }
+    }
+
+    for (const SectorAuthoringExtractedFace& face : faces.faces) {
+        int depth = 0;
+        int parentFaceId = face.id;
+        std::set<int> visited;
+        while (true) {
+            const auto parentIt = info.parentFaceIdByFaceId.find(parentFaceId);
+            if (parentIt == info.parentFaceIdByFaceId.end()) {
+                break;
+            }
+            if (!visited.insert(parentIt->second).second) {
+                break;
+            }
+            parentFaceId = parentIt->second;
+            ++depth;
+        }
+        info.depthByFaceId[face.id] = depth;
+    }
+
+    for (auto& entry : info.childFaceIdsByFaceId) {
+        std::sort(
+                entry.second.begin(),
+                entry.second.end(),
+                [&faces](int lhs, int rhs) {
+                    const double lhsArea = FaceAreaById(faces, lhs);
+                    const double rhsArea = FaceAreaById(faces, rhs);
+                    if (lhsArea != rhsArea) {
+                        return lhsArea > rhsArea;
+                    }
+                    return lhs < rhs;
+                });
+    }
+    return info;
+}
+
+void AddUnsupportedNestedFaceDiagnostics(
+        const SectorAuthoringFaceExtractionResult& faces,
+        const FaceContainmentInfo& containment,
+        std::vector<SectorAuthoringDerivationDiagnostic>& diagnostics)
+{
+    for (const SectorAuthoringExtractedFace& face : faces.faces) {
+        const auto depthIt = containment.depthByFaceId.find(face.id);
+        const int depth = depthIt == containment.depthByFaceId.end() ? 0 : depthIt->second;
+        if (depth <= 1) {
+            continue;
+        }
+
+        const int objectId = face.boundary.empty() ? face.id : face.boundary.front().planarEdgeId;
+        AddDerivationDiagnostic(
+                diagnostics,
+                SectorAuthoringDerivationDiagnosticKind::FaceExtraction,
+                objectId,
+                "Nested authoring loops deeper than one level are not supported");
+    }
+}
+
+bool FaceContainsAnchorPointRespectingHoles(
+        const SectorAuthoringPlanarizationResult& planar,
+        const SectorAuthoringFaceExtractionResult& faces,
+        const FaceContainmentInfo& containment,
+        const SectorAuthoringExtractedFace& face,
+        const SectorAuthoringFaceAnchor& anchor)
+{
+    if (!FaceContainsAnchorPoint(planar, face, anchor)) {
+        return false;
+    }
+
+    const auto childIt = containment.childFaceIdsByFaceId.find(face.id);
+    if (childIt == containment.childFaceIdsByFaceId.end()) {
+        return true;
+    }
+
+    for (int childFaceId : childIt->second) {
+        const auto childDepthIt = containment.depthByFaceId.find(childFaceId);
+        const int childDepth = childDepthIt == containment.depthByFaceId.end() ? 0 : childDepthIt->second;
+        const auto faceDepthIt = containment.depthByFaceId.find(face.id);
+        const int faceDepth = faceDepthIt == containment.depthByFaceId.end() ? 0 : faceDepthIt->second;
+        if (childDepth != faceDepth + 1) {
+            continue;
+        }
+        for (const SectorAuthoringExtractedFace& childFace : faces.faces) {
+            if (childFace.id == childFaceId && FaceContainsAnchorPoint(planar, childFace, anchor)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 std::map<int, int> ResolveFaceAnchorsByFaceId(
         const SectorAuthoringGraph& graph,
         const SectorAuthoringPlanarizationResult& planar,
         const SectorAuthoringFaceExtractionResult& faces,
+        const FaceContainmentInfo& containment,
         std::vector<SectorAuthoringDerivationDiagnostic>& diagnostics)
 {
     std::map<int, std::vector<int>> anchorIdsByFaceId;
     for (const SectorAuthoringFaceAnchor& anchor : graph.faceAnchors) {
         std::vector<int> containingFaceIds;
         for (const SectorAuthoringExtractedFace& face : faces.faces) {
-            if (FaceContainsAnchorPoint(planar, face, anchor)) {
+            if (FaceContainsAnchorPointRespectingHoles(planar, faces, containment, face, anchor)) {
                 containingFaceIds.push_back(face.id);
             }
         }
@@ -1174,6 +1316,7 @@ void BuildDerivedTopologyFacesAndLines(
         const SectorAuthoringGraph& graph,
         const SectorAuthoringPlanarizationResult& planar,
         const SectorAuthoringFaceExtractionResult& faces,
+        const FaceContainmentInfo& containment,
         const std::map<int, int>& topologyVertexIdsByPlanarVertexId,
         const std::map<int, int>& faceAnchorIdsByFaceId,
         SectorTopologyMap& topology,
@@ -1256,7 +1399,35 @@ void BuildDerivedTopologyFacesAndLines(
             continue;
         }
 
-        for (const SectorAuthoringFaceBoundaryEdge& boundaryEdge : face.boundary) {
+        std::vector<SectorAuthoringFaceBoundaryEdge> sectorBoundaryEdges = face.boundary;
+        const auto childIt = containment.childFaceIdsByFaceId.find(face.id);
+        if (childIt != containment.childFaceIdsByFaceId.end()) {
+            const int faceDepth = containment.depthByFaceId.find(face.id) == containment.depthByFaceId.end()
+                    ? 0
+                    : containment.depthByFaceId.find(face.id)->second;
+            for (int childFaceId : childIt->second) {
+                const auto childDepthIt = containment.depthByFaceId.find(childFaceId);
+                const int childDepth = childDepthIt == containment.depthByFaceId.end() ? 0 : childDepthIt->second;
+                if (childDepth != faceDepth + 1) {
+                    continue;
+                }
+
+                for (const SectorAuthoringExtractedFace& childFace : faces.faces) {
+                    if (childFace.id != childFaceId) {
+                        continue;
+                    }
+                    for (const SectorAuthoringFaceBoundaryEdge& childBoundaryEdge : childFace.boundary) {
+                        SectorAuthoringFaceBoundaryEdge holeBoundaryEdge = childBoundaryEdge;
+                        holeBoundaryEdge.sourceSide = childBoundaryEdge.sourceSide == SectorTopologySideKind::Front
+                                ? SectorTopologySideKind::Back
+                                : SectorTopologySideKind::Front;
+                        sectorBoundaryEdges.push_back(holeBoundaryEdge);
+                    }
+                }
+            }
+        }
+
+        for (const SectorAuthoringFaceBoundaryEdge& boundaryEdge : sectorBoundaryEdges) {
             const auto lineIt = topologyLineIdsByPlanarEdgeId.find(boundaryEdge.planarEdgeId);
             if (lineIt == topologyLineIdsByPlanarEdgeId.end()) {
                 continue;
@@ -1834,10 +2005,6 @@ SectorAuthoringFaceExtractionResult ExtractSectorAuthoringFaces(
         }
     }
 
-    if (HasUnsupportedDisconnectedClosedFaces(planar, candidateFaces, result)) {
-        return result;
-    }
-
     result.faces.reserve(candidateFaces.size());
     for (CandidateExtractedFace& candidate : candidateFaces) {
         result.faces.push_back(std::move(candidate.face));
@@ -1918,10 +2085,17 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
         return result;
     }
 
+    const FaceContainmentInfo faceContainment = BuildFaceContainmentInfo(result.planar, result.faces);
+    AddUnsupportedNestedFaceDiagnostics(result.faces, faceContainment, result.diagnostics);
+    if (HasDerivationErrors(result.diagnostics)) {
+        return result;
+    }
+
     const std::map<int, int> faceAnchorIdsByFaceId = ResolveFaceAnchorsByFaceId(
             graph,
             result.planar,
             result.faces,
+            faceContainment,
             result.diagnostics);
     if (HasDerivationErrors(result.diagnostics)) {
         return result;
@@ -1944,6 +2118,7 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
             graph,
             result.planar,
             result.faces,
+            faceContainment,
             topologyVertexIdsByPlanarVertexId,
             faceAnchorIdsByFaceId,
             result.topology,
