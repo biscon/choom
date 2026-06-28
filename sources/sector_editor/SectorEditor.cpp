@@ -618,7 +618,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     } else if (state.lightDrag.active) {
                         CancelLightDrag("Cancelled light move");
                     } else if (state.pendingAuthoringLine.active) {
-                        CancelPendingAuthoringLine("Cancelled authoring line");
+                        CancelPendingAuthoringLine("Line chain stopped");
                     } else if (state.pendingAuthoringRectangle.active) {
                         CancelPendingAuthoringRectangle("Rectangle cancelled");
                     } else if (state.pendingAuthoringInsertVertex.active
@@ -830,7 +830,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
 
                 if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
                     if (state.pendingAuthoringLine.active) {
-                        CancelPendingAuthoringLine("Cancelled authoring line");
+                        CancelPendingAuthoringLine("Line chain stopped");
                         engine::ConsumeEvent(event);
                         return;
                     }
@@ -1230,7 +1230,7 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
 
 void SectorEditor::CancelPendingAuthoringLine(const char* message)
 {
-    state.pendingAuthoringLine = PendingAuthoringLineDraw{};
+    CancelSectorEditorAuthoringLineToolChain(state);
     if (message != nullptr && message[0] != '\0') {
         statusText = message;
     }
@@ -1458,33 +1458,26 @@ void SectorEditor::AddAuthoringLinePoint(SectorPoint point)
         return;
     }
 
-    if (!state.pendingAuthoringLine.active) {
-        state.pendingAuthoringLine.active = true;
-        state.pendingAuthoringLine.startPoint = topologyPoint;
-        state.pendingAuthoringLine.errorMessage.clear();
-        FindSectorAuthoringVertexAtPoint(
-                state.authoringGraph,
-                topologyPoint,
-                &state.pendingAuthoringLine.startVertexId);
-        statusText = "Authoring line: choose end point";
-        return;
+    const SectorEditorAuthoringLineToolClickResult result =
+            ClickSectorEditorAuthoringLineTool(state, topologyPoint);
+    switch (result.status) {
+        case SectorEditorAuthoringLineToolClickStatus::StartedChain:
+            statusText = "Line: click next point, Esc/right click stops chain";
+            return;
+        case SectorEditorAuthoringLineToolClickStatus::CreatedSegment:
+            ClearSelection();
+            SelectSectorEditorAuthoringLine(state, result.segment.lineId);
+            statusText = "Created authoring line segment";
+            return;
+        case SectorEditorAuthoringLineToolClickStatus::ZeroLength:
+            statusText = state.pendingAuthoringLine.errorMessage;
+            return;
+        case SectorEditorAuthoringLineToolClickStatus::Rejected:
+            statusText = state.pendingAuthoringLine.errorMessage.empty()
+                    ? "Authoring line segment rejected"
+                    : state.pendingAuthoringLine.errorMessage;
+            return;
     }
-
-    int lineId = -1;
-    if (!AddSectorEditorAuthoringLineSegment(
-                state,
-                state.pendingAuthoringLine.startPoint,
-                topologyPoint,
-                &lineId)) {
-        state.pendingAuthoringLine.errorMessage = "Authoring line needs two distinct points";
-        statusText = state.pendingAuthoringLine.errorMessage;
-        return;
-    }
-
-    state.pendingAuthoringLine = PendingAuthoringLineDraw{};
-    ClearSelection();
-    SelectSectorEditorAuthoringLine(state, lineId);
-    statusText = TextFormat("Added authoring line %d", lineId);
 }
 
 void SectorEditor::AddAuthoringRectanglePoint(SectorPoint point)
@@ -3680,7 +3673,9 @@ void SectorEditor::DrawToolsPanel(
             ClearTopologySelectionOnly();
         }
         state.currentTool = tool;
-        if (tool == SectorEditorTool::AuthoringInsertVertex) {
+        if (tool == SectorEditorTool::AuthoringLine) {
+            statusText = "Line: click start point";
+        } else if (tool == SectorEditorTool::AuthoringInsertVertex) {
             state.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
             if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
                     && FindSectorAuthoringLine(state.authoringGraph, state.selectedAuthoring.lineId) != nullptr) {

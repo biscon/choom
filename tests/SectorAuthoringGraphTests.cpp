@@ -4928,6 +4928,193 @@ void TestEditorAuthoringLineDrawHelperReusesVerticesAndRejectsZeroLength()
 const game::SectorAuthoringLine* FindAuthoringLineWithEndpoints(
         const game::SectorAuthoringGraph& graph,
         int startVertexId,
+        int endVertexId);
+
+int FindAuthoringVertexIdAt(
+        const game::SectorAuthoringGraph& graph,
+        game::SectorCoord x,
+        game::SectorCoord y);
+
+void TestEditorAuthoringLineToolChainCommitsConnectedSegments()
+{
+    game::SectorEditorState state;
+    game::InitializeSectorEditorAuthoringStateFromTopology(state, game::SectorTopologyMap{});
+    const std::size_t originalTopologyVertexCount = state.topologyMap.vertices.size();
+    const std::size_t originalTopologyLineCount = state.topologyMap.lineDefs.size();
+    const uint64_t originalRevision = state.topologyRenderRevision;
+
+    game::SectorEditorAuthoringLineToolClickResult first =
+            game::ClickSectorEditorAuthoringLineTool(state, game::SectorTopologyCoordPoint{0, 0});
+    Check(first.status == game::SectorEditorAuthoringLineToolClickStatus::StartedChain,
+          "line chain first click starts pending chain");
+    Check(state.pendingAuthoringLine.active
+                  && state.pendingAuthoringLine.startPoint.x == 0
+                  && state.pendingAuthoringLine.startPoint.y == 0,
+          "line chain starts at first point");
+
+    game::SectorEditorAuthoringLineToolClickResult second =
+            game::ClickSectorEditorAuthoringLineTool(state, game::SectorTopologyCoordPoint{64, 0});
+    Check(second.status == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
+          "line chain second click creates first segment");
+    Check(state.pendingAuthoringLine.active
+                  && state.pendingAuthoringLine.startPoint.x == 64
+                  && state.pendingAuthoringLine.startPoint.y == 0,
+          "line chain advances to first segment endpoint");
+
+    game::SectorEditorAuthoringLineToolClickResult third =
+            game::ClickSectorEditorAuthoringLineTool(state, game::SectorTopologyCoordPoint{64, 64});
+    Check(third.status == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
+          "line chain third click creates second segment");
+    Check(state.pendingAuthoringLine.active
+                  && state.pendingAuthoringLine.startPoint.x == 64
+                  && state.pendingAuthoringLine.startPoint.y == 64,
+          "line chain advances to second segment endpoint");
+
+    const int a = FindAuthoringVertexIdAt(state.authoringGraph, 0, 0);
+    const int b = FindAuthoringVertexIdAt(state.authoringGraph, 64, 0);
+    const int c = FindAuthoringVertexIdAt(state.authoringGraph, 64, 64);
+    Check(a > 0 && b > 0 && c > 0, "line chain creates expected vertices");
+    Check(state.authoringGraph.lines.size() == 2, "line chain creates two authoring lines");
+    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, a, b) != nullptr,
+          "line chain first line connects A to B");
+    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, b, c) != nullptr,
+          "line chain second line connects B to C");
+    Check(second.segment.endVertexId == b && third.segment.startVertexId == b,
+          "line chain reuses B as the shared endpoint vertex");
+    Check(state.topologyDocumentDirty, "line chain marks document dirty through authoring edit path");
+    Check(state.authoringDerivedTopologyStale,
+          "line chain leaves open graph derivation stale after failed refresh");
+    Check(state.topologyRenderRevision == originalRevision + 2,
+          "line chain invalidates render cache once per committed segment");
+    Check(state.topologyMap.vertices.size() == originalTopologyVertexCount
+                  && state.topologyMap.lineDefs.size() == originalTopologyLineCount,
+          "line chain does not directly mutate derived topology");
+}
+
+void TestEditorAuthoringLineToolCancelStartsNewChain()
+{
+    game::SectorEditorState state;
+    state.currentTool = game::SectorEditorTool::AuthoringLine;
+
+    Check(game::ClickSectorEditorAuthoringLineTool(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 0}).status
+                  == game::SectorEditorAuthoringLineToolClickStatus::StartedChain,
+          "line chain cancel setup starts chain");
+    Check(game::ClickSectorEditorAuthoringLineTool(
+                  state,
+                  game::SectorTopologyCoordPoint{64, 0}).status
+                  == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
+          "line chain cancel setup commits first segment");
+
+    game::CancelSectorEditorAuthoringLineToolChain(state);
+    Check(!state.pendingAuthoringLine.active, "line chain cancel clears pending chain");
+    Check(state.currentTool == game::SectorEditorTool::AuthoringLine,
+          "line chain cancel keeps authoring line tool selected");
+
+    Check(game::ClickSectorEditorAuthoringLineTool(
+                  state,
+                  game::SectorTopologyCoordPoint{128, 0}).status
+                  == game::SectorEditorAuthoringLineToolClickStatus::StartedChain,
+          "line chain click after cancel starts a new chain");
+    Check(game::ClickSectorEditorAuthoringLineTool(
+                  state,
+                  game::SectorTopologyCoordPoint{192, 0}).status
+                  == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
+          "line chain new chain commits separate segment");
+
+    const int a = FindAuthoringVertexIdAt(state.authoringGraph, 0, 0);
+    const int b = FindAuthoringVertexIdAt(state.authoringGraph, 64, 0);
+    const int c = FindAuthoringVertexIdAt(state.authoringGraph, 128, 0);
+    const int d = FindAuthoringVertexIdAt(state.authoringGraph, 192, 0);
+    Check(state.authoringGraph.lines.size() == 2,
+          "line chain after cancel has only two committed segments");
+    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, a, b) != nullptr,
+          "line chain before cancel creates A to B");
+    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, c, d) != nullptr,
+          "line chain after cancel creates C to D");
+    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, b, c) == nullptr,
+          "line chain cancel prevents accidental B to C segment");
+}
+
+void TestEditorAuthoringLineToolRejectsZeroLengthWithoutEndingChain()
+{
+    game::SectorEditorState state;
+    Check(game::ClickSectorEditorAuthoringLineTool(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 0}).status
+                  == game::SectorEditorAuthoringLineToolClickStatus::StartedChain,
+          "zero-length line chain setup starts chain");
+
+    const game::SectorEditorAuthoringLineToolClickResult zero =
+            game::ClickSectorEditorAuthoringLineTool(state, game::SectorTopologyCoordPoint{0, 0});
+    Check(zero.status == game::SectorEditorAuthoringLineToolClickStatus::ZeroLength,
+          "line chain rejects zero-length segment");
+    Check(state.authoringGraph.lines.empty(), "zero-length line chain creates no line");
+    Check(state.pendingAuthoringLine.active
+                  && state.pendingAuthoringLine.startPoint.x == 0
+                  && state.pendingAuthoringLine.startPoint.y == 0,
+          "zero-length line chain remains active at previous point");
+    Check(TextContains(state.pendingAuthoringLine.errorMessage.c_str(), "non-zero"),
+          "zero-length line chain stores clear error message");
+
+    Check(game::ClickSectorEditorAuthoringLineTool(
+                  state,
+                  game::SectorTopologyCoordPoint{64, 0}).status
+                  == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
+          "line chain continues after zero-length rejection");
+    const int a = FindAuthoringVertexIdAt(state.authoringGraph, 0, 0);
+    const int b = FindAuthoringVertexIdAt(state.authoringGraph, 64, 0);
+    Check(state.authoringGraph.lines.size() == 1
+                  && FindAuthoringLineWithEndpoints(state.authoringGraph, a, b) != nullptr,
+          "line chain creates A to B after zero-length rejection");
+}
+
+void TestEditorAuthoringLineToolLoopClosureRemainsActive()
+{
+    game::SectorEditorState state;
+    Check(game::ClickSectorEditorAuthoringLineTool(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 0}).status
+                  == game::SectorEditorAuthoringLineToolClickStatus::StartedChain,
+          "loop closure setup starts chain");
+    Check(game::ClickSectorEditorAuthoringLineTool(
+                  state,
+                  game::SectorTopologyCoordPoint{64, 0}).status
+                  == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
+          "loop closure creates first segment");
+    Check(game::ClickSectorEditorAuthoringLineTool(
+                  state,
+                  game::SectorTopologyCoordPoint{0, 64}).status
+                  == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
+          "loop closure creates second segment");
+    const game::SectorEditorAuthoringLineToolClickResult close =
+            game::ClickSectorEditorAuthoringLineTool(state, game::SectorTopologyCoordPoint{0, 0});
+    Check(close.status == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
+          "loop closure creates final segment back to first point");
+
+    const int a = FindAuthoringVertexIdAt(state.authoringGraph, 0, 0);
+    const int b = FindAuthoringVertexIdAt(state.authoringGraph, 64, 0);
+    const int c = FindAuthoringVertexIdAt(state.authoringGraph, 0, 64);
+    Check(state.authoringGraph.lines.size() == 3, "loop closure creates three lines");
+    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, c, a) != nullptr,
+          "loop closure final line connects C to A");
+    Check(state.pendingAuthoringLine.active
+                  && state.pendingAuthoringLine.startVertexId == a
+                  && state.pendingAuthoringLine.startPoint.x == 0
+                  && state.pendingAuthoringLine.startPoint.y == 0,
+          "loop closure leaves chain active from closed point");
+
+    const game::SectorAuthoringDerivationResult derivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(state.authoringGraph);
+    Check(derivation.success && !derivation.topology.sectors.empty(),
+          "loop closure graph derives a valid face");
+    Check(b > 0, "loop closure keeps middle vertex valid");
+}
+
+const game::SectorAuthoringLine* FindAuthoringLineWithEndpoints(
+        const game::SectorAuthoringGraph& graph,
+        int startVertexId,
         int endVertexId)
 {
     for (const game::SectorAuthoringLine& line : graph.lines) {
@@ -4950,6 +5137,19 @@ int CountAuthoringVerticesAt(
         }
     }
     return count;
+}
+
+int FindAuthoringVertexIdAt(
+        const game::SectorAuthoringGraph& graph,
+        game::SectorCoord x,
+        game::SectorCoord y)
+{
+    for (const game::SectorAuthoringVertex& vertex : graph.vertices) {
+        if (vertex.x == x && vertex.y == y) {
+            return vertex.id;
+        }
+    }
+    return -1;
 }
 
 void CheckSplitLineAtPoint(
@@ -5899,8 +6099,8 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
 {
     Check(TextContains(game::ToolName(game::SectorEditorTool::AuthoringLine), "Authoring"),
           "authoring line tool name is exposed as an authoring graph tool");
-    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::AuthoringLine), "snapped points"),
-          "authoring line tool help describes mouse-driven line creation");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::AuthoringLine), "continuous line chain"),
+          "authoring line tool help describes continuous line-chain creation");
     Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Select), "authoring"),
           "select tool help includes authoring graph selection targets");
     Check(TextContains(game::ToolName(game::SectorEditorTool::AuthoringMove), "Move"),
@@ -6489,6 +6689,10 @@ int main()
     TestEditorAuthoringHoverAndPruneUseGraphValidity();
     TestEditorAuthoringLineDrawHelperCreatesLooseLineAndMarksDirty();
     TestEditorAuthoringLineDrawHelperReusesVerticesAndRejectsZeroLength();
+    TestEditorAuthoringLineToolChainCommitsConnectedSegments();
+    TestEditorAuthoringLineToolCancelStartsNewChain();
+    TestEditorAuthoringLineToolRejectsZeroLengthWithoutEndingChain();
+    TestEditorAuthoringLineToolLoopClosureRemainsActive();
     TestInsertVertexSplitsHorizontalVerticalAndDiagonalLines();
     TestInsertVertexRejectsOffLineAndEndpoints();
     TestInsertVertexReusesExistingInteriorVertex();

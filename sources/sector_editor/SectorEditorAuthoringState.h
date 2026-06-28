@@ -72,11 +72,39 @@ bool FindSectorEditorAuthoringSelectionAtMapPoint(
         SectorTopologyCoordPoint* outVertexPoint = nullptr,
         std::string* outStatus = nullptr);
 
+struct SectorEditorAuthoringLineSegmentResult {
+    int lineId = -1;
+    int startVertexId = -1;
+    int endVertexId = -1;
+    SectorTopologyCoordPoint startPoint = {};
+    SectorTopologyCoordPoint endPoint = {};
+};
+
 bool AddSectorEditorAuthoringLineSegment(
         SectorEditorState& state,
         SectorTopologyCoordPoint start,
         SectorTopologyCoordPoint end,
-        int* outLineId = nullptr);
+        int* outLineId = nullptr,
+        SectorEditorAuthoringLineSegmentResult* outResult = nullptr);
+
+enum class SectorEditorAuthoringLineToolClickStatus {
+    StartedChain,
+    CreatedSegment,
+    ZeroLength,
+    Rejected
+};
+
+struct SectorEditorAuthoringLineToolClickResult {
+    SectorEditorAuthoringLineToolClickStatus status =
+            SectorEditorAuthoringLineToolClickStatus::Rejected;
+    SectorEditorAuthoringLineSegmentResult segment;
+};
+
+SectorEditorAuthoringLineToolClickResult ClickSectorEditorAuthoringLineTool(
+        SectorEditorState& state,
+        SectorTopologyCoordPoint point);
+
+void CancelSectorEditorAuthoringLineToolChain(SectorEditorState& state);
 
 struct SectorEditorAuthoringRectangleResult {
     int vertexIds[4] = {-1, -1, -1, -1};

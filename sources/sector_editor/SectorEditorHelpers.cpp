@@ -724,7 +724,7 @@ const char* ToolHelpText(SectorEditorTool tool)
 {
     switch (tool) {
         case SectorEditorTool::Select: return "Select: click authoring lines or vertices";
-        case SectorEditorTool::AuthoringLine: return "Authoring line: click snapped points to create authoring lines, right click/Esc cancels";
+        case SectorEditorTool::AuthoringLine: return "Authoring line: click snapped points to draw a continuous line chain, right click/Esc stops chain";
         case SectorEditorTool::AuthoringRectangle: return "Rectangle: click first corner, then opposite corner, right click/Esc cancels";
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex: click an authoring line to split it, right click/Esc cancels";
         case SectorEditorTool::AuthoringMove: return "Move Vertex: drag authoring vertices";

@@ -1146,7 +1146,8 @@ bool AddSectorEditorAuthoringLineSegment(
         SectorEditorState& state,
         SectorTopologyCoordPoint start,
         SectorTopologyCoordPoint end,
-        int* outLineId)
+        int* outLineId,
+        SectorEditorAuthoringLineSegmentResult* outResult)
 {
     if (start.x == end.x && start.y == end.y) {
         return false;
@@ -1197,6 +1198,21 @@ bool AddSectorEditorAuthoringLineSegment(
     if (outLineId != nullptr) {
         *outLineId = lineId;
     }
+    if (outResult != nullptr) {
+        outResult->lineId = lineId;
+        outResult->startVertexId = startVertexId;
+        outResult->endVertexId = endVertexId;
+        outResult->startPoint = start;
+        outResult->endPoint = end;
+        if (const SectorAuthoringVertex* resolvedStart =
+                    FindSectorAuthoringVertex(state.authoringGraph, startVertexId)) {
+            outResult->startPoint = SectorTopologyCoordPoint{resolvedStart->x, resolvedStart->y};
+        }
+        if (const SectorAuthoringVertex* resolvedEnd =
+                    FindSectorAuthoringVertex(state.authoringGraph, endVertexId)) {
+            outResult->endPoint = SectorTopologyCoordPoint{resolvedEnd->x, resolvedEnd->y};
+        }
+    }
     MarkSectorEditorAuthoringGraphEdited(
             state,
             TextFormat("Added authoring line %d", lineId));
@@ -1205,6 +1221,59 @@ bool AddSectorEditorAuthoringLineSegment(
             TextFormat("Added authoring line %d; derived topology current", lineId),
             TextFormat("Added authoring line %d; derivation failed", lineId));
     return true;
+}
+
+SectorEditorAuthoringLineToolClickResult ClickSectorEditorAuthoringLineTool(
+        SectorEditorState& state,
+        SectorTopologyCoordPoint point)
+{
+    SectorEditorAuthoringLineToolClickResult result;
+
+    if (!state.pendingAuthoringLine.active) {
+        state.pendingAuthoringLine.active = true;
+        state.pendingAuthoringLine.startPoint = point;
+        state.pendingAuthoringLine.errorMessage.clear();
+        state.pendingAuthoringLine.startVertexId = -1;
+        FindSectorAuthoringVertexAtPoint(
+                state.authoringGraph,
+                point,
+                &state.pendingAuthoringLine.startVertexId);
+        result.status = SectorEditorAuthoringLineToolClickStatus::StartedChain;
+        return result;
+    }
+
+    if (state.pendingAuthoringLine.startPoint.x == point.x
+            && state.pendingAuthoringLine.startPoint.y == point.y) {
+        state.pendingAuthoringLine.errorMessage = "Line needs non-zero length";
+        result.status = SectorEditorAuthoringLineToolClickStatus::ZeroLength;
+        return result;
+    }
+
+    int lineId = -1;
+    SectorEditorAuthoringLineSegmentResult segment;
+    if (!AddSectorEditorAuthoringLineSegment(
+                state,
+                state.pendingAuthoringLine.startPoint,
+                point,
+                &lineId,
+                &segment)) {
+        state.pendingAuthoringLine.errorMessage = "Authoring line segment rejected";
+        result.status = SectorEditorAuthoringLineToolClickStatus::Rejected;
+        return result;
+    }
+
+    state.pendingAuthoringLine.active = true;
+    state.pendingAuthoringLine.startPoint = segment.endPoint;
+    state.pendingAuthoringLine.startVertexId = segment.endVertexId;
+    state.pendingAuthoringLine.errorMessage.clear();
+    result.status = SectorEditorAuthoringLineToolClickStatus::CreatedSegment;
+    result.segment = segment;
+    return result;
+}
+
+void CancelSectorEditorAuthoringLineToolChain(SectorEditorState& state)
+{
+    state.pendingAuthoringLine = PendingAuthoringLineDraw{};
 }
 
 bool CreateSectorAuthoringRectangle(
