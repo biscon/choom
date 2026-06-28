@@ -29,18 +29,10 @@ namespace game {
 
 enum class SectorEditorTool {
     Select,
-    Sector,
     AuthoringLine,
     AuthoringMove,
-    InsertSectorInside,
     Light,
-    Move,
-    Erase
-};
-
-enum class PendingSectorDrawKind {
-    NewSector,
-    InsertInside
+    Move
 };
 
 enum class SectorEditorMode {
@@ -58,15 +50,6 @@ enum class SectorEditorAuthoringDerivationState {
     ValidCurrent,
     ValidStale,
     InvalidLastValid
-};
-
-struct PendingSectorDraw {
-    std::vector<SectorPoint> points;
-    bool active = false;
-    PendingSectorDrawKind kind = PendingSectorDrawKind::NewSector;
-    int parentTopologySectorId = -1;
-    std::string parentSectorLabel;
-    std::string errorMessage;
 };
 
 struct PendingAuthoringLineDraw {
@@ -305,20 +288,6 @@ struct SectorPreviewSettingsModalState {
     std::string errorMessage;
 };
 
-struct VertexDragState {
-    bool active = false;
-    int topologyVertexId = -1;
-    SectorTopologyCoordPoint originalPoint = {};
-    SectorTopologyCoordPoint previewPoint = {};
-    SectorTopologyCoordPoint lastValidatedPoint = {};
-    bool hasPreviewPoint = false;
-    bool hasValidatedPreview = false;
-    bool lastPreviewValid = true;
-    bool hasMergeTarget = false;
-    int mergeTargetVertexId = -1;
-    std::string errorMessage;
-};
-
 struct AuthoringVertexDragState {
     bool active = false;
     int vertexId = -1;
@@ -333,43 +302,6 @@ struct LightDragState {
     int topologyLightId = -1;
     Vector3 originalPosition = {};
     Vector3 snappedPosition = {};
-};
-
-struct PendingTopologyLineSplitAtPoint {
-    bool active = false;
-    int lineDefId = -1;
-    int sideDefId = -1;
-    SectorTopologySideKind side = SectorTopologySideKind::Front;
-    TopologyWallPart wallPart = TopologyWallPart::Wall;
-    SectorTopologyCoordPoint candidatePoint = {};
-    bool hasCandidatePoint = false;
-    bool hasValidCandidate = false;
-    std::string message;
-};
-
-struct PendingTopologyVertexMerge {
-    bool active = false;
-    int sourceVertexId = -1;
-    int hoveredTargetVertexId = -1;
-    bool hasValidTarget = false;
-    std::string message;
-};
-
-struct PendingTopologySectorCut {
-    bool active = false;
-    int sectorId = -1;
-    bool hasFirstPoint = false;
-    SectorTopologyBoundaryCutPoint firstPoint;
-    SectorTopologyBoundaryCutPoint candidatePoint;
-    bool hasCandidatePoint = false;
-    bool hasValidCandidate = false;
-    bool cacheHasFirstPoint = false;
-    SectorTopologyBoundaryCutPoint cachedFirstPoint;
-    SectorTopologyBoundaryCutPoint cachedCandidatePoint;
-    int cachedSectorId = -1;
-    bool cachedValid = false;
-    std::string cachedError;
-    std::string message;
 };
 
 struct CachedTopologyOutlineSegment {
@@ -502,14 +434,9 @@ struct SectorEditorState {
     Vector2 snappedMouseMap = {0.0f, 0.0f};
     Vector2 rawMouseMap = {0.0f, 0.0f};
 
-    PendingSectorDraw pendingSector;
     PendingAuthoringLineDraw pendingAuthoringLine;
-    VertexDragState vertexDrag;
     AuthoringVertexDragState authoringVertexDrag;
     LightDragState lightDrag;
-    PendingTopologyLineSplitAtPoint pendingTopologyLineSplitAtPoint;
-    PendingTopologyVertexMerge pendingTopologyVertexMerge;
-    PendingTopologySectorCut pendingTopologySectorCut;
     float defaultSectorFloorZ = 0.0f;
     float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);
     std::string defaultFloorTextureId;

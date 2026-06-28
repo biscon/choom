@@ -200,7 +200,7 @@ Suggested path:
       "id": "phase_15_cleanup_docs_and_tests",
       "title": "Cleanup, documentation, and final regression pass",
       "type": "phase",
-      "status": "In Progress",
+      "status": "Completed",
       "parent": null
     },
     {
@@ -235,42 +235,42 @@ Suggested path:
       "id": "phase_15d_01_legacy_inspector_status_cleanup",
       "title": "Reduce retired direct-topology inspector actions to clear unavailable status",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_15_cleanup_docs_and_tests"
     },
     {
       "id": "phase_15d_02_pending_direct_topology_state_cleanup",
       "title": "Remove unused pending direct-topology editor interaction state",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_15_cleanup_docs_and_tests"
     },
     {
       "id": "phase_15d_03_editor_topology_action_wrapper_cleanup",
       "title": "Remove or dev-mark unused direct-topology editor action wrappers",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_15_cleanup_docs_and_tests"
     },
     {
       "id": "phase_15d_04_legacy_tool_enum_ui_cleanup",
       "title": "Remove or further demote unavailable legacy tool enum and UI remnants",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_15_cleanup_docs_and_tests"
     },
     {
       "id": "phase_15e_regression_coverage_audit",
       "title": "Audit regression coverage for the authoring workflow",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_15_cleanup_docs_and_tests"
     },
     {
       "id": "phase_15f_final_verification_and_completion",
       "title": "Run final verification and close the transition plan",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_15_cleanup_docs_and_tests"
     }
   ]
@@ -1679,12 +1679,23 @@ Phase 15c survey result (2026-06-28):
   * do not remove graph-native inspectors, texture picker behavior, or
     authoring-anchor material/property writes
   * run the phase verification checklist
+  * completed 2026-06-28: removed stale inspector callback plumbing for retired
+    direct-topology sector and vertex actions after the visible inspector
+    controls had already been reduced to clear retired/unavailable status text;
+    graph-native inspector edits, texture picker behavior, and authoring-anchor
+    writes were left unchanged
 * `phase_15d_02_pending_direct_topology_state_cleanup`
   * remove pending direct-topology interaction state and helpers only after
     confirming normal tools pane, inspectors, and tests no longer call them
   * preserve authoring edit refresh, document-edited behavior, and 2D
     render-cache invalidation paths
   * run the phase verification checklist
+  * completed 2026-06-28: removed unused pending direct-topology editor
+    interaction state for closed-sector drawing/insertion, topology vertex drag
+    and merge, split-at-point, and sector-cut overlays/handlers after confirming
+    the remaining normal editor paths use authoring-line, authoring-vertex, and
+    light interactions instead; existing authoring mutation refresh,
+    document-edited, and 2D render-cache invalidation paths were left unchanged
 * `phase_15d_03_editor_topology_action_wrapper_cleanup`
   * remove or clearly dev-mark obsolete direct-topology editor action wrappers
     only when there are no remaining non-GUI topology tests, import helpers, or
@@ -1694,6 +1705,13 @@ Phase 15c survey result (2026-06-28):
     and lightmap helpers unless a specific unused editor-only wrapper is proven
     removable
   * run the phase verification checklist
+  * completed 2026-06-28: removed unused editor-only direct-topology mutation
+    action wrappers and stale editor methods for sector delete confirmation,
+    linedef split, vertex dissolve, and sector join; remaining erase/delete
+    entry points now report the retired-action status, while active static-light
+    actions, portal `blocksPlayer` flag editing, topology backend utilities,
+    topology validation, serialization, generated geometry, collision, and
+    lightmap helpers were left unchanged
 * `phase_15d_04_legacy_tool_enum_ui_cleanup`
   * remove or further demote unavailable legacy tool enum/UI remnants only if
     doing so does not disturb current editor layout tests, saved/editor state
@@ -1701,16 +1719,43 @@ Phase 15c survey result (2026-06-28):
   * keep the existing editor application, tools pane style, authoring line tool,
     authoring selection, and graph diagnostics workflow
   * run the phase verification checklist
+  * completed 2026-06-28: removed the retired closed-sector, insert-inside, and
+    erase tool enum/helper/test remnants and the inert legacy-topology tools-pane
+    notice; active graph authoring tools, authoring selection, graph diagnostics,
+    light placement, and the unavailable legacy move status path were left in
+    place
 * `phase_15e_regression_coverage_audit`
   * compare existing tests against the regression checklist in this phase
   * add narrow non-GUI tests only for clear gaps in the main authoring workflow
   * do not add `xdotool`, screenshot, GUI automation, or interactive editor
     launch tests
+  * completed 2026-06-28: audited the existing CTest coverage against the
+    regression checklist and found the main authoring workflow already covered
+    by non-GUI tests. `tests/SectorAuthoringGraphTests.cpp` covers the
+    authoring graph model, topology-v2 import, planarization, face extraction,
+    derivation diagnostics/mapping, graph-native save/load including invalid
+    graphs, editor authoring state, overlay/render-cache helpers, authoring
+    tool helpers, inspector/property projection, texture picker routing through
+    authoring anchors, preview/bake gating, lightmap stale/clear behavior, and
+    legacy tool availability/status. Existing topology suites cover generated
+    geometry, mesh batching, collision world/movement, lightmaps, topology
+    serialization/validation/creation, sky rendering helpers, FPS controller
+    behavior, and editor UI layout helpers. No new tests were added because no
+    clear uncovered main-workflow gap was identified, and no GUI automation,
+    screenshot, `xdotool`, or interactive editor-launch tests were added.
 * `phase_15f_final_verification_and_completion`
   * run the full verification checklist
   * verify manual smoke instructions are documented for the user
   * mark phase 15 child passes and parent phase completed only when all child
     passes are complete and the transition completion criteria are satisfied
+  * completed 2026-06-28: ran the full verification checklist successfully
+    (`cmake --build cmake-build-debug -j2`,
+    `ctest --test-dir cmake-build-debug --output-on-failure`,
+    `git diff --check`, `git diff --stat`, and `git status --short`);
+    confirmed manual smoke instructions are documented in
+    `docs/sector_authoring_workflow.md`; marked this pass and the phase 15
+    parent completed because all phase 15 child passes are complete and the
+    transition completion criteria are satisfied
 
 Completion criteria:
 

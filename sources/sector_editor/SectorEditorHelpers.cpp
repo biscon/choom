@@ -380,13 +380,10 @@ const char* ToolName(SectorEditorTool tool)
 {
     switch (tool) {
         case SectorEditorTool::Select: return "Select";
-        case SectorEditorTool::Sector: return "Legacy Sector";
         case SectorEditorTool::AuthoringLine: return "Authoring Line";
         case SectorEditorTool::AuthoringMove: return "Move Vertex";
-        case SectorEditorTool::InsertSectorInside: return "Insert Inside";
         case SectorEditorTool::Light: return "Light";
         case SectorEditorTool::Move: return "Move";
-        case SectorEditorTool::Erase: return "Erase";
     }
     return "Unknown";
 }
@@ -400,10 +397,7 @@ bool IsGraphAuthoringTool(SectorEditorTool tool)
 
 bool IsLegacyTopologyMutationTool(SectorEditorTool tool)
 {
-    return tool == SectorEditorTool::Sector
-            || tool == SectorEditorTool::InsertSectorInside
-            || tool == SectorEditorTool::Move
-            || tool == SectorEditorTool::Erase;
+    return tool == SectorEditorTool::Move;
 }
 
 bool IsToolAvailableInGraphAuthoritativeMode(SectorEditorTool tool)
@@ -726,13 +720,10 @@ const char* ToolHelpText(SectorEditorTool tool)
 {
     switch (tool) {
         case SectorEditorTool::Select: return "Select: click authoring lines or vertices";
-        case SectorEditorTool::Sector: return "Legacy sector: closed topology polygon tool; use Authoring Line for graph edits";
         case SectorEditorTool::AuthoringLine: return "Authoring line: click snapped points to create authoring lines, right click/Esc cancels";
         case SectorEditorTool::AuthoringMove: return "Move Vertex: drag authoring vertices";
-        case SectorEditorTool::InsertSectorInside: return "Legacy insert sector: unavailable in graph-authoritative mode; draw authoring loops instead";
         case SectorEditorTool::Light: return "Light: click inside a sector to place, or drag an existing baked static point light";
         case SectorEditorTool::Move: return "Legacy move: unavailable in graph-authoritative mode; use Move Vertex for authoring vertices";
-        case SectorEditorTool::Erase: return "Erase: delete legacy topology sectors";
     }
     return "";
 }

@@ -12,9 +12,6 @@
 namespace game {
 
 struct SectorEditorVertexInspectorCallbacks {
-    std::function<void(const char*)> cancelPendingTopologyVertexMerge;
-    std::function<bool()> dissolveSelectedTopologyVertex;
-    std::function<void(int)> startPendingTopologyVertexMerge;
     std::function<void()> clearStaleTopologySelection;
 };
 

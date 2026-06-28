@@ -13,9 +13,6 @@ namespace game {
 
 struct SectorEditorSectorInspectorCallbacks {
     std::function<bool()> tryRenameSelectedTopologySector;
-    std::function<void()> openDeleteSelectedTopologySectorConfirmation;
-    std::function<void()> startInsertSectorInside;
-    std::function<void()> startPendingTopologySectorCut;
     std::function<void(const char*)> setStatusText;
     std::function<void(const char*)> markTopologyDocumentEdited;
     std::function<bool(float, float)> applySectorHeights;
