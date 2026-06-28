@@ -141,6 +141,13 @@ Suggested path:
       "parent": null
     },
     {
+      "id": "phase_12b_nested_loops_and_holes",
+      "title": "Support nested authoring loops, holes, and island diagnostics",
+      "type": "phase",
+      "status": "Planned",
+      "parent": null
+    },
+    {
       "id": "phase_13_inspector_porting",
       "title": "Port inspectors and material editing to authoring anchors",
       "type": "phase",
@@ -1076,6 +1083,104 @@ Completion criteria:
 * no runtime system consumes invalid graph data
 * selected plan item marked Completed
 
+## Phase 12b: Support nested authoring loops, holes, and island diagnostics
+
+Selected item:
+
+`phase_12b_nested_loops_and_holes`
+
+Goal:
+
+Support nested authoring loops, holes, and island diagnostics in the pure authoring graph derivation path.
+
+This phase is the graph-era replacement for workflows that used to rely on direct-topology actions such as:
+
+* `Insert Sector Inside`
+* `Cut Sector`
+
+The implementation should stay source-of-truth correct:
+
+* users draw authoring lines/loops
+* derivation interprets the authoring graph
+* `SectorTopologyMap` remains derived runtime topology
+* old direct topology mutation buttons are not resurrected as primary workflows
+
+Required behavior:
+
+* an outer closed loop containing an inner closed loop should no longer be rejected merely because of containment
+* nested loops should produce deterministic derived topology or a clear diagnostic
+* support the common room with an inner island/pillar/void boundary workflow where feasible
+* support graph-native equivalent behavior for old `Insert Sector Inside` use cases when the intent is unambiguous
+* support graph-native equivalent behavior for old `Cut Sector` use cases through ordinary authoring cut lines, not through direct topology mutation
+* preserve authoring-to-derived mapping for outer and inner boundaries as far as practical
+* preserve authoring line/side property projection where practical
+* preserve face anchor behavior or report clear diagnostics when anchors are ambiguous
+* reject or diagnose ambiguous containment/property cases rather than silently guessing
+* reject or diagnose overlapping loops, duplicate loops, invalid holes, and unsupported island cases
+* keep the unbounded outside face out of derived sectors
+* generated `SectorTopologyMap` must still validate
+* generated geometry should still build for supported cases
+
+Important distinction:
+
+Support now:
+
+* one outer rectangle containing one inner rectangle
+* one outer loop containing multiple non-overlapping inner loops if feasible
+* connected cut-line cases that split an existing face
+* deterministic diagnostics for ambiguous containment
+
+May remain diagnostic/deferred if implementation becomes too broad:
+
+* arbitrary overlapping nested loops
+* multiple levels of nesting beyond one level
+* holes inside holes
+* ambiguous face-anchor/property ownership
+* complex island semantics that require new editor UX decisions
+
+Do not implement this by reviving direct topology mutation.
+
+Do not make legacy tools update `AuthoringGraph`.
+
+Do not add two-way sync between `SectorTopologyMap` and `AuthoringGraph`.
+
+Do not rewrite mesh generation unless a very small compatibility adjustment is required by valid derived topology with holes. Prefer deriving topology in the existing strict format that existing mesh generation already understands.
+
+Tests:
+
+* outer rectangle containing one inner rectangle derives valid topology or produces the documented supported result
+* generated topology validates
+* generated geometry builds for supported nested-loop cases
+* nested-loop authoring side/line mappings remain deterministic enough for later inspector work
+* ambiguous nested loops produce `AmbiguousTopology` or equivalent diagnostics
+* overlapping inner loops produce diagnostics
+* open/dangling lines inside or near nested loops still produce dangling diagnostics
+* face anchors inside nested/contained regions resolve deterministically or produce clear ambiguity diagnostics
+* old `Insert Sector Inside` direct topology behavior is not called or required
+* old `Cut Sector` direct topology behavior is not called or required
+* no GUI automation
+* no `xdotool`
+* no screenshot tests
+* no editor launch from Codex
+
+Verification:
+
+```bash
+cmake --build cmake-build-debug -j2
+ctest --test-dir cmake-build-debug --output-on-failure
+git diff --check
+git diff --stat
+git status --short
+```
+
+Completion criteria:
+
+* nested authoring-loop behavior is implemented or explicitly diagnosed according to this phase
+* common contained-loop cases are covered by tests
+* direct topology mutation tools are not used as the solution
+* no replacement editor UI was created
+* selected plan item marked Completed
+
 ## Phase 13: Port inspectors and material editing to authoring anchors
 
 Selected item:
@@ -1103,6 +1208,16 @@ Do not add 3D doors.
 Important:
 
 Do not allow inspector buttons to mutate derived topology directly once graph-authoritative mode is active.
+
+Phase 13 is for property/material inspector writes only. It should not port old direct-topology action buttons such as `Insert Sector Inside`, `Cut Sector`, `Delete Sector`, `Split Linedef`, `Merge Into`, or `Dissolve Vertex` as authoring inspectors. Those are topology mutation actions, not property inspectors. They should either be replaced by graph-native workflows such as drawing/cutting authoring lines, or handled by the legacy retirement phase.
+
+Keep Phase 13 focused on:
+
+* face/room anchor properties
+* authoring side materials
+* authoring line flags
+* texture picker reuse
+* 3D surface selection mapping back to authoring anchors
 
 Keep the existing inspector/picker UI style. Port the data target; do not replace the inspector system with an unrelated UI.
 
@@ -1185,6 +1300,11 @@ Required behavior:
 * old tools do not silently corrupt source/derived consistency
 * if a tool remains for dev/migration, label it clearly as legacy/dev-only
 * status messages should explain why legacy direct-topology tools are unavailable
+* `Insert Sector Inside` must not remain as a direct topology mutation button in graph-authoritative mode
+* `Cut Sector` must not remain as a direct topology mutation button in graph-authoritative mode
+* graph-native replacements should be ordinary authoring graph operations, not legacy topology edits
+* if nested-loop/hole support from Phase 12b covers the use case, the old direct button should be hidden, disabled, or demoted
+* if a graph-native replacement is still missing, leave a clear diagnostic/status or dev-only legacy label rather than silently mutating derived topology
 * do not replace the whole tools pane; update the existing tools pane/tool availability in the existing style
 
 Tests:
