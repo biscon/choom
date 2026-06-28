@@ -193,7 +193,7 @@ Suggested path:
       "id": "phase_14_legacy_tool_retirement",
       "title": "Hide or demote legacy direct-topology tools",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {

@@ -95,44 +95,37 @@ bool DrawTopologySectorInspector(
         y += 36.0f;
     }
 
-    if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_topology_delete_sector",
-                Rectangle{0.0f, y, contentW, rowH},
-                font,
-                "Delete Sector")) {
-        callbacks.openDeleteSelectedTopologySectorConfirmation();
-    }
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{0.0f, y, contentW, rowH},
+            font,
+            "Delete Sector retired; delete authoring lines or face anchors instead.",
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
     y += rowH + gap;
 
-    if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_topology_insert_sector_inside",
-                Rectangle{0.0f, y, contentW, rowH},
-                font,
-                "Insert Sector Inside")) {
-        callbacks.startInsertSectorInside();
-    }
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{0.0f, y, contentW, rowH},
+            font,
+            "Insert Sector Inside retired; draw nested authoring loops instead.",
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
     y += rowH + gap;
 
-    if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_topology_cut_sector",
-                Rectangle{0.0f, y, contentW, rowH},
-                font,
-                "Cut Sector")) {
-        callbacks.startPendingTopologySectorCut();
-        return true;
-    }
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{0.0f, y, contentW, rowH},
+            font,
+            "Cut Sector retired; draw authoring cut lines instead.",
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
     y += rowH + gap;
 
     auto drawHeight = [&](const char* id, const char* label, float current, engine::UIFloatInputState& inputState, bool floorField) {

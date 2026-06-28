@@ -505,14 +505,16 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
         return;
     }
 
-    if (state.currentTool == SectorEditorTool::Move) {
+    if (state.currentTool == SectorEditorTool::Light
+            || state.currentTool == SectorEditorTool::Move) {
         const int lightId = FindTopologyLightNearScreenPoint(input.MousePosition());
         if (lightId >= 0) {
             state.hoveredTopologyLightId = lightId;
             if (!state.pendingTopologyVertexMerge.active) {
                 state.inspectedTopologyVertexId = -1;
             }
-        } else {
+        } else if (state.currentTool == SectorEditorTool::Move
+                && !IsSectorEditorGraphAuthoritativeMode()) {
             int vertexId = -1;
             SectorTopologyCoordPoint point;
             if (FindTopologyVertexNearScreenPoint(input.MousePosition(), vertexId, point)) {
@@ -829,6 +831,17 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
+                if (state.currentTool == SectorEditorTool::Light
+                        && event.mouseButton.button == MOUSE_LEFT_BUTTON
+                        && Contains(canvasRect, event.mouseButton.position)) {
+                    const int lightId = FindTopologyLightNearScreenPoint(event.mouseButton.position);
+                    if (lightId >= 0) {
+                        StartLightDrag(lightId);
+                        engine::ConsumeEvent(event);
+                    }
+                    return;
+                }
+
                 if (state.currentTool != SectorEditorTool::Move
                         || event.mouseButton.button != MOUSE_LEFT_BUTTON
                         || !Contains(canvasRect, event.mouseButton.position)) {
@@ -839,6 +852,11 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 if (lightId >= 0) {
                     StartLightDrag(lightId);
                 } else {
+                    if (IsSectorEditorGraphAuthoritativeMode()) {
+                        statusText = "Move: drag an existing light, or use Move Vertex for authoring vertices.";
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
                     int vertexId = -1;
                     SectorTopologyCoordPoint point;
                     if (FindTopologyVertexNearScreenPoint(event.mouseButton.position, vertexId, point)) {
@@ -1074,6 +1092,12 @@ void SectorEditor::UpdateVertexDrag(engine::Input& input)
 
 void SectorEditor::FinishVertexDrag()
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        state.vertexDrag = VertexDragState{};
+        statusText = LegacyTopologyMutationUnavailableMessage();
+        return;
+    }
+
     if (!state.vertexDrag.active) {
         return;
     }
@@ -1322,6 +1346,11 @@ void SectorEditor::CancelLightDrag(const char* message)
 
 void SectorEditor::StartPendingTopologyVertexMerge(int sourceVertexId)
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        statusText = LegacyTopologyMutationUnavailableMessage();
+        return;
+    }
+
     const SectorTopologyVertex* source = FindSectorTopologyVertex(state.topologyMap, sourceVertexId);
     if (source == nullptr) {
         state.inspectedTopologyVertexId = -1;
@@ -1394,6 +1423,14 @@ void SectorEditor::UpdatePendingTopologyVertexMerge(engine::Input& input)
 
 void SectorEditor::CommitPendingTopologyVertexMerge()
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        if (state.pendingTopologyVertexMerge.active) {
+            state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
+        }
+        statusText = LegacyTopologyMutationUnavailableMessage();
+        return;
+    }
+
     if (!state.pendingTopologyVertexMerge.active) {
         return;
     }
@@ -1432,6 +1469,11 @@ void SectorEditor::CommitPendingTopologyVertexMerge()
 
 void SectorEditor::StartPendingTopologyLineSplitAtPoint()
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        statusText = LegacyTopologyMutationUnavailableMessage();
+        return;
+    }
+
     const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
     if (lineDef == nullptr) {
         ClearStaleTopologySelection();
@@ -1564,6 +1606,14 @@ void SectorEditor::UpdatePendingTopologyLineSplitAtPoint(engine::Input& input)
 
 void SectorEditor::CommitPendingTopologyLineSplitAtPoint()
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        if (state.pendingTopologyLineSplitAtPoint.active) {
+            state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
+        }
+        statusText = LegacyTopologyMutationUnavailableMessage();
+        return;
+    }
+
     if (!ValidatePendingTopologyLineSplitAtPointTarget(
                 "Split at point cancelled: target linedef no longer exists.")) {
         return;
@@ -1619,6 +1669,11 @@ void SectorEditor::CommitPendingTopologyLineSplitAtPoint()
 
 void SectorEditor::StartPendingTopologySectorCut()
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        statusText = LegacyTopologyMutationUnavailableMessage();
+        return;
+    }
+
     const SectorTopologySector* sector = SelectedTopologySector();
     if (sector == nullptr) {
         ClearStaleTopologySelection();
@@ -2000,6 +2055,12 @@ void SectorEditor::AddPendingSectorPoint(SectorPoint point)
 
 void SectorEditor::FinalizePendingSector()
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        state.pendingSector.errorMessage = LegacyTopologyMutationUnavailableMessage();
+        statusText = state.pendingSector.errorMessage;
+        return;
+    }
+
     if (!state.pendingSector.active || state.pendingSector.points.size() < 3) {
         state.pendingSector.errorMessage = "Need at least 3 points to close sector";
         statusText = state.pendingSector.errorMessage;
@@ -2049,6 +2110,11 @@ void SectorEditor::FinalizePendingSector()
 
 void SectorEditor::StartInsertSectorInside()
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        statusText = LegacyTopologyMutationUnavailableMessage();
+        return;
+    }
+
     const SectorTopologySector* parent = SelectedTopologySector();
     if (parent == nullptr) {
         ClearStaleTopologySelection();
@@ -2650,6 +2716,11 @@ bool SectorEditor::TryRenameSelectedLight()
 
 void SectorEditor::OpenDeleteSelectedTopologySectorConfirmation()
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        statusText = LegacyTopologyMutationUnavailableMessage();
+        return;
+    }
+
     const SectorTopologySector* sector = SelectedTopologySector();
     if (sector == nullptr) {
         ClearStaleTopologySelection();
@@ -2661,6 +2732,11 @@ void SectorEditor::OpenDeleteSelectedTopologySectorConfirmation()
 
 void SectorEditor::OpenDeleteTopologySectorConfirmation(int sectorId)
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        statusText = LegacyTopologyMutationUnavailableMessage();
+        return;
+    }
+
     const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sectorId);
     if (sector == nullptr) {
         ClearStaleTopologySelection();
@@ -2679,6 +2755,11 @@ void SectorEditor::OpenDeleteTopologySectorConfirmation(int sectorId)
 
 bool SectorEditor::DeleteSelectedTopologySectorConfirmed(int sectorId)
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        statusText = LegacyTopologyMutationUnavailableMessage();
+        return false;
+    }
+
     const bool hadPendingSplit = state.pendingTopologyLineSplitAtPoint.active;
     const int pendingSplitLineDefId = state.pendingTopologyLineSplitAtPoint.lineDefId;
     const SectorEditorDeleteSectorResult result = game::DeleteTopologySector(state.topologyMap, sectorId);
@@ -4551,7 +4632,8 @@ void SectorEditor::DrawPendingTopologyVertexMerge() const
 
 void SectorEditor::DrawLightMoveOverlay() const
 {
-    if (state.currentTool != SectorEditorTool::Move) {
+    if (state.currentTool != SectorEditorTool::Light
+            && state.currentTool != SectorEditorTool::Move) {
         return;
     }
 
@@ -4697,6 +4779,11 @@ void SectorEditor::DrawToolsPanel(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
+    if (!IsToolAvailableInGraphAuthoritativeMode(state.currentTool)) {
+        state.currentTool = SectorEditorTool::Select;
+        statusText = LegacyTopologyMutationUnavailableMessage();
+    }
+
     const engine::UIPanelResult panel = engine::BeginPanel(
             ui,
             config,
@@ -4719,7 +4806,7 @@ void SectorEditor::DrawToolsPanel(
     const float toolsContentH =
             sectionLabelH + rowsHeight(3)
             + separatorH + sectionLabelH + rowsHeight(1)
-            + separatorH + sectionLabelH + rowsHeight(3)
+            + separatorH + sectionLabelH + 58.0f
             + separatorH + rowsHeight(4)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
@@ -4784,6 +4871,10 @@ void SectorEditor::DrawToolsPanel(
     };
 
     const auto selectTool = [&](SectorEditorTool tool) {
+        if (!IsToolAvailableInGraphAuthoritativeMode(tool)) {
+            statusText = LegacyTopologyMutationUnavailableMessage();
+            return;
+        }
         if ((state.currentTool == SectorEditorTool::Sector
                     || state.currentTool == SectorEditorTool::InsertSectorInside)
                 && tool != state.currentTool) {
@@ -4838,16 +4929,20 @@ void SectorEditor::DrawToolsPanel(
 
     separator();
     sectionLabel("Legacy topology");
-    const SectorEditorTool legacyTools[] = {
-            SectorEditorTool::Sector,
-            SectorEditorTool::Move,
-            SectorEditorTool::Erase
-    };
-    for (SectorEditorTool tool : legacyTools) {
-        if (drawToolButton(tool)) {
-            selectTool(tool);
-        }
-    }
+    engine::Text(
+            config,
+            assets,
+            Rectangle{
+                    scroll.viewport.x,
+                    scroll.viewport.y - uiState.toolsScroll.offset.y + y,
+                    contentW,
+                    52.0f
+            },
+            font,
+            "Direct topology tools retired in graph mode.",
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
+    y += 58.0f;
 
     separator();
 
@@ -6592,32 +6687,26 @@ bool SectorEditor::DrawTopologySideDefInspector(
         y += 32.0f;
     }
 
-    if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_topology_split_linedef",
-                Rectangle{0.0f, y, contentW, 38.0f},
-                font,
-                "Split Linedef")) {
-        SplitSelectedTopologyLineDef();
-        return true;
-    }
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{0.0f, y, contentW, 38.0f},
+            font,
+            "Split Linedef retired; derivation auto-splits authoring lines.",
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
     y += 38.0f + gap;
 
-    if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_topology_split_linedef_at_point",
-                Rectangle{0.0f, y, contentW, 38.0f},
-                font,
-                "Split At Point")) {
-        StartPendingTopologyLineSplitAtPoint();
-        return true;
-    }
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{0.0f, y, contentW, 38.0f},
+            font,
+            "Split At Point retired; move or redraw authoring vertices.",
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
     y += 38.0f + gap;
 
     if (sideDef == nullptr) {
@@ -6632,18 +6721,15 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 : nullptr;
         if (preferredSideDef != nullptr && opposite != nullptr
                 && preferredSideDef->sectorId != opposite->sectorId) {
-            if (engine::Button(
-                        ui,
-                        config,
-                        input,
-                        assets,
-                        "sector_editor_topology_join_sectors",
-                        Rectangle{0.0f, y, contentW, 38.0f},
-                        font,
-                        "Join Sectors")) {
-                JoinSelectedTopologySectors();
-                return true;
-            }
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 38.0f},
+                    font,
+                    "Join Sectors retired; remove authoring boundaries instead.",
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
             y += 38.0f + gap;
         }
 
@@ -6678,18 +6764,15 @@ bool SectorEditor::DrawTopologySideDefInspector(
     const bool middleEligible = IsTopologyMiddleEligible(state.topologyMap, sideDef);
     if (opposite != nullptr) {
         if (opposite->sectorId != sideDef->sectorId) {
-            if (engine::Button(
-                        ui,
-                        config,
-                        input,
-                        assets,
-                        "sector_editor_topology_join_sectors",
-                        Rectangle{0.0f, y, contentW, 38.0f},
-                        font,
-                        "Join Sectors")) {
-                JoinSelectedTopologySectors();
-                return true;
-            }
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 38.0f},
+                    font,
+                    "Join Sectors retired; remove authoring boundaries instead.",
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
             y += 38.0f + gap;
         } else {
             engine::Text(
@@ -9541,6 +9624,11 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
 
 bool SectorEditor::SplitSelectedTopologyLineDef()
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        statusText = LegacyTopologyMutationUnavailableMessage();
+        return false;
+    }
+
     const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
     if (lineDef == nullptr) {
         ClearStaleTopologySelection();
@@ -9596,6 +9684,11 @@ bool SectorEditor::SplitSelectedTopologyLineDef()
 
 bool SectorEditor::DissolveSelectedTopologyVertex()
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        statusText = LegacyTopologyMutationUnavailableMessage();
+        return false;
+    }
+
     const SectorTopologyVertex* vertex = SelectedTopologyVertex();
     if (vertex == nullptr) {
         ClearStaleTopologySelection();
@@ -9637,6 +9730,11 @@ bool SectorEditor::DissolveSelectedTopologyVertex()
 
 bool SectorEditor::JoinSelectedTopologySectors()
 {
+    if (IsSectorEditorGraphAuthoritativeMode()) {
+        statusText = LegacyTopologyMutationUnavailableMessage();
+        return false;
+    }
+
     const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
     if (lineDef == nullptr) {
         ClearStaleTopologySelection();

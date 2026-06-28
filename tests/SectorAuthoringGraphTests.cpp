@@ -5204,12 +5204,34 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "closed-sector polygon tool is labeled as legacy in the tools pane");
     Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Sector), "Legacy"),
           "closed-sector polygon help distinguishes legacy topology mutation");
-    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Move), "legacy topology"),
-          "topology move help distinguishes legacy topology mutation");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Move), "unavailable"),
+          "topology move help says it is unavailable in graph-authoritative mode");
     Check(!game::IsGraphAuthoringTool(game::SectorEditorTool::Move),
           "legacy topology move is not classified as a graph-authoring tool");
     Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Erase), "legacy topology"),
           "topology erase help distinguishes legacy topology mutation");
+    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::Select),
+          "select remains available in graph-authoritative mode");
+    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::AuthoringLine),
+          "authoring line remains available in graph-authoritative mode");
+    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::AuthoringMove),
+          "authoring move remains available in graph-authoritative mode");
+    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::Light),
+          "map light placement remains available in graph-authoritative mode");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Light), "drag"),
+          "light tool help preserves existing-light drag workflow");
+    Check(game::IsSectorEditorGraphAuthoritativeMode(),
+          "sector editor runs in graph-authoritative mode");
+    Check(!game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::Sector),
+          "closed-sector polygon tool is blocked in graph-authoritative mode");
+    Check(!game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::InsertSectorInside),
+          "insert-inside direct topology tool is blocked in graph-authoritative mode");
+    Check(!game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::Move),
+          "legacy topology move tool is blocked in graph-authoritative mode");
+    Check(!game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::Erase),
+          "legacy topology erase tool is blocked in graph-authoritative mode");
+    Check(TextContains(game::LegacyTopologyMutationUnavailableMessage(), "unavailable"),
+          "legacy topology retirement has a status message");
 }
 
 void TestEditorAuthoringLastValidTopologyIsNotPersisted()

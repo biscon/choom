@@ -109,39 +109,35 @@ bool DrawTopologyVertexInspector(
                 callbacks.cancelPendingTopologyVertexMerge("Cancelled vertex merge");
             }
         } else if (hasSelectedTopologyVertex) {
-            if (engine::Button(
-                        ui,
-                        config,
-                        input,
-                        assets,
-                        "sector_editor_dissolve_vertex",
-                        Rectangle{0.0f, y, contentW, rowH},
-                        font,
-                        "Dissolve Vertex")) {
-                callbacks.dissolveSelectedTopologyVertex();
-            }
-            y += rowH + gap;
-            if (engine::Button(
-                        ui,
-                        config,
-                        input,
-                        assets,
-                        "sector_editor_merge_vertex_into",
-                        Rectangle{0.0f, y, contentW, rowH},
-                        font,
-                        "Merge Into...")) {
-                callbacks.startPendingTopologyVertexMerge(vertex->id);
-            }
-        } else if (engine::Button(
+            engine::Text(
                     ui,
                     config,
-                    input,
                     assets,
-                    "sector_editor_merge_vertex_into",
                     Rectangle{0.0f, y, contentW, rowH},
                     font,
-                    "Merge Into...")) {
-            callbacks.startPendingTopologyVertexMerge(vertex->id);
+                    "Dissolve Vertex retired; edit authoring vertices instead.",
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
+            y += rowH + gap;
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font,
+                    "Merge Into retired; use graph vertex workflows.",
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
+        } else {
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font,
+                    "Topology vertex merge retired in graph mode.",
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
         }
     } else {
         state.inspectedTopologyVertexId = -1;
