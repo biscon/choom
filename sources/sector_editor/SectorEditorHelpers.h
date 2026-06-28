@@ -112,6 +112,10 @@ SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(SectorTopologySideDe
 const SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
         const SectorTopologySideDef& sideDef,
         TopologyWallPart part);
+SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(SectorAuthoringLineSide& side, TopologyWallPart part);
+const SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
+        const SectorAuthoringLineSide& side,
+        TopologyWallPart part);
 bool IsTopologyMiddleEligible(const SectorTopologyMap& map, const SectorTopologySideDef* sideDef);
 TopologyWallPart ValidTopologyWallPartForSideDef(
         const SectorTopologyMap& map,

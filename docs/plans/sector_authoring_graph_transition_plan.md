@@ -151,7 +151,7 @@ Suggested path:
       "id": "phase_13_inspector_porting",
       "title": "Port inspectors and material editing to authoring anchors",
       "type": "phase",
-      "status": "In Progress",
+      "status": "Completed",
       "parent": null
     },
     {
@@ -186,7 +186,7 @@ Suggested path:
       "id": "phase_13e_texture_picker_reuse_cleanup",
       "title": "Keep texture picker and import workflows reusable for authoring targets",
       "type": "pass",
-      "status": "Planned",
+      "status": "Completed",
       "parent": "phase_13_inspector_porting"
     },
     {

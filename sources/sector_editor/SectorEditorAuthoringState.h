@@ -72,6 +72,8 @@ void InitializeSectorEditorAuthoringStateFromTopology(
         SectorEditorState& state,
         const SectorTopologyMap& sourceMap);
 
+bool HasAuthoringGraphData(const SectorEditorState& state);
+
 void MarkSectorEditorAuthoringGraphEdited(
         SectorEditorState& state,
         const char* status);

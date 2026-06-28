@@ -4,9 +4,11 @@
 #include "sector_demo/SectorUnits.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -2900,6 +2902,309 @@ void TestEditorAuthoringFlatSurfaceStaleMappingBlocksMaterialEdits()
           "stale 3D flat material edit does not mutate derived topology");
 }
 
+void SelectTextureInPicker(game::TexturePickerState& picker, const std::string& textureId)
+{
+    for (size_t i = 0; i < picker.textureIds.size(); ++i) {
+        if (picker.textureIds[i] == textureId) {
+            picker.selectedTextureIndex = static_cast<int>(i);
+            return;
+        }
+    }
+    picker.selectedTextureIndex = -1;
+}
+
+void TestEditorAuthoringFaceTexturePickerWritesThroughFaceAnchor()
+{
+    game::SectorEditorState state;
+    state.topologyMap.texturesById.emplace("old_floor", game::SectorTextureDefinition{"old_floor", "old_floor.png"});
+    state.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    Check(anchor != nullptr, "authoring face picker setup has face anchor");
+    if (anchor != nullptr) {
+        anchor->floorTextureId = "old_floor";
+    }
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "authoring face picker setup derives valid topology");
+
+    Check(game::OpenAuthoringFaceAnchorTexturePicker(
+                  state,
+                  200,
+                  game::TopologySectorTextureField::Floor,
+                  game::TopologyMaterialLayer::Base),
+          "authoring face picker opens for mapped derived sector");
+    Check(state.texturePicker.topologyTargetKind == game::TopologyTexturePickerTargetKind::AuthoringFaceAnchor,
+          "authoring face picker records authoring target kind");
+    Check(game::CurrentTextureForPickerTarget(state) == "old_floor",
+          "authoring face picker reads current texture from face anchor");
+
+    SelectTextureInPicker(state.texturePicker, "new_floor");
+    const game::SectorEditorTexturePickerApplyResult result =
+            game::ApplyAuthoringTexturePickerSelection(state);
+
+    const game::SectorAuthoringFaceAnchor* editedAnchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    const game::SectorTopologySector* projectedSector =
+            game::FindSectorTopologySector(state.topologyMap, 200);
+    Check(result.changed, "authoring face picker reports texture change");
+    Check(editedAnchor != nullptr && editedAnchor->floorTextureId == "new_floor",
+          "authoring face picker writes selected texture to face anchor");
+    Check(projectedSector != nullptr && projectedSector->floorTextureId == "new_floor",
+          "authoring face picker refreshes projected derived sector texture");
+    Check(state.topologyDocumentDirty && state.hasUnsavedChanges,
+          "authoring face picker marks document dirty");
+    Check(!state.topologyRenderCache.valid,
+          "authoring face picker invalidates cached topology rendering through graph edit");
+}
+
+void TestEditorAuthoringSideTexturePickerWritesThroughAuthoringSide()
+{
+    game::SectorEditorState state;
+    state.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
+    state.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall.textureId = "old_wall";
+    state.authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "authoring side picker setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef =
+            FindDerivedSideDefForAuthoringSide(
+                    state.authoringDerivation,
+                    10,
+                    game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "authoring side picker setup has mapped sidedef");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    Check(game::OpenAuthoringSideTexturePicker(
+                  state,
+                  sideDef->id,
+                  game::TopologyWallPart::Wall,
+                  game::TopologyMaterialLayer::Base),
+          "authoring side picker opens for mapped derived sidedef");
+    Check(state.texturePicker.topologyTargetKind == game::TopologyTexturePickerTargetKind::AuthoringSide,
+          "authoring side picker records authoring target kind");
+    Check(game::CurrentTextureForPickerTarget(state) == "old_wall",
+          "authoring side picker reads current texture from authoring side");
+
+    SelectTextureInPicker(state.texturePicker, "new_wall");
+    const game::SectorEditorTexturePickerApplyResult result =
+            game::ApplyAuthoringTexturePickerSelection(state);
+
+    const game::SectorAuthoringLineSide* editedSide =
+            game::FindSectorAuthoringLineSide(
+                    state.authoringGraph,
+                    game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front});
+    const game::SectorTopologySideDef* projectedSideDef =
+            FindDerivedSideDefForAuthoringSide(
+                    state.authoringDerivation,
+                    10,
+                    game::SectorTopologySideKind::Front);
+    Check(result.changed, "authoring side picker reports texture change");
+    Check(editedSide != nullptr && editedSide->wall.textureId == "new_wall",
+          "authoring side picker writes selected texture to authoring side");
+    Check(projectedSideDef != nullptr && projectedSideDef->wall.textureId == "new_wall",
+          "authoring side picker refreshes projected derived sidedef texture");
+}
+
+void TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen()
+{
+    game::SectorEditorState state;
+    state.topologyMap.texturesById.emplace("old_floor", game::SectorTextureDefinition{"old_floor", "old_floor.png"});
+    state.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    Check(anchor != nullptr, "stale face picker setup has face anchor");
+    if (anchor != nullptr) {
+        anchor->floorTextureId = "old_floor";
+    }
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "stale face picker setup derives valid topology");
+
+    Check(game::OpenAuthoringFaceAnchorTexturePicker(
+                  state,
+                  200,
+                  game::TopologySectorTextureField::Floor,
+                  game::TopologyMaterialLayer::Base),
+          "stale face picker opens before derivation becomes stale");
+    SelectTextureInPicker(state.texturePicker, "new_floor");
+
+    const game::SectorTopologySector* beforeSector =
+            game::FindSectorTopologySector(state.topologyMap, 200);
+    const std::string beforeSectorTexture = beforeSector != nullptr
+            ? beforeSector->floorTextureId
+            : std::string{};
+    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed after picker open");
+
+    const game::SectorEditorTexturePickerApplyResult result =
+            game::ApplyAuthoringTexturePickerSelection(state);
+
+    const game::SectorAuthoringFaceAnchor* afterAnchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    const game::SectorTopologySector* afterSector =
+            game::FindSectorTopologySector(state.topologyMap, 200);
+    Check(!result.changed, "stale face picker apply reports no texture change");
+    Check(result.status.find("derived topology is not current") != std::string::npos,
+          "stale face picker apply reports stale mapping");
+    Check(!state.texturePicker.open, "stale face picker apply closes picker");
+    Check(afterAnchor != nullptr && afterAnchor->floorTextureId == "old_floor",
+          "stale face picker apply does not mutate face anchor");
+    Check(afterSector != nullptr && afterSector->floorTextureId == beforeSectorTexture,
+          "stale face picker apply does not directly mutate live derived sector");
+}
+
+void TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen()
+{
+    game::SectorEditorState state;
+    state.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
+    state.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall.textureId = "old_wall";
+    state.authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "stale side picker setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef =
+            FindDerivedSideDefForAuthoringSide(
+                    state.authoringDerivation,
+                    10,
+                    game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "stale side picker setup has mapped sidedef");
+    if (sideDef == nullptr) {
+        return;
+    }
+    const int sideDefId = sideDef->id;
+
+    Check(game::OpenAuthoringSideTexturePicker(
+                  state,
+                  sideDefId,
+                  game::TopologyWallPart::Wall,
+                  game::TopologyMaterialLayer::Base),
+          "stale side picker opens before derivation becomes stale");
+    SelectTextureInPicker(state.texturePicker, "new_wall");
+
+    const game::SectorTopologySideDef* beforeSideDef =
+            game::FindSectorTopologySideDef(state.topologyMap, sideDefId);
+    const std::string beforeSideTexture = beforeSideDef != nullptr
+            ? beforeSideDef->wall.textureId
+            : std::string{};
+    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed after picker open");
+
+    const game::SectorEditorTexturePickerApplyResult result =
+            game::ApplyAuthoringTexturePickerSelection(state);
+
+    const game::SectorAuthoringLineSide* afterSide =
+            game::FindSectorAuthoringLineSide(
+                    state.authoringGraph,
+                    game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front});
+    const game::SectorTopologySideDef* afterSideDef =
+            game::FindSectorTopologySideDef(state.topologyMap, sideDefId);
+    Check(!result.changed, "stale side picker apply reports no texture change");
+    Check(result.status.find("derived topology is not current") != std::string::npos,
+          "stale side picker apply reports stale mapping");
+    Check(!state.texturePicker.open, "stale side picker apply closes picker");
+    Check(afterSide != nullptr && afterSide->wall.textureId == "old_wall",
+          "stale side picker apply does not mutate authoring side");
+    Check(afterSideDef != nullptr && afterSideDef->wall.textureId == beforeSideTexture,
+          "stale side picker apply does not directly mutate live derived sidedef");
+}
+
+void TestEditorAuthoringTexturePickerRejectsStaleMapping()
+{
+    game::SectorEditorState state;
+    state.topologyMap.texturesById.emplace("wall", game::SectorTextureDefinition{"wall", "wall.png"});
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "stale authoring picker setup derives valid topology");
+    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed before picker open");
+
+    Check(!game::OpenAuthoringFaceAnchorTexturePicker(
+                  state,
+                  200,
+                  game::TopologySectorTextureField::Floor,
+                  game::TopologyMaterialLayer::Base),
+          "authoring face picker refuses stale derived mapping");
+    Check(!state.texturePicker.open,
+          "authoring face picker closes state when mapping is stale");
+}
+
+void TestEditorLegacyTopologyTexturePickerWritesLiveTopologyWithoutAuthoringGraph()
+{
+    game::SectorEditorState state;
+    state.topologyMap = MakeSingleSectorSquareMap();
+    state.topologyMap.texturesById.emplace("room_floor", game::SectorTextureDefinition{"room_floor", "room_floor.png"});
+    state.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
+
+    Check(game::OpenTopologyTexturePicker(
+                  state,
+                  200,
+                  game::TopologySectorTextureField::Floor,
+                  game::TopologyMaterialLayer::Base),
+          "legacy topology texture picker opens without authoring graph");
+    SelectTextureInPicker(state.texturePicker, "new_floor");
+
+    const game::SectorEditorTexturePickerApplyResult result =
+            game::ApplyTexturePickerSelection(state);
+    const game::SectorTopologySector* sector =
+            game::FindSectorTopologySector(state.topologyMap, 200);
+    Check(result.changed, "legacy topology texture picker reports texture change");
+    Check(sector != nullptr && sector->floorTextureId == "new_floor",
+          "legacy topology texture picker writes live topology when no authoring graph is active");
+    Check(!state.texturePicker.open, "legacy topology texture picker closes after apply");
+}
+
+void TestEditorMapTextureImportPreservesMapLevelRegistryOnly()
+{
+    game::SectorEditorState state;
+    state.topologyRenderCache.valid = true;
+    const uint64_t originalRevision = state.topologyRenderRevision;
+    state.addMapTexture.paths.push_back("assets/images/imported_wall.png");
+    state.addMapTexture.selectedPathIndex = 0;
+    std::snprintf(
+            state.addMapTexture.textureIdBuffer,
+            sizeof(state.addMapTexture.textureIdBuffer),
+            "%s",
+            "imported_wall");
+    state.addMapTexture.filter = game::SectorTextureFilter::Point;
+
+    const game::SectorEditorAddTextureResult result =
+            game::AddSelectedMapTexture(state);
+
+    const auto textureIt = state.topologyMap.texturesById.find("imported_wall");
+    Check(result.success, "map texture import helper succeeds for valid texture id");
+    Check(textureIt != state.topologyMap.texturesById.end()
+                  && textureIt->second.path == "assets/images/imported_wall.png"
+                  && textureIt->second.filter == game::SectorTextureFilter::Point,
+          "map texture import writes only the map-level texture registry");
+    Check(state.topologyRenderCache.valid,
+          "map texture import does not invalidate cached topology rendering by itself");
+    Check(state.topologyRenderRevision == originalRevision,
+          "map texture import does not bump topology render revision by itself");
+}
+
 void TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics()
 {
     game::SectorEditorState state;
@@ -3890,6 +4195,13 @@ int main()
     TestEditorAuthoringFlatSurfaceCeilingUvWritesThroughFaceAnchor();
     TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor();
     TestEditorAuthoringFlatSurfaceStaleMappingBlocksMaterialEdits();
+    TestEditorAuthoringFaceTexturePickerWritesThroughFaceAnchor();
+    TestEditorAuthoringSideTexturePickerWritesThroughAuthoringSide();
+    TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen();
+    TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen();
+    TestEditorAuthoringTexturePickerRejectsStaleMapping();
+    TestEditorLegacyTopologyTexturePickerWritesLiveTopologyWithoutAuthoringGraph();
+    TestEditorMapTextureImportPreservesMapLevelRegistryOnly();
     TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics();
     TestEditorAuthoringPreviewAndBakeGateAllowsCurrentDerivedTopology();
     TestEditorAuthoringPreviewAndBakeGateRejectsInvalidNoDerived();

@@ -110,6 +110,7 @@ if(BUILD_TESTING)
             tests/SectorAuthoringGraphTests.cpp
             sources/sector_editor/SectorEditorAuthoringState.cpp
             sources/sector_editor/SectorEditorHelpers.cpp
+            sources/sector_editor/SectorEditorTextureActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp

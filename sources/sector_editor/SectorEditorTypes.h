@@ -80,6 +80,8 @@ enum class TopologyTexturePickerTargetKind {
     None,
     Sector,
     SideDef,
+    AuthoringFaceAnchor,
+    AuthoringSide,
     MapSky
 };
 

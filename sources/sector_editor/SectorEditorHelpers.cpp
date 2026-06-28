@@ -732,10 +732,14 @@ const char* TopologyPickerTargetLabel(const TexturePickerState& picker)
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::MapSky) {
         return "sky texture";
     }
-    if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef) {
+    if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef
+            || picker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringSide) {
+        const char* sideTarget = picker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringSide
+                ? "authoring side"
+                : "sidedef";
         return picker.topologyLayer == TopologyMaterialLayer::Decal
-                ? TextFormat("%s sidedef decal texture", TopologyWallPartStatusName(picker.topologyWallPart))
-                : TextFormat("%s sidedef texture", TopologyWallPartStatusName(picker.topologyWallPart));
+                ? TextFormat("%s %s decal texture", TopologyWallPartStatusName(picker.topologyWallPart), sideTarget)
+                : TextFormat("%s %s texture", TopologyWallPartStatusName(picker.topologyWallPart), sideTarget);
     }
     if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
         switch (picker.topologyField) {
@@ -859,6 +863,32 @@ const SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
         case TopologyWallPart::Middle: return sideDef.middle;
     }
     return sideDef.wall;
+}
+
+SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
+        SectorAuthoringLineSide& side,
+        TopologyWallPart part)
+{
+    switch (part) {
+        case TopologyWallPart::Wall: return side.wall;
+        case TopologyWallPart::Lower: return side.lower;
+        case TopologyWallPart::Upper: return side.upper;
+        case TopologyWallPart::Middle: return side.middle;
+    }
+    return side.wall;
+}
+
+const SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
+        const SectorAuthoringLineSide& side,
+        TopologyWallPart part)
+{
+    switch (part) {
+        case TopologyWallPart::Wall: return side.wall;
+        case TopologyWallPart::Lower: return side.lower;
+        case TopologyWallPart::Upper: return side.upper;
+        case TopologyWallPart::Middle: return side.middle;
+    }
+    return side.wall;
 }
 
 bool IsTopologyMiddleEligible(

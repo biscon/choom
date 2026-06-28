@@ -8482,7 +8482,10 @@ void SectorEditor::OpenTopologyTexturePicker(
         TopologySectorTextureField field,
         TopologyMaterialLayer layer)
 {
-    if (!game::OpenTopologyTexturePicker(state, sectorId, field, layer)) {
+    const bool opened = HasAuthoringGraphData()
+            ? game::OpenAuthoringFaceAnchorTexturePicker(state, sectorId, field, layer)
+            : game::OpenTopologyTexturePicker(state, sectorId, field, layer);
+    if (!opened) {
         statusText = "No topology sector texture target";
     }
 }
@@ -8492,7 +8495,10 @@ void SectorEditor::OpenTopologySideDefTexturePicker(
         TopologyWallPart wallPart,
         TopologyMaterialLayer layer)
 {
-    if (!game::OpenTopologySideDefTexturePicker(state, sideDefId, wallPart, layer)) {
+    const bool opened = HasAuthoringGraphData()
+            ? game::OpenAuthoringSideTexturePicker(state, sideDefId, wallPart, layer)
+            : game::OpenTopologySideDefTexturePicker(state, sideDefId, wallPart, layer);
+    if (!opened) {
         statusText = "No topology sidedef texture target";
     }
 }
@@ -8506,6 +8512,22 @@ void SectorEditor::OpenMapSkyTexturePicker()
 
 void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
 {
+    if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringFaceAnchor
+            || state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringSide) {
+        const SectorEditorTexturePickerApplyResult result =
+                game::ApplyAuthoringTexturePickerSelection(state);
+        if (!result.status.empty()) {
+            statusText = result.status;
+        }
+        if (result.changed
+                && result.rebuildPreviewOnApply
+                && state.mode == SectorEditorMode::Preview3D
+                && preview.IsRendererReady()) {
+            RebuildPreviewMeshesPreservingView(assets);
+        }
+        return;
+    }
+
     const bool routeAuthoringSideMaterial =
             HasAuthoringGraphData()
             && state.texturePicker.open

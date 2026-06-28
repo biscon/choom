@@ -10,7 +10,6 @@
 #include <utility>
 
 namespace game {
-namespace {
 
 bool HasAuthoringGraphData(const SectorEditorState& state)
 {
@@ -19,6 +18,8 @@ bool HasAuthoringGraphData(const SectorEditorState& state)
             || !state.authoringGraph.lineSides.empty()
             || !state.authoringGraph.faceAnchors.empty();
 }
+
+namespace {
 
 bool IsFlatSurfaceEditTarget(TopologySurfaceEditTargetKind kind)
 {
