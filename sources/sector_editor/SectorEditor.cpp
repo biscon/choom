@@ -7909,6 +7909,7 @@ bool SectorEditor::LoadLevel(
     if (loaded.format == SectorEditorDocumentFormat::AuthoringGraph) {
         loadedAuthoringGraph = true;
         state.topologyMap = std::move(loaded.mapData);
+        const SectorLightmapMetadata loadedBakedLightmap = state.topologyMap.bakedLightmap;
         state.authoringGraph = std::move(loaded.authoringGraph);
         state.authoringDerivation = SectorAuthoringDerivationResult{};
         state.lastValidAuthoringDerivedTopology.reset();
@@ -7924,6 +7925,13 @@ bool SectorEditor::LoadLevel(
                 state,
                 successStatus.c_str(),
                 failureStatus.c_str());
+        if (authoringDerivationCurrent) {
+            state.topologyMap.bakedLightmap = loadedBakedLightmap;
+            state.authoringDerivation.topology.bakedLightmap = loadedBakedLightmap;
+            if (state.lastValidAuthoringDerivedTopology.has_value()) {
+                state.lastValidAuthoringDerivedTopology->bakedLightmap = loadedBakedLightmap;
+            }
+        }
     } else {
         state.topologyMap = std::move(loaded.mapData);
         InitializeSectorEditorAuthoringStateFromTopology(state, state.topologyMap);

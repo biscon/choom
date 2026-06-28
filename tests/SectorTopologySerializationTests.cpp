@@ -1676,7 +1676,7 @@ void TestGraphNativeValidGraphDerivesTopologyAndProperties()
     Check(saved["authoringGraph"]["faceAnchors"][0]["ceilingSky"] == true,
           "face anchor ceilingSky is persisted");
     Check(!saved.contains("bakedLightmap"),
-          "graph-native save omits baked lightmap metadata until currentness can be proven");
+          "graph-native save omits absent baked lightmap metadata");
 
     game::SectorAuthoringDocument loaded;
     std::string error;
@@ -1721,10 +1721,10 @@ void TestGraphNativeMapLevelRoundTrip()
     source.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
     source.directionalLight.intensity = 1.5f;
     source.lightmapSettings.ambientOcclusionStrength = 0.25f;
-    source.bakedLightmap.path = "stale.png";
+    source.bakedLightmap.path = "assets/levels/test/test.lightmap.png";
     source.bakedLightmap.width = 128;
     source.bakedLightmap.height = 128;
-    source.bakedLightmap.sourceHash = "old";
+    source.bakedLightmap.sourceHash = "abc123";
 
     const game::SectorAuthoringDocument original = MakeAuthoringDocumentFromMap(source);
     const Json saved = Json::parse(SaveAuthoringText(original));
@@ -1736,7 +1736,14 @@ void TestGraphNativeMapLevelRoundTrip()
           "graph-native directional light settings are persisted");
     Check(saved["lightmapSettings"]["ambientOcclusionStrength"] == 0.25f,
           "graph-native bake settings are persisted");
-    Check(!saved.contains("bakedLightmap"), "graph-native save clears stale baked metadata");
+    Check(saved["bakedLightmap"].is_object(), "graph-native baked lightmap metadata is persisted");
+    Check(saved["bakedLightmap"]["path"] == "assets/levels/test/test.lightmap.png",
+          "graph-native baked lightmap path is persisted");
+    Check(saved["bakedLightmap"]["width"] == 128
+                  && saved["bakedLightmap"]["height"] == 128,
+          "graph-native baked lightmap dimensions are persisted");
+    Check(saved["bakedLightmap"]["sourceHash"] == "abc123",
+          "graph-native baked lightmap source hash is persisted");
 
     game::SectorAuthoringDocument loaded;
     std::string error;
@@ -1746,15 +1753,26 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
                   && loaded.mapData.skySettings.textureId == "sky"
                   && loaded.mapData.directionalLight.enabled
-                  && Near(loaded.mapData.lightmapSettings.ambientOcclusionStrength, 0.25f),
+                  && Near(loaded.mapData.lightmapSettings.ambientOcclusionStrength, 0.25f)
+                  && loaded.mapData.bakedLightmap.path == "assets/levels/test/test.lightmap.png"
+                  && loaded.mapData.bakedLightmap.width == 128
+                  && loaded.mapData.bakedLightmap.height == 128
+                  && loaded.mapData.bakedLightmap.sourceHash == "abc123",
           "graph-native map-level fields round-trip");
     Check(loaded.derivation.success
                   && loaded.derivation.topology.texturesById.count("sky") == 1
                   && loaded.derivation.topology.staticLights.size() == 1
-                  && loaded.derivation.topology.skySettings.textureId == "sky",
+                  && loaded.derivation.topology.skySettings.textureId == "sky"
+                  && loaded.derivation.topology.bakedLightmap.path == "assets/levels/test/test.lightmap.png"
+                  && loaded.derivation.topology.bakedLightmap.sourceHash == "abc123",
           "derived topology receives map-level fields after load");
-    Check(loaded.derivation.topology.bakedLightmap.path.empty(),
-          "derived topology starts with cleared baked lightmap metadata");
+
+    const Json resaved = Json::parse(SaveAuthoringText(loaded));
+    Check(resaved["bakedLightmap"]["path"] == saved["bakedLightmap"]["path"]
+                  && resaved["bakedLightmap"]["width"] == saved["bakedLightmap"]["width"]
+                  && resaved["bakedLightmap"]["height"] == saved["bakedLightmap"]["height"]
+                  && resaved["bakedLightmap"]["sourceHash"] == saved["bakedLightmap"]["sourceHash"],
+          "graph-native save/load/save preserves baked lightmap metadata");
 }
 
 void TestGraphNativeLegacyImportPathStillWorks()

@@ -173,6 +173,12 @@
     },
     "intensity": 1.0
   },
+  "bakedLightmap": {
+    "path": "assets/levels/test5/test5.lightmap.png",
+    "width": 2048,
+    "height": 2048,
+    "sourceHash": "ca10c199af274c92"
+  },
   "authoringGraph": {
     "vertices": [
       {

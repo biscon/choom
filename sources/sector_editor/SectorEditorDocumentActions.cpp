@@ -146,7 +146,6 @@ SectorAuthoringDocument BuildSectorAuthoringDocumentFromEditorState(
     document.mapData.lineDefs.clear();
     document.mapData.sideDefs.clear();
     document.mapData.sectors.clear();
-    document.mapData.bakedLightmap = {};
     document.derivation = state.authoringDerivation;
     return document;
 }

@@ -1,5 +1,6 @@
 #include "sector_demo/SectorAuthoringGraph.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
+#include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTopologySerialization.h"
 #include "sector_demo/SectorUnits.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
@@ -341,8 +342,16 @@ game::SectorEditorState MakeEditorStateFromLoadedDocument(
     }
 
     state.topologyMap = loaded.mapData;
+    const game::SectorLightmapMetadata loadedBakedLightmap = state.topologyMap.bakedLightmap;
     state.authoringGraph = loaded.authoringGraph;
     const bool refreshed = game::RefreshSectorEditorAuthoringDerivation(state);
+    if (refreshed) {
+        state.topologyMap.bakedLightmap = loadedBakedLightmap;
+        state.authoringDerivation.topology.bakedLightmap = loadedBakedLightmap;
+        if (state.lastValidAuthoringDerivedTopology.has_value()) {
+            state.lastValidAuthoringDerivedTopology->bakedLightmap = loadedBakedLightmap;
+        }
+    }
     if (outDerivationCurrent != nullptr) {
         *outDerivationCurrent = refreshed
                 && state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
@@ -5402,6 +5411,8 @@ void TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent()
     Check(loadedState.authoringGraph.faceAnchors.size() == 1
                   && loadedState.authoringGraph.faceAnchors[0].name == "room",
           "valid graph-native reload preserves face anchor label");
+    Check(game::GetSectorLightmapStatus(loadedState.topologyMap) == game::SectorLightmapStatus::None,
+          "graph-native reload without baked metadata reports no lightmap metadata");
     std::error_code removeError;
     std::filesystem::remove(path, removeError);
 }
@@ -5650,6 +5661,14 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     state.topologyMap.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
     state.topologyMap.directionalLight.intensity = 1.5f;
     state.topologyMap.lightmapSettings.ambientOcclusionStrength = 0.25f;
+    const std::filesystem::path lightmapPath =
+            TempJsonPath("sector_editor_map_level_graph_native.lightmap.png");
+    WriteTextFile(lightmapPath, "fake-lightmap");
+    state.topologyMap.bakedLightmap.path = lightmapPath.string();
+    state.topologyMap.bakedLightmap.width = 2048;
+    state.topologyMap.bakedLightmap.height = 2048;
+    state.topologyMap.bakedLightmap.sourceHash =
+            game::ComputeSectorLightmapSourceHash(state.topologyMap);
 
     std::string savedText;
     const Json saved = SaveEditorStateToJson(
@@ -5665,6 +5684,13 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
           "editor graph-native save persists directional light");
     Check(saved["lightmapSettings"]["ambientOcclusionStrength"] == 0.25f,
           "editor graph-native save persists lightmap settings");
+    Check(saved["bakedLightmap"]["path"] == lightmapPath.string(),
+          "editor graph-native save persists baked lightmap path");
+    Check(saved["bakedLightmap"]["width"] == 2048
+                  && saved["bakedLightmap"]["height"] == 2048,
+          "editor graph-native save persists baked lightmap dimensions");
+    Check(saved["bakedLightmap"]["sourceHash"] == state.topologyMap.bakedLightmap.sourceHash,
+          "editor graph-native save persists baked lightmap source hash");
 
     const std::filesystem::path path =
             TempJsonPath("sector_editor_map_level_graph_native_reload_test.json");
@@ -5678,7 +5704,11 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
                   && loaded.mapData.skySettings.textureId == "sky"
                   && loaded.mapData.directionalLight.enabled
-                  && Near(loaded.mapData.lightmapSettings.ambientOcclusionStrength, 0.25f),
+                  && Near(loaded.mapData.lightmapSettings.ambientOcclusionStrength, 0.25f)
+                  && loaded.mapData.bakedLightmap.path == lightmapPath.string()
+                  && loaded.mapData.bakedLightmap.width == 2048
+                  && loaded.mapData.bakedLightmap.height == 2048
+                  && loaded.mapData.bakedLightmap.sourceHash == state.topologyMap.bakedLightmap.sourceHash,
           "editor graph-native load preserves map-level fields");
     bool current = false;
     const game::SectorEditorState loadedState =
@@ -5686,10 +5716,30 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     Check(current
                   && loadedState.topologyMap.texturesById.count("sky") == 1
                   && loadedState.topologyMap.staticLights.size() == 1
-                  && loadedState.topologyMap.skySettings.textureId == "sky",
+                  && loadedState.topologyMap.skySettings.textureId == "sky"
+                  && loadedState.topologyMap.bakedLightmap.path == lightmapPath.string(),
           "editor graph-native derivation receives map-level fields after load");
+    Check(game::GetSectorLightmapStatus(loadedState.topologyMap) == game::SectorLightmapStatus::Valid,
+          "editor graph-native reload reports matching baked lightmap metadata as valid");
+
+    game::SectorEditorState staleState = loadedState;
+    staleState.topologyMap.bakedLightmap.sourceHash = "mismatched-source-hash";
+    Check(game::GetSectorLightmapStatus(staleState.topologyMap) == game::SectorLightmapStatus::Stale,
+          "editor graph-native reload uses existing stale policy for mismatched source hash");
+
+    const Json resaved = SaveEditorStateToJson(
+            loadedState,
+            "sector_editor_map_level_graph_native_resave_test.json");
+    Check(resaved["formatVersion"] == 3 && resaved["topology"] == "authoringGraph",
+          "editor graph-native resave remains graph-native");
+    Check(resaved["bakedLightmap"]["path"] == saved["bakedLightmap"]["path"]
+                  && resaved["bakedLightmap"]["width"] == saved["bakedLightmap"]["width"]
+                  && resaved["bakedLightmap"]["height"] == saved["bakedLightmap"]["height"]
+                  && resaved["bakedLightmap"]["sourceHash"] == saved["bakedLightmap"]["sourceHash"],
+          "editor graph-native save/load/save preserves baked lightmap metadata");
     std::error_code removeError;
     std::filesystem::remove(path, removeError);
+    std::filesystem::remove(lightmapPath, removeError);
 }
 
 } // namespace

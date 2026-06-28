@@ -1031,7 +1031,6 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
 void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
 {
     if (!document.derivation.success) {
-        document.mapData.bakedLightmap = {};
         return;
     }
 
@@ -1041,7 +1040,7 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
     document.derivation.topology.skySettings = document.mapData.skySettings;
     document.derivation.topology.directionalLight = document.mapData.directionalLight;
     document.derivation.topology.lightmapSettings = document.mapData.lightmapSettings;
-    document.derivation.topology.bakedLightmap = {};
+    document.derivation.topology.bakedLightmap = document.mapData.bakedLightmap;
 }
 
 SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
@@ -1062,7 +1061,7 @@ SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
 
     SectorAuthoringDocument document;
     ReadTextures(root, document.mapData);
-    ReadMapLevelFields(root, document.mapData, false);
+    ReadMapLevelFields(root, document.mapData, true);
     ValidateAuthoringMapData(document.mapData);
     document.graph = ReadAuthoringGraph(RequireField(root, "authoringGraph", "root"));
     document.derivation = DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
@@ -1230,7 +1229,7 @@ Json SerializeAuthoringDocument(const SectorAuthoringDocument& document)
     root["topology"] = "authoringGraph";
     root["coordSubdivisions"] = SectorCoordSubdivisions;
     WriteTextureFields(root, document.mapData);
-    WriteMapLevelFields(root, document.mapData, false);
+    WriteMapLevelFields(root, document.mapData, true);
     root["authoringGraph"] = WriteAuthoringGraph(document.graph);
     return root;
 }
