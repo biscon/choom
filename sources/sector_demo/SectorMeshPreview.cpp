@@ -3,6 +3,7 @@
 #include "engine/assets/TextureLoadFlags.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshBuilder.h"
+#include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorSkyCylinder.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
@@ -27,6 +28,24 @@ constexpr float BloomStrength = 0.5f;
 constexpr float BloomLdrIntensityScale = 10.0f;
 constexpr int BloomIterations = 3;
 constexpr int BloomDownsample = 4;
+constexpr float DefaultVisibilityDebugAspect = 16.0f / 9.0f;
+constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
+
+Vector2 PreviewYawForwardXZ(float yawRadians)
+{
+    return Vector2{std::cos(yawRadians), std::sin(yawRadians)};
+}
+
+float VisibilityDebugHorizontalFovRadians(const Camera3D& camera)
+{
+    const int screenWidth = GetScreenWidth();
+    const int screenHeight = GetScreenHeight();
+    const float aspect = screenWidth > 0 && screenHeight > 0
+            ? static_cast<float>(screenWidth) / static_cast<float>(screenHeight)
+            : DefaultVisibilityDebugAspect;
+    const float verticalFovRadians = camera.fovy * DegreesToRadians;
+    return 2.0f * std::atan(std::tan(verticalFovRadians * 0.5f) * aspect);
+}
 
 const char* SectorLightmapVs = R"(
 #version 330
@@ -415,6 +434,17 @@ bool SectorMeshPreview::RebuildRendererResources(
         return false;
     }
 
+    std::string visibilityError;
+    visibilityGraphValid = BuildRuntimeSectorVisibilityGraph(map, visibilityGraph, &visibilityError);
+    if (!visibilityGraphValid) {
+        std::fprintf(stderr, "[SectorDemo WARNING] Visibility graph build failed: %s\n", visibilityError.c_str());
+        visibilityGraph = {};
+    }
+    visibilityLookupWorldValid = visibilityLookupWorld.BuildFromTopology(map, &visibilityError);
+    if (!visibilityLookupWorldValid) {
+        std::fprintf(stderr, "[SectorDemo WARNING] Visibility sector lookup build failed: %s\n", visibilityError.c_str());
+    }
+
     assetScope = assets.CreateScope(scopeName == nullptr ? "sector_mesh_preview" : scopeName);
     if (engine::IsNull(assetScope)) {
         generatedGeometry = {};
@@ -528,6 +558,7 @@ bool SectorMeshPreview::RebuildRendererResources(
     camera.fovy = 75.0f;
     camera.projection = CAMERA_PERSPECTIVE;
     UpdateCamera();
+    UpdateVisibilityDebug();
 
     initialized = true;
     return true;
@@ -541,6 +572,12 @@ void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
 void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
 {
     generatedGeometry = {};
+    visibilityGraph = {};
+    visibilityResult = {};
+    visibilityDebugText.clear();
+    visibilityLookupWorld = SectorCollisionWorld{};
+    visibilityGraphValid = false;
+    visibilityLookupWorldValid = false;
     if (!initialized
             && engine::IsNull(assetScope)
             && meshes.batches.empty()
@@ -965,6 +1002,26 @@ void SectorMeshPreview::ApplyRendererPose(const SectorViewPose& pose)
     yawRadians = pose.yawRadians;
     pitchRadians = pose.pitchRadians;
     UpdateCamera();
+    UpdateVisibilityDebug();
+}
+
+void SectorMeshPreview::UpdateVisibilityDebug(int preferredStartSectorId)
+{
+    if (!visibilityGraphValid) {
+        visibilityResult = RuntimePortalVisibilityResult{};
+        visibilityResult.startSectorId = -1;
+        visibilityResult.fallbackDrawAll = true;
+        visibilityResult.status = "visibility graph unavailable; fallback draw all";
+    } else {
+        visibilityResult = ComputeRuntimeSectorVisibilityFromView(
+                visibilityGraph,
+                visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+                Vector2{camera.position.x, camera.position.z},
+                PreviewYawForwardXZ(yawRadians),
+                VisibilityDebugHorizontalFovRadians(camera),
+                preferredStartSectorId);
+    }
+    visibilityDebugText = FormatRuntimePortalVisibilityDebugText(visibilityResult);
 }
 
 float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const

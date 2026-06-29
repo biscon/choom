@@ -1183,6 +1183,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
             }
             UpdateSectorEditorGameplayPreview(state, controllerInput, previousVisualEyeY, dt);
             ApplyGameplayPoseToPreview();
+            preview.UpdateVisibilityDebug(state.fpsControllerState.currentSectorId);
             state.freeflyController.pose = preview.RendererPose();
         }
         UpdatePreview3DSelection(input);
@@ -2449,7 +2450,7 @@ void SectorEditor::DrawPreviewOverlay(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
-    const Rectangle panel{32.0f, 32.0f, 980.0f, 202.0f};
+    const Rectangle panel{32.0f, 32.0f, 980.0f, 232.0f};
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
@@ -2559,6 +2560,15 @@ void SectorEditor::DrawPreviewOverlay(
             engine::UITextJustify::Left,
             config.mutedTextColor
     );
+    engine::Text(
+            config,
+            assets,
+            Rectangle{panel.x + 18.0f, panel.y + 152.0f, panel.width - 36.0f, 30.0f},
+            font,
+            preview.VisibilityDebugText().c_str(),
+            engine::UITextJustify::Left,
+            config.mutedTextColor
+    );
     const char* previewStatusText = statusText.empty() ? "Ready" : statusText.c_str();
     const char* collisionWarningText = state.sectorCollisionWorldWarning.empty()
             ? previewStatusText
@@ -2566,7 +2576,7 @@ void SectorEditor::DrawPreviewOverlay(
     engine::Text(
             config,
             assets,
-            Rectangle{panel.x + 18.0f, panel.y + 160.0f, panel.width - 36.0f, 30.0f},
+            Rectangle{panel.x + 18.0f, panel.y + 190.0f, panel.width - 36.0f, 30.0f},
             font,
             state.previewControlMode == SectorPreviewControlMode::Gameplay
                     ? TextFormat(

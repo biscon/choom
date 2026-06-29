@@ -209,9 +209,11 @@ if(BUILD_TESTING)
 
     add_executable(sector_portal_visibility_tests
             tests/SectorPortalVisibilityTests.cpp
+            sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorPortalVisibility.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
     )
     target_include_directories(sector_portal_visibility_tests PRIVATE sources)
     target_link_libraries(sector_portal_visibility_tests PRIVATE raylib)

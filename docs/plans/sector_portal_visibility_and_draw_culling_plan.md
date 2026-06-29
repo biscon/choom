@@ -30,7 +30,7 @@ This plan assumes the completed authoring-graph transition:
       "id": "phase_02_visibility_debug_integration",
       "title": "Integrate current-sector lookup and visibility debug output",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {
