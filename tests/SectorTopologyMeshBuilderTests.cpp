@@ -1,10 +1,13 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorCollisionWorld.h"
+#include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorMeshBuilder.h"
 #include "sector_demo/SectorPortalVisibility.h"
 
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -35,6 +38,57 @@ bool Near(Vector3 actual, Vector3 expected, float epsilon = 0.00001f)
     return Near(actual.x, expected.x, epsilon)
             && Near(actual.y, expected.y, epsilon)
             && Near(actual.z, expected.z, epsilon);
+}
+
+game::SectorReceiverBounds Bounds(int sectorId, Vector3 min, Vector3 max)
+{
+    game::SectorReceiverBounds bounds;
+    bounds.sectorId = sectorId;
+    bounds.min = min;
+    bounds.max = max;
+    return bounds;
+}
+
+game::SectorPreviewDynamicPointLightSource LightSource(
+        int lightId,
+        int ownerSectorId,
+        Vector3 position,
+        float radius,
+        float intensity = 1.0f,
+        Vector3 color = Vector3{1.0f, 1.0f, 1.0f})
+{
+    game::SectorPreviewDynamicPointLightSource source;
+    source.lightId = lightId;
+    source.ownerSectorId = ownerSectorId;
+    source.light.position = position;
+    source.light.color = color;
+    source.light.radius = radius;
+    source.light.intensity = intensity;
+    return source;
+}
+
+bool HasCandidateLightId(
+        const std::vector<game::SectorPreviewDynamicPointLightSource>& candidates,
+        int lightId)
+{
+    for (const game::SectorPreviewDynamicPointLightSource& candidate : candidates) {
+        if (candidate.lightId == lightId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const game::SectorReceiverBounds* FindBounds(
+        const std::vector<game::SectorReceiverBounds>& bounds,
+        int sectorId)
+{
+    for (const game::SectorReceiverBounds& sectorBounds : bounds) {
+        if (sectorBounds.sectorId == sectorId) {
+            return &sectorBounds;
+        }
+    }
+    return nullptr;
 }
 
 game::SectorTopologyWallPartSettings Part(const char* textureId)
@@ -975,6 +1029,29 @@ void TestDrawRecordVisibilitySelection()
           "draw selection handles empty visible set safely");
 }
 
+void TestSectorReceiverBoundsFromDrawRecords()
+{
+    const game::SectorGeneratedGeometry geometry =
+            BuildGeometryOrFail(MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f),
+                                "receiver bounds geometry builds");
+    const game::SectorMeshBatchDataResult drawRecords = game::BuildSectorMeshDrawRecordData(geometry);
+    const std::vector<game::SectorReceiverBounds> receiverBounds =
+            game::BuildSectorReceiverBounds(drawRecords);
+
+    const game::SectorReceiverBounds* left = FindBounds(receiverBounds, 10);
+    const game::SectorReceiverBounds* right = FindBounds(receiverBounds, 20);
+    Check(left != nullptr, "receiver bounds include left sector");
+    Check(right != nullptr, "receiver bounds include right sector");
+    Check(left != nullptr && Near(left->min, Vector3{0.0f, 0.0f, 0.0f}),
+          "left receiver bounds min comes from generated draw geometry");
+    Check(left != nullptr && Near(left->max, Vector3{0.5f, 3.0f, 0.5f}),
+          "left receiver bounds max comes from generated draw geometry");
+    Check(right != nullptr && Near(right->min, Vector3{0.5f, 0.0f, 0.0f}),
+          "right receiver bounds min comes from generated draw geometry");
+    Check(right != nullptr && Near(right->max, Vector3{1.0f, 3.0f, 0.5f}),
+          "right receiver bounds max comes from generated draw geometry");
+}
+
 void TestBloomDrawRecordVisibilitySelection()
 {
     const std::vector<game::SectorMeshBatch> records = {
@@ -999,6 +1076,195 @@ void TestBloomDrawRecordVisibilitySelection()
     fallback.fallbackDrawAll = true;
     Check(game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[1], fallback),
           "bloom selection falls back to draw-all visibility");
+}
+
+void TestDynamicPointLightVisibilityCandidateSelection()
+{
+    game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::SectorCollisionWorld lookupWorld;
+    std::string error;
+    Check(lookupWorld.BuildFromTopology(map, &error), "dynamic light sector lookup world builds");
+
+    map.dynamicPointLights = {
+            game::SectorTopologyDynamicPointLight{
+                    1,
+                    Vector3{2.0f, 1.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    8.0f,
+                    true},
+            game::SectorTopologyDynamicPointLight{
+                    2,
+                    Vector3{6.0f, 1.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    8.0f,
+                    true},
+            game::SectorTopologyDynamicPointLight{
+                    3,
+                    Vector3{2.0f, 1.0f, 2.0f},
+                    WHITE,
+                    0.0f,
+                    8.0f,
+                    true},
+            game::SectorTopologyDynamicPointLight{
+                    4,
+                    Vector3{18.0f, 1.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    8.0f,
+                    true},
+            game::SectorTopologyDynamicPointLight{
+                    5,
+                    Vector3{2.0f, 1.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    8.0f,
+                    false},
+            game::SectorTopologyDynamicPointLight{
+                    6,
+                    Vector3{2.0f, 1.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    -1.0f,
+                    true},
+            game::SectorTopologyDynamicPointLight{
+                    7,
+                    Vector3{2.0f, 1.0f, 2.0f},
+                    WHITE,
+                    -1.0f,
+                    8.0f,
+                    true},
+            game::SectorTopologyDynamicPointLight{
+                    8,
+                    Vector3{std::numeric_limits<float>::quiet_NaN(), 1.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    8.0f,
+                    true}};
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> sources;
+    game::BuildSectorPreviewDynamicPointLightSources(map, &lookupWorld, sources);
+    Check(sources.size() == 3, "dynamic light source collection drops invalid lights");
+    Check(sources[0].lightId == 1 && sources[0].ownerSectorId == 10,
+          "dynamic light source collection assigns left-sector ownership");
+    Check(sources[1].lightId == 2 && sources[1].ownerSectorId == 20,
+          "dynamic light source collection assigns right-sector ownership");
+    Check(sources[2].lightId == 4 && sources[2].ownerSectorId == 0,
+          "dynamic light source collection leaves outside lights unassigned");
+
+    game::RuntimePortalVisibilityResult visibleLeft;
+    visibleLeft.validStartSector = true;
+    visibleLeft.visibleSectorIds = {10};
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.5f, 3.0f, 0.5f}),
+            Bounds(20, Vector3{0.5f, 0.0f, 0.0f}, Vector3{1.0f, 3.0f, 0.5f})};
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates;
+    game::CollectSectorPreviewDynamicPointLightCandidates(sources, visibleLeft, receiverBounds, candidates);
+    Check(candidates.size() == 2,
+          "dynamic light candidates include owner-visible and visible-receiver-overlap lights");
+    Check(HasCandidateLightId(candidates, 1), "dynamic light candidates include visible owner sector");
+    Check(HasCandidateLightId(candidates, 2), "dynamic light candidates include hidden owner touching visible receivers");
+    Check(!HasCandidateLightId(candidates, 4), "dynamic light candidates exclude irrelevant hidden outside light");
+    Check(!candidates.empty() && Near(candidates[0].light.position, Vector3{0.25f, 0.125f, 0.25f}),
+          "dynamic light candidates preserve world-space uniform data");
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.fallbackDrawAll = true;
+    game::CollectSectorPreviewDynamicPointLightCandidates(sources, fallback, receiverBounds, candidates);
+    Check(candidates.size() == 3,
+          "dynamic light candidates include all valid lights during fallback draw-all");
+}
+
+void TestDynamicPointLightReceiverBoundCandidateSelection()
+{
+    const std::vector<game::SectorPreviewDynamicPointLightSource> sources = {
+            LightSource(1, 20, Vector3{1.0f, 0.5f, 1.0f}, 0.75f),
+            LightSource(2, 20, Vector3{1.99f, 0.5f, 0.5f}, 0.0f),
+            LightSource(3, 20, Vector3{3.0f, 0.5f, 0.5f}, 0.9f)};
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates;
+    game::CollectSectorPreviewDynamicPointLightCandidates(sources, visible, receiverBounds, candidates);
+    Check(HasCandidateLightId(candidates, 1),
+          "hidden-owner light overlapping visible receiver bounds is included");
+    Check(!HasCandidateLightId(candidates, 3),
+          "hidden-owner light outside visible receiver bounds is excluded");
+
+    const std::vector<game::SectorPreviewDynamicPointLightSource> boundarySources = {
+            LightSource(4, 20, Vector3{1.052f, 0.5f, 0.5f}, 0.005f)};
+    game::CollectSectorPreviewDynamicPointLightCandidates(boundarySources, visible, receiverBounds, candidates);
+    Check(HasCandidateLightId(candidates, 4),
+          "dynamic light sphere overlap uses padded receiver bounds at boundaries");
+}
+
+void TestDynamicPointLightRankingAndPacking()
+{
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates = {
+            LightSource(1, 10, Vector3{20.0f, 0.0f, 0.0f}, 10.0f, 100.0f),
+            LightSource(2, 20, Vector3{4.0f, 0.5f, 0.5f}, 10.0f, 1.0f),
+            LightSource(3, 20, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 1.0f),
+            LightSource(4, 20, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 4.0f)};
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    game::SelectRankedSectorPreviewDynamicPointLights(candidates, visible, receiverBounds, 2, selected);
+    Check(selected.size() == 2, "dynamic light ranking applies max-light cap");
+    Check(!selected.empty() && Near(selected[0].position, Vector3{0.5f, 0.5f, 0.5f}),
+          "dynamic light ranking lets receiver-relevant stronger lights win");
+    Check(selected.size() > 1 && Near(selected[1].position, Vector3{0.5f, 0.5f, 0.5f}),
+          "dynamic light ranking prioritizes receiver overlap over owner-sector visibility alone");
+
+    game::SelectRankedSectorPreviewDynamicPointLights(candidates, visible, receiverBounds, 8, selected);
+    Check(selected.size() == 4,
+          "dynamic light ranking does not drop candidates solely because they do not affect receiver bounds");
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> tiedCandidates = {
+            LightSource(8, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f),
+            LightSource(7, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f)};
+    game::SelectRankedSectorPreviewDynamicPointLights(tiedCandidates, visible, receiverBounds, 1, selected);
+    Check(selected.size() == 1 && Near(selected[0].position, Vector3{0.5f, 0.5f, 0.5f}),
+          "dynamic light ranking uses deterministic light-id tie breaking");
+}
+
+void TestDynamicPointLightFallbackUsesAllReceiverBounds()
+{
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates = {
+            LightSource(1, 10, Vector3{0.5f, 0.5f, 0.5f}, 5.0f, 1.0f),
+            LightSource(2, 20, Vector3{20.5f, 0.5f, 0.5f}, 5.0f, 4.0f)};
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f}),
+            Bounds(20, Vector3{20.0f, 0.0f, 0.0f}, Vector3{21.0f, 1.0f, 1.0f})};
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.validStartSector = true;
+    fallback.fallbackDrawAll = true;
+    fallback.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> collected;
+    game::CollectSectorPreviewDynamicPointLightCandidates(candidates, fallback, receiverBounds, collected);
+    Check(collected.size() == 2,
+          "fallback draw-all candidate collection includes all valid lights");
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    game::SelectRankedSectorPreviewDynamicPointLights(collected, fallback, receiverBounds, 1, selected);
+    Check(selected.size() == 1 && Near(selected[0].position, Vector3{20.5f, 0.5f, 0.5f}),
+          "fallback draw-all ranking treats all receiver bounds as visible");
+
+    const std::vector<game::SectorReceiverBounds> noBounds;
+    game::CollectSectorPreviewDynamicPointLightCandidates(candidates, fallback, noBounds, collected);
+    game::SelectRankedSectorPreviewDynamicPointLights(collected, fallback, noBounds, 2, selected);
+    Check(selected.size() == 2,
+          "fallback draw-all without receiver bounds still selects valid lights conservatively");
 }
 
 } // namespace
@@ -1026,7 +1292,12 @@ int main()
     TestGeneratedGeometryPickingUsesVisibilityFilter();
     TestGeneratedSurfaceHighlightVisibilitySelection();
     TestDrawRecordVisibilitySelection();
+    TestSectorReceiverBoundsFromDrawRecords();
     TestBloomDrawRecordVisibilitySelection();
+    TestDynamicPointLightVisibilityCandidateSelection();
+    TestDynamicPointLightReceiverBoundCandidateSelection();
+    TestDynamicPointLightRankingAndPacking();
+    TestDynamicPointLightFallbackUsesAllReceiverBounds();
     if (failures == 0) {
         std::puts("Sector topology mesh builder tests passed");
     }

@@ -2,6 +2,7 @@
 
 #include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorCollisionWorld.h"
+#include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
@@ -16,13 +17,6 @@
 namespace game {
 
 struct SectorTopologyMap;
-
-struct SectorPreviewDynamicPointLightUniform {
-    Vector3 position = {};
-    Vector3 color = {};
-    float radius = 0.0f;
-    float intensity = 0.0f;
-};
 
 class SectorMeshPreview {
 public:
@@ -113,6 +107,8 @@ private:
     int dynamicLightRadiiLoc = -1;
     int dynamicLightIntensitiesLoc = -1;
     int dynamicLightingClampLoc = -1;
+    std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightSources;
+    std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;
     std::vector<SectorPreviewDynamicPointLightUniform> dynamicPointLights;
     Material bloomSourceMaterial = {};
     Texture2D bloomDefaultMaterialTexture = {};

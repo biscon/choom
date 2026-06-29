@@ -56,6 +56,8 @@ SectorMeshBatchDataResult BuildSectorMeshBatchData(
 SectorMeshBatchDataResult BuildSectorMeshDrawRecordData(
         const SectorGeneratedGeometry& geometry,
         const SectorLightmapLayout* lightmapLayout = nullptr);
+std::vector<SectorReceiverBounds> BuildSectorReceiverBounds(
+        const SectorMeshBatchDataResult& drawRecordData);
 
 SectorMeshBuildResult BuildSectorMeshes(
         const SectorTopologyMap& map,

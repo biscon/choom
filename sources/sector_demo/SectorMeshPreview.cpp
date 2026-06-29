@@ -291,44 +291,6 @@ int GetShaderLocationArrayBase(Shader shader, const char* name)
     return GetShaderLocation(shader, indexedName.c_str());
 }
 
-bool IsFiniteVector3(Vector3 value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
-}
-
-Vector3 ColorToUnitRgb(Color color)
-{
-    return Vector3{
-            static_cast<float>(color.r) / 255.0f,
-            static_cast<float>(color.g) / 255.0f,
-            static_cast<float>(color.b) / 255.0f};
-}
-
-bool MakeDynamicPointLightUniform(
-        const SectorTopologyDynamicPointLight& light,
-        SectorPreviewDynamicPointLightUniform& outLight)
-{
-    if (!light.enabled
-            || !std::isfinite(light.radius)
-            || !std::isfinite(light.intensity)
-            || light.radius <= 0.0f
-            || light.intensity <= 0.0f
-            || !IsFiniteVector3(light.position)) {
-        return false;
-    }
-
-    outLight.position = SectorAuthoringToWorldPosition(light.position);
-    outLight.color = ColorToUnitRgb(light.color);
-    outLight.radius = SectorAuthoringToWorldDistance(light.radius);
-    outLight.intensity = light.intensity;
-    return std::isfinite(outLight.radius)
-            && outLight.radius > 0.0f
-            && std::isfinite(outLight.intensity)
-            && outLight.intensity > 0.0f
-            && IsFiniteVector3(outLight.position)
-            && IsFiniteVector3(outLight.color);
-}
-
 void UploadDynamicPointLights(
         Shader shader,
         int dynamicLightCountLoc,
@@ -677,18 +639,14 @@ bool SectorMeshPreview::RebuildRendererResources(
         return false;
     }
 
+    BuildSectorPreviewDynamicPointLightSources(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+            dynamicPointLightSources);
+    dynamicPointLightCandidates.clear();
+    dynamicPointLightCandidates.reserve(dynamicPointLightSources.size());
     dynamicPointLights.clear();
     dynamicPointLights.reserve(MaxDynamicLights);
-    for (const SectorTopologyDynamicPointLight& light : map.dynamicPointLights) {
-        if (dynamicPointLights.size() >= static_cast<size_t>(MaxDynamicLights)) {
-            break;
-        }
-
-        SectorPreviewDynamicPointLightUniform uniformLight;
-        if (MakeDynamicPointLightUniform(light, uniformLight)) {
-            dynamicPointLights.push_back(uniformLight);
-        }
-    }
 
     if (!LoadPreviewMaterial(
                 material,
@@ -750,6 +708,8 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     visibilityLookupWorld = SectorCollisionWorld{};
     visibilityGraphValid = false;
     visibilityLookupWorldValid = false;
+    dynamicPointLightSources.clear();
+    dynamicPointLightCandidates.clear();
     dynamicPointLights.clear();
     if (!initialized
             && engine::IsNull(assetScope)
@@ -1215,6 +1175,17 @@ void SectorMeshPreview::UpdateVisibilityDebug(int preferredStartSectorId)
     visibilityDebugText = FormatRuntimePortalVisibilityDebugText(visibilityResult);
     const size_t visibleDrawRecordCount =
             CountSectorMeshDrawRecordsForVisibility(meshes.sectorDrawRecords, visibilityResult);
+    CollectSectorPreviewDynamicPointLightCandidates(
+            dynamicPointLightSources,
+            visibilityResult,
+            meshes.sectorReceiverBounds,
+            dynamicPointLightCandidates);
+    SelectRankedSectorPreviewDynamicPointLights(
+            dynamicPointLightCandidates,
+            visibilityResult,
+            meshes.sectorReceiverBounds,
+            static_cast<std::size_t>(MaxDynamicLights),
+            dynamicPointLights);
     visibilityDebugText += " | draw records: "
             + std::to_string(visibleDrawRecordCount)
             + " / "

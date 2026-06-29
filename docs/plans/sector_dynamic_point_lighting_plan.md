@@ -75,21 +75,21 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_03",
       "title": "Visibility-Aware Dynamic Light Selection",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03a",
       "title": "Assign Dynamic Lights To Sectors And Collect Visibility Candidates",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03b",
       "title": "Rank, Cap, And Pack Selected Dynamic Lights",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04",
@@ -138,9 +138,9 @@ When an agent is asked to execute this plan, it must:
 | Phase 2: Shader Dynamic Point Light Support                                   | Completed   | 2026-06-29 | Shader dynamic point light support is implemented.                         |
 | Phase 2A: Pass Fragment World Position And Normal Through Sector Shader       | Completed   | 2026-06-29 | Shader plumbing only; dynamic light count remains zero.                    |
 | Phase 2B: Add Fixed-Size Dynamic Point Light Shader Uniforms And Contribution | Completed   | 2026-06-29 | Adds capped fixed-array dynamic point-light contribution.                  |
-| Phase 3: Visibility-Aware Dynamic Light Selection                             | Not Started |      | Parent phase.                                                              |
-| Phase 3A: Assign Dynamic Lights To Sectors And Collect Visibility Candidates  | Not Started |      | Candidate collection using portal visibility.                              |
-| Phase 3B: Rank, Cap, And Pack Selected Dynamic Lights                         | Not Started |      | Top-N selection and shader packing.                                        |
+| Phase 3: Visibility-Aware Dynamic Light Selection                             | Completed   | 2026-06-29 | Visibility candidate filtering and ranked top-N selection are implemented. |
+| Phase 3A: Assign Dynamic Lights To Sectors And Collect Visibility Candidates  | Completed   | 2026-06-29 | Dynamic lights are assigned to sectors and selected against visible receiver bounds. |
+| Phase 3B: Rank, Cap, And Pack Selected Dynamic Lights                         | Completed   | 2026-06-29 | Candidate lights are ranked by estimated visible-receiver contribution and capped at 8. |
 | Phase 4: Dynamic Light Debug And Selection Stability                          | Not Started |      | Parent phase.                                                              |
 | Phase 4A: Add Dynamic Light Debug Readout And Runtime Toggle                  | Not Started |      | Makes selection visible/debuggable.                                        |
 | Phase 4B: Add Simple Top-N Selection Hysteresis                               | Not Started |      | Reduces threshold flicker.                                                 |
@@ -257,6 +257,104 @@ Behavior notes:
 
 Verification:
 
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed.
+* `git diff --check` passed.
+* `git diff --stat` reviewed.
+* `git status --short` reviewed.
+
+### 2026-06-29: Phase 3A Completed
+
+Summary:
+
+* Added a small dynamic point light selection helper that converts valid authored dynamic lights into preview uniform data and assigns an owning sector through `SectorCollisionWorld::FindSectorContainingPoint()`.
+* Replaced rebuild-time first-eight packing with visibility-time candidate collection.
+* Added candidate filtering; later Phase 3 correction expanded this from owner-sector visibility to visible receiver bounds.
+* Added tests for visible receiver overlap, fallback draw-all behavior, invalid-light dropping, world-space conversion, and unassigned outside-map lights.
+
+Behavior notes:
+
+* Source code changed.
+* Sector ownership lookup uses the existing topology-built collision world and world-space XZ light position.
+* Disabled, non-positive-radius, non-positive-intensity, non-finite-position, and invalid converted lights are dropped before candidate filtering.
+* If visibility is invalid or `fallbackDrawAll` is true, all valid dynamic light sources are candidates.
+* During normal valid visibility, owner-sector visibility is only an inclusion shortcut; hidden-owner lights may still be included when they overlap visible receiver bounds.
+* No scoring/ranking formula was added; Phase 3B remains responsible for ranking and the final cap policy. The shader upload helper still caps the list at `MAX_DYNAMIC_LIGHTS`.
+* Shader formula and dynamic-light contribution behavior are unchanged.
+* Portal geometry draw culling is unchanged.
+* Static baked lighting and lightmap source-hash behavior are unchanged; no lightmap hash code or baked-light inputs were touched.
+* No topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* No gameplay, collision, sector lookup, or physics behavior changed; the existing collision world is only read for preview light ownership.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug --target sector_topology_mesh_builder_tests -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_topology_mesh_builder$"` passed.
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed.
+* `git diff --check` passed.
+* `git diff --stat` reviewed.
+* `git status --short` reviewed.
+
+### 2026-06-29: Phase 3B Completed
+
+Summary:
+
+* Added ranked dynamic point light selection after portal-visibility candidate collection.
+* Ranked visible/fallback candidates by estimated visible-receiver contribution and packed only the selected lights into the existing shader uniform upload path.
+* Added tests for receiver-bound priority, fallback draw-all bounds, boundary padding, disabled/invalid-light dropping through source collection, max-light capping, and deterministic light-ID tie-breaking.
+
+Behavior notes:
+
+* Source code changed.
+* Candidate policy uses owner-sector visibility as an inclusion shortcut, visible receiver AABB overlap as the main safe inclusion path, and all valid sources during invalid visibility or fallback draw-all.
+* Ranking score is `intensity * max(color.r, color.g, color.b) * atten^2`, where `atten = saturate(1 - nearestDistance(light.position, visibleReceiverBounds) / radius)`.
+* Lights are not dropped solely because the camera is outside their influence radius.
+* Selected dynamic lights are capped at `MAX_DYNAMIC_LIGHTS` / 8 before shader upload.
+* Ties use ascending stable light ID.
+* Dynamic light shader formula and uniform layout are unchanged.
+* Portal geometry draw culling is unchanged.
+* Static baked lighting and lightmap source-hash behavior are unchanged; no lightmap hash code or baked-light inputs were touched.
+* No topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* No gameplay, collision, sector lookup, or physics behavior changed; the existing collision world continues to be read only for preview light ownership.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug --target sector_topology_mesh_builder_tests -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_topology_mesh_builder$"` passed.
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed.
+* `git diff --check` passed.
+* `git diff --stat` reviewed.
+* `git status --short` reviewed.
+
+### 2026-06-29: Phase 3 Dynamic Light Selection Correction
+
+Summary:
+
+* Dynamic light candidate selection now uses visible receiver bounds instead of camera-distance hard rejection. Owner-sector visibility is only an inclusion shortcut, not the only inclusion path.
+* Added per-sector receiver bounds derived from generated sector draw-record geometry.
+* Updated candidate collection to include owner-visible lights, lights overlapping padded visible receiver bounds, and all valid lights during fallback draw-all.
+* Updated ranking to estimate contribution to visible receiver bounds rather than distance to the camera.
+
+Behavior notes:
+
+* Source code changed.
+* Receiver bounds include generated renderable sector geometry and exclude the separately generated sky cylinder/top cap.
+* Fallback draw-all treats all receiver bounds as visible; if receiver bounds are unavailable, valid dynamic lights are included and ranked conservatively.
+* Receiver bounds are padded slightly for sphere-overlap and nearest-distance scoring to avoid exact-boundary misses.
+* Owner-sector visibility does not add a scoring bonus; ranking remains receiver-contribution based when bounds are available.
+* Dynamic light selection remains part of the per-frame preview visibility update and is not gated by debug UI display.
+* Dynamic light shader formula and uniform layout are unchanged.
+* Static baked lighting and lightmap source-hash behavior are unchanged; no lightmap hash code or baked-light inputs were touched.
+* No topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+
+Verification:
+
+* `cmake --build cmake-build-debug --target sector_topology_mesh_builder_tests -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_topology_mesh_builder$"` passed.
 * `cmake --build cmake-build-debug -j2` passed.
 * `ctest --test-dir cmake-build-debug --output-on-failure` passed.
 * `git diff --check` passed.

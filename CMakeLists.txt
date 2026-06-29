@@ -154,6 +154,8 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_mesh_builder_tests
             tests/SectorTopologyMeshBuilderTests.cpp
+            sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorDynamicPointLightSelection.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorMeshBuilder.cpp
             sources/sector_demo/SectorTextureTypes.cpp
