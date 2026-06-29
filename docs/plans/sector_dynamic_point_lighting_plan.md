@@ -1,23 +1,183 @@
-# Sector Dynamic Point Lighting Implementation Plan
+# Sector Dynamic Point Lighting Plan
 
-## Summary
+## How To Use This Plan
+
+This is a living execution plan.
+
+When an agent is asked to execute this plan, it must:
+
+1. Read this section first.
+2. Read the `plan-state-json` block.
+3. Identify the selected phase/pass.
+4. Execute only that selected phase/pass.
+5. Do not skip ahead.
+6. Do not execute multiple phases/passes in one run unless the selected item explicitly says it is a combined pass.
+7. If the selected item is too broad, update this plan with smaller child passes and stop.
+8. If smaller passes are added, do not also implement source changes in the same run unless explicitly instructed.
+9. After executing a phase/pass, update this plan with status, date, summary, verification results, and behavior notes.
+10. Do not claim manual verification unless it was actually performed.
+11. Keep this plan self-tracking so future fresh-context runs can resume from it.
+
+```plan-state-json
+{
+  "plan_id": "sector_dynamic_point_lighting_plan",
+  "status_values": [
+    "Not Started",
+    "Planned",
+    "In Progress",
+    "Completed",
+    "Deferred",
+    "Blocked",
+    "Partial"
+  ],
+  "items": [
+    {
+      "id": "phase_01",
+      "title": "Dynamic Point Light Data And Editor Authoring",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_01a",
+      "title": "Add Dynamic Point Light Data, Serialization, And Hash Isolation",
+      "type": "pass",
+      "parent": "phase_01",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_01b",
+      "title": "Add Dynamic Light Editor Tool, Selection, And Inspector",
+      "type": "pass",
+      "parent": "phase_01",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_02",
+      "title": "Shader Dynamic Point Light Support",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_02a",
+      "title": "Pass Fragment World Position And Normal Through Sector Shader",
+      "type": "pass",
+      "parent": "phase_02",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_02b",
+      "title": "Add Fixed-Size Dynamic Point Light Shader Uniforms And Contribution",
+      "type": "pass",
+      "parent": "phase_02",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_03",
+      "title": "Visibility-Aware Dynamic Light Selection",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_03a",
+      "title": "Assign Dynamic Lights To Sectors And Collect Visibility Candidates",
+      "type": "pass",
+      "parent": "phase_03",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_03b",
+      "title": "Rank, Cap, And Pack Selected Dynamic Lights",
+      "type": "pass",
+      "parent": "phase_03",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_04",
+      "title": "Dynamic Light Debug And Selection Stability",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_04a",
+      "title": "Add Dynamic Light Debug Readout And Runtime Toggle",
+      "type": "pass",
+      "parent": "phase_04",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_04b",
+      "title": "Add Simple Top-N Selection Hysteresis",
+      "type": "pass",
+      "parent": "phase_04",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_05",
+      "title": "Polish, Tests, Documentation, And Completion",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_05a",
+      "title": "Tune Defaults, Strengthen Tests, Update Docs, And Close Plan",
+      "type": "pass",
+      "parent": "phase_05",
+      "status": "Not Started"
+    }
+  ]
+}
+```
+
+## Current Progress
+
+| Phase / Pass                                                                  | Status      | Date | Notes                                                                      |
+| ----------------------------------------------------------------------------- | ----------- | ---- | -------------------------------------------------------------------------- |
+| Phase 1: Dynamic Point Light Data And Editor Authoring                        | Not Started |      | Parent phase.                                                              |
+| Phase 1A: Add Dynamic Point Light Data, Serialization, And Hash Isolation     | Not Started |      | First executable pass. Adds model/persistence without rendering/editor UI. |
+| Phase 1B: Add Dynamic Light Editor Tool, Selection, And Inspector             | Not Started |      | Adds authoring UI after data model is stable.                              |
+| Phase 2: Shader Dynamic Point Light Support                                   | Not Started |      | Parent phase.                                                              |
+| Phase 2A: Pass Fragment World Position And Normal Through Sector Shader       | Not Started |      | Shader plumbing only; dynamic light count remains zero.                    |
+| Phase 2B: Add Fixed-Size Dynamic Point Light Shader Uniforms And Contribution | Not Started |      | Adds actual point-light contribution.                                      |
+| Phase 3: Visibility-Aware Dynamic Light Selection                             | Not Started |      | Parent phase.                                                              |
+| Phase 3A: Assign Dynamic Lights To Sectors And Collect Visibility Candidates  | Not Started |      | Candidate collection using portal visibility.                              |
+| Phase 3B: Rank, Cap, And Pack Selected Dynamic Lights                         | Not Started |      | Top-N selection and shader packing.                                        |
+| Phase 4: Dynamic Light Debug And Selection Stability                          | Not Started |      | Parent phase.                                                              |
+| Phase 4A: Add Dynamic Light Debug Readout And Runtime Toggle                  | Not Started |      | Makes selection visible/debuggable.                                        |
+| Phase 4B: Add Simple Top-N Selection Hysteresis                               | Not Started |      | Reduces threshold flicker.                                                 |
+| Phase 5: Polish, Tests, Documentation, And Completion                         | Not Started |      | Parent phase.                                                              |
+| Phase 5A: Tune Defaults, Strengthen Tests, Update Docs, And Close Plan        | Not Started |      | Final cleanup and plan closure.                                            |
+
+## Execution Tracking Rules
+
+* Each pass must leave the project buildable and runnable.
+* Each pass final report must state whether source code changed.
+* Each implementation pass must update this document before finishing.
+* The update should be small and local.
+* Do not rewrite unrelated phases when marking progress.
+* If behavior is intended to remain unchanged, explicitly state that.
+* If a pass changes serialization, generated data, public APIs, runtime behavior, cache invalidation, shader behavior, or build/test behavior, clearly say so.
+* Do not claim manual GUI verification unless it was actually performed.
+* If a pass produces only a plan or audit and no source changes, state that clearly.
+* If a pass is too broad, split it into smaller child passes and stop without source changes.
+
+## Goal And Desired End State
 
 Add forward-rendered dynamic point lights to the sector renderer.
 
-The first implementation should be boring and practical:
+Desired end state:
 
-* dynamic point lights only
-* no spotlights
-* no shadow maps
-* no PCF
-* no deferred/clustered/tiled renderer
-* no dynamic floors/doors
-* no full entity/object ownership system
-* no reuse of existing baked `staticLights` as runtime dynamic lights
-
-Static lights remain baked lightmap inputs.
-
-Dynamic point lights are separate authored/runtime lights. They render in the sector fragment shader, are culled/ranked using the completed portal visibility system, and do not affect the baked lightmap source hash.
+* Authored dynamic point lights exist separately from existing baked `staticLights`.
+* Dynamic point lights save/load correctly.
+* Dynamic point lights are editable in the sector editor.
+* Existing static lights remain baked lightmap inputs.
+* Dynamic point lights do not affect the lightmap source hash.
+* Sector shader supports per-pixel dynamic point lights.
+* Dynamic light count zero preserves old visual output.
+* Portal visibility is used to select candidate dynamic lights.
+* More authored dynamic lights can exist than the shader evaluates.
+* Selected lights are ranked by estimated contribution.
+* Debug output shows candidate/selected dynamic light counts.
+* No shadow-map, spotlight, dynamic-sector, deferred-rendering, or clustered-lighting scope leaks into this plan.
 
 Target shader composition:
 
@@ -26,77 +186,105 @@ lighting = bakedDirect + sectorAmbient * bakedAO + dynamicDirect
 finalRgb = surfaceRgb * lighting
 ```
 
-Dynamic light count zero must preserve the current visual output.
+Current audit facts to preserve:
 
-## Plan State
+* Sector shader is embedded in `SectorMeshPreview.cpp`.
+* Material slots are piggybacked:
 
-```plan-state-json
-{
-  "plan": "sector_dynamic_point_lighting",
-  "version": 1,
-  "status": "planned",
-  "current_phase": "phase_01_dynamic_point_light_data_and_editor",
-  "phases": [
-    {
-      "id": "phase_01_dynamic_point_light_data_and_editor",
-      "status": "pending"
-    },
-    {
-      "id": "phase_02_shader_dynamic_point_light_support",
-      "status": "pending"
-    },
-    {
-      "id": "phase_03_visibility_aware_light_selection",
-      "status": "pending"
-    },
-    {
-      "id": "phase_04_dynamic_light_debug_and_stability",
-      "status": "pending"
-    },
-    {
-      "id": "phase_05_polish_tests_and_plan_completion",
-      "status": "pending"
-    }
-  ]
-}
-```
+  * diffuse = base texture
+  * specular = lightmap
+  * normal = decal texture
+* Current lighting is `clamp(vertexAmbient * bakedAO + bakedDirect, 0..1) * surfaceRgb`.
+* AO affects ambient only, not baked direct.
+* Meshes already upload positions and normals, but the shader does not currently pass position/normal to the fragment stage.
+* Existing `staticLights` are bake lights and source-hash inputs.
+* First dynamic light implementation should use fixed uniform arrays and no new samplers.
 
-## Global Rules
+## Dependency Direction Rules
 
-Keep every phase compiling and runnable.
+* Static baked lighting must not depend on dynamic runtime lighting.
+* Dynamic runtime lighting may read topology, current camera state, and portal visibility.
+* Dynamic light selection may depend on visibility results.
+* Visibility/culling must not depend on dynamic lighting.
+* Lightmap source hashing must not include runtime dynamic point lights.
+* The shader may receive selected dynamic light uniforms, but mesh generation should not need to know selected lights.
+* Editor authoring data may be serialized, but runtime selected-light state must not be serialized.
 
-Use small, reviewable changes.
+## Proposed Phases
 
-Update this plan document after each completed phase with:
+### Phase 1: Dynamic Point Light Data And Editor Authoring
 
-* phase status
-* date
-* summary
-* files changed
-* verification results
-* any follow-up notes
+Goal:
 
-Dynamic point lights must not affect static lightmap baking or the lightmap source hash.
+Add dynamic point lights as their own authored map-level concept.
 
-Existing `staticLights` remain baked/static lights.
+Why it helps:
 
-Do not add shadow maps, PCF, spotlights, cookies, volumetrics, clustered lighting, deferred rendering, or dynamic sectors in this plan.
+This keeps baked static lights and runtime dynamic lights separate, avoiding source-hash confusion and double-lighting surprises.
 
-Do not add GUI automation or screenshot tests.
+Files/functions likely touched:
 
-Prefer non-GUI unit/data tests for serialization, ranking, selection, and packing helpers.
+* `sources/sector_demo/SectorTopologyTypes.h`
+* `sources/sector_demo/SectorTopologySerialization.cpp`
+* `sources/sector_demo/SectorLightmap.cpp`
+* `sources/sector_editor/SectorEditorTopologyActions.cpp`
+* `sources/sector_editor/SectorEditorLightInspector.cpp`
+* editor selection/tool files as needed
+* topology serialization/hash tests
 
-## Phase 1: Dynamic Point Light Data and Editor
+Exact behavior that must remain unchanged:
 
-### Goal
+* Existing `staticLights` still save/load as before.
+* Existing static light baking behavior stays unchanged.
+* Lightmap source hashes change for static light edits, but not dynamic light edits.
+* Levels with no `dynamicPointLights` field load normally.
 
-Add authored dynamic point lights as a separate map-level concept and make them editable in the sector editor, without changing rendering output yet.
+Risks/goblins:
 
-### Requirements
+* Accidentally including dynamic lights in lightmap hash.
+* Accidentally reusing static-light source radius semantics.
+* Confusing static and dynamic lights in editor labels.
+* Serialization compatibility issues with old levels.
 
-Add a new dynamic point light type separate from `SectorTopologyStaticPointLight`.
+Non-goals:
 
-Suggested authored type:
+* No dynamic shader lighting yet.
+* No shadow settings.
+* No sourceRadius on dynamic lights.
+* No spotlights.
+* No animation/flicker system.
+
+Suggested tests/manual smoke checks:
+
+* Serialization round-trip for dynamic point lights.
+* Missing `dynamicPointLights` loads as empty.
+* Invalid values are handled defensively.
+* Dynamic light edits do not affect lightmap source hash.
+* Manual editor smoke only after Phase 1B.
+
+Final report expectations:
+
+* State files changed.
+* State serialization field name.
+* State whether hash behavior was tested.
+* State whether source code changed.
+* State verification commands/results.
+
+How to update this plan after completion:
+
+* Mark completed pass as `Completed` in JSON and table.
+* Add date, summary, verification results, and behavior notes.
+* Mark parent phase `Completed` only after both Phase 1A and Phase 1B are complete.
+
+#### Phase 1A: Add Dynamic Point Light Data, Serialization, And Hash Isolation
+
+Goal:
+
+Add the data model and persistence for authored dynamic point lights without editor UI or shader changes.
+
+Implementation guidance:
+
+Add a separate dynamic point light type, for example:
 
 ```cpp
 struct SectorTopologyDynamicPointLight {
@@ -109,9 +297,7 @@ struct SectorTopologyDynamicPointLight {
 };
 ```
 
-Use the same coordinate/unit convention as existing static lights in saved topology data. Convert to world units only for runtime/shader use.
-
-Add storage to the topology/map model:
+Add map-level storage such as:
 
 ```cpp
 std::vector<SectorTopologyDynamicPointLight> dynamicPointLights;
@@ -119,51 +305,79 @@ std::vector<SectorTopologyDynamicPointLight> dynamicPointLights;
 
 Use stable positive integer IDs.
 
-Serialize under a distinct root field, for example:
+Serialize under a distinct root field such as:
 
 ```json
 "dynamicPointLights": []
 ```
 
-Omit the field when empty if that matches the project’s existing save style.
+Load missing field as empty.
 
-Load missing `dynamicPointLights` as empty.
+Omit empty field on save if that matches the project’s existing save style.
 
-Validate bad data defensively:
-
-* invalid ID
-* non-object entries
-* bad position
-* bad color
-* negative radius
-* negative intensity
-* non-boolean enabled
+Validate bad data defensively.
 
 Do not include dynamic point lights in `ComputeSectorLightmapSourceHash()`.
 
-Add tests proving dynamic point light changes do not affect the baked lightmap source hash.
+Add tests for:
 
-Add a separate editor tool/control for dynamic lights. Do not make this a checkbox on static lights.
+* missing dynamic lights load as empty
+* save/load round-trip
+* dynamic light changes do not change lightmap source hash
+* static light changes still change lightmap source hash
 
-Suggested UI:
+Behavior that must remain unchanged:
+
+* Renderer output.
+* Editor UI.
+* Static light serialization.
+* Static light bake/source-hash behavior.
+
+Suggested checks:
+
+```bash
+git diff --check
+git diff --stat
+git status --short
+```
+
+Run relevant serialization/hash tests.
+
+Final report expectations:
+
+* Confirm no rendering/editor behavior changed.
+* Confirm dynamic lights are not part of lightmap source hash.
+* Confirm tests/checks run.
+
+#### Phase 1B: Add Dynamic Light Editor Tool, Selection, And Inspector
+
+Goal:
+
+Make authored dynamic point lights addable, selectable, editable, saveable, and reloadable from the editor.
+
+Implementation guidance:
+
+Add separate UI/tool affordance for dynamic lights. Do not make dynamic/static a checkbox on one light object.
+
+Suggested labels:
 
 ```text
 Static Light
 Dynamic Light
 ```
 
-Dynamic light placement should reuse the same general interaction style as static light placement:
+Dynamic point light placement should reuse static-light placement patterns:
 
 * click in 2D sector to place
-* default height: sector floor + existing static-light default height, probably 1.8 world units
-* default color: white
-* default intensity: 1.0
+* default height: sector floor + 1.8 world units, matching current static-light placement style where appropriate
 * default radius: 8.0 world units
+* default intensity: 1.0
+* default color: white
 * enabled: true
 
-Add selection/editing support for dynamic lights.
+Add selection/editing support.
 
-Add a dynamic light inspector with:
+Dynamic light inspector fields:
 
 * enabled
 * position
@@ -171,27 +385,17 @@ Add a dynamic light inspector with:
 * intensity
 * color
 
-Do not show `sourceRadius` for dynamic lights. That belongs to baked soft shadows and future dynamic shadow systems, not first-pass runtime point lights.
+Do not show `sourceRadius`.
 
-Render dynamic light editor/debug glyphs distinctly from static lights in 2D/preview editor overlays if there is already such a path. Keep it simple.
+If editor overlays/glyphs exist for static lights, render dynamic light glyphs distinctly but simply.
 
-### Out of Scope
+Behavior that must remain unchanged:
 
-No shader lighting yet.
+* Static light tool and inspector behavior.
+* Lightmap baking and source hash.
+* Renderer output except editor overlay glyphs.
 
-No dynamic-light culling/ranking yet.
-
-No shadow settings.
-
-No spotlights.
-
-No light animation/flicker system.
-
-### Verification
-
-Run the relevant unit tests.
-
-Run:
+Suggested checks:
 
 ```bash
 git diff --check
@@ -199,56 +403,148 @@ git diff --stat
 git status --short
 ```
 
-If tests exist for topology serialization/lightmap hashing, run them.
+Run relevant editor/topology tests.
 
-### Manual Smoke Test
+Manual smoke checks:
 
-In the editor:
+* Add a dynamic light.
+* Select it.
+* Edit enabled/radius/intensity/color/position.
+* Save and reload.
+* Confirm it persists.
+* Confirm no lightmap stale/rebake behavior is triggered by dynamic-only edits.
 
-* add a dynamic light
-* select it
-* edit radius/intensity/color/enabled
-* save
-* reload
-* confirm it persists
-* confirm no lightmap rebake/stale behavior is triggered solely by dynamic light edits
+Final report expectations:
 
-Expected rendering result: no visual dynamic lighting yet.
+* State UI/tool labels.
+* State manual verification if actually performed.
+* Confirm no shader dynamic lighting exists yet.
 
-## Phase 2: Shader Dynamic Point Light Support
+### Phase 2: Shader Dynamic Point Light Support
 
-### Goal
+Goal:
 
-Add forward per-pixel dynamic point light support to the sector shader, with a simple global upload path.
+Add per-pixel point light support to the sector shader.
 
-Dynamic light count zero must match current rendering.
+Why it helps:
 
-### Requirements
+This proves the renderer can blend dynamic direct lighting with baked lightmaps/AO before adding ranking/culling complexity.
 
-Modify the embedded sector shader in `SectorMeshPreview.cpp`.
+Files/functions likely touched:
 
-Pass these from vertex shader to fragment shader:
+* `sources/sector_demo/SectorMeshPreview.cpp`
+* sector shader strings inside `SectorMeshPreview.cpp`
+* shader uniform location/setup code
+* draw loop uniform upload helpers
+* possible shader helper structs/constants
+* shader/data packing tests if helpers are extracted
+
+Exact behavior that must remain unchanged:
+
+* Dynamic light count zero must match current output.
+* Base texture/lightmap/decal material slot behavior must stay compatible.
+* Emissive bloom source must not be affected by dynamic lights.
+* Alpha-tested middle textures must still discard correctly.
+
+Risks/goblins:
+
+* Shader compile errors from attribute names/locations.
+* NaNs near zero distance.
+* Overbright scenes due to LDR clamp behavior.
+* Accidentally changing old baked-only appearance.
+* Accidentally treating decal material slot as normal map support.
+
+Non-goals:
+
+* No visibility-aware selection in Phase 2.
+* No per-sector light lists.
+* No shadows.
+* No spotlights.
+* No new samplers.
+
+Suggested tests/manual smoke checks:
+
+* With zero dynamic lights, output should appear unchanged.
+* One dynamic point light visibly affects nearby surfaces.
+* Normals affect floor/wall brightness directionally.
+* Decals and alpha-tested middle textures still render.
+* Bloom source remains emissive-only.
+
+Final report expectations:
+
+* State shader/uniform changes.
+* State clamp used.
+* State tests/checks run.
+* State any manual smoke results if performed.
+
+How to update this plan after completion:
+
+* Mark completed pass as `Completed` in JSON and table.
+* Add date, summary, verification results, and behavior notes.
+* Mark parent phase `Completed` only after both Phase 2A and Phase 2B are complete.
+
+#### Phase 2A: Pass Fragment World Position And Normal Through Sector Shader
+
+Goal:
+
+Add shader plumbing for fragment world position and normal, but keep dynamic light count zero.
+
+Implementation guidance:
+
+Modify embedded sector shader strings.
+
+Pass from vertex to fragment:
 
 ```glsl
 fragWorldPosition
 fragWorldNormal
 ```
 
-Current sector meshes already upload world-space generated positions and normals. Current draw uses `MatrixIdentity()`, so local/world are effectively identical for this first implementation.
+Current generated mesh positions are already world-space and draw records use `MatrixIdentity()`, so first pass can treat `vertexPosition` as world position and `vertexNormal` as world normal.
 
-Add fixed-size dynamic point light uniforms.
+Normalize normals in shader.
 
-Use:
+Do not change lighting formula yet except unavoidable plumbing.
+
+Behavior that must remain unchanged:
+
+* Visual output should be unchanged.
+* No dynamic light contribution yet.
+* Bloom source remains unchanged unless compile plumbing requires a harmless matching update.
+
+Suggested checks:
+
+```bash
+git diff --check
+git diff --stat
+git status --short
+```
+
+Run relevant tests/build.
+
+Manual smoke:
+
+* Existing levels render like before.
+* No shader compile errors.
+
+Final report expectations:
+
+* Confirm whether visual behavior is intended unchanged.
+* Confirm shader compiled in manual or automated run if actually checked.
+
+#### Phase 2B: Add Fixed-Size Dynamic Point Light Shader Uniforms And Contribution
+
+Goal:
+
+Add actual dynamic point light contribution with a simple global upload path.
+
+Implementation guidance:
+
+Use fixed uniform arrays:
 
 ```glsl
 #define MAX_DYNAMIC_LIGHTS 8
-```
 
-or an equivalent C++/GLSL shared constant approach.
-
-Suggested uniforms:
-
-```glsl
 uniform int dynamicLightCount;
 uniform vec3 dynamicLightPositions[MAX_DYNAMIC_LIGHTS];
 uniform vec3 dynamicLightColors[MAX_DYNAMIC_LIGHTS];
@@ -256,79 +552,53 @@ uniform float dynamicLightRadii[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightIntensities[MAX_DYNAMIC_LIGHTS];
 ```
 
-Add matching shader location fields and upload helpers in preview rendering code.
+Add matching C++ uniform locations and upload helper.
 
-First shader formula:
+For this phase, upload enabled authored dynamic point lights in deterministic ID/insertion order, capped at `MAX_DYNAMIC_LIGHTS`. Phase 3 will replace this with visibility-aware ranking.
+
+Skip invalid lights:
+
+* disabled
+* radius <= 0
+* intensity <= 0
+* invalid position/color
+
+Dynamic contribution:
 
 ```text
-dynamicDirect = sum(point light contributions)
+toLight = light.position - fragWorldPosition
+distance = length(toLight)
+if distance < radius:
+    L = toLight / distance
+    ndotl = max(dot(normalize(fragWorldNormal), L), 0)
+    atten = saturate(1 - distance / radius)
+    atten = atten * atten
+    dynamicDirect += light.colorRgb * intensity * atten * ndotl
+```
 
+Handle very small distance safely.
+
+Composition:
+
+```text
 lighting = bakedDirect + sectorAmbient * bakedAO + dynamicDirect
 lighting = clamp(lighting, 0, dynamicLightingClamp)
 finalRgb = surfaceRgb * lighting
 ```
 
-Use a clamp above 1 so dynamic lights can visibly brighten baked scenes, but avoid silly overbright explosions. Suggested first clamp:
+Use `dynamicLightingClamp` of either 2.0 or 4.0 and document the choice.
 
-```text
-0..2
-```
+Do not multiply dynamic light by baked AO.
 
-or
+Do not affect emissive bloom source.
 
-```text
-0..4
-```
+Behavior that must remain unchanged:
 
-Pick one and document it in code comments/debug notes.
+* Dynamic light count zero matches current rendering.
+* Static baked lightmaps remain unchanged.
+* Decal/emissive behavior remains unchanged.
 
-Point light contribution:
-
-```text
-toLight = light.position - fragWorldPosition
-distance = length(toLight)
-
-if distance < radius:
-    L = toLight / distance
-    NdotL = max(dot(normalize(fragWorldNormal), L), 0)
-    atten = saturate(1 - distance / radius)
-    atten = atten * atten
-    dynamicDirect += light.colorRgb * intensity * atten * NdotL
-```
-
-Handle very small distances without NaNs.
-
-Alpha-tested middle textures must still discard before expensive lighting work.
-
-Do not apply baked AO to dynamic lights in this first pass.
-
-Do not add new samplers. Current material map slots are already reused:
-
-* diffuse = base texture
-* specular = lightmap
-* normal = decal texture
-
-Do not change bloom-source shader behavior except as necessary to keep it compiling. Dynamic lights should not affect emissive bloom source rendering.
-
-For this phase, upload a simple global dynamic light list from authored dynamic point lights, capped at `MAX_DYNAMIC_LIGHTS`, without visibility-aware selection yet. It is acceptable to use insertion/ID order temporarily. Phase 3 will replace this with proper candidate selection/ranking.
-
-Disabled lights, zero-radius lights, and zero-intensity lights should upload as inactive or be skipped.
-
-### Out of Scope
-
-No visibility-aware ranking yet.
-
-No hysteresis.
-
-No per-sector light lists.
-
-No shadows or spotlights.
-
-### Verification
-
-Run the relevant CMake/CTest target set.
-
-Run:
+Suggested checks:
 
 ```bash
 git diff --check
@@ -336,64 +606,145 @@ git diff --stat
 git status --short
 ```
 
-### Manual Smoke Test
+Run build/tests.
 
-Use a level with at least one dynamic point light.
+Manual smoke:
 
-Confirm:
+* Disable all dynamic lights: old look.
+* Enable one dynamic light: visible local lighting.
+* Radius/intensity/color changes are visible.
+* Alpha-tested middle textures still work.
+* Decals/bloom still work.
 
-* `dynamicLightCount = 0` or all dynamic lights disabled looks like the old renderer
-* enabling one dynamic light visibly adds light
-* light fades with radius
-* wall/floor normals respond to light direction
-* alpha-tested middle textures still render correctly
-* decals still render correctly
-* emissive bloom source is not accidentally affected by dynamic lights
-* lightmapped scenes still retain baked lighting and AO
+Final report expectations:
 
-## Phase 3: Visibility-Aware Light Selection and Ranking
+* State MAX_DYNAMIC_LIGHTS.
+* State clamp max.
+* State upload order before Phase 3 ranking.
+* State manual smoke if performed.
 
-### Goal
+### Phase 3: Visibility-Aware Dynamic Light Selection
 
-Use portal visibility to select and rank dynamic lights before uploading them to the shader.
+Goal:
 
-This lets the map contain more dynamic lights than the shader evaluates.
+Use portal visibility to select/rank dynamic lights before uploading them.
 
-### Requirements
+Why it helps:
 
-Add a runtime selected-light path that runs once per frame after the current portal visibility result is updated and before sector draw records are rendered.
+The map can contain more dynamic lights than the forward shader evaluates, without every hidden light consuming a shader slot.
 
-Use the current portal visibility result:
+Files/functions likely touched:
 
-* valid start sector
-* visible sector IDs
-* fallback draw-all
-* total sector count
+* `SectorMeshPreview.cpp`
+* `SectorPortalVisibility` integration call sites
+* `SectorCollisionWorld` or sector lookup helpers
+* new dynamic light selection helper files if useful
+* tests for candidate selection/ranking
 
-If visibility is invalid or `fallbackDrawAll` is true, consider all enabled dynamic point lights as candidates.
+Exact behavior that must remain unchanged:
 
-If visibility is valid and not fallback, prefer dynamic lights whose owning sector is visible.
+* Portal geometry draw culling remains unchanged.
+* `fallbackDrawAll` remains safe and conservative.
+* Static baked lighting remains unchanged.
+* Shader formula from Phase 2 remains unchanged except selected input list.
 
-Determine each dynamic light’s sector ownership using existing collision/sector lookup code where practical.
+Risks/goblins:
 
-For first pass, one owning sector per light is enough.
+* False negative visibility excluding lights that should illuminate visible surfaces.
+* Hidden-sector lights wasting slots.
+* Top-N flicker near score thresholds.
+* Ambiguous sector ownership for lights near portals/walls.
+* Incorrect fallback behavior.
 
-If a light cannot be assigned to a sector:
+Non-goals:
 
-* include it during fallback draw-all
-* otherwise either exclude it or include it conservatively, but document the chosen behavior
+* No hysteresis in Phase 3 unless trivial.
+* No per-sector or per-draw-record light lists.
+* No clustered/tiled/deferred lighting.
+* No shadows.
 
-Drop invalid candidates:
+Suggested tests/manual smoke checks:
+
+* Candidate filtering by visible sectors.
+* Fallback draw-all considers all lights.
+* Top-N cap keeps highest scores.
+* More than 8 authored lights present.
+* Hidden-sector lights generally do not consume slots in normal visibility cases.
+
+Final report expectations:
+
+* State candidate policy.
+* State fallback behavior.
+* State ranking formula.
+* State tests/checks run.
+
+How to update this plan after completion:
+
+* Mark completed pass as `Completed` in JSON and table.
+* Add date, summary, verification results, and behavior notes.
+* Mark parent phase `Completed` only after Phase 3A and Phase 3B are complete.
+
+#### Phase 3A: Assign Dynamic Lights To Sectors And Collect Visibility Candidates
+
+Goal:
+
+Determine which dynamic point lights are candidates based on portal visibility.
+
+Implementation guidance:
+
+Run dynamic light candidate selection after the current visibility result is updated and before drawing.
+
+Assign each dynamic light to one sector where practical using existing sector/collision lookup helpers.
+
+Candidate rules:
+
+* If visibility is invalid, consider all enabled dynamic point lights.
+* If `fallbackDrawAll` is true, consider all enabled dynamic point lights.
+* Otherwise, prefer lights whose owning sector is in `visibleSectorIds`.
+
+For lights that cannot be assigned to a sector:
+
+* choose a conservative documented behavior
+* recommended first behavior: include them only during fallback draw-all; otherwise exclude and report/debug-count them if easy
+
+Drop invalid lights:
 
 * disabled
 * radius <= 0
 * intensity <= 0
-* invalid position
-* invalid color
+* invalid position/color
 
-Drop lights outside their influence radius from the camera as a cheap first cut.
+Behavior that must remain unchanged:
 
-Use contribution scoring instead of distance-only sorting.
+* Shader still uses whatever selected/uploaded list exists.
+* No scoring changes beyond candidate inclusion.
+* No geometry culling changes.
+
+Suggested checks:
+
+```bash
+git diff --check
+git diff --stat
+git status --short
+```
+
+Add/run tests for visible-sector candidate filtering and fallback behavior.
+
+Final report expectations:
+
+* State sector ownership lookup method.
+* State unassigned-light behavior.
+* State fallback behavior.
+
+#### Phase 3B: Rank, Cap, And Pack Selected Dynamic Lights
+
+Goal:
+
+Rank candidates by estimated contribution, keep top `MAX_DYNAMIC_LIGHTS`, and upload only selected lights.
+
+Implementation guidance:
+
+Do not sort by distance only.
 
 Suggested score:
 
@@ -410,38 +761,23 @@ Optional radius bias:
 score *= sqrt(radius)
 ```
 
+Use deterministic tie-breaking by light ID.
+
+Drop lights outside influence radius from camera as a cheap first cut.
+
 Keep top `MAX_DYNAMIC_LIGHTS`.
 
-Use deterministic tie-breaking, preferably by light ID.
+Pack selected lights into shader uniforms.
 
-Upload only the selected lights.
+Add testable helper functions where practical.
 
-Add helper functions for candidate collection, scoring, sorting, and packing where they can be tested without GUI/screenshot tests.
+Behavior that must remain unchanged:
 
-### Out of Scope
+* Dynamic light shader formula.
+* Portal geometry culling.
+* Static lighting.
 
-No hysteresis yet unless trivial and isolated. Phase 4 handles stability/debug polish.
-
-No per-sector or per-draw-record light lists.
-
-No clustered/tiled/deferred lighting.
-
-### Verification
-
-Add tests for:
-
-* stronger light beats weaker light
-* nearby light beats far light when otherwise equal
-* lights outside radius are dropped
-* disabled lights are dropped
-* visible-sector filtering excludes hidden-sector lights
-* fallback draw-all considers all enabled lights
-* max-light cap keeps top N
-* tie-breaking is deterministic
-
-Run tests.
-
-Run:
+Suggested checks:
 
 ```bash
 git diff --check
@@ -449,27 +785,92 @@ git diff --stat
 git status --short
 ```
 
-### Manual Smoke Test
+Add/run tests:
 
-Create more than 8 dynamic point lights.
+* stronger light beats weaker light
+* nearby light beats far light when otherwise equal
+* outside-radius light is dropped
+* disabled light is dropped
+* max-light cap keeps top N
+* tie-breaking is deterministic
 
-Confirm:
+Manual smoke:
 
-* only selected top lights affect the scene
-* lights in hidden sectors generally stop consuming slots
-* fallback draw-all still renders safely
-* no visible geometry disappears
-* dynamic lighting updates as the camera moves between sectors
+* Create more dynamic lights than the cap.
+* Move around and confirm visible/relevant lights tend to win slots.
 
-## Phase 4: Dynamic Light Debug and Stability
+Final report expectations:
 
-### Goal
+* State exact score formula.
+* State max cap.
+* State tests/checks run.
 
-Add debug visibility into dynamic light selection and reduce obvious top-N flicker.
+### Phase 4: Dynamic Light Debug And Selection Stability
 
-### Requirements
+Goal:
 
-Add debug text/readout near the existing portal visibility debug output.
+Expose dynamic light selection state and reduce obvious top-N flicker.
+
+Why it helps:
+
+The feature becomes debuggable and less visually twitchy before final polish.
+
+Files/functions likely touched:
+
+* `SectorMeshPreview.cpp`
+* debug text/status rendering
+* dynamic light selection helper code
+* tests for hysteresis if helper logic is extracted
+
+Exact behavior that must remain unchanged:
+
+* Geometry visibility culling.
+* Static lighting.
+* Save/load.
+* Shader formula.
+
+Risks/goblins:
+
+* Debug text becoming noisy.
+* Hysteresis retaining stale/deleted/disabled lights.
+* Hysteresis making selection confusing.
+* Runtime toggle accidentally affecting saved data.
+
+Non-goals:
+
+* No complex performance overlay.
+* No per-sector light lists.
+* No shadow/spotlight UI.
+* No permanent settings overbuild.
+
+Suggested tests/manual smoke checks:
+
+* Debug counts match expectations.
+* Disabling selected light removes it immediately.
+* Selected IDs remain stable near thresholds.
+* Fallback draw-all still behaves safely.
+
+Final report expectations:
+
+* State debug text format.
+* State toggle/hysteresis behavior.
+* State tests/checks run.
+
+How to update this plan after completion:
+
+* Mark completed pass as `Completed` in JSON and table.
+* Add date, summary, verification results, and behavior notes.
+* Mark parent phase `Completed` only after Phase 4A and Phase 4B are complete.
+
+#### Phase 4A: Add Dynamic Light Debug Readout And Runtime Toggle
+
+Goal:
+
+Show what the dynamic light system is doing.
+
+Implementation guidance:
+
+Add debug text near the existing portal visibility debug.
 
 Show at least:
 
@@ -483,45 +884,17 @@ Optionally show selected IDs:
 selected dynamic light ids: 3, 7, 12
 ```
 
-Add a debug flag or obvious code path for disabling dynamic light rendering if the project already has similar toggles. Do not overbuild a settings UI.
+Add a simple runtime debug toggle to disable dynamic lighting if there is an obvious existing pattern for debug toggles.
 
-Add selection stability/hysteresis if top-N flicker is visible or easy to prevent cleanly.
+The toggle should be runtime-only unless existing settings infrastructure makes persistence trivial and appropriate.
 
-Suggested hysteresis:
+Behavior that must remain unchanged:
 
-```text
-Keep previously selected lights if their current score is still close enough.
-Only replace a retained light if a new candidate score is at least 15-25% higher.
-```
+* Dynamic lights still render when enabled.
+* Static lighting unchanged.
+* No save/load changes unless explicitly justified.
 
-Keep the algorithm deterministic.
-
-If hysteresis is added, make sure:
-
-* deleted/disabled lights are removed immediately
-* lights outside influence radius are removed
-* fallback draw-all does not retain invalid stale lights
-* selected count never exceeds `MAX_DYNAMIC_LIGHTS`
-
-Document how the selected dynamic light list is updated each frame.
-
-### Out of Scope
-
-No per-sector light lists.
-
-No shadow settings.
-
-No spotlight UI.
-
-No permanent complex performance overlay.
-
-### Verification
-
-Add non-GUI tests if helper functions make hysteresis testable.
-
-Run tests.
-
-Run:
+Suggested checks:
 
 ```bash
 git diff --check
@@ -529,37 +902,150 @@ git diff --stat
 git status --short
 ```
 
-### Manual Smoke Test
+Manual smoke:
 
-Create competing dynamic lights near the selection limit.
+* Counts make sense with zero, one, and many dynamic lights.
+* Toggle disables/re-enables dynamic contribution if implemented.
 
-Move/rotate around.
+Final report expectations:
 
-Confirm:
+* State readout format.
+* State toggle key/behavior if added.
 
-* debug counts make sense
-* selected IDs are stable enough
-* lights do not flicker rapidly at threshold boundaries
-* disabling a selected light removes it immediately
-* fallback draw-all still behaves safely
+#### Phase 4B: Add Simple Top-N Selection Hysteresis
 
-## Phase 5: Polish, Tests, Documentation, and Plan Completion
+Goal:
 
-### Goal
+Reduce flicker when lights compete near the `MAX_DYNAMIC_LIGHTS` boundary.
 
-Finish the dynamic point lighting pass, tune defaults, document behavior, and close the plan.
+Implementation guidance:
 
-### Requirements
+Add simple hysteresis only to selected dynamic light IDs, not to saved data.
+
+Suggested behavior:
+
+```text
+Keep previously selected lights if their current score is still close enough.
+Only replace a retained light if a new candidate score is at least 15-25% higher.
+```
+
+Constraints:
+
+* deleted lights are removed immediately
+* disabled lights are removed immediately
+* outside-radius lights are removed
+* invalid lights are removed
+* selected count never exceeds `MAX_DYNAMIC_LIGHTS`
+* fallback draw-all does not retain invalid stale lights
+
+Keep the algorithm deterministic.
+
+Behavior that must remain unchanged:
+
+* Ranking still mostly follows contribution score.
+* Static lighting unchanged.
+* Shader formula unchanged.
+
+Suggested checks:
+
+```bash
+git diff --check
+git diff --stat
+git status --short
+```
+
+Add/run tests if helper logic is testable:
+
+* retained selected light survives small score difference
+* clearly better light replaces old one
+* disabled/deleted light is removed
+* selected count capped
+
+Manual smoke:
+
+* Move near two competing lights around the slot boundary.
+* Confirm no rapid flicker.
+
+Final report expectations:
+
+* State hysteresis threshold.
+* State invalidation behavior.
+* State tests/checks run.
+
+### Phase 5: Polish, Tests, Documentation, And Completion
+
+Goal:
+
+Tune defaults, strengthen tests/docs, and close the dynamic point lighting plan.
+
+Why it helps:
+
+This locks down the first usable version and records the intentionally deferred goblins.
+
+Files/functions likely touched:
+
+* dynamic light code/comments
+* tests
+* `docs/sector_dynamic_lighting_design.md`
+* this plan document
+* maybe editor labels/defaults
+
+Exact behavior that must remain unchanged:
+
+* Static lights remain baked-only.
+* Dynamic lights remain runtime-only.
+* No source-hash change for dynamic lights.
+* No shadow/spotlight scope.
+
+Risks/goblins:
+
+* Over-tuning without screenshots/manual feedback.
+* Accidentally broadening into shadow or spotlight work.
+* Weak tests around serialization/ranking.
+
+Non-goals:
+
+* No shadow maps.
+* No PCF.
+* No spotlights.
+* No dynamic floors/doors.
+* No renderer architecture replacement.
+
+Suggested tests/manual smoke checks:
+
+* Full relevant test suite.
+* Manual map with baked lights, AO, decals, emissive decals, alpha-tested middle textures, sky sectors, and many dynamic lights.
+
+Final report expectations:
+
+* State final defaults.
+* State docs updated.
+* State full verification.
+* State plan completion criteria met/unmet.
+* State known deferred work.
+
+How to update this plan after completion:
+
+* Mark Phase 5A `Completed`.
+* Mark Phase 5 `Completed`.
+* If all phases are complete, set all parent phases to `Completed`.
+* Leave a final completion note.
+
+#### Phase 5A: Tune Defaults, Strengthen Tests, Update Docs, And Close Plan
+
+Goal:
+
+Finish the feature pass cleanly.
+
+Implementation guidance:
 
 Tune first-pass defaults:
 
 * dynamic light radius
 * intensity
-* clamp max
-* color handling
-* debug text wording
-
-Confirm static and dynamic light concepts are clearly separated in UI labels, inspector labels, comments, and docs.
+* dynamic lighting clamp
+* debug wording
+* editor labels
 
 Update `docs/sector_dynamic_lighting_design.md` with implementation notes if behavior differs from the original audit/design.
 
@@ -573,36 +1059,30 @@ Document:
 * selected dynamic lights are visibility-culled/ranked
 * shadows and spotlights are future work
 
-Add or update tests for:
+Ensure tests cover:
 
 * dynamic light serialization
-* dynamic light omission/default load behavior
+* missing/default load behavior
 * dynamic lights not affecting lightmap source hash
-* dynamic light candidate selection
-* dynamic light packing zero-count and max-count behavior
+* candidate selection
+* ranking/capping
+* packing zero-count and max-count
 * deterministic selection order
 
-Clean up names/comments where necessary.
+Manual smoke checklist:
 
-Avoid broad refactors.
+* renderer unchanged when dynamic lights disabled
+* dynamic point lights add on top of baked lighting
+* baked AO still affects ambient only
+* dynamic lights do not stale/recompute baked lightmaps
+* portal culling still culls draw records
+* dynamic light selection uses visible sectors
+* hidden-sector lights do not consume slots in normal valid visibility cases
+* fallback draw-all remains safe
+* picking/highlight behavior from portal culling still works
+* save/reload preserves authored dynamic lights
 
-### Out of Scope
-
-No shadow maps.
-
-No PCF.
-
-No spotlights.
-
-No dynamic sector implementation.
-
-No replacement of raylib material/shader architecture.
-
-### Verification
-
-Run the full relevant test suite.
-
-Run:
+Suggested checks:
 
 ```bash
 git diff --check
@@ -610,40 +1090,42 @@ git diff --stat
 git status --short
 ```
 
-### Manual Smoke Test
+Run the full relevant test suite.
 
-Use a level containing:
+Final report expectations:
 
-* baked static lights
-* baked AO
-* dynamic point lights
-* decals
-* emissive decals/bloom
-* alpha-tested middle textures
-* sky sectors
-* enough sectors/lights to trigger culling/ranking
+* State final defaults.
+* State verification results.
+* State manual smoke results if actually performed.
+* State whether the plan is complete.
 
-Confirm:
+## Deferred Decisions For Later Phases
 
-* renderer looks unchanged when dynamic lights are disabled
-* dynamic point lights add correctly on top of baked lighting
-* baked AO still affects ambient only
-* dynamic lights do not stale/recompute baked lightmaps
-* portal culling still culls draw records
-* dynamic light selection uses visible sectors
-* no hidden sector light consumes slots in normal valid visibility cases
-* fallback draw-all remains safe
-* picking/highlight behavior from the portal culling plan still works
-* save/reload preserves authored dynamic lights
+These are intentionally out of scope for this plan:
+
+* Spotlights.
+* 3D spotlight editing/gizmos.
+* Shadow maps.
+* PCF.
+* Shadow bias tuning.
+* Point-light cubemap shadows.
+* Flashlight gameplay item.
+* Dynamic floors/doors.
+* Per-sector/per-draw-record light lists.
+* Clustered/tiled/deferred lighting.
+* Volumetric lights/fog.
+* Projected cookies.
+* Normal mapping.
+* Replacing raylib material/shader architecture.
 
 ## Final Completion Criteria
 
 This plan is complete when:
 
-* authored dynamic point lights exist separately from static bake lights
+* dynamic point lights are separate from static bake lights
 * dynamic point lights save/load correctly
 * dynamic point lights are editable in the editor
-* dynamic point lights render as per-pixel forward lights in the sector shader
+* dynamic point lights render as per-pixel forward lights
 * dynamic light count zero preserves old visual output
 * portal visibility is used to select candidate lights
 * more authored dynamic lights can exist than the shader evaluates
