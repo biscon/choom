@@ -35,21 +35,21 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_01",
       "title": "Dynamic Point Light Data And Editor Authoring",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01a",
       "title": "Add Dynamic Point Light Data, Serialization, And Hash Isolation",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01b",
       "title": "Add Dynamic Light Editor Tool, Selection, And Inspector",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02",
@@ -132,9 +132,9 @@ When an agent is asked to execute this plan, it must:
 
 | Phase / Pass                                                                  | Status      | Date | Notes                                                                      |
 | ----------------------------------------------------------------------------- | ----------- | ---- | -------------------------------------------------------------------------- |
-| Phase 1: Dynamic Point Light Data And Editor Authoring                        | Not Started |      | Parent phase.                                                              |
-| Phase 1A: Add Dynamic Point Light Data, Serialization, And Hash Isolation     | Not Started |      | First executable pass. Adds model/persistence without rendering/editor UI. |
-| Phase 1B: Add Dynamic Light Editor Tool, Selection, And Inspector             | Not Started |      | Adds authoring UI after data model is stable.                              |
+| Phase 1: Dynamic Point Light Data And Editor Authoring                        | Completed   | 2026-06-29 | Dynamic light data and editor authoring are implemented.                   |
+| Phase 1A: Add Dynamic Point Light Data, Serialization, And Hash Isolation     | Completed   | 2026-06-29 | Added dynamic point light data/persistence and hash isolation tests; no renderer/editor UI behavior changes. |
+| Phase 1B: Add Dynamic Light Editor Tool, Selection, And Inspector             | Completed   | 2026-06-29 | Added separate Static Light and Dynamic Light editor tools, dynamic selection/drag/edit/delete support, and distinct 2D glyphs. |
 | Phase 2: Shader Dynamic Point Light Support                                   | Not Started |      | Parent phase.                                                              |
 | Phase 2A: Pass Fragment World Position And Normal Through Sector Shader       | Not Started |      | Shader plumbing only; dynamic light count remains zero.                    |
 | Phase 2B: Add Fixed-Size Dynamic Point Light Shader Uniforms And Contribution | Not Started |      | Adds actual point-light contribution.                                      |
@@ -146,6 +146,64 @@ When an agent is asked to execute this plan, it must:
 | Phase 4B: Add Simple Top-N Selection Hysteresis                               | Not Started |      | Reduces threshold flicker.                                                 |
 | Phase 5: Polish, Tests, Documentation, And Completion                         | Not Started |      | Parent phase.                                                              |
 | Phase 5A: Tune Defaults, Strengthen Tests, Update Docs, And Close Plan        | Not Started |      | Final cleanup and plan closure.                                            |
+
+## Execution Log
+
+### 2026-06-29: Phase 1A Completed
+
+Summary:
+
+* Added authored `SectorTopologyDynamicPointLight` map-level data with stable IDs, position, color, intensity, radius, and enabled state.
+* Added `dynamicPointLights` serialization/loading for topology and graph-native documents; missing field loads as empty, and default `enabled: true` is omitted on save.
+* Added validation/helper coverage for dynamic point lights and preserved graph-derived map-level copying.
+
+Behavior notes:
+
+* Source code changed.
+* Serialization field name is `dynamicPointLights`.
+* Rendering, shader behavior, editor UI/tools, and static light behavior are intended unchanged.
+* Dynamic point lights are intentionally excluded from `ComputeSectorLightmapSourceHash()`.
+* Topology render-cache invalidation behavior was not changed; no topology mutation UI path was added in this pass.
+* Lightmap source-hash behavior was tested: dynamic light additions/edits do not affect the hash, while existing static light hash assertions still pass.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_topology_(serialization|lightmap)$"` passed.
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed.
+* `git diff --check` passed.
+* `git diff --stat` reviewed.
+* `git status --short` reviewed.
+
+### 2026-06-29: Phase 1B Completed
+
+Summary:
+
+* Added separate editor tools labeled `Static Light` and `Dynamic Light`.
+* Added dynamic point light placement in 2D sectors using the static-light placement height style, with default radius 8.0 world units, intensity 1.0, white color, and enabled state.
+* Added dynamic light selection, drag/move, delete, and inspector editing for enabled, position, radius, intensity, and color.
+* Added distinct dynamic light 2D cache entries/glyphs while preserving static light source-radius display.
+
+Behavior notes:
+
+* Source code changed.
+* Static light tool and inspector behavior are intended unchanged except labels/status text now say static light explicitly.
+* Dynamic light edits use the existing document-edited path, so 2D topology render-cache invalidation happens through `MarkTopologyDocumentEdited()` / `FinishTopologyActionResult()`.
+* Dynamic light changes remain serialized through the existing `dynamicPointLights` field from Phase 1A.
+* Lightmap source-hash behavior is intended unchanged: dynamic point lights remain excluded, static lights remain bake/hash inputs.
+* No shader dynamic lighting exists yet; renderer output is unchanged except editor overlay glyphs.
+* No gameplay, collision, sector lookup, or physics behavior changed.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_authoring_graph|sector_topology_(serialization|lightmap)$"` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed.
+* `git diff --check` passed.
+* `git diff --stat` reviewed.
+* `git status --short` reviewed.
 
 ## Execution Tracking Rules
 

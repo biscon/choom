@@ -25,6 +25,24 @@
     }
   },
   "staticLights": [],
+  "dynamicPointLights": [
+    {
+      "id": 1,
+      "position": [
+        32.0,
+        20.0,
+        40.0
+      ],
+      "radius": 64.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 0,
+        "b": 255,
+        "a": 255
+      }
+    }
+  ],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
     "ambientOcclusionStrength": 0.550000011920929,
@@ -396,7 +414,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.20000000298023224,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -548,7 +566,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.20000000298023224,
         "defaultWall": {
           "textureId": "wall",
           "uv": {

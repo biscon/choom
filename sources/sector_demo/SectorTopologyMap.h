@@ -47,6 +47,7 @@ struct SectorTopologyMap {
     std::vector<SectorTopologySideDef> sideDefs;
     std::vector<SectorTopologySector> sectors;
     std::vector<SectorTopologyStaticPointLight> staticLights;
+    std::vector<SectorTopologyDynamicPointLight> dynamicPointLights;
     SectorPreviewSettings previewSettings;
     SectorTopologySkySettings skySettings;
     SectorTopologyDirectionalLightSettings directionalLight;
@@ -86,6 +87,7 @@ int AllocateSectorTopologyLineDefId(const SectorTopologyMap& map);
 int AllocateSectorTopologySideDefId(const SectorTopologyMap& map);
 int AllocateSectorTopologySectorId(const SectorTopologyMap& map);
 int AllocateSectorTopologyStaticLightId(const SectorTopologyMap& map);
+int AllocateSectorTopologyDynamicLightId(const SectorTopologyMap& map);
 
 const SectorTopologyVertex* FindSectorTopologyVertex(const SectorTopologyMap& map, int id);
 SectorTopologyVertex* FindSectorTopologyVertex(SectorTopologyMap& map, int id);
@@ -103,6 +105,11 @@ const SectorTopologyStaticPointLight* FindSectorTopologyStaticLight(const Sector
 SectorTopologyStaticPointLight* FindSectorTopologyStaticLight(SectorTopologyMap& map, int id);
 
 bool RemoveSectorTopologyStaticLight(SectorTopologyMap& map, int id);
+
+const SectorTopologyDynamicPointLight* FindSectorTopologyDynamicLight(const SectorTopologyMap& map, int id);
+SectorTopologyDynamicPointLight* FindSectorTopologyDynamicLight(SectorTopologyMap& map, int id);
+
+bool RemoveSectorTopologyDynamicLight(SectorTopologyMap& map, int id);
 
 const SectorTopologySideDef* FindOppositeSectorTopologySideDef(
         const SectorTopologyMap& map,

@@ -33,7 +33,8 @@ enum class SectorEditorTool {
     AuthoringRectangle,
     AuthoringInsertVertex,
     AuthoringMove,
-    Light,
+    StaticLight,
+    DynamicLight,
     Move
 };
 
@@ -97,7 +98,8 @@ enum class TopologySelectionKind {
     Vertex,
     SideDef,
     LineDef,
-    Light
+    StaticLight,
+    DynamicLight
 };
 
 enum class SectorAuthoringSelectionKind {
@@ -403,6 +405,7 @@ struct SectorEditorTopologyRenderCache {
     std::vector<CachedTopologyLineDraw> lineDefs;
     std::vector<CachedTopologyVertexDraw> vertices;
     std::vector<CachedTopologyLightDraw> staticLights;
+    std::vector<CachedTopologyLightDraw> dynamicLights;
     std::vector<CachedAuthoringLineDraw> authoringLines;
     std::vector<CachedAuthoringVertexDraw> authoringVertices;
     std::vector<CachedAuthoringFaceHighlightDraw> authoringFaceHighlights;
@@ -441,7 +444,9 @@ struct SectorEditorState {
     TopologyWallPart selectedTopologyWallPart = TopologyWallPart::Wall;
     TopologyMaterialLayer activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
     int selectedTopologyLightId = -1;
+    int selectedTopologyDynamicLightId = -1;
     int hoveredTopologyLightId = -1;
+    int hoveredTopologyDynamicLightId = -1;
     bool hasHoveredVertex = false;
     int hoveredTopologyVertexId = -1;
     SectorTopologyCoordPoint hoveredTopologyVertexPoint = {};

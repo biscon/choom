@@ -384,7 +384,8 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::AuthoringRectangle: return "Rectangle";
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex";
         case SectorEditorTool::AuthoringMove: return "Move Vertex";
-        case SectorEditorTool::Light: return "Light";
+        case SectorEditorTool::StaticLight: return "Static Light";
+        case SectorEditorTool::DynamicLight: return "Dynamic Light";
         case SectorEditorTool::Move: return "Move";
     }
     return "Unknown";
@@ -728,7 +729,8 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::AuthoringRectangle: return "Rectangle: click first corner, then opposite corner, right click/Esc cancels";
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex: click an authoring line to split it, right click/Esc cancels";
         case SectorEditorTool::AuthoringMove: return "Move Vertex: drag authoring vertices";
-        case SectorEditorTool::Light: return "Light: click inside a sector to place, or drag an existing baked static point light";
+        case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place, or drag an existing baked point light";
+        case SectorEditorTool::DynamicLight: return "Dynamic Light: click inside a sector to place, or drag an existing runtime point light";
         case SectorEditorTool::Move: return "Legacy move: unavailable in graph-authoritative mode; use Move Vertex for authoring vertices";
     }
     return "";

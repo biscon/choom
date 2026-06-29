@@ -104,6 +104,15 @@ struct SectorTopologyStaticPointLight {
     float sourceRadius = 0.0f;
 };
 
+struct SectorTopologyDynamicPointLight {
+    int id = -1;
+    Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
+    Color color = WHITE;
+    float intensity = 1.0f;
+    float radius = SectorWorldToAuthoringDistance(8.0f);
+    bool enabled = true;
+};
+
 enum class SectorTopologyValidationSeverity {
     Warning,
     Error
@@ -115,7 +124,8 @@ enum class SectorTopologyObjectKind {
     LineDef,
     SideDef,
     Sector,
-    StaticLight
+    StaticLight,
+    DynamicLight
 };
 
 struct SectorTopologyValidationIssue {

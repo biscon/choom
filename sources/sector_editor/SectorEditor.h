@@ -199,6 +199,7 @@ private:
             SectorAuthoringSelectionTarget& outTarget,
             SectorTopologyCoordPoint& outVertexPoint) const;
     int FindTopologyLightNearScreenPoint(Vector2 screenPoint) const;
+    int FindTopologyDynamicLightNearScreenPoint(Vector2 screenPoint) const;
     bool FindTopologyVertexNearScreenPoint(
             Vector2 screenPoint,
             int& outVertexId,
@@ -248,6 +249,8 @@ private:
     const SectorTopologyLineDef* SelectedTopologyLineDef() const;
     SectorTopologyStaticPointLight* SelectedTopologyLight();
     const SectorTopologyStaticPointLight* SelectedTopologyLight() const;
+    SectorTopologyDynamicPointLight* SelectedTopologyDynamicLight();
+    const SectorTopologyDynamicPointLight* SelectedTopologyDynamicLight() const;
     void ClearStaleTopologySelection();
     void SyncSelectedSectorIdBuffer();
     void SyncSelectedLightIdBuffer();
@@ -256,6 +259,7 @@ private:
     void SelectTopologySideDef(int sideDefId, TopologyWallPart wallPart);
     void SelectTopologyLineDef(int lineDefId, SectorTopologySideKind side, TopologyWallPart wallPart);
     void SelectTopologyLight(int topologyLightId);
+    void SelectTopologyDynamicLight(int topologyLightId);
     void SelectAuthoringLine(int lineId);
     bool DeleteSelectedAuthoringLine();
     void SelectAuthoringVertex(int vertexId);
@@ -325,6 +329,8 @@ private:
     bool DeleteSelectedLight();
     bool DeleteLightById(int topologyLightId);
     void AddStaticLightAt(Vector2 mapPoint);
+    bool DeleteDynamicLightById(int topologyLightId);
+    void AddDynamicLightAt(Vector2 mapPoint);
     bool BakeLightmaps();
     bool StartLightmapBake();
     void PollLightmapBakeResult(engine::AssetManager& assets);

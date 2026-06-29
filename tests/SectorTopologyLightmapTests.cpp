@@ -322,6 +322,19 @@ void TestSourceHashChanges()
     changedLight.staticLights[0].color.r = 64;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) != hash, "hash changes when light color changes");
 
+    game::SectorTopologyMap changedDynamicLight = base;
+    changedDynamicLight.dynamicPointLights.push_back(game::SectorTopologyDynamicPointLight{
+            1, Vector3{1.0f, 2.0f, 3.0f}, WHITE, 1.0f, 8.0f, true});
+    Check(game::ComputeSectorLightmapSourceHash(changedDynamicLight) == hash,
+          "hash ignores added dynamic point lights");
+    changedDynamicLight.dynamicPointLights.front().position.x += 1.0f;
+    changedDynamicLight.dynamicPointLights.front().radius += 1.0f;
+    changedDynamicLight.dynamicPointLights.front().intensity += 0.25f;
+    changedDynamicLight.dynamicPointLights.front().color.r = 64;
+    changedDynamicLight.dynamicPointLights.front().enabled = false;
+    Check(game::ComputeSectorLightmapSourceHash(changedDynamicLight) == hash,
+          "hash ignores dynamic point light edits");
+
     game::SectorTopologyMap changedDirectional = base;
     changedDirectional.directionalLight.enabled = true;
     Check(game::ComputeSectorLightmapSourceHash(changedDirectional) != hash,

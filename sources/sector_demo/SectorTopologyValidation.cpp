@@ -592,6 +592,7 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
     ValidateIds(map.sideDefs, SectorTopologyObjectKind::SideDef, issues);
     ValidateIds(map.sectors, SectorTopologyObjectKind::Sector, issues);
     ValidateIds(map.staticLights, SectorTopologyObjectKind::StaticLight, issues);
+    ValidateIds(map.dynamicPointLights, SectorTopologyObjectKind::DynamicLight, issues);
 
     for (const SectorTopologyStaticPointLight& light : map.staticLights) {
         if (!std::isfinite(light.position.x)
@@ -614,6 +615,23 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
         } else if (std::isfinite(light.radius) && light.sourceRadius > light.radius) {
             AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
                      "source radius must not exceed radius");
+        }
+    }
+
+    for (const SectorTopologyDynamicPointLight& light : map.dynamicPointLights) {
+        if (!std::isfinite(light.position.x)
+                || !std::isfinite(light.position.y)
+                || !std::isfinite(light.position.z)) {
+            AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
+                     "position values must be finite");
+        }
+        if (!std::isfinite(light.intensity)) {
+            AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
+                     "intensity must be finite");
+        }
+        if (!std::isfinite(light.radius) || light.radius <= 0.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
+                     "radius must be finite and positive");
         }
     }
 
@@ -806,6 +824,9 @@ std::string FormatSectorTopologyValidationIssue(
             break;
         case SectorTopologyObjectKind::StaticLight:
             objectName = "StaticLight";
+            break;
+        case SectorTopologyObjectKind::DynamicLight:
+            objectName = "DynamicLight";
             break;
     }
 

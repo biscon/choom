@@ -905,6 +905,30 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
         }
     }
 
+    const auto dynamicLightsIt = root.find("dynamicPointLights");
+    if (dynamicLightsIt != root.end()) {
+        if (!dynamicLightsIt->is_array()) {
+            Fail("root.dynamicPointLights must be an array");
+        }
+        const Json& dynamicLights = *dynamicLightsIt;
+        for (size_t i = 0; i < dynamicLights.size(); ++i) {
+            const std::string context = "root.dynamicPointLights[" + std::to_string(i) + "]";
+            const Json& value = dynamicLights[i];
+            if (!value.is_object()) {
+                Fail(context + " must be an object");
+            }
+
+            SectorTopologyDynamicPointLight light;
+            light.id = ReadInt(value, "id", context);
+            light.position = ReadVector3(RequireField(value, "position", context), context + ".position");
+            light.radius = ReadFloat(value, "radius", context);
+            light.intensity = ReadFloat(value, "intensity", context);
+            light.color = ReadColor(RequireField(value, "color", context), context + ".color");
+            light.enabled = ReadOptionalBool(value, "enabled", context, true);
+            map.dynamicPointLights.push_back(light);
+        }
+    }
+
     const auto lightmapSettingsIt = root.find("lightmapSettings");
     if (lightmapSettingsIt != root.end()) {
         map.lightmapSettings = ReadLightmapSettings(*lightmapSettingsIt, "root.lightmapSettings");
@@ -1037,6 +1061,7 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
 
     document.derivation.topology.texturesById = document.mapData.texturesById;
     document.derivation.topology.staticLights = document.mapData.staticLights;
+    document.derivation.topology.dynamicPointLights = document.mapData.dynamicPointLights;
     document.derivation.topology.previewSettings = document.mapData.previewSettings;
     document.derivation.topology.skySettings = document.mapData.skySettings;
     document.derivation.topology.directionalLight = document.mapData.directionalLight;
@@ -1108,6 +1133,24 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
         });
+    }
+
+    root["dynamicPointLights"] = Json::array();
+    for (const SectorTopologyDynamicPointLight* light : SortedById(map.dynamicPointLights)) {
+        const std::string context = "dynamic point light " + std::to_string(light->id);
+        RequireFinite(light->intensity, context + ".intensity");
+        RequireFinite(light->radius, context + ".radius");
+        Json lightJson{
+                {"id", light->id},
+                {"position", WriteVector3(light->position, context + ".position")},
+                {"radius", light->radius},
+                {"intensity", light->intensity},
+                {"color", WriteColor(light->color)}
+        };
+        if (!light->enabled) {
+            lightJson["enabled"] = false;
+        }
+        root["dynamicPointLights"].push_back(std::move(lightJson));
     }
 
     root["lightmapSettings"] = WriteLightmapSettings(map.lightmapSettings);
@@ -1464,6 +1507,24 @@ Json SerializeMap(const SectorTopologyMap& map)
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
         });
+    }
+
+    root["dynamicPointLights"] = Json::array();
+    for (const SectorTopologyDynamicPointLight* light : SortedById(map.dynamicPointLights)) {
+        const std::string context = "dynamic point light " + std::to_string(light->id);
+        RequireFinite(light->intensity, context + ".intensity");
+        RequireFinite(light->radius, context + ".radius");
+        Json lightJson{
+                {"id", light->id},
+                {"position", WriteVector3(light->position, context + ".position")},
+                {"radius", light->radius},
+                {"intensity", light->intensity},
+                {"color", WriteColor(light->color)}
+        };
+        if (!light->enabled) {
+            lightJson["enabled"] = false;
+        }
+        root["dynamicPointLights"].push_back(std::move(lightJson));
     }
 
     root["lightmapSettings"] = WriteLightmapSettings(map.lightmapSettings);
