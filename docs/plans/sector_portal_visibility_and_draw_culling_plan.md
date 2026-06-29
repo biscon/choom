@@ -290,6 +290,7 @@ git diff --stat
 git status --short
 ```
 
+
 Manual user-only smoke suggestions, not for Codex:
 
 * enter 3D preview in a multi-sector map
