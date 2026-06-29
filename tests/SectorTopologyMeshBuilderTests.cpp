@@ -1238,11 +1238,49 @@ void TestDynamicPointLightRankingAndPacking()
     Check(selected.size() == 4,
           "dynamic light ranking does not drop candidates solely because they do not affect receiver bounds");
 
+    std::vector<int> selectedIds = {99};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            receiverBounds,
+            0,
+            selected,
+            &selectedIds);
+    Check(selected.empty() && selectedIds.empty(),
+          "dynamic light packing zero-count clears selected lights and IDs");
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> manyCandidates;
+    for (int i = 0; i < 12; ++i) {
+        manyCandidates.push_back(LightSource(
+                100 + i,
+                10,
+                Vector3{0.5f, 0.5f, 0.5f},
+                10.0f,
+                static_cast<float>(12 - i)));
+    }
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            manyCandidates,
+            visible,
+            receiverBounds,
+            8,
+            selected,
+            &selectedIds);
+    Check(selected.size() == 8 && selectedIds.size() == 8,
+          "dynamic light packing applies shader max-count cap");
+    Check(selectedIds.front() == 100 && selectedIds.back() == 107,
+          "dynamic light packing keeps deterministic strongest-light order at max count");
+
     std::vector<game::SectorPreviewDynamicPointLightSource> tiedCandidates = {
             LightSource(8, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f),
             LightSource(7, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f)};
-    game::SelectRankedSectorPreviewDynamicPointLights(tiedCandidates, visible, receiverBounds, 1, selected);
-    Check(selected.size() == 1 && Near(selected[0].position, Vector3{0.5f, 0.5f, 0.5f}),
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            tiedCandidates,
+            visible,
+            receiverBounds,
+            1,
+            selected,
+            &selectedIds);
+    Check(selected.size() == 1 && selectedIds.size() == 1 && selectedIds[0] == 7,
           "dynamic light ranking uses deterministic light-id tie breaking");
 }
 

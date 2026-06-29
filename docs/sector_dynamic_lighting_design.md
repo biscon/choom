@@ -1,12 +1,40 @@
 # Sector Dynamic Per-Pixel Lighting Audit and Design
 
-This is an audit/design document only. It does not change production rendering,
-mesh generation, baking, collision, save/load, editor behavior, or shaders.
+This started as an audit/design document. The first dynamic point lighting pass
+is now implemented; this document records both the original constraints and the
+current behavior.
 
-Future goal: add forward-rendered runtime point lights, optionally followed by
-spotlights, in the sector fragment shader. Dynamic lighting should blend with
-the current sector ambient, baked lightmap direct lighting, baked AO, decals,
-and portal-culled sector drawing. Shadow maps are future work.
+Implemented goal: forward-rendered runtime point lights in the sector fragment
+shader. Dynamic lighting blends with the current sector ambient, baked lightmap
+direct lighting, baked AO, decals, and portal-culled sector drawing. Spotlights,
+shadow maps, and dynamic-sector lighting are future work.
+
+## Implemented First Pass Notes
+
+- Authored dynamic point lights are map-level runtime shader lights, separate
+  from existing `staticLights`.
+- Static point lights remain baked lightmap inputs. Dynamic point lights do not
+  affect `ComputeSectorLightmapSourceHash()` and do not stale or recompute baked
+  lightmaps.
+- Dynamic point lights serialize under `dynamicPointLights`; missing fields load
+  as an empty list, and default `enabled: true` is omitted on save.
+- Editor authoring uses a separate Dynamic Light tool and inspector controls for
+  enabled state, position, color, radius, and intensity.
+- New dynamic lights currently default to white, intensity `1.0`, and radius
+  `8.0` world units converted to authoring units.
+- The first renderer pass supports point lights only. There are no spotlights,
+  cookies, shadow maps, PCF, or normal maps.
+- The sector shader evaluates up to `8` selected dynamic point lights using
+  fixed-size uniform arrays.
+- Selected dynamic lights are rebuilt from authored lights, visibility
+  candidates, receiver bounds, contribution ranking, and a small runtime-only
+  top-N hysteresis step.
+- If dynamic lighting is toggled off at runtime, the uploaded dynamic light count
+  is zero and the old baked-only lighting path is preserved.
+- The dynamic lighting clamp is `4.0` for frames with active dynamic lights; the
+  zero-count path keeps the previous `0..1` baked-lighting clamp.
+- Preview debug text reports `selected / candidates / total` dynamic light
+  counts and selected stable dynamic light IDs when present.
 
 ## Current Shader and Material Pipeline
 
@@ -309,41 +337,45 @@ rendering are unnecessary for the first implementation.
 
 ## Candidate Dynamic Light Selection and Ranking
 
-First-pass policy:
+Implemented first-pass policy:
 
-1. Store each runtime dynamic light with a known sector ID if possible.
-2. If `visibilityResult.validStartSector && !visibilityResult.fallbackDrawAll`,
-   collect lights whose sector ID is in `visibleSectorIds`.
-3. If visibility is invalid or fallback draw-all is active, collect all dynamic
-   lights.
-4. Drop disabled/invalid lights and lights whose radius or intensity is not
+1. Store each runtime dynamic light with a known stable ID and owner sector ID
+   if possible.
+2. Drop disabled/invalid lights and lights whose radius or intensity is not
    positive.
-5. Drop lights outside their influence radius from the camera as a cheap first
-   cut. If sector bounds are later available, use radius overlap with visible
-   sector bounds instead of camera-only distance.
-6. Score candidates by estimated contribution, not pure distance:
+3. If visibility is invalid or fallback draw-all is active, collect all valid
+   dynamic lights.
+4. Otherwise, collect lights whose owner sector is visible as an inclusion
+   shortcut.
+5. Also collect hidden-owner lights when their influence sphere overlaps the
+   padded bounds of visible receivers. This keeps lights just outside the
+   visible sector set available when they can still affect visible geometry.
+6. Score candidates by estimated contribution at the nearest point on the
+   visible receiver bounds, not by camera distance:
 
 ```text
 brightness = max(color.r, color.g, color.b) in 0..1
-atten = saturate(1 - distance(camera, light.position) / light.radius)
+distance = nearest distance from light.position to visible receiver bounds
+atten = saturate(1 - distance / light.radius)
 atten = atten * atten
 score = light.intensity * brightness * atten
 ```
 
 Optionally bias by radius with a small factor if large area lights need to win
-over tiny local lights near the camera:
+over tiny local lights:
 
 ```text
 score *= sqrt(radius)
 ```
 
 Keep the top `MAX_DYNAMIC_LIGHTS`, sorted by stable key after ranking for
-deterministic upload if scores tie. To reduce top-N flicker, keep the previous
-frame's selected IDs when scores are close. Simple hysteresis:
+deterministic upload if scores tie. Runtime selection keeps the previous
+frame's selected IDs when scores are close; this hysteresis is not serialized and
+does not affect baked lightmaps. Simple hysteresis:
 
 ```text
 Only replace an already-selected light if the new candidate score is at least
-15-25% higher than the retained light's score.
+20% higher than the retained light's score.
 ```
 
 Debug text should report selected dynamic lights versus candidates, for example
@@ -528,4 +560,3 @@ For the future feature, runtime dynamic lights should not be included in
 `ComputeSectorLightmapSourceHash()` unless they become authored bake-affecting
 data. Existing `staticLights` remain bake lights and continue to affect the
 lightmap source hash.
-

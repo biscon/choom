@@ -115,14 +115,14 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_05",
       "title": "Polish, Tests, Documentation, And Completion",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05a",
       "title": "Tune Defaults, Strengthen Tests, Update Docs, And Close Plan",
       "type": "pass",
       "parent": "phase_05",
-      "status": "Not Started"
+      "status": "Completed"
     }
   ]
 }
@@ -144,8 +144,8 @@ When an agent is asked to execute this plan, it must:
 | Phase 4: Dynamic Light Debug And Selection Stability                          | Completed   | 2026-06-29 | Debug readout/toggle and top-N selection hysteresis are implemented.        |
 | Phase 4A: Add Dynamic Light Debug Readout And Runtime Toggle                  | Completed   | 2026-06-29 | Added dynamic light counts, selected IDs, and F4 runtime toggle.           |
 | Phase 4B: Add Simple Top-N Selection Hysteresis                               | Completed   | 2026-06-29 | Keeps previous selected IDs unless replacements score at least 20% higher. |
-| Phase 5: Polish, Tests, Documentation, And Completion                         | Not Started |      | Parent phase.                                                              |
-| Phase 5A: Tune Defaults, Strengthen Tests, Update Docs, And Close Plan        | Not Started |      | Final cleanup and plan closure.                                            |
+| Phase 5: Polish, Tests, Documentation, And Completion                         | Completed   | 2026-06-29 | Dynamic point lighting first pass is complete; docs/tests were strengthened. |
+| Phase 5A: Tune Defaults, Strengthen Tests, Update Docs, And Close Plan        | Completed   | 2026-06-29 | Added final selection packing tests, implementation docs, and completion notes. |
 
 ## Execution Log
 
@@ -412,6 +412,36 @@ Behavior notes:
 * No topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
 * No gameplay, collision, sector lookup, or physics behavior changed.
 * No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug --target sector_topology_mesh_builder_tests -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_topology_mesh_builder$"` passed.
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed.
+* `git diff --check` passed.
+* `git diff --stat` reviewed.
+* `git status --short` reviewed.
+
+### 2026-06-29: Phase 5A Completed
+
+Summary:
+
+* Added focused dynamic point light selection tests for zero-count packing, max-count packing, and deterministic stable-ID ordering.
+* Updated `docs/sector_dynamic_lighting_design.md` with implementation notes for the first dynamic point lighting pass.
+* Closed Phase 5 and the overall dynamic point lighting plan.
+
+Behavior notes:
+
+* Source code changed only in tests.
+* Production runtime behavior is unchanged.
+* Final defaults remain: radius 8.0 world units, intensity 1.0, white color, enabled by default, max 8 selected dynamic lights, dynamic lighting clamp 4.0 when active, and 20% selection hysteresis.
+* Static lights remain baked-only; dynamic lights remain runtime shader lights.
+* Dynamic point lights remain excluded from the lightmap source hash; static light baking behavior is unchanged.
+* Shader behavior, serialization behavior, editor labels/defaults, topology mutation paths, and 2D topology render-cache invalidation behavior are unchanged.
+* No gameplay, collision, sector lookup, or physics behavior changed.
+* No manual GUI verification was performed.
+* Deferred work remains: spotlights, shadow maps, PCF, normal mapping, per-sector/per-record light lists, clustered/tiled/deferred lighting, dynamic floors/doors, and other items listed in Deferred Decisions.
 
 Verification:
 
