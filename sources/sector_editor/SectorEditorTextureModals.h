@@ -79,8 +79,29 @@ bool OpenTopologySideDefTexturePicker(
         int sideDefId,
         TopologyWallPart wallPart,
         TopologyMaterialLayer layer);
+bool OpenAuthoringFaceAnchorTexturePicker(
+        SectorEditorState& state,
+        int topologySectorId,
+        TopologySectorTextureField field,
+        TopologyMaterialLayer layer);
+bool OpenAuthoringFaceAnchorTexturePickerById(
+        SectorEditorState& state,
+        int faceAnchorId,
+        TopologySectorTextureField field,
+        TopologyMaterialLayer layer);
+bool OpenAuthoringSideTexturePicker(
+        SectorEditorState& state,
+        int topologySideDefId,
+        TopologyWallPart wallPart,
+        TopologyMaterialLayer layer);
+bool OpenAuthoringSideTexturePickerById(
+        SectorEditorState& state,
+        SectorAuthoringSideId sideId,
+        TopologyWallPart wallPart,
+        TopologyMaterialLayer layer);
 bool OpenMapSkyTexturePicker(SectorEditorState& state);
 std::string CurrentTextureForPickerTarget(const SectorEditorState& state);
 SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(SectorEditorState& state);
+SectorEditorTexturePickerApplyResult ApplyAuthoringTexturePickerSelection(SectorEditorState& state);
 
 } // namespace game

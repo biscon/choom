@@ -106,8 +106,31 @@ if(BUILD_TESTING)
     target_link_libraries(sector_topology_tests PRIVATE raylib)
     add_test(NAME sector_topology_validation COMMAND sector_topology_tests)
 
+    add_executable(sector_authoring_graph_tests
+            tests/SectorAuthoringGraphTests.cpp
+            sources/sector_editor/SectorEditorAuthoringState.cpp
+            sources/sector_editor/SectorEditorDocumentActions.cpp
+            sources/sector_editor/SectorEditorHelpers.cpp
+            sources/sector_editor/SectorEditorTextureActions.cpp
+            sources/sector_editor/SectorEditorTopologyRenderCache.cpp
+            sources/sector_demo/SectorFpsController.cpp
+            sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorAuthoringGraph.cpp
+            sources/sector_demo/SectorTextureTypes.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologySerialization.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_authoring_graph_tests PRIVATE sources)
+    target_compile_definitions(sector_authoring_graph_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+    target_link_libraries(sector_authoring_graph_tests PRIVATE raylib)
+    add_test(NAME sector_authoring_graph COMMAND sector_authoring_graph_tests)
+
     add_executable(sector_topology_serialization_tests
             tests/SectorTopologySerializationTests.cpp
+            sources/sector_demo/SectorAuthoringGraph.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologySerialization.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
@@ -212,6 +235,13 @@ if(BUILD_TESTING)
     target_include_directories(sector_sky_cylinder_tests PRIVATE sources)
     target_link_libraries(sector_sky_cylinder_tests PRIVATE raylib)
     add_test(NAME sector_sky_cylinder COMMAND sector_sky_cylinder_tests)
+
+    add_executable(sector_editor_ui_layout_tests
+            tests/SectorEditorUiLayoutTests.cpp
+    )
+    target_include_directories(sector_editor_ui_layout_tests PRIVATE sources)
+    target_link_libraries(sector_editor_ui_layout_tests PRIVATE raylib)
+    add_test(NAME sector_editor_ui_layout COMMAND sector_editor_ui_layout_tests)
 endif()
 
 # -------------------------------

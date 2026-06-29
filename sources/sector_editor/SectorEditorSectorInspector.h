@@ -13,11 +13,13 @@ namespace game {
 
 struct SectorEditorSectorInspectorCallbacks {
     std::function<bool()> tryRenameSelectedTopologySector;
-    std::function<void()> openDeleteSelectedTopologySectorConfirmation;
-    std::function<void()> startInsertSectorInside;
-    std::function<void()> startPendingTopologySectorCut;
     std::function<void(const char*)> setStatusText;
     std::function<void(const char*)> markTopologyDocumentEdited;
+    std::function<bool(float, float)> applySectorHeights;
+    std::function<bool(bool)> applySectorCeilingSky;
+    std::function<bool(float)> applySectorAmbientIntensity;
+    std::function<bool(Color)> applySectorAmbientColor;
+    std::function<bool(TopologySectorTextureField, const SectorTopologyUvSettings&)> applySectorUv;
     std::function<void(int, TopologySectorTextureField, TopologyMaterialLayer)> openTopologyTexturePicker;
     std::function<bool(TopologySurfaceEditTarget)> copyTopologyMaterial;
     std::function<bool(TopologySurfaceEditTarget, engine::AssetManager&)> pasteTopologyMaterial;

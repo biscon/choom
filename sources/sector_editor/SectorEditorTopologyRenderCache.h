@@ -13,6 +13,7 @@ struct SectorEditorTopologyDrawContext {
     Vector2 viewCenter = {};
     float viewZoom = 1.0f;
     bool showSectorIds = false;
+    bool derivedTopologyStale = false;
     SectorEditorTool currentTool = SectorEditorTool::Select;
     TopologySelectionKind selectionKind = TopologySelectionKind::None;
     int selectedSectorId = -1;
@@ -21,10 +22,14 @@ struct SectorEditorTopologyDrawContext {
     bool hasHoveredVertex = false;
     int hoveredVertexId = -1;
     int hoveredLightId = -1;
+    SectorAuthoringSelectionTarget selectedAuthoring;
+    SectorAuthoringSelectionTarget hoveredAuthoring;
 };
 
 SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         const SectorTopologyMap& map,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
         uint64_t revision);
 
 void DrawCachedTopologySectors(
@@ -39,5 +44,32 @@ void DrawCachedTopologyVertices(
 void DrawCachedTopologyStaticLights(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context);
+void DrawCachedAuthoringGraphOverlay(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context);
+void DrawCachedAuthoringDiagnostics(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context);
+
+bool ShouldDrawLegacyTopologySelectionHighlight(
+        bool hasAuthoringGraphData,
+        TopologySelectionKind selectionKind);
+
+bool ShouldDrawAuthoringLineSelectionHighlight(
+        SectorAuthoringSelectionTarget selectedAuthoring,
+        int lineId);
+
+bool ShouldDrawAuthoringVertexSelectionHighlight(
+        SectorAuthoringSelectionTarget selectedAuthoring,
+        int vertexId);
+
+bool ShouldDrawAuthoringFaceSelectionHighlight(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        int faceAnchorId);
+
+const CachedAuthoringFaceHighlightDraw* FindCachedAuthoringFaceHighlight(
+        const SectorEditorTopologyRenderCache& cache,
+        int faceAnchorId);
 
 } // namespace game

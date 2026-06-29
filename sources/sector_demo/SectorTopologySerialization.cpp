@@ -294,6 +294,18 @@ SectorTopologyLineDefFlags ReadLineDefFlags(const Json& value, const std::string
     return flags;
 }
 
+SectorTopologySideKind ReadSideKind(const Json& object, const char* field, const std::string& context)
+{
+    const std::string sideName = ReadString(object, field, context);
+    if (sideName == "front") {
+        return SectorTopologySideKind::Front;
+    }
+    if (sideName == "back") {
+        return SectorTopologySideKind::Back;
+    }
+    Fail(context + "." + field + " must be 'front' or 'back'");
+}
+
 void ReadOptionalLineDefFlags(
         const Json& object,
         const char* field,
@@ -631,6 +643,17 @@ Json WriteLineDefFlags(const SectorTopologyLineDefFlags& flags)
     return value;
 }
 
+const char* WriteSideKind(SectorTopologySideKind side, const std::string& context)
+{
+    switch (side) {
+        case SectorTopologySideKind::Front:
+            return "front";
+        case SectorTopologySideKind::Back:
+            return "back";
+    }
+    Fail(context + " has an invalid side value");
+}
+
 Json WriteDecal(const SectorTopologyDecalLayer& decal, const std::string& context)
 {
     if (!std::isfinite(decal.opacity)
@@ -823,23 +846,19 @@ void ValidateForSerialization(const SectorTopologyMap& map)
     }
 }
 
-SectorTopologyMap ParseMap(const Json& root)
+void ValidateAuthoringMapData(const SectorTopologyMap& map)
 {
-    if (!root.is_object()) {
-        Fail("Topology JSON root must be an object");
+    const auto issues = ValidateSectorTopologyMap(map);
+    const auto error = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
+        return issue.severity == SectorTopologyValidationSeverity::Error;
+    });
+    if (error != issues.end()) {
+        Fail("Authoring map-level validation failed: " + FormatSectorTopologyValidationIssue(*error));
     }
+}
 
-    if (ReadInt(root, "formatVersion", "root") != 2) {
-        Fail("root.formatVersion must be 2");
-    }
-    if (ReadString(root, "topology", "root") != "linedef") {
-        Fail("root.topology must be 'linedef'");
-    }
-    if (ReadInt(root, "coordSubdivisions", "root") != SectorCoordSubdivisions) {
-        Fail("root.coordSubdivisions must equal " + std::to_string(SectorCoordSubdivisions));
-    }
-
-    SectorTopologyMap map;
+void ReadTextures(const Json& root, SectorTopologyMap& map)
+{
     const Json& textures = RequireObjectField(root, "textures", "root");
     for (const auto& entry : textures.items()) {
         const std::string context = "root.textures." + entry.key();
@@ -858,95 +877,10 @@ SectorTopologyMap ParseMap(const Json& root)
         texture.filter = ReadTextureFilter(ReadString(entry.value(), "filter", context), context);
         map.texturesById.emplace(texture.id, std::move(texture));
     }
+}
 
-    const Json& vertices = RequireArrayField(root, "vertices", "root");
-    for (size_t i = 0; i < vertices.size(); ++i) {
-        const std::string context = "root.vertices[" + std::to_string(i) + "]";
-        if (!vertices[i].is_object()) {
-            Fail(context + " must be an object");
-        }
-        map.vertices.push_back(SectorTopologyVertex{
-                ReadInt(vertices[i], "id", context),
-                ReadCoord(vertices[i], "x", context),
-                ReadCoord(vertices[i], "y", context)
-        });
-    }
-
-    const Json& lineDefs = RequireArrayField(root, "linedefs", "root");
-    for (size_t i = 0; i < lineDefs.size(); ++i) {
-        const std::string context = "root.linedefs[" + std::to_string(i) + "]";
-        if (!lineDefs[i].is_object()) {
-            Fail(context + " must be an object");
-        }
-        SectorTopologyLineDef lineDef;
-        lineDef.id = ReadInt(lineDefs[i], "id", context);
-        lineDef.startVertexId = ReadInt(lineDefs[i], "startVertexId", context);
-        lineDef.endVertexId = ReadInt(lineDefs[i], "endVertexId", context);
-        lineDef.frontSideDefId = ReadInt(lineDefs[i], "frontSideDefId", context);
-        lineDef.backSideDefId = ReadInt(lineDefs[i], "backSideDefId", context);
-        ReadOptionalLineDefFlags(lineDefs[i], "flags", context, lineDef.flags);
-        map.lineDefs.push_back(lineDef);
-    }
-
-    const Json& sideDefs = RequireArrayField(root, "sidedefs", "root");
-    for (size_t i = 0; i < sideDefs.size(); ++i) {
-        const std::string context = "root.sidedefs[" + std::to_string(i) + "]";
-        const Json& value = sideDefs[i];
-        if (!value.is_object()) {
-            Fail(context + " must be an object");
-        }
-        const std::string sideName = ReadString(value, "side", context);
-        SectorTopologySideKind side;
-        if (sideName == "front") {
-            side = SectorTopologySideKind::Front;
-        } else if (sideName == "back") {
-            side = SectorTopologySideKind::Back;
-        } else {
-            Fail(context + ".side must be 'front' or 'back'");
-        }
-        SectorTopologySideDef sideDef;
-        sideDef.id = ReadInt(value, "id", context);
-        sideDef.lineDefId = ReadInt(value, "lineDefId", context);
-        sideDef.side = side;
-        sideDef.sectorId = ReadInt(value, "sectorId", context);
-        sideDef.wall = ReadWallPart(RequireField(value, "wall", context), context + ".wall");
-        sideDef.lower = ReadWallPart(RequireField(value, "lower", context), context + ".lower");
-        sideDef.upper = ReadWallPart(RequireField(value, "upper", context), context + ".upper");
-        ReadOptionalWallPart(value, "middle", context, sideDef.middle);
-        map.sideDefs.push_back(std::move(sideDef));
-    }
-
-    const Json& sectors = RequireArrayField(root, "sectors", "root");
-    for (size_t i = 0; i < sectors.size(); ++i) {
-        const std::string context = "root.sectors[" + std::to_string(i) + "]";
-        const Json& value = sectors[i];
-        if (!value.is_object()) {
-            Fail(context + " must be an object");
-        }
-        SectorTopologySector sector;
-        sector.id = ReadInt(value, "id", context);
-        sector.name = ReadString(value, "name", context);
-        sector.floorZ = ReadFloat(value, "floorZ", context);
-        sector.ceilingZ = ReadFloat(value, "ceilingZ", context);
-        sector.floorTextureId = ReadString(value, "floorTextureId", context);
-        sector.ceilingTextureId = ReadString(value, "ceilingTextureId", context);
-        sector.ceilingSky = ReadOptionalBool(value, "ceilingSky", context, false);
-        sector.floorUv = ReadUv(RequireField(value, "floorUv", context), context + ".floorUv");
-        sector.ceilingUv = ReadUv(RequireField(value, "ceilingUv", context), context + ".ceilingUv");
-        ReadOptionalDecal(value, "floorDecal", context, sector.floorDecal);
-        ReadOptionalDecal(value, "ceilingDecal", context, sector.ceilingDecal);
-        sector.ambientColor = ReadColor(
-                RequireField(value, "ambientColor", context), context + ".ambientColor");
-        sector.ambientIntensity = ReadFloat(value, "ambientIntensity", context);
-        sector.defaultWall = ReadWallPart(
-                RequireField(value, "defaultWall", context), context + ".defaultWall");
-        sector.defaultLower = ReadWallPart(
-                RequireField(value, "defaultLower", context), context + ".defaultLower");
-        sector.defaultUpper = ReadWallPart(
-                RequireField(value, "defaultUpper", context), context + ".defaultUpper");
-        map.sectors.push_back(std::move(sector));
-    }
-
+void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBakedLightmap)
+{
     const auto staticLightsIt = root.find("staticLights");
     if (staticLightsIt != root.end()) {
         if (!staticLightsIt->is_array()) {
@@ -992,13 +926,413 @@ SectorTopologyMap ParseMap(const Json& root)
     }
 
     const auto bakedLightmapIt = root.find("bakedLightmap");
-    if (bakedLightmapIt != root.end()) {
+    if (bakedLightmapIt != root.end() && allowBakedLightmap) {
         map.bakedLightmap = ReadBakedLightmap(*bakedLightmapIt, "root.bakedLightmap");
     }
 
     map.previewSettings = NormalizeSectorPreviewSettings(map.previewSettings);
     map.skySettings = NormalizeSectorTopologySkySettings(map.skySettings);
     map.directionalLight = NormalizeSectorTopologyDirectionalLightSettings(map.directionalLight);
+}
+
+SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
+{
+    if (!value.is_object()) {
+        Fail("root.authoringGraph must be an object");
+    }
+
+    SectorAuthoringGraph graph;
+    const Json& vertices = RequireArrayField(value, "vertices", "root.authoringGraph");
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        const std::string context = "root.authoringGraph.vertices[" + std::to_string(i) + "]";
+        if (!vertices[i].is_object()) {
+            Fail(context + " must be an object");
+        }
+        graph.vertices.push_back(SectorAuthoringVertex{
+                ReadInt(vertices[i], "id", context),
+                ReadCoord(vertices[i], "x", context),
+                ReadCoord(vertices[i], "y", context)
+        });
+    }
+
+    const Json& lines = RequireArrayField(value, "lines", "root.authoringGraph");
+    for (size_t i = 0; i < lines.size(); ++i) {
+        const std::string context = "root.authoringGraph.lines[" + std::to_string(i) + "]";
+        if (!lines[i].is_object()) {
+            Fail(context + " must be an object");
+        }
+        SectorAuthoringLine line;
+        line.id = ReadInt(lines[i], "id", context);
+        line.startVertexId = ReadInt(lines[i], "startVertexId", context);
+        line.endVertexId = ReadInt(lines[i], "endVertexId", context);
+        ReadOptionalLineDefFlags(lines[i], "flags", context, line.flags);
+        const auto specialIt = lines[i].find("special");
+        if (specialIt != lines[i].end()) {
+            if (!specialIt->is_object()) {
+                Fail(context + ".special must be an object");
+            }
+            line.special.type = ReadInt(*specialIt, "type", context + ".special");
+            line.special.tag = ReadString(*specialIt, "tag", context + ".special");
+        }
+        graph.lines.push_back(std::move(line));
+    }
+
+    const Json& lineSides = RequireArrayField(value, "lineSides", "root.authoringGraph");
+    for (size_t i = 0; i < lineSides.size(); ++i) {
+        const std::string context = "root.authoringGraph.lineSides[" + std::to_string(i) + "]";
+        if (!lineSides[i].is_object()) {
+            Fail(context + " must be an object");
+        }
+        SectorAuthoringLineSide side;
+        side.id.lineId = ReadInt(lineSides[i], "lineId", context);
+        side.id.side = ReadSideKind(lineSides[i], "side", context);
+        side.wall = ReadWallPart(RequireField(lineSides[i], "wall", context), context + ".wall");
+        side.lower = ReadWallPart(RequireField(lineSides[i], "lower", context), context + ".lower");
+        side.upper = ReadWallPart(RequireField(lineSides[i], "upper", context), context + ".upper");
+        ReadOptionalWallPart(lineSides[i], "middle", context, side.middle);
+        graph.lineSides.push_back(std::move(side));
+    }
+
+    const Json& faceAnchors = RequireArrayField(value, "faceAnchors", "root.authoringGraph");
+    for (size_t i = 0; i < faceAnchors.size(); ++i) {
+        const std::string context = "root.authoringGraph.faceAnchors[" + std::to_string(i) + "]";
+        if (!faceAnchors[i].is_object()) {
+            Fail(context + " must be an object");
+        }
+        SectorAuthoringFaceAnchor anchor;
+        anchor.id = ReadInt(faceAnchors[i], "id", context);
+        anchor.name = ReadString(faceAnchors[i], "name", context);
+        anchor.x = ReadCoord(faceAnchors[i], "x", context);
+        anchor.y = ReadCoord(faceAnchors[i], "y", context);
+        anchor.floorZ = ReadFloat(faceAnchors[i], "floorZ", context);
+        anchor.ceilingZ = ReadFloat(faceAnchors[i], "ceilingZ", context);
+        anchor.floorTextureId = ReadString(faceAnchors[i], "floorTextureId", context);
+        anchor.ceilingTextureId = ReadString(faceAnchors[i], "ceilingTextureId", context);
+        anchor.ceilingSky = ReadOptionalBool(faceAnchors[i], "ceilingSky", context, false);
+        anchor.floorUv = ReadUv(RequireField(faceAnchors[i], "floorUv", context), context + ".floorUv");
+        anchor.ceilingUv = ReadUv(RequireField(faceAnchors[i], "ceilingUv", context), context + ".ceilingUv");
+        ReadOptionalDecal(faceAnchors[i], "floorDecal", context, anchor.floorDecal);
+        ReadOptionalDecal(faceAnchors[i], "ceilingDecal", context, anchor.ceilingDecal);
+        anchor.ambientColor = ReadColor(
+                RequireField(faceAnchors[i], "ambientColor", context), context + ".ambientColor");
+        anchor.ambientIntensity = ReadFloat(faceAnchors[i], "ambientIntensity", context);
+        anchor.defaultWall = ReadWallPart(
+                RequireField(faceAnchors[i], "defaultWall", context), context + ".defaultWall");
+        anchor.defaultLower = ReadWallPart(
+                RequireField(faceAnchors[i], "defaultLower", context), context + ".defaultLower");
+        anchor.defaultUpper = ReadWallPart(
+                RequireField(faceAnchors[i], "defaultUpper", context), context + ".defaultUpper");
+        graph.faceAnchors.push_back(std::move(anchor));
+    }
+
+    return graph;
+}
+
+void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
+{
+    if (!document.derivation.success) {
+        return;
+    }
+
+    document.derivation.topology.texturesById = document.mapData.texturesById;
+    document.derivation.topology.staticLights = document.mapData.staticLights;
+    document.derivation.topology.previewSettings = document.mapData.previewSettings;
+    document.derivation.topology.skySettings = document.mapData.skySettings;
+    document.derivation.topology.directionalLight = document.mapData.directionalLight;
+    document.derivation.topology.lightmapSettings = document.mapData.lightmapSettings;
+    document.derivation.topology.bakedLightmap = document.mapData.bakedLightmap;
+}
+
+SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
+{
+    if (!root.is_object()) {
+        Fail("Authoring JSON root must be an object");
+    }
+
+    if (ReadInt(root, "formatVersion", "root") != 3) {
+        Fail("root.formatVersion must be 3");
+    }
+    if (ReadString(root, "topology", "root") != "authoringGraph") {
+        Fail("root.topology must be 'authoringGraph'");
+    }
+    if (ReadInt(root, "coordSubdivisions", "root") != SectorCoordSubdivisions) {
+        Fail("root.coordSubdivisions must equal " + std::to_string(SectorCoordSubdivisions));
+    }
+
+    SectorAuthoringDocument document;
+    ReadTextures(root, document.mapData);
+    ReadMapLevelFields(root, document.mapData, true);
+    ValidateAuthoringMapData(document.mapData);
+    document.graph = ReadAuthoringGraph(RequireField(root, "authoringGraph", "root"));
+    document.derivation = DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
+    CopyMapLevelFieldsToDerivedTopology(document);
+    return document;
+}
+
+void WriteTextureFields(Json& root, const SectorTopologyMap& map)
+{
+    root["textures"] = Json::object();
+
+    std::vector<std::string> textureIds;
+    textureIds.reserve(map.texturesById.size());
+    for (const auto& entry : map.texturesById) {
+        textureIds.push_back(entry.first);
+    }
+    std::sort(textureIds.begin(), textureIds.end());
+    for (const std::string& id : textureIds) {
+        const SectorTextureDefinition& texture = map.texturesById.at(id);
+        if (id.empty() || texture.id != id || texture.path.empty()) {
+            Fail("texture '" + id + "' must have a matching non-empty ID and path");
+        }
+        root["textures"][id] = Json{
+                {"path", texture.path},
+                {"filter", WriteTextureFilter(texture.filter)}
+        };
+    }
+}
+
+void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeBakedLightmap)
+{
+    root["staticLights"] = Json::array();
+    for (const SectorTopologyStaticPointLight* light : SortedById(map.staticLights)) {
+        const std::string context = "static light " + std::to_string(light->id);
+        RequireFinite(light->intensity, context + ".intensity");
+        RequireFinite(light->radius, context + ".radius");
+        RequireFinite(light->sourceRadius, context + ".sourceRadius");
+        root["staticLights"].push_back(Json{
+                {"id", light->id},
+                {"position", WriteVector3(light->position, context + ".position")},
+                {"radius", light->radius},
+                {"sourceRadius", light->sourceRadius},
+                {"intensity", light->intensity},
+                {"color", WriteColor(light->color)}
+        });
+    }
+
+    root["lightmapSettings"] = WriteLightmapSettings(map.lightmapSettings);
+    root["previewSettings"] = WritePreviewSettings(map.previewSettings);
+    if (!IsDefaultSkySettings(map.skySettings)) {
+        root["skySettings"] = WriteSkySettings(map.skySettings);
+    }
+    if (!IsDefaultDirectionalLightSettings(map.directionalLight)) {
+        root["directionalLight"] = WriteDirectionalLightSettings(map.directionalLight);
+    }
+    if (includeBakedLightmap
+            && !map.bakedLightmap.path.empty()
+            && map.bakedLightmap.width > 0
+            && map.bakedLightmap.height > 0
+            && !map.bakedLightmap.sourceHash.empty()) {
+        root["bakedLightmap"] = WriteBakedLightmap(map.bakedLightmap);
+    }
+}
+
+Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
+{
+    Json graphJson;
+    graphJson["vertices"] = Json::array();
+    for (const SectorAuthoringVertex* vertex : SortedById(graph.vertices)) {
+        graphJson["vertices"].push_back(Json{
+                {"id", vertex->id}, {"x", vertex->x}, {"y", vertex->y}
+        });
+    }
+
+    graphJson["lines"] = Json::array();
+    for (const SectorAuthoringLine* line : SortedById(graph.lines)) {
+        Json lineJson{
+                {"id", line->id},
+                {"startVertexId", line->startVertexId},
+                {"endVertexId", line->endVertexId}
+        };
+        if (HasNonDefaultLineDefFlags(line->flags)) {
+            lineJson["flags"] = WriteLineDefFlags(line->flags);
+        }
+        if (line->special.type != 0 || !line->special.tag.empty()) {
+            lineJson["special"] = Json{
+                    {"type", line->special.type},
+                    {"tag", line->special.tag}
+            };
+        }
+        graphJson["lines"].push_back(std::move(lineJson));
+    }
+
+    graphJson["lineSides"] = Json::array();
+    std::vector<const SectorAuthoringLineSide*> sortedSides;
+    sortedSides.reserve(graph.lineSides.size());
+    for (const SectorAuthoringLineSide& side : graph.lineSides) {
+        sortedSides.push_back(&side);
+    }
+    std::sort(sortedSides.begin(), sortedSides.end(), [](const auto* left, const auto* right) {
+        if (left->id.lineId != right->id.lineId) {
+            return left->id.lineId < right->id.lineId;
+        }
+        return static_cast<int>(left->id.side) < static_cast<int>(right->id.side);
+    });
+    for (const SectorAuthoringLineSide* side : sortedSides) {
+        const std::string context = "authoring side " + std::to_string(side->id.lineId);
+        Json sideJson{
+                {"lineId", side->id.lineId},
+                {"side", WriteSideKind(side->id.side, context)},
+                {"wall", WriteWallPart(side->wall, context + ".wall")},
+                {"lower", WriteWallPart(side->lower, context + ".lower")},
+                {"upper", WriteWallPart(side->upper, context + ".upper")}
+        };
+        if (HasNonDefaultWallPart(side->middle)) {
+            sideJson["middle"] = WriteWallPart(side->middle, context + ".middle");
+        }
+        graphJson["lineSides"].push_back(std::move(sideJson));
+    }
+
+    graphJson["faceAnchors"] = Json::array();
+    for (const SectorAuthoringFaceAnchor* anchor : SortedById(graph.faceAnchors)) {
+        const std::string context = "face anchor " + std::to_string(anchor->id);
+        RequireFinite(anchor->floorZ, context + ".floorZ");
+        RequireFinite(anchor->ceilingZ, context + ".ceilingZ");
+        RequireFinite(anchor->ambientIntensity, context + ".ambientIntensity");
+        Json anchorJson{
+                {"id", anchor->id},
+                {"name", anchor->name},
+                {"x", anchor->x},
+                {"y", anchor->y},
+                {"floorZ", anchor->floorZ},
+                {"ceilingZ", anchor->ceilingZ},
+                {"floorTextureId", anchor->floorTextureId},
+                {"ceilingTextureId", anchor->ceilingTextureId},
+                {"floorUv", WriteUv(anchor->floorUv, context + ".floorUv")},
+                {"ceilingUv", WriteUv(anchor->ceilingUv, context + ".ceilingUv")},
+                {"ambientColor", WriteColor(anchor->ambientColor)},
+                {"ambientIntensity", anchor->ambientIntensity},
+                {"defaultWall", WriteWallPart(anchor->defaultWall, context + ".defaultWall")},
+                {"defaultLower", WriteWallPart(anchor->defaultLower, context + ".defaultLower")},
+                {"defaultUpper", WriteWallPart(anchor->defaultUpper, context + ".defaultUpper")}
+        };
+        if (anchor->ceilingSky) {
+            anchorJson["ceilingSky"] = true;
+        }
+        if (HasDecal(anchor->floorDecal)) {
+            anchorJson["floorDecal"] = WriteDecal(anchor->floorDecal, context + ".floorDecal");
+        }
+        if (HasDecal(anchor->ceilingDecal)) {
+            anchorJson["ceilingDecal"] = WriteDecal(anchor->ceilingDecal, context + ".ceilingDecal");
+        }
+        graphJson["faceAnchors"].push_back(std::move(anchorJson));
+    }
+
+    return graphJson;
+}
+
+Json SerializeAuthoringDocument(const SectorAuthoringDocument& document)
+{
+    ValidateAuthoringMapData(document.mapData);
+
+    Json root;
+    root["formatVersion"] = 3;
+    root["topology"] = "authoringGraph";
+    root["coordSubdivisions"] = SectorCoordSubdivisions;
+    WriteTextureFields(root, document.mapData);
+    WriteMapLevelFields(root, document.mapData, true);
+    root["authoringGraph"] = WriteAuthoringGraph(document.graph);
+    return root;
+}
+
+SectorTopologyMap ParseMap(const Json& root)
+{
+    if (!root.is_object()) {
+        Fail("Topology JSON root must be an object");
+    }
+
+    if (ReadInt(root, "formatVersion", "root") != 2) {
+        Fail("root.formatVersion must be 2");
+    }
+    if (ReadString(root, "topology", "root") != "linedef") {
+        Fail("root.topology must be 'linedef'");
+    }
+    if (ReadInt(root, "coordSubdivisions", "root") != SectorCoordSubdivisions) {
+        Fail("root.coordSubdivisions must equal " + std::to_string(SectorCoordSubdivisions));
+    }
+
+    SectorTopologyMap map;
+    ReadTextures(root, map);
+
+    const Json& vertices = RequireArrayField(root, "vertices", "root");
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        const std::string context = "root.vertices[" + std::to_string(i) + "]";
+        if (!vertices[i].is_object()) {
+            Fail(context + " must be an object");
+        }
+        map.vertices.push_back(SectorTopologyVertex{
+                ReadInt(vertices[i], "id", context),
+                ReadCoord(vertices[i], "x", context),
+                ReadCoord(vertices[i], "y", context)
+        });
+    }
+
+    const Json& lineDefs = RequireArrayField(root, "linedefs", "root");
+    for (size_t i = 0; i < lineDefs.size(); ++i) {
+        const std::string context = "root.linedefs[" + std::to_string(i) + "]";
+        if (!lineDefs[i].is_object()) {
+            Fail(context + " must be an object");
+        }
+        SectorTopologyLineDef lineDef;
+        lineDef.id = ReadInt(lineDefs[i], "id", context);
+        lineDef.startVertexId = ReadInt(lineDefs[i], "startVertexId", context);
+        lineDef.endVertexId = ReadInt(lineDefs[i], "endVertexId", context);
+        lineDef.frontSideDefId = ReadInt(lineDefs[i], "frontSideDefId", context);
+        lineDef.backSideDefId = ReadInt(lineDefs[i], "backSideDefId", context);
+        ReadOptionalLineDefFlags(lineDefs[i], "flags", context, lineDef.flags);
+        map.lineDefs.push_back(lineDef);
+    }
+
+    const Json& sideDefs = RequireArrayField(root, "sidedefs", "root");
+    for (size_t i = 0; i < sideDefs.size(); ++i) {
+        const std::string context = "root.sidedefs[" + std::to_string(i) + "]";
+        const Json& value = sideDefs[i];
+        if (!value.is_object()) {
+            Fail(context + " must be an object");
+        }
+        SectorTopologySideDef sideDef;
+        sideDef.id = ReadInt(value, "id", context);
+        sideDef.lineDefId = ReadInt(value, "lineDefId", context);
+        sideDef.side = ReadSideKind(value, "side", context);
+        sideDef.sectorId = ReadInt(value, "sectorId", context);
+        sideDef.wall = ReadWallPart(RequireField(value, "wall", context), context + ".wall");
+        sideDef.lower = ReadWallPart(RequireField(value, "lower", context), context + ".lower");
+        sideDef.upper = ReadWallPart(RequireField(value, "upper", context), context + ".upper");
+        ReadOptionalWallPart(value, "middle", context, sideDef.middle);
+        map.sideDefs.push_back(std::move(sideDef));
+    }
+
+    const Json& sectors = RequireArrayField(root, "sectors", "root");
+    for (size_t i = 0; i < sectors.size(); ++i) {
+        const std::string context = "root.sectors[" + std::to_string(i) + "]";
+        const Json& value = sectors[i];
+        if (!value.is_object()) {
+            Fail(context + " must be an object");
+        }
+        SectorTopologySector sector;
+        sector.id = ReadInt(value, "id", context);
+        sector.name = ReadString(value, "name", context);
+        sector.floorZ = ReadFloat(value, "floorZ", context);
+        sector.ceilingZ = ReadFloat(value, "ceilingZ", context);
+        sector.floorTextureId = ReadString(value, "floorTextureId", context);
+        sector.ceilingTextureId = ReadString(value, "ceilingTextureId", context);
+        sector.ceilingSky = ReadOptionalBool(value, "ceilingSky", context, false);
+        sector.floorUv = ReadUv(RequireField(value, "floorUv", context), context + ".floorUv");
+        sector.ceilingUv = ReadUv(RequireField(value, "ceilingUv", context), context + ".ceilingUv");
+        ReadOptionalDecal(value, "floorDecal", context, sector.floorDecal);
+        ReadOptionalDecal(value, "ceilingDecal", context, sector.ceilingDecal);
+        sector.ambientColor = ReadColor(
+                RequireField(value, "ambientColor", context), context + ".ambientColor");
+        sector.ambientIntensity = ReadFloat(value, "ambientIntensity", context);
+        sector.defaultWall = ReadWallPart(
+                RequireField(value, "defaultWall", context), context + ".defaultWall");
+        sector.defaultLower = ReadWallPart(
+                RequireField(value, "defaultLower", context), context + ".defaultLower");
+        sector.defaultUpper = ReadWallPart(
+                RequireField(value, "defaultUpper", context), context + ".defaultUpper");
+        map.sectors.push_back(std::move(sector));
+    }
+
+    ReadMapLevelFields(root, map, true);
     ValidateForSerialization(map);
     return map;
 }
@@ -1182,6 +1516,40 @@ bool SaveSectorTopologyMapToJsonString(
     }
 }
 
+bool LoadSectorAuthoringDocumentFromJsonString(
+        const std::string& jsonText,
+        SectorAuthoringDocument& outDocument,
+        std::string* outError)
+{
+    ClearError(outError);
+    try {
+        const Json root = Json::parse(jsonText);
+        SectorAuthoringDocument parsed = ParseAuthoringDocument(root);
+        outDocument = std::move(parsed);
+        return true;
+    } catch (const std::exception& exception) {
+        SetError(outError, exception.what());
+        return false;
+    }
+}
+
+bool SaveSectorAuthoringDocumentToJsonString(
+        const SectorAuthoringDocument& document,
+        std::string& outJsonText,
+        std::string* outError)
+{
+    ClearError(outError);
+    try {
+        std::string serialized = SerializeAuthoringDocument(document).dump(2);
+        serialized.push_back('\n');
+        outJsonText = std::move(serialized);
+        return true;
+    } catch (const std::exception& exception) {
+        SetError(outError, exception.what());
+        return false;
+    }
+}
+
 bool LoadSectorTopologyMap(
         const char* path,
         SectorTopologyMap& outMap,
@@ -1230,6 +1598,59 @@ bool SaveSectorTopologyMap(
     file.write(jsonText.data(), static_cast<std::streamsize>(jsonText.size()));
     if (!file) {
         SetError(outError, std::string("Failed to write topology map: ") + path);
+        return false;
+    }
+    return true;
+}
+
+bool LoadSectorAuthoringDocument(
+        const char* path,
+        SectorAuthoringDocument& outDocument,
+        std::string* outError)
+{
+    ClearError(outError);
+    if (path == nullptr || path[0] == '\0') {
+        SetError(outError, "Cannot load an authoring document without a path");
+        return false;
+    }
+
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        SetError(outError, std::string("Failed to open authoring document: ") + path);
+        return false;
+    }
+    std::ostringstream contents;
+    contents << file.rdbuf();
+    if (!file.good() && !file.eof()) {
+        SetError(outError, std::string("Failed to read authoring document: ") + path);
+        return false;
+    }
+    return LoadSectorAuthoringDocumentFromJsonString(contents.str(), outDocument, outError);
+}
+
+bool SaveSectorAuthoringDocument(
+        const char* path,
+        const SectorAuthoringDocument& document,
+        std::string* outError)
+{
+    ClearError(outError);
+    if (path == nullptr || path[0] == '\0') {
+        SetError(outError, "Cannot save an authoring document without a path");
+        return false;
+    }
+
+    std::string jsonText;
+    if (!SaveSectorAuthoringDocumentToJsonString(document, jsonText, outError)) {
+        return false;
+    }
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    if (!file) {
+        SetError(outError, std::string("Failed to open authoring document for writing: ") + path);
+        return false;
+    }
+    file.write(jsonText.data(), static_cast<std::streamsize>(jsonText.size()));
+    if (!file) {
+        SetError(outError, std::string("Failed to write authoring document: ") + path);
         return false;
     }
     return true;

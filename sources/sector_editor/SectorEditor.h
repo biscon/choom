@@ -7,11 +7,10 @@
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_demo/SectorMeshPreview.h"
-#include "sector_demo/SectorTopologyCreation.h"
-#include "sector_demo/SectorTopologyEdit.h"
 
 #include <raylib.h>
 
+#include <functional>
 #include <string>
 
 namespace game {
@@ -49,43 +48,32 @@ private:
     bool IsMouseOverCanvas(const engine::Input& input) const;
     void UpdateHoverAndMouse(engine::Input& input);
     void HandleCanvasInput(engine::Input& input, float dt);
-    void StartVertexDrag(int vertexId, SectorTopologyCoordPoint point);
-    void UpdateVertexDrag(engine::Input& input);
-    void FinishVertexDrag();
-    void CancelVertexDrag(const char* message);
+    void StartAuthoringVertexDrag(int vertexId, SectorTopologyCoordPoint point);
+    void UpdateAuthoringVertexDrag(engine::Input& input);
+    void FinishAuthoringVertexDrag();
+    void CancelAuthoringVertexDrag(const char* message);
     void StartLightDrag(int topologyLightId);
     void UpdateLightDrag(engine::Input& input);
     void FinishLightDrag();
     void CancelLightDrag(const char* message);
-    void StartPendingTopologyVertexMerge(int sourceVertexId);
-    void CancelPendingTopologyVertexMerge(const char* message);
-    void UpdatePendingTopologyVertexMerge(engine::Input& input);
-    void CommitPendingTopologyVertexMerge();
-    void StartPendingTopologyLineSplitAtPoint();
-    void CancelPendingTopologyLineSplitAtPoint(const char* message);
-    bool ValidatePendingTopologyLineSplitAtPointTarget(const char* staleMessage);
-    void UpdatePendingTopologyLineSplitAtPoint(engine::Input& input);
-    void CommitPendingTopologyLineSplitAtPoint();
-    void StartPendingTopologySectorCut();
-    void CancelPendingTopologySectorCut(const char* message);
-    bool ValidatePendingTopologySectorCutTarget(const char* staleMessage);
-    void UpdatePendingTopologySectorCut(engine::Input& input);
-    void CommitPendingTopologySectorCut();
     void UpdatePreview3D(engine::Input& input, float dt);
     void UpdatePreview3DSelection(engine::Input& input);
-    void CancelPendingSector(const char* message);
-    void StartInsertSectorInside();
-    bool IsPendingInsertParentValid() const;
-    void RemoveLastPendingSectorPoint();
-    void AddPendingSectorPoint(SectorPoint point);
-    void FinalizePendingSector();
-    bool CanClosePendingSectorAt(SectorPoint point) const;
+    void CancelPendingAuthoringLine(const char* message);
+    void CancelPendingAuthoringRectangle(const char* message);
+    void CancelPendingAuthoringInsertVertex(const char* message);
+    void BeginPendingAuthoringInsertVertex(int lineId);
+    void AddAuthoringLinePoint(SectorPoint point);
+    void AddAuthoringRectanglePoint(SectorPoint point);
+    bool TryResolveAuthoringInsertVertexPoint(
+            int lineId,
+            Vector2 mapPoint,
+            SectorTopologyCoordPoint& outPoint,
+            std::string& error) const;
+    void UpdatePendingAuthoringInsertVertex(Vector2 mapPoint);
+    void CommitAuthoringInsertVertex(Vector2 screenPoint);
     SectorPoint CurrentSnappedSectorPoint() const;
     bool ToTopologyCoordPoint(SectorPoint point, SectorTopologyCoordPoint& outPoint, std::string& error) const;
     bool ToCanonicalSectorPoint(SectorPoint point, SectorPoint& outPoint, std::string& error) const;
-    bool BuildPendingTopologyPoints(std::vector<SectorTopologyCoordPoint>& outPoints, std::string& error) const;
-    bool ValidatePendingTopologyPoint(SectorPoint point, std::string& error) const;
-    SectorTopologyCreatePolygonOptions BuildTopologyCreateOptions() const;
 
     void DrawGrid() const;
     void InvalidateTopologyRenderCache();
@@ -93,12 +81,11 @@ private:
     void DrawTopologyDocument();
     void DrawTopologySelectedLineHighlight() const;
     void DrawTopologySnapCrosshair() const;
-    void DrawPendingSector() const;
-    void DrawVertexMoveOverlay() const;
-    void DrawPendingTopologyVertexMerge() const;
+    void DrawPendingAuthoringLine() const;
+    void DrawPendingAuthoringRectangle() const;
+    void DrawPendingAuthoringInsertVertex() const;
+    void DrawAuthoringVertexMoveOverlay() const;
     void DrawLightMoveOverlay() const;
-    void DrawPendingTopologyLineSplitAtPoint() const;
-    void DrawPendingTopologySectorCut() const;
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
     void RenderPreview3D(engine::AssetManager& assets);
     void DrawPreviewSurfaceHighlights() const;
@@ -202,18 +189,21 @@ private:
             int& outSideDefId,
             SectorTopologySideKind& outSide,
             bool& outPreferredMissing) const;
+    int FindAuthoringLineNearScreenPoint(Vector2 screenPoint) const;
+    bool FindAuthoringVertexNearScreenPoint(
+            Vector2 screenPoint,
+            int& outVertexId,
+            SectorTopologyCoordPoint& outPoint) const;
+    bool FindAuthoringSelectionNearScreenPoint(
+            Vector2 screenPoint,
+            SectorAuthoringSelectionTarget& outTarget,
+            SectorTopologyCoordPoint& outVertexPoint) const;
     int FindTopologyLightNearScreenPoint(Vector2 screenPoint) const;
     bool FindTopologyVertexNearScreenPoint(
             Vector2 screenPoint,
             int& outVertexId,
             SectorTopologyCoordPoint& outPoint) const;
-    bool FindSelectedSectorBoundaryCutPointNearScreenPoint(
-            Vector2 screenPoint,
-            SectorTopologyBoundaryCutPoint& outPoint) const;
-    int FindTopologyVertexAtCoordPoint(
-            SectorTopologyCoordPoint point,
-            int excludedVertexId = -1) const;
-    bool SnapTopologyVertexMoveTarget(
+    bool SnapAuthoringVertexMoveTarget(
             Vector2 mapPoint,
             SectorTopologyCoordPoint& outPoint,
             std::string& error) const;
@@ -266,6 +256,11 @@ private:
     void SelectTopologySideDef(int sideDefId, TopologyWallPart wallPart);
     void SelectTopologyLineDef(int lineDefId, SectorTopologySideKind side, TopologyWallPart wallPart);
     void SelectTopologyLight(int topologyLightId);
+    void SelectAuthoringLine(int lineId);
+    bool DeleteSelectedAuthoringLine();
+    void SelectAuthoringVertex(int vertexId);
+    bool DeleteSelectedAuthoringVertex();
+    void SelectAuthoringFaceAnchor(int faceAnchorId);
     void SelectSurface3D(SectorSurfaceRef surface);
     bool IsValidSurfaceRef(SectorSurfaceRef surface) const;
     bool SameSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b) const;
@@ -296,17 +291,28 @@ private:
     bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialU(TopologySurfaceEditTarget target, TopologyUAlignDirection direction, engine::AssetManager* assets, TopologyMaterialLayer layer);
+    bool HasAuthoringGraphData() const;
+    bool IsSelectedSurface3DFlatTarget(TopologySurfaceEditTarget target) const;
+    bool EnsureSelectedSurface3DAuthoringMappingCurrent();
+    bool ApplyAuthoringSideMaterialAction(
+            TopologySurfaceEditTarget target,
+            engine::AssetManager* assets,
+            const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action);
+    bool ApplyAuthoringFaceAnchorFlatMaterialAction(
+            TopologySurfaceEditTarget target,
+            engine::AssetManager* assets,
+            const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action);
+    bool FinishAuthoringSideMaterialActionResult(
+            TopologySurfaceEditTarget target,
+            const SectorEditorMaterialActionResult& result,
+            const SectorTopologyMap& editedTopology,
+            engine::AssetManager* assets);
     bool FinishMaterialActionResult(const SectorEditorMaterialActionResult& result, engine::AssetManager* assets);
     bool FinishTopologyMaterialMutation(const char* status, engine::AssetManager* assets);
     bool FinishTopologyActionResult(const SectorEditorTopologyActionResult& result);
     bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
-    bool SplitSelectedTopologyLineDef();
-    bool DissolveSelectedTopologyVertex();
-    bool JoinSelectedTopologySectors();
     void ClearTransientTopologyEditStateAfterGeometryChange();
-    void OpenDeleteSelectedTopologySectorConfirmation();
-    void OpenDeleteTopologySectorConfirmation(int sectorId);
-    bool DeleteSelectedTopologySectorConfirmed(int sectorId);
+    void ClearTopologySelectionOnly();
     void ClearSelection();
     void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer);
     void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer);

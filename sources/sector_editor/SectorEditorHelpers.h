@@ -65,6 +65,11 @@ std::string MakeTemporaryLightmapPath(const std::string& finalOutputPath);
 void DeleteFileIfExists(const std::string& path);
 std::string GeneratedTextureIdBase(const std::string& assetPath);
 const char* ToolName(SectorEditorTool tool);
+bool IsGraphAuthoringTool(SectorEditorTool tool);
+bool IsLegacyTopologyMutationTool(SectorEditorTool tool);
+bool IsToolAvailableInGraphAuthoritativeMode(SectorEditorTool tool);
+bool IsSectorEditorGraphAuthoritativeMode();
+const char* LegacyTopologyMutationUnavailableMessage();
 const char* TopologyWallPartName(TopologyWallPart part);
 const char* TopologyWallPartStatusName(TopologyWallPart part);
 const char* TopologyMaterialLayerName(TopologyMaterialLayer layer);
@@ -110,6 +115,10 @@ float DistancePointToSegment(Vector2 point, Vector2 a, Vector2 b);
 SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(SectorTopologySideDef& sideDef, TopologyWallPart part);
 const SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
         const SectorTopologySideDef& sideDef,
+        TopologyWallPart part);
+SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(SectorAuthoringLineSide& side, TopologyWallPart part);
+const SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
+        const SectorAuthoringLineSide& side,
         TopologyWallPart part);
 bool IsTopologyMiddleEligible(const SectorTopologyMap& map, const SectorTopologySideDef* sideDef);
 TopologyWallPart ValidTopologyWallPartForSideDef(

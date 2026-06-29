@@ -380,13 +380,43 @@ const char* ToolName(SectorEditorTool tool)
 {
     switch (tool) {
         case SectorEditorTool::Select: return "Select";
-        case SectorEditorTool::Sector: return "Sector";
-        case SectorEditorTool::InsertSectorInside: return "Insert Inside";
+        case SectorEditorTool::AuthoringLine: return "Authoring Line";
+        case SectorEditorTool::AuthoringRectangle: return "Rectangle";
+        case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex";
+        case SectorEditorTool::AuthoringMove: return "Move Vertex";
         case SectorEditorTool::Light: return "Light";
         case SectorEditorTool::Move: return "Move";
-        case SectorEditorTool::Erase: return "Erase";
     }
     return "Unknown";
+}
+
+bool IsGraphAuthoringTool(SectorEditorTool tool)
+{
+    return tool == SectorEditorTool::Select
+            || tool == SectorEditorTool::AuthoringLine
+            || tool == SectorEditorTool::AuthoringRectangle
+            || tool == SectorEditorTool::AuthoringInsertVertex
+            || tool == SectorEditorTool::AuthoringMove;
+}
+
+bool IsLegacyTopologyMutationTool(SectorEditorTool tool)
+{
+    return tool == SectorEditorTool::Move;
+}
+
+bool IsToolAvailableInGraphAuthoritativeMode(SectorEditorTool tool)
+{
+    return !IsLegacyTopologyMutationTool(tool);
+}
+
+bool IsSectorEditorGraphAuthoritativeMode()
+{
+    return true;
+}
+
+const char* LegacyTopologyMutationUnavailableMessage()
+{
+    return "Legacy direct-topology tools are unavailable in graph-authoritative mode; use authoring lines and vertices instead.";
 }
 
 const char* TopologyWallPartName(TopologyWallPart part)
@@ -693,12 +723,13 @@ Vector3 SectorPointToWorld(SectorPoint point, float height)
 const char* ToolHelpText(SectorEditorTool tool)
 {
     switch (tool) {
-        case SectorEditorTool::Select: return "Select: click lights, linedefs, or sectors in canvas";
-        case SectorEditorTool::Sector: return "Sector: left click add, click first closes, right click/Esc cancels, Backspace removes";
-        case SectorEditorTool::InsertSectorInside: return "Insert sector: draw inside selected parent; Enter closes, right click/Esc cancels";
-        case SectorEditorTool::Light: return "Light: click inside a sector to place a baked static point light";
-        case SectorEditorTool::Move: return "Move: drag topology light or vertex";
-        case SectorEditorTool::Erase: return "Erase: click sector to delete";
+        case SectorEditorTool::Select: return "Select: click authoring lines or vertices";
+        case SectorEditorTool::AuthoringLine: return "Authoring line: click snapped points to draw a continuous line chain, right click/Esc stops chain";
+        case SectorEditorTool::AuthoringRectangle: return "Rectangle: click first corner, then opposite corner, right click/Esc cancels";
+        case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex: click an authoring line to split it, right click/Esc cancels";
+        case SectorEditorTool::AuthoringMove: return "Move Vertex: drag authoring vertices";
+        case SectorEditorTool::Light: return "Light: click inside a sector to place, or drag an existing baked static point light";
+        case SectorEditorTool::Move: return "Legacy move: unavailable in graph-authoritative mode; use Move Vertex for authoring vertices";
     }
     return "";
 }
@@ -721,10 +752,14 @@ const char* TopologyPickerTargetLabel(const TexturePickerState& picker)
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::MapSky) {
         return "sky texture";
     }
-    if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef) {
+    if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef
+            || picker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringSide) {
+        const char* sideTarget = picker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringSide
+                ? "authoring side"
+                : "sidedef";
         return picker.topologyLayer == TopologyMaterialLayer::Decal
-                ? TextFormat("%s sidedef decal texture", TopologyWallPartStatusName(picker.topologyWallPart))
-                : TextFormat("%s sidedef texture", TopologyWallPartStatusName(picker.topologyWallPart));
+                ? TextFormat("%s %s decal texture", TopologyWallPartStatusName(picker.topologyWallPart), sideTarget)
+                : TextFormat("%s %s texture", TopologyWallPartStatusName(picker.topologyWallPart), sideTarget);
     }
     if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
         switch (picker.topologyField) {
@@ -848,6 +883,32 @@ const SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
         case TopologyWallPart::Middle: return sideDef.middle;
     }
     return sideDef.wall;
+}
+
+SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
+        SectorAuthoringLineSide& side,
+        TopologyWallPart part)
+{
+    switch (part) {
+        case TopologyWallPart::Wall: return side.wall;
+        case TopologyWallPart::Lower: return side.lower;
+        case TopologyWallPart::Upper: return side.upper;
+        case TopologyWallPart::Middle: return side.middle;
+    }
+    return side.wall;
+}
+
+const SectorTopologyWallPartSettings& TopologyWallPartSettingsFor(
+        const SectorAuthoringLineSide& side,
+        TopologyWallPart part)
+{
+    switch (part) {
+        case TopologyWallPart::Wall: return side.wall;
+        case TopologyWallPart::Lower: return side.lower;
+        case TopologyWallPart::Upper: return side.upper;
+        case TopologyWallPart::Middle: return side.middle;
+    }
+    return side.wall;
 }
 
 bool IsTopologyMiddleEligible(

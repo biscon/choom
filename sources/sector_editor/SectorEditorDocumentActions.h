@@ -24,6 +24,18 @@ struct SectorEditorSaveLevelPlan {
     bool needsOverwriteConfirmation = false;
 };
 
+enum class SectorEditorDocumentFormat {
+    Unknown,
+    AuthoringGraph,
+    TopologyV2Import
+};
+
+struct SectorEditorLoadedDocument {
+    SectorEditorDocumentFormat format = SectorEditorDocumentFormat::Unknown;
+    SectorTopologyMap mapData;
+    SectorAuthoringGraph authoringGraph;
+};
+
 bool IsValidLevelName(const std::string& name, std::string& error);
 bool BuildLevelPaths(const std::string& name, LevelPaths& paths, std::string& error);
 SectorTopologyMap CreateEmptySectorTopologyDocument();
@@ -40,9 +52,9 @@ void OpenSaveLevelModalState(
         const std::string& currentLevelName);
 void RefreshLoadLevelModalState(LoadLevelModalState& modalState);
 void OpenLoadLevelModalState(LoadLevelModalState& modalState);
-bool LoadSectorTopologyDocumentFromAsset(
+bool LoadSectorEditorDocumentFromAsset(
         const std::string& jsonAssetPath,
-        SectorTopologyMap& outMap,
+        SectorEditorLoadedDocument& outDocument,
         std::string& errorMessage);
 bool PrepareSaveLevelPlan(
         const std::string& name,
@@ -52,9 +64,9 @@ bool PrepareSaveLevelPlan(
         SectorEditorSaveLevelPlan& outPlan,
         std::string& errorMessage);
 bool EnsureSaveLevelDirectory(const LevelPaths& paths, std::string& errorMessage);
-bool SaveSectorTopologyDocument(
+bool SaveSectorEditorAuthoringDocument(
         const LevelPaths& paths,
-        const SectorTopologyMap& map,
+        const SectorEditorState& state,
         std::string& errorMessage);
 
 } // namespace game

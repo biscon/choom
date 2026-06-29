@@ -2,6 +2,7 @@
 
 #include "engine/assets/TextureLoadFlags.h"
 #include "engine/input/InputEvents.h"
+#include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorDocumentActions.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorLightInspector.h"
@@ -20,7 +21,6 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTextureTypes.h"
-#include "sector_demo/SectorTopologyCreation.h"
 #include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorTopologySerialization.h"
 #include "sector_demo/SectorTopologyUnits.h"
@@ -34,15 +34,190 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <numeric>
 #include <sstream>
 #include <system_error>
 #include <utility>
 #include <vector>
 
 namespace game {
+
+namespace {
+
+bool IsFlatTopologySurfaceTarget(TopologySurfaceEditTarget target)
+{
+    return target.kind == TopologySurfaceEditTargetKind::SectorFloor
+            || target.kind == TopologySurfaceEditTargetKind::SectorCeiling;
+}
+
+int64_t PositiveModulo(int64_t value, int64_t divisor)
+{
+    if (divisor <= 0) {
+        return 0;
+    }
+    const int64_t result = value % divisor;
+    return result < 0 ? result + divisor : result;
+}
+
+bool CoordAlignedToStep(SectorCoord value, int64_t step)
+{
+    return step <= 1 || PositiveModulo(value, step) == 0;
+}
+
+int64_t LcmClamped(int64_t a, int64_t b)
+{
+    if (a <= 0 || b <= 0) {
+        return 1;
+    }
+    const int64_t divisor = std::gcd(a, b);
+    if (divisor <= 0) {
+        return 1;
+    }
+    constexpr int64_t maxReasonablePeriod = 1 << 20;
+    const int64_t divided = a / divisor;
+    if (divided > maxReasonablePeriod / b) {
+        return maxReasonablePeriod;
+    }
+    return std::max<int64_t>(1, divided * b);
+}
+
+int64_t CoordinateSequencePeriod(SectorCoord stepDelta, int64_t snapStep)
+{
+    if (snapStep <= 1) {
+        return 1;
+    }
+    const int64_t divisor = std::gcd<int64_t>(
+            std::llabs(static_cast<int64_t>(stepDelta)),
+            snapStep);
+    return std::max<int64_t>(1, snapStep / std::max<int64_t>(1, divisor));
+}
+
+const char* InsertVertexFailureStatus(SectorAuthoringInsertVertexStatus status)
+{
+    switch (status) {
+        case SectorAuthoringInsertVertexStatus::Inserted:
+            return "Inserted vertex on authoring line";
+        case SectorAuthoringInsertVertexStatus::InvalidLine:
+            return "Insert Vertex: select or click an authoring line";
+        case SectorAuthoringInsertVertexStatus::InvalidEndpoint:
+            return "Insert Vertex unavailable: selected authoring line is invalid";
+        case SectorAuthoringInsertVertexStatus::OffLine:
+            return "Insert point must lie on the selected line";
+        case SectorAuthoringInsertVertexStatus::Endpoint:
+            return "Insert point is too close to an endpoint";
+        case SectorAuthoringInsertVertexStatus::IdAllocationFailed:
+            return "Insert Vertex failed: could not allocate authoring IDs";
+    }
+    return "Insert Vertex failed";
+}
+
+float AuthoringInspectorTextureRowTotalHeight(float gap)
+{
+    return SectorEditorInspectorTextureRowHeight() + gap;
+}
+
+float AuthoringInspectorAssignedDecalControlsHeight(bool emissive, float rowH, float gap, bool includeTintAndFit)
+{
+    float height = 0.0f;
+    height += rowH + gap;
+    height += 36.0f + gap;
+    if (emissive) {
+        height += rowH + gap;
+    }
+    if (includeTintAndFit) {
+        height += rowH + gap;
+        height += 36.0f + gap;
+    }
+    return height;
+}
+
+float AuthoringInspectorDecalBlockHeight(
+        const SectorTopologyDecalLayer& decal,
+        float rowH,
+        float gap,
+        bool includeTintAndFit)
+{
+    float height = AuthoringInspectorTextureRowTotalHeight(gap);
+    if (!decal.textureId.empty()) {
+        height += AuthoringInspectorAssignedDecalControlsHeight(
+                decal.emissive,
+                rowH,
+                gap,
+                includeTintAndFit);
+    }
+    return height;
+}
+
+float AuthoringLineInspectorContentHeight(
+        const SectorAuthoringLine& line,
+        const SectorAuthoringGraph& graph,
+        float rowH,
+        float gap)
+{
+    float height = 0.0f;
+    height += 38.0f;
+    height += 32.0f;
+    height += 36.0f + gap;
+
+    const auto addSideSection = [&](SectorTopologySideKind sideKind) {
+        height += 18.0f;
+        height += 30.0f;
+        height += AuthoringInspectorTextureRowTotalHeight(gap) * 4.0f;
+
+        const SectorAuthoringLineSide* side =
+                FindSectorAuthoringLineSide(graph, SectorAuthoringSideId{line.id, sideKind});
+        const SectorTopologyDecalLayer emptyDecal;
+        const SectorTopologyDecalLayer& wallDecal =
+                side != nullptr ? side->wall.decal : emptyDecal;
+        const SectorTopologyDecalLayer& lowerDecal =
+                side != nullptr ? side->lower.decal : emptyDecal;
+        const SectorTopologyDecalLayer& upperDecal =
+                side != nullptr ? side->upper.decal : emptyDecal;
+        height += AuthoringInspectorDecalBlockHeight(wallDecal, rowH, gap, true);
+        height += AuthoringInspectorDecalBlockHeight(lowerDecal, rowH, gap, true);
+        height += AuthoringInspectorDecalBlockHeight(upperDecal, rowH, gap, true);
+    };
+
+    addSideSection(SectorTopologySideKind::Front);
+    addSideSection(SectorTopologySideKind::Back);
+    height += rowH + gap;
+    height += rowH + gap;
+    return height;
+}
+
+float AuthoringFaceInspectorContentHeight(
+        const SectorAuthoringFaceAnchor& anchor,
+        float rowH,
+        float gap)
+{
+    float height = 0.0f;
+    height += 38.0f;
+    height += 32.0f;
+    height += (rowH + gap) * 2.0f;
+    height += rowH + gap;
+
+    height += 18.0f;
+    height += 30.0f;
+    height += rowH + gap;
+    height += (rowH + gap) * 3.0f;
+
+    height += 18.0f;
+    height += 30.0f;
+    height += AuthoringInspectorTextureRowTotalHeight(gap) * 5.0f;
+    height += AuthoringInspectorDecalBlockHeight(anchor.floorDecal, rowH, gap, true);
+    height += AuthoringInspectorDecalBlockHeight(anchor.ceilingDecal, rowH, gap, true);
+    height += AuthoringInspectorDecalBlockHeight(anchor.defaultWall.decal, rowH, gap, false);
+    height += AuthoringInspectorDecalBlockHeight(anchor.defaultLower.decal, rowH, gap, false);
+    height += AuthoringInspectorDecalBlockHeight(anchor.defaultUpper.decal, rowH, gap, false);
+    height += rowH + gap;
+    return height;
+}
+
+} // namespace
 
 bool SectorEditor::Init(engine::AssetManager& assets)
 {
@@ -71,9 +246,10 @@ void SectorEditor::Shutdown(engine::AssetManager& assets)
 void SectorEditor::Update(engine::Input& input, float dt)
 {
     if (IsLightmapBakeBlocking()) {
-        CancelVertexDrag(nullptr);
+        CancelAuthoringVertexDrag(nullptr);
         CancelLightDrag(nullptr);
-        CancelPendingSector(nullptr);
+        CancelPendingAuthoringLine(nullptr);
+        CancelPendingAuthoringRectangle(nullptr);
         return;
     }
 
@@ -83,12 +259,6 @@ void SectorEditor::Update(engine::Input& input, float dt)
         }
         UpdatePreview3D(input, dt);
         return;
-    }
-
-    if (state.pendingSector.active
-            && state.pendingSector.kind == PendingSectorDrawKind::InsertInside
-            && !IsPendingInsertParentValid()) {
-        CancelPendingSector("Insert sector cancelled: parent sector changed");
     }
 
     canvasRect = BuildCanvasRect();
@@ -273,8 +443,8 @@ Vector2 SectorEditor::SnapMapPoint(Vector2 map) const
             std::round(map.y / grid) * grid
     };
 
-    if (state.currentTool != SectorEditorTool::Sector
-            && state.currentTool != SectorEditorTool::InsertSectorInside) {
+    if (state.currentTool != SectorEditorTool::AuthoringLine
+            && state.currentTool != SectorEditorTool::AuthoringRectangle) {
         return snapped;
     }
 
@@ -285,15 +455,32 @@ Vector2 SectorEditor::SnapMapPoint(Vector2 map) const
     float bestDistance2 = threshold * threshold;
     bool found = false;
     Vector2 best = snapped;
-    for (const SectorTopologyVertex& topologyVertex : state.topologyMap.vertices) {
-        const Vector2 vertex = SectorTopologyVertexToMap(topologyVertex);
-        const float dx = vertex.x - map.x;
-        const float dy = vertex.y - map.y;
-        const float distance2 = dx * dx + dy * dy;
-        if (distance2 <= bestDistance2) {
-            bestDistance2 = distance2;
-            best = vertex;
-            found = true;
+    if (state.currentTool == SectorEditorTool::AuthoringLine
+            || state.currentTool == SectorEditorTool::AuthoringRectangle) {
+        for (const SectorAuthoringVertex& authoringVertex : state.authoringGraph.vertices) {
+            const Vector2 vertex{
+                    SectorCoordToVisibleAuthoring(authoringVertex.x),
+                    SectorCoordToVisibleAuthoring(authoringVertex.y)};
+            const float dx = vertex.x - map.x;
+            const float dy = vertex.y - map.y;
+            const float distance2 = dx * dx + dy * dy;
+            if (distance2 <= bestDistance2) {
+                bestDistance2 = distance2;
+                best = vertex;
+                found = true;
+            }
+        }
+    } else {
+        for (const SectorTopologyVertex& topologyVertex : state.topologyMap.vertices) {
+            const Vector2 vertex = SectorTopologyVertexToMap(topologyVertex);
+            const float dx = vertex.x - map.x;
+            const float dy = vertex.y - map.y;
+            const float distance2 = dx * dx + dy * dy;
+            if (distance2 <= bestDistance2) {
+                bestDistance2 = distance2;
+                best = vertex;
+                found = true;
+            }
         }
     }
 
@@ -334,23 +521,73 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
 {
     state.rawMouseMap = ScreenToMap(input.MousePosition());
     state.snappedMouseMap = SnapMapPoint(state.rawMouseMap);
+    if (state.pendingAuthoringRectangle.active) {
+        std::string error;
+        SectorTopologyCoordPoint currentCorner;
+        if (ToTopologyCoordPoint(CurrentSnappedSectorPoint(), currentCorner, error)) {
+            state.pendingAuthoringRectangle.currentCorner = currentCorner;
+        }
+    }
+    if (state.currentTool == SectorEditorTool::AuthoringInsertVertex
+            || state.pendingAuthoringInsertVertex.active) {
+        UpdatePendingAuthoringInsertVertex(state.rawMouseMap);
+    }
     state.hasHoveredVertex = false;
     state.hoveredTopologyLightId = -1;
     state.hoveredTopologyVertexId = -1;
     state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
+    ClearSectorEditorAuthoringHover(state);
 
     if (!initialized || !IsMouseOverCanvas(input)) {
         return;
     }
 
-    if (state.currentTool == SectorEditorTool::Move || state.currentTool == SectorEditorTool::Select) {
+    if (state.currentTool == SectorEditorTool::Select) {
+        SectorAuthoringSelectionTarget target;
+        SectorTopologyCoordPoint authoringVertexPoint{};
+        if (FindAuthoringSelectionNearScreenPoint(
+                    input.MousePosition(),
+                    target,
+                    authoringVertexPoint)) {
+            if (target.kind == SectorAuthoringSelectionKind::Vertex) {
+                SetHoveredSectorEditorAuthoringVertex(state, target.vertexId);
+            } else if (target.kind == SectorAuthoringSelectionKind::Line) {
+                SetHoveredSectorEditorAuthoringLine(state, target.lineId);
+            }
+        }
+        state.inspectedTopologyVertexId = -1;
+        return;
+    }
+
+    if (state.currentTool == SectorEditorTool::AuthoringMove) {
+        int authoringVertexId = -1;
+        SectorTopologyCoordPoint authoringVertexPoint{};
+        if (FindAuthoringVertexNearScreenPoint(
+                    input.MousePosition(),
+                    authoringVertexId,
+                    authoringVertexPoint)) {
+            SetHoveredSectorEditorAuthoringVertex(state, authoringVertexId);
+        }
+        state.inspectedTopologyVertexId = -1;
+        return;
+    }
+
+    if (state.currentTool == SectorEditorTool::AuthoringInsertVertex) {
+        if (state.pendingAuthoringInsertVertex.lineId >= 0) {
+            SetHoveredSectorEditorAuthoringLine(state, state.pendingAuthoringInsertVertex.lineId);
+        }
+        state.inspectedTopologyVertexId = -1;
+        return;
+    }
+
+    if (state.currentTool == SectorEditorTool::Light
+            || state.currentTool == SectorEditorTool::Move) {
         const int lightId = FindTopologyLightNearScreenPoint(input.MousePosition());
         if (lightId >= 0) {
             state.hoveredTopologyLightId = lightId;
-            if (!state.pendingTopologyVertexMerge.active) {
-                state.inspectedTopologyVertexId = -1;
-            }
-        } else {
+            state.inspectedTopologyVertexId = -1;
+        } else if (state.currentTool == SectorEditorTool::Move
+                && !IsSectorEditorGraphAuthoritativeMode()) {
             int vertexId = -1;
             SectorTopologyCoordPoint point;
             if (FindTopologyVertexNearScreenPoint(input.MousePosition(), vertexId, point)) {
@@ -358,7 +595,7 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
                 state.hoveredTopologyVertexId = vertexId;
                 state.hoveredTopologyVertexPoint = point;
                 state.inspectedTopologyVertexId = vertexId;
-            } else if (!state.pendingTopologyVertexMerge.active) {
+            } else {
                 state.inspectedTopologyVertexId = -1;
             }
         }
@@ -376,20 +613,20 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
             true,
             [this](engine::InputEvent& event) {
                 if (event.key.key == KEY_ESCAPE) {
-                    if (state.vertexDrag.active) {
-                        CancelVertexDrag("Cancelled vertex move");
+                    if (state.authoringVertexDrag.active) {
+                        CancelAuthoringVertexDrag("Cancelled authoring vertex move");
                     } else if (state.lightDrag.active) {
                         CancelLightDrag("Cancelled light move");
-                    } else if (state.pendingTopologyVertexMerge.active) {
-                        CancelPendingTopologyVertexMerge("Cancelled vertex merge");
-                    } else if (state.pendingTopologyLineSplitAtPoint.active) {
-                        CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
-                    } else if (state.pendingTopologySectorCut.active) {
-                        CancelPendingTopologySectorCut("Cancelled sector cut");
-                    } else if (state.pendingSector.active) {
-                        CancelPendingSector("Cancelled sector");
+                    } else if (state.pendingAuthoringLine.active) {
+                        CancelPendingAuthoringLine("Line chain stopped");
+                    } else if (state.pendingAuthoringRectangle.active) {
+                        CancelPendingAuthoringRectangle("Rectangle cancelled");
+                    } else if (state.pendingAuthoringInsertVertex.active
+                            || state.currentTool == SectorEditorTool::AuthoringInsertVertex) {
+                        CancelPendingAuthoringInsertVertex("Insert Vertex cancelled");
                     } else if (state.selectedTopologyLightId >= 0
-                            || state.topologySelectionKind != TopologySelectionKind::None) {
+                            || state.topologySelectionKind != TopologySelectionKind::None
+                            || state.selectedAuthoring.kind != SectorAuthoringSelectionKind::None) {
                         ClearSelection();
                     } else {
                         state.currentTool = SectorEditorTool::Select;
@@ -398,25 +635,25 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
-                if (state.pendingSector.active && event.key.key == KEY_BACKSPACE) {
-                    RemoveLastPendingSectorPoint();
-                    engine::ConsumeEvent(event);
-                    return;
-                }
-
-                if (state.pendingSector.active && event.key.key == KEY_ENTER) {
-                    FinalizePendingSector();
-                    engine::ConsumeEvent(event);
-                    return;
-                }
-
                 if (event.key.key == KEY_DELETE) {
-                    if (state.topologySelectionKind == TopologySelectionKind::Light
+                    if (IsGraphAuthoringTool(state.currentTool)) {
+                        if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line) {
+                            DeleteSelectedAuthoringLine();
+                        } else if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex) {
+                            DeleteSelectedAuthoringVertex();
+                        } else {
+                            statusText = "Select an authoring line or isolated authoring vertex to delete.";
+                        }
+                    } else if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line) {
+                        DeleteSelectedAuthoringLine();
+                    } else if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex) {
+                        DeleteSelectedAuthoringVertex();
+                    } else if (state.topologySelectionKind == TopologySelectionKind::Light
                             && state.selectedTopologyLightId >= 0) {
                         DeleteSelectedLight();
                     } else if (state.topologySelectionKind == TopologySelectionKind::Sector
                             && state.selectedTopologySectorId >= 0) {
-                        OpenDeleteSelectedTopologySectorConfirmation();
+                        statusText = LegacyTopologyMutationUnavailableMessage();
                     } else if (state.topologySelectionKind == TopologySelectionKind::Vertex
                             && state.selectedTopologyVertexId >= 0) {
                         statusText = "Standalone vertex deletion is not available; use Dissolve Vertex for simple degree-2 vertices.";
@@ -432,79 +669,9 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
             }
     );
 
-    if (state.pendingTopologyVertexMerge.active) {
-        UpdatePendingTopologyVertexMerge(input);
-
-        input.ForEachEvent(
-                engine::InputEventType::MouseButtonPressed,
-                true,
-                [this](engine::InputEvent& event) {
-                    if (event.mouseButton.button == MOUSE_RIGHT_BUTTON) {
-                        CancelPendingTopologyVertexMerge("Cancelled vertex merge");
-                        engine::ConsumeEvent(event);
-                    }
-                }
-        );
-
-        input.ForEachEvent(
-                engine::InputEventType::MouseClick,
-                true,
-                [this](engine::InputEvent& event) {
-                    if (!Contains(canvasRect, event.mouseClick.releasePosition)) {
-                        return;
-                    }
-                    if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
-                        CancelPendingTopologyVertexMerge("Cancelled vertex merge");
-                        engine::ConsumeEvent(event);
-                        return;
-                    }
-                    if (event.mouseClick.button == MOUSE_LEFT_BUTTON) {
-                        CommitPendingTopologyVertexMerge();
-                        engine::ConsumeEvent(event);
-                    }
-                }
-        );
-        return;
-    }
-
-    if (state.pendingTopologySectorCut.active) {
-        UpdatePendingTopologySectorCut(input);
-
-        input.ForEachEvent(
-                engine::InputEventType::MouseButtonPressed,
-                true,
-                [this](engine::InputEvent& event) {
-                    if (event.mouseButton.button == MOUSE_RIGHT_BUTTON) {
-                        CancelPendingTopologySectorCut("Cancelled sector cut");
-                        engine::ConsumeEvent(event);
-                    }
-                }
-        );
-
-        input.ForEachEvent(
-                engine::InputEventType::MouseClick,
-                true,
-                [this](engine::InputEvent& event) {
-                    if (!Contains(canvasRect, event.mouseClick.releasePosition)) {
-                        return;
-                    }
-                    if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
-                        CancelPendingTopologySectorCut("Cancelled sector cut");
-                        engine::ConsumeEvent(event);
-                        return;
-                    }
-                    if (event.mouseClick.button == MOUSE_LEFT_BUTTON) {
-                        CommitPendingTopologySectorCut();
-                        engine::ConsumeEvent(event);
-                    }
-                }
-        );
-        return;
-    }
-
-    if (state.vertexDrag.active || state.lightDrag.active) {
-        if (state.vertexDrag.active) {
-            UpdateVertexDrag(input);
+    if (state.authoringVertexDrag.active || state.lightDrag.active) {
+        if (state.authoringVertexDrag.active) {
+            UpdateAuthoringVertexDrag(input);
         }
         if (state.lightDrag.active) {
             UpdateLightDrag(input);
@@ -515,8 +682,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 true,
                 [this](engine::InputEvent& event) {
                     if (event.mouseButton.button == MOUSE_RIGHT_BUTTON) {
-                        if (state.vertexDrag.active) {
-                            CancelVertexDrag("Cancelled vertex move");
+                        if (state.authoringVertexDrag.active) {
+                            CancelAuthoringVertexDrag("Cancelled authoring vertex move");
                         }
                         if (state.lightDrag.active) {
                             CancelLightDrag("Cancelled light move");
@@ -531,8 +698,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 true,
                 [this](engine::InputEvent& event) {
                     if (event.mouseButton.button == MOUSE_LEFT_BUTTON) {
-                        if (state.vertexDrag.active) {
-                            FinishVertexDrag();
+                        if (state.authoringVertexDrag.active) {
+                            FinishAuthoringVertexDrag();
                         }
                         if (state.lightDrag.active) {
                             FinishLightDrag();
@@ -550,40 +717,6 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
         );
         return;
-    }
-
-    if (state.pendingTopologyLineSplitAtPoint.active) {
-        UpdatePendingTopologyLineSplitAtPoint(input);
-
-        input.ForEachEvent(
-                engine::InputEventType::MouseButtonPressed,
-                true,
-                [this](engine::InputEvent& event) {
-                    if (event.mouseButton.button == MOUSE_RIGHT_BUTTON) {
-                        CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
-                        engine::ConsumeEvent(event);
-                    }
-                }
-        );
-
-        input.ForEachEvent(
-                engine::InputEventType::MouseClick,
-                true,
-                [this](engine::InputEvent& event) {
-                    if (!Contains(canvasRect, event.mouseClick.releasePosition)) {
-                        return;
-                    }
-                    if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
-                        CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
-                        engine::ConsumeEvent(event);
-                        return;
-                    }
-                    if (event.mouseClick.button == MOUSE_LEFT_BUTTON) {
-                        CommitPendingTopologyLineSplitAtPoint();
-                        engine::ConsumeEvent(event);
-                    }
-                }
-        );
     }
 
     if (!uiState.keyboardCaptured) {
@@ -615,14 +748,39 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
         return;
     }
 
-    if (state.pendingTopologyLineSplitAtPoint.active || state.pendingTopologySectorCut.active) {
-        return;
-    }
-
     input.ForEachEvent(
             engine::InputEventType::MouseButtonPressed,
             true,
             [this](engine::InputEvent& event) {
+                if (state.currentTool == SectorEditorTool::AuthoringMove
+                        && event.mouseButton.button == MOUSE_LEFT_BUTTON
+                        && Contains(canvasRect, event.mouseButton.position)) {
+                    int authoringVertexId = -1;
+                    SectorTopologyCoordPoint point{};
+                    if (FindAuthoringVertexNearScreenPoint(
+                                event.mouseButton.position,
+                                authoringVertexId,
+                                point)) {
+                        StartAuthoringVertexDrag(authoringVertexId, point);
+                        engine::ConsumeEvent(event);
+                    } else {
+                        statusText = "Move Vertex: click an authoring vertex";
+                        engine::ConsumeEvent(event);
+                    }
+                    return;
+                }
+
+                if (state.currentTool == SectorEditorTool::Light
+                        && event.mouseButton.button == MOUSE_LEFT_BUTTON
+                        && Contains(canvasRect, event.mouseButton.position)) {
+                    const int lightId = FindTopologyLightNearScreenPoint(event.mouseButton.position);
+                    if (lightId >= 0) {
+                        StartLightDrag(lightId);
+                        engine::ConsumeEvent(event);
+                    }
+                    return;
+                }
+
                 if (state.currentTool != SectorEditorTool::Move
                         || event.mouseButton.button != MOUSE_LEFT_BUTTON
                         || !Contains(canvasRect, event.mouseButton.position)) {
@@ -633,13 +791,16 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 if (lightId >= 0) {
                     StartLightDrag(lightId);
                 } else {
+                    if (IsSectorEditorGraphAuthoritativeMode()) {
+                        statusText = "Move: drag an existing light, or use Move Vertex for authoring vertices.";
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
                     int vertexId = -1;
                     SectorTopologyCoordPoint point;
-                    if (FindTopologyVertexNearScreenPoint(event.mouseButton.position, vertexId, point)) {
-                        StartVertexDrag(vertexId, point);
-                    } else {
-                        statusText = "Move: click a topology light or vertex";
-                    }
+                    statusText = FindTopologyVertexNearScreenPoint(event.mouseButton.position, vertexId, point)
+                            ? LegacyTopologyMutationUnavailableMessage()
+                            : "Move: click a topology light";
                 }
                 engine::ConsumeEvent(event);
             }
@@ -667,10 +828,23 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
-                if (event.mouseClick.button == MOUSE_RIGHT_BUTTON && state.pendingSector.active) {
-                    CancelPendingSector("Cancelled sector");
-                    engine::ConsumeEvent(event);
-                    return;
+                if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
+                    if (state.pendingAuthoringLine.active) {
+                        CancelPendingAuthoringLine("Line chain stopped");
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+                    if (state.pendingAuthoringRectangle.active) {
+                        CancelPendingAuthoringRectangle("Rectangle cancelled");
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+                    if (state.pendingAuthoringInsertVertex.active
+                            || state.currentTool == SectorEditorTool::AuthoringInsertVertex) {
+                        CancelPendingAuthoringInsertVertex("Insert Vertex cancelled");
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
                 }
 
                 if (event.mouseClick.button != MOUSE_LEFT_BUTTON) {
@@ -678,89 +852,46 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::Select) {
-                    const int lightId = FindTopologyLightNearScreenPoint(event.mouseClick.releasePosition);
-                    if (lightId >= 0) {
-                        SelectTopologyLight(lightId);
-                        statusText = TextFormat("Selected topology light %d", lightId);
-                        engine::ConsumeEvent(event);
-                        return;
-                    }
-
-                    int vertexId = -1;
-                    SectorTopologyCoordPoint vertexPoint;
-                    if (FindTopologyVertexNearScreenPoint(
+                    SectorAuthoringSelectionTarget target;
+                    SectorTopologyCoordPoint authoringVertexPoint{};
+                    if (FindAuthoringSelectionNearScreenPoint(
                                 event.mouseClick.releasePosition,
-                                vertexId,
-                                vertexPoint)) {
-                        SelectTopologyVertex(vertexId);
-                        statusText = TextFormat("Selected topology vertex %d", vertexId);
-                        engine::ConsumeEvent(event);
-                        return;
-                    }
-
-                    int lineDefId = -1;
-                    int sideDefId = -1;
-                    SectorTopologySideKind side = SectorTopologySideKind::Front;
-                    bool preferredMissing = false;
-                    if (FindTopologyLineNearScreenPoint(
-                                event.mouseClick.releasePosition,
-                                ScreenToMap(event.mouseClick.releasePosition),
-                                lineDefId,
-                                sideDefId,
-                                side,
-                                preferredMissing)) {
-                        if (sideDefId >= 0) {
-                            SelectTopologySideDef(sideDefId, state.selectedTopologyWallPart);
-                            statusText = preferredMissing
-                                    ? TextFormat(
-                                            "Selected topology %s sidedef %d; clicked side has no sidedef",
-                                            SectorTopologySideKindName(side),
-                                            sideDefId)
-                                    : TextFormat(
-                                            "Selected topology %s sidedef %d",
-                                            SectorTopologySideKindName(side),
-                                            sideDefId);
-                        } else {
-                            SelectTopologyLineDef(lineDefId, side, state.selectedTopologyWallPart);
-                            statusText = TextFormat("Selected topology linedef %d (no sidedef)", lineDefId);
+                                target,
+                                authoringVertexPoint)) {
+                        if (target.kind == SectorAuthoringSelectionKind::Vertex) {
+                            SelectAuthoringVertex(target.vertexId);
+                            statusText = TextFormat("Selected authoring vertex %d", target.vertexId);
+                        } else if (target.kind == SectorAuthoringSelectionKind::Line) {
+                            SelectAuthoringLine(target.lineId);
+                            statusText = TextFormat("Selected authoring line %d", target.lineId);
+                        } else if (target.kind == SectorAuthoringSelectionKind::FaceAnchor) {
+                            SelectAuthoringFaceAnchor(target.faceAnchorId);
+                            statusText = TextFormat("Selected authoring face anchor %d", target.faceAnchorId);
                         }
                         engine::ConsumeEvent(event);
                         return;
                     }
 
-                    bool multipleMatches = false;
-                    const int sectorId = FindTopologySectorAt(
-                            ScreenToMap(event.mouseClick.releasePosition),
-                            &multipleMatches);
-                    if (sectorId >= 0) {
-                        SelectTopologySector(sectorId);
-                        statusText = multipleMatches
-                                ? TextFormat("Selected topology sector %d (lowest ID on boundary)", sectorId)
-                                : TextFormat("Selected topology sector %d", sectorId);
-                    } else {
-                        ClearSelection();
-                        statusText = "Selected: none";
-                    }
+                    ClearSelection();
+                    statusText = "Selected authoring: none";
                     engine::ConsumeEvent(event);
                     return;
                 }
 
-                if (state.currentTool == SectorEditorTool::Sector
-                        || state.currentTool == SectorEditorTool::InsertSectorInside) {
-                    if (state.currentTool == SectorEditorTool::InsertSectorInside
-                            && (!state.pendingSector.active
-                                    || state.pendingSector.kind != PendingSectorDrawKind::InsertInside)) {
-                        statusText = "Select a topology sector before inserting inside it.";
-                        engine::ConsumeEvent(event);
-                        return;
-                    }
+                if (state.currentTool == SectorEditorTool::AuthoringLine) {
+                    AddAuthoringLinePoint(CurrentSnappedSectorPoint());
+                    engine::ConsumeEvent(event);
+                    return;
+                }
 
-                    const SectorPoint point = CurrentSnappedSectorPoint();
-                    if (CanClosePendingSectorAt(point)) {
-                        FinalizePendingSector();
-                    } else {
-                        AddPendingSectorPoint(point);
-                    }
+                if (state.currentTool == SectorEditorTool::AuthoringRectangle) {
+                    AddAuthoringRectanglePoint(CurrentSnappedSectorPoint());
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
+                if (state.currentTool == SectorEditorTool::AuthoringInsertVertex) {
+                    CommitAuthoringInsertVertex(event.mouseClick.releasePosition);
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -771,198 +902,110 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
-                if (state.currentTool == SectorEditorTool::Erase) {
-                    const int sectorId = FindTopologySectorAt(
-                            ScreenToMap(event.mouseClick.releasePosition));
-                    if (sectorId >= 0) {
-                        SelectTopologySector(sectorId);
-                        OpenDeleteTopologySectorConfirmation(sectorId);
-                    } else {
-                        statusText = "Select a topology sector to delete.";
-                    }
+                if (state.currentTool == SectorEditorTool::Move) {
+                    statusText = "Move: click a topology light";
                     engine::ConsumeEvent(event);
                     return;
                 }
 
-                if (state.currentTool == SectorEditorTool::Move) {
-                    statusText = "Move: click a topology light or vertex";
+                if (state.currentTool == SectorEditorTool::AuthoringMove) {
+                    statusText = "Move Vertex: click an authoring vertex";
                     engine::ConsumeEvent(event);
                 }
             }
     );
 }
 
-void SectorEditor::StartVertexDrag(int vertexId, SectorTopologyCoordPoint point)
+void SectorEditor::StartAuthoringVertexDrag(int vertexId, SectorTopologyCoordPoint point)
 {
-    if (!IsValidSectorTopologyId(vertexId)
-            || FindSectorTopologyVertex(state.topologyMap, vertexId) == nullptr) {
+    if (!IsValidSectorAuthoringId(vertexId)
+            || FindSectorAuthoringVertex(state.authoringGraph, vertexId) == nullptr) {
         return;
     }
 
-    SelectTopologyVertex(vertexId);
-    state.vertexDrag.active = true;
-    state.vertexDrag.topologyVertexId = vertexId;
-    state.vertexDrag.originalPoint = point;
-    state.vertexDrag.previewPoint = point;
-    state.vertexDrag.lastValidatedPoint = point;
-    state.vertexDrag.hasPreviewPoint = true;
-    state.vertexDrag.hasValidatedPreview = true;
-    state.vertexDrag.lastPreviewValid = true;
-    state.vertexDrag.errorMessage.clear();
+    SelectAuthoringVertex(vertexId);
+    ClearTopologySelectionOnly();
+    state.authoringVertexDrag.active = true;
+    state.authoringVertexDrag.vertexId = vertexId;
+    state.authoringVertexDrag.originalPoint = point;
+    state.authoringVertexDrag.previewPoint = point;
+    state.authoringVertexDrag.hasPreviewPoint = true;
+    state.authoringVertexDrag.errorMessage.clear();
 
     size_t connectedCount = 0;
-    for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
-        if (lineDef.startVertexId == vertexId || lineDef.endVertexId == vertexId) {
+    for (const SectorAuthoringLine& line : state.authoringGraph.lines) {
+        if (line.startVertexId == vertexId || line.endVertexId == vertexId) {
             ++connectedCount;
         }
     }
-    statusText = connectedCount > 1
-            ? TextFormat("Moving topology vertex %d (%zu connected linedefs)", vertexId, connectedCount)
-            : TextFormat("Moving topology vertex %d", vertexId);
+    statusText = connectedCount > 0
+            ? TextFormat("Moving authoring vertex %d (%zu connected lines)", vertexId, connectedCount)
+            : TextFormat("Moving authoring vertex %d", vertexId);
 }
 
-void SectorEditor::UpdateVertexDrag(engine::Input& input)
+void SectorEditor::UpdateAuthoringVertexDrag(engine::Input& input)
 {
-    if (!state.vertexDrag.active) {
+    if (!state.authoringVertexDrag.active) {
         return;
     }
 
     std::string error;
     SectorTopologyCoordPoint snappedPoint;
-    if (!SnapTopologyVertexMoveTarget(ScreenToMap(input.MousePosition()), snappedPoint, error)) {
-        state.vertexDrag.errorMessage = error;
-        state.vertexDrag.hasPreviewPoint = false;
-        state.vertexDrag.lastPreviewValid = false;
-        state.vertexDrag.hasMergeTarget = false;
-        state.vertexDrag.mergeTargetVertexId = -1;
-        statusText = TextFormat("Move rejected: %s", error.c_str());
+    if (!SnapAuthoringVertexMoveTarget(ScreenToMap(input.MousePosition()), snappedPoint, error)) {
+        state.authoringVertexDrag.errorMessage = error;
+        state.authoringVertexDrag.hasPreviewPoint = false;
+        statusText = TextFormat("Authoring move rejected: %s", error.c_str());
         return;
     }
 
-    state.vertexDrag.previewPoint = snappedPoint;
-    state.vertexDrag.hasPreviewPoint = true;
-    const int mergeTargetVertexId = FindTopologyVertexAtCoordPoint(
-            state.vertexDrag.previewPoint,
-            state.vertexDrag.topologyVertexId);
-    if (SameTopologyPoint(state.vertexDrag.previewPoint, state.vertexDrag.originalPoint)) {
-        state.vertexDrag.errorMessage.clear();
-        state.vertexDrag.hasValidatedPreview = true;
-        state.vertexDrag.lastValidatedPoint = state.vertexDrag.previewPoint;
-        state.vertexDrag.lastPreviewValid = true;
-        state.vertexDrag.hasMergeTarget = false;
-        state.vertexDrag.mergeTargetVertexId = -1;
-        statusText = "Moving vertex: original point";
-        return;
-    }
-
-    if (mergeTargetVertexId >= 0) {
-        state.vertexDrag.errorMessage.clear();
-        state.vertexDrag.lastPreviewValid = true;
-        state.vertexDrag.hasMergeTarget = true;
-        state.vertexDrag.mergeTargetVertexId = mergeTargetVertexId;
-        state.vertexDrag.hasValidatedPreview = true;
-        state.vertexDrag.lastValidatedPoint = state.vertexDrag.previewPoint;
-        statusText = TextFormat("Release to merge into vertex %d", mergeTargetVertexId);
-        return;
-    }
-
-    state.vertexDrag.hasMergeTarget = false;
-    state.vertexDrag.mergeTargetVertexId = -1;
-    if (!state.vertexDrag.hasValidatedPreview
-            || !SameTopologyPoint(state.vertexDrag.previewPoint, state.vertexDrag.lastValidatedPoint)) {
-        SectorTopologyMap previewMap = state.topologyMap;
-        state.vertexDrag.lastPreviewValid = MoveSectorTopologyVertex(
-                previewMap,
-                state.vertexDrag.topologyVertexId,
-                state.vertexDrag.previewPoint,
-                &error);
-        state.vertexDrag.lastValidatedPoint = state.vertexDrag.previewPoint;
-        state.vertexDrag.hasValidatedPreview = true;
-        state.vertexDrag.errorMessage = state.vertexDrag.lastPreviewValid ? std::string{} : error;
-    }
-
-    if (state.vertexDrag.lastPreviewValid) {
-        state.vertexDrag.errorMessage.clear();
-        statusText = TextFormat("Moving topology vertex %d", state.vertexDrag.topologyVertexId);
+    state.authoringVertexDrag.previewPoint = snappedPoint;
+    state.authoringVertexDrag.hasPreviewPoint = true;
+    state.authoringVertexDrag.errorMessage.clear();
+    if (SameTopologyPoint(snappedPoint, state.authoringVertexDrag.originalPoint)) {
+        statusText = "Moving authoring vertex: original point";
     } else {
-        statusText = TextFormat("Move rejected: %s", state.vertexDrag.errorMessage.c_str());
+        statusText = TextFormat("Moving authoring vertex %d", state.authoringVertexDrag.vertexId);
     }
 }
 
-void SectorEditor::FinishVertexDrag()
+void SectorEditor::FinishAuthoringVertexDrag()
 {
-    if (!state.vertexDrag.active) {
+    if (!state.authoringVertexDrag.active) {
         return;
     }
 
-    const int vertexId = state.vertexDrag.topologyVertexId;
-    const SectorTopologyCoordPoint original = state.vertexDrag.originalPoint;
-    const SectorTopologyCoordPoint target = state.vertexDrag.previewPoint;
-
-    if (!state.vertexDrag.hasPreviewPoint) {
-        const std::string error = state.vertexDrag.errorMessage.empty()
-                ? "Move target is outside topology coordinate range"
-                : state.vertexDrag.errorMessage;
-        state.vertexDrag = VertexDragState{};
-        statusText = TextFormat("Move rejected: %s", error.c_str());
+    const int vertexId = state.authoringVertexDrag.vertexId;
+    const SectorTopologyCoordPoint original = state.authoringVertexDrag.originalPoint;
+    const SectorTopologyCoordPoint target = state.authoringVertexDrag.previewPoint;
+    if (!state.authoringVertexDrag.hasPreviewPoint) {
+        const std::string error = state.authoringVertexDrag.errorMessage.empty()
+                ? "Move target is outside authoring coordinate range"
+                : state.authoringVertexDrag.errorMessage;
+        state.authoringVertexDrag = AuthoringVertexDragState{};
+        statusText = TextFormat("Authoring move rejected: %s", error.c_str());
         return;
     }
 
     if (SameTopologyPoint(target, original)) {
-        state.vertexDrag = VertexDragState{};
-        statusText = "Vertex unchanged";
+        state.authoringVertexDrag = AuthoringVertexDragState{};
+        statusText = "Authoring vertex unchanged";
         return;
     }
 
-    if (state.vertexDrag.hasMergeTarget) {
-        const int targetVertexId = state.vertexDrag.mergeTargetVertexId;
-        const SectorEditorMergeVerticesResult result = MergeTopologyVertices(
-                state.topologyMap,
-                vertexId,
-                targetVertexId);
-        if (!result.changed) {
-            state.vertexDrag = VertexDragState{};
-            statusText = result.status;
-            return;
-        }
-
-        const SectorTopologyMergeVerticesResult& merge = result.merge;
-        ClearTransientTopologyEditStateAfterGeometryChange();
-        SelectTopologyVertex(merge.mergedVertexId);
-        state.inspectedTopologyVertexId = merge.mergedVertexId;
-        state.hasHoveredVertex = true;
-        state.hoveredTopologyVertexId = merge.mergedVertexId;
-        const SectorTopologyVertex* merged = FindSectorTopologyVertex(
-                state.topologyMap,
-                merge.mergedVertexId);
-        state.hoveredTopologyVertexPoint = merged != nullptr
-                ? SectorTopologyCoordPoint{merged->x, merged->y}
-                : SectorTopologyCoordPoint{};
-        state.vertexDrag = VertexDragState{};
-        FinishTopologyActionResult(SectorEditorTopologyActionResult{true, result.status});
+    if (!MoveSectorEditorAuthoringVertex(state, vertexId, target)) {
+        state.authoringVertexDrag = AuthoringVertexDragState{};
+        statusText = "Authoring vertex move rejected";
         return;
     }
 
-    const SectorEditorTopologyActionResult result = MoveTopologyVertex(
-            state.topologyMap,
-            vertexId,
-            original,
-            target);
-    if (!result.changed) {
-        state.vertexDrag = VertexDragState{};
-        statusText = result.status;
-        return;
-    }
-
-    ClearTransientTopologyEditStateAfterGeometryChange();
-    SelectTopologyVertex(vertexId);
-    state.vertexDrag = VertexDragState{};
-    FinishTopologyActionResult(result);
+    SelectAuthoringVertex(vertexId);
+    state.authoringVertexDrag = AuthoringVertexDragState{};
+    statusText = TextFormat("Moved authoring vertex %d", vertexId);
 }
 
-void SectorEditor::CancelVertexDrag(const char* message)
+void SectorEditor::CancelAuthoringVertexDrag(const char* message)
 {
-    state.vertexDrag = VertexDragState{};
+    state.authoringVertexDrag = AuthoringVertexDragState{};
     if (message != nullptr && message[0] != '\0') {
         statusText = message;
     }
@@ -1040,473 +1083,6 @@ void SectorEditor::CancelLightDrag(const char* message)
     if (message != nullptr && message[0] != '\0') {
         statusText = message;
     }
-}
-
-void SectorEditor::StartPendingTopologyVertexMerge(int sourceVertexId)
-{
-    const SectorTopologyVertex* source = FindSectorTopologyVertex(state.topologyMap, sourceVertexId);
-    if (source == nullptr) {
-        state.inspectedTopologyVertexId = -1;
-        statusText = "Select a topology vertex before merging.";
-        return;
-    }
-
-    CancelPendingSector(nullptr);
-    CancelVertexDrag(nullptr);
-    CancelLightDrag(nullptr);
-    CancelPendingTopologyLineSplitAtPoint(nullptr);
-    CancelPendingTopologySectorCut(nullptr);
-
-    PendingTopologyVertexMerge pending;
-    pending.active = true;
-    pending.sourceVertexId = sourceVertexId;
-    pending.message = "Click target vertex to merge, Escape/right click to cancel.";
-    state.pendingTopologyVertexMerge = pending;
-    state.currentTool = SectorEditorTool::Move;
-    state.hoveredSurface3D = SectorSurfaceHit{};
-    state.inspectedTopologyVertexId = sourceVertexId;
-    statusText = pending.message;
-}
-
-void SectorEditor::CancelPendingTopologyVertexMerge(const char* message)
-{
-    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
-    if (message != nullptr && message[0] != '\0') {
-        statusText = message;
-    }
-}
-
-void SectorEditor::UpdatePendingTopologyVertexMerge(engine::Input& input)
-{
-    PendingTopologyVertexMerge& pending = state.pendingTopologyVertexMerge;
-    if (!pending.active) {
-        return;
-    }
-
-    if (FindSectorTopologyVertex(state.topologyMap, pending.sourceVertexId) == nullptr) {
-        CancelPendingTopologyVertexMerge("Vertex merge cancelled: source vertex no longer exists.");
-        return;
-    }
-
-    pending.hoveredTargetVertexId = -1;
-    pending.hasValidTarget = false;
-    pending.message = "Click target vertex to merge, Escape/right click to cancel.";
-
-    if (!IsMouseOverCanvas(input)) {
-        statusText = pending.message;
-        return;
-    }
-
-    int targetVertexId = -1;
-    SectorTopologyCoordPoint point;
-    if (!FindTopologyVertexNearScreenPoint(input.MousePosition(), targetVertexId, point)) {
-        pending.message = "Click target vertex to merge, Escape/right click to cancel.";
-        statusText = pending.message;
-        return;
-    }
-
-    pending.hoveredTargetVertexId = targetVertexId;
-    pending.hasValidTarget = targetVertexId != pending.sourceVertexId;
-    pending.message = pending.hasValidTarget
-            ? TextFormat("Click to merge into vertex %d.", targetVertexId)
-            : "Choose a different target vertex.";
-    statusText = pending.message;
-}
-
-void SectorEditor::CommitPendingTopologyVertexMerge()
-{
-    if (!state.pendingTopologyVertexMerge.active) {
-        return;
-    }
-
-    const PendingTopologyVertexMerge pending = state.pendingTopologyVertexMerge;
-    if (!pending.hasValidTarget) {
-        statusText = pending.message.empty() ? "Choose a target vertex to merge into." : pending.message;
-        return;
-    }
-
-    const SectorEditorMergeVerticesResult result = MergeTopologyVertices(
-            state.topologyMap,
-            pending.sourceVertexId,
-            pending.hoveredTargetVertexId);
-    if (!result.changed) {
-        state.pendingTopologyVertexMerge.message = result.status.empty()
-                ? "Merge rejected."
-                : result.status;
-        statusText = state.pendingTopologyVertexMerge.message;
-        return;
-    }
-
-    const SectorTopologyMergeVerticesResult& merge = result.merge;
-    ClearTransientTopologyEditStateAfterGeometryChange();
-    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
-    SelectTopologyVertex(merge.mergedVertexId);
-    state.inspectedTopologyVertexId = merge.mergedVertexId;
-    state.hasHoveredVertex = true;
-    state.hoveredTopologyVertexId = merge.mergedVertexId;
-    const SectorTopologyVertex* merged = FindSectorTopologyVertex(state.topologyMap, merge.mergedVertexId);
-    state.hoveredTopologyVertexPoint = merged != nullptr
-            ? SectorTopologyCoordPoint{merged->x, merged->y}
-            : SectorTopologyCoordPoint{};
-    FinishTopologyActionResult(SectorEditorTopologyActionResult{true, result.status});
-}
-
-void SectorEditor::StartPendingTopologyLineSplitAtPoint()
-{
-    const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
-    if (lineDef == nullptr) {
-        ClearStaleTopologySelection();
-        statusText = "Select a topology linedef before splitting at point.";
-        return;
-    }
-
-    CancelPendingSector(nullptr);
-    CancelVertexDrag(nullptr);
-    CancelLightDrag(nullptr);
-    CancelPendingTopologyVertexMerge(nullptr);
-    CancelPendingTopologySectorCut(nullptr);
-
-    PendingTopologyLineSplitAtPoint pending;
-    pending.active = true;
-    pending.lineDefId = lineDef->id;
-    pending.sideDefId = state.topologySelectionKind == TopologySelectionKind::SideDef
-            ? state.selectedTopologySideDefId
-            : -1;
-    pending.side = state.selectedTopologySideKind;
-    pending.wallPart = state.selectedTopologyWallPart;
-    pending.message = "Click a snapped point on the selected linedef; Escape or right click cancels.";
-    state.pendingTopologyLineSplitAtPoint = pending;
-    state.currentTool = SectorEditorTool::Select;
-    state.hoveredSurface3D = SectorSurfaceHit{};
-    statusText = pending.message;
-}
-
-void SectorEditor::CancelPendingTopologyLineSplitAtPoint(const char* message)
-{
-    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
-    if (message != nullptr && message[0] != '\0') {
-        statusText = message;
-    }
-}
-
-bool SectorEditor::ValidatePendingTopologyLineSplitAtPointTarget(const char* staleMessage)
-{
-    if (!state.pendingTopologyLineSplitAtPoint.active) {
-        return false;
-    }
-
-    const PendingTopologyLineSplitAtPoint& pending = state.pendingTopologyLineSplitAtPoint;
-    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
-            state.topologyMap,
-            pending.lineDefId);
-    if (lineDef == nullptr) {
-        CancelPendingTopologyLineSplitAtPoint(staleMessage);
-        return false;
-    }
-
-    if (pending.sideDefId >= 0) {
-        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
-                state.topologyMap,
-                pending.sideDefId);
-        if (sideDef == nullptr || sideDef->lineDefId != lineDef->id) {
-            CancelPendingTopologyLineSplitAtPoint(staleMessage);
-            return false;
-        }
-    }
-
-    const SectorTopologyVertex* start = nullptr;
-    const SectorTopologyVertex* end = nullptr;
-    if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
-        CancelPendingTopologyLineSplitAtPoint(staleMessage);
-        return false;
-    }
-    return true;
-}
-
-void SectorEditor::UpdatePendingTopologyLineSplitAtPoint(engine::Input& input)
-{
-    if (!ValidatePendingTopologyLineSplitAtPointTarget(
-                "Split at point cancelled: target linedef no longer exists.")) {
-        return;
-    }
-
-    PendingTopologyLineSplitAtPoint& pending = state.pendingTopologyLineSplitAtPoint;
-    pending.hasCandidatePoint = false;
-    pending.hasValidCandidate = false;
-
-    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
-            state.topologyMap,
-            pending.lineDefId);
-    const SectorTopologyVertex* start = nullptr;
-    const SectorTopologyVertex* end = nullptr;
-    if (lineDef == nullptr || !GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
-        CancelPendingTopologyLineSplitAtPoint("Split at point cancelled: target linedef no longer exists.");
-        return;
-    }
-
-    if (!Contains(canvasRect, input.MousePosition())) {
-        pending.message = "Move over the selected linedef to choose a split point.";
-        statusText = pending.message;
-        return;
-    }
-
-    SectorTopologyCoordPoint candidate;
-    std::string error;
-    if (!ToTopologyCoordPoint(Vector2ToSectorPoint(state.snappedMouseMap), candidate, error)) {
-        pending.message = error;
-        statusText = error;
-        return;
-    }
-
-    pending.candidatePoint = candidate;
-    pending.hasCandidatePoint = true;
-
-    const SectorTopologyCoordPoint startPoint{start->x, start->y};
-    const SectorTopologyCoordPoint endPoint{end->x, end->y};
-    if (!SectorTopologyPointStrictlyInsideSegment(candidate, startPoint, endPoint)) {
-        pending.message = "Split point must be inside the selected linedef.";
-        statusText = pending.message;
-        return;
-    }
-
-    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
-        if (vertex.x == candidate.x && vertex.y == candidate.y) {
-            pending.message = "Split point is already occupied by a topology vertex.";
-            statusText = pending.message;
-            return;
-        }
-    }
-
-    pending.hasValidCandidate = true;
-    pending.message = "Click to split selected linedef; Escape or right click cancels.";
-    statusText = pending.message;
-}
-
-void SectorEditor::CommitPendingTopologyLineSplitAtPoint()
-{
-    if (!ValidatePendingTopologyLineSplitAtPointTarget(
-                "Split at point cancelled: target linedef no longer exists.")) {
-        return;
-    }
-
-    const PendingTopologyLineSplitAtPoint pending = state.pendingTopologyLineSplitAtPoint;
-    if (!pending.hasCandidatePoint || !pending.hasValidCandidate) {
-        statusText = pending.message.empty()
-                ? "Choose a valid split point on the selected linedef."
-                : pending.message;
-        return;
-    }
-
-    const SectorEditorSplitLineDefResult result = game::SplitTopologyLineDefAtPoint(
-                state.topologyMap,
-                pending.lineDefId,
-                pending.candidatePoint);
-    if (!result.changed) {
-        statusText = result.status;
-        return;
-    }
-
-    const SectorTopologySplitLineResult split = result.split;
-    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
-    state.hasHoveredVertex = false;
-    state.hoveredTopologyVertexId = -1;
-    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
-    state.hoveredSurface3D = SectorSurfaceHit{};
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ResetSurface3DUiState();
-    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-
-    if (pending.sideDefId >= 0) {
-        const int secondSideDefId = pending.side == SectorTopologySideKind::Front
-                ? split.secondFrontSideDefId
-                : split.secondBackSideDefId;
-        if (FindSectorTopologySideDef(state.topologyMap, secondSideDefId) != nullptr) {
-            SelectTopologySideDef(secondSideDefId, pending.wallPart);
-        } else {
-            SelectTopologyLineDef(split.secondLineDefId, pending.side, pending.wallPart);
-        }
-    } else {
-        SelectTopologyLineDef(split.secondLineDefId, pending.side, pending.wallPart);
-    }
-
-    state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(result.status.c_str());
-}
-
-void SectorEditor::StartPendingTopologySectorCut()
-{
-    const SectorTopologySector* sector = SelectedTopologySector();
-    if (sector == nullptr) {
-        ClearStaleTopologySelection();
-        statusText = "Select a topology sector before cutting it.";
-        return;
-    }
-
-    CancelPendingSector(nullptr);
-    CancelVertexDrag(nullptr);
-    CancelLightDrag(nullptr);
-    CancelPendingTopologyVertexMerge(nullptr);
-    CancelPendingTopologyLineSplitAtPoint(nullptr);
-
-    PendingTopologySectorCut pending;
-    pending.active = true;
-    pending.sectorId = sector->id;
-    pending.message = "Click first boundary point for sector cut; Escape or right click cancels.";
-    state.pendingTopologySectorCut = pending;
-    state.currentTool = SectorEditorTool::Select;
-    state.hoveredSurface3D = SectorSurfaceHit{};
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ResetSurface3DUiState();
-    statusText = pending.message;
-}
-
-void SectorEditor::CancelPendingTopologySectorCut(const char* message)
-{
-    state.pendingTopologySectorCut = PendingTopologySectorCut{};
-    if (message != nullptr && message[0] != '\0') {
-        statusText = message;
-    }
-}
-
-bool SectorEditor::ValidatePendingTopologySectorCutTarget(const char* staleMessage)
-{
-    if (!state.pendingTopologySectorCut.active) {
-        return false;
-    }
-    if (FindSectorTopologySector(state.topologyMap, state.pendingTopologySectorCut.sectorId) == nullptr) {
-        CancelPendingTopologySectorCut(staleMessage);
-        return false;
-    }
-    return true;
-}
-
-void SectorEditor::UpdatePendingTopologySectorCut(engine::Input& input)
-{
-    if (!ValidatePendingTopologySectorCutTarget(
-                "Sector cut cancelled: selected sector no longer exists.")) {
-        return;
-    }
-
-    PendingTopologySectorCut& pending = state.pendingTopologySectorCut;
-    pending.hasCandidatePoint = false;
-    pending.hasValidCandidate = false;
-
-    if (!Contains(canvasRect, input.MousePosition())) {
-        pending.message = pending.hasFirstPoint
-                ? "Move over the selected sector boundary to choose the second cut point."
-                : "Move over the selected sector boundary to choose the first cut point.";
-        statusText = pending.message;
-        return;
-    }
-
-    SectorTopologyBoundaryCutPoint candidate;
-    if (!FindSelectedSectorBoundaryCutPointNearScreenPoint(input.MousePosition(), candidate)) {
-        pending.message = pending.hasFirstPoint
-                ? "Choose a second point on the selected sector outer boundary."
-                : "Choose a first point on the selected sector outer boundary.";
-        statusText = pending.message;
-        return;
-    }
-
-    pending.candidatePoint = candidate;
-    pending.hasCandidatePoint = true;
-
-    std::string endpointError;
-    if (!ValidateSectorTopologySectorBoundaryCutPoint(
-                state.topologyMap,
-                pending.sectorId,
-                pending.candidatePoint,
-                &endpointError)) {
-        pending.hasValidCandidate = false;
-        pending.cacheHasFirstPoint = false;
-        pending.message = endpointError.empty() ? "Sector cut endpoint rejected." : endpointError;
-        statusText = pending.message;
-        return;
-    }
-
-    if (!pending.hasFirstPoint) {
-        pending.hasValidCandidate = true;
-        pending.message = "Click to place first cut point.";
-        statusText = pending.message;
-        return;
-    }
-
-    const bool cacheMatches =
-            pending.cacheHasFirstPoint
-            && pending.cachedSectorId == pending.sectorId
-            && SameBoundaryCutPoint(pending.cachedFirstPoint, pending.firstPoint)
-            && SameBoundaryCutPoint(pending.cachedCandidatePoint, pending.candidatePoint);
-    if (!cacheMatches) {
-        SectorTopologyMap candidateMap = state.topologyMap;
-        SectorTopologyCutSectorResult previewResult;
-        std::string error;
-        pending.cachedValid = CutSectorTopologySectorBetweenBoundaryPoints(
-                candidateMap,
-                pending.sectorId,
-                pending.firstPoint,
-                pending.candidatePoint,
-                &previewResult,
-                &error);
-        pending.cachedError = pending.cachedValid ? std::string{} : error;
-        pending.cachedSectorId = pending.sectorId;
-        pending.cachedFirstPoint = pending.firstPoint;
-        pending.cachedCandidatePoint = pending.candidatePoint;
-        pending.cacheHasFirstPoint = true;
-    }
-
-    pending.hasValidCandidate = pending.cachedValid;
-    pending.message = pending.cachedValid
-            ? "Click to cut selected sector; Escape or right click cancels."
-            : (pending.cachedError.empty() ? "Sector cut rejected." : pending.cachedError);
-    statusText = pending.message;
-}
-
-void SectorEditor::CommitPendingTopologySectorCut()
-{
-    if (!ValidatePendingTopologySectorCutTarget(
-                "Sector cut cancelled: selected sector no longer exists.")) {
-        return;
-    }
-
-    PendingTopologySectorCut& pending = state.pendingTopologySectorCut;
-    if (!pending.hasCandidatePoint || !pending.hasValidCandidate) {
-        statusText = pending.message.empty()
-                ? "Choose a valid boundary point for sector cut."
-                : pending.message;
-        return;
-    }
-
-    if (!pending.hasFirstPoint) {
-        pending.firstPoint = pending.candidatePoint;
-        pending.hasFirstPoint = true;
-        pending.cacheHasFirstPoint = false;
-        pending.message = "Click second boundary point for sector cut; Escape or right click cancels.";
-        statusText = pending.message;
-        return;
-    }
-
-    const PendingTopologySectorCut committed = pending;
-    const SectorEditorCutSectorResult result = game::CutTopologySector(
-                state.topologyMap,
-                committed.sectorId,
-                committed.firstPoint,
-                committed.candidatePoint);
-    if (!result.changed) {
-        pending.cacheHasFirstPoint = false;
-        pending.hasValidCandidate = false;
-        pending.message = result.status;
-        statusText = pending.message;
-        return;
-    }
-
-    ClearTransientTopologyEditStateAfterGeometryChange();
-    state.pendingTopologySectorCut = PendingTopologySectorCut{};
-    SelectTopologySector(result.cut.originalSectorId);
-    MarkTopologyDocumentEdited(result.status.c_str());
 }
 
 void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
@@ -1652,165 +1228,295 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
     );
 }
 
-void SectorEditor::CancelPendingSector(const char* message)
+void SectorEditor::CancelPendingAuthoringLine(const char* message)
 {
-    const bool wasInsert = state.pendingSector.kind == PendingSectorDrawKind::InsertInside;
-    state.pendingSector = PendingSectorDraw{};
-    if (wasInsert) {
-        state.currentTool = SectorEditorTool::Select;
-    }
+    CancelSectorEditorAuthoringLineToolChain(state);
     if (message != nullptr && message[0] != '\0') {
         statusText = message;
     }
 }
 
-void SectorEditor::RemoveLastPendingSectorPoint()
+void SectorEditor::CancelPendingAuthoringRectangle(const char* message)
 {
-    if (!state.pendingSector.active || state.pendingSector.points.empty()) {
-        return;
-    }
-
-    state.pendingSector.points.pop_back();
-    state.pendingSector.errorMessage.clear();
-    if (state.pendingSector.points.empty()) {
-        CancelPendingSector("Cancelled sector");
-    } else {
-        statusText = state.pendingSector.kind == PendingSectorDrawKind::InsertInside
-                ? TextFormat(
-                        "Insert sector: %zu points inside %s",
-                        state.pendingSector.points.size(),
-                        state.pendingSector.parentSectorLabel.c_str())
-                : TextFormat("Pending sector: %zu points", state.pendingSector.points.size());
+    state.pendingAuthoringRectangle = PendingAuthoringRectangleDraw{};
+    if (message != nullptr && message[0] != '\0') {
+        statusText = message;
     }
 }
 
-void SectorEditor::AddPendingSectorPoint(SectorPoint point)
+void SectorEditor::CancelPendingAuthoringInsertVertex(const char* message)
 {
-    const PendingSectorDrawKind pendingKind = state.pendingSector.active
-            ? state.pendingSector.kind
-            : PendingSectorDrawKind::NewSector;
-    std::string error;
-    SectorPoint canonicalPoint;
-    if (!ToCanonicalSectorPoint(point, canonicalPoint, error)) {
-        state.pendingSector.errorMessage = error;
-        statusText = error;
-        return;
-    }
-    if (!ValidatePendingTopologyPoint(canonicalPoint, error)) {
-        state.pendingSector.errorMessage = error;
-        statusText = error;
-        return;
-    }
-
-    state.pendingSector.active = true;
-    state.pendingSector.kind = pendingKind;
-    state.pendingSector.points.push_back(canonicalPoint);
-    state.pendingSector.errorMessage.clear();
-    if (state.pendingSector.kind == PendingSectorDrawKind::InsertInside) {
-        statusText = TextFormat(
-                "Insert sector: %zu points inside %s",
-                state.pendingSector.points.size(),
-                state.pendingSector.parentSectorLabel.c_str());
-    } else {
-        statusText = TextFormat("Pending sector: %zu points", state.pendingSector.points.size());
+    state.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
+    if (message != nullptr && message[0] != '\0') {
+        statusText = message;
     }
 }
 
-void SectorEditor::FinalizePendingSector()
+void SectorEditor::BeginPendingAuthoringInsertVertex(int lineId)
 {
-    if (!state.pendingSector.active || state.pendingSector.points.size() < 3) {
-        state.pendingSector.errorMessage = "Need at least 3 points to close sector";
-        statusText = state.pendingSector.errorMessage;
+    if (FindSectorAuthoringLine(state.authoringGraph, lineId) == nullptr) {
+        statusText = "Insert Vertex: select or click an authoring line";
         return;
     }
 
-    std::string error;
-    std::vector<SectorTopologyCoordPoint> topologyPoints;
-    if (!BuildPendingTopologyPoints(topologyPoints, error)) {
-        state.pendingSector.errorMessage = error;
-        statusText = error;
-        return;
+    if (state.pendingAuthoringLine.active) {
+        CancelPendingAuthoringLine("Cancelled authoring line");
+    }
+    if (state.pendingAuthoringRectangle.active) {
+        CancelPendingAuthoringRectangle("Rectangle cancelled");
+    }
+    if (state.authoringVertexDrag.active) {
+        CancelAuthoringVertexDrag("Cancelled authoring vertex move");
+    }
+    if (state.lightDrag.active) {
+        CancelLightDrag("Cancelled light move");
     }
 
-    SectorEditorCreateSectorResult result;
-    if (state.pendingSector.kind == PendingSectorDrawKind::InsertInside) {
-        SectorTopologyInsertPolygonOptions options;
-        result = game::InsertTopologySectorInside(
-                state.topologyMap,
-                state.pendingSector.parentTopologySectorId,
-                topologyPoints,
-                options);
-    } else {
-        SectorTopologyCreatePolygonOptions options = BuildTopologyCreateOptions();
-        result = game::CreateTopologySector(
-                state.topologyMap,
-                topologyPoints,
-                options);
-    }
-    if (!result.changed) {
-        state.pendingSector.errorMessage = result.status;
-        statusText = state.pendingSector.errorMessage;
-        return;
-    }
-
-    state.pendingSector = PendingSectorDraw{};
-    state.hasHoveredVertex = false;
-    state.hoveredTopologyVertexId = -1;
-    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
-    state.hoveredSurface3D = SectorSurfaceHit{};
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    SelectTopologySector(result.sectorId);
-    state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(result.status.c_str());
+    ClearTopologySelectionOnly();
+    SelectSectorEditorAuthoringLine(state, lineId);
+    state.currentTool = SectorEditorTool::AuthoringInsertVertex;
+    state.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
+    state.pendingAuthoringInsertVertex.active = true;
+    state.pendingAuthoringInsertVertex.lineId = lineId;
+    statusText = "Insert Vertex: click point on selected line, Esc/right click cancels";
 }
 
-void SectorEditor::StartInsertSectorInside()
+bool SectorEditor::TryResolveAuthoringInsertVertexPoint(
+        int lineId,
+        Vector2 mapPoint,
+        SectorTopologyCoordPoint& outPoint,
+        std::string& error) const
 {
-    const SectorTopologySector* parent = SelectedTopologySector();
-    if (parent == nullptr) {
-        ClearStaleTopologySelection();
-        statusText = "Select a topology sector before inserting inside it.";
-        return;
-    }
+    outPoint = SectorTopologyCoordPoint{};
+    error.clear();
 
-    PendingSectorDraw pending;
-    pending.active = true;
-    pending.kind = PendingSectorDrawKind::InsertInside;
-    pending.parentTopologySectorId = parent->id;
-    pending.parentSectorLabel = parent->name.empty()
-            ? TextFormat("sector %d", parent->id)
-            : parent->name;
-    state.pendingSector = std::move(pending);
-    state.currentTool = SectorEditorTool::InsertSectorInside;
-    state.hoveredSurface3D = SectorSurfaceHit{};
-    statusText = TextFormat("Draw a sector inside %s", state.pendingSector.parentSectorLabel.c_str());
-}
-
-bool SectorEditor::IsPendingInsertParentValid() const
-{
-    if (!state.pendingSector.active
-            || state.pendingSector.kind != PendingSectorDrawKind::InsertInside
-            || state.pendingSector.parentTopologySectorId < 0) {
-        return false;
-    }
-    return FindSectorTopologySector(state.topologyMap, state.pendingSector.parentTopologySectorId) != nullptr;
-}
-
-bool SectorEditor::CanClosePendingSectorAt(SectorPoint point) const
-{
-    if (!state.pendingSector.active
-            || state.pendingSector.points.size() < 3) {
+    const SectorAuthoringLine* line = FindSectorAuthoringLine(state.authoringGraph, lineId);
+    if (line == nullptr) {
+        error = "Insert Vertex: select or click an authoring line";
         return false;
     }
 
-    SectorTopologyCoordPoint candidate;
-    SectorTopologyCoordPoint first;
+    const SectorAuthoringVertex* start =
+            FindSectorAuthoringVertex(state.authoringGraph, line->startVertexId);
+    const SectorAuthoringVertex* end =
+            FindSectorAuthoringVertex(state.authoringGraph, line->endVertexId);
+    if (start == nullptr || end == nullptr
+            || (start->x == end->x && start->y == end->y)) {
+        error = "Insert Vertex unavailable: selected authoring line is invalid";
+        return false;
+    }
+
+    const int64_t dx = static_cast<int64_t>(end->x) - start->x;
+    const int64_t dy = static_cast<int64_t>(end->y) - start->y;
+    const int64_t latticeCount = std::gcd(std::llabs(dx), std::llabs(dy));
+    if (latticeCount <= 1) {
+        error = "Insert point is too close to an endpoint";
+        return false;
+    }
+
+    const double mouseX = static_cast<double>(mapPoint.x)
+            * static_cast<double>(SectorCoordSubdivisions);
+    const double mouseY = static_cast<double>(mapPoint.y)
+            * static_cast<double>(SectorCoordSubdivisions);
+    const double apX = mouseX - static_cast<double>(start->x);
+    const double apY = mouseY - static_cast<double>(start->y);
+    const double lengthSquared = static_cast<double>(dx) * static_cast<double>(dx)
+            + static_cast<double>(dy) * static_cast<double>(dy);
+    if (lengthSquared <= 0.0) {
+        error = "Insert Vertex unavailable: selected authoring line is invalid";
+        return false;
+    }
+    const double t = std::clamp(
+            (apX * static_cast<double>(dx) + apY * static_cast<double>(dy)) / lengthSquared,
+            0.0,
+            1.0);
+    const int64_t nearestLattice = std::clamp<int64_t>(
+            static_cast<int64_t>(std::llround(t * static_cast<double>(latticeCount))),
+            1,
+            latticeCount - 1);
+
+    const SectorCoord stepX = static_cast<SectorCoord>(dx / latticeCount);
+    const SectorCoord stepY = static_cast<SectorCoord>(dy / latticeCount);
+    const auto pointAt = [&](int64_t index) {
+        return SectorTopologyCoordPoint{
+                static_cast<SectorCoord>(static_cast<int64_t>(start->x) + static_cast<int64_t>(stepX) * index),
+                static_cast<SectorCoord>(static_cast<int64_t>(start->y) + static_cast<int64_t>(stepY) * index)};
+    };
+
+    const int64_t snapStep = std::max<int64_t>(
+            1,
+            static_cast<int64_t>(std::max(1, state.gridSize)) * SectorCoordSubdivisions);
+    const auto alignedToSnapStep = [&](int64_t index) {
+        const SectorTopologyCoordPoint point = pointAt(index);
+        return CoordAlignedToStep(point.x, snapStep)
+                && CoordAlignedToStep(point.y, snapStep);
+    };
+
+    const int64_t xPeriod = CoordinateSequencePeriod(stepX, snapStep);
+    const int64_t yPeriod = CoordinateSequencePeriod(stepY, snapStep);
+    const int64_t searchPeriod = LcmClamped(xPeriod, yPeriod);
+    bool foundSnapCandidate = false;
+    int64_t bestSnapIndex = nearestLattice;
+    for (int64_t offset = 0; offset <= searchPeriod; ++offset) {
+        const int64_t candidates[2] = {
+                nearestLattice - offset,
+                nearestLattice + offset};
+        for (int64_t candidate : candidates) {
+            if (candidate <= 0 || candidate >= latticeCount) {
+                continue;
+            }
+            if (!alignedToSnapStep(candidate)) {
+                continue;
+            }
+            bestSnapIndex = candidate;
+            foundSnapCandidate = true;
+            break;
+        }
+        if (foundSnapCandidate) {
+            break;
+        }
+    }
+
+    const int64_t chosenIndex = foundSnapCandidate ? bestSnapIndex : nearestLattice;
+    if (chosenIndex <= 0 || chosenIndex >= latticeCount) {
+        error = "Insert point is too close to an endpoint";
+        return false;
+    }
+
+    outPoint = pointAt(chosenIndex);
+    return true;
+}
+
+void SectorEditor::UpdatePendingAuthoringInsertVertex(Vector2 mapPoint)
+{
+    PendingAuthoringInsertVertex& pending = state.pendingAuthoringInsertVertex;
+    pending.hasPreviewPoint = false;
+    pending.errorMessage.clear();
+
+    int lineId = pending.active ? pending.lineId : -1;
+    if (!pending.active) {
+        lineId = FindAuthoringLineNearScreenPoint(MapToScreen(mapPoint));
+    }
+
+    if (FindSectorAuthoringLine(state.authoringGraph, lineId) == nullptr) {
+        pending.lineId = -1;
+        pending.errorMessage = "Insert Vertex: select or click an authoring line";
+        return;
+    }
+
+    pending.lineId = lineId;
+    SetHoveredSectorEditorAuthoringLine(state, lineId);
+    SectorTopologyCoordPoint point;
     std::string error;
-    return ToTopologyCoordPoint(point, candidate, error)
-            && ToTopologyCoordPoint(state.pendingSector.points.front(), first, error)
-            && candidate.x == first.x
-            && candidate.y == first.y;
+    if (!TryResolveAuthoringInsertVertexPoint(lineId, mapPoint, point, error)) {
+        pending.errorMessage = error;
+        return;
+    }
+
+    pending.previewPoint = point;
+    pending.hasPreviewPoint = true;
+}
+
+void SectorEditor::CommitAuthoringInsertVertex(Vector2 screenPoint)
+{
+    const int lineId = state.pendingAuthoringInsertVertex.active
+            ? state.pendingAuthoringInsertVertex.lineId
+            : FindAuthoringLineNearScreenPoint(screenPoint);
+    if (FindSectorAuthoringLine(state.authoringGraph, lineId) == nullptr) {
+        statusText = "Insert Vertex: select or click an authoring line";
+        return;
+    }
+
+    SectorTopologyCoordPoint point;
+    std::string error;
+    if (!TryResolveAuthoringInsertVertexPoint(lineId, ScreenToMap(screenPoint), point, error)) {
+        state.pendingAuthoringInsertVertex.errorMessage = error;
+        statusText = error;
+        return;
+    }
+
+    SectorAuthoringInsertVertexResult result;
+    if (!InsertSectorEditorAuthoringVertexOnLine(state, lineId, point, &result)) {
+        statusText = InsertVertexFailureStatus(result.status);
+        state.pendingAuthoringInsertVertex.errorMessage = statusText;
+        return;
+    }
+
+    state.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
+    statusText = "Inserted vertex on authoring line";
+}
+
+void SectorEditor::AddAuthoringLinePoint(SectorPoint point)
+{
+    ClearTopologySelectionOnly();
+
+    std::string error;
+    SectorTopologyCoordPoint topologyPoint;
+    if (!ToTopologyCoordPoint(point, topologyPoint, error)) {
+        state.pendingAuthoringLine.errorMessage = error;
+        statusText = error;
+        return;
+    }
+
+    const SectorEditorAuthoringLineToolClickResult result =
+            ClickSectorEditorAuthoringLineTool(state, topologyPoint);
+    switch (result.status) {
+        case SectorEditorAuthoringLineToolClickStatus::StartedChain:
+            statusText = "Line: click next point, Esc/right click stops chain";
+            return;
+        case SectorEditorAuthoringLineToolClickStatus::CreatedSegment:
+            ClearSelection();
+            SelectSectorEditorAuthoringLine(state, result.segment.lineId);
+            statusText = "Created authoring line segment";
+            return;
+        case SectorEditorAuthoringLineToolClickStatus::ZeroLength:
+            statusText = state.pendingAuthoringLine.errorMessage;
+            return;
+        case SectorEditorAuthoringLineToolClickStatus::Rejected:
+            statusText = state.pendingAuthoringLine.errorMessage.empty()
+                    ? "Authoring line segment rejected"
+                    : state.pendingAuthoringLine.errorMessage;
+            return;
+    }
+}
+
+void SectorEditor::AddAuthoringRectanglePoint(SectorPoint point)
+{
+    ClearTopologySelectionOnly();
+
+    std::string error;
+    SectorTopologyCoordPoint topologyPoint;
+    if (!ToTopologyCoordPoint(point, topologyPoint, error)) {
+        state.pendingAuthoringRectangle.errorMessage = error;
+        statusText = error;
+        return;
+    }
+
+    if (!state.pendingAuthoringRectangle.active) {
+        state.pendingAuthoringRectangle.active = true;
+        state.pendingAuthoringRectangle.firstCorner = topologyPoint;
+        state.pendingAuthoringRectangle.currentCorner = topologyPoint;
+        state.pendingAuthoringRectangle.errorMessage.clear();
+        statusText = "Rectangle: click opposite corner, right click/Esc cancels";
+        return;
+    }
+
+    SectorEditorAuthoringRectangleResult result;
+    if (!AddSectorEditorAuthoringRectangle(
+                state,
+                state.pendingAuthoringRectangle.firstCorner,
+                topologyPoint,
+                &result)) {
+        state.pendingAuthoringRectangle.currentCorner = topologyPoint;
+        state.pendingAuthoringRectangle.errorMessage = "Rectangle needs non-zero width and height";
+        statusText = state.pendingAuthoringRectangle.errorMessage;
+        return;
+    }
+
+    state.pendingAuthoringRectangle = PendingAuthoringRectangleDraw{};
+    ClearSelection();
+    SelectSectorEditorAuthoringLine(state, result.lineIds[0]);
+    statusText = "Created authoring rectangle";
 }
 
 SectorPoint SectorEditor::CurrentSnappedSectorPoint() const
@@ -1849,89 +1555,6 @@ bool SectorEditor::ToCanonicalSectorPoint(
     }
     outPoint = SectorTopologyCoordPointToSectorPoint(topologyPoint);
     return true;
-}
-
-bool SectorEditor::BuildPendingTopologyPoints(
-        std::vector<SectorTopologyCoordPoint>& outPoints,
-        std::string& error) const
-{
-    if (!state.pendingSector.active
-            || (state.pendingSector.kind != PendingSectorDrawKind::NewSector
-                    && state.pendingSector.kind != PendingSectorDrawKind::InsertInside)) {
-        error = "No topology sector draw is active";
-        return false;
-    }
-
-    outPoints.clear();
-    outPoints.reserve(state.pendingSector.points.size());
-    for (SectorPoint point : state.pendingSector.points) {
-        SectorTopologyCoordPoint topologyPoint;
-        if (!ToTopologyCoordPoint(point, topologyPoint, error)) {
-            return false;
-        }
-        outPoints.push_back(topologyPoint);
-    }
-    error.clear();
-    return true;
-}
-
-bool SectorEditor::ValidatePendingTopologyPoint(SectorPoint point, std::string& error) const
-{
-    SectorTopologyCoordPoint candidate;
-    if (!ToTopologyCoordPoint(point, candidate, error)) {
-        return false;
-    }
-
-    if (!state.pendingSector.active || state.pendingSector.points.empty()) {
-        error.clear();
-        return true;
-    }
-    std::vector<SectorTopologyCoordPoint> existing;
-    if (!BuildPendingTopologyPoints(existing, error)) {
-        return false;
-    }
-
-    const SectorTopologyCoordPoint previous = existing.back();
-    if (candidate.x == previous.x && candidate.y == previous.y) {
-        error = "Duplicate point";
-        return false;
-    }
-
-    if (existing.size() >= 2
-            && candidate.x == existing.front().x
-            && candidate.y == existing.front().y) {
-        error = existing.size() >= 3
-                ? "Click first point to close sector"
-                : "Need at least 3 points to close sector";
-        return false;
-    }
-
-    for (SectorTopologyCoordPoint point : existing) {
-        if (candidate.x == point.x && candidate.y == point.y) {
-            error = "Duplicate point";
-            return false;
-        }
-    }
-
-    error.clear();
-    return true;
-}
-
-SectorTopologyCreatePolygonOptions SectorEditor::BuildTopologyCreateOptions() const
-{
-    SectorTopologyCreatePolygonOptions options;
-    options.floorZ = state.defaultSectorFloorZ;
-    options.ceilingZ = state.defaultSectorCeilingZ;
-    options.floorTextureId = state.defaultFloorTextureId;
-    options.ceilingTextureId = state.defaultCeilingTextureId;
-    options.defaultWall.textureId = state.defaultWallTextureId;
-    options.defaultLower.textureId = state.defaultLowerWallTextureId.empty()
-            ? state.defaultWallTextureId
-            : state.defaultLowerWallTextureId;
-    options.defaultUpper.textureId = state.defaultUpperWallTextureId.empty()
-            ? state.defaultWallTextureId
-            : state.defaultUpperWallTextureId;
-    return options;
 }
 
 SectorTopologySector* SectorEditor::SelectedTopologySector()
@@ -2053,14 +1676,6 @@ void SectorEditor::ClearStaleTopologySelection()
     }
 
     if (stale) {
-        if (state.pendingTopologyLineSplitAtPoint.active
-                && (state.pendingTopologyLineSplitAtPoint.lineDefId == state.selectedTopologyLineDefId
-                        || FindSectorTopologyLineDef(
-                                state.topologyMap,
-                                state.pendingTopologyLineSplitAtPoint.lineDefId) == nullptr)) {
-            CancelPendingTopologyLineSplitAtPoint(
-                    "Split at point cancelled: target linedef no longer exists.");
-        }
         state.topologySelectionKind = TopologySelectionKind::None;
         state.selectedTopologySectorId = -1;
         state.selectedTopologyVertexId = -1;
@@ -2153,22 +1768,48 @@ bool SectorEditor::FinishTopologyActionResult(const SectorEditorTopologyActionRe
 
 bool SectorEditor::SetLineDefBlocksPlayer(int lineDefId, bool blocksPlayer)
 {
-    const SectorEditorTopologyActionResult result = game::SetPortalBlocksPlayer(
-            state.topologyMap,
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, lineDefId);
+    if (lineDef == nullptr) {
+        statusText = "Selected linedef is no longer valid.";
+        return false;
+    }
+    if (lineDef->frontSideDefId == -1 || lineDef->backSideDefId == -1) {
+        statusText = "Blocks Player is only editable on two-sided portals.";
+        return false;
+    }
+
+    const int authoringLineId =
+            FindSectorEditorAuthoringLineIdForTopologyLineDef(state, lineDefId);
+    const SectorAuthoringLine* authoringLine =
+            FindSectorAuthoringLine(state.authoringGraph, authoringLineId);
+    if (authoringLine == nullptr) {
+        statusText = "Blocks Player unavailable: selected linedef has no authoring line mapping.";
+        return false;
+    }
+    if (authoringLine->flags.blocksPlayer == blocksPlayer) {
+        return true;
+    }
+
+    const bool changed = MutateSectorEditorAuthoringLineForTopologyLineDef(
+            state,
             lineDefId,
-            blocksPlayer);
-    const bool changed = FinishTopologyActionResult(result);
+            blocksPlayer
+                    ? "Enabled player blocking on authoring portal."
+                    : "Disabled player blocking on authoring portal.",
+            [blocksPlayer](SectorAuthoringLine& line) {
+                line.flags.blocksPlayer = blocksPlayer;
+                return true;
+            });
     if (changed) {
         RebuildSectorCollisionWorld();
     }
-    return changed || result.status.empty();
+    return changed;
 }
 
 void SectorEditor::ClearTransientTopologyEditStateAfterGeometryChange()
 {
     ClearStaleTopologySelection();
     state.topologyRenderWarning.clear();
-    state.pendingTopologySectorCut = PendingTopologySectorCut{};
     state.hoveredSurface3D = SectorSurfaceHit{};
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
@@ -2234,6 +1875,43 @@ bool SectorEditor::TryRenameSelectedTopologySector()
         return true;
     }
 
+    const bool hasAuthoringGraph =
+            !state.authoringGraph.vertices.empty()
+            || !state.authoringGraph.lines.empty()
+            || !state.authoringGraph.lineSides.empty()
+            || !state.authoringGraph.faceAnchors.empty();
+    if (hasAuthoringGraph
+            && (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+                    || state.authoringDerivedTopologyStale
+                    || !state.authoringDerivation.success)) {
+        uiState.idEditError = "Sector name edit unavailable: derived topology is not current";
+        statusText = uiState.idEditError;
+        return true;
+    }
+
+    const bool hasFaceAnchorMapping =
+            FindSectorEditorAuthoringFaceAnchorIdForTopologySector(state, sector->id) >= 0;
+    if (hasFaceAnchorMapping) {
+        MutateSectorEditorAuthoringFaceAnchorForTopologySector(
+                state,
+                sector->id,
+                TextFormat("Renamed authoring face anchor %d", sector->id),
+                [&newName](SectorAuthoringFaceAnchor& anchor) {
+                    if (anchor.name == newName) {
+                        return false;
+                    }
+                    anchor.name = newName;
+                    return true;
+                });
+        uiState.idEditError.clear();
+        return true;
+    }
+    if (hasAuthoringGraph) {
+        uiState.idEditError = "Sector name edit unavailable: selected sector has no face anchor mapping";
+        statusText = uiState.idEditError;
+        return true;
+    }
+
     sector->name = newName;
     uiState.idEditError.clear();
     MarkTopologyDocumentEdited(TextFormat("Renamed topology sector %d", sector->id));
@@ -2251,71 +1929,6 @@ bool SectorEditor::TryRenameSelectedLight()
     uiState.idEditError = "Topology light IDs are stable";
     statusText = uiState.idEditError;
     return false;
-}
-
-void SectorEditor::OpenDeleteSelectedTopologySectorConfirmation()
-{
-    const SectorTopologySector* sector = SelectedTopologySector();
-    if (sector == nullptr) {
-        ClearStaleTopologySelection();
-        statusText = "Select a topology sector to delete.";
-        return;
-    }
-    OpenDeleteTopologySectorConfirmation(sector->id);
-}
-
-void SectorEditor::OpenDeleteTopologySectorConfirmation(int sectorId)
-{
-    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sectorId);
-    if (sector == nullptr) {
-        ClearStaleTopologySelection();
-        statusText = "Select a topology sector to delete.";
-        return;
-    }
-
-    const std::string label = sector->name.empty()
-            ? TextFormat("topology sector %d", sector->id)
-            : TextFormat("%s", sector->name.c_str());
-    OpenConfirmation(
-            "Delete Sector",
-            TextFormat("Delete sector \"%s\"?", label.c_str()),
-            [this, sectorId]() { DeleteSelectedTopologySectorConfirmed(sectorId); });
-}
-
-bool SectorEditor::DeleteSelectedTopologySectorConfirmed(int sectorId)
-{
-    const bool hadPendingSplit = state.pendingTopologyLineSplitAtPoint.active;
-    const int pendingSplitLineDefId = state.pendingTopologyLineSplitAtPoint.lineDefId;
-    const SectorEditorDeleteSectorResult result = game::DeleteTopologySector(state.topologyMap, sectorId);
-    if (!result.changed) {
-        statusText = result.status;
-        return false;
-    }
-
-    state.hasHoveredVertex = false;
-    state.hoveredTopologyVertexId = -1;
-    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
-    state.hoveredSurface3D = SectorSurfaceHit{};
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ResetSurface3DUiState();
-    for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
-    ClearStaleTopologySelection();
-    state.topologyRenderWarning.clear();
-    const bool pendingSplitTargetRemoved = hadPendingSplit
-            && FindSectorTopologyLineDef(state.topologyMap, pendingSplitLineDefId) == nullptr;
-    MarkTopologyDocumentEdited(pendingSplitTargetRemoved
-            ? TextFormat(
-                    "Deleted topology sector %d; split at point cancelled",
-                    result.deleted.deletedSectorId)
-            : result.status.c_str());
-    return true;
 }
 
 bool SectorEditor::DeleteSelectedLight()
@@ -2397,6 +2010,12 @@ bool SectorEditor::StartLightmapBake()
 
     if (!state.hasCurrentLevelPath) {
         statusText = "Save the level before baking lightmaps";
+        return false;
+    }
+
+    std::string gateMessage;
+    if (!CanUseCurrentAuthoringDerivedTopologyForLightmapBake(state, &gateMessage)) {
+        statusText = gateMessage.empty() ? "Bake failed: derived topology is not current" : gateMessage;
         return false;
     }
 
@@ -2699,169 +2318,22 @@ bool SectorEditor::FindTopologyVertexNearScreenPoint(
     return true;
 }
 
-bool SectorEditor::FindSelectedSectorBoundaryCutPointNearScreenPoint(
-        Vector2 screenPoint,
-        SectorTopologyBoundaryCutPoint& outPoint) const
-{
-    outPoint = SectorTopologyBoundaryCutPoint{};
-    const SectorTopologySector* sector = SelectedTopologySector();
-    if (sector == nullptr) {
-        return false;
-    }
-
-    SectorTopologyLoopSet loops;
-    if (!ExtractSectorTopologyLoops(state.topologyMap, sector->id, loops)) {
-        return false;
-    }
-
-    float bestVertexDistance2 = ScreenVertexSnapPixels * ScreenVertexSnapPixels;
-    int bestVertexId = -1;
-    SectorTopologyCoordPoint bestVertexPoint{};
-    for (int vertexId : loops.outer.vertexIds) {
-        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
-        if (vertex == nullptr) {
-            continue;
-        }
-        const Vector2 screenVertex = MapToScreen(SectorTopologyVertexToMap(*vertex));
-        const float dx = screenVertex.x - screenPoint.x;
-        const float dy = screenVertex.y - screenPoint.y;
-        const float distance2 = dx * dx + dy * dy;
-        if (distance2 > bestVertexDistance2) {
-            continue;
-        }
-        if (bestVertexId >= 0
-                && std::fabs(distance2 - bestVertexDistance2) <= 0.001f
-                && vertex->id >= bestVertexId) {
-            continue;
-        }
-        bestVertexDistance2 = distance2;
-        bestVertexId = vertex->id;
-        bestVertexPoint = SectorTopologyCoordPoint{vertex->x, vertex->y};
-    }
-    if (bestVertexId >= 0) {
-        outPoint.vertexId = bestVertexId;
-        outPoint.point = bestVertexPoint;
-        return true;
-    }
-
-    SectorTopologyCoordPoint snappedPoint;
-    std::string error;
-    if (!ToTopologyCoordPoint(Vector2ToSectorPoint(state.snappedMouseMap), snappedPoint, error)) {
-        return false;
-    }
-
-    float bestLineDistance = ScreenEdgePickPixels;
-    int bestLineDefId = -1;
-    for (const SectorTopologyLoopEdge& edge : loops.outer.edges) {
-        const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, edge.lineDefId);
-        if (lineDef == nullptr) {
-            continue;
-        }
-        const SectorTopologyVertex* start = nullptr;
-        const SectorTopologyVertex* end = nullptr;
-        if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
-            continue;
-        }
-        const SectorTopologyCoordPoint startPoint{start->x, start->y};
-        const SectorTopologyCoordPoint endPoint{end->x, end->y};
-        if (!SectorTopologyPointStrictlyInsideSegment(snappedPoint, startPoint, endPoint)) {
-            continue;
-        }
-
-        const Vector2 screenStart = MapToScreen(SectorTopologyVertexToMap(*start));
-        const Vector2 screenEnd = MapToScreen(SectorTopologyVertexToMap(*end));
-        const float distance = DistancePointToSegment(screenPoint, screenStart, screenEnd);
-        if (distance > ScreenEdgePickPixels) {
-            continue;
-        }
-        if (bestLineDefId >= 0
-                && (distance > bestLineDistance + 0.001f
-                        || (std::fabs(distance - bestLineDistance) <= 0.001f
-                                && lineDef->id >= bestLineDefId))) {
-            continue;
-        }
-        bestLineDistance = distance;
-        bestLineDefId = lineDef->id;
-    }
-
-    if (bestLineDefId < 0) {
-        return false;
-    }
-
-    outPoint.lineDefId = bestLineDefId;
-    outPoint.point = snappedPoint;
-    return true;
-}
-
-int SectorEditor::FindTopologyVertexAtCoordPoint(
-        SectorTopologyCoordPoint point,
-        int excludedVertexId) const
-{
-    int bestVertexId = -1;
-    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
-        if (vertex.id == excludedVertexId) {
-            continue;
-        }
-        if (vertex.x != point.x || vertex.y != point.y) {
-            continue;
-        }
-        if (bestVertexId < 0 || vertex.id < bestVertexId) {
-            bestVertexId = vertex.id;
-        }
-    }
-    return bestVertexId;
-}
-
-bool SectorEditor::SnapTopologyVertexMoveTarget(
+bool SectorEditor::SnapAuthoringVertexMoveTarget(
         Vector2 mapPoint,
         SectorTopologyCoordPoint& outPoint,
         std::string& error) const
 {
     const float grid = static_cast<float>(std::max(1, state.gridSize));
-    Vector2 snapped{
+    const Vector2 snapped{
             std::round(mapPoint.x / grid) * grid,
             std::round(mapPoint.y / grid) * grid
     };
 
-    const float threshold = std::max(
-            SectorWorldToAuthoringDistance(ScreenVertexSnapPixels / std::max(1.0f, state.viewZoom)),
-            grid * 0.20f
-    );
-    float bestDistance2 = threshold * threshold;
-    bool found = false;
-    Vector2 best = snapped;
-    int bestVertexId = -1;
-
-    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
-        if (state.vertexDrag.active && vertex.id == state.vertexDrag.topologyVertexId) {
-            continue;
-        }
-
-        const Vector2 vertexMap = SectorTopologyVertexToMap(vertex);
-        const float dx = vertexMap.x - mapPoint.x;
-        const float dy = vertexMap.y - mapPoint.y;
-        const float distance2 = dx * dx + dy * dy;
-        if (distance2 > bestDistance2) {
-            continue;
-        }
-        if (found
-                && std::fabs(distance2 - bestDistance2) <= 0.001f
-                && vertex.id >= bestVertexId) {
-            continue;
-        }
-
-        bestDistance2 = distance2;
-        best = vertexMap;
-        bestVertexId = vertex.id;
-        found = true;
-    }
-
-    const Vector2 canonical = found ? best : snapped;
     SectorCoord x = 0;
     SectorCoord y = 0;
-    if (!VisibleAuthoringToSectorCoord(canonical.x, x)
-            || !VisibleAuthoringToSectorCoord(canonical.y, y)) {
-        error = "Move target is outside topology coordinate range";
+    if (!VisibleAuthoringToSectorCoord(snapped.x, x)
+            || !VisibleAuthoringToSectorCoord(snapped.y, y)) {
+        error = "Move target is outside authoring coordinate range";
         outPoint = SectorTopologyCoordPoint{};
         return false;
     }
@@ -3144,6 +2616,9 @@ void SectorEditor::DrawPreviewUvPanel(
         state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
         return;
     }
+    if (!EnsureSelectedSurface3DAuthoringMappingCurrent()) {
+        return;
+    }
 
     const TopologySurfaceEditTarget target = state.selectedTopologySurface3D;
     const bool targetIsMiddle = IsMiddleTopologyEditTarget(target.kind);
@@ -3198,6 +2673,7 @@ void SectorEditor::DrawPreviewUvPanel(
                 sideDef->id,
                 sideDef->lineDefId);
     }
+    targetLabel = BuildSectorEditorSurface3DTargetLabel(state, state.selectedSurface3D, target);
 
     const float margin = 18.0f;
     const float top = panel.y + margin;
@@ -3327,6 +2803,9 @@ void SectorEditor::DrawPreviewUvPanel(
         if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
                 || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
             OpenTopologyTexturePicker(target.sectorId, TopologyEditTargetSectorTextureField(target.kind), layer);
+            if (state.texturePicker.open && HasAuthoringGraphData()) {
+                state.texturePicker.authoringSurface3DFlatTarget = true;
+            }
         } else {
             OpenTopologySideDefTexturePicker(target.sideDefId, TopologyEditTargetWallPart(target.kind), layer);
         }
@@ -3656,6 +3135,8 @@ void SectorEditor::EnsureTopologyRenderCache()
             || state.topologyRenderCache.revision != state.topologyRenderRevision) {
         state.topologyRenderCache = BuildSectorEditorTopologyRenderCache(
                 state.topologyMap,
+                state.authoringGraph,
+                state.authoringDerivation,
                 state.topologyRenderRevision);
         state.topologyRenderWarning = state.topologyRenderCache.warning;
     }
@@ -3671,32 +3152,41 @@ void SectorEditor::DrawTopologyDocument()
     EnsureTopologyRenderCache();
 
     ClearStaleTopologySelection();
+    const bool hasAuthoringGraph = HasAuthoringGraphData();
+    const bool drawLegacyTopologySelection =
+            ShouldDrawLegacyTopologySelectionHighlight(hasAuthoringGraph, state.topologySelectionKind);
     const SectorEditorTopologyDrawContext drawContext{
             canvasRect,
             state.viewCenter,
             state.viewZoom,
             state.showSectorIds,
+            state.authoringDerivedTopologyStale,
             state.currentTool,
-            state.topologySelectionKind,
-            state.selectedTopologySectorId,
-            state.selectedTopologyVertexId,
-            state.selectedTopologyLightId,
+            drawLegacyTopologySelection ? state.topologySelectionKind : TopologySelectionKind::None,
+            drawLegacyTopologySelection ? state.selectedTopologySectorId : -1,
+            drawLegacyTopologySelection ? state.selectedTopologyVertexId : -1,
+            drawLegacyTopologySelection ? state.selectedTopologyLightId : -1,
             state.hasHoveredVertex,
             state.hoveredTopologyVertexId,
-            state.hoveredTopologyLightId
+            state.hoveredTopologyLightId,
+            state.selectedAuthoring,
+            state.hoveredAuthoring
     };
     DrawCachedTopologySectors(state.topologyRenderCache, drawContext);
 
-    DrawTopologySelectedLineHighlight();
+    if (drawLegacyTopologySelection) {
+        DrawTopologySelectedLineHighlight();
+    }
     DrawCachedTopologyLineDefs(state.topologyRenderCache, drawContext);
     DrawCachedTopologyVertices(state.topologyRenderCache, drawContext);
-    DrawVertexMoveOverlay();
-    DrawPendingTopologyVertexMerge();
-    DrawPendingTopologyLineSplitAtPoint();
-    DrawPendingTopologySectorCut();
+    DrawCachedAuthoringGraphOverlay(state.topologyRenderCache, drawContext);
+    DrawCachedAuthoringDiagnostics(state.topologyRenderCache, drawContext);
+    DrawAuthoringVertexMoveOverlay();
     DrawCachedTopologyStaticLights(state.topologyRenderCache, drawContext);
     DrawLightMoveOverlay();
-    DrawPendingSector();
+    DrawPendingAuthoringLine();
+    DrawPendingAuthoringRectangle();
+    DrawPendingAuthoringInsertVertex();
     DrawTopologySnapCrosshair();
 
     if (!state.topologyRenderWarning.empty()) {
@@ -3704,6 +3194,15 @@ void SectorEditor::DrawTopologyDocument()
                 state.topologyRenderWarning.c_str(),
                 static_cast<int>(canvasRect.x + 16.0f),
                 static_cast<int>(canvasRect.y + 14.0f),
+                18,
+                Color{236, 196, 92, 255}
+        );
+    }
+    if (state.authoringDerivedTopologyStale) {
+        DrawText(
+                "Authoring graph changed; derived sector fills are stale",
+                static_cast<int>(canvasRect.x + 16.0f),
+                static_cast<int>(canvasRect.y + 64.0f),
                 18,
                 Color{236, 196, 92, 255}
         );
@@ -3763,8 +3262,21 @@ void SectorEditor::DrawTopologySnapCrosshair() const
         return;
     }
 
-    const bool useCanonicalSectorPoint = state.currentTool == SectorEditorTool::Sector
-            || state.pendingSector.active;
+    if ((state.currentTool == SectorEditorTool::AuthoringInsertVertex
+                || state.pendingAuthoringInsertVertex.active)
+            && state.pendingAuthoringInsertVertex.hasPreviewPoint) {
+        const Vector2 snap = MapToScreen(Vector2{
+                SectorCoordToVisibleAuthoring(state.pendingAuthoringInsertVertex.previewPoint.x),
+                SectorCoordToVisibleAuthoring(state.pendingAuthoringInsertVertex.previewPoint.y)});
+        DrawLineEx(Vector2{snap.x - 9.0f, snap.y}, Vector2{snap.x + 9.0f, snap.y}, 2.0f, Color{235, 224, 130, 255});
+        DrawLineEx(Vector2{snap.x, snap.y - 9.0f}, Vector2{snap.x, snap.y + 9.0f}, 2.0f, Color{235, 224, 130, 255});
+        return;
+    }
+
+    const bool useCanonicalSectorPoint = state.currentTool == SectorEditorTool::AuthoringLine
+            || state.currentTool == SectorEditorTool::AuthoringRectangle
+            || state.pendingAuthoringLine.active
+            || state.pendingAuthoringRectangle.active;
     const Vector2 snap = useCanonicalSectorPoint
             ? MapToScreen(SectorPointToVector2(CurrentSnappedSectorPoint()))
             : MapToScreen(state.snappedMouseMap);
@@ -3772,208 +3284,237 @@ void SectorEditor::DrawTopologySnapCrosshair() const
     DrawLineEx(Vector2{snap.x, snap.y - 9.0f}, Vector2{snap.x, snap.y + 9.0f}, 2.0f, Color{235, 224, 130, 255});
 }
 
-void SectorEditor::DrawPendingSector() const
+void SectorEditor::DrawPendingAuthoringLine() const
 {
-    if (!state.pendingSector.active || state.pendingSector.points.empty()) {
+    if (!state.pendingAuthoringLine.active) {
         return;
     }
 
-    const SectorPoint cursorPoint = CurrentSnappedSectorPoint();
-    const bool closeable = CanClosePendingSectorAt(cursorPoint);
-    std::string previewError = state.pendingSector.errorMessage;
-    if (!closeable && state.pendingSector.active) {
-        std::string candidateError;
-        if (!ValidatePendingTopologyPoint(cursorPoint, candidateError)
-                && candidateError != "Click first point to close sector") {
-            previewError = candidateError;
-        }
-    }
+    const SectorPoint start = SectorTopologyCoordPointToSectorPoint(
+            state.pendingAuthoringLine.startPoint);
+    const SectorPoint cursor = CurrentSnappedSectorPoint();
+    const bool invalid = SamePoint(start, cursor)
+            || !state.pendingAuthoringLine.errorMessage.empty();
+    const Color lineColor = invalid ? Color{220, 88, 88, 190} : Color{122, 220, 244, 205};
+    const Color startColor = Color{245, 226, 154, 255};
+    const Color cursorColor = invalid ? Color{220, 88, 88, 255} : Color{120, 230, 154, 255};
+    const Vector2 startScreen = MapToScreen(SectorPointToVector2(start));
+    const Vector2 cursorScreen = MapToScreen(SectorPointToVector2(cursor));
 
-    if (state.pendingSector.points.size() >= 3 && previewError.empty()) {
-        std::string finalError;
-        std::vector<SectorTopologyCoordPoint> topologyPoints;
-        SectorTopologyMap previewMap = state.topologyMap;
-        int previewSectorId = -1;
-        if (!BuildPendingTopologyPoints(topologyPoints, finalError)) {
-            previewError = finalError;
-        } else if (state.pendingSector.kind == PendingSectorDrawKind::InsertInside) {
-            SectorTopologyInsertPolygonOptions options;
-            if (!InsertSectorTopologyPolygon(
-                        previewMap,
-                        state.pendingSector.parentTopologySectorId,
-                        topologyPoints,
-                        options,
-                        &previewSectorId,
-                        &finalError)) {
-                previewError = finalError;
-            }
-        } else if (!CreateSectorTopologyPolygon(
-                    previewMap,
-                    topologyPoints,
-                    BuildTopologyCreateOptions(),
-                    &previewSectorId,
-                    &finalError)) {
-            previewError = finalError;
-        }
+    if (!SamePoint(start, cursor)) {
+        DrawLineEx(startScreen, cursorScreen, 3.0f, lineColor);
     }
-
-    const bool invalid = !previewError.empty() && previewError != "Click first point to close sector";
-    const Color lineColor = invalid ? Color{220, 88, 88, 245} : Color{236, 196, 92, 245};
-    const Color previewColor = invalid ? Color{220, 88, 88, 170} : Color{236, 196, 92, 175};
-    const Color pointColor = Color{245, 226, 154, 255};
-    const Color firstColor = closeable ? Color{120, 230, 154, 255} : Color{245, 226, 154, 255};
-
-    for (size_t i = 0; i + 1 < state.pendingSector.points.size(); ++i) {
-        const Vector2 a = MapToScreen(SectorPointToVector2(state.pendingSector.points[i]));
-        const Vector2 b = MapToScreen(SectorPointToVector2(state.pendingSector.points[i + 1]));
-        DrawLineEx(a, b, 3.0f, lineColor);
-    }
-
-    const Vector2 last = MapToScreen(SectorPointToVector2(state.pendingSector.points.back()));
-    const Vector2 cursor = MapToScreen(SectorPointToVector2(cursorPoint));
-    if (!SamePoint(cursorPoint, state.pendingSector.points.back())) {
-        DrawLineEx(last, cursor, 2.0f, previewColor);
-    }
-
-    if (state.pendingSector.points.size() >= 2) {
-        const Vector2 first = MapToScreen(SectorPointToVector2(state.pendingSector.points.front()));
-        DrawLineEx(cursor, first, 1.5f, WithAlpha(previewColor, closeable ? 230 : 120));
-    }
-
-    for (size_t i = 0; i < state.pendingSector.points.size(); ++i) {
-        const Vector2 point = MapToScreen(SectorPointToVector2(state.pendingSector.points[i]));
-        const bool first = i == 0;
-        DrawCircleV(point, first ? 6.0f : 5.0f, first ? firstColor : pointColor);
-        DrawCircleLines(static_cast<int>(std::round(point.x)), static_cast<int>(std::round(point.y)), first ? 8.0f : 7.0f, Color{20, 24, 32, 255});
-    }
+    DrawCircleV(startScreen, 5.5f, startColor);
+    DrawCircleLines(
+            static_cast<int>(std::round(startScreen.x)),
+            static_cast<int>(std::round(startScreen.y)),
+            8.0f,
+            Color{20, 24, 32, 255});
+    DrawCircleV(cursorScreen, 5.0f, cursorColor);
+    DrawCircleLines(
+            static_cast<int>(std::round(cursorScreen.x)),
+            static_cast<int>(std::round(cursorScreen.y)),
+            7.5f,
+            Color{20, 24, 32, 255});
 }
 
-void SectorEditor::DrawVertexMoveOverlay() const
+void SectorEditor::DrawPendingAuthoringRectangle() const
 {
-    if (state.currentTool != SectorEditorTool::Move) {
+    if (!state.pendingAuthoringRectangle.active) {
         return;
     }
 
-    if (!state.vertexDrag.active && state.hasHoveredVertex) {
-        const Vector2 point = MapToScreen(SectorPointToVector2(
-                SectorTopologyCoordPointToSectorPoint(state.hoveredTopologyVertexPoint)));
-        size_t connectedCount = 0;
-        for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
-            if (lineDef.startVertexId == state.hoveredTopologyVertexId
-                    || lineDef.endVertexId == state.hoveredTopologyVertexId) {
-                ++connectedCount;
-            }
+    const SectorPoint first = SectorTopologyCoordPointToSectorPoint(
+            state.pendingAuthoringRectangle.firstCorner);
+    const SectorPoint cursor = SectorTopologyCoordPointToSectorPoint(
+            state.pendingAuthoringRectangle.currentCorner);
+    const bool invalid = first.x == cursor.x
+            || first.y == cursor.y
+            || !state.pendingAuthoringRectangle.errorMessage.empty();
+    const Color lineColor = invalid ? Color{220, 88, 88, 190} : Color{122, 220, 244, 205};
+    const Color firstColor = Color{245, 226, 154, 255};
+    const Color cursorColor = invalid ? Color{220, 88, 88, 255} : Color{120, 230, 154, 255};
+
+    const float minX = std::min(first.x, cursor.x);
+    const float maxX = std::max(first.x, cursor.x);
+    const float minY = std::min(first.y, cursor.y);
+    const float maxY = std::max(first.y, cursor.y);
+    const Vector2 a = MapToScreen(Vector2{minX, minY});
+    const Vector2 b = MapToScreen(Vector2{maxX, minY});
+    const Vector2 c = MapToScreen(Vector2{maxX, maxY});
+    const Vector2 d = MapToScreen(Vector2{minX, maxY});
+    if (!invalid) {
+        DrawLineEx(a, b, 3.0f, lineColor);
+        DrawLineEx(b, c, 3.0f, lineColor);
+        DrawLineEx(c, d, 3.0f, lineColor);
+        DrawLineEx(d, a, 3.0f, lineColor);
+    } else if (!SamePoint(first, cursor)) {
+        DrawLineEx(
+                MapToScreen(SectorPointToVector2(first)),
+                MapToScreen(SectorPointToVector2(cursor)),
+                3.0f,
+                lineColor);
+    }
+
+    const Vector2 firstScreen = MapToScreen(SectorPointToVector2(first));
+    const Vector2 cursorScreen = MapToScreen(SectorPointToVector2(cursor));
+    DrawCircleV(firstScreen, 5.5f, firstColor);
+    DrawCircleLines(
+            static_cast<int>(std::round(firstScreen.x)),
+            static_cast<int>(std::round(firstScreen.y)),
+            8.0f,
+            Color{20, 24, 32, 255});
+    DrawCircleV(cursorScreen, 5.0f, cursorColor);
+    DrawCircleLines(
+            static_cast<int>(std::round(cursorScreen.x)),
+            static_cast<int>(std::round(cursorScreen.y)),
+            7.5f,
+            Color{20, 24, 32, 255});
+}
+
+void SectorEditor::DrawPendingAuthoringInsertVertex() const
+{
+    if (state.currentTool != SectorEditorTool::AuthoringInsertVertex
+            && !state.pendingAuthoringInsertVertex.active) {
+        return;
+    }
+
+    const PendingAuthoringInsertVertex& pending = state.pendingAuthoringInsertVertex;
+    const SectorAuthoringLine* line = FindSectorAuthoringLine(state.authoringGraph, pending.lineId);
+    if (line == nullptr) {
+        return;
+    }
+    const SectorAuthoringVertex* start =
+            FindSectorAuthoringVertex(state.authoringGraph, line->startVertexId);
+    const SectorAuthoringVertex* end =
+            FindSectorAuthoringVertex(state.authoringGraph, line->endVertexId);
+    if (start == nullptr || end == nullptr) {
+        return;
+    }
+
+    const bool invalid = !pending.hasPreviewPoint || !pending.errorMessage.empty();
+    const Color lineColor = invalid ? Color{220, 88, 88, 170} : Color{122, 220, 244, 205};
+    const Color pointColor = invalid ? Color{220, 88, 88, 255} : Color{120, 230, 154, 255};
+    const Vector2 startScreen = MapToScreen(Vector2{
+            SectorCoordToVisibleAuthoring(start->x),
+            SectorCoordToVisibleAuthoring(start->y)});
+    const Vector2 endScreen = MapToScreen(Vector2{
+            SectorCoordToVisibleAuthoring(end->x),
+            SectorCoordToVisibleAuthoring(end->y)});
+    DrawLineEx(startScreen, endScreen, 5.0f, lineColor);
+
+    if (!pending.hasPreviewPoint) {
+        return;
+    }
+
+    const Vector2 point = MapToScreen(Vector2{
+            SectorCoordToVisibleAuthoring(pending.previewPoint.x),
+            SectorCoordToVisibleAuthoring(pending.previewPoint.y)});
+    DrawCircleV(point, 5.0f, pointColor);
+    DrawCircleLines(
+            static_cast<int>(std::round(point.x)),
+            static_cast<int>(std::round(point.y)),
+            9.0f,
+            Color{20, 24, 32, 255});
+    DrawLineEx(Vector2{point.x - 10.0f, point.y}, Vector2{point.x + 10.0f, point.y}, 2.0f, pointColor);
+    DrawLineEx(Vector2{point.x, point.y - 10.0f}, Vector2{point.x, point.y + 10.0f}, 2.0f, pointColor);
+}
+
+void SectorEditor::DrawAuthoringVertexMoveOverlay() const
+{
+    if (state.currentTool != SectorEditorTool::AuthoringMove
+            && !state.authoringVertexDrag.active) {
+        return;
+    }
+
+    if (!state.authoringVertexDrag.active
+            && state.hoveredAuthoring.kind == SectorAuthoringSelectionKind::Vertex) {
+        const SectorAuthoringVertex* vertex =
+                FindSectorAuthoringVertex(state.authoringGraph, state.hoveredAuthoring.vertexId);
+        if (vertex == nullptr) {
+            return;
         }
-        const Color color = connectedCount > 1
-                ? Color{122, 220, 244, 255}
-                : Color{245, 226, 154, 255};
-        DrawCircleLines(static_cast<int>(std::round(point.x)), static_cast<int>(std::round(point.y)), 11.0f, color);
-        DrawCircleV(point, 4.5f, color);
+
+        const Vector2 point = MapToScreen(Vector2{
+                SectorCoordToVisibleAuthoring(vertex->x),
+                SectorCoordToVisibleAuthoring(vertex->y)});
+        DrawCircleLines(
+                static_cast<int>(std::round(point.x)),
+                static_cast<int>(std::round(point.y)),
+                12.0f,
+                Color{122, 220, 244, 255});
+        DrawCircleV(point, 4.5f, Color{122, 220, 244, 255});
         return;
     }
 
-    if (!state.vertexDrag.active) {
+    if (!state.authoringVertexDrag.active) {
         return;
     }
 
-    const bool invalid = !state.vertexDrag.errorMessage.empty();
+    const bool invalid = !state.authoringVertexDrag.errorMessage.empty()
+            || !state.authoringVertexDrag.hasPreviewPoint;
     const Color targetColor = invalid ? Color{230, 82, 82, 255} : Color{120, 230, 154, 255};
     const Color previewColor = invalid ? Color{230, 82, 82, 205} : Color{122, 220, 244, 220};
     const Color originalColor = Color{245, 226, 154, 230};
-    const Vector2 original = MapToScreen(SectorPointToVector2(
-            SectorTopologyCoordPointToSectorPoint(state.vertexDrag.originalPoint)));
+    const Vector2 original = MapToScreen(Vector2{
+            SectorCoordToVisibleAuthoring(state.authoringVertexDrag.originalPoint.x),
+            SectorCoordToVisibleAuthoring(state.authoringVertexDrag.originalPoint.y)});
 
-    if (!state.vertexDrag.hasPreviewPoint) {
-        DrawCircleLines(static_cast<int>(std::round(original.x)), static_cast<int>(std::round(original.y)), 10.0f, originalColor);
+    if (!state.authoringVertexDrag.hasPreviewPoint) {
+        DrawCircleLines(
+                static_cast<int>(std::round(original.x)),
+                static_cast<int>(std::round(original.y)),
+                10.0f,
+                originalColor);
         return;
     }
 
-    const int draggedVertexId = state.vertexDrag.topologyVertexId;
-    const Vector2 previewMap = SectorPointToVector2(
-            SectorTopologyCoordPointToSectorPoint(state.vertexDrag.previewPoint));
-    for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
-        if (lineDef.startVertexId != draggedVertexId && lineDef.endVertexId != draggedVertexId) {
+    const int draggedVertexId = state.authoringVertexDrag.vertexId;
+    const Vector2 previewMap{
+            SectorCoordToVisibleAuthoring(state.authoringVertexDrag.previewPoint.x),
+            SectorCoordToVisibleAuthoring(state.authoringVertexDrag.previewPoint.y)};
+    for (const SectorAuthoringLine& line : state.authoringGraph.lines) {
+        if (line.startVertexId != draggedVertexId && line.endVertexId != draggedVertexId) {
             continue;
         }
 
-        const int otherVertexId = lineDef.startVertexId == draggedVertexId
-                ? lineDef.endVertexId
-                : lineDef.startVertexId;
-        const SectorTopologyVertex* otherVertex = FindSectorTopologyVertex(state.topologyMap, otherVertexId);
+        const int otherVertexId = line.startVertexId == draggedVertexId
+                ? line.endVertexId
+                : line.startVertexId;
+        const SectorAuthoringVertex* otherVertex =
+                FindSectorAuthoringVertex(state.authoringGraph, otherVertexId);
         if (otherVertex == nullptr) {
             continue;
         }
+
         DrawLineEx(
                 MapToScreen(previewMap),
-                MapToScreen(SectorTopologyVertexToMap(*otherVertex)),
+                MapToScreen(Vector2{
+                        SectorCoordToVisibleAuthoring(otherVertex->x),
+                        SectorCoordToVisibleAuthoring(otherVertex->y)}),
                 4.0f,
-                previewColor
-        );
+                previewColor);
     }
 
     const Vector2 target = MapToScreen(previewMap);
     DrawLineEx(original, target, 2.0f, WithAlpha(targetColor, 180));
-    DrawCircleLines(static_cast<int>(std::round(original.x)), static_cast<int>(std::round(original.y)), 10.0f, originalColor);
-    DrawCircleLines(static_cast<int>(std::round(target.x)), static_cast<int>(std::round(target.y)), state.vertexDrag.hasMergeTarget ? 17.0f : 13.0f, targetColor);
-    if (state.vertexDrag.hasMergeTarget) {
-        DrawCircleLines(static_cast<int>(std::round(target.x)), static_cast<int>(std::round(target.y)), 22.0f, Color{236, 196, 92, 235});
-    }
-    DrawCircleV(target, 5.0f, targetColor);
-}
-
-void SectorEditor::DrawPendingTopologyVertexMerge() const
-{
-    if (!state.pendingTopologyVertexMerge.active) {
-        return;
-    }
-
-    const PendingTopologyVertexMerge& pending = state.pendingTopologyVertexMerge;
-    const SectorTopologyVertex* source = FindSectorTopologyVertex(
-            state.topologyMap,
-            pending.sourceVertexId);
-    if (source == nullptr) {
-        return;
-    }
-
-    const Vector2 sourceScreen = MapToScreen(SectorTopologyVertexToMap(*source));
     DrawCircleLines(
-            static_cast<int>(std::round(sourceScreen.x)),
-            static_cast<int>(std::round(sourceScreen.y)),
-            17.0f,
-            Color{236, 196, 92, 255});
+            static_cast<int>(std::round(original.x)),
+            static_cast<int>(std::round(original.y)),
+            10.0f,
+            originalColor);
     DrawCircleLines(
-            static_cast<int>(std::round(sourceScreen.x)),
-            static_cast<int>(std::round(sourceScreen.y)),
-            23.0f,
-            Color{236, 196, 92, 170});
-
-    if (pending.hoveredTargetVertexId < 0) {
-        return;
-    }
-
-    const SectorTopologyVertex* target = FindSectorTopologyVertex(
-            state.topologyMap,
-            pending.hoveredTargetVertexId);
-    if (target == nullptr) {
-        return;
-    }
-
-    const Color targetColor = pending.hasValidTarget
-            ? Color{120, 230, 154, 255}
-            : Color{230, 82, 82, 255};
-    const Vector2 targetScreen = MapToScreen(SectorTopologyVertexToMap(*target));
-    DrawLineEx(sourceScreen, targetScreen, 2.0f, WithAlpha(targetColor, 170));
-    DrawCircleLines(
-            static_cast<int>(std::round(targetScreen.x)),
-            static_cast<int>(std::round(targetScreen.y)),
-            18.0f,
+            static_cast<int>(std::round(target.x)),
+            static_cast<int>(std::round(target.y)),
+            13.0f,
             targetColor);
-    DrawCircleV(targetScreen, 5.5f, targetColor);
+    DrawCircleV(target, 5.0f, targetColor);
 }
 
 void SectorEditor::DrawLightMoveOverlay() const
 {
-    if (state.currentTool != SectorEditorTool::Move) {
+    if (state.currentTool != SectorEditorTool::Light
+            && state.currentTool != SectorEditorTool::Move) {
         return;
     }
 
@@ -4011,107 +3552,6 @@ void SectorEditor::DrawLightMoveOverlay() const
     DrawCircleLines(static_cast<int>(std::round(center.x)), static_cast<int>(std::round(center.y)), 13.0f, Color{245, 226, 154, 255});
 }
 
-void SectorEditor::DrawPendingTopologyLineSplitAtPoint() const
-{
-    if (!state.pendingTopologyLineSplitAtPoint.active) {
-        return;
-    }
-
-    const PendingTopologyLineSplitAtPoint& pending = state.pendingTopologyLineSplitAtPoint;
-    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
-            state.topologyMap,
-            pending.lineDefId);
-    if (lineDef == nullptr) {
-        return;
-    }
-
-    const SectorTopologyVertex* start = nullptr;
-    const SectorTopologyVertex* end = nullptr;
-    if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
-        return;
-    }
-
-    const Vector2 a = MapToScreen(SectorTopologyVertexToMap(*start));
-    const Vector2 b = MapToScreen(SectorTopologyVertexToMap(*end));
-    DrawLineEx(a, b, 13.0f, Color{236, 196, 92, 120});
-    DrawLineEx(a, b, 4.0f, Color{236, 196, 92, 245});
-
-    if (!pending.hasCandidatePoint) {
-        return;
-    }
-
-    const Vector2 candidate = MapToScreen(SectorPointToVector2(
-            SectorTopologyCoordPointToSectorPoint(pending.candidatePoint)));
-    const Color color = pending.hasValidCandidate
-            ? Color{120, 230, 154, 255}
-            : Color{230, 82, 82, 245};
-    DrawCircleLines(
-            static_cast<int>(std::round(candidate.x)),
-            static_cast<int>(std::round(candidate.y)),
-            pending.hasValidCandidate ? 13.0f : 11.0f,
-            color);
-    DrawCircleV(candidate, pending.hasValidCandidate ? 5.5f : 4.5f, color);
-}
-
-void SectorEditor::DrawPendingTopologySectorCut() const
-{
-    if (!state.pendingTopologySectorCut.active) {
-        return;
-    }
-
-    const PendingTopologySectorCut& pending = state.pendingTopologySectorCut;
-    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, pending.sectorId);
-    if (sector == nullptr) {
-        return;
-    }
-
-    auto pointToScreen = [this](const SectorTopologyBoundaryCutPoint& point, Vector2& outScreen) {
-        if (point.vertexId >= 0) {
-            const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, point.vertexId);
-            if (vertex == nullptr) {
-                return false;
-            }
-            outScreen = MapToScreen(SectorTopologyVertexToMap(*vertex));
-            return true;
-        }
-        outScreen = MapToScreen(SectorPointToVector2(
-                SectorTopologyCoordPointToSectorPoint(point.point)));
-        return true;
-    };
-
-    Vector2 firstScreen{};
-    if (pending.hasFirstPoint && pointToScreen(pending.firstPoint, firstScreen)) {
-        DrawCircleLines(
-                static_cast<int>(std::round(firstScreen.x)),
-                static_cast<int>(std::round(firstScreen.y)),
-                15.0f,
-                Color{236, 196, 92, 255});
-        DrawCircleV(firstScreen, 5.5f, Color{236, 196, 92, 255});
-    }
-
-    if (!pending.hasCandidatePoint) {
-        return;
-    }
-
-    Vector2 candidateScreen{};
-    if (!pointToScreen(pending.candidatePoint, candidateScreen)) {
-        return;
-    }
-
-    const Color color = pending.hasFirstPoint
-            ? (pending.hasValidCandidate ? Color{120, 230, 154, 255} : Color{230, 82, 82, 245})
-            : (pending.hasValidCandidate ? Color{236, 196, 92, 255} : Color{230, 82, 82, 245});
-    if (pending.hasFirstPoint) {
-        DrawLineEx(firstScreen, candidateScreen, 3.0f, WithAlpha(color, 210));
-    }
-    DrawCircleLines(
-            static_cast<int>(std::round(candidateScreen.x)),
-            static_cast<int>(std::round(candidateScreen.y)),
-            pending.hasValidCandidate ? 13.0f : 11.0f,
-            color);
-    DrawCircleV(candidateScreen, pending.hasValidCandidate ? 5.0f : 4.0f, color);
-}
-
 void SectorEditor::DrawToolsPanel(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -4119,6 +3559,11 @@ void SectorEditor::DrawToolsPanel(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
+    if (!IsToolAvailableInGraphAuthoritativeMode(state.currentTool)) {
+        state.currentTool = SectorEditorTool::Select;
+        statusText = LegacyTopologyMutationUnavailableMessage();
+    }
+
     const engine::UIPanelResult panel = engine::BeginPanel(
             ui,
             config,
@@ -4131,7 +3576,21 @@ void SectorEditor::DrawToolsPanel(
 
     const float rowH = 46.0f;
     const float gap = config.rowSpacing;
-    const float toolsContentH = 1166.0f;
+    const float separatorH = 22.0f;
+    const float sectionLabelH = 26.0f;
+    const float lightmapLabelH = 32.0f;
+    const float bottomPadding = rowH + gap * 2.0f;
+    const auto rowsHeight = [rowH, gap](int count) {
+        return static_cast<float>(count) * (rowH + gap);
+    };
+    const float toolsContentH =
+            sectionLabelH + rowsHeight(4)
+            + separatorH + sectionLabelH + rowsHeight(1)
+            + separatorH + rowsHeight(4)
+            + lightmapLabelH + rowsHeight(5)
+            + separatorH + rowsHeight(4)
+            + separatorH + rowsHeight(1)
+            + bottomPadding;
     const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
             ui,
@@ -4158,17 +3617,25 @@ void SectorEditor::DrawToolsPanel(
         );
         y += 22.0f;
     };
-
-    const SectorEditorTool tools[] = {
-            SectorEditorTool::Select,
-            SectorEditorTool::Sector,
-            SectorEditorTool::Light,
-            SectorEditorTool::Move,
-            SectorEditorTool::Erase
+    const auto sectionLabel = [&](const char* label) {
+        engine::Text(
+                config,
+                assets,
+                Rectangle{
+                        scroll.viewport.x,
+                        scroll.viewport.y - uiState.toolsScroll.offset.y + y,
+                        contentW,
+                        20.0f
+                },
+                font,
+                label,
+                engine::UITextJustify::Left
+        );
+        y += 26.0f;
     };
 
-    for (SectorEditorTool tool : tools) {
-        if (engine::ToolButton(
+    const auto drawToolButton = [&](SectorEditorTool tool) {
+        const bool clicked = engine::ToolButton(
                 ui,
                 config,
                 input,
@@ -4177,27 +3644,73 @@ void SectorEditor::DrawToolsPanel(
                 Rectangle{0.0f, y, contentW, rowH},
                 font,
                 ToolName(tool),
-                state.currentTool == tool)) {
-            if ((state.currentTool == SectorEditorTool::Sector
-                        || state.currentTool == SectorEditorTool::InsertSectorInside)
-                    && tool != state.currentTool) {
-                CancelPendingSector("Cancelled sector");
-            }
-            if (state.vertexDrag.active && tool != SectorEditorTool::Move) {
-                CancelVertexDrag("Cancelled vertex move");
-            }
-            if (state.lightDrag.active && tool != SectorEditorTool::Move) {
-                CancelLightDrag("Cancelled light move");
-            }
-            if (state.pendingTopologyLineSplitAtPoint.active) {
-                CancelPendingTopologyLineSplitAtPoint("Cancelled split at point");
-            }
-            if (state.pendingTopologyVertexMerge.active) {
-                CancelPendingTopologyVertexMerge("Cancelled vertex merge");
-            }
-            state.currentTool = tool;
-        }
+                state.currentTool == tool);
         y += rowH + gap;
+        return clicked;
+    };
+
+    const auto selectTool = [&](SectorEditorTool tool) {
+        if (!IsToolAvailableInGraphAuthoritativeMode(tool)) {
+            statusText = LegacyTopologyMutationUnavailableMessage();
+            return;
+        }
+        if (state.pendingAuthoringLine.active && tool != SectorEditorTool::AuthoringLine) {
+            CancelPendingAuthoringLine("Cancelled authoring line");
+        }
+        if (state.pendingAuthoringRectangle.active && tool != SectorEditorTool::AuthoringRectangle) {
+            CancelPendingAuthoringRectangle("Rectangle cancelled");
+        }
+        if (state.pendingAuthoringInsertVertex.active && tool != SectorEditorTool::AuthoringInsertVertex) {
+            CancelPendingAuthoringInsertVertex("Insert Vertex cancelled");
+        }
+        if (state.authoringVertexDrag.active && tool != SectorEditorTool::AuthoringMove) {
+            CancelAuthoringVertexDrag("Cancelled authoring vertex move");
+        }
+        if (state.lightDrag.active && tool != SectorEditorTool::Move) {
+            CancelLightDrag("Cancelled light move");
+        }
+        if (IsGraphAuthoringTool(tool)) {
+            ClearTopologySelectionOnly();
+        }
+        state.currentTool = tool;
+        if (tool == SectorEditorTool::AuthoringLine) {
+            statusText = "Line: click start point";
+        } else if (tool == SectorEditorTool::AuthoringInsertVertex) {
+            state.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
+            if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
+                    && FindSectorAuthoringLine(state.authoringGraph, state.selectedAuthoring.lineId) != nullptr) {
+                state.pendingAuthoringInsertVertex.active = true;
+                state.pendingAuthoringInsertVertex.lineId = state.selectedAuthoring.lineId;
+                statusText = "Insert Vertex: click point on selected line, Esc/right click cancels";
+            } else {
+                statusText = "Insert Vertex: select or click an authoring line";
+            }
+        }
+    };
+
+    sectionLabel("Graph authoring");
+    const SectorEditorTool graphTools[] = {
+            SectorEditorTool::Select,
+            SectorEditorTool::AuthoringLine,
+            SectorEditorTool::AuthoringRectangle,
+            SectorEditorTool::AuthoringInsertVertex,
+            SectorEditorTool::AuthoringMove
+    };
+    for (SectorEditorTool tool : graphTools) {
+        if (drawToolButton(tool)) {
+            selectTool(tool);
+        }
+    }
+
+    separator();
+    sectionLabel("Map objects");
+    const SectorEditorTool mapTools[] = {
+            SectorEditorTool::Light
+    };
+    for (SectorEditorTool tool : mapTools) {
+        if (drawToolButton(tool)) {
+            selectTool(tool);
+        }
     }
 
     separator();
@@ -4371,6 +3884,22 @@ void SectorEditor::DrawSectorsPanel(
     const bool hasSelectedTopologyLineDef = state.topologySelectionKind == TopologySelectionKind::LineDef
             && SelectedTopologyLineDef() != nullptr;
     const bool hasSelectedLight = SelectedTopologyLight() != nullptr;
+    const SectorEditorInspectorTarget inspectorTarget = ResolveSectorEditorInspectorTarget(state);
+    const bool allowLegacyTopologyInspector =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::LegacyTopology
+            || inspectorTarget.kind == SectorEditorInspectorTargetKind::None;
+    const SectorAuthoringLine* selectedAuthoringLine =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringLine
+            ? FindSectorAuthoringLine(state.authoringGraph, inspectorTarget.lineId)
+            : nullptr;
+    const SectorAuthoringFaceAnchor* selectedAuthoringFaceAnchor =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringFaceAnchor
+            ? FindSectorAuthoringFaceAnchor(state.authoringGraph, inspectorTarget.faceAnchorId)
+            : nullptr;
+    const SectorAuthoringVertex* selectedAuthoringVertex =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringVertex
+            ? FindSectorAuthoringVertex(state.authoringGraph, inspectorTarget.vertexId)
+            : nullptr;
     const SectorTopologyVertex* inspectedVertex = FindSectorTopologyVertex(
             state.topologyMap,
             state.inspectedTopologyVertexId);
@@ -4386,23 +3915,35 @@ void SectorEditor::DrawSectorsPanel(
     const float gap = 8.0f;
     const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
     const auto inspectorContentHeight = [&]() {
+        if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
+            return 120.0f;
+        }
         if (hasSelectedLight) {
             return StaticLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
         }
-        if (hasSelectedTopologySector) {
+        if (hasSelectedTopologySector && allowLegacyTopologyInspector) {
             return SectorInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
         }
-        if (hasSelectedTopologyVertex) {
+        if (hasSelectedTopologyVertex && allowLegacyTopologyInspector) {
             return SelectedVertexInspectorContentHeight();
         }
-        if (hasSelectedTopologySideDef) {
+        if (hasSelectedTopologySideDef && allowLegacyTopologyInspector) {
             return 1240.0f;
         }
-        if (hasSelectedTopologyLineDef) {
+        if (hasSelectedTopologyLineDef && allowLegacyTopologyInspector) {
             return 218.0f;
         }
-        if (hasInspectedVertex || state.pendingTopologyVertexMerge.active) {
+        if (hasInspectedVertex) {
             return InspectedVertexInspectorContentHeight();
+        }
+        if (selectedAuthoringLine != nullptr) {
+            return AuthoringLineInspectorContentHeight(*selectedAuthoringLine, state.authoringGraph, rowH, gap);
+        }
+        if (selectedAuthoringFaceAnchor != nullptr) {
+            return AuthoringFaceInspectorContentHeight(*selectedAuthoringFaceAnchor, rowH, gap);
+        }
+        if (selectedAuthoringVertex != nullptr) {
+            return 120.0f;
         }
         return 42.0f;
     };
@@ -4421,14 +3962,293 @@ void SectorEditor::DrawSectorsPanel(
     const float contentW = scroll.viewport.width;
     float y = 0.0f;
 
-    if (hasSelectedTopologySector) {
+    if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                "Authoring Inspector",
+                engine::UITextJustify::Left,
+                config.textColor);
+        y += 38.0f;
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 64.0f},
+                font,
+                inspectorTarget.status.empty()
+                        ? "Mapped authoring target is unavailable."
+                        : inspectorTarget.status.c_str(),
+                engine::UITextJustify::Left,
+                config.invalidColor);
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return;
+    }
+
+    if (hasSelectedTopologySector && allowLegacyTopologyInspector) {
+        const auto hasAuthoringGraph = [this]() {
+            return !state.authoringGraph.vertices.empty()
+                    || !state.authoringGraph.lines.empty()
+                    || !state.authoringGraph.lineSides.empty()
+                    || !state.authoringGraph.faceAnchors.empty();
+        };
+        const auto selectedAuthoringFaceAnchorUnavailable = [this, hasAuthoringGraph]() {
+            const SectorTopologySector* selectedSector = SelectedTopologySector();
+            if (selectedSector == nullptr || !hasAuthoringGraph()) {
+                return false;
+            }
+            if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+                    || state.authoringDerivedTopologyStale
+                    || !state.authoringDerivation.success) {
+                return true;
+            }
+            return FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
+                           state,
+                           selectedSector->id) < 0;
+        };
+        const auto reportAuthoringFaceAnchorUnavailable = [this]() {
+            const char* message =
+                    "Sector property edit unavailable: selected sector has no current face anchor mapping";
+            statusText = message;
+            return true;
+        };
+        const auto mutateSelectedAuthoringFaceAnchor =
+                [this](const char* status, const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate) {
+                    const SectorTopologySector* selectedSector = SelectedTopologySector();
+                    if (selectedSector == nullptr) {
+                        return false;
+                    }
+                    if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+                            || state.authoringDerivedTopologyStale
+                            || !state.authoringDerivation.success) {
+                        return false;
+                    }
+                    if (FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
+                                state,
+                                selectedSector->id) < 0) {
+                        return false;
+                    }
+                    MutateSectorEditorAuthoringFaceAnchorForTopologySector(
+                            state,
+                            selectedSector->id,
+                            status,
+                            mutate);
+                    return true;
+                };
+        const auto mutateSelectedTopologySector =
+                [this](const char* status, const std::function<bool(SectorTopologySector&)>& mutate) {
+                    SectorTopologySector* selectedSector = SelectedTopologySector();
+                    if (selectedSector == nullptr || !mutate || !mutate(*selectedSector)) {
+                        return false;
+                    }
+                    MarkTopologyDocumentEdited(status);
+                    return true;
+                };
         const SectorEditorSectorInspectorCallbacks callbacks{
                 [this]() { return TryRenameSelectedTopologySector(); },
-                [this]() { OpenDeleteSelectedTopologySectorConfirmation(); },
-                [this]() { StartInsertSectorInside(); },
-                [this]() { StartPendingTopologySectorCut(); },
                 [this](const char* status) { statusText = status != nullptr ? status : ""; },
                 [this](const char* status) { MarkTopologyDocumentEdited(status); },
+                [mutateSelectedAuthoringFaceAnchor,
+                 mutateSelectedTopologySector,
+                 selectedAuthoringFaceAnchorUnavailable,
+                 reportAuthoringFaceAnchorUnavailable](
+                        float floorZ,
+                        float ceilingZ) {
+                    const char* status = "Updated sector height";
+                    if (mutateSelectedAuthoringFaceAnchor(
+                                status,
+                                [floorZ, ceilingZ](SectorAuthoringFaceAnchor& anchor) {
+                                    if (anchor.floorZ == floorZ && anchor.ceilingZ == ceilingZ) {
+                                        return false;
+                                    }
+                                    anchor.floorZ = floorZ;
+                                    anchor.ceilingZ = ceilingZ;
+                                    return true;
+                                })) {
+                        return true;
+                    }
+                    if (selectedAuthoringFaceAnchorUnavailable()) {
+                        return reportAuthoringFaceAnchorUnavailable();
+                    }
+                    return mutateSelectedTopologySector(
+                            status,
+                            [floorZ, ceilingZ](SectorTopologySector& sector) {
+                                if (sector.floorZ == floorZ && sector.ceilingZ == ceilingZ) {
+                                    return false;
+                                }
+                                sector.floorZ = floorZ;
+                                sector.ceilingZ = ceilingZ;
+                                return true;
+                            });
+                },
+                [mutateSelectedAuthoringFaceAnchor,
+                 mutateSelectedTopologySector,
+                 selectedAuthoringFaceAnchorUnavailable,
+                 reportAuthoringFaceAnchorUnavailable](bool ceilingSky) {
+                    const char* status = "Updated sector ceiling sky";
+                    if (mutateSelectedAuthoringFaceAnchor(
+                                status,
+                                [ceilingSky](SectorAuthoringFaceAnchor& anchor) {
+                                    if (anchor.ceilingSky == ceilingSky) {
+                                        return false;
+                                    }
+                                    anchor.ceilingSky = ceilingSky;
+                                    return true;
+                                })) {
+                        return true;
+                    }
+                    if (selectedAuthoringFaceAnchorUnavailable()) {
+                        return reportAuthoringFaceAnchorUnavailable();
+                    }
+                    return mutateSelectedTopologySector(
+                            status,
+                            [ceilingSky](SectorTopologySector& sector) {
+                                if (sector.ceilingSky == ceilingSky) {
+                                    return false;
+                                }
+                                sector.ceilingSky = ceilingSky;
+                                return true;
+                            });
+                },
+                [mutateSelectedAuthoringFaceAnchor,
+                 mutateSelectedTopologySector,
+                 selectedAuthoringFaceAnchorUnavailable,
+                 reportAuthoringFaceAnchorUnavailable](float intensity) {
+                    const char* status = "Updated sector ambient intensity";
+                    if (mutateSelectedAuthoringFaceAnchor(
+                                status,
+                                [intensity](SectorAuthoringFaceAnchor& anchor) {
+                                    if (anchor.ambientIntensity == intensity) {
+                                        return false;
+                                    }
+                                    anchor.ambientIntensity = intensity;
+                                    return true;
+                                })) {
+                        return true;
+                    }
+                    if (selectedAuthoringFaceAnchorUnavailable()) {
+                        return reportAuthoringFaceAnchorUnavailable();
+                    }
+                    return mutateSelectedTopologySector(
+                            status,
+                            [intensity](SectorTopologySector& sector) {
+                                if (sector.ambientIntensity == intensity) {
+                                    return false;
+                                }
+                                sector.ambientIntensity = intensity;
+                                return true;
+                            });
+                },
+                [mutateSelectedAuthoringFaceAnchor,
+                 mutateSelectedTopologySector,
+                 selectedAuthoringFaceAnchorUnavailable,
+                 reportAuthoringFaceAnchorUnavailable](Color color) {
+                    const char* status = "Updated sector ambient color";
+                    if (mutateSelectedAuthoringFaceAnchor(
+                                status,
+                                [color](SectorAuthoringFaceAnchor& anchor) {
+                                    if (anchor.ambientColor.r == color.r
+                                            && anchor.ambientColor.g == color.g
+                                            && anchor.ambientColor.b == color.b
+                                            && anchor.ambientColor.a == color.a) {
+                                        return false;
+                                    }
+                                    anchor.ambientColor = color;
+                                    return true;
+                                })) {
+                        return true;
+                    }
+                    if (selectedAuthoringFaceAnchorUnavailable()) {
+                        return reportAuthoringFaceAnchorUnavailable();
+                    }
+                    return mutateSelectedTopologySector(
+                            status,
+                            [color](SectorTopologySector& sector) {
+                                if (sector.ambientColor.r == color.r
+                                        && sector.ambientColor.g == color.g
+                                        && sector.ambientColor.b == color.b
+                                        && sector.ambientColor.a == color.a) {
+                                    return false;
+                                }
+                                sector.ambientColor = color;
+                                return true;
+                            });
+                },
+                [mutateSelectedAuthoringFaceAnchor,
+                 mutateSelectedTopologySector,
+                 selectedAuthoringFaceAnchorUnavailable,
+                 reportAuthoringFaceAnchorUnavailable](
+                        TopologySectorTextureField field,
+                        const SectorTopologyUvSettings& uv) {
+                    const char* status = "Updated sector UV";
+                    const auto applyAnchorUv =
+                            [field, uv](SectorAuthoringFaceAnchor& anchor) {
+                                SectorTopologyUvSettings* target = nullptr;
+                                switch (field) {
+                                case TopologySectorTextureField::Floor:
+                                    target = &anchor.floorUv;
+                                    break;
+                                case TopologySectorTextureField::Ceiling:
+                                    target = &anchor.ceilingUv;
+                                    break;
+                                case TopologySectorTextureField::DefaultWall:
+                                    target = &anchor.defaultWall.uv;
+                                    break;
+                                case TopologySectorTextureField::DefaultLower:
+                                    target = &anchor.defaultLower.uv;
+                                    break;
+                                case TopologySectorTextureField::DefaultUpper:
+                                    target = &anchor.defaultUpper.uv;
+                                    break;
+                                case TopologySectorTextureField::None:
+                                    break;
+                                }
+                                if (target == nullptr) {
+                                    return false;
+                                }
+                                *target = uv;
+                                return true;
+                    };
+                    if (mutateSelectedAuthoringFaceAnchor(status, applyAnchorUv)) {
+                        return true;
+                    }
+                    if (selectedAuthoringFaceAnchorUnavailable()) {
+                        return reportAuthoringFaceAnchorUnavailable();
+                    }
+                    return mutateSelectedTopologySector(
+                            status,
+                            [field, uv](SectorTopologySector& sector) {
+                                SectorTopologyUvSettings* target = nullptr;
+                                switch (field) {
+                                case TopologySectorTextureField::Floor:
+                                    target = &sector.floorUv;
+                                    break;
+                                case TopologySectorTextureField::Ceiling:
+                                    target = &sector.ceilingUv;
+                                    break;
+                                case TopologySectorTextureField::DefaultWall:
+                                    target = &sector.defaultWall.uv;
+                                    break;
+                                case TopologySectorTextureField::DefaultLower:
+                                    target = &sector.defaultLower.uv;
+                                    break;
+                                case TopologySectorTextureField::DefaultUpper:
+                                    target = &sector.defaultUpper.uv;
+                                    break;
+                                case TopologySectorTextureField::None:
+                                    break;
+                                }
+                                if (target == nullptr) {
+                                    return false;
+                                }
+                                *target = uv;
+                                return true;
+                            });
+                },
                 [this](int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer) {
                     OpenTopologyTexturePicker(sectorId, field, layer);
                 },
@@ -4469,7 +4289,7 @@ void SectorEditor::DrawSectorsPanel(
         }
     }
 
-    if (hasSelectedTopologySideDef || hasSelectedTopologyLineDef) {
+    if (allowLegacyTopologyInspector && (hasSelectedTopologySideDef || hasSelectedTopologyLineDef)) {
         if (DrawTopologySideDefInspector(ui, config, input, assets, font, scroll, contentW, rowH, gap)) {
             engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
             engine::EndPanel(ui, config, panel);
@@ -4506,11 +4326,9 @@ void SectorEditor::DrawSectorsPanel(
         return;
     }
 
-    if (hasSelectedTopologyVertex || hasInspectedVertex || state.pendingTopologyVertexMerge.active) {
+    if ((allowLegacyTopologyInspector && hasSelectedTopologyVertex)
+            || hasInspectedVertex) {
         const SectorEditorVertexInspectorCallbacks callbacks{
-                [this](const char* message) { CancelPendingTopologyVertexMerge(message); },
-                [this]() { return DissolveSelectedTopologyVertex(); },
-                [this](int vertexId) { StartPendingTopologyVertexMerge(vertexId); },
                 [this]() { ClearStaleTopologySelection(); }
         };
         DrawTopologyVertexInspector(
@@ -4526,6 +4344,1051 @@ void SectorEditor::DrawSectorsPanel(
                 hasSelectedTopologyVertex,
                 state,
                 callbacks);
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return;
+    }
+
+    if (selectedAuthoringLine != nullptr) {
+        const SectorAuthoringVertex* start =
+                FindSectorAuthoringVertex(state.authoringGraph, selectedAuthoringLine->startVertexId);
+        const SectorAuthoringVertex* end =
+                FindSectorAuthoringVertex(state.authoringGraph, selectedAuthoringLine->endVertexId);
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                TextFormat("Authoring Line: %d", selectedAuthoringLine->id),
+                engine::UITextJustify::Left,
+                config.textColor);
+        y += 38.0f;
+
+        if (start != nullptr && end != nullptr) {
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 30.0f},
+                    font,
+                    TextFormat(
+                            "From %.2f, %.2f  To %.2f, %.2f",
+                            SectorCoordToVisibleAuthoring(start->x),
+                            SectorCoordToVisibleAuthoring(start->y),
+                            SectorCoordToVisibleAuthoring(end->x),
+                            SectorCoordToVisibleAuthoring(end->y)),
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
+            y += 32.0f;
+        } else {
+            engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Line endpoints are invalid", engine::UITextJustify::Left, config.invalidColor);
+            y += 32.0f;
+        }
+
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_authoring_line_insert_vertex",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font,
+                    "Insert Vertex")) {
+            BeginPendingAuthoringInsertVertex(selectedAuthoringLine->id);
+            engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+            engine::EndPanel(ui, config, panel);
+            return;
+        }
+        y += rowH + gap;
+
+        bool blocksPlayer = selectedAuthoringLine->flags.blocksPlayer;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_authoring_line_blocks_player",
+                    Rectangle{0.0f, y, contentW, 36.0f},
+                    font,
+                    "Blocks Player",
+                    blocksPlayer)) {
+            const int lineId = selectedAuthoringLine->id;
+            MutateSectorEditorAuthoringLineById(
+                    state,
+                    lineId,
+                    "Updated authoring line flags",
+                    [blocksPlayer](SectorAuthoringLine& line) {
+                        if (line.flags.blocksPlayer == blocksPlayer) {
+                            return false;
+                        }
+                        line.flags.blocksPlayer = blocksPlayer;
+                        return true;
+                    });
+            engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+            engine::EndPanel(ui, config, panel);
+            return;
+        }
+        y += 36.0f + gap;
+
+        const auto drawAuthoringSideSection =
+                [&](SectorTopologySideKind sideKind, const char* title, const char* idPrefix) {
+                    engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
+                    y += 18.0f;
+                    engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, title, engine::UITextJustify::Left, config.textColor);
+                    y += 30.0f;
+
+                    const SectorAuthoringSideId sideId{selectedAuthoringLine->id, sideKind};
+                    const SectorAuthoringLineSide* authoringSide =
+                            FindSectorAuthoringLineSide(state.authoringGraph, sideId);
+                    const auto textureForPart = [authoringSide](TopologyWallPart part) -> std::string {
+                        if (authoringSide == nullptr) {
+                            return std::string{};
+                        }
+                        return TopologyWallPartSettingsFor(*authoringSide, part).textureId;
+                    };
+                    const auto decalForPart = [authoringSide](TopologyWallPart part) -> SectorTopologyDecalLayer {
+                        if (authoringSide == nullptr) {
+                            return SectorTopologyDecalLayer{};
+                        }
+                        return TopologyWallPartSettingsFor(*authoringSide, part).decal;
+                    };
+                    const auto mappedTargetForPart = [this, sideId](TopologyWallPart part, TopologySurfaceEditTarget& outTarget) {
+                        if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+                                || state.authoringDerivedTopologyStale
+                                || !state.authoringDerivation.success) {
+                            return false;
+                        }
+                        for (const SectorAuthoringDerivedSideMapping& mapping : state.authoringDerivation.mapping.sides) {
+                            if (mapping.authoringLineId != sideId.lineId || mapping.authoringSide != sideId.side) {
+                                continue;
+                            }
+                            const SectorTopologySideDef* sideDef =
+                                    FindSectorTopologySideDef(state.topologyMap, mapping.topologySideDefId);
+                            if (sideDef == nullptr) {
+                                continue;
+                            }
+                            outTarget.kind = TopologyWallPartEditTargetKind(part);
+                            outTarget.sectorId = sideDef->sectorId;
+                            outTarget.lineDefId = sideDef->lineDefId;
+                            outTarget.sideDefId = sideDef->id;
+                            outTarget.side = sideDef->side;
+                            return true;
+                        }
+                        return false;
+                    };
+                    const auto mutateSide = [this, sideId](const char* status, const std::function<bool(SectorAuthoringLineSide&)>& mutate) {
+                        return MutateSectorEditorAuthoringSideById(state, sideId, status, mutate);
+                    };
+                    const auto drawTextureRow =
+                            [&](const char* suffix, const char* label, TopologyWallPart part) {
+                                const float buttonW = 38.0f;
+                                const bool canClear = part == TopologyWallPart::Middle;
+                                const float clearW = canClear ? 58.0f : 0.0f;
+                                const std::string textureId = textureForPart(part);
+                                const SectorEditorInspectorTextureRowLayout row =
+                                        BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
+                                const bool missing = !textureId.empty()
+                                        && FindSectorTopologyTexture(state.topologyMap, textureId) == nullptr;
+                                engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+                                engine::Text(
+                                        ui,
+                                        config,
+                                        assets,
+                                        row.valueRect,
+                                        font,
+                                        textureId.empty() ? "<none>" : textureId.c_str(),
+                                        engine::UITextJustify::Left,
+                                        missing ? config.invalidColor : config.mutedTextColor);
+                                if (canClear
+                                        && engine::Button(
+                                                ui,
+                                                config,
+                                                input,
+                                                assets,
+                                                TextFormat("%s_%s_clear", idPrefix, suffix),
+                                                row.clearButtonRect,
+                                                font,
+                                                "Clear")) {
+                                    mutateSide(
+                                            "Cleared authoring middle texture",
+                                            [part](SectorAuthoringLineSide& side) {
+                                                SectorTopologyWallPartSettings& settings =
+                                                        TopologyWallPartSettingsFor(side, part);
+                                                if (IsDefaultWallPartSettings(settings)) {
+                                                    return false;
+                                                }
+                                                settings = SectorTopologyWallPartSettings{};
+                                                return true;
+                                            });
+                                }
+                                if (engine::Button(
+                                            ui,
+                                            config,
+                                            input,
+                                            assets,
+                                            TextFormat("%s_%s", idPrefix, suffix),
+                                            row.pickerButtonRect,
+                                            font,
+                                            ">")) {
+                                    if (!OpenAuthoringSideTexturePickerById(
+                                                state,
+                                                sideId,
+                                                part,
+                                                TopologyMaterialLayer::Base)) {
+                                        statusText = "Authoring side texture picker unavailable: derived mapping is not current";
+                                    }
+                                }
+                                y += row.height + gap;
+                            };
+                    const auto drawDecalControls =
+                            [&](const char* suffix, const char* title, TopologyWallPart part) {
+                                const SectorTopologyDecalLayer decal = decalForPart(part);
+                                const float buttonW = 38.0f;
+                                const float clearW = 92.0f;
+                                const SectorEditorInspectorTextureRowLayout row =
+                                        BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
+                                const bool missing = !decal.textureId.empty()
+                                        && FindSectorTopologyTexture(state.topologyMap, decal.textureId) == nullptr;
+                                engine::Text(ui, config, assets, row.labelRect, font, title, engine::UITextJustify::Left, config.mutedTextColor);
+                                engine::Text(
+                                        ui,
+                                        config,
+                                        assets,
+                                        row.valueRect,
+                                        font,
+                                        decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
+                                        engine::UITextJustify::Left,
+                                        missing ? config.invalidColor : config.mutedTextColor);
+                                if (engine::Button(
+                                            ui,
+                                            config,
+                                            input,
+                                            assets,
+                                            TextFormat("%s_%s_clear_decal", idPrefix, suffix),
+                                            row.clearButtonRect,
+                                            font,
+                                            "Clear")) {
+                                    mutateSide(
+                                            "Cleared authoring side decal",
+                                            [part](SectorAuthoringLineSide& side) {
+                                                SectorTopologyDecalLayer& target =
+                                                        TopologyWallPartSettingsFor(side, part).decal;
+                                                if (IsDefaultDecalLayer(target)) {
+                                                    return false;
+                                                }
+                                                ResetDecalLayer(target);
+                                                return true;
+                                            });
+                                }
+                                if (engine::Button(
+                                            ui,
+                                            config,
+                                            input,
+                                            assets,
+                                            TextFormat("%s_%s_pick_decal", idPrefix, suffix),
+                                            row.pickerButtonRect,
+                                            font,
+                                            ">")) {
+                                    if (!OpenAuthoringSideTexturePickerById(
+                                                state,
+                                                sideId,
+                                                part,
+                                                TopologyMaterialLayer::Decal)) {
+                                        statusText = "Authoring side decal picker unavailable: derived mapping is not current";
+                                    }
+                                }
+                                y += row.height + gap;
+
+                                if (decal.textureId.empty()) {
+                                    return;
+                                }
+
+                                const SectorEditorInspectorNumericRowLayout opacityLayout =
+                                        BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
+                                const SectorEditorFloatInputResult opacityResult = DrawLabeledFloatInput(
+                                        ui,
+                                        config,
+                                        input,
+                                        assets,
+                                        font,
+                                        TextFormat("%s_%s_decal_opacity", idPrefix, suffix),
+                                        "Opacity:",
+                                        opacityLayout.labelRect,
+                                        opacityLayout.inputRect,
+                                        engine::UITextJustify::Left,
+                                        decal.opacity,
+                                        uiState.topologySideDefDecalOpacityInput,
+                                        0.0f,
+                                        1.0f,
+                                        3);
+                                if (opacityResult.changed && opacityResult.value != decal.opacity && opacityResult.finite) {
+                                    mutateSide(
+                                            "Updated authoring side decal opacity",
+                                            [part, value = opacityResult.value](SectorAuthoringLineSide& side) {
+                                                SectorTopologyDecalLayer& target =
+                                                        TopologyWallPartSettingsFor(side, part).decal;
+                                                if (target.textureId.empty() || target.opacity == value) {
+                                                    return false;
+                                                }
+                                                target.opacity = value;
+                                                return true;
+                                            });
+                                }
+                                y += rowH + gap;
+
+                                bool emissive = decal.emissive;
+                                if (engine::Checkbox(
+                                            ui,
+                                            config,
+                                            input,
+                                            assets,
+                                            TextFormat("%s_%s_decal_emissive", idPrefix, suffix),
+                                            Rectangle{0.0f, y, contentW, 36.0f},
+                                            font,
+                                            "Emissive",
+                                            emissive)) {
+                                    mutateSide(
+                                            "Updated authoring side decal emissive",
+                                            [part, emissive](SectorAuthoringLineSide& side) {
+                                                SectorTopologyDecalLayer& target =
+                                                        TopologyWallPartSettingsFor(side, part).decal;
+                                                if (target.textureId.empty() || target.emissive == emissive) {
+                                                    return false;
+                                                }
+                                                target.emissive = emissive;
+                                                return true;
+                                            });
+                                }
+                                y += 36.0f + gap;
+
+                                if (decal.emissive) {
+                                    const SectorEditorInspectorNumericRowLayout bloomLayout =
+                                            BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
+                                    const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
+                                            ui,
+                                            config,
+                                            input,
+                                            assets,
+                                            font,
+                                            TextFormat("%s_%s_decal_bloom", idPrefix, suffix),
+                                            "Bloom:",
+                                            bloomLayout.labelRect,
+                                            bloomLayout.inputRect,
+                                            engine::UITextJustify::Left,
+                                            decal.bloomIntensity,
+                                            uiState.topologySideDefDecalBloomIntensityInput,
+                                            0.0f,
+                                            10.0f,
+                                            3);
+                                    if (bloomResult.changed && bloomResult.value != decal.bloomIntensity && bloomResult.finite) {
+                                        mutateSide(
+                                                "Updated authoring side decal bloom intensity",
+                                                [part, value = bloomResult.value](SectorAuthoringLineSide& side) {
+                                                    SectorTopologyDecalLayer& target =
+                                                            TopologyWallPartSettingsFor(side, part).decal;
+                                                    if (target.textureId.empty() || target.bloomIntensity == value) {
+                                                        return false;
+                                                    }
+                                                    target.bloomIntensity = value;
+                                                    return true;
+                                                });
+                                    }
+                                    y += rowH + gap;
+                                }
+
+                                engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Tint:", engine::UITextJustify::Left, config.mutedTextColor);
+                                const Rectangle swatchLocal{82.0f, y + 3.0f, 56.0f, rowH - 6.0f};
+                                if (engine::Button(
+                                            ui,
+                                            config,
+                                            input,
+                                            assets,
+                                            TextFormat("%s_%s_decal_tint", idPrefix, suffix),
+                                            swatchLocal,
+                                            font,
+                                            "")) {
+                                    TopologySurfaceEditTarget target;
+                                    if (mappedTargetForPart(part, target)) {
+                                        OpenDecalTintModal(target);
+                                    } else {
+                                        statusText = "Authoring side decal tint unavailable: derived mapping is not current";
+                                    }
+                                }
+                                const Rectangle swatchScreen{
+                                        scroll.viewport.x + swatchLocal.x,
+                                        scroll.viewport.y - uiState.inspectorScroll.offset.y + swatchLocal.y,
+                                        swatchLocal.width,
+                                        swatchLocal.height};
+                                DrawColorSwatch(config, swatchScreen, DecalTintPreviewColor(decal.tint), config.borderThickness);
+                                y += rowH + gap;
+
+                                TopologySurfaceEditTarget fitTarget;
+                                if (mappedTargetForPart(part, fitTarget)
+                                        && engine::Button(
+                                                ui,
+                                                config,
+                                                input,
+                                                assets,
+                                                TextFormat("%s_%s_fit_decal", idPrefix, suffix),
+                                                Rectangle{0.0f, y, contentW, 36.0f},
+                                                font,
+                                                "Fit Decal")) {
+                                    FitSelectedDecal(fitTarget, &assets);
+                                }
+                                y += 36.0f + gap;
+                            };
+                    drawTextureRow("wall", "Wall:", TopologyWallPart::Wall);
+                    drawTextureRow("lower", "Lower:", TopologyWallPart::Lower);
+                    drawTextureRow("upper", "Upper:", TopologyWallPart::Upper);
+                    drawTextureRow("middle", "Middle:", TopologyWallPart::Middle);
+                    drawDecalControls("wall", "Wall Decal:", TopologyWallPart::Wall);
+                    drawDecalControls("lower", "Lower Decal:", TopologyWallPart::Lower);
+                    drawDecalControls("upper", "Upper Decal:", TopologyWallPart::Upper);
+                };
+
+        drawAuthoringSideSection(SectorTopologySideKind::Front, "Front Side", "sector_editor_authoring_front_side");
+        drawAuthoringSideSection(SectorTopologySideKind::Back, "Back Side", "sector_editor_authoring_back_side");
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return;
+    }
+
+    if (selectedAuthoringFaceAnchor != nullptr) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                TextFormat("Authoring Face: %d", selectedAuthoringFaceAnchor->id),
+                engine::UITextJustify::Left,
+                config.textColor);
+        y += 38.0f;
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 30.0f},
+                font,
+                TextFormat(
+                        "Anchor %.2f, %.2f",
+                        SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->x),
+                        SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->y)),
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        y += 32.0f;
+
+        const float labelW = 92.0f;
+        const float numberFieldW = 112.0f;
+        const int faceAnchorId = selectedAuthoringFaceAnchor->id;
+        const auto mutateFaceAnchor =
+                [this, faceAnchorId](const char* status, const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate) {
+                    return MutateSectorEditorAuthoringFaceAnchorById(state, faceAnchorId, status, mutate);
+                };
+
+        auto drawHeight = [&](const char* id, const char* label, float current, engine::UIFloatInputState& inputState, bool floorField) {
+            const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    id,
+                    label,
+                    Rectangle{0.0f, y, labelW, rowH},
+                    Rectangle{labelW, y, numberFieldW, rowH},
+                    engine::UITextJustify::Right,
+                    current,
+                    inputState,
+                    -512.0f,
+                    512.0f,
+                    2);
+            if (result.changed && result.value != current) {
+                const float nextFloor = floorField ? result.value : selectedAuthoringFaceAnchor->floorZ;
+                const float nextCeiling = floorField ? selectedAuthoringFaceAnchor->ceilingZ : result.value;
+                if (!std::isfinite(nextFloor) || !std::isfinite(nextCeiling) || nextCeiling <= nextFloor) {
+                    statusText = "Invalid authoring face heights: ceiling must be greater than floor";
+                } else {
+                    mutateFaceAnchor(
+                            "Updated authoring face height",
+                            [nextFloor, nextCeiling](SectorAuthoringFaceAnchor& anchor) {
+                                if (anchor.floorZ == nextFloor && anchor.ceilingZ == nextCeiling) {
+                                    return false;
+                                }
+                                anchor.floorZ = nextFloor;
+                                anchor.ceilingZ = nextCeiling;
+                                return true;
+                            });
+                }
+            }
+            y += rowH + gap;
+        };
+        drawHeight("sector_editor_authoring_face_floor", "Floor:", selectedAuthoringFaceAnchor->floorZ, uiState.floorInput, true);
+        drawHeight("sector_editor_authoring_face_ceiling", "Ceiling:", selectedAuthoringFaceAnchor->ceilingZ, uiState.ceilingInput, false);
+
+        bool ceilingSky = selectedAuthoringFaceAnchor->ceilingSky;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_authoring_face_ceiling_sky",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font,
+                    "Ceiling Sky",
+                    ceilingSky)) {
+            mutateFaceAnchor(
+                    "Updated authoring face ceiling sky",
+                    [ceilingSky](SectorAuthoringFaceAnchor& anchor) {
+                        if (anchor.ceilingSky == ceilingSky) {
+                            return false;
+                        }
+                        anchor.ceilingSky = ceilingSky;
+                        return true;
+                    });
+        }
+        y += rowH + gap;
+
+        engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
+        y += 18.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Lighting", engine::UITextJustify::Left, config.textColor);
+        y += 30.0f;
+
+        const float ambientIntensity = std::clamp(selectedAuthoringFaceAnchor->ambientIntensity, 0.0f, 1.0f);
+        const SectorEditorFloatInputResult ambientResult = DrawLabeledFloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                "sector_editor_authoring_face_ambient_intensity",
+                "Intensity:",
+                Rectangle{0.0f, y, labelW, rowH},
+                Rectangle{labelW, y, numberFieldW, rowH},
+                engine::UITextJustify::Right,
+                ambientIntensity,
+                uiState.ambientIntensityInput,
+                0.0f,
+                1.0f,
+                3);
+        if (ambientResult.changed && ambientResult.value != selectedAuthoringFaceAnchor->ambientIntensity) {
+            mutateFaceAnchor(
+                    "Updated authoring face ambient intensity",
+                    [value = ambientResult.value](SectorAuthoringFaceAnchor& anchor) {
+                        if (anchor.ambientIntensity == value) {
+                            return false;
+                        }
+                        anchor.ambientIntensity = value;
+                        return true;
+                    });
+        }
+        y += rowH + gap;
+
+        auto drawAmbientChannel = [&](const char* id, const char* label, unsigned char current, engine::UIIntInputState& inputState, int channel) {
+            const SectorEditorRgb8InputResult result = DrawRgb8ChannelInput(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    id,
+                    label,
+                    Rectangle{0.0f, y, labelW, rowH},
+                    Rectangle{labelW, y, contentW - labelW, rowH},
+                    engine::UITextJustify::Right,
+                    current,
+                    inputState);
+            if (result.changed && result.channel != current) {
+                mutateFaceAnchor(
+                        "Updated authoring face ambient color",
+                        [channel, value = result.channel](SectorAuthoringFaceAnchor& anchor) {
+                            Color next = anchor.ambientColor;
+                            if (channel == 0) {
+                                next.r = value;
+                            } else if (channel == 1) {
+                                next.g = value;
+                            } else {
+                                next.b = value;
+                            }
+                            next.a = 255;
+                            if (anchor.ambientColor.r == next.r
+                                    && anchor.ambientColor.g == next.g
+                                    && anchor.ambientColor.b == next.b
+                                    && anchor.ambientColor.a == next.a) {
+                                return false;
+                            }
+                            anchor.ambientColor = next;
+                            return true;
+                        });
+            }
+            y += rowH + gap;
+        };
+        drawAmbientChannel("sector_editor_authoring_face_ambient_r", "R:", selectedAuthoringFaceAnchor->ambientColor.r, uiState.ambientRedInput, 0);
+        drawAmbientChannel("sector_editor_authoring_face_ambient_g", "G:", selectedAuthoringFaceAnchor->ambientColor.g, uiState.ambientGreenInput, 1);
+        drawAmbientChannel("sector_editor_authoring_face_ambient_b", "B:", selectedAuthoringFaceAnchor->ambientColor.b, uiState.ambientBlueInput, 2);
+
+        const auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologySectorTextureField field) {
+            const float buttonW = 38.0f;
+            const SectorEditorInspectorTextureRowLayout row =
+                    BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, 0.0f);
+            const bool missing = !textureId.empty() && FindSectorTopologyTexture(state.topologyMap, textureId) == nullptr;
+            engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    row.valueRect,
+                    font,
+                    textureId.empty() ? "<none>" : textureId.c_str(),
+                    engine::UITextJustify::Left,
+                    missing ? config.invalidColor : config.mutedTextColor);
+            if (engine::Button(ui, config, input, assets, id, row.pickerButtonRect, font, ">")) {
+                if (!OpenAuthoringFaceAnchorTexturePickerById(
+                            state,
+                            faceAnchorId,
+                            field,
+                            TopologyMaterialLayer::Base)) {
+                    statusText = "Authoring face texture picker unavailable: derived mapping is not current";
+                }
+            }
+            y += row.height + gap;
+        };
+        const auto mappedFlatTargetForField = [this, faceAnchorId](TopologySectorTextureField field, TopologySurfaceEditTarget& outTarget) {
+            if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+                    || state.authoringDerivedTopologyStale
+                    || !state.authoringDerivation.success) {
+                return false;
+            }
+            for (const SectorAuthoringDerivedSectorMapping& mapping : state.authoringDerivation.mapping.sectors) {
+                if (mapping.faceAnchorId != faceAnchorId) {
+                    continue;
+                }
+                if (FindSectorTopologySector(state.topologyMap, mapping.topologySectorId) == nullptr) {
+                    continue;
+                }
+                if (field == TopologySectorTextureField::Floor) {
+                    outTarget.kind = TopologySurfaceEditTargetKind::SectorFloor;
+                } else if (field == TopologySectorTextureField::Ceiling) {
+                    outTarget.kind = TopologySurfaceEditTargetKind::SectorCeiling;
+                } else {
+                    return false;
+                }
+                outTarget.sectorId = mapping.topologySectorId;
+                return true;
+            }
+            return false;
+        };
+        const auto drawFlatDecalControls =
+                [&](const char* idPrefix, const char* label, const SectorTopologyDecalLayer& decal, TopologySectorTextureField field, int inputIndex) {
+                    const float buttonW = 38.0f;
+                    const float clearW = 92.0f;
+                    const SectorEditorInspectorTextureRowLayout row =
+                            BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
+                    const bool missing = !decal.textureId.empty()
+                            && FindSectorTopologyTexture(state.topologyMap, decal.textureId) == nullptr;
+                    engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+                    engine::Text(
+                            ui,
+                            config,
+                            assets,
+                            row.valueRect,
+                            font,
+                            decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
+                            engine::UITextJustify::Left,
+                            missing ? config.invalidColor : config.mutedTextColor);
+                    if (engine::Button(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_clear", idPrefix),
+                                row.clearButtonRect,
+                                font,
+                                "Clear")) {
+                        mutateFaceAnchor(
+                                "Cleared authoring face decal",
+                                [field](SectorAuthoringFaceAnchor& anchor) {
+                                    SectorTopologyDecalLayer* target = nullptr;
+                                    if (field == TopologySectorTextureField::Floor) {
+                                        target = &anchor.floorDecal;
+                                    } else if (field == TopologySectorTextureField::Ceiling) {
+                                        target = &anchor.ceilingDecal;
+                                    }
+                                    if (target == nullptr || IsDefaultDecalLayer(*target)) {
+                                        return false;
+                                    }
+                                    ResetDecalLayer(*target);
+                                    return true;
+                                });
+                    }
+                    if (engine::Button(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_pick", idPrefix),
+                                row.pickerButtonRect,
+                                font,
+                                ">")) {
+                        if (!OpenAuthoringFaceAnchorTexturePickerById(
+                                    state,
+                                    faceAnchorId,
+                                    field,
+                                    TopologyMaterialLayer::Decal)) {
+                            statusText = "Authoring face decal picker unavailable: derived mapping is not current";
+                        }
+                    }
+                    y += row.height + gap;
+
+                    if (decal.textureId.empty()) {
+                        return;
+                    }
+
+                    const SectorEditorInspectorNumericRowLayout opacityLayout =
+                            BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
+                    const SectorEditorFloatInputResult opacityResult = DrawLabeledFloatInput(
+                            ui,
+                            config,
+                            input,
+                            assets,
+                            font,
+                            TextFormat("%s_opacity", idPrefix),
+                            "Opacity:",
+                            opacityLayout.labelRect,
+                            opacityLayout.inputRect,
+                            engine::UITextJustify::Left,
+                            decal.opacity,
+                            uiState.topologySectorDecalOpacityInputs[inputIndex],
+                            0.0f,
+                            1.0f,
+                            3);
+                    if (opacityResult.changed && opacityResult.value != decal.opacity && opacityResult.finite) {
+                        mutateFaceAnchor(
+                                "Updated authoring face decal opacity",
+                                [field, value = opacityResult.value](SectorAuthoringFaceAnchor& anchor) {
+                                    SectorTopologyDecalLayer* target = field == TopologySectorTextureField::Floor
+                                            ? &anchor.floorDecal
+                                            : &anchor.ceilingDecal;
+                                    if (target->textureId.empty() || target->opacity == value) {
+                                        return false;
+                                    }
+                                    target->opacity = value;
+                                    return true;
+                                });
+                    }
+                    y += rowH + gap;
+
+                    bool emissive = decal.emissive;
+                    if (engine::Checkbox(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_emissive", idPrefix),
+                                Rectangle{0.0f, y, contentW, 36.0f},
+                                font,
+                                "Emissive",
+                                emissive)) {
+                        mutateFaceAnchor(
+                                "Updated authoring face decal emissive",
+                                [field, emissive](SectorAuthoringFaceAnchor& anchor) {
+                                    SectorTopologyDecalLayer* target = field == TopologySectorTextureField::Floor
+                                            ? &anchor.floorDecal
+                                            : &anchor.ceilingDecal;
+                                    if (target->textureId.empty() || target->emissive == emissive) {
+                                        return false;
+                                    }
+                                    target->emissive = emissive;
+                                    return true;
+                                });
+                    }
+                    y += 36.0f + gap;
+
+                    if (decal.emissive) {
+                        const SectorEditorInspectorNumericRowLayout bloomLayout =
+                                BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
+                        const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                font,
+                                TextFormat("%s_bloom", idPrefix),
+                                "Bloom:",
+                                bloomLayout.labelRect,
+                                bloomLayout.inputRect,
+                                engine::UITextJustify::Left,
+                                decal.bloomIntensity,
+                                uiState.topologySectorDecalBloomIntensityInputs[inputIndex],
+                                0.0f,
+                                10.0f,
+                                3);
+                        if (bloomResult.changed && bloomResult.value != decal.bloomIntensity && bloomResult.finite) {
+                            mutateFaceAnchor(
+                                    "Updated authoring face decal bloom intensity",
+                                    [field, value = bloomResult.value](SectorAuthoringFaceAnchor& anchor) {
+                                        SectorTopologyDecalLayer* target = field == TopologySectorTextureField::Floor
+                                                ? &anchor.floorDecal
+                                                : &anchor.ceilingDecal;
+                                        if (target->textureId.empty() || target->bloomIntensity == value) {
+                                            return false;
+                                        }
+                                        target->bloomIntensity = value;
+                                        return true;
+                                    });
+                        }
+                        y += rowH + gap;
+                    }
+
+                    engine::Text(ui, config, assets, Rectangle{0.0f, y, 82.0f, rowH}, font, "Tint:", engine::UITextJustify::Left, config.mutedTextColor);
+                    const Rectangle swatchLocal{82.0f, y + 3.0f, 56.0f, rowH - 6.0f};
+                    if (engine::Button(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_tint", idPrefix),
+                                swatchLocal,
+                                font,
+                                "")) {
+                        TopologySurfaceEditTarget target;
+                        if (mappedFlatTargetForField(field, target)) {
+                            OpenDecalTintModal(target);
+                        } else {
+                            statusText = "Authoring face decal tint unavailable: derived mapping is not current";
+                        }
+                    }
+                    const Rectangle swatchScreen{
+                            scroll.viewport.x + swatchLocal.x,
+                            scroll.viewport.y - uiState.inspectorScroll.offset.y + swatchLocal.y,
+                            swatchLocal.width,
+                            swatchLocal.height};
+                    DrawColorSwatch(config, swatchScreen, DecalTintPreviewColor(decal.tint), config.borderThickness);
+                    y += rowH + gap;
+
+                    TopologySurfaceEditTarget fitTarget;
+                    if (mappedFlatTargetForField(field, fitTarget)
+                            && engine::Button(
+                                    ui,
+                                    config,
+                                    input,
+                                    assets,
+                                    TextFormat("%s_fit", idPrefix),
+                                    Rectangle{0.0f, y, contentW, 36.0f},
+                                    font,
+                                    "Fit Decal")) {
+                        FitSelectedDecal(fitTarget, &assets);
+                    }
+                    y += 36.0f + gap;
+                };
+        const auto drawDefaultDecalControls =
+                [&](const char* idPrefix, const char* label, const SectorTopologyDecalLayer& decal, TopologySectorTextureField field, int inputIndex) {
+                    const float buttonW = 38.0f;
+                    const float clearW = 92.0f;
+                    const SectorEditorInspectorTextureRowLayout row =
+                            BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
+                    const bool missing = !decal.textureId.empty()
+                            && FindSectorTopologyTexture(state.topologyMap, decal.textureId) == nullptr;
+                    engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
+                    engine::Text(
+                            ui,
+                            config,
+                            assets,
+                            row.valueRect,
+                            font,
+                            decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
+                            engine::UITextJustify::Left,
+                            missing ? config.invalidColor : config.mutedTextColor);
+                    auto defaultDecalForField = [field](SectorAuthoringFaceAnchor& anchor) -> SectorTopologyDecalLayer* {
+                        if (field == TopologySectorTextureField::DefaultWall) {
+                            return &anchor.defaultWall.decal;
+                        }
+                        if (field == TopologySectorTextureField::DefaultLower) {
+                            return &anchor.defaultLower.decal;
+                        }
+                        if (field == TopologySectorTextureField::DefaultUpper) {
+                            return &anchor.defaultUpper.decal;
+                        }
+                        return nullptr;
+                    };
+                    if (engine::Button(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_clear", idPrefix),
+                                row.clearButtonRect,
+                                font,
+                                "Clear")) {
+                        mutateFaceAnchor(
+                                "Cleared authoring default decal",
+                                [defaultDecalForField](SectorAuthoringFaceAnchor& anchor) {
+                                    SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
+                                    if (target == nullptr || IsDefaultDecalLayer(*target)) {
+                                        return false;
+                                    }
+                                    ResetDecalLayer(*target);
+                                    return true;
+                                });
+                    }
+                    if (engine::Button(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_pick", idPrefix),
+                                row.pickerButtonRect,
+                                font,
+                                ">")) {
+                        if (!OpenAuthoringFaceAnchorTexturePickerById(
+                                    state,
+                                    faceAnchorId,
+                                    field,
+                                    TopologyMaterialLayer::Decal)) {
+                            statusText = "Authoring default decal picker unavailable: derived mapping is not current";
+                        }
+                    }
+                    y += row.height + gap;
+
+                    if (decal.textureId.empty()) {
+                        return;
+                    }
+
+                    const SectorEditorInspectorNumericRowLayout opacityLayout =
+                            BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
+                    const SectorEditorFloatInputResult opacityResult = DrawLabeledFloatInput(
+                            ui,
+                            config,
+                            input,
+                            assets,
+                            font,
+                            TextFormat("%s_opacity", idPrefix),
+                            "Opacity:",
+                            opacityLayout.labelRect,
+                            opacityLayout.inputRect,
+                            engine::UITextJustify::Left,
+                            decal.opacity,
+                            uiState.topologySectorDecalOpacityInputs[inputIndex],
+                            0.0f,
+                            1.0f,
+                            3);
+                    if (opacityResult.changed && opacityResult.value != decal.opacity && opacityResult.finite) {
+                        mutateFaceAnchor(
+                                "Updated authoring default decal opacity",
+                                [defaultDecalForField, value = opacityResult.value](SectorAuthoringFaceAnchor& anchor) {
+                                    SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
+                                    if (target == nullptr || target->textureId.empty() || target->opacity == value) {
+                                        return false;
+                                    }
+                                    target->opacity = value;
+                                    return true;
+                                });
+                    }
+                    y += rowH + gap;
+
+                    bool emissive = decal.emissive;
+                    if (engine::Checkbox(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                TextFormat("%s_emissive", idPrefix),
+                                Rectangle{0.0f, y, contentW, 36.0f},
+                                font,
+                                "Emissive",
+                                emissive)) {
+                        mutateFaceAnchor(
+                                "Updated authoring default decal emissive",
+                                [defaultDecalForField, emissive](SectorAuthoringFaceAnchor& anchor) {
+                                    SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
+                                    if (target == nullptr || target->textureId.empty() || target->emissive == emissive) {
+                                        return false;
+                                    }
+                                    target->emissive = emissive;
+                                    return true;
+                                });
+                    }
+                    y += 36.0f + gap;
+
+                    if (decal.emissive) {
+                        const SectorEditorInspectorNumericRowLayout bloomLayout =
+                                BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
+                        const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                font,
+                                TextFormat("%s_bloom", idPrefix),
+                                "Bloom:",
+                                bloomLayout.labelRect,
+                                bloomLayout.inputRect,
+                                engine::UITextJustify::Left,
+                                decal.bloomIntensity,
+                                uiState.topologySectorDecalBloomIntensityInputs[inputIndex],
+                                0.0f,
+                                10.0f,
+                                3);
+                        if (bloomResult.changed && bloomResult.value != decal.bloomIntensity && bloomResult.finite) {
+                            mutateFaceAnchor(
+                                    "Updated authoring default decal bloom intensity",
+                                    [defaultDecalForField, value = bloomResult.value](SectorAuthoringFaceAnchor& anchor) {
+                                        SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
+                                        if (target == nullptr || target->textureId.empty() || target->bloomIntensity == value) {
+                                            return false;
+                                        }
+                                        target->bloomIntensity = value;
+                                        return true;
+                                    });
+                        }
+                        y += rowH + gap;
+                    }
+                };
+
+        engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
+        y += 18.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Materials", engine::UITextJustify::Left, config.textColor);
+        y += 30.0f;
+        drawTextureRow("sector_editor_authoring_face_pick_floor", "Floor:", selectedAuthoringFaceAnchor->floorTextureId, TopologySectorTextureField::Floor);
+        drawTextureRow("sector_editor_authoring_face_pick_ceiling", "Ceiling:", selectedAuthoringFaceAnchor->ceilingTextureId, TopologySectorTextureField::Ceiling);
+        drawTextureRow("sector_editor_authoring_face_pick_default_wall", "Wall:", selectedAuthoringFaceAnchor->defaultWall.textureId, TopologySectorTextureField::DefaultWall);
+        drawTextureRow("sector_editor_authoring_face_pick_default_lower", "Lower:", selectedAuthoringFaceAnchor->defaultLower.textureId, TopologySectorTextureField::DefaultLower);
+        drawTextureRow("sector_editor_authoring_face_pick_default_upper", "Upper:", selectedAuthoringFaceAnchor->defaultUpper.textureId, TopologySectorTextureField::DefaultUpper);
+        drawFlatDecalControls("sector_editor_authoring_face_floor_decal", "Floor Decal:", selectedAuthoringFaceAnchor->floorDecal, TopologySectorTextureField::Floor, 0);
+        drawFlatDecalControls("sector_editor_authoring_face_ceiling_decal", "Ceiling Decal:", selectedAuthoringFaceAnchor->ceilingDecal, TopologySectorTextureField::Ceiling, 1);
+        drawDefaultDecalControls("sector_editor_authoring_face_default_wall_decal", "Wall Decal:", selectedAuthoringFaceAnchor->defaultWall.decal, TopologySectorTextureField::DefaultWall, 0);
+        drawDefaultDecalControls("sector_editor_authoring_face_default_lower_decal", "Lower Decal:", selectedAuthoringFaceAnchor->defaultLower.decal, TopologySectorTextureField::DefaultLower, 1);
+        drawDefaultDecalControls("sector_editor_authoring_face_default_upper_decal", "Upper Decal:", selectedAuthoringFaceAnchor->defaultUpper.decal, TopologySectorTextureField::DefaultUpper, 0);
+
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return;
+    }
+
+    if (selectedAuthoringVertex != nullptr) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                TextFormat("Authoring Vertex: %d", selectedAuthoringVertex->id),
+                engine::UITextJustify::Left,
+                config.textColor);
+        y += 38.0f;
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 30.0f},
+                font,
+                TextFormat(
+                        "%.2f, %.2f",
+                        SectorCoordToVisibleAuthoring(selectedAuthoringVertex->x),
+                        SectorCoordToVisibleAuthoring(selectedAuthoringVertex->y)),
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return;
@@ -4602,32 +5465,26 @@ bool SectorEditor::DrawTopologySideDefInspector(
         y += 32.0f;
     }
 
-    if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_topology_split_linedef",
-                Rectangle{0.0f, y, contentW, 38.0f},
-                font,
-                "Split Linedef")) {
-        SplitSelectedTopologyLineDef();
-        return true;
-    }
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{0.0f, y, contentW, 38.0f},
+            font,
+            "Split Linedef retired; derivation auto-splits authoring lines.",
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
     y += 38.0f + gap;
 
-    if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_topology_split_linedef_at_point",
-                Rectangle{0.0f, y, contentW, 38.0f},
-                font,
-                "Split At Point")) {
-        StartPendingTopologyLineSplitAtPoint();
-        return true;
-    }
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{0.0f, y, contentW, 38.0f},
+            font,
+            "Split At Point retired; move or redraw authoring vertices.",
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
     y += 38.0f + gap;
 
     if (sideDef == nullptr) {
@@ -4642,18 +5499,15 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 : nullptr;
         if (preferredSideDef != nullptr && opposite != nullptr
                 && preferredSideDef->sectorId != opposite->sectorId) {
-            if (engine::Button(
-                        ui,
-                        config,
-                        input,
-                        assets,
-                        "sector_editor_topology_join_sectors",
-                        Rectangle{0.0f, y, contentW, 38.0f},
-                        font,
-                        "Join Sectors")) {
-                JoinSelectedTopologySectors();
-                return true;
-            }
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 38.0f},
+                    font,
+                    "Join Sectors retired; remove authoring boundaries instead.",
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
             y += 38.0f + gap;
         }
 
@@ -4688,18 +5542,15 @@ bool SectorEditor::DrawTopologySideDefInspector(
     const bool middleEligible = IsTopologyMiddleEligible(state.topologyMap, sideDef);
     if (opposite != nullptr) {
         if (opposite->sectorId != sideDef->sectorId) {
-            if (engine::Button(
-                        ui,
-                        config,
-                        input,
-                        assets,
-                        "sector_editor_topology_join_sectors",
-                        Rectangle{0.0f, y, contentW, 38.0f},
-                        font,
-                        "Join Sectors")) {
-                JoinSelectedTopologySectors();
-                return true;
-            }
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 38.0f},
+                    font,
+                    "Join Sectors retired; remove authoring boundaries instead.",
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
             y += 38.0f + gap;
         } else {
             engine::Text(
@@ -5738,13 +6589,23 @@ void SectorEditor::DrawStatusPanel(
         selectedLabel = topologySector->name.empty()
                 ? TextFormat("topology sector %d", topologySector->id)
                 : TextFormat("%s (%d)", topologySector->name.c_str(), topologySector->id);
+    } else if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line) {
+        selectedLabel = TextFormat("authoring line %d", state.selectedAuthoring.lineId);
+    } else if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex) {
+        selectedLabel = TextFormat("authoring vertex %d", state.selectedAuthoring.vertexId);
+    } else if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor) {
+        selectedLabel = TextFormat("authoring face anchor %d", state.selectedAuthoring.faceAnchorId);
     }
 
     std::string pendingText;
-    if (state.pendingSector.active) {
-        pendingText = TextFormat(" | pending %zu pts", state.pendingSector.points.size());
-    } else if (state.pendingTopologyLineSplitAtPoint.active) {
-        pendingText = " | split at point";
+    if (state.pendingAuthoringLine.active) {
+        pendingText = " | authoring line";
+    } else if (state.pendingAuthoringRectangle.active) {
+        pendingText = " | rectangle";
+    } else if (state.pendingAuthoringInsertVertex.active) {
+        pendingText = " | insert vertex";
+    } else if (state.authoringVertexDrag.active) {
+        pendingText = " | authoring vertex move";
     }
     const std::string shortMapPath = state.hasCurrentLevelPath
             ? state.currentLevelPath
@@ -5806,27 +6667,57 @@ bool SectorEditor::LoadLevel(
         const std::string& levelName,
         const std::string& jsonAssetPath)
 {
-    const bool hadPendingSplit = state.pendingTopologyLineSplitAtPoint.active;
-    SectorTopologyMap loaded;
-    if (!LoadSectorTopologyDocumentFromAsset(jsonAssetPath, loaded, state.loadLevelModal.errorMessage)) {
+    SectorEditorLoadedDocument loaded;
+    if (!LoadSectorEditorDocumentFromAsset(jsonAssetPath, loaded, state.loadLevelModal.errorMessage)) {
         statusText = state.loadLevelModal.errorMessage;
         return false;
     }
 
     preview.ShutdownRendererResources(assets);
-    CancelPendingSector(nullptr);
-    CancelPendingTopologyVertexMerge(nullptr);
-    CancelPendingTopologyLineSplitAtPoint(nullptr);
-    CancelPendingTopologySectorCut(nullptr);
-    CancelVertexDrag(nullptr);
+    CancelAuthoringVertexDrag(nullptr);
     CancelLightDrag(nullptr);
-    state.topologyMap = std::move(loaded);
+    bool loadedAuthoringGraph = false;
+    bool authoringDerivationCurrent = false;
+    if (loaded.format == SectorEditorDocumentFormat::AuthoringGraph) {
+        loadedAuthoringGraph = true;
+        state.topologyMap = std::move(loaded.mapData);
+        const SectorLightmapMetadata loadedBakedLightmap = state.topologyMap.bakedLightmap;
+        state.authoringGraph = std::move(loaded.authoringGraph);
+        state.authoringDerivation = SectorAuthoringDerivationResult{};
+        state.lastValidAuthoringDerivedTopology.reset();
+        state.authoringDerivationState = SectorEditorAuthoringDerivationState::InvalidNoDerived;
+        state.authoringDerivedTopologyStale = true;
+        const std::string successStatus = TextFormat(
+                "Authoring graph: loaded %s; derived topology current",
+                jsonAssetPath.c_str());
+        const std::string failureStatus = TextFormat(
+                "Authoring graph: loaded %s; derivation failed",
+                jsonAssetPath.c_str());
+        authoringDerivationCurrent = RefreshSectorEditorAuthoringDerivation(
+                state,
+                successStatus.c_str(),
+                failureStatus.c_str());
+        if (authoringDerivationCurrent) {
+            state.topologyMap.bakedLightmap = loadedBakedLightmap;
+            state.authoringDerivation.topology.bakedLightmap = loadedBakedLightmap;
+            if (state.lastValidAuthoringDerivedTopology.has_value()) {
+                state.lastValidAuthoringDerivedTopology->bakedLightmap = loadedBakedLightmap;
+            }
+        }
+    } else {
+        state.topologyMap = std::move(loaded.mapData);
+        InitializeSectorEditorAuthoringStateFromTopology(state, state.topologyMap);
+    }
     InvalidateTopologyRenderCache();
     state.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             state.topologyMap.previewSettings);
     state.topologyDocumentInitialized = true;
     state.topologyDocumentDirty = false;
-    state.topologyDocumentStatus = TextFormat("Topology document: loaded %s", jsonAssetPath.c_str());
+    if (!loadedAuthoringGraph) {
+        state.topologyDocumentStatus = TextFormat(
+                "Topology document: imported legacy topology %s",
+                jsonAssetPath.c_str());
+    }
     state.currentLevelName = levelName;
     state.currentLevelPath = jsonAssetPath;
     state.hasCurrentLevelPath = true;
@@ -5844,14 +6735,18 @@ bool SectorEditor::LoadLevel(
     state.hasHoveredVertex = false;
     state.hoveredTopologyVertexId = -1;
     state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
-    state.pendingSector = PendingSectorDraw{};
-    state.vertexDrag = VertexDragState{};
+    state.authoringVertexDrag = AuthoringVertexDragState{};
     state.lightDrag = LightDragState{};
     RefreshDefaultTextures();
     RefreshEditorTextureAssets(assets);
-    statusText = hadPendingSplit
-            ? TextFormat("Loaded topology %s; split at point cancelled", jsonAssetPath.c_str())
-            : TextFormat("Loaded topology %s", jsonAssetPath.c_str());
+    if (loadedAuthoringGraph) {
+        const char* loadedText = authoringDerivationCurrent
+                ? "Loaded authoring graph"
+                : "Loaded authoring graph with derivation diagnostics";
+        statusText = TextFormat("%s %s", loadedText, jsonAssetPath.c_str());
+    } else {
+        statusText = TextFormat("Imported legacy topology %s", jsonAssetPath.c_str());
+    }
     return true;
 }
 
@@ -5930,7 +6825,7 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
         return false;
     }
 
-    if (!SaveSectorTopologyDocument(savePlan.paths, state.topologyMap, modal.errorMessage)) {
+    if (!SaveSectorEditorAuthoringDocument(savePlan.paths, state, modal.errorMessage)) {
         statusText = TextFormat("Save failed: %s", savePlan.paths.jsonAssetPath.c_str());
         return false;
     }
@@ -5941,11 +6836,11 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
     state.hasUnsavedChanges = false;
     state.topologyDocumentInitialized = true;
     state.topologyDocumentDirty = false;
-    state.topologyDocumentStatus = TextFormat("Topology document: saved %s", savePlan.paths.jsonAssetPath.c_str());
+    state.topologyDocumentStatus = TextFormat("Authoring graph: saved %s", savePlan.paths.jsonAssetPath.c_str());
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
     state.decalTintModal = DecalTintModalState{};
-    statusText = TextFormat("Saved topology %s", savePlan.paths.jsonAssetPath.c_str());
+    statusText = TextFormat("Saved authoring graph %s", savePlan.paths.jsonAssetPath.c_str());
     return true;
 }
 
@@ -5965,17 +6860,19 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
         return false;
     }
 
-    CancelPendingSector(nullptr);
-    CancelPendingTopologyVertexMerge(nullptr);
-    CancelPendingTopologyLineSplitAtPoint(nullptr);
-    CancelPendingTopologySectorCut(nullptr);
-    CancelVertexDrag(nullptr);
+    CancelAuthoringVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     ui.hotId = 0;
     ui.activeId = 0;
     ui.openOptionId = 0;
     ui.focusedId = 0;
     uiState.keyboardCaptured = false;
+
+    std::string gateMessage;
+    if (!CanUseCurrentAuthoringDerivedTopologyForPreview(state, &gateMessage)) {
+        statusText = gateMessage.empty() ? "3D mode failed: derived topology is not current" : gateMessage;
+        return false;
+    }
 
     std::string error;
     if (!preview.RebuildRendererResources(assets, state.topologyMap, "sector_editor_preview", error)) {
@@ -6438,6 +7335,78 @@ bool SectorEditor::FindTopologyLineNearScreenPoint(
     return true;
 }
 
+int SectorEditor::FindAuthoringLineNearScreenPoint(Vector2 screenPoint) const
+{
+    int lineId = -1;
+    const float maxDistance = SectorWorldToAuthoringDistance(
+            ScreenEdgePickPixels / std::max(1.0f, state.viewZoom));
+    if (!FindSectorEditorAuthoringLineNearMapPoint(
+                state.authoringGraph,
+                ScreenToMap(screenPoint),
+                maxDistance,
+                &lineId)) {
+        return -1;
+    }
+    return lineId;
+}
+
+bool SectorEditor::FindAuthoringVertexNearScreenPoint(
+        Vector2 screenPoint,
+        int& outVertexId,
+        SectorTopologyCoordPoint& outPoint) const
+{
+    outVertexId = -1;
+    outPoint = SectorTopologyCoordPoint{};
+
+    float bestDistance2 = ScreenVertexSnapPixels * ScreenVertexSnapPixels;
+    int bestVertexId = -1;
+    SectorTopologyCoordPoint bestPoint{};
+    for (const SectorAuthoringVertex& vertex : state.authoringGraph.vertices) {
+        const Vector2 screenVertex = MapToScreen(Vector2{
+                SectorCoordToVisibleAuthoring(vertex.x),
+                SectorCoordToVisibleAuthoring(vertex.y)});
+        const float dx = screenVertex.x - screenPoint.x;
+        const float dy = screenVertex.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 > bestDistance2) {
+            continue;
+        }
+        if (bestVertexId >= 0
+                && std::fabs(distance2 - bestDistance2) <= 0.001f
+                && vertex.id >= bestVertexId) {
+            continue;
+        }
+        bestDistance2 = distance2;
+        bestVertexId = vertex.id;
+        bestPoint = SectorTopologyCoordPoint{vertex.x, vertex.y};
+    }
+
+    if (bestVertexId < 0) {
+        return false;
+    }
+    outVertexId = bestVertexId;
+    outPoint = bestPoint;
+    return true;
+}
+
+bool SectorEditor::FindAuthoringSelectionNearScreenPoint(
+        Vector2 screenPoint,
+        SectorAuthoringSelectionTarget& outTarget,
+        SectorTopologyCoordPoint& outVertexPoint) const
+{
+    const float vertexMaxDistance = SectorWorldToAuthoringDistance(
+            ScreenVertexSnapPixels / std::max(1.0f, state.viewZoom));
+    const float lineMaxDistance = SectorWorldToAuthoringDistance(
+            ScreenEdgePickPixels / std::max(1.0f, state.viewZoom));
+    return FindSectorEditorAuthoringSelectionAtMapPoint(
+            state,
+            ScreenToMap(screenPoint),
+            vertexMaxDistance,
+            lineMaxDistance,
+            &outTarget,
+            &outVertexPoint);
+}
+
 void SectorEditor::SelectTopologySector(int sectorId)
 {
     if (FindSectorTopologySector(state.topologyMap, sectorId) == nullptr) {
@@ -6455,6 +7424,7 @@ void SectorEditor::SelectTopologySector(int sectorId)
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ClearSectorEditorAuthoringSelection(state);
     ResetSurface3DUiState();
     uiState.idBufferLightIndex = -1;
     uiState.inspectorScroll.offset = Vector2{};
@@ -6489,6 +7459,7 @@ void SectorEditor::SelectTopologyVertex(int vertexId)
     state.inspectedTopologyVertexId = vertex->id;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ClearSectorEditorAuthoringSelection(state);
     ResetSurface3DUiState();
     uiState.idBufferLightIndex = -1;
     uiState.inspectorScroll.offset = Vector2{};
@@ -6523,6 +7494,7 @@ void SectorEditor::SelectTopologySideDef(int sideDefId, TopologyWallPart wallPar
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ClearSectorEditorAuthoringSelection(state);
     ResetSurface3DUiState();
     uiState.idBufferLightIndex = -1;
     uiState.inspectorScroll.offset = Vector2{};
@@ -6556,6 +7528,7 @@ void SectorEditor::SelectTopologyLineDef(
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ClearSectorEditorAuthoringSelection(state);
     ResetSurface3DUiState();
     uiState.idBufferLightIndex = -1;
     uiState.inspectorScroll.offset = Vector2{};
@@ -6583,6 +7556,7 @@ void SectorEditor::SelectTopologyLight(int topologyLightId)
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ClearSectorEditorAuthoringSelection(state);
     ResetSurface3DUiState();
     uiState.inspectorScroll.offset = Vector2{};
     uiState.lightXInput = engine::UIFloatInputState{};
@@ -6606,6 +7580,21 @@ void SectorEditor::SelectSurface3D(SectorSurfaceRef surface)
         state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
         return;
     }
+    SectorEditorAuthoringSurfaceTarget authoringTarget;
+    const bool hasAuthoringGraph = HasAuthoringGraphData();
+    if (hasAuthoringGraph) {
+        std::string unavailableStatus;
+        if (!ResolveSectorEditorAuthoringSurfaceTarget(
+                    state,
+                    surface,
+                    authoringTarget,
+                    &unavailableStatus)) {
+            state.selectedSurface3D = SectorSurfaceRef{};
+            state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+            statusText = unavailableStatus;
+            return;
+        }
+    }
 
     if (!SameSurfaceRef(state.selectedSurface3D, surface)) {
         ResetSurface3DUiState();
@@ -6617,6 +7606,15 @@ void SectorEditor::SelectSurface3D(SectorSurfaceRef surface)
                 SurfaceKindToTopologyWallPart(surface.kind));
     } else {
         SelectTopologySector(surface.topologySectorId);
+    }
+    if (hasAuthoringGraph) {
+        const SectorAuthoringSelectionTarget authoringSelection =
+                MakeSectorEditorAuthoringSelectionTargetForSurfaceTarget(authoringTarget);
+        if (authoringSelection.kind == SectorAuthoringSelectionKind::Line) {
+            SelectSectorEditorAuthoringLine(state, authoringSelection.lineId);
+        } else if (authoringSelection.kind == SectorAuthoringSelectionKind::FaceAnchor) {
+            SelectSectorEditorAuthoringFaceAnchor(state, authoringSelection.faceAnchorId);
+        }
     }
     state.selectedSurface3D = surface;
     state.selectedTopologySurface3D = target;
@@ -6678,11 +7676,9 @@ void SectorEditor::ResetSurface3DUiState()
     uiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
 }
 
-void SectorEditor::ClearSelection()
+void SectorEditor::ClearTopologySelectionOnly()
 {
-    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
-    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
-    state.pendingTopologySectorCut = PendingTopologySectorCut{};
+    state.lightDrag = LightDragState{};
     state.topologySelectionKind = TopologySelectionKind::None;
     state.selectedTopologySectorId = -1;
     state.selectedTopologyVertexId = -1;
@@ -6694,6 +7690,27 @@ void SectorEditor::ClearSelection()
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
+    uiState.idBufferSectorIndex = -1;
+    uiState.idBufferLightIndex = -1;
+    SyncSelectedSectorIdBuffer();
+    SyncSelectedLightIdBuffer();
+}
+
+void SectorEditor::ClearSelection()
+{
+    state.authoringVertexDrag = AuthoringVertexDragState{};
+    state.topologySelectionKind = TopologySelectionKind::None;
+    state.selectedTopologySectorId = -1;
+    state.selectedTopologyVertexId = -1;
+    state.selectedTopologySideDefId = -1;
+    state.selectedTopologyLineDefId = -1;
+    state.selectedTopologyLightId = -1;
+    state.selectedTopologySideKind = SectorTopologySideKind::Front;
+    state.inspectedTopologyVertexId = -1;
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ClearSectorEditorAuthoringSelection(state);
+    ResetSurface3DUiState();
     uiState.ambientIntensityInput = engine::UIFloatInputState{};
     uiState.ambientRedInput = engine::UIIntInputState{};
     uiState.ambientGreenInput = engine::UIIntInputState{};
@@ -6701,6 +7718,272 @@ void SectorEditor::ClearSelection()
     uiState.inspectorScroll.offset = Vector2{};
     SyncSelectedSectorIdBuffer();
     SyncSelectedLightIdBuffer();
+}
+
+void SectorEditor::SelectAuthoringLine(int lineId)
+{
+    if (FindSectorAuthoringLine(state.authoringGraph, lineId) == nullptr) {
+        ClearSelection();
+        return;
+    }
+
+    ClearSelection();
+    SelectSectorEditorAuthoringLine(state, lineId);
+    uiState.inspectorScroll.offset = Vector2{};
+}
+
+bool SectorEditor::DeleteSelectedAuthoringLine()
+{
+    const int lineId = state.selectedAuthoring.lineId;
+    if (!DeleteSectorEditorSelectedAuthoringLine(state)) {
+        statusText = "Select an authoring line to delete.";
+        return false;
+    }
+
+    statusText = TextFormat("Deleted authoring line %d", lineId);
+    return true;
+}
+
+void SectorEditor::SelectAuthoringVertex(int vertexId)
+{
+    if (FindSectorAuthoringVertex(state.authoringGraph, vertexId) == nullptr) {
+        ClearSelection();
+        return;
+    }
+
+    ClearSelection();
+    SelectSectorEditorAuthoringVertex(state, vertexId);
+    uiState.inspectorScroll.offset = Vector2{};
+}
+
+void SectorEditor::SelectAuthoringFaceAnchor(int faceAnchorId)
+{
+    if (FindSectorAuthoringFaceAnchor(state.authoringGraph, faceAnchorId) == nullptr) {
+        ClearSelection();
+        return;
+    }
+
+    ClearSelection();
+    SelectSectorEditorAuthoringFaceAnchor(state, faceAnchorId);
+    uiState.inspectorScroll.offset = Vector2{};
+    uiState.floorInput = engine::UIFloatInputState{};
+    uiState.ceilingInput = engine::UIFloatInputState{};
+    uiState.ambientIntensityInput = engine::UIFloatInputState{};
+    uiState.ambientRedInput = engine::UIIntInputState{};
+    uiState.ambientGreenInput = engine::UIIntInputState{};
+    uiState.ambientBlueInput = engine::UIIntInputState{};
+    for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+        inputState = engine::UIFloatInputState{};
+    }
+}
+
+bool SectorEditor::DeleteSelectedAuthoringVertex()
+{
+    const int vertexId = state.selectedAuthoring.vertexId;
+    if (!DeleteSectorEditorSelectedAuthoringVertex(state)) {
+        statusText = state.authoringDerivationStatus.empty()
+                ? "Select an isolated authoring vertex to delete."
+                : state.authoringDerivationStatus;
+        return false;
+    }
+
+    statusText = TextFormat("Deleted authoring vertex %d", vertexId);
+    return true;
+}
+
+bool SectorEditor::HasAuthoringGraphData() const
+{
+    return !state.authoringGraph.vertices.empty()
+            || !state.authoringGraph.lines.empty()
+            || !state.authoringGraph.lineSides.empty()
+            || !state.authoringGraph.faceAnchors.empty();
+}
+
+bool SectorEditor::IsSelectedSurface3DFlatTarget(TopologySurfaceEditTarget target) const
+{
+    if (target.kind == TopologySurfaceEditTargetKind::SectorFloor) {
+        return state.selectedSurface3D.kind == SectorSurfaceKind::Floor
+                && state.selectedSurface3D.topologySectorId == target.sectorId;
+    }
+    if (target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
+        return state.selectedSurface3D.kind == SectorSurfaceKind::Ceiling
+                && state.selectedSurface3D.topologySectorId == target.sectorId;
+    }
+    return false;
+}
+
+bool SectorEditor::EnsureSelectedSurface3DAuthoringMappingCurrent()
+{
+    std::string unavailableStatus;
+    if (ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
+                state,
+                &unavailableStatus)) {
+        return true;
+    }
+    ResetSurface3DUiState();
+    statusText = unavailableStatus;
+    return false;
+}
+
+bool SectorEditor::FinishAuthoringSideMaterialActionResult(
+        TopologySurfaceEditTarget target,
+        const SectorEditorMaterialActionResult& result,
+        const SectorTopologyMap& editedTopology,
+        engine::AssetManager* assets)
+{
+    if (!result.changed) {
+        if (!result.status.empty()) {
+            statusText = result.status;
+        }
+        return false;
+    }
+
+    const SectorTopologySideDef* editedSideDef =
+            FindSectorTopologySideDef(editedTopology, target.sideDefId);
+    if (editedSideDef == nullptr) {
+        statusText = "Selected authoring side material target is no longer valid.";
+        return false;
+    }
+
+    if (result.resetSurface3DUi) {
+        ResetSurface3DUiState();
+    }
+    if (result.resetSectorUvInputs) {
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+    }
+    if (result.resetSideDefUvInputs) {
+        for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+    }
+    if (result.resetDecalInputs) {
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalOpacityInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalBloomIntensityInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+        uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
+        uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
+        uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
+        uiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+    }
+    if (result.closeDecalTintModal) {
+        state.decalTintModal = DecalTintModalState{};
+    }
+
+    state.topologyRenderWarning.clear();
+    const bool refreshed = MutateSectorEditorAuthoringSideForTopologySideDef(
+            state,
+            target.sideDefId,
+            result.status.c_str(),
+            [editedSideDef](SectorAuthoringLineSide& side) {
+                side.wall = editedSideDef->wall;
+                side.lower = editedSideDef->lower;
+                side.upper = editedSideDef->upper;
+                side.middle = editedSideDef->middle;
+                return true;
+            });
+    if (!refreshed) {
+        statusText = "Wall material edit unavailable: selected sidedef has no authoring side mapping";
+    }
+    if (assets != nullptr && refreshed && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
+        return RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return refreshed;
+}
+
+bool SectorEditor::ApplyAuthoringSideMaterialAction(
+        TopologySurfaceEditTarget target,
+        engine::AssetManager* assets,
+        const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action)
+{
+    if (!IsWallTopologyEditTarget(target.kind) || !HasAuthoringGraphData()) {
+        return false;
+    }
+    if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+            || state.authoringDerivedTopologyStale
+            || !state.authoringDerivation.success) {
+        statusText = "Wall material edit unavailable: derived topology is not current";
+        return true;
+    }
+    SectorAuthoringSideId sideId;
+    if (!FindSectorEditorAuthoringSideIdForTopologySideDef(
+                state,
+                target.sideDefId,
+                sideId)) {
+        statusText = "Wall material edit unavailable: selected sidedef has no authoring side mapping";
+        return true;
+    }
+    if (!action) {
+        return false;
+    }
+
+    SectorTopologyMap editedTopology = state.topologyMap;
+    return FinishAuthoringSideMaterialActionResult(
+            target,
+            action(editedTopology),
+            editedTopology,
+            assets);
+}
+
+bool SectorEditor::ApplyAuthoringFaceAnchorFlatMaterialAction(
+        TopologySurfaceEditTarget target,
+        engine::AssetManager* assets,
+        const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action)
+{
+    SectorSurfaceRef surface = state.selectedSurface3D;
+    if (!IsSelectedSurface3DFlatTarget(target)
+            && (target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                    || target.kind == TopologySurfaceEditTargetKind::SectorCeiling)) {
+        surface = SectorSurfaceRef{};
+        surface.kind = target.kind == TopologySurfaceEditTargetKind::SectorFloor
+                ? SectorSurfaceKind::Floor
+                : SectorSurfaceKind::Ceiling;
+        surface.topologySectorId = target.sectorId;
+    }
+
+    SectorEditorAuthoringFlatMaterialActionResult result;
+    if (!game::ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
+                state,
+                surface,
+                target,
+                action,
+                &result)) {
+        return false;
+    }
+
+    if (result.materialResult.resetSurface3DUi) {
+        ResetSurface3DUiState();
+    }
+    if (result.materialResult.resetSectorUvInputs) {
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+    }
+    if (result.materialResult.resetDecalInputs) {
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalOpacityInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+        for (engine::UIFloatInputState& inputState : uiState.topologySectorDecalBloomIntensityInputs) {
+            inputState = engine::UIFloatInputState{};
+        }
+        uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
+        uiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+    }
+    if (result.materialResult.closeDecalTintModal) {
+        state.decalTintModal = DecalTintModalState{};
+    }
+
+    if (!result.status.empty()) {
+        statusText = result.status;
+    }
+    if (assets != nullptr && result.changed && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
+        RebuildPreviewMeshesPreservingView(*assets);
+    }
+    return true;
 }
 
 const SectorTopologyDecalLayer* SectorEditor::DecalForSurface(TopologySurfaceEditTarget target) const
@@ -6754,6 +8037,22 @@ bool SectorEditor::CopyTopologyMaterial(TopologySurfaceEditTarget target)
 
 bool SectorEditor::PasteTopologyMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                &assets,
+                [this, target](SectorTopologyMap& map) {
+                    return game::PasteMaterialSurface(map, target, state.copiedTopologyMaterial);
+                });
+    }
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                &assets,
+                [this, target](SectorTopologyMap& map) {
+                    return game::PasteMaterialSurface(map, target, state.copiedTopologyMaterial);
+                });
+    }
     return FinishMaterialActionResult(
             game::PasteMaterialSurface(state.topologyMap, target, state.copiedTopologyMaterial),
             &assets);
@@ -6766,6 +8065,36 @@ bool SectorEditor::ApplySurface3DUvValue(
         float value,
         engine::AssetManager& assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        const SectorSurfaceKind surfaceKind = state.selectedSurface3D.kind;
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                &assets,
+                [target, layer, component, value, surfaceKind](SectorTopologyMap& map) {
+                    return game::ApplySurfaceUvValue(
+                            map,
+                            target,
+                            layer,
+                            surfaceKind,
+                            component,
+                            value);
+                });
+    }
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
+        const SectorSurfaceKind surfaceKind = state.selectedSurface3D.kind;
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                &assets,
+                [target, layer, component, value, surfaceKind](SectorTopologyMap& map) {
+                    return game::ApplySurfaceUvValue(
+                            map,
+                            target,
+                            layer,
+                            surfaceKind,
+                            component,
+                            value);
+                });
+    }
     return FinishMaterialActionResult(
             game::ApplySurfaceUvValue(
                     state.topologyMap,
@@ -6782,6 +8111,22 @@ bool SectorEditor::ApplySurfaceDecalOpacity(
         float opacity,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, opacity](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalOpacity(map, target, opacity);
+                });
+    }
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target, opacity](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalOpacity(map, target, opacity);
+                });
+    }
     return FinishMaterialActionResult(game::ApplySurfaceDecalOpacity(state.topologyMap, target, opacity), assets);
 }
 
@@ -6790,6 +8135,22 @@ bool SectorEditor::ApplySurfaceDecalEmissive(
         bool emissive,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, emissive](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalEmissive(map, target, emissive);
+                });
+    }
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target, emissive](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalEmissive(map, target, emissive);
+                });
+    }
     return FinishMaterialActionResult(game::ApplySurfaceDecalEmissive(state.topologyMap, target, emissive), assets);
 }
 
@@ -6798,6 +8159,22 @@ bool SectorEditor::ApplySurfaceDecalTint(
         Vector3 tint,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, tint](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalTint(map, target, tint);
+                });
+    }
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target, tint](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalTint(map, target, tint);
+                });
+    }
     return FinishMaterialActionResult(game::ApplySurfaceDecalTint(state.topologyMap, target, tint), assets);
 }
 
@@ -6806,6 +8183,22 @@ bool SectorEditor::ApplySurfaceDecalBloomIntensity(
         float bloomIntensity,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, bloomIntensity](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalBloomIntensity(map, target, bloomIntensity);
+                });
+    }
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target, bloomIntensity](SectorTopologyMap& map) {
+                    return game::ApplySurfaceDecalBloomIntensity(map, target, bloomIntensity);
+                });
+    }
     return FinishMaterialActionResult(
             game::ApplySurfaceDecalBloomIntensity(state.topologyMap, target, bloomIntensity),
             assets);
@@ -6827,6 +8220,22 @@ bool SectorEditor::ClearSurfaceDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target](SectorTopologyMap& map) {
+                    return game::ClearSurfaceDecal(map, target);
+                });
+    }
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target](SectorTopologyMap& map) {
+                    return game::ClearSurfaceDecal(map, target);
+                });
+    }
     return FinishMaterialActionResult(game::ClearSurfaceDecal(state.topologyMap, target), assets);
 }
 
@@ -6834,6 +8243,14 @@ bool SectorEditor::ClearMiddleTexture(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target](SectorTopologyMap& map) {
+                    return game::ClearMiddleTexture(map, target);
+                });
+    }
     return FinishMaterialActionResult(game::ClearMiddleTexture(state.topologyMap, target), assets);
 }
 
@@ -6842,6 +8259,24 @@ bool SectorEditor::ResetSurface3DUv(
         TopologyMaterialLayer layer,
         engine::AssetManager& assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        const SectorSurfaceKind surfaceKind = state.selectedSurface3D.kind;
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                &assets,
+                [target, layer, surfaceKind](SectorTopologyMap& map) {
+                    return game::ResetSurfaceUv(map, target, layer, surfaceKind);
+                });
+    }
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
+        const SectorSurfaceKind surfaceKind = state.selectedSurface3D.kind;
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                &assets,
+                [target, layer, surfaceKind](SectorTopologyMap& map) {
+                    return game::ResetSurfaceUv(map, target, layer, surfaceKind);
+                });
+    }
     return FinishMaterialActionResult(
             game::ResetSurfaceUv(state.topologyMap, target, layer, state.selectedSurface3D.kind),
             &assets);
@@ -6851,6 +8286,22 @@ bool SectorEditor::FitSelectedDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target](SectorTopologyMap& map) {
+                    return game::FitSelectedDecal(map, target);
+                });
+    }
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target](SectorTopologyMap& map) {
+                    return game::FitSelectedDecal(map, target);
+                });
+    }
     return FinishMaterialActionResult(game::FitSelectedDecal(state.topologyMap, target), assets);
 }
 
@@ -6858,6 +8309,14 @@ bool SectorEditor::FitSelectedFlatDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
+        return ApplyAuthoringFaceAnchorFlatMaterialAction(
+                target,
+                assets,
+                [target](SectorTopologyMap& map) {
+                    return game::FitSelectedFlatDecal(map, target);
+                });
+    }
     return FinishMaterialActionResult(game::FitSelectedFlatDecal(state.topologyMap, target), assets);
 }
 
@@ -6867,6 +8326,14 @@ bool SectorEditor::FitSelectedWallMaterial(
         engine::AssetManager* assets,
         TopologyMaterialLayer layer)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, mode, layer](SectorTopologyMap& map) {
+                    return game::FitSelectedWallMaterial(map, target, mode, layer);
+                });
+    }
     return FinishMaterialActionResult(
             game::FitSelectedWallMaterial(state.topologyMap, target, mode, layer),
             assets);
@@ -6877,6 +8344,14 @@ bool SectorEditor::AlignSelectedWallMaterialVertical(
         engine::AssetManager* assets,
         TopologyMaterialLayer layer)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, layer](SectorTopologyMap& map) {
+                    return game::AlignSelectedWallMaterialVertical(map, target, layer);
+                });
+    }
     return FinishMaterialActionResult(
             game::AlignSelectedWallMaterialVertical(state.topologyMap, target, layer),
             assets);
@@ -6888,6 +8363,14 @@ bool SectorEditor::AlignSelectedWallMaterialU(
         engine::AssetManager* assets,
         TopologyMaterialLayer layer)
 {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
+        return ApplyAuthoringSideMaterialAction(
+                target,
+                assets,
+                [target, direction, layer](SectorTopologyMap& map) {
+                    return game::AlignSelectedWallMaterialU(map, target, direction, layer);
+                });
+    }
     return FinishMaterialActionResult(
             game::AlignSelectedWallMaterialU(state.topologyMap, target, direction, layer),
             assets);
@@ -6896,6 +8379,12 @@ bool SectorEditor::AlignSelectedWallMaterialU(
 bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& assets)
 {
     if (!preview.IsRendererReady()) {
+        return false;
+    }
+
+    std::string gateMessage;
+    if (!CanUseCurrentAuthoringDerivedTopologyForPreview(state, &gateMessage)) {
+        statusText = gateMessage.empty() ? "3D mode rebuild failed: derived topology is not current" : gateMessage;
         return false;
     }
 
@@ -6940,159 +8429,6 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
     return true;
 }
 
-bool SectorEditor::SplitSelectedTopologyLineDef()
-{
-    const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
-    if (lineDef == nullptr) {
-        ClearStaleTopologySelection();
-        statusText = "Select a topology linedef before splitting.";
-        return false;
-    }
-
-    const int originalLineDefId = lineDef->id;
-    const TopologySelectionKind previousSelectionKind = state.topologySelectionKind;
-    const SectorTopologySideKind previousSide = state.selectedTopologySideKind;
-    const TopologyWallPart previousWallPart = state.selectedTopologyWallPart;
-
-    const SectorEditorSplitLineDefResult result = game::SplitTopologyLineDef(
-            state.topologyMap,
-            originalLineDefId);
-    if (!result.changed) {
-        statusText = result.status;
-        return false;
-    }
-
-    const SectorTopologySplitLineResult split = result.split;
-    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
-    state.pendingTopologySectorCut = PendingTopologySectorCut{};
-    state.hasHoveredVertex = false;
-    state.hoveredTopologyVertexId = -1;
-    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
-    state.hoveredSurface3D = SectorSurfaceHit{};
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ResetSurface3DUiState();
-    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-
-    if (previousSelectionKind == TopologySelectionKind::SideDef) {
-        const int secondSideDefId = previousSide == SectorTopologySideKind::Front
-                ? split.secondFrontSideDefId
-                : split.secondBackSideDefId;
-        if (FindSectorTopologySideDef(state.topologyMap, secondSideDefId) != nullptr) {
-            SelectTopologySideDef(secondSideDefId, previousWallPart);
-        } else {
-            SelectTopologyLineDef(split.secondLineDefId, previousSide, previousWallPart);
-        }
-    } else {
-        SelectTopologyLineDef(split.secondLineDefId, previousSide, previousWallPart);
-    }
-
-    state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(result.status.c_str());
-    return true;
-}
-
-bool SectorEditor::DissolveSelectedTopologyVertex()
-{
-    const SectorTopologyVertex* vertex = SelectedTopologyVertex();
-    if (vertex == nullptr) {
-        ClearStaleTopologySelection();
-        statusText = "Select a topology vertex before dissolving.";
-        return false;
-    }
-
-    const int vertexId = vertex->id;
-    const SectorEditorDissolveVertexResult result = DissolveTopologyVertex(state.topologyMap, vertexId);
-    if (!result.changed) {
-        statusText = result.status;
-        return false;
-    }
-
-    const SectorTopologyDissolveVertexResult& dissolve = result.dissolve;
-    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
-    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
-    state.pendingTopologySectorCut = PendingTopologySectorCut{};
-    state.hasHoveredVertex = false;
-    state.hoveredTopologyVertexId = -1;
-    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
-    state.inspectedTopologyVertexId = -1;
-    state.hoveredSurface3D = SectorSurfaceHit{};
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ResetSurface3DUiState();
-    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-
-    SelectTopologyLineDef(
-            dissolve.replacementLineDefId,
-            SectorTopologySideKind::Front,
-            state.selectedTopologyWallPart);
-    state.topologyRenderWarning.clear();
-    FinishTopologyActionResult(SectorEditorTopologyActionResult{true, result.status});
-    return true;
-}
-
-bool SectorEditor::JoinSelectedTopologySectors()
-{
-    const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
-    if (lineDef == nullptr) {
-        ClearStaleTopologySelection();
-        statusText = "Select a two-sided topology portal before joining sectors.";
-        return false;
-    }
-
-    const SectorTopologySideDef* winnerSideDef = SelectedTopologySideDef();
-    if (winnerSideDef == nullptr) {
-        const int sideDefId = state.selectedTopologySideKind == SectorTopologySideKind::Front
-                ? lineDef->frontSideDefId
-                : lineDef->backSideDefId;
-        winnerSideDef = FindSectorTopologySideDef(state.topologyMap, sideDefId);
-    }
-    if (winnerSideDef == nullptr || winnerSideDef->lineDefId != lineDef->id) {
-        statusText = "Join Sectors requires a selected side of a two-sided topology portal.";
-        return false;
-    }
-
-    const SectorTopologySideDef* otherSideDef = FindOppositeSectorTopologySideDef(
-            state.topologyMap,
-            winnerSideDef->id);
-    if (otherSideDef == nullptr) {
-        statusText = "Join Sectors requires a two-sided topology portal.";
-        return false;
-    }
-    if (winnerSideDef->sectorId == otherSideDef->sectorId) {
-        statusText = "Join Sectors requires two different adjacent sectors.";
-        return false;
-    }
-
-    const SectorEditorJoinSectorsResult result = game::JoinTopologySectors(
-                state.topologyMap,
-                winnerSideDef->sectorId,
-                otherSideDef->sectorId);
-    if (!result.changed) {
-        statusText = result.status;
-        return false;
-    }
-
-    CancelPendingSector(nullptr);
-    CancelVertexDrag(nullptr);
-    CancelLightDrag(nullptr);
-    state.pendingTopologyLineSplitAtPoint = PendingTopologyLineSplitAtPoint{};
-    state.pendingTopologyVertexMerge = PendingTopologyVertexMerge{};
-    state.pendingTopologySectorCut = PendingTopologySectorCut{};
-    state.hasHoveredVertex = false;
-    state.hoveredTopologyVertexId = -1;
-    state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
-    state.hoveredTopologyLightId = -1;
-    ClearTransientTopologyEditStateAfterGeometryChange();
-    SelectTopologySector(result.join.survivingSectorId);
-    MarkTopologyDocumentEdited(result.status.c_str());
-    return true;
-}
-
 std::string SectorEditor::CurrentTextureForPickerTarget() const
 {
     return game::CurrentTextureForPickerTarget(state);
@@ -7103,7 +8439,10 @@ void SectorEditor::OpenTopologyTexturePicker(
         TopologySectorTextureField field,
         TopologyMaterialLayer layer)
 {
-    if (!game::OpenTopologyTexturePicker(state, sectorId, field, layer)) {
+    const bool opened = HasAuthoringGraphData()
+            ? game::OpenAuthoringFaceAnchorTexturePicker(state, sectorId, field, layer)
+            : game::OpenTopologyTexturePicker(state, sectorId, field, layer);
+    if (!opened) {
         statusText = "No topology sector texture target";
     }
 }
@@ -7113,7 +8452,10 @@ void SectorEditor::OpenTopologySideDefTexturePicker(
         TopologyWallPart wallPart,
         TopologyMaterialLayer layer)
 {
-    if (!game::OpenTopologySideDefTexturePicker(state, sideDefId, wallPart, layer)) {
+    const bool opened = HasAuthoringGraphData()
+            ? game::OpenAuthoringSideTexturePicker(state, sideDefId, wallPart, layer)
+            : game::OpenTopologySideDefTexturePicker(state, sideDefId, wallPart, layer);
+    if (!opened) {
         statusText = "No topology sidedef texture target";
     }
 }
@@ -7127,7 +8469,154 @@ void SectorEditor::OpenMapSkyTexturePicker()
 
 void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
 {
+    if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringFaceAnchor
+            || state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringSide) {
+        const SectorEditorTexturePickerApplyResult result =
+                game::ApplyAuthoringTexturePickerSelection(state);
+        if (!result.status.empty()) {
+            statusText = result.status;
+        }
+        if (result.changed
+                && result.rebuildPreviewOnApply
+                && state.mode == SectorEditorMode::Preview3D
+                && preview.IsRendererReady()) {
+            RebuildPreviewMeshesPreservingView(assets);
+        }
+        return;
+    }
+
+    const bool routeAuthoringSideMaterial =
+            HasAuthoringGraphData()
+            && state.texturePicker.open
+            && state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef;
+    const bool routeAuthoringFlatMaterial =
+            HasAuthoringGraphData()
+            && state.texturePicker.open
+            && state.texturePicker.authoringSurface3DFlatTarget
+            && state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::Sector
+            && (state.texturePicker.topologyField == TopologySectorTextureField::Floor
+                    || state.texturePicker.topologyField == TopologySectorTextureField::Ceiling);
+    const int authoringSideDefId = routeAuthoringSideMaterial
+            ? state.texturePicker.topologySideDefId
+            : -1;
+    const TopologyMaterialLayer authoringPickerLayer = routeAuthoringSideMaterial
+            ? state.texturePicker.topologyLayer
+            : TopologyMaterialLayer::Base;
+    TopologySurfaceEditTarget authoringSideTarget;
+    TopologySurfaceEditTarget authoringFlatTarget;
+    SectorSurfaceRef authoringFlatSurface;
+    SectorTopologyMap topologyBeforePicker;
+    if (routeAuthoringSideMaterial || routeAuthoringFlatMaterial) {
+        if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+                || state.authoringDerivedTopologyStale
+                || !state.authoringDerivation.success) {
+            statusText = routeAuthoringSideMaterial
+                    ? "Wall material edit unavailable: derived topology is not current"
+                    : "3D surface edit unavailable: derived topology is not current";
+            state.texturePicker = TexturePickerState{};
+            return;
+        }
+    }
+    if (routeAuthoringSideMaterial) {
+        SectorAuthoringSideId sideId;
+        if (!FindSectorEditorAuthoringSideIdForTopologySideDef(
+                    state,
+                    authoringSideDefId,
+                    sideId)) {
+            statusText = "Wall material edit unavailable: selected sidedef has no authoring side mapping";
+            state.texturePicker = TexturePickerState{};
+            return;
+        }
+        topologyBeforePicker = state.topologyMap;
+        const SectorTopologySideDef* sideDef =
+                FindSectorTopologySideDef(state.topologyMap, authoringSideDefId);
+        if (sideDef != nullptr) {
+            switch (state.texturePicker.topologyWallPart) {
+                case TopologyWallPart::Wall:
+                    authoringSideTarget.kind = TopologySurfaceEditTargetKind::SideDefWall;
+                    break;
+                case TopologyWallPart::Lower:
+                    authoringSideTarget.kind = TopologySurfaceEditTargetKind::SideDefLower;
+                    break;
+                case TopologyWallPart::Upper:
+                    authoringSideTarget.kind = TopologySurfaceEditTargetKind::SideDefUpper;
+                    break;
+                case TopologyWallPart::Middle:
+                    authoringSideTarget.kind = TopologySurfaceEditTargetKind::SideDefMiddle;
+                    break;
+            }
+            authoringSideTarget.sectorId = sideDef->sectorId;
+            authoringSideTarget.lineDefId = sideDef->lineDefId;
+            authoringSideTarget.sideDefId = sideDef->id;
+            authoringSideTarget.side = sideDef->side;
+        }
+    }
+    if (routeAuthoringFlatMaterial) {
+        authoringFlatTarget.kind = state.texturePicker.topologyField == TopologySectorTextureField::Floor
+                ? TopologySurfaceEditTargetKind::SectorFloor
+                : TopologySurfaceEditTargetKind::SectorCeiling;
+        authoringFlatTarget.sectorId = state.texturePicker.topologySectorId;
+        authoringFlatSurface.kind = state.texturePicker.topologyField == TopologySectorTextureField::Floor
+                ? SectorSurfaceKind::Floor
+                : SectorSurfaceKind::Ceiling;
+        authoringFlatSurface.topologySectorId = state.texturePicker.topologySectorId;
+
+        SectorEditorAuthoringSurfaceTarget surfaceTarget;
+        std::string unavailableStatus;
+        if (!ResolveSectorEditorAuthoringSurfaceTarget(
+                    state,
+                    authoringFlatSurface,
+                    surfaceTarget,
+                    &unavailableStatus)
+                || surfaceTarget.kind != SectorEditorAuthoringSurfaceTargetKind::FaceAnchor) {
+            statusText = unavailableStatus.empty()
+                    ? "3D flat surface edit unavailable: selected surface has no face anchor mapping"
+                    : unavailableStatus;
+            state.texturePicker = TexturePickerState{};
+            return;
+        }
+        topologyBeforePicker = state.topologyMap;
+    }
+
     const SectorEditorTexturePickerApplyResult result = game::ApplyTexturePickerSelection(state);
+    if (routeAuthoringSideMaterial) {
+        const SectorTopologyMap editedTopology = state.topologyMap;
+        state.topologyMap = topologyBeforePicker;
+        if (result.changed) {
+            SectorEditorMaterialActionResult materialResult;
+            materialResult.changed = true;
+            materialResult.status = result.status;
+            materialResult.resetSideDefUvInputs = true;
+            materialResult.resetDecalInputs = authoringPickerLayer == TopologyMaterialLayer::Decal;
+            FinishAuthoringSideMaterialActionResult(
+                    authoringSideTarget,
+                    materialResult,
+                    editedTopology,
+                    &assets);
+        }
+        return;
+    }
+    if (routeAuthoringFlatMaterial) {
+        const SectorTopologyMap editedTopology = state.topologyMap;
+        state.topologyMap = topologyBeforePicker;
+        if (result.changed) {
+            ApplyAuthoringFaceAnchorFlatMaterialAction(
+                    authoringFlatTarget,
+                    &assets,
+                    [authoringFlatTarget, editedTopology, result](SectorTopologyMap& map) {
+                        map = editedTopology;
+                        SectorEditorMaterialActionResult materialResult;
+                        materialResult.changed = true;
+                        materialResult.status = result.status;
+                        materialResult.resetSurface3DUi = true;
+                        materialResult.resetSectorUvInputs = true;
+                        materialResult.resetDecalInputs = true;
+                        return materialResult;
+                    });
+        }
+        return;
+    }
+
     if (result.changed) {
         if (result.useMaterialMutationFinish) {
             FinishTopologyMaterialMutation(result.status.c_str(), &assets);
