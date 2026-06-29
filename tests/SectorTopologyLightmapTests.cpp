@@ -338,6 +338,34 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedDynamicLight) == hash,
           "hash ignores dynamic point light edits");
 
+    game::SectorTopologyMap changedDynamicSpotLight = base;
+    changedDynamicSpotLight.dynamicSpotLights.push_back(game::SectorTopologyDynamicSpotLight{
+            2,
+            Vector3{1.0f, 2.0f, 3.0f},
+            Vector3{4.0f, 5.0f, 6.0f},
+            WHITE,
+            1.0f,
+            8.0f,
+            20.0f,
+            35.0f,
+            true
+    });
+    Check(game::ComputeSectorLightmapSourceHash(changedDynamicSpotLight) == hash,
+          "hash ignores added dynamic spot lights");
+    changedDynamicSpotLight.dynamicSpotLights.front().position.x += 1.0f;
+    changedDynamicSpotLight.dynamicSpotLights.front().target.z += 1.0f;
+    changedDynamicSpotLight.dynamicSpotLights.front().range += 1.0f;
+    changedDynamicSpotLight.dynamicSpotLights.front().intensity += 0.25f;
+    changedDynamicSpotLight.dynamicSpotLights.front().color.r = 64;
+    changedDynamicSpotLight.dynamicSpotLights.front().innerConeDegrees = 12.0f;
+    changedDynamicSpotLight.dynamicSpotLights.front().outerConeDegrees = 48.0f;
+    changedDynamicSpotLight.dynamicSpotLights.front().enabled = false;
+    changedDynamicSpotLight.dynamicSpotLights.front().flicker = true;
+    changedDynamicSpotLight.dynamicSpotLights.front().flickerSpeed = 4.0f;
+    changedDynamicSpotLight.dynamicSpotLights.front().flickerAmount = 0.8f;
+    Check(game::ComputeSectorLightmapSourceHash(changedDynamicSpotLight) == hash,
+          "hash ignores dynamic spot light edits");
+
     game::SectorTopologyMap changedDirectional = base;
     changedDirectional.directionalLight.enabled = true;
     Check(game::ComputeSectorLightmapSourceHash(changedDirectional) != hash,

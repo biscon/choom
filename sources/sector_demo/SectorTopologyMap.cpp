@@ -300,6 +300,11 @@ int AllocateSectorTopologyDynamicLightId(const SectorTopologyMap& map)
     return AllocateNextId(map.dynamicPointLights);
 }
 
+int AllocateSectorTopologyDynamicSpotLightId(const SectorTopologyMap& map)
+{
+    return AllocateNextId(map.dynamicSpotLights);
+}
+
 const SectorTopologyVertex* FindSectorTopologyVertex(const SectorTopologyMap& map, int id)
 {
     return FindById(map.vertices, id);
@@ -393,6 +398,34 @@ bool RemoveSectorTopologyDynamicLight(SectorTopologyMap& map, int id)
     }
 
     map.dynamicPointLights.erase(found);
+    return true;
+}
+
+const SectorTopologyDynamicSpotLight* FindSectorTopologyDynamicSpotLight(const SectorTopologyMap& map, int id)
+{
+    return FindById(map.dynamicSpotLights, id);
+}
+
+SectorTopologyDynamicSpotLight* FindSectorTopologyDynamicSpotLight(SectorTopologyMap& map, int id)
+{
+    return FindById(map.dynamicSpotLights, id);
+}
+
+bool RemoveSectorTopologyDynamicSpotLight(SectorTopologyMap& map, int id)
+{
+    if (!IsValidSectorTopologyId(id)) {
+        return false;
+    }
+
+    const auto found = std::find_if(
+            map.dynamicSpotLights.begin(),
+            map.dynamicSpotLights.end(),
+            [id](const SectorTopologyDynamicSpotLight& light) { return light.id == id; });
+    if (found == map.dynamicSpotLights.end()) {
+        return false;
+    }
+
+    map.dynamicSpotLights.erase(found);
     return true;
 }
 

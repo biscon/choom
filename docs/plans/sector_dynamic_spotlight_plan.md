@@ -35,14 +35,14 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_01",
       "title": "Dynamic Spotlight Data And Serialization",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01a",
       "title": "Add Dynamic Spotlight Data Model And JSON Round Trip",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02",
@@ -131,8 +131,8 @@ When an agent is asked to execute this plan, it must:
 
 | Phase / Pass                                                        | Status      | Date | Notes                                                                                    |
 | ------------------------------------------------------------------- | ----------- | ---- | ---------------------------------------------------------------------------------------- |
-| Phase 1: Dynamic Spotlight Data And Serialization                   | Not Started |      | Parent phase.                                                                            |
-| Phase 1A: Add Dynamic Spotlight Data Model And JSON Round Trip      | Not Started |      | First executable pass. Data/persistence only, no rendering/editor UI.                    |
+| Phase 1: Dynamic Spotlight Data And Serialization                   | Completed   | 2026-06-29 | Completed with Phase 1A.                                                                 |
+| Phase 1A: Add Dynamic Spotlight Data Model And JSON Round Trip      | Completed   | 2026-06-29 | Added `dynamicSpotLights` data model, JSON round trip, validation, helpers, authoring map-level copy, and tests. |
 | Phase 2: Dynamic Spotlight Editor Authoring                         | Not Started |      | Parent phase.                                                                            |
 | Phase 2A: Add Dynamic Spotlight Tool And Inspector Fields           | Not Started |      | Add authoring tool and numeric inspector fields.                                         |
 | Phase 2B: Add 2D Spotlight Overlay And Selection Handles            | Not Started |      | Draw/edit origin/target/cone in 2D.                                                      |
@@ -145,6 +145,43 @@ When an agent is asked to execute this plan, it must:
 | Phase 5A: Add Pilot Selected Spotlight Apply Cancel Workflow        | Not Started |      | Be-the-light workflow.                                                                   |
 | Phase 6: Polish Tests Documentation And Completion                  | Not Started |      | Parent phase.                                                                            |
 | Phase 6A: Tune Defaults Strengthen Tests Update Docs And Close Plan | Not Started |      | Final cleanup and documentation.                                                         |
+
+### Phase 1A Completion Notes - 2026-06-29
+
+Summary:
+
+* Source code changed.
+* Added `SectorTopologyDynamicSpotLight` and map-level `dynamicSpotLights`.
+* Added stable ID allocation, lookup, and removal helpers.
+* Added topology and graph-native authoring JSON round-trip support.
+* Added validation and tests for serialization defaults, missing fields, invalid fields, deterministic output, helper functions, authoring map-level persistence, and static lightmap hash isolation.
+
+Serialized field names:
+
+* Root array: `dynamicSpotLights`.
+* Per light: `id`, `position`, `target`, `range`, `intensity`, `color`, optional `innerConeDegrees`, optional `outerConeDegrees`, optional `enabled`, optional `flicker`, optional `flickerSpeed`, optional `flickerAmount`.
+
+Default values:
+
+* `enabled = true`, `color = WHITE`, `intensity = 1.0`, `range = SectorWorldToAuthoringDistance(8.0f)`, `innerConeDegrees = 20.0`, `outerConeDegrees = 35.0`, `flicker = false`, `flickerSpeed = DynamicLightFlickerDefaultSpeed`, `flickerAmount = DynamicLightFlickerDefaultAmount`.
+* Default optional fields are omitted on save where matching existing dynamic point light style.
+
+Validation and behavior notes:
+
+* Missing `dynamicSpotLights` loads as empty.
+* Required `position`, `target`, `range`, `intensity`, and `color` fields are validated.
+* `range` must be finite and positive.
+* `intensity` must be finite and non-negative.
+* Cone fields load with clamps `0.0..179.0`, and `outerConeDegrees` is widened to at least `innerConeDegrees`.
+* Flicker fields use the existing dynamic light defaults and clamps.
+* Coincident `position` and `target` remain loadable.
+* Renderer/editor UI behavior is unchanged.
+* Static lightmap source hash ignores dynamic spotlights and dynamic spotlight edits.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
 
 ## Execution Tracking Rules
 

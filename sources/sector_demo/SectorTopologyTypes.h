@@ -137,6 +137,21 @@ struct SectorTopologyDynamicPointLight {
     float flickerAmount = DynamicLightFlickerDefaultAmount;
 };
 
+struct SectorTopologyDynamicSpotLight {
+    int id = -1;
+    Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
+    Vector3 target = {SectorWorldToAuthoringDistance(4.0f), SectorWorldToAuthoringDistance(1.0f), 0.0f};
+    Color color = WHITE;
+    float intensity = 1.0f;
+    float range = SectorWorldToAuthoringDistance(8.0f);
+    float innerConeDegrees = 20.0f;
+    float outerConeDegrees = 35.0f;
+    bool enabled = true;
+    bool flicker = false;
+    float flickerSpeed = DynamicLightFlickerDefaultSpeed;
+    float flickerAmount = DynamicLightFlickerDefaultAmount;
+};
+
 enum class SectorTopologyValidationSeverity {
     Warning,
     Error
