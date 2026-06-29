@@ -1062,17 +1062,17 @@ bool PointIsOnSegment(
             && py >= std::min(ay, by) - epsilon && py <= std::max(ay, by) + epsilon;
 }
 
-bool FaceContainsAnchorPoint(
+bool FaceContainsPoint(
         const SectorAuthoringPlanarizationResult& planar,
         const SectorAuthoringExtractedFace& face,
-        const SectorAuthoringFaceAnchor& anchor)
+        double px,
+        double py,
+        bool includeBoundary)
 {
     if (face.boundary.size() < 3) {
         return false;
     }
 
-    const double px = static_cast<double>(anchor.x);
-    const double py = static_cast<double>(anchor.y);
     bool inside = false;
     for (std::size_t index = 0; index < face.boundary.size(); ++index) {
         const SectorAuthoringFaceBoundaryEdge& boundary = face.boundary[index];
@@ -1086,7 +1086,7 @@ bool FaceContainsAnchorPoint(
         const double ay = PlanarPointY(start->point);
         const double bx = PlanarPointX(end->point);
         const double by = PlanarPointY(end->point);
-        if (PointIsOnSegment(px, py, ax, ay, bx, by)) {
+        if (includeBoundary && PointIsOnSegment(px, py, ax, ay, bx, by)) {
             return true;
         }
         if (((ay > py) != (by > py))
@@ -1095,6 +1095,19 @@ bool FaceContainsAnchorPoint(
         }
     }
     return inside;
+}
+
+bool FaceContainsAnchorPoint(
+        const SectorAuthoringPlanarizationResult& planar,
+        const SectorAuthoringExtractedFace& face,
+        const SectorAuthoringFaceAnchor& anchor)
+{
+    return FaceContainsPoint(
+            planar,
+            face,
+            static_cast<double>(anchor.x),
+            static_cast<double>(anchor.y),
+            true);
 }
 
 bool FaceContainsFace(
@@ -1388,6 +1401,57 @@ int AllocateDerivedSectorId(
     return sectorId;
 }
 
+void PruneUnusedDerivedTopology(
+        SectorTopologyMap& topology,
+        SectorAuthoringDerivationMapping& mapping)
+{
+    std::set<int> usedLineDefIds;
+    for (const SectorTopologyLineDef& lineDef : topology.lineDefs) {
+        if (lineDef.frontSideDefId > 0 || lineDef.backSideDefId > 0) {
+            usedLineDefIds.insert(lineDef.id);
+        }
+    }
+
+    topology.lineDefs.erase(
+            std::remove_if(
+                    topology.lineDefs.begin(),
+                    topology.lineDefs.end(),
+                    [&usedLineDefIds](const SectorTopologyLineDef& lineDef) {
+                        return usedLineDefIds.find(lineDef.id) == usedLineDefIds.end();
+                    }),
+            topology.lineDefs.end());
+    mapping.lines.erase(
+            std::remove_if(
+                    mapping.lines.begin(),
+                    mapping.lines.end(),
+                    [&usedLineDefIds](const SectorAuthoringDerivedLineMapping& lineMapping) {
+                        return usedLineDefIds.find(lineMapping.topologyLineDefId) == usedLineDefIds.end();
+                    }),
+            mapping.lines.end());
+
+    std::set<int> usedVertexIds;
+    for (const SectorTopologyLineDef& lineDef : topology.lineDefs) {
+        usedVertexIds.insert(lineDef.startVertexId);
+        usedVertexIds.insert(lineDef.endVertexId);
+    }
+    topology.vertices.erase(
+            std::remove_if(
+                    topology.vertices.begin(),
+                    topology.vertices.end(),
+                    [&usedVertexIds](const SectorTopologyVertex& vertex) {
+                        return usedVertexIds.find(vertex.id) == usedVertexIds.end();
+                    }),
+            topology.vertices.end());
+    mapping.vertices.erase(
+            std::remove_if(
+                    mapping.vertices.begin(),
+                    mapping.vertices.end(),
+                    [&usedVertexIds](const SectorAuthoringDerivedVertexMapping& vertexMapping) {
+                        return usedVertexIds.find(vertexMapping.topologyVertexId) == usedVertexIds.end();
+                    }),
+            mapping.vertices.end());
+}
+
 void BuildDerivedTopologyFacesAndLines(
         const SectorAuthoringGraph& graph,
         const SectorAuthoringPlanarizationResult& planar,
@@ -1458,6 +1522,17 @@ void BuildDerivedTopologyFacesAndLines(
             faceAnchorId = anchorIt->second;
         }
 
+        const SectorAuthoringFaceAnchor* anchor = FindSectorAuthoringFaceAnchor(graph, faceAnchorId);
+        if (anchor != nullptr && anchor->isVoid) {
+            SectorAuthoringResolvedFaceMapping resolvedMapping;
+            resolvedMapping.extractedFaceId = face.id;
+            resolvedMapping.faceAnchorId = faceAnchorId;
+            resolvedMapping.topologySectorId = -1;
+            resolvedMapping.kind = SectorAuthoringFaceResolutionKind::VoidNoDerivedSector;
+            mapping.resolvedFaces.push_back(resolvedMapping);
+            continue;
+        }
+
         SectorTopologySector sector;
         const int topologySectorId = AllocateDerivedSectorId(
                 faceAnchorId,
@@ -1465,7 +1540,6 @@ void BuildDerivedTopologyFacesAndLines(
                 reservedSectorIds,
                 &nextGeneratedSectorId);
         CopyFaceDefaultsToTopologySector(face, topologySectorId, sector);
-        const SectorAuthoringFaceAnchor* anchor = FindSectorAuthoringFaceAnchor(graph, faceAnchorId);
         if (anchor != nullptr) {
             CopyFaceAnchorPropertiesToTopologySector(*anchor, sector);
         }
@@ -1485,6 +1559,13 @@ void BuildDerivedTopologyFacesAndLines(
         sectorMapping.faceAnchorId = faceAnchorId;
         sectorMapping.topologySectorId = sector.id;
         mapping.sectors.push_back(sectorMapping);
+
+        SectorAuthoringResolvedFaceMapping resolvedMapping;
+        resolvedMapping.extractedFaceId = face.id;
+        resolvedMapping.faceAnchorId = faceAnchorId;
+        resolvedMapping.topologySectorId = sector.id;
+        resolvedMapping.kind = SectorAuthoringFaceResolutionKind::DerivedSector;
+        mapping.resolvedFaces.push_back(resolvedMapping);
     }
 
     for (const SectorAuthoringExtractedFace& face : faces.faces) {
@@ -1561,6 +1642,8 @@ void BuildDerivedTopologyFacesAndLines(
             mapping.sides.push_back(sideMapping);
         }
     }
+
+    PruneUnusedDerivedTopology(topology, mapping);
 }
 
 } // namespace
@@ -2440,6 +2523,19 @@ SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopolog
     }
 
     return graph;
+}
+
+bool SectorAuthoringFaceContainsMapPoint(
+        const SectorAuthoringPlanarizationResult& planar,
+        const SectorAuthoringExtractedFace& face,
+        Vector2 mapPoint)
+{
+    return FaceContainsPoint(
+            planar,
+            face,
+            static_cast<double>(mapPoint.x) * SectorCoordSubdivisions,
+            static_cast<double>(mapPoint.y) * SectorCoordSubdivisions,
+            true);
 }
 
 } // namespace game

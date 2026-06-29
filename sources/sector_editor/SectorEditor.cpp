@@ -1183,6 +1183,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
             }
             UpdateSectorEditorGameplayPreview(state, controllerInput, previousVisualEyeY, dt);
             ApplyGameplayPoseToPreview();
+            preview.UpdateVisibilityDebug(state.fpsControllerState.currentSectorId);
             state.freeflyController.pose = preview.RendererPose();
         }
         UpdatePreview3DSelection(input);
@@ -2390,6 +2391,7 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
     const SectorGeneratedSurfaceHit hit = PickSectorGeneratedGeometry(
             preview.RenderedGeometry(),
             ray,
+            preview.VisibilityResult(),
             GeometryEpsilon);
     if (!hit.hit) {
         return best;
@@ -2414,6 +2416,9 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
         }
         const float lift = IsWallSurface(surface.kind) ? PreviewHighlightLift : PreviewHighlightLift * 2.0f;
         for (const SectorGeneratedSurface& generated : preview.RenderedGeometry().surfaces) {
+            if (!ShouldIncludeSectorGeneratedSurfaceForVisibility(generated, preview.VisibilityResult())) {
+                continue;
+            }
             const SectorSurfaceRef generatedRef = ToEditorSurfaceRef(generated.ref);
             if (!SameSurfaceRef(surface, generatedRef)) {
                 continue;
@@ -2449,7 +2454,7 @@ void SectorEditor::DrawPreviewOverlay(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
-    const Rectangle panel{32.0f, 32.0f, 980.0f, 202.0f};
+    const Rectangle panel{32.0f, 32.0f, 980.0f, 232.0f};
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
@@ -2559,6 +2564,15 @@ void SectorEditor::DrawPreviewOverlay(
             engine::UITextJustify::Left,
             config.mutedTextColor
     );
+    engine::Text(
+            config,
+            assets,
+            Rectangle{panel.x + 18.0f, panel.y + 152.0f, panel.width - 36.0f, 30.0f},
+            font,
+            preview.VisibilityDebugText().c_str(),
+            engine::UITextJustify::Left,
+            config.mutedTextColor
+    );
     const char* previewStatusText = statusText.empty() ? "Ready" : statusText.c_str();
     const char* collisionWarningText = state.sectorCollisionWorldWarning.empty()
             ? previewStatusText
@@ -2566,7 +2580,7 @@ void SectorEditor::DrawPreviewOverlay(
     engine::Text(
             config,
             assets,
-            Rectangle{panel.x + 18.0f, panel.y + 160.0f, panel.width - 36.0f, 30.0f},
+            Rectangle{panel.x + 18.0f, panel.y + 190.0f, panel.width - 36.0f, 30.0f},
             font,
             state.previewControlMode == SectorPreviewControlMode::Gameplay
                     ? TextFormat(
@@ -4786,6 +4800,29 @@ void SectorEditor::DrawSectorsPanel(
                 [this, faceAnchorId](const char* status, const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate) {
                     return MutateSectorEditorAuthoringFaceAnchorById(state, faceAnchorId, status, mutate);
                 };
+
+        bool isVoidFace = selectedAuthoringFaceAnchor->isVoid;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_authoring_face_void",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font,
+                    "Void Face",
+                    isVoidFace)) {
+            mutateFaceAnchor(
+                    "Updated authoring face void state",
+                    [isVoidFace](SectorAuthoringFaceAnchor& anchor) {
+                        if (anchor.isVoid == isVoidFace) {
+                            return false;
+                        }
+                        anchor.isVoid = isVoidFace;
+                        return true;
+                    });
+        }
+        y += rowH + gap;
 
         auto drawHeight = [&](const char* id, const char* label, float current, engine::UIFloatInputState& inputState, bool floorField) {
             const SectorEditorFloatInputResult result = DrawLabeledFloatInput(

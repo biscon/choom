@@ -46,6 +46,75 @@ Vector2 AuthoringFaceAnchorToMap(const SectorAuthoringFaceAnchor& anchor)
     };
 }
 
+const SectorAuthoringPlanarVertex* FindCachedPlanarVertex(
+        const SectorAuthoringPlanarizationResult& planar,
+        int vertexId)
+{
+    for (const SectorAuthoringPlanarVertex& vertex : planar.vertices) {
+        if (vertex.id == vertexId) {
+            return &vertex;
+        }
+    }
+    return nullptr;
+}
+
+bool PlanarVertexToMap(
+        const SectorAuthoringPlanarizationResult& planar,
+        int vertexId,
+        Vector2& outMap)
+{
+    const SectorAuthoringPlanarVertex* vertex = FindCachedPlanarVertex(planar, vertexId);
+    if (vertex == nullptr
+            || !SectorAuthoringPlanarRationalIsInteger(vertex->point.x)
+            || !SectorAuthoringPlanarRationalIsInteger(vertex->point.y)) {
+        return false;
+    }
+
+    outMap = Vector2{
+            SectorCoordToVisibleAuthoring(SectorAuthoringPlanarRationalToSectorCoord(vertex->point.x)),
+            SectorCoordToVisibleAuthoring(SectorAuthoringPlanarRationalToSectorCoord(vertex->point.y))
+    };
+    return true;
+}
+
+bool AppendAuthoringFaceBoundaryHighlight(
+        const SectorAuthoringDerivationResult& derivation,
+        const SectorAuthoringResolvedFaceMapping& mapping,
+        bool isVoid,
+        CachedAuthoringFaceHighlightDraw& outHighlight)
+{
+    const SectorAuthoringExtractedFace* face = nullptr;
+    for (const SectorAuthoringExtractedFace& candidate : derivation.faces.faces) {
+        if (candidate.id == mapping.extractedFaceId) {
+            face = &candidate;
+            break;
+        }
+    }
+    if (face == nullptr) {
+        return false;
+    }
+
+    outHighlight.faceAnchorId = mapping.faceAnchorId;
+    outHighlight.topologySectorId = mapping.topologySectorId;
+    outHighlight.isVoid = isVoid;
+    outHighlight.outlineSegments.reserve(face->boundary.size());
+    for (const SectorAuthoringFaceBoundaryEdge& edge : face->boundary) {
+        Vector2 a{};
+        Vector2 b{};
+        if (!PlanarVertexToMap(derivation.planar, edge.startVertexId, a)
+                || !PlanarVertexToMap(derivation.planar, edge.endVertexId, b)) {
+            continue;
+        }
+
+        CachedTopologyOutlineSegment segment;
+        segment.a = a;
+        segment.b = b;
+        segment.hole = isVoid;
+        outHighlight.outlineSegments.push_back(segment);
+    }
+    return !outHighlight.outlineSegments.empty();
+}
+
 bool FindAuthoringLineMidpoint(
         const SectorAuthoringGraph& graph,
         int lineId,
@@ -471,17 +540,22 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
     if (authoringDerivation.success) {
         std::map<int, int> topologySectorIdByFaceAnchorId;
         std::map<int, int> mappingCountByFaceAnchorId;
-        for (const SectorAuthoringDerivedSectorMapping& mapping
-                : authoringDerivation.mapping.sectors) {
+        std::map<int, const SectorAuthoringResolvedFaceMapping*> voidMappingByFaceAnchorId;
+        for (const SectorAuthoringResolvedFaceMapping& mapping
+                : authoringDerivation.mapping.resolvedFaces) {
             if (!IsValidSectorAuthoringId(mapping.faceAnchorId)
                     || FindSectorAuthoringFaceAnchor(authoringGraph, mapping.faceAnchorId) == nullptr) {
                 continue;
             }
-            topologySectorIdByFaceAnchorId[mapping.faceAnchorId] = mapping.topologySectorId;
             ++mappingCountByFaceAnchorId[mapping.faceAnchorId];
+            if (mapping.kind == SectorAuthoringFaceResolutionKind::DerivedSector) {
+                topologySectorIdByFaceAnchorId[mapping.faceAnchorId] = mapping.topologySectorId;
+            } else if (mapping.kind == SectorAuthoringFaceResolutionKind::VoidNoDerivedSector) {
+                voidMappingByFaceAnchorId[mapping.faceAnchorId] = &mapping;
+            }
         }
 
-        cache.authoringFaceHighlights.reserve(topologySectorIdByFaceAnchorId.size());
+        cache.authoringFaceHighlights.reserve(topologySectorIdByFaceAnchorId.size() + voidMappingByFaceAnchorId.size());
         for (const auto& entry : topologySectorIdByFaceAnchorId) {
             const int faceAnchorId = entry.first;
             if (mappingCountByFaceAnchorId[faceAnchorId] != 1) {
@@ -504,6 +578,16 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
             highlight.topologySectorId = sectorDraw->sectorId;
             highlight.outlineSegments = sectorDraw->outlineSegments;
             cache.authoringFaceHighlights.push_back(std::move(highlight));
+        }
+        for (const auto& entry : voidMappingByFaceAnchorId) {
+            const int faceAnchorId = entry.first;
+            if (mappingCountByFaceAnchorId[faceAnchorId] != 1 || entry.second == nullptr) {
+                continue;
+            }
+            CachedAuthoringFaceHighlightDraw highlight;
+            if (AppendAuthoringFaceBoundaryHighlight(authoringDerivation, *entry.second, true, highlight)) {
+                cache.authoringFaceHighlights.push_back(std::move(highlight));
+            }
         }
     }
 
@@ -596,16 +680,38 @@ void DrawCachedAuthoringGraphOverlay(
         DrawCircleV(screen, hovered ? 4.5f : 3.5f, fill);
     }
 
+    const Color voidFaceColor = Color{162, 160, 174, 160};
+    for (const CachedAuthoringFaceHighlightDraw& highlight : cache.authoringFaceHighlights) {
+        if (!highlight.isVoid) {
+            continue;
+        }
+        const bool selected =
+                context.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
+                && context.selectedAuthoring.faceAnchorId == highlight.faceAnchorId;
+        if (selected) {
+            continue;
+        }
+        for (const CachedTopologyOutlineSegment& segment : highlight.outlineSegments) {
+            const Vector2 a = CachedMapToScreen(context, segment.a);
+            const Vector2 b = CachedMapToScreen(context, segment.b);
+            DrawLineEx(a, b, 5.0f, lineShadow);
+            DrawLineEx(a, b, 2.0f, voidFaceColor);
+        }
+    }
+
     if (context.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
             && !context.derivedTopologyStale) {
         if (const CachedAuthoringFaceHighlightDraw* highlight = FindCachedAuthoringFaceHighlight(
                     cache,
                     context.selectedAuthoring.faceAnchorId)) {
+            const Color selectedFaceColor = highlight->isVoid
+                    ? Color{190, 188, 204, 235}
+                    : selectedLineColor;
             for (const CachedTopologyOutlineSegment& segment : highlight->outlineSegments) {
                 const Vector2 a = CachedMapToScreen(context, segment.a);
                 const Vector2 b = CachedMapToScreen(context, segment.b);
                 DrawLineEx(a, b, 8.0f, lineShadow);
-                DrawLineEx(a, b, 4.0f, selectedLineColor);
+                DrawLineEx(a, b, 4.0f, selectedFaceColor);
             }
         }
     }

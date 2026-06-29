@@ -8,6 +8,7 @@
 namespace game {
 
 struct SectorMeshBatch {
+    int sectorId = -1;
     std::string textureId;
     std::string decalTextureId;
     float decalOpacity = 1.0f;
@@ -24,6 +25,7 @@ struct SectorMeshBatch {
 
 struct SectorMeshBuildResult {
     std::vector<SectorMeshBatch> batches;
+    std::vector<SectorMeshBatch> sectorDrawRecords;
     int vertexCount = 0;
     int triangleCount = 0;
 };

@@ -81,6 +81,13 @@ void SectorDemo::RenderOverlay(engine::AssetManager& assets)
             20,
             LIGHTGRAY
     );
+    DrawText(
+            preview.VisibilityDebugText().c_str(),
+            40,
+            136,
+            20,
+            LIGHTGRAY
+    );
 }
 
 } // namespace game

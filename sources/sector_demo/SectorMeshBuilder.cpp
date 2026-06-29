@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorPortalVisibility.h"
 
 #include <raylib.h>
 
@@ -19,6 +20,7 @@ namespace game {
 namespace {
 
 struct SectorMeshBatchKey {
+    int sectorId = -1;
     std::string textureId;
     std::string decalTextureId;
     float decalOpacity = 1.0f;
@@ -31,7 +33,8 @@ struct SectorMeshBatchKey {
 
     bool operator==(const SectorMeshBatchKey& other) const
     {
-        return textureId == other.textureId
+        return sectorId == other.sectorId
+                && textureId == other.textureId
                 && decalTextureId == other.decalTextureId
                 && decalOpacity == other.decalOpacity
                 && decalEmissive == other.decalEmissive
@@ -48,6 +51,7 @@ struct SectorMeshBatchKey {
 struct SectorMeshBatchKeyHash {
     size_t operator()(const SectorMeshBatchKey& key) const
     {
+        const size_t sectorHash = std::hash<int>{}(key.sectorId);
         const size_t textureHash = std::hash<std::string>{}(key.textureId);
         const size_t decalHash = std::hash<std::string>{}(key.decalTextureId);
         const size_t opacityHash = std::hash<float>{}(key.decalOpacity);
@@ -59,7 +63,8 @@ struct SectorMeshBatchKeyHash {
         const size_t alphaTestHash = std::hash<bool>{}(key.alphaTest);
         const size_t alphaCutoffHash = std::hash<float>{}(key.alphaCutoff);
         const size_t receivesLightmapHash = std::hash<bool>{}(key.receivesLightmap);
-        size_t hash = textureHash ^ (decalHash + 0x9e3779b9u + (textureHash << 6u) + (textureHash >> 2u));
+        size_t hash = sectorHash ^ (textureHash + 0x9e3779b9u + (sectorHash << 6u) + (sectorHash >> 2u));
+        hash ^= decalHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= opacityHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= emissiveHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= tintXHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
@@ -101,6 +106,7 @@ float DecalBloomIntensityOrDefault(float value)
 SectorMeshBatchData& BatchForKey(
         std::unordered_map<SectorMeshBatchKey, size_t, SectorMeshBatchKeyHash>& batchIndexByKey,
         std::vector<SectorMeshBatchData>& batches,
+        int sectorId,
         const std::string& textureId,
         const std::string& decalTextureId,
         float decalOpacity,
@@ -113,6 +119,7 @@ SectorMeshBatchData& BatchForKey(
 {
     const bool hasDecal = !decalTextureId.empty();
     const SectorMeshBatchKey key{
+            sectorId,
             textureId,
             decalTextureId,
             hasDecal ? UnitOrDefault(decalOpacity, 1.0f) : 1.0f,
@@ -128,6 +135,7 @@ SectorMeshBatchData& BatchForKey(
     }
 
     SectorMeshBatchData batch;
+    batch.sectorId = key.sectorId;
     batch.textureId = textureId;
     batch.decalTextureId = decalTextureId;
     batch.decalOpacity = key.decalOpacity;
@@ -210,11 +218,10 @@ Mesh CreateMeshFromBatch(const SectorMeshBatchData& batch)
     return mesh;
 }
 
-} // namespace
-
-SectorMeshBatchDataResult BuildSectorMeshBatchData(
+SectorMeshBatchDataResult BuildSectorMeshBatchDataInternal(
         const SectorGeneratedGeometry& geometry,
-        const SectorLightmapLayout* lightmapLayout)
+        const SectorLightmapLayout* lightmapLayout,
+        bool groupBySector)
 {
     SectorMeshBatchDataResult result;
 
@@ -222,9 +229,11 @@ SectorMeshBatchDataResult BuildSectorMeshBatchData(
 
     for (size_t surfaceIndex = 0; surfaceIndex < geometry.surfaces.size(); ++surfaceIndex) {
         const SectorGeneratedSurface& surface = geometry.surfaces[surfaceIndex];
+        const int sectorId = groupBySector ? surface.ref.topologySectorId : -1;
         SectorMeshBatchData& batch = BatchForKey(
                 batchIndexByKey,
                 result.batches,
+                sectorId,
                 surface.textureId,
                 surface.decalTextureId,
                 surface.decalOpacity,
@@ -262,6 +271,41 @@ SectorMeshBatchDataResult BuildSectorMeshBatchData(
     return result;
 }
 
+SectorMeshBatch MakeUploadedBatch(const SectorMeshBatchData& builder, Mesh mesh)
+{
+    SectorMeshBatch batch;
+    batch.sectorId = builder.sectorId;
+    batch.textureId = builder.textureId;
+    batch.decalTextureId = builder.decalTextureId;
+    batch.decalOpacity = builder.decalOpacity;
+    batch.decalEmissive = builder.decalEmissive;
+    batch.decalTint = builder.decalTint;
+    batch.decalBloomIntensity = builder.decalBloomIntensity;
+    batch.alphaTest = builder.alphaTest;
+    batch.alphaCutoff = builder.alphaCutoff;
+    batch.receivesLightmap = builder.receivesLightmap;
+    batch.mesh = mesh;
+    batch.vertexCount = mesh.vertexCount;
+    batch.triangleCount = mesh.triangleCount;
+    return batch;
+}
+
+} // namespace
+
+SectorMeshBatchDataResult BuildSectorMeshBatchData(
+        const SectorGeneratedGeometry& geometry,
+        const SectorLightmapLayout* lightmapLayout)
+{
+    return BuildSectorMeshBatchDataInternal(geometry, lightmapLayout, false);
+}
+
+SectorMeshBatchDataResult BuildSectorMeshDrawRecordData(
+        const SectorGeneratedGeometry& geometry,
+        const SectorLightmapLayout* lightmapLayout)
+{
+    return BuildSectorMeshBatchDataInternal(geometry, lightmapLayout, true);
+}
+
 SectorMeshBuildResult BuildSectorMeshes(
         const SectorTopologyMap& map,
         const SectorLightmapLayout* lightmapLayout,
@@ -278,14 +322,10 @@ SectorMeshBuildResult BuildSectorMeshes(
     }
 
     const SectorMeshBatchDataResult batchData = BuildSectorMeshBatchData(geometry, lightmapLayout);
-
+    result.batches.reserve(batchData.batches.size());
     for (const SectorMeshBatchData& builder : batchData.batches) {
-        Mesh mesh = CreateMeshFromBatch(builder);
-        if (mesh.vertexCount <= 0) {
-            continue;
-        }
-
         SectorMeshBatch batch;
+        batch.sectorId = builder.sectorId;
         batch.textureId = builder.textureId;
         batch.decalTextureId = builder.decalTextureId;
         batch.decalOpacity = builder.decalOpacity;
@@ -295,28 +335,75 @@ SectorMeshBuildResult BuildSectorMeshes(
         batch.alphaTest = builder.alphaTest;
         batch.alphaCutoff = builder.alphaCutoff;
         batch.receivesLightmap = builder.receivesLightmap;
-        batch.mesh = mesh;
-        batch.vertexCount = mesh.vertexCount;
-        batch.triangleCount = mesh.triangleCount;
+        batch.vertexCount = builder.vertexCount;
+        batch.triangleCount = builder.triangleCount;
+        result.batches.push_back(batch);
+    }
+
+    const SectorMeshBatchDataResult drawRecordData = BuildSectorMeshDrawRecordData(geometry, lightmapLayout);
+    result.sectorDrawRecords.reserve(drawRecordData.batches.size());
+    for (const SectorMeshBatchData& builder : drawRecordData.batches) {
+        Mesh mesh = CreateMeshFromBatch(builder);
+        if (mesh.vertexCount <= 0) {
+            continue;
+        }
+
+        SectorMeshBatch batch = MakeUploadedBatch(builder, mesh);
         result.vertexCount += batch.vertexCount;
         result.triangleCount += batch.triangleCount;
-        result.batches.push_back(batch);
+        result.sectorDrawRecords.push_back(batch);
     }
 
     std::fprintf(
             stdout,
-            "[SectorDemo] Generated %d vertices, %d triangles, %zu topology mesh batches\n",
+            "[SectorDemo] Generated %d vertices, %d triangles, %zu sector mesh draw records\n",
             result.vertexCount,
             result.triangleCount,
-            result.batches.size()
+            result.sectorDrawRecords.size()
     );
 
     return result;
 }
 
+bool ShouldDrawSectorMeshRecordForVisibility(
+        const SectorMeshBatch& record,
+        const RuntimePortalVisibilityResult& visibility)
+{
+    if (!visibility.validStartSector || visibility.fallbackDrawAll) {
+        return true;
+    }
+
+    return std::find(
+            visibility.visibleSectorIds.begin(),
+            visibility.visibleSectorIds.end(),
+            record.sectorId) != visibility.visibleSectorIds.end();
+}
+
+bool ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(
+        const SectorMeshBatch& record,
+        const RuntimePortalVisibilityResult& visibility)
+{
+    return record.decalEmissive
+            && !record.decalTextureId.empty()
+            && ShouldDrawSectorMeshRecordForVisibility(record, visibility);
+}
+
+size_t CountSectorMeshDrawRecordsForVisibility(
+        const std::vector<SectorMeshBatch>& records,
+        const RuntimePortalVisibilityResult& visibility)
+{
+    size_t count = 0;
+    for (const SectorMeshBatch& record : records) {
+        if (ShouldDrawSectorMeshRecordForVisibility(record, visibility)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 void UnloadSectorMeshes(SectorMeshBuildResult& buildResult)
 {
-    for (SectorMeshBatch& batch : buildResult.batches) {
+    for (SectorMeshBatch& batch : buildResult.sectorDrawRecords) {
         if (batch.mesh.vertexCount > 0) {
             UnloadMesh(batch.mesh);
             batch.mesh = Mesh{};

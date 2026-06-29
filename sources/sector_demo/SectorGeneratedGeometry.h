@@ -9,6 +9,8 @@
 
 namespace game {
 
+struct RuntimePortalVisibilityResult;
+
 constexpr float kSectorGeneratedTextureWorldSize = 2.0f;
 
 enum class SectorGeneratedSurfaceKind {
@@ -73,6 +75,14 @@ SectorGeneratedSurfaceHit PickSectorGeneratedGeometry(
         const SectorGeneratedGeometry& geometry,
         Ray ray,
         float minDistance = 0.001f);
+SectorGeneratedSurfaceHit PickSectorGeneratedGeometry(
+        const SectorGeneratedGeometry& geometry,
+        Ray ray,
+        const RuntimePortalVisibilityResult& visibility,
+        float minDistance = 0.001f);
+bool ShouldIncludeSectorGeneratedSurfaceForVisibility(
+        const SectorGeneratedSurface& surface,
+        const RuntimePortalVisibilityResult& visibility);
 const char* SectorGeneratedSurfaceKindName(SectorGeneratedSurfaceKind kind);
 std::string FormatSectorGeneratedSurfaceLabel(const SectorGeneratedSurfaceRef& ref);
 

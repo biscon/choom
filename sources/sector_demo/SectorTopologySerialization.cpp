@@ -1004,6 +1004,7 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         anchor.name = ReadString(faceAnchors[i], "name", context);
         anchor.x = ReadCoord(faceAnchors[i], "x", context);
         anchor.y = ReadCoord(faceAnchors[i], "y", context);
+        anchor.isVoid = ReadOptionalBool(faceAnchors[i], "isVoid", context, false);
         anchor.floorZ = ReadFloat(faceAnchors[i], "floorZ", context);
         anchor.ceilingZ = ReadFloat(faceAnchors[i], "ceilingZ", context);
         anchor.floorTextureId = ReadString(faceAnchors[i], "floorTextureId", context);
@@ -1207,6 +1208,9 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         };
         if (anchor->ceilingSky) {
             anchorJson["ceilingSky"] = true;
+        }
+        if (anchor->isVoid) {
+            anchorJson["isVoid"] = true;
         }
         if (HasDecal(anchor->floorDecal)) {
             anchorJson["floorDecal"] = WriteDecal(anchor->floorDecal, context + ".floorDecal");

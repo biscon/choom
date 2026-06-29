@@ -1,5 +1,7 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
+#include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshBuilder.h"
+#include "sector_demo/SectorPortalVisibility.h"
 
 #include <cmath>
 #include <cstdio>
@@ -150,6 +152,33 @@ bool HasBatchTexture(const game::SectorMeshBatchDataResult& result, const std::s
     return false;
 }
 
+int CountSectorRecords(const game::SectorMeshBatchDataResult& result, int sectorId)
+{
+    int count = 0;
+    for (const game::SectorMeshBatchData& batch : result.batches) {
+        if (batch.sectorId == sectorId) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+const game::SectorMeshBatchData* FindSectorRecord(
+        const game::SectorMeshBatchDataResult& result,
+        int sectorId,
+        const std::string& textureId,
+        const std::string& decalTextureId)
+{
+    for (const game::SectorMeshBatchData& batch : result.batches) {
+        if (batch.sectorId == sectorId
+                && batch.textureId == textureId
+                && batch.decalTextureId == decalTextureId) {
+            return &batch;
+        }
+    }
+    return nullptr;
+}
+
 const game::SectorMeshBatchData* FindBatch(
         const game::SectorMeshBatchDataResult& result,
         const std::string& textureId,
@@ -265,6 +294,20 @@ game::SectorGeneratedSurface MakeBatchTestSurface(
     return surface;
 }
 
+game::SectorMeshBatch MakeDrawRecord(
+        int sectorId,
+        const char* textureId,
+        const char* decalTextureId = "",
+        bool decalEmissive = false)
+{
+    game::SectorMeshBatch record;
+    record.sectorId = sectorId;
+    record.textureId = textureId;
+    record.decalTextureId = decalTextureId;
+    record.decalEmissive = decalEmissive;
+    return record;
+}
+
 game::SectorGeneratedSurface MakeMiddleBatchTestSurface(const char* textureId, float xOffset)
 {
     game::SectorGeneratedSurface surface =
@@ -370,6 +413,36 @@ void TestSquareTopologyMeshBatchData()
     Check(HasBatchTexture(result, "square-wall"), "square topology batch data contains wall texture");
 }
 
+void TestOneSectorMeshDrawRecords()
+{
+    const game::SectorGeneratedGeometry geometry = BuildGeometryOrFail(MakeSquare(), "square topology geometry builds");
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshDrawRecordData(geometry);
+    Check(!result.batches.empty(), "one-sector topology draw records are built");
+    Check(result.vertexCount > 0 && result.triangleCount > 0,
+          "one-sector topology draw records include geometry");
+    Check(CountSectorRecords(result, 10) == static_cast<int>(result.batches.size()),
+          "one-sector topology draw records retain sector ownership");
+}
+
+void TestTwoSectorsWithSameMaterialKeepSeparateDrawRecords()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface left = MakeBatchTestSurface("shared", "", Vector2{0.0f, 0.0f}, 1.0f, 0.0f);
+    left.ref.topologySectorId = 10;
+    game::SectorGeneratedSurface right = MakeBatchTestSurface("shared", "", Vector2{0.0f, 0.0f}, 1.0f, 2.0f);
+    right.ref.topologySectorId = 20;
+    geometry.surfaces.push_back(left);
+    geometry.surfaces.push_back(right);
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshDrawRecordData(geometry);
+    Check(result.batches.size() == 2,
+          "same material in two sectors produces separate sector draw records");
+    Check(FindSectorRecord(result, 10, "shared", "") != nullptr,
+          "left sector keeps its shared material draw record");
+    Check(FindSectorRecord(result, 20, "shared", "") != nullptr,
+          "right sector keeps its shared material draw record");
+}
+
 void TestDecalMeshBatchData()
 {
     game::SectorGeneratedGeometry geometry;
@@ -458,6 +531,56 @@ void TestDecalMeshBatchData()
     }
 }
 
+void TestSectorDrawRecordMaterialGrouping()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface baseA = MakeBatchTestSurface("stone", "", Vector2{0.0f, 0.0f}, 1.0f, 0.0f);
+    baseA.ref.topologySectorId = 10;
+    game::SectorGeneratedSurface baseB = MakeBatchTestSurface("stone", "", Vector2{0.0f, 0.0f}, 1.0f, 2.0f);
+    baseB.ref.topologySectorId = 10;
+    game::SectorGeneratedSurface decal = MakeBatchTestSurface("stone", "poster", Vector2{0.25f, 0.5f}, 0.6f, 4.0f);
+    decal.ref.topologySectorId = 10;
+    geometry.surfaces.push_back(baseA);
+    geometry.surfaces.push_back(baseB);
+    geometry.surfaces.push_back(decal);
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshDrawRecordData(geometry);
+    const game::SectorMeshBatchData* baseRecord = FindSectorRecord(result, 10, "stone", "");
+    const game::SectorMeshBatchData* decalRecord = FindSectorRecord(result, 10, "stone", "poster");
+    Check(result.batches.size() == 2,
+          "sector draw record grouping still uses material and decal key");
+    Check(baseRecord != nullptr && baseRecord->vertices.size() == 6,
+          "matching sector/material surfaces share one sector draw record");
+    Check(decalRecord != nullptr && decalRecord->vertices.size() == 3,
+          "different decal key creates a separate sector draw record");
+    Check(decalRecord != nullptr && Near(decalRecord->decalOpacity, 0.6f),
+          "sector draw record preserves decal opacity");
+}
+
+void TestSectorDrawRecordLightmapUvsUseOriginalSurfaceIndex()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface first = MakeBatchTestSurface("stone", "", Vector2{0.0f, 0.0f}, 1.0f, 0.0f);
+    first.ref.topologySectorId = 10;
+    game::SectorGeneratedSurface second = MakeBatchTestSurface("stone", "", Vector2{0.0f, 0.0f}, 1.0f, 2.0f);
+    second.ref.topologySectorId = 20;
+    geometry.surfaces.push_back(first);
+    geometry.surfaces.push_back(second);
+
+    game::SectorLightmapLayout layout;
+    layout.charts.resize(2);
+    layout.charts[0].vertexUvs = {Vector2{0.1f, 0.2f}, Vector2{0.2f, 0.2f}, Vector2{0.1f, 0.3f}};
+    layout.charts[1].vertexUvs = {Vector2{0.7f, 0.8f}, Vector2{0.8f, 0.8f}, Vector2{0.7f, 0.9f}};
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshDrawRecordData(geometry, &layout);
+    const game::SectorMeshBatchData* firstRecord = FindSectorRecord(result, 10, "stone", "");
+    const game::SectorMeshBatchData* secondRecord = FindSectorRecord(result, 20, "stone", "");
+    Check(firstRecord != nullptr && Near(firstRecord->vertices.front().lightmapUv, Vector2{0.1f, 0.2f}),
+          "first sector draw record copies lightmap UVs from original surface index");
+    Check(secondRecord != nullptr && Near(secondRecord->vertices.front().lightmapUv, Vector2{0.7f, 0.8f}),
+          "second sector draw record copies lightmap UVs from original surface index");
+}
+
 void TestMiddleTextureBatchState()
 {
     game::SectorGeneratedGeometry geometry;
@@ -492,6 +615,41 @@ void TestMiddleTextureBatchState()
           "middle texture batch stores alpha cutoff");
     Check(middleBatch != nullptr && middleBatch->vertices.size() == 6,
           "matching middle texture surfaces share the alpha-test batch");
+}
+
+void TestSectorDrawRecordMiddleTextureAlphaTest()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface middle = MakeMiddleBatchTestSurface("bars", 0.0f);
+    middle.ref.topologySectorId = 10;
+    geometry.surfaces.push_back(middle);
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshDrawRecordData(geometry);
+    const game::SectorMeshBatchData* record = FindSectorRecord(result, 10, "bars", "");
+    Check(record != nullptr && record->alphaTest,
+          "middle texture sector draw record preserves alpha-test state");
+    Check(record != nullptr && Near(record->alphaCutoff, 0.5f),
+          "middle texture sector draw record preserves alpha cutoff");
+    Check(record != nullptr && record->receivesLightmap,
+          "middle texture sector draw record preserves lightmap receiver state");
+}
+
+void TestSectorDrawRecordEmissiveDecalMetadata()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface emissive =
+            MakeBatchTestSurface("stone", "sign", Vector2{0.25f, 0.5f}, 0.75f, 0.0f, true, Vector3{0.5f, 1.0f, 0.25f}, 4.0f);
+    emissive.ref.topologySectorId = 10;
+    geometry.surfaces.push_back(emissive);
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshDrawRecordData(geometry);
+    const game::SectorMeshBatchData* record = FindSectorRecord(result, 10, "stone", "sign");
+    Check(record != nullptr && record->decalEmissive,
+          "emissive decal sector draw record preserves emissive flag");
+    Check(record != nullptr && Near(record->decalTint, Vector3{0.5f, 1.0f, 0.25f}),
+          "emissive decal sector draw record preserves tint");
+    Check(record != nullptr && Near(record->decalBloomIntensity, 4.0f),
+          "emissive decal sector draw record preserves bloom intensity");
 }
 
 void TestLightmapParticipationSplitsBatchKey()
@@ -700,13 +858,162 @@ void TestGeneratedGeometryPickingResolvesMiddleFacingRefs()
           "back-side ray picks back owner for back-assigned middle texture");
 }
 
+void TestGeneratedSurfaceVisibilitySelection()
+{
+    const game::SectorGeneratedGeometry geometry =
+            BuildGeometryOrFail(MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f),
+                                "visible surface filter geometry builds");
+
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    int included = 0;
+    int hiddenSectorIncluded = 0;
+    for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (!game::ShouldIncludeSectorGeneratedSurfaceForVisibility(surface, visible)) {
+            continue;
+        }
+        ++included;
+        if (surface.ref.topologySectorId == 20) {
+            ++hiddenSectorIncluded;
+        }
+    }
+    Check(included > 0, "visible-sector surface filter includes visible sector surfaces");
+    Check(hiddenSectorIncluded == 0, "visible-sector surface filter excludes hidden sector surfaces");
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.fallbackDrawAll = true;
+    int fallbackIncluded = 0;
+    for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (game::ShouldIncludeSectorGeneratedSurfaceForVisibility(surface, fallback)) {
+            ++fallbackIncluded;
+        }
+    }
+    Check(fallbackIncluded == static_cast<int>(geometry.surfaces.size()),
+          "fallback draw-all surface filter includes all surfaces");
+}
+
+void TestGeneratedGeometryPickingUsesVisibilityFilter()
+{
+    const game::SectorGeneratedGeometry geometry =
+            BuildGeometryOrFail(MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f),
+                                "visibility-aware pick geometry builds");
+    const Ray rightSectorFloorRay =
+            MakeRay(Vector3{0.75f, -1.0f, 0.25f}, Vector3{0.0f, 1.0f, 0.0f});
+
+    game::RuntimePortalVisibilityResult visibleLeft;
+    visibleLeft.validStartSector = true;
+    visibleLeft.visibleSectorIds = {10};
+    const game::SectorGeneratedSurfaceHit hiddenHit =
+            game::PickSectorGeneratedGeometry(geometry, rightSectorFloorRay, visibleLeft);
+    Check(!hiddenHit.hit, "visibility-aware picking ignores hidden-sector surfaces");
+
+    game::RuntimePortalVisibilityResult visibleRight;
+    visibleRight.validStartSector = true;
+    visibleRight.visibleSectorIds = {20};
+    const game::SectorGeneratedSurfaceHit visibleHit =
+            game::PickSectorGeneratedGeometry(geometry, rightSectorFloorRay, visibleRight);
+    Check(visibleHit.hit, "visibility-aware picking still hits visible-sector surfaces");
+    Check(visibleHit.ref.topologySectorId == 20,
+          "visibility-aware picking preserves topology refs for visible picked surfaces");
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.fallbackDrawAll = true;
+    const game::SectorGeneratedSurfaceHit fallbackHit =
+            game::PickSectorGeneratedGeometry(geometry, rightSectorFloorRay, fallback);
+    Check(fallbackHit.hit && fallbackHit.ref.topologySectorId == 20,
+          "visibility-aware picking falls back to all surfaces");
+}
+
+void TestGeneratedSurfaceHighlightVisibilitySelection()
+{
+    game::SectorGeneratedSurface visibleSurface = MakeBatchTestSurface("visible", "", {}, 1.0f, 0.0f);
+    visibleSurface.ref.topologySectorId = 10;
+    game::SectorGeneratedSurface hiddenSurface = MakeBatchTestSurface("hidden", "", {}, 1.0f, 2.0f);
+    hiddenSurface.ref.topologySectorId = 20;
+
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+    Check(game::ShouldIncludeSectorGeneratedSurfaceForVisibility(visibleSurface, visible),
+          "highlight helper includes selected visible sector surface");
+    Check(!game::ShouldIncludeSectorGeneratedSurfaceForVisibility(hiddenSurface, visible),
+          "highlight helper suppresses selected hidden sector surface");
+}
+
+void TestDrawRecordVisibilitySelection()
+{
+    const std::vector<game::SectorMeshBatch> records = {
+            MakeDrawRecord(10, "a"),
+            MakeDrawRecord(20, "b"),
+            MakeDrawRecord(30, "c")};
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.validStartSector = false;
+    fallback.fallbackDrawAll = true;
+    Check(game::CountSectorMeshDrawRecordsForVisibility(records, fallback) == 3,
+          "draw selection returns all records for fallback draw-all");
+    Check(game::ShouldDrawSectorMeshRecordForVisibility(records[1], fallback),
+          "invalid start sector draws all records");
+
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10, 30};
+    Check(game::CountSectorMeshDrawRecordsForVisibility(records, visible) == 2,
+          "draw selection returns only visible sector records");
+    Check(game::ShouldDrawSectorMeshRecordForVisibility(records[0], visible),
+          "visible sector record is selected");
+    Check(!game::ShouldDrawSectorMeshRecordForVisibility(records[1], visible),
+          "disconnected hidden sector record is not selected");
+    Check(game::ShouldDrawSectorMeshRecordForVisibility(records[2], visible),
+          "second visible sector record is selected");
+
+    game::RuntimePortalVisibilityResult emptyVisible;
+    emptyVisible.validStartSector = true;
+    Check(game::CountSectorMeshDrawRecordsForVisibility(records, emptyVisible) == 0,
+          "draw selection handles empty visible set safely");
+}
+
+void TestBloomDrawRecordVisibilitySelection()
+{
+    const std::vector<game::SectorMeshBatch> records = {
+            MakeDrawRecord(10, "wall", "poster", true),
+            MakeDrawRecord(20, "wall", "hidden-poster", true),
+            MakeDrawRecord(30, "wall", "plain-decal", false),
+            MakeDrawRecord(40, "wall", "", true)};
+
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10, 30, 40};
+    Check(game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[0], visible),
+          "bloom selection includes visible emissive decal record");
+    Check(!game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[1], visible),
+          "bloom selection uses the same hidden-sector filtering");
+    Check(!game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[2], visible),
+          "bloom selection skips non-emissive decal records");
+    Check(!game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[3], visible),
+          "bloom selection skips records without decal textures");
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.fallbackDrawAll = true;
+    Check(game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[1], fallback),
+          "bloom selection falls back to draw-all visibility");
+}
+
 } // namespace
 
 int main()
 {
     TestSquareTopologyMeshBatchData();
+    TestOneSectorMeshDrawRecords();
+    TestTwoSectorsWithSameMaterialKeepSeparateDrawRecords();
     TestDecalMeshBatchData();
+    TestSectorDrawRecordMaterialGrouping();
+    TestSectorDrawRecordLightmapUvsUseOriginalSurfaceIndex();
     TestMiddleTextureBatchState();
+    TestSectorDrawRecordMiddleTextureAlphaTest();
+    TestSectorDrawRecordEmissiveDecalMetadata();
     TestLightmapParticipationSplitsBatchKey();
     TestHoleTopologyMeshBatchData();
     TestEqualHeightPortal();
@@ -715,6 +1022,11 @@ int main()
     TestInvalidTopologyMeshBuilder();
     TestGeneratedGeometryPickingKeepsTopologyRefs();
     TestGeneratedGeometryPickingResolvesMiddleFacingRefs();
+    TestGeneratedSurfaceVisibilitySelection();
+    TestGeneratedGeometryPickingUsesVisibilityFilter();
+    TestGeneratedSurfaceHighlightVisibilitySelection();
+    TestDrawRecordVisibilitySelection();
+    TestBloomDrawRecordVisibilitySelection();
     if (failures == 0) {
         std::puts("Sector topology mesh builder tests passed");
     }

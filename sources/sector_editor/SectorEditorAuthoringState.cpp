@@ -1029,61 +1029,58 @@ bool FindSectorEditorAuthoringFaceAnchorAtMapPoint(
         return false;
     }
 
-    const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(state.topologyMap);
     int bestFaceAnchorId = -1;
-    int bestTopologySectorId = -1;
     double bestArea = 0.0;
     bool foundCandidate = false;
-    bool foundContainingSector = false;
-    std::string mappingStatus;
-    for (const SectorTopologySector& sector : state.topologyMap.sectors) {
-        if (!PointInTopologySector(state.topologyMap, indexes, mapPoint, sector.id)) {
+    bool foundContainingFace = false;
+    for (const SectorAuthoringExtractedFace& face : state.authoringDerivation.faces.faces) {
+        if (!SectorAuthoringFaceContainsMapPoint(state.authoringDerivation.planar, face, mapPoint)) {
             continue;
         }
-        foundContainingSector = true;
+        foundContainingFace = true;
 
         int faceAnchorId = -1;
-        std::string candidateMappingStatus;
-        if (!FindUniqueMappedFaceAnchorForTopologySector(
-                    state,
-                    sector.id,
-                    &faceAnchorId,
-                    &candidateMappingStatus)) {
-            if (candidateMappingStatus.find("ambiguous") != std::string::npos) {
+        bool foundMapping = false;
+        for (const SectorAuthoringResolvedFaceMapping& mapping
+                : state.authoringDerivation.mapping.resolvedFaces) {
+            if (mapping.extractedFaceId != face.id
+                    || !IsValidSectorAuthoringId(mapping.faceAnchorId)
+                    || FindSectorAuthoringFaceAnchor(state.authoringGraph, mapping.faceAnchorId) == nullptr) {
+                continue;
+            }
+            if (foundMapping) {
                 if (outStatus != nullptr) {
-                    *outStatus = candidateMappingStatus;
+                    *outStatus = "Authoring face selection unavailable: derived face has ambiguous face anchor mapping";
                 }
                 return false;
             }
-            if (mappingStatus.empty()) {
-                mappingStatus = candidateMappingStatus;
-            }
+            faceAnchorId = mapping.faceAnchorId;
+            foundMapping = true;
+        }
+
+        if (!foundMapping) {
             continue;
         }
 
-        double area = 0.0;
-        if (!TryComputeTopologySectorArea(state.topologyMap, indexes, sector.id, &area)) {
+        if (face.signedArea <= 0.0) {
             continue;
         }
 
         if (!foundCandidate
-                || area < bestArea
-                || (area == bestArea && sector.id < bestTopologySectorId)) {
+                || face.signedArea < bestArea
+                || (face.signedArea == bestArea && faceAnchorId < bestFaceAnchorId)) {
             bestFaceAnchorId = faceAnchorId;
-            bestTopologySectorId = sector.id;
-            bestArea = area;
+            bestArea = face.signedArea;
             foundCandidate = true;
         }
     }
 
     if (!foundCandidate) {
         if (outStatus != nullptr) {
-            if (!foundContainingSector) {
-                *outStatus = "Authoring face selection unavailable: no derived face under cursor";
-            } else if (!mappingStatus.empty()) {
-                *outStatus = mappingStatus;
+            if (!foundContainingFace) {
+                *outStatus = "Authoring face selection unavailable: no authoring face under cursor";
             } else {
-                *outStatus = "Authoring face selection unavailable: derived face under cursor is invalid";
+                *outStatus = "Authoring face selection unavailable: derived face has no face anchor mapping";
             }
         }
         return false;

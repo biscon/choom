@@ -46,6 +46,7 @@ struct SectorAuthoringFaceAnchor {
     std::string name;
     SectorCoord x = 0;
     SectorCoord y = 0;
+    bool isVoid = false;
 
     float floorZ = 0.0f;
     float ceilingZ = 24.0f;
@@ -228,11 +229,25 @@ struct SectorAuthoringDerivedSectorMapping {
     int topologySectorId = -1;
 };
 
+enum class SectorAuthoringFaceResolutionKind {
+    Unresolved,
+    DerivedSector,
+    VoidNoDerivedSector
+};
+
+struct SectorAuthoringResolvedFaceMapping {
+    int extractedFaceId = -1;
+    int faceAnchorId = -1;
+    int topologySectorId = -1;
+    SectorAuthoringFaceResolutionKind kind = SectorAuthoringFaceResolutionKind::Unresolved;
+};
+
 struct SectorAuthoringDerivationMapping {
     std::vector<SectorAuthoringDerivedVertexMapping> vertices;
     std::vector<SectorAuthoringDerivedLineMapping> lines;
     std::vector<SectorAuthoringDerivedSideMapping> sides;
     std::vector<SectorAuthoringDerivedSectorMapping> sectors;
+    std::vector<SectorAuthoringResolvedFaceMapping> resolvedFaces;
 };
 
 struct SectorAuthoringDerivationResult {
@@ -331,5 +346,10 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
         const SectorAuthoringGraph& graph);
 
 SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopologyMap& map);
+
+bool SectorAuthoringFaceContainsMapPoint(
+        const SectorAuthoringPlanarizationResult& planar,
+        const SectorAuthoringExtractedFace& face,
+        Vector2 mapPoint);
 
 } // namespace game

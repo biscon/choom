@@ -1,8 +1,10 @@
 #pragma once
 
 #include "engine/assets/AssetManager.h"
+#include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorMeshTypes.h"
+#include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorViewPose.h"
 
 #include <raylib.h>
@@ -44,7 +46,7 @@ public:
     void ApplyPose(const SectorViewPose& pose);
     void ApplyRendererPose(const SectorViewPose& pose);
     size_t SectorCount() const { return sectorCount; }
-    size_t BatchCount() const { return meshes.batches.size(); }
+    size_t BatchCount() const { return meshes.sectorDrawRecords.size(); }
     int TriangleCount() const { return meshes.triangleCount; }
     const SectorGeneratedGeometry& GeneratedGeometry() const { return generatedGeometry; }
     const SectorGeneratedGeometry& RenderedGeometry() const { return GeneratedGeometry(); }
@@ -52,6 +54,9 @@ public:
     float RendererAssetProgress(engine::AssetManager& assets) const;
     const char* LightmapStatusText() const;
     const char* RendererLightmapStatusText() const;
+    void UpdateVisibilityDebug(int preferredStartSectorId = 0);
+    const RuntimePortalVisibilityResult& VisibilityResult() const { return visibilityResult; }
+    const std::string& VisibilityDebugText() const { return visibilityDebugText; }
 
 private:
     static std::string ResolveAssetPath(const std::string& path);
@@ -65,6 +70,12 @@ private:
 
     SectorMeshBuildResult meshes;
     SectorGeneratedGeometry generatedGeometry;
+    RuntimeSectorVisibilityGraph visibilityGraph;
+    RuntimePortalVisibilityResult visibilityResult;
+    std::string visibilityDebugText;
+    SectorCollisionWorld visibilityLookupWorld;
+    bool visibilityGraphValid = false;
+    bool visibilityLookupWorldValid = false;
     std::unordered_map<std::string, engine::TextureHandle> textureHandlesById;
     engine::TextureHandle lightmapTexture = engine::NullTextureHandle();
     engine::TextureHandle skyTextureHandle = engine::NullTextureHandle();

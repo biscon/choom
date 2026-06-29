@@ -1,4 +1,5 @@
 #include "sector_demo/SectorAuthoringGraph.h"
+#include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTopologySerialization.h"
@@ -1270,6 +1271,109 @@ std::size_t CountSectorHoles(
     return loops.holes.size();
 }
 
+int CountTwoSidedLineDefs(const game::SectorTopologyMap& topology)
+{
+    int count = 0;
+    for (const game::SectorTopologyLineDef& lineDef : topology.lineDefs) {
+        if (lineDef.frontSideDefId > 0 && lineDef.backSideDefId > 0) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+int CountOneSidedLineDefs(const game::SectorTopologyMap& topology)
+{
+    int count = 0;
+    for (const game::SectorTopologyLineDef& lineDef : topology.lineDefs) {
+        const bool hasFront = lineDef.frontSideDefId > 0;
+        const bool hasBack = lineDef.backSideDefId > 0;
+        if (hasFront != hasBack) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+const game::SectorTopologyLineDef* FindLineDefByEndpoints(
+        const game::SectorTopologyMap& topology,
+        game::SectorCoord ax,
+        game::SectorCoord ay,
+        game::SectorCoord bx,
+        game::SectorCoord by)
+{
+    for (const game::SectorTopologyLineDef& lineDef : topology.lineDefs) {
+        const game::SectorTopologyVertex* start =
+                game::FindSectorTopologyVertex(topology, lineDef.startVertexId);
+        const game::SectorTopologyVertex* end =
+                game::FindSectorTopologyVertex(topology, lineDef.endVertexId);
+        if (start == nullptr || end == nullptr) {
+            continue;
+        }
+        const bool forward = start->x == ax && start->y == ay && end->x == bx && end->y == by;
+        const bool reverse = start->x == bx && start->y == by && end->x == ax && end->y == ay;
+        if (forward || reverse) {
+            return &lineDef;
+        }
+    }
+    return nullptr;
+}
+
+const game::SectorTopologySideDef* FindOnlySideDef(
+        const game::SectorTopologyMap& topology,
+        const game::SectorTopologyLineDef& lineDef)
+{
+    if (lineDef.frontSideDefId > 0 && lineDef.backSideDefId <= 0) {
+        return game::FindSectorTopologySideDef(topology, lineDef.frontSideDefId);
+    }
+    if (lineDef.backSideDefId > 0 && lineDef.frontSideDefId <= 0) {
+        return game::FindSectorTopologySideDef(topology, lineDef.backSideDefId);
+    }
+    return nullptr;
+}
+
+int CountWallSurfacesForLine(
+        const game::SectorGeneratedGeometry& geometry,
+        int lineDefId)
+{
+    int count = 0;
+    for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (surface.ref.topologyLineDefId != lineDefId) {
+            continue;
+        }
+        if (surface.ref.kind == game::SectorGeneratedSurfaceKind::Wall
+                || surface.ref.kind == game::SectorGeneratedSurfaceKind::LowerWall
+                || surface.ref.kind == game::SectorGeneratedSurfaceKind::UpperWall) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool CollisionHasBlockingEdgeForLine(
+        const game::SectorTopologyMap& topology,
+        int lineDefId)
+{
+    game::SectorCollisionWorld world;
+    std::string error;
+    if (!world.BuildFromTopology(topology, &error)) {
+        return false;
+    }
+    for (const game::SectorTopologySector& sector : topology.sectors) {
+        const std::vector<game::SectorCollisionEdge>* edges = world.GetSectorEdges(sector.id);
+        if (edges == nullptr) {
+            continue;
+        }
+        for (const game::SectorCollisionEdge& edge : *edges) {
+            if (edge.lineDefId == lineDefId
+                    && edge.kind == game::SectorCollisionEdgeKind::BlockingWall) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void TestDeriveSingleSquare()
 {
     const game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
@@ -1310,6 +1414,239 @@ void TestDeriveAdjacentSquares()
         }
     }
     Check(twoSidedLineCount == 1, "adjacent squares derive one two-sided linedef");
+}
+
+void TestVoidFaceExcludedFromDerivedTopologyAndJson()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(graph, 200, 32, 32, "void-room");
+    graph.faceAnchors.back().isVoid = true;
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "single void face derives empty valid topology");
+    Check(result.topology.vertices.empty(), "single void face emits no vertices");
+    Check(result.topology.lineDefs.empty(), "single void face emits no linedefs");
+    Check(result.topology.sideDefs.empty(), "single void face emits no sidedefs");
+    Check(result.topology.sectors.empty(), "single void face emits no sectors");
+    Check(result.mapping.sectors.empty(), "single void face emits no sector mappings");
+    Check(result.mapping.resolvedFaces.size() == 1
+                  && result.mapping.resolvedFaces.front().kind
+                        == game::SectorAuthoringFaceResolutionKind::VoidNoDerivedSector,
+          "single void face records void face resolution");
+    Check(game::FindSectorAuthoringFaceAnchor(graph, 200) != nullptr,
+          "single void face keeps authoring anchor");
+
+    game::SectorAuthoringDocument document;
+    document.graph = graph;
+    document.derivation = result;
+    std::string jsonText;
+    std::string error;
+    Check(game::SaveSectorAuthoringDocumentToJsonString(document, jsonText, &error),
+          "void face graph-native save succeeds");
+    Check(jsonText.find("\"isVoid\": true") != std::string::npos,
+          "void face graph-native save persists true flag");
+
+    game::SectorAuthoringDocument loaded;
+    Check(game::LoadSectorAuthoringDocumentFromJsonString(jsonText, loaded, &error),
+          "void face graph-native load succeeds");
+    const game::SectorAuthoringFaceAnchor* loadedAnchor =
+            game::FindSectorAuthoringFaceAnchor(loaded.graph, 200);
+    Check(loadedAnchor != nullptr && loadedAnchor->isVoid,
+          "void face graph-native load preserves true flag");
+
+    Json parsed = Json::parse(jsonText);
+    parsed["authoringGraph"]["faceAnchors"][0].erase("isVoid");
+    Check(game::LoadSectorAuthoringDocumentFromJsonString(parsed.dump(2), loaded, &error),
+          "missing void flag graph-native load succeeds");
+    loadedAnchor = game::FindSectorAuthoringFaceAnchor(loaded.graph, 200);
+    Check(loadedAnchor != nullptr && !loadedAnchor->isVoid,
+          "missing void flag defaults to normal sector");
+}
+
+void TestAdjacentVoidFaceCreatesOneSidedWallAndProjectsNonVoidMaterial()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
+    AddFaceAnchor(graph, 200, 32, 32, "left-room");
+    AddFaceAnchor(graph, 201, 96, 32, "void-room");
+    graph.faceAnchors.back().isVoid = true;
+
+    game::SectorAuthoringLineSide sharedSide;
+    sharedSide.id = game::SectorAuthoringSideId{11, game::SectorTopologySideKind::Front};
+    sharedSide.wall.textureId = "non_void_wall";
+    sharedSide.lower.textureId = "non_void_lower";
+    sharedSide.upper.textureId = "non_void_upper";
+    sharedSide.middle.textureId = "non_void_middle";
+    graph.lineSides.push_back(sharedSide);
+
+    game::SectorAuthoringLineSide voidSide;
+    voidSide.id = game::SectorAuthoringSideId{11, game::SectorTopologySideKind::Back};
+    voidSide.wall.textureId = "void_wall";
+    graph.lineSides.push_back(voidSide);
+
+    game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "adjacent void derives valid topology");
+    Check(result.topology.sectors.size() == 1, "adjacent void emits only non-void sector");
+    Check(result.mapping.sectors.size() == 1, "adjacent void emits only non-void sector mapping");
+    Check(CountTwoSidedLineDefs(result.topology) == 0,
+          "adjacent void emits no two-sided shared portal");
+
+    const game::SectorTopologyLineDef* sharedLine =
+            FindLineDefByEndpoints(result.topology, 64, 0, 64, 64);
+    Check(sharedLine != nullptr, "adjacent void emits shared boundary linedef");
+    if (sharedLine != nullptr) {
+        const game::SectorTopologySideDef* sideDef = FindOnlySideDef(result.topology, *sharedLine);
+        Check(sideDef != nullptr, "adjacent void shared boundary has exactly one sidedef");
+        Check(sideDef != nullptr && sideDef->sectorId == 200,
+              "adjacent void shared boundary sidedef belongs to non-void sector");
+        Check(sideDef != nullptr
+                      && sideDef->wall.textureId == "non_void_wall"
+                      && sideDef->lower.textureId == "non_void_lower"
+                      && sideDef->upper.textureId == "non_void_upper"
+                      && sideDef->middle.textureId == "non_void_middle",
+              "adjacent void shared boundary projects non-void side material");
+
+        game::SectorGeneratedGeometry geometry;
+        std::string error;
+        Check(game::BuildSectorGeneratedGeometry(result.topology, geometry, &error),
+              "adjacent void generated geometry builds");
+        Check(CountWallSurfacesForLine(geometry, sharedLine->id) > 0,
+              "adjacent void shared boundary emits wall geometry");
+        Check(CollisionHasBlockingEdgeForLine(result.topology, sharedLine->id),
+              "adjacent void shared boundary is collision blocking");
+    }
+
+    game::SectorAuthoringFaceAnchor* voidAnchor =
+            game::FindSectorAuthoringFaceAnchor(graph, 201);
+    if (voidAnchor != nullptr) {
+        voidAnchor->isVoid = false;
+    }
+    result = game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    CheckDerivedTopologyIsValid(result, "unvoided adjacent face derives valid topology");
+    Check(result.topology.sectors.size() == 2, "unvoided adjacent face emits two sectors");
+    sharedLine = FindLineDefByEndpoints(result.topology, 64, 0, 64, 64);
+    Check(sharedLine != nullptr
+                  && sharedLine->frontSideDefId > 0
+                  && sharedLine->backSideDefId > 0,
+          "unvoided adjacent face restores two-sided boundary");
+    if (sharedLine != nullptr) {
+        const game::SectorTopologySideDef* backSide =
+                game::FindSectorTopologySideDef(result.topology, sharedLine->backSideDefId);
+        Check(backSide != nullptr && backSide->wall.textureId == "void_wall",
+              "unvoided adjacent face restores preserved void-side material");
+    }
+}
+
+void TestEnclosedVoidFaceCreatesHoleAndSolidInnerWalls()
+{
+    game::SectorAuthoringGraph graph = MakeNestedRectangleGraph(2);
+    AddFaceAnchor(graph, 200, 16, 16, "outer");
+    AddFaceAnchor(graph, 201, 64, 64, "inner-void");
+    graph.faceAnchors.back().isVoid = true;
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "enclosed void face derives valid topology");
+    Check(result.topology.sectors.size() == 1, "enclosed void emits only outer sector");
+    Check(result.mapping.sectors.size() == 1, "enclosed void emits only outer sector mapping");
+    Check(CountSectorHoles(result.topology, 200, "enclosed void outer sector extracts loops") == 1,
+          "enclosed void creates one floor/ceiling hole");
+
+    const game::SectorTopologyLineDef* innerLine =
+            FindLineDefByEndpoints(result.topology, 32, 32, 96, 32);
+    Check(innerLine != nullptr, "enclosed void emits inner boundary linedef");
+    if (innerLine != nullptr) {
+        Check(FindOnlySideDef(result.topology, *innerLine) != nullptr,
+              "enclosed void inner boundary is one-sided");
+        game::SectorGeneratedGeometry geometry;
+        std::string error;
+        Check(game::BuildSectorGeneratedGeometry(result.topology, geometry, &error),
+              "enclosed void generated geometry builds");
+        Check(CountWallSurfacesForLine(geometry, innerLine->id) > 0,
+              "enclosed void inner boundary emits wall geometry");
+        Check(CollisionHasBlockingEdgeForLine(result.topology, innerLine->id),
+              "enclosed void inner boundary is collision blocking");
+    }
+
+    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
+    game::SectorAuthoringSelectionTarget target;
+    std::string status;
+    Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+                  state,
+                  VisibleAuthoringPoint(64, 64),
+                  0.25f,
+                  0.25f,
+                  &target,
+                  nullptr,
+                  &status),
+          "enclosed void face remains selectable in 2D");
+    Check(target.kind == game::SectorAuthoringSelectionKind::FaceAnchor
+                  && target.faceAnchorId == 201,
+          "enclosed void 2D selection resolves void anchor");
+}
+
+void TestCenterVoidPreventsAccidentalSameHeightPortals()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {
+                    {0, 0}, {32, 0}, {64, 0}, {96, 0},
+                    {0, 32}, {32, 32}, {64, 32}, {96, 32},
+                    {0, 64}, {32, 64}, {64, 64}, {96, 64},
+                    {0, 96}, {32, 96}, {64, 96}, {96, 96}
+            },
+            {
+                    {1, 2}, {2, 3}, {3, 4},
+                    {5, 6}, {6, 7}, {7, 8},
+                    {9, 10}, {10, 11}, {11, 12},
+                    {13, 14}, {14, 15}, {15, 16},
+                    {1, 5}, {5, 9}, {9, 13},
+                    {2, 6}, {6, 10}, {10, 14},
+                    {3, 7}, {7, 11}, {11, 15},
+                    {4, 8}, {8, 12}, {12, 16}
+            });
+    AddFaceAnchor(graph, 200, 48, 48, "center-void");
+    graph.faceAnchors.back().isVoid = true;
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(result, "center void grid derives valid topology");
+    Check(result.topology.sectors.size() == 8,
+          "center void grid emits neighboring sectors but no center sector");
+    Check(result.mapping.sectors.size() == 8,
+          "center void grid has no derived sector mapping for center void");
+
+    const game::SectorTopologyLineDef* top =
+            FindLineDefByEndpoints(result.topology, 32, 32, 64, 32);
+    const game::SectorTopologyLineDef* right =
+            FindLineDefByEndpoints(result.topology, 64, 32, 64, 64);
+    const game::SectorTopologyLineDef* bottom =
+            FindLineDefByEndpoints(result.topology, 32, 64, 64, 64);
+    const game::SectorTopologyLineDef* left =
+            FindLineDefByEndpoints(result.topology, 32, 32, 32, 64);
+    const game::SectorTopologyLineDef* centerBoundaries[] = {top, right, bottom, left};
+    for (const game::SectorTopologyLineDef* lineDef : centerBoundaries) {
+        Check(lineDef != nullptr, "center void boundary linedef exists");
+        if (lineDef != nullptr) {
+            Check(FindOnlySideDef(result.topology, *lineDef) != nullptr,
+                  "center void boundary is one-sided");
+        }
+    }
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(result.topology, geometry, &error),
+          "center void grid generated geometry builds");
+    Check(CountTwoSidedLineDefs(result.topology) == 8,
+          "center void grid keeps portals only between non-void neighboring sectors");
 }
 
 void TestDeriveCrossingDiagonals()
@@ -2499,6 +2836,7 @@ void TestAuthoringOverlayFaceAnchorHighlightFailsClosedWithoutCurrentMapping()
 
     game::SectorAuthoringDerivationResult missingMapping = state.authoringDerivation;
     missingMapping.mapping.sectors.clear();
+    missingMapping.mapping.resolvedFaces.clear();
     cache = game::BuildSectorEditorTopologyRenderCache(
             state.topologyMap,
             state.authoringGraph,
@@ -2512,6 +2850,7 @@ void TestAuthoringOverlayFaceAnchorHighlightFailsClosedWithoutCurrentMapping()
 
     game::SectorAuthoringDerivationResult ambiguousMapping = state.authoringDerivation;
     ambiguousMapping.mapping.sectors.push_back(ambiguousMapping.mapping.sectors.front());
+    ambiguousMapping.mapping.resolvedFaces.push_back(ambiguousMapping.mapping.resolvedFaces.front());
     cache = game::BuildSectorEditorTopologyRenderCache(
             state.topologyMap,
             state.authoringGraph,
@@ -3441,6 +3780,55 @@ void TestEditorSelectedFaceAnchorPropertiesWriteWithoutTopologySelection()
           "selected face direct property write does not create topology sector selection");
 }
 
+void TestEditorSelectedFaceAnchorVoidToggleWritesAuthoringOnly()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "left-room");
+    AddFaceAnchor(state.authoringGraph, 201, 96, 32, "right-room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "selected face void toggle setup derives valid topology");
+    Check(game::SelectSectorEditorAuthoringFaceAnchor(state, 201),
+          "selected face void toggle selects face anchor");
+    Check(state.topologyMap.sectors.size() == 2,
+          "selected face void toggle starts with two sectors");
+
+    state.topologyRenderCache.valid = true;
+    const uint64_t originalRevision = state.topologyRenderRevision;
+    state.topologySelectionKind = game::TopologySelectionKind::None;
+    state.selectedTopologySectorId = -1;
+
+    Check(game::MutateSectorEditorAuthoringFaceAnchorById(
+                  state,
+                  state.selectedAuthoring.faceAnchorId,
+                  "Updated selected authoring face void state",
+                  [](game::SectorAuthoringFaceAnchor& anchor) {
+                      anchor.isVoid = true;
+                      return true;
+                  }),
+          "selected face void toggle succeeds through authoring helper");
+
+    const game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 201);
+    Check(anchor != nullptr && anchor->isVoid,
+          "selected face void toggle updates authoring anchor");
+    Check(game::FindSectorTopologySector(state.topologyMap, 201) == nullptr,
+          "selected face void toggle removes void sector through derivation");
+    Check(state.topologyMap.sectors.size() == 1,
+          "selected face void toggle leaves non-void sector only");
+    Check(state.topologyDocumentDirty && state.hasUnsavedChanges,
+          "selected face void toggle marks document dirty");
+    Check(!state.topologyRenderCache.valid,
+          "selected face void toggle invalidates cached editor topology rendering");
+    Check(state.topologyRenderRevision == originalRevision + 1,
+          "selected face void toggle bumps topology render revision");
+    Check(state.topologySelectionKind == game::TopologySelectionKind::None
+                  && state.selectedTopologySectorId == -1,
+          "selected face void toggle does not create topology selection");
+}
+
 void TestEditorAuthoringFacePointSelectionRequiresCurrentUnambiguousMapping()
 {
     game::SectorEditorState state;
@@ -3486,6 +3874,7 @@ void TestEditorAuthoringFacePointSelectionRequiresCurrentUnambiguousMapping()
 
     game::SectorEditorState missingState = state;
     missingState.authoringDerivation.mapping.sectors.clear();
+    missingState.authoringDerivation.mapping.resolvedFaces.clear();
     status.clear();
     Check(!game::FindSectorEditorAuthoringSelectionAtMapPoint(
                   missingState,
@@ -3502,6 +3891,8 @@ void TestEditorAuthoringFacePointSelectionRequiresCurrentUnambiguousMapping()
     game::SectorEditorState ambiguousState = state;
     ambiguousState.authoringDerivation.mapping.sectors.push_back(
             ambiguousState.authoringDerivation.mapping.sectors.front());
+    ambiguousState.authoringDerivation.mapping.resolvedFaces.push_back(
+            ambiguousState.authoringDerivation.mapping.resolvedFaces.front());
     status.clear();
     Check(!game::FindSectorEditorAuthoringSelectionAtMapPoint(
                   ambiguousState,
@@ -6591,6 +6982,10 @@ int main()
     TestExtractDisconnectedClosedLoopsWithDanglingLineReportsOnlyDanglingLine();
     TestDeriveSingleSquare();
     TestDeriveAdjacentSquares();
+    TestVoidFaceExcludedFromDerivedTopologyAndJson();
+    TestAdjacentVoidFaceCreatesOneSidedWallAndProjectsNonVoidMaterial();
+    TestEnclosedVoidFaceCreatesHoleAndSolidInnerWalls();
+    TestCenterVoidPreventsAccidentalSameHeightPortals();
     TestDeriveCrossingDiagonals();
     TestDeriveDisconnectedClosedLoopsProducesSectors();
     TestDeriveNestedLoopCreatesHoleTopology();
@@ -6651,6 +7046,7 @@ int main()
     TestEditorSelectedAuthoringLineBlocksPlayerWritesWithoutTopologySelection();
     TestEditorSelectedAuthoringLineSideMaterialWritesWithoutTopologySelection();
     TestEditorSelectedFaceAnchorPropertiesWriteWithoutTopologySelection();
+    TestEditorSelectedFaceAnchorVoidToggleWritesAuthoringOnly();
     TestEditorAuthoringFacePointSelectionRequiresCurrentUnambiguousMapping();
     TestEditorAuthoringNestedFacePointSelectionChoosesDeepestAnchor();
     TestEditorAuthoringSiblingNestedFacePointSelectionChoosesIndependentAnchors();

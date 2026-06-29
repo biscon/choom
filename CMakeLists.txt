@@ -114,6 +114,7 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorTextureActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
             sources/sector_demo/SectorFpsController.cpp
+            sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp
@@ -205,6 +206,18 @@ if(BUILD_TESTING)
     target_include_directories(sector_collision_world_tests PRIVATE sources)
     target_link_libraries(sector_collision_world_tests PRIVATE raylib)
     add_test(NAME sector_collision_world COMMAND sector_collision_world_tests)
+
+    add_executable(sector_portal_visibility_tests
+            tests/SectorPortalVisibilityTests.cpp
+            sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorPortalVisibility.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_portal_visibility_tests PRIVATE sources)
+    target_link_libraries(sector_portal_visibility_tests PRIVATE raylib)
+    add_test(NAME sector_portal_visibility COMMAND sector_portal_visibility_tests)
 
     add_executable(sector_collision_movement_tests
             tests/SectorCollisionMovementTests.cpp
