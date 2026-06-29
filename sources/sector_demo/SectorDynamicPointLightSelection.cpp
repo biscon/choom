@@ -14,6 +14,13 @@ namespace game {
 namespace {
 
 constexpr float ReceiverBoundsPadding = 0.05f;
+constexpr float DynamicPointLightHysteresisReplacementFactor = 1.2f;
+
+struct ScoredDynamicPointLightCandidate {
+    const SectorPreviewDynamicPointLightSource* source = nullptr;
+    float score = -1.0f;
+    bool previouslySelected = false;
+};
 
 bool IsFiniteVector3(Vector3 value)
 {
@@ -31,6 +38,11 @@ Vector3 ColorToUnitRgb(Color color)
 bool ContainsSectorId(const std::vector<int>& sectorIds, int sectorId)
 {
     return std::find(sectorIds.begin(), sectorIds.end(), sectorId) != sectorIds.end();
+}
+
+bool ContainsLightId(const std::vector<int>& lightIds, int lightId)
+{
+    return std::find(lightIds.begin(), lightIds.end(), lightId) != lightIds.end();
 }
 
 float DistanceSq(Vector3 a, Vector3 b)
@@ -135,6 +147,47 @@ float DynamicPointLightSelectionScore(
     return std::isfinite(score) ? score : -1.0f;
 }
 
+bool BetterScoredDynamicPointLight(
+        const ScoredDynamicPointLightCandidate& lhs,
+        const ScoredDynamicPointLightCandidate& rhs)
+{
+    if (lhs.score != rhs.score) {
+        return lhs.score > rhs.score;
+    }
+    return lhs.source->lightId < rhs.source->lightId;
+}
+
+int FindSelectedLightIndex(
+        const std::vector<ScoredDynamicPointLightCandidate>& selected,
+        int lightId)
+{
+    for (std::size_t i = 0; i < selected.size(); ++i) {
+        if (selected[i].source->lightId == lightId) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+int FindWeakestPreviouslySelectedLightIndex(
+        const std::vector<ScoredDynamicPointLightCandidate>& selected)
+{
+    int weakestIndex = -1;
+    for (std::size_t i = 0; i < selected.size(); ++i) {
+        if (!selected[i].previouslySelected) {
+            continue;
+        }
+        if (weakestIndex < 0
+                || selected[i].score < selected[static_cast<std::size_t>(weakestIndex)].score
+                || (selected[i].score == selected[static_cast<std::size_t>(weakestIndex)].score
+                    && selected[i].source->lightId
+                            > selected[static_cast<std::size_t>(weakestIndex)].source->lightId)) {
+            weakestIndex = static_cast<int>(i);
+        }
+    }
+    return weakestIndex;
+}
+
 } // namespace
 
 bool MakeSectorPreviewDynamicPointLightUniform(
@@ -228,10 +281,20 @@ void SelectRankedSectorPreviewDynamicPointLights(
         const RuntimePortalVisibilityResult& visibility,
         const std::vector<SectorReceiverBounds>& receiverBounds,
         std::size_t maxLights,
-        std::vector<SectorPreviewDynamicPointLightUniform>& outSelectedLights)
+        std::vector<SectorPreviewDynamicPointLightUniform>& outSelectedLights,
+        std::vector<int>* outSelectedLightIds,
+        const std::vector<int>* previousSelectedLightIds)
 {
+    const std::vector<int> previousIds = previousSelectedLightIds != nullptr
+            ? *previousSelectedLightIds
+            : std::vector<int>{};
+
     outSelectedLights.clear();
     outSelectedLights.reserve(std::min(candidates.size(), maxLights));
+    if (outSelectedLightIds != nullptr) {
+        outSelectedLightIds->clear();
+        outSelectedLightIds->reserve(std::min(candidates.size(), maxLights));
+    }
     if (maxLights == 0) {
         return;
     }
@@ -239,29 +302,81 @@ void SelectRankedSectorPreviewDynamicPointLights(
     std::vector<const SectorReceiverBounds*> relevantBounds;
     BuildRelevantReceiverBounds(visibility, receiverBounds, relevantBounds);
 
-    std::sort(
-            candidates.begin(),
-            candidates.end(),
-            [&relevantBounds](
-                    const SectorPreviewDynamicPointLightSource& lhs,
-                    const SectorPreviewDynamicPointLightSource& rhs) {
-                const float lhsScore = DynamicPointLightSelectionScore(lhs.light, relevantBounds);
-                const float rhsScore = DynamicPointLightSelectionScore(rhs.light, relevantBounds);
-                if (lhsScore != rhsScore) {
-                    return lhsScore > rhsScore;
-                }
-                return lhs.lightId < rhs.lightId;
-            });
-
+    std::vector<ScoredDynamicPointLightCandidate> ranked;
+    ranked.reserve(candidates.size());
     for (const SectorPreviewDynamicPointLightSource& candidate : candidates) {
-        if (outSelectedLights.size() >= maxLights) {
+        const float score = DynamicPointLightSelectionScore(candidate.light, relevantBounds);
+        if (score < 0.0f) {
+            continue;
+        }
+        ranked.push_back(ScoredDynamicPointLightCandidate{
+                &candidate,
+                score,
+                ContainsLightId(previousIds, candidate.lightId)});
+    }
+
+    std::sort(ranked.begin(), ranked.end(), BetterScoredDynamicPointLight);
+
+    if (previousIds.empty()) {
+        for (const ScoredDynamicPointLightCandidate& candidate : ranked) {
+            if (outSelectedLights.size() >= maxLights) {
+                break;
+            }
+            outSelectedLights.push_back(candidate.source->light);
+            if (outSelectedLightIds != nullptr) {
+                outSelectedLightIds->push_back(candidate.source->lightId);
+            }
+        }
+        return;
+    }
+
+    std::vector<ScoredDynamicPointLightCandidate> selected;
+    selected.reserve(std::min(ranked.size(), maxLights));
+
+    for (const ScoredDynamicPointLightCandidate& candidate : ranked) {
+        if (!candidate.previouslySelected || candidate.score <= 0.0f) {
+            continue;
+        }
+        if (selected.size() >= maxLights) {
             break;
         }
-        if (DynamicPointLightSelectionScore(candidate.light, relevantBounds) < 0.0f) {
+        selected.push_back(candidate);
+    }
+
+    for (const ScoredDynamicPointLightCandidate& candidate : ranked) {
+        if (FindSelectedLightIndex(selected, candidate.source->lightId) >= 0) {
+            continue;
+        }
+        if (candidate.previouslySelected && candidate.score <= 0.0f) {
             continue;
         }
 
-        outSelectedLights.push_back(candidate.light);
+        if (selected.size() < maxLights) {
+            selected.push_back(candidate);
+            continue;
+        }
+
+        if (candidate.previouslySelected) {
+            continue;
+        }
+
+        const int replaceIndex = FindWeakestPreviouslySelectedLightIndex(selected);
+        if (replaceIndex < 0) {
+            continue;
+        }
+
+        const ScoredDynamicPointLightCandidate& retained = selected[static_cast<std::size_t>(replaceIndex)];
+        if (candidate.score >= retained.score * DynamicPointLightHysteresisReplacementFactor) {
+            selected[static_cast<std::size_t>(replaceIndex)] = candidate;
+        }
+    }
+
+    std::sort(selected.begin(), selected.end(), BetterScoredDynamicPointLight);
+    for (const ScoredDynamicPointLightCandidate& candidate : selected) {
+        outSelectedLights.push_back(candidate.source->light);
+        if (outSelectedLightIds != nullptr) {
+            outSelectedLightIds->push_back(candidate.source->lightId);
+        }
     }
 }
 

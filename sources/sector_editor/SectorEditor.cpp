@@ -1205,6 +1205,15 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                     return;
                 }
 
+                if (event.key.key == KEY_F4) {
+                    preview.ToggleDynamicLightingEnabled();
+                    statusText = preview.DynamicLightingEnabled()
+                            ? "Dynamic lighting enabled"
+                            : "Dynamic lighting disabled";
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
@@ -2620,7 +2629,7 @@ void SectorEditor::DrawPreviewOverlay(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
-    const Rectangle panel{32.0f, 32.0f, 980.0f, 232.0f};
+    const Rectangle panel{32.0f, 32.0f, EditorWidth - 64.0f, 262.0f};
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
@@ -2647,9 +2656,9 @@ void SectorEditor::DrawPreviewOverlay(
     }
     const char* interactionText = state.freeflyController.mouseLookEnabled
             ? (state.previewControlMode == SectorPreviewControlMode::Gameplay
-                    ? "WASD move | Space jump | Shift run | Mouse look | F3 FreeFly/Gameplay | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return"
-                    : "WASD move | Mouse look | Space/Ctrl up/down | F3 FreeFly/Gameplay | F1 AO | F2 hide UI | F11 cursor | Tab/Escape return")
-            : "F1 AO | F2 hide UI | F3 FreeFly/Gameplay | F11 cursor | click surface to select | Tab/Escape return";
+                    ? "WASD move | Space jump | Shift run | Mouse look | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc"
+                    : "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc")
+            : "F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | click surface to select | Tab/Esc";
     engine::Text(
             config,
             assets,
@@ -2735,7 +2744,16 @@ void SectorEditor::DrawPreviewOverlay(
             assets,
             Rectangle{panel.x + 18.0f, panel.y + 152.0f, panel.width - 36.0f, 30.0f},
             font,
-            preview.VisibilityDebugText().c_str(),
+            preview.PortalVisibilityDebugText().c_str(),
+            engine::UITextJustify::Left,
+            config.mutedTextColor
+    );
+    engine::Text(
+            config,
+            assets,
+            Rectangle{panel.x + 18.0f, panel.y + 182.0f, panel.width - 36.0f, 30.0f},
+            font,
+            preview.RenderDebugText().c_str(),
             engine::UITextJustify::Left,
             config.mutedTextColor
     );
@@ -2746,7 +2764,7 @@ void SectorEditor::DrawPreviewOverlay(
     engine::Text(
             config,
             assets,
-            Rectangle{panel.x + 18.0f, panel.y + 190.0f, panel.width - 36.0f, 30.0f},
+            Rectangle{panel.x + 18.0f, panel.y + 220.0f, panel.width - 36.0f, 30.0f},
             font,
             state.previewControlMode == SectorPreviewControlMode::Gameplay
                     ? TextFormat(

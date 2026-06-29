@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -299,9 +300,12 @@ void UploadDynamicPointLights(
         int dynamicLightRadiiLoc,
         int dynamicLightIntensitiesLoc,
         int dynamicLightingClampLoc,
+        bool dynamicLightingEnabled,
         const std::vector<SectorPreviewDynamicPointLightUniform>& lights)
 {
-    const int lightCount = static_cast<int>(std::min(lights.size(), static_cast<size_t>(MaxDynamicLights)));
+    const int lightCount = dynamicLightingEnabled
+            ? static_cast<int>(std::min(lights.size(), static_cast<size_t>(MaxDynamicLights)))
+            : 0;
     if (dynamicLightCountLoc >= 0) {
         SetShaderValue(shader, dynamicLightCountLoc, &lightCount, SHADER_UNIFORM_INT);
     }
@@ -336,6 +340,35 @@ void UploadDynamicPointLights(
     if (dynamicLightIntensitiesLoc >= 0) {
         SetShaderValueV(shader, dynamicLightIntensitiesLoc, intensities.data(), SHADER_UNIFORM_FLOAT, lightCount);
     }
+}
+
+std::string FormatDynamicLightDebugText(
+        bool dynamicLightingEnabled,
+        size_t selectedCount,
+        size_t candidateCount,
+        size_t totalCount,
+        const std::vector<int>& selectedIds)
+{
+    std::ostringstream out;
+    out << "dynamic lights: "
+            << selectedCount
+            << " / "
+            << candidateCount
+            << " / "
+            << totalCount
+            << " ("
+            << (dynamicLightingEnabled ? "on" : "off")
+            << ")";
+    if (!selectedIds.empty()) {
+        out << " | selected dynamic light ids: ";
+        for (size_t i = 0; i < selectedIds.size(); ++i) {
+            if (i > 0) {
+                out << ",";
+            }
+            out << selectedIds[i];
+        }
+    }
+    return out.str();
 }
 
 std::vector<std::string> SortedTopologyTextureIds(const SectorTopologyMap& map)
@@ -647,6 +680,8 @@ bool SectorMeshPreview::RebuildRendererResources(
     dynamicPointLightCandidates.reserve(dynamicPointLightSources.size());
     dynamicPointLights.clear();
     dynamicPointLights.reserve(MaxDynamicLights);
+    selectedDynamicPointLightIds.clear();
+    selectedDynamicPointLightIds.reserve(MaxDynamicLights);
 
     if (!LoadPreviewMaterial(
                 material,
@@ -704,13 +739,16 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     generatedGeometry = {};
     visibilityGraph = {};
     visibilityResult = {};
+    portalVisibilityDebugText.clear();
     visibilityDebugText.clear();
+    renderDebugText.clear();
     visibilityLookupWorld = SectorCollisionWorld{};
     visibilityGraphValid = false;
     visibilityLookupWorldValid = false;
     dynamicPointLightSources.clear();
     dynamicPointLightCandidates.clear();
     dynamicPointLights.clear();
+    selectedDynamicPointLightIds.clear();
     if (!initialized
             && engine::IsNull(assetScope)
             && meshes.batches.empty()
@@ -790,6 +828,7 @@ void SectorMeshPreview::DrawScene(engine::AssetManager& assets, bool useBakedAmb
             dynamicLightRadiiLoc,
             dynamicLightIntensitiesLoc,
             dynamicLightingClampLoc,
+            dynamicLightingEnabled,
             dynamicPointLights);
     for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
         if (!ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)) {
@@ -1172,7 +1211,8 @@ void SectorMeshPreview::UpdateVisibilityDebug(int preferredStartSectorId)
                 VisibilityDebugHorizontalFovRadians(camera),
                 preferredStartSectorId);
     }
-    visibilityDebugText = FormatRuntimePortalVisibilityDebugText(visibilityResult);
+    portalVisibilityDebugText = FormatRuntimePortalVisibilityDebugText(visibilityResult);
+    visibilityDebugText = portalVisibilityDebugText;
     const size_t visibleDrawRecordCount =
             CountSectorMeshDrawRecordsForVisibility(meshes.sectorDrawRecords, visibilityResult);
     CollectSectorPreviewDynamicPointLightCandidates(
@@ -1185,11 +1225,21 @@ void SectorMeshPreview::UpdateVisibilityDebug(int preferredStartSectorId)
             visibilityResult,
             meshes.sectorReceiverBounds,
             static_cast<std::size_t>(MaxDynamicLights),
-            dynamicPointLights);
-    visibilityDebugText += " | draw records: "
+            dynamicPointLights,
+            &selectedDynamicPointLightIds,
+            &selectedDynamicPointLightIds);
+    renderDebugText = "draw records: "
             + std::to_string(visibleDrawRecordCount)
             + " / "
             + std::to_string(meshes.sectorDrawRecords.size());
+    renderDebugText += " | "
+            + FormatDynamicLightDebugText(
+                    dynamicLightingEnabled,
+                    dynamicPointLights.size(),
+                    dynamicPointLightCandidates.size(),
+                    dynamicPointLightSources.size(),
+                    selectedDynamicPointLightIds);
+    visibilityDebugText += " | " + renderDebugText;
 }
 
 float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const

@@ -79,6 +79,16 @@ bool HasCandidateLightId(
     return false;
 }
 
+bool HasSelectedLightId(const std::vector<int>& selectedLightIds, int lightId)
+{
+    for (int selectedLightId : selectedLightIds) {
+        if (selectedLightId == lightId) {
+            return true;
+        }
+    }
+    return false;
+}
+
 const game::SectorReceiverBounds* FindBounds(
         const std::vector<game::SectorReceiverBounds>& bounds,
         int sectorId)
@@ -1267,6 +1277,92 @@ void TestDynamicPointLightFallbackUsesAllReceiverBounds()
           "fallback draw-all without receiver bounds still selects valid lights conservatively");
 }
 
+void TestDynamicPointLightSelectionHysteresis()
+{
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+    const std::vector<game::SectorReceiverBounds> noReceiverBounds;
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates = {
+            LightSource(1, 10, Vector3{0.0f, 0.0f, 0.0f}, 5.0f, 1.0f),
+            LightSource(2, 10, Vector3{1.0f, 0.0f, 0.0f}, 5.0f, 1.1f)};
+    std::vector<int> selectedIds = {1};
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            noReceiverBounds,
+            1,
+            selected,
+            &selectedIds,
+            &selectedIds);
+    Check(selectedIds.size() == 1 && selectedIds[0] == 1,
+          "dynamic light hysteresis retains old selected light against small score difference");
+
+    candidates = {
+            LightSource(1, 10, Vector3{0.0f, 0.0f, 0.0f}, 5.0f, 1.0f),
+            LightSource(2, 10, Vector3{1.0f, 0.0f, 0.0f}, 5.0f, 1.25f)};
+    selectedIds = {1};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            noReceiverBounds,
+            1,
+            selected,
+            &selectedIds,
+            &selectedIds);
+    Check(selectedIds.size() == 1 && selectedIds[0] == 2,
+          "dynamic light hysteresis replaces old selected light with clearly better candidate");
+
+    candidates = {
+            LightSource(2, 10, Vector3{1.0f, 0.0f, 0.0f}, 5.0f, 1.0f)};
+    selectedIds = {1};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            noReceiverBounds,
+            1,
+            selected,
+            &selectedIds,
+            &selectedIds);
+    Check(selectedIds.size() == 1 && selectedIds[0] == 2,
+          "dynamic light hysteresis removes deleted or disabled old selected light immediately");
+
+    candidates = {
+            LightSource(1, 10, Vector3{0.0f, 0.0f, 0.0f}, 5.0f, 1.0f),
+            LightSource(2, 10, Vector3{1.0f, 0.0f, 0.0f}, 5.0f, 1.0f),
+            LightSource(3, 10, Vector3{2.0f, 0.0f, 0.0f}, 5.0f, 1.0f)};
+    selectedIds = {1, 2, 3};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            noReceiverBounds,
+            2,
+            selected,
+            &selectedIds,
+            &selectedIds);
+    Check(selectedIds.size() == 2,
+          "dynamic light hysteresis keeps selected count capped");
+
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+    candidates = {
+            LightSource(1, 10, Vector3{20.0f, 0.0f, 0.0f}, 5.0f, 1.0f),
+            LightSource(2, 10, Vector3{0.5f, 0.5f, 0.5f}, 5.0f, 1.0f)};
+    selectedIds = {1};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            receiverBounds,
+            1,
+            selected,
+            &selectedIds,
+            &selectedIds);
+    Check(selectedIds.size() == 1 && selectedIds[0] == 2 && !HasSelectedLightId(selectedIds, 1),
+          "dynamic light hysteresis does not retain outside-radius old selected light");
+}
+
 } // namespace
 
 int main()
@@ -1298,6 +1394,7 @@ int main()
     TestDynamicPointLightReceiverBoundCandidateSelection();
     TestDynamicPointLightRankingAndPacking();
     TestDynamicPointLightFallbackUsesAllReceiverBounds();
+    TestDynamicPointLightSelectionHysteresis();
     if (failures == 0) {
         std::puts("Sector topology mesh builder tests passed");
     }

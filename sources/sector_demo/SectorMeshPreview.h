@@ -58,7 +58,12 @@ public:
     const char* RendererLightmapStatusText() const;
     void UpdateVisibilityDebug(int preferredStartSectorId = 0);
     const RuntimePortalVisibilityResult& VisibilityResult() const { return visibilityResult; }
+    const std::string& PortalVisibilityDebugText() const { return portalVisibilityDebugText; }
     const std::string& VisibilityDebugText() const { return visibilityDebugText; }
+    const std::string& RenderDebugText() const { return renderDebugText; }
+    bool DynamicLightingEnabled() const { return dynamicLightingEnabled; }
+    void SetDynamicLightingEnabled(bool enabled) { dynamicLightingEnabled = enabled; }
+    void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
 
 private:
     static std::string ResolveAssetPath(const std::string& path);
@@ -74,7 +79,9 @@ private:
     SectorGeneratedGeometry generatedGeometry;
     RuntimeSectorVisibilityGraph visibilityGraph;
     RuntimePortalVisibilityResult visibilityResult;
+    std::string portalVisibilityDebugText;
     std::string visibilityDebugText;
+    std::string renderDebugText;
     SectorCollisionWorld visibilityLookupWorld;
     bool visibilityGraphValid = false;
     bool visibilityLookupWorldValid = false;
@@ -110,6 +117,8 @@ private:
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightSources;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;
     std::vector<SectorPreviewDynamicPointLightUniform> dynamicPointLights;
+    std::vector<int> selectedDynamicPointLightIds;
+    bool dynamicLightingEnabled = true;
     Material bloomSourceMaterial = {};
     Texture2D bloomDefaultMaterialTexture = {};
     bool bloomSourceMaterialLoaded = false;

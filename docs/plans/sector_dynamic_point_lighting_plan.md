@@ -95,21 +95,21 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_04",
       "title": "Dynamic Light Debug And Selection Stability",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04a",
       "title": "Add Dynamic Light Debug Readout And Runtime Toggle",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04b",
       "title": "Add Simple Top-N Selection Hysteresis",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05",
@@ -141,9 +141,9 @@ When an agent is asked to execute this plan, it must:
 | Phase 3: Visibility-Aware Dynamic Light Selection                             | Completed   | 2026-06-29 | Visibility candidate filtering and ranked top-N selection are implemented. |
 | Phase 3A: Assign Dynamic Lights To Sectors And Collect Visibility Candidates  | Completed   | 2026-06-29 | Dynamic lights are assigned to sectors and selected against visible receiver bounds. |
 | Phase 3B: Rank, Cap, And Pack Selected Dynamic Lights                         | Completed   | 2026-06-29 | Candidate lights are ranked by estimated visible-receiver contribution and capped at 8. |
-| Phase 4: Dynamic Light Debug And Selection Stability                          | Not Started |      | Parent phase.                                                              |
-| Phase 4A: Add Dynamic Light Debug Readout And Runtime Toggle                  | Not Started |      | Makes selection visible/debuggable.                                        |
-| Phase 4B: Add Simple Top-N Selection Hysteresis                               | Not Started |      | Reduces threshold flicker.                                                 |
+| Phase 4: Dynamic Light Debug And Selection Stability                          | Completed   | 2026-06-29 | Debug readout/toggle and top-N selection hysteresis are implemented.        |
+| Phase 4A: Add Dynamic Light Debug Readout And Runtime Toggle                  | Completed   | 2026-06-29 | Added dynamic light counts, selected IDs, and F4 runtime toggle.           |
+| Phase 4B: Add Simple Top-N Selection Hysteresis                               | Completed   | 2026-06-29 | Keeps previous selected IDs unless replacements score at least 20% higher. |
 | Phase 5: Polish, Tests, Documentation, And Completion                         | Not Started |      | Parent phase.                                                              |
 | Phase 5A: Tune Defaults, Strengthen Tests, Update Docs, And Close Plan        | Not Started |      | Final cleanup and plan closure.                                            |
 
@@ -350,6 +350,68 @@ Behavior notes:
 * Dynamic light shader formula and uniform layout are unchanged.
 * Static baked lighting and lightmap source-hash behavior are unchanged; no lightmap hash code or baked-light inputs were touched.
 * No topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+
+Verification:
+
+* `cmake --build cmake-build-debug --target sector_topology_mesh_builder_tests -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_topology_mesh_builder$"` passed.
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed.
+* `git diff --check` passed.
+* `git diff --stat` reviewed.
+* `git status --short` reviewed.
+
+### 2026-06-29: Phase 4A Completed
+
+Summary:
+
+* Added dynamic light debug text to the existing preview visibility readout.
+* The readout format is `dynamic lights: selected / candidates / total (on|off)`.
+* Added selected stable dynamic light IDs when any dynamic lights are selected, formatted as `selected dynamic light ids: 3,7,12`.
+* Added runtime-only `F4` dynamic lighting toggle in the sector demo and 3D editor preview.
+
+Behavior notes:
+
+* Source code changed.
+* The `F4` toggle sets uploaded shader dynamic light count to zero when disabled, and restores the current selected lights when re-enabled.
+* Dynamic light candidate collection and selection still run while dynamic lighting is disabled so debug counts remain visible.
+* The toggle is runtime-only and is not serialized.
+* No selection hysteresis was added; Phase 4B remains responsible for that.
+* Shader formula, geometry visibility culling, static lighting, save/load, and authored dynamic light data are unchanged.
+* Static baked lighting and lightmap source-hash behavior are unchanged; no lightmap hash code or baked-light inputs were touched.
+* No topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* No gameplay, collision, sector lookup, or physics behavior changed.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed.
+* `git diff --check` passed.
+* `git diff --stat` reviewed.
+* `git status --short` reviewed.
+
+### 2026-06-29: Phase 4B Completed
+
+Summary:
+
+* Added runtime-only top-N dynamic point light selection hysteresis using previous selected stable light IDs.
+* Previously selected lights are retained while valid and contributing unless a replacement candidate scores at least 20% higher.
+* Added helper tests for small-difference retention, clearly better replacement, stale selected ID removal, max-light capping, and zero-contribution old-light removal.
+
+Behavior notes:
+
+* Source code changed.
+* Hysteresis threshold is 20% (`1.2x` replacement score factor).
+* Hysteresis state is runtime-only and stored in the preview selected-ID list; it is not serialized and does not change authored map data.
+* Deleted, disabled, invalid, non-candidate, and zero-contribution previously selected lights are not retained.
+* Selected dynamic light count remains capped at `MAX_DYNAMIC_LIGHTS` / 8.
+* Dynamic light ranking remains contribution-score based with stable light-ID tie-breaking.
+* Shader formula, uniform layout, geometry visibility culling, static lighting, save/load, and authored dynamic light data are unchanged.
+* Static baked lighting and lightmap source-hash behavior are unchanged; no lightmap hash code or baked-light inputs were touched.
+* No topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* No gameplay, collision, sector lookup, or physics behavior changed.
+* No manual GUI verification was performed.
 
 Verification:
 

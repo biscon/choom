@@ -47,6 +47,8 @@ void SelectRankedSectorPreviewDynamicPointLights(
         const RuntimePortalVisibilityResult& visibility,
         const std::vector<SectorReceiverBounds>& receiverBounds,
         std::size_t maxLights,
-        std::vector<SectorPreviewDynamicPointLightUniform>& outSelectedLights);
+        std::vector<SectorPreviewDynamicPointLightUniform>& outSelectedLights,
+        std::vector<int>* outSelectedLightIds = nullptr,
+        const std::vector<int>* previousSelectedLightIds = nullptr);
 
 } // namespace game
