@@ -2391,6 +2391,7 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
     const SectorGeneratedSurfaceHit hit = PickSectorGeneratedGeometry(
             preview.RenderedGeometry(),
             ray,
+            preview.VisibilityResult(),
             GeometryEpsilon);
     if (!hit.hit) {
         return best;
@@ -2415,6 +2416,9 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
         }
         const float lift = IsWallSurface(surface.kind) ? PreviewHighlightLift : PreviewHighlightLift * 2.0f;
         for (const SectorGeneratedSurface& generated : preview.RenderedGeometry().surfaces) {
+            if (!ShouldIncludeSectorGeneratedSurfaceForVisibility(generated, preview.VisibilityResult())) {
+                continue;
+            }
             const SectorSurfaceRef generatedRef = ToEditorSurfaceRef(generated.ref);
             if (!SameSurfaceRef(surface, generatedRef)) {
                 continue;

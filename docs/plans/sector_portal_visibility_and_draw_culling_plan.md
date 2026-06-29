@@ -51,7 +51,7 @@ This plan assumes the completed authoring-graph transition:
       "id": "phase_05_pick_and_highlight_visibility_filter",
       "title": "Filter 3D picking and highlights by visible sectors",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     }
   ]

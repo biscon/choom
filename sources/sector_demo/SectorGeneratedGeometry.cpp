@@ -1,5 +1,6 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 
+#include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorUnits.h"
 #include "util/earcut.h"
 
@@ -438,9 +439,23 @@ SectorGeneratedSurfaceHit PickSectorGeneratedGeometry(
         Ray ray,
         float minDistance)
 {
+    RuntimePortalVisibilityResult fallback;
+    fallback.fallbackDrawAll = true;
+    return PickSectorGeneratedGeometry(geometry, ray, fallback, minDistance);
+}
+
+SectorGeneratedSurfaceHit PickSectorGeneratedGeometry(
+        const SectorGeneratedGeometry& geometry,
+        Ray ray,
+        const RuntimePortalVisibilityResult& visibility,
+        float minDistance)
+{
     SectorGeneratedSurfaceHit best;
     bool bestFacesRay = false;
     for (const SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (!ShouldIncludeSectorGeneratedSurfaceForVisibility(surface, visibility)) {
+            continue;
+        }
         for (size_t i = 0; i + 2 < surface.vertices.size(); i += 3) {
             RayCollision collision = GetRayCollisionTriangle(
                     ray,
@@ -474,6 +489,20 @@ SectorGeneratedSurfaceHit PickSectorGeneratedGeometry(
         }
     }
     return best;
+}
+
+bool ShouldIncludeSectorGeneratedSurfaceForVisibility(
+        const SectorGeneratedSurface& surface,
+        const RuntimePortalVisibilityResult& visibility)
+{
+    if (!visibility.validStartSector || visibility.fallbackDrawAll) {
+        return true;
+    }
+
+    return std::find(
+            visibility.visibleSectorIds.begin(),
+            visibility.visibleSectorIds.end(),
+            surface.ref.topologySectorId) != visibility.visibleSectorIds.end();
 }
 
 std::string FormatSectorGeneratedSurfaceLabel(const SectorGeneratedSurfaceRef& ref)

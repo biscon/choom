@@ -858,6 +858,90 @@ void TestGeneratedGeometryPickingResolvesMiddleFacingRefs()
           "back-side ray picks back owner for back-assigned middle texture");
 }
 
+void TestGeneratedSurfaceVisibilitySelection()
+{
+    const game::SectorGeneratedGeometry geometry =
+            BuildGeometryOrFail(MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f),
+                                "visible surface filter geometry builds");
+
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    int included = 0;
+    int hiddenSectorIncluded = 0;
+    for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (!game::ShouldIncludeSectorGeneratedSurfaceForVisibility(surface, visible)) {
+            continue;
+        }
+        ++included;
+        if (surface.ref.topologySectorId == 20) {
+            ++hiddenSectorIncluded;
+        }
+    }
+    Check(included > 0, "visible-sector surface filter includes visible sector surfaces");
+    Check(hiddenSectorIncluded == 0, "visible-sector surface filter excludes hidden sector surfaces");
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.fallbackDrawAll = true;
+    int fallbackIncluded = 0;
+    for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (game::ShouldIncludeSectorGeneratedSurfaceForVisibility(surface, fallback)) {
+            ++fallbackIncluded;
+        }
+    }
+    Check(fallbackIncluded == static_cast<int>(geometry.surfaces.size()),
+          "fallback draw-all surface filter includes all surfaces");
+}
+
+void TestGeneratedGeometryPickingUsesVisibilityFilter()
+{
+    const game::SectorGeneratedGeometry geometry =
+            BuildGeometryOrFail(MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f),
+                                "visibility-aware pick geometry builds");
+    const Ray rightSectorFloorRay =
+            MakeRay(Vector3{0.75f, -1.0f, 0.25f}, Vector3{0.0f, 1.0f, 0.0f});
+
+    game::RuntimePortalVisibilityResult visibleLeft;
+    visibleLeft.validStartSector = true;
+    visibleLeft.visibleSectorIds = {10};
+    const game::SectorGeneratedSurfaceHit hiddenHit =
+            game::PickSectorGeneratedGeometry(geometry, rightSectorFloorRay, visibleLeft);
+    Check(!hiddenHit.hit, "visibility-aware picking ignores hidden-sector surfaces");
+
+    game::RuntimePortalVisibilityResult visibleRight;
+    visibleRight.validStartSector = true;
+    visibleRight.visibleSectorIds = {20};
+    const game::SectorGeneratedSurfaceHit visibleHit =
+            game::PickSectorGeneratedGeometry(geometry, rightSectorFloorRay, visibleRight);
+    Check(visibleHit.hit, "visibility-aware picking still hits visible-sector surfaces");
+    Check(visibleHit.ref.topologySectorId == 20,
+          "visibility-aware picking preserves topology refs for visible picked surfaces");
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.fallbackDrawAll = true;
+    const game::SectorGeneratedSurfaceHit fallbackHit =
+            game::PickSectorGeneratedGeometry(geometry, rightSectorFloorRay, fallback);
+    Check(fallbackHit.hit && fallbackHit.ref.topologySectorId == 20,
+          "visibility-aware picking falls back to all surfaces");
+}
+
+void TestGeneratedSurfaceHighlightVisibilitySelection()
+{
+    game::SectorGeneratedSurface visibleSurface = MakeBatchTestSurface("visible", "", {}, 1.0f, 0.0f);
+    visibleSurface.ref.topologySectorId = 10;
+    game::SectorGeneratedSurface hiddenSurface = MakeBatchTestSurface("hidden", "", {}, 1.0f, 2.0f);
+    hiddenSurface.ref.topologySectorId = 20;
+
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+    Check(game::ShouldIncludeSectorGeneratedSurfaceForVisibility(visibleSurface, visible),
+          "highlight helper includes selected visible sector surface");
+    Check(!game::ShouldIncludeSectorGeneratedSurfaceForVisibility(hiddenSurface, visible),
+          "highlight helper suppresses selected hidden sector surface");
+}
+
 void TestDrawRecordVisibilitySelection()
 {
     const std::vector<game::SectorMeshBatch> records = {
@@ -938,6 +1022,9 @@ int main()
     TestInvalidTopologyMeshBuilder();
     TestGeneratedGeometryPickingKeepsTopologyRefs();
     TestGeneratedGeometryPickingResolvesMiddleFacingRefs();
+    TestGeneratedSurfaceVisibilitySelection();
+    TestGeneratedGeometryPickingUsesVisibilityFilter();
+    TestGeneratedSurfaceHighlightVisibilitySelection();
     TestDrawRecordVisibilitySelection();
     TestBloomDrawRecordVisibilitySelection();
     if (failures == 0) {
