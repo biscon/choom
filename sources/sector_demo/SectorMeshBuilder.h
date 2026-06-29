@@ -27,6 +27,7 @@ struct SectorMeshBatchVertex {
 };
 
 struct SectorMeshBatchData {
+    int sectorId = -1;
     std::string textureId;
     std::string decalTextureId;
     float decalOpacity = 1.0f;
@@ -48,6 +49,9 @@ struct SectorMeshBatchDataResult {
 };
 
 SectorMeshBatchDataResult BuildSectorMeshBatchData(
+        const SectorGeneratedGeometry& geometry,
+        const SectorLightmapLayout* lightmapLayout = nullptr);
+SectorMeshBatchDataResult BuildSectorMeshDrawRecordData(
         const SectorGeneratedGeometry& geometry,
         const SectorLightmapLayout* lightmapLayout = nullptr);
 

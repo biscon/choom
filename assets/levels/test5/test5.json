@@ -274,7 +274,7 @@
     "path": "assets/levels/test5/test5.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "d7558edd70fd8686"
+    "sourceHash": "d1974f379444e57e"
   },
   "authoringGraph": {
     "vertices": [
@@ -1845,6 +1845,70 @@
             ],
             "offset": [
               0.25,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 37,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "decal": {
+            "textureId": "biker_chick",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -0.6499999761581421,
+                -0.6499999761581421
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
               0.0
             ]
           }

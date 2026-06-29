@@ -46,7 +46,7 @@ public:
     void ApplyPose(const SectorViewPose& pose);
     void ApplyRendererPose(const SectorViewPose& pose);
     size_t SectorCount() const { return sectorCount; }
-    size_t BatchCount() const { return meshes.batches.size(); }
+    size_t BatchCount() const { return meshes.sectorDrawRecords.size(); }
     int TriangleCount() const { return meshes.triangleCount; }
     const SectorGeneratedGeometry& GeneratedGeometry() const { return generatedGeometry; }
     const SectorGeneratedGeometry& RenderedGeometry() const { return GeneratedGeometry(); }

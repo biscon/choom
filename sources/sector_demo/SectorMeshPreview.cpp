@@ -516,10 +516,10 @@ bool SectorMeshPreview::RebuildRendererResources(
 
     std::string meshError;
     meshes = BuildSectorMeshes(map, useLightmapLayout ? &lightmapLayout : nullptr, &meshError);
-    if (meshes.batches.empty()) {
+    if (meshes.sectorDrawRecords.empty()) {
         Shutdown(assets);
         error = meshError.empty()
-                ? "Preview failed: topology mesh builder produced no batches"
+                ? "Preview failed: topology mesh builder produced no sector draw records"
                 : "Preview failed: " + meshError;
         return false;
     }
@@ -581,6 +581,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     if (!initialized
             && engine::IsNull(assetScope)
             && meshes.batches.empty()
+            && meshes.sectorDrawRecords.empty()
             && !materialLoaded
             && skyCylinderMesh.vertexCount <= 0
             && skyTopCapMesh.vertexCount <= 0
@@ -648,7 +649,7 @@ void SectorMeshPreview::DrawScene(engine::AssetManager& assets, bool useBakedAmb
     if (useBakedAmbientOcclusionLoc >= 0) {
         SetShaderValue(material.shader, useBakedAmbientOcclusionLoc, &useAo, SHADER_UNIFORM_FLOAT);
     }
-    for (const SectorMeshBatch& batch : meshes.batches) {
+    for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
         const engine::TextureHandle textureHandle = TextureForId(batch.textureId);
         const Texture2D* texture = assets.GetTexture(textureHandle);
         material.maps[MATERIAL_MAP_DIFFUSE].texture = (texture != nullptr)
@@ -816,7 +817,7 @@ void SectorMeshPreview::RenderBloomSource(engine::AssetManager& assets)
     bloomSourceMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = bloomDefaultMaterialTexture;
     bloomSourceMaterial.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
 
-    for (const SectorMeshBatch& batch : meshes.batches) {
+    for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
         const Texture2D* decalTexture = nullptr;
         if (!batch.decalTextureId.empty()) {
             decalTexture = assets.GetTexture(TextureForId(batch.decalTextureId));

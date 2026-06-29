@@ -1,4 +1,5 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
+#include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshBuilder.h"
 
 #include <cmath>
@@ -148,6 +149,33 @@ bool HasBatchTexture(const game::SectorMeshBatchDataResult& result, const std::s
         }
     }
     return false;
+}
+
+int CountSectorRecords(const game::SectorMeshBatchDataResult& result, int sectorId)
+{
+    int count = 0;
+    for (const game::SectorMeshBatchData& batch : result.batches) {
+        if (batch.sectorId == sectorId) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+const game::SectorMeshBatchData* FindSectorRecord(
+        const game::SectorMeshBatchDataResult& result,
+        int sectorId,
+        const std::string& textureId,
+        const std::string& decalTextureId)
+{
+    for (const game::SectorMeshBatchData& batch : result.batches) {
+        if (batch.sectorId == sectorId
+                && batch.textureId == textureId
+                && batch.decalTextureId == decalTextureId) {
+            return &batch;
+        }
+    }
+    return nullptr;
 }
 
 const game::SectorMeshBatchData* FindBatch(
@@ -370,6 +398,36 @@ void TestSquareTopologyMeshBatchData()
     Check(HasBatchTexture(result, "square-wall"), "square topology batch data contains wall texture");
 }
 
+void TestOneSectorMeshDrawRecords()
+{
+    const game::SectorGeneratedGeometry geometry = BuildGeometryOrFail(MakeSquare(), "square topology geometry builds");
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshDrawRecordData(geometry);
+    Check(!result.batches.empty(), "one-sector topology draw records are built");
+    Check(result.vertexCount > 0 && result.triangleCount > 0,
+          "one-sector topology draw records include geometry");
+    Check(CountSectorRecords(result, 10) == static_cast<int>(result.batches.size()),
+          "one-sector topology draw records retain sector ownership");
+}
+
+void TestTwoSectorsWithSameMaterialKeepSeparateDrawRecords()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface left = MakeBatchTestSurface("shared", "", Vector2{0.0f, 0.0f}, 1.0f, 0.0f);
+    left.ref.topologySectorId = 10;
+    game::SectorGeneratedSurface right = MakeBatchTestSurface("shared", "", Vector2{0.0f, 0.0f}, 1.0f, 2.0f);
+    right.ref.topologySectorId = 20;
+    geometry.surfaces.push_back(left);
+    geometry.surfaces.push_back(right);
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshDrawRecordData(geometry);
+    Check(result.batches.size() == 2,
+          "same material in two sectors produces separate sector draw records");
+    Check(FindSectorRecord(result, 10, "shared", "") != nullptr,
+          "left sector keeps its shared material draw record");
+    Check(FindSectorRecord(result, 20, "shared", "") != nullptr,
+          "right sector keeps its shared material draw record");
+}
+
 void TestDecalMeshBatchData()
 {
     game::SectorGeneratedGeometry geometry;
@@ -458,6 +516,56 @@ void TestDecalMeshBatchData()
     }
 }
 
+void TestSectorDrawRecordMaterialGrouping()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface baseA = MakeBatchTestSurface("stone", "", Vector2{0.0f, 0.0f}, 1.0f, 0.0f);
+    baseA.ref.topologySectorId = 10;
+    game::SectorGeneratedSurface baseB = MakeBatchTestSurface("stone", "", Vector2{0.0f, 0.0f}, 1.0f, 2.0f);
+    baseB.ref.topologySectorId = 10;
+    game::SectorGeneratedSurface decal = MakeBatchTestSurface("stone", "poster", Vector2{0.25f, 0.5f}, 0.6f, 4.0f);
+    decal.ref.topologySectorId = 10;
+    geometry.surfaces.push_back(baseA);
+    geometry.surfaces.push_back(baseB);
+    geometry.surfaces.push_back(decal);
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshDrawRecordData(geometry);
+    const game::SectorMeshBatchData* baseRecord = FindSectorRecord(result, 10, "stone", "");
+    const game::SectorMeshBatchData* decalRecord = FindSectorRecord(result, 10, "stone", "poster");
+    Check(result.batches.size() == 2,
+          "sector draw record grouping still uses material and decal key");
+    Check(baseRecord != nullptr && baseRecord->vertices.size() == 6,
+          "matching sector/material surfaces share one sector draw record");
+    Check(decalRecord != nullptr && decalRecord->vertices.size() == 3,
+          "different decal key creates a separate sector draw record");
+    Check(decalRecord != nullptr && Near(decalRecord->decalOpacity, 0.6f),
+          "sector draw record preserves decal opacity");
+}
+
+void TestSectorDrawRecordLightmapUvsUseOriginalSurfaceIndex()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface first = MakeBatchTestSurface("stone", "", Vector2{0.0f, 0.0f}, 1.0f, 0.0f);
+    first.ref.topologySectorId = 10;
+    game::SectorGeneratedSurface second = MakeBatchTestSurface("stone", "", Vector2{0.0f, 0.0f}, 1.0f, 2.0f);
+    second.ref.topologySectorId = 20;
+    geometry.surfaces.push_back(first);
+    geometry.surfaces.push_back(second);
+
+    game::SectorLightmapLayout layout;
+    layout.charts.resize(2);
+    layout.charts[0].vertexUvs = {Vector2{0.1f, 0.2f}, Vector2{0.2f, 0.2f}, Vector2{0.1f, 0.3f}};
+    layout.charts[1].vertexUvs = {Vector2{0.7f, 0.8f}, Vector2{0.8f, 0.8f}, Vector2{0.7f, 0.9f}};
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshDrawRecordData(geometry, &layout);
+    const game::SectorMeshBatchData* firstRecord = FindSectorRecord(result, 10, "stone", "");
+    const game::SectorMeshBatchData* secondRecord = FindSectorRecord(result, 20, "stone", "");
+    Check(firstRecord != nullptr && Near(firstRecord->vertices.front().lightmapUv, Vector2{0.1f, 0.2f}),
+          "first sector draw record copies lightmap UVs from original surface index");
+    Check(secondRecord != nullptr && Near(secondRecord->vertices.front().lightmapUv, Vector2{0.7f, 0.8f}),
+          "second sector draw record copies lightmap UVs from original surface index");
+}
+
 void TestMiddleTextureBatchState()
 {
     game::SectorGeneratedGeometry geometry;
@@ -492,6 +600,41 @@ void TestMiddleTextureBatchState()
           "middle texture batch stores alpha cutoff");
     Check(middleBatch != nullptr && middleBatch->vertices.size() == 6,
           "matching middle texture surfaces share the alpha-test batch");
+}
+
+void TestSectorDrawRecordMiddleTextureAlphaTest()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface middle = MakeMiddleBatchTestSurface("bars", 0.0f);
+    middle.ref.topologySectorId = 10;
+    geometry.surfaces.push_back(middle);
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshDrawRecordData(geometry);
+    const game::SectorMeshBatchData* record = FindSectorRecord(result, 10, "bars", "");
+    Check(record != nullptr && record->alphaTest,
+          "middle texture sector draw record preserves alpha-test state");
+    Check(record != nullptr && Near(record->alphaCutoff, 0.5f),
+          "middle texture sector draw record preserves alpha cutoff");
+    Check(record != nullptr && record->receivesLightmap,
+          "middle texture sector draw record preserves lightmap receiver state");
+}
+
+void TestSectorDrawRecordEmissiveDecalMetadata()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface emissive =
+            MakeBatchTestSurface("stone", "sign", Vector2{0.25f, 0.5f}, 0.75f, 0.0f, true, Vector3{0.5f, 1.0f, 0.25f}, 4.0f);
+    emissive.ref.topologySectorId = 10;
+    geometry.surfaces.push_back(emissive);
+
+    const game::SectorMeshBatchDataResult result = game::BuildSectorMeshDrawRecordData(geometry);
+    const game::SectorMeshBatchData* record = FindSectorRecord(result, 10, "stone", "sign");
+    Check(record != nullptr && record->decalEmissive,
+          "emissive decal sector draw record preserves emissive flag");
+    Check(record != nullptr && Near(record->decalTint, Vector3{0.5f, 1.0f, 0.25f}),
+          "emissive decal sector draw record preserves tint");
+    Check(record != nullptr && Near(record->decalBloomIntensity, 4.0f),
+          "emissive decal sector draw record preserves bloom intensity");
 }
 
 void TestLightmapParticipationSplitsBatchKey()
@@ -705,8 +848,14 @@ void TestGeneratedGeometryPickingResolvesMiddleFacingRefs()
 int main()
 {
     TestSquareTopologyMeshBatchData();
+    TestOneSectorMeshDrawRecords();
+    TestTwoSectorsWithSameMaterialKeepSeparateDrawRecords();
     TestDecalMeshBatchData();
+    TestSectorDrawRecordMaterialGrouping();
+    TestSectorDrawRecordLightmapUvsUseOriginalSurfaceIndex();
     TestMiddleTextureBatchState();
+    TestSectorDrawRecordMiddleTextureAlphaTest();
+    TestSectorDrawRecordEmissiveDecalMetadata();
     TestLightmapParticipationSplitsBatchKey();
     TestHoleTopologyMeshBatchData();
     TestEqualHeightPortal();
