@@ -91,6 +91,7 @@ private:
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
     void RenderPreview3D(engine::AssetManager& assets);
     void DrawPreviewSurfaceHighlights() const;
+    void DrawPreviewDynamicSpotLightOverlay() const;
     void DrawPreviewOverlay(
             engine::UIContext& ui,
             const engine::UIConfig& config,

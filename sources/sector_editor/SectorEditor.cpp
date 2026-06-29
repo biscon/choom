@@ -153,6 +153,46 @@ float AuthoringInspectorDecalBlockHeight(
     return height;
 }
 
+void DrawSpotLightConeRing(
+        Vector3 origin,
+        Vector3 forward,
+        Vector3 right,
+        Vector3 up,
+        float range,
+        float coneDegrees,
+        Color color,
+        bool drawSpokes)
+{
+    if (!std::isfinite(range) || range <= 0.0f || !std::isfinite(coneDegrees)) {
+        return;
+    }
+
+    constexpr int SegmentCount = 32;
+    const float halfAngleRadians = std::clamp(coneDegrees, 0.0f, 179.0f) * DEG2RAD * 0.5f;
+    const float radius = std::tan(halfAngleRadians) * range;
+    const Vector3 center = Vector3Add(origin, Vector3Scale(forward, range));
+
+    Vector3 previous = Vector3Add(
+            center,
+            Vector3Scale(right, radius));
+    for (int i = 1; i <= SegmentCount; ++i) {
+        const float angle = static_cast<float>(i) * 2.0f * PI / static_cast<float>(SegmentCount);
+        const Vector3 radial = Vector3Add(
+                Vector3Scale(right, std::cos(angle) * radius),
+                Vector3Scale(up, std::sin(angle) * radius));
+        const Vector3 current = Vector3Add(center, radial);
+        DrawLine3D(previous, current, color);
+        previous = current;
+    }
+
+    if (drawSpokes) {
+        DrawLine3D(origin, Vector3Add(center, Vector3Scale(right, radius)), color);
+        DrawLine3D(origin, Vector3Subtract(center, Vector3Scale(right, radius)), color);
+        DrawLine3D(origin, Vector3Add(center, Vector3Scale(up, radius)), color);
+        DrawLine3D(origin, Vector3Subtract(center, Vector3Scale(up, radius)), color);
+    }
+}
+
 float AuthoringLineInspectorContentHeight(
         const SectorAuthoringLine& line,
         const SectorAuthoringGraph& graph,
@@ -2763,6 +2803,7 @@ void SectorEditor::RenderPreview3DOverlays()
 {
     if (!state.previewUiHidden) {
         DrawPreviewSurfaceHighlights();
+        DrawPreviewDynamicSpotLightOverlay();
     }
 }
 
@@ -2840,6 +2881,69 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
     if (state.selectedSurface3D.kind != SectorSurfaceKind::None) {
         drawSurface(state.selectedSurface3D, Color{84, 204, 255, 255}, 3.0f);
     }
+    EndMode3D();
+}
+
+void SectorEditor::DrawPreviewDynamicSpotLightOverlay() const
+{
+    if (!preview.IsRendererReady() || state.freeflyController.mouseLookEnabled) {
+        return;
+    }
+
+    const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight();
+    if (light == nullptr) {
+        return;
+    }
+
+    const Vector3 origin = SectorAuthoringToWorldPosition(light->position);
+    const Vector3 target = SectorAuthoringToWorldPosition(light->target);
+    Vector3 forward = Vector3Subtract(target, origin);
+    if (Vector3LengthSqr(forward) <= 0.000001f) {
+        forward = Vector3{1.0f, 0.0f, 0.0f};
+    } else {
+        forward = Vector3Normalize(forward);
+    }
+
+    Vector3 basisUp = Vector3{0.0f, 1.0f, 0.0f};
+    if (std::fabs(Vector3DotProduct(forward, basisUp)) > 0.98f) {
+        basisUp = Vector3{0.0f, 0.0f, 1.0f};
+    }
+    const Vector3 right = Vector3Normalize(Vector3CrossProduct(basisUp, forward));
+    const Vector3 up = Vector3Normalize(Vector3CrossProduct(forward, right));
+    const float range = SectorAuthoringToWorldDistance(light->range);
+    const Vector3 rangeEnd = Vector3Add(origin, Vector3Scale(forward, range));
+
+    constexpr float OriginMarkerRadius = 0.12f;
+    constexpr float TargetMarkerRadius = 0.09f;
+    constexpr Color OriginColor{255, 236, 122, 255};
+    constexpr Color TargetColor{255, 170, 82, 255};
+    constexpr Color DirectionColor{255, 216, 88, 255};
+    constexpr Color OuterConeColor{255, 216, 88, 235};
+    constexpr Color InnerConeColor{110, 218, 255, 220};
+
+    BeginMode3D(preview.RenderCamera());
+    DrawSphereWires(origin, OriginMarkerRadius, 8, 12, OriginColor);
+    DrawSphereWires(target, TargetMarkerRadius, 8, 12, TargetColor);
+    DrawLine3D(origin, target, DirectionColor);
+    DrawLine3D(origin, rangeEnd, Color{255, 216, 88, 170});
+    DrawSpotLightConeRing(
+            origin,
+            forward,
+            right,
+            up,
+            range,
+            light->outerConeDegrees,
+            OuterConeColor,
+            true);
+    DrawSpotLightConeRing(
+            origin,
+            forward,
+            right,
+            up,
+            range,
+            light->innerConeDegrees,
+            InnerConeColor,
+            false);
     EndMode3D();
 }
 

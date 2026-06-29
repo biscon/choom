@@ -88,14 +88,14 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_04",
       "title": "3D Spotlight Visualization",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04a",
       "title": "Draw Selected Spotlight Cone Overlay In 3D Preview",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05",
@@ -139,8 +139,8 @@ When an agent is asked to execute this plan, it must:
 | Phase 3: Runtime Dynamic Spotlight Rendering                        | Completed   | 2026-06-29 | Completed with Phase 3A and Phase 3B.                                                    |
 | Phase 3A: Extend Runtime Light Selection And Packing For Spotlights | Completed   | 2026-06-29 | Dynamic spotlights join the runtime selection pool and packed uniform data under the shared cap. |
 | Phase 3B: Add Spotlight Shader Contribution                         | Completed   | 2026-06-29 | Dynamic spotlights now contribute cone-filtered direct light in the forward shader.       |
-| Phase 4: 3D Spotlight Visualization                                 | Not Started |      | Parent phase.                                                                            |
-| Phase 4A: Draw Selected Spotlight Cone Overlay In 3D Preview        | Not Started |      | Wire cone/line overlay for selected spotlight.                                           |
+| Phase 4: 3D Spotlight Visualization                                 | Completed   | 2026-06-29 | Completed with Phase 4A.                                                                 |
+| Phase 4A: Draw Selected Spotlight Cone Overlay In 3D Preview        | Completed   | 2026-06-29 | Added selected dynamic spotlight 3D wire overlay.                                        |
 | Phase 5: Spotlight Pilot Mode                                       | Not Started |      | Parent phase.                                                                            |
 | Phase 5A: Add Pilot Selected Spotlight Apply Cancel Workflow        | Not Started |      | Be-the-light workflow.                                                                   |
 | Phase 6: Polish Tests Documentation And Completion                  | Not Started |      | Parent phase.                                                                            |
@@ -297,6 +297,32 @@ Verification:
 * `cmake --build cmake-build-debug -j2` passed.
 * `./cmake-build-debug/sector_topology_mesh_builder_tests` passed.
 * `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+
+### Phase 4A Completion Notes - 2026-06-29
+
+Summary:
+
+* Source code changed.
+* Added an editor-only 3D preview overlay for the selected dynamic spotlight.
+* The overlay draws an origin wire marker, target wire marker, origin-to-target line, range direction line, outer cone wire ring with spokes, and inner cone wire ring.
+* Cone direction, range, and inner/outer angles use the same authored dynamic spotlight values as runtime spotlight rendering, converted to world units for preview drawing.
+
+Behavior notes:
+
+* Overlay drawing is selected dynamic spotlight only; unselected spotlights do not add 3D preview clutter.
+* Rendering/culling, runtime dynamic spotlight shader behavior, dynamic light selection/ranking, serialization, and public data schema are unchanged.
+* This pass does not mutate topology, so 2D topology render-cache invalidation behavior is unchanged.
+* Static lightmap source-hash behavior is unchanged; dynamic spotlights remain excluded from the static lightmap source hash.
+* Gameplay collision, sector lookup, physics, and camera behavior are unchanged.
+* Manual GUI smoke was not performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+* `git diff --check` passed.
+* `git diff --stat` ran; 3 files changed.
+* `git status --short` ran; expected modified files remain uncommitted.
 
 ## Execution Tracking Rules
 
