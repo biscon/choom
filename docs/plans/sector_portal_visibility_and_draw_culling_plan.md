@@ -44,7 +44,7 @@ This plan assumes the completed authoring-graph transition:
       "id": "phase_04_draw_scene_and_bloom_culling",
       "title": "Cull DrawScene and bloom rendering by visible sectors",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {

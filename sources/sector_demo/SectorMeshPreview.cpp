@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <string>
 #include <vector>
 
 namespace game {
@@ -650,6 +651,10 @@ void SectorMeshPreview::DrawScene(engine::AssetManager& assets, bool useBakedAmb
         SetShaderValue(material.shader, useBakedAmbientOcclusionLoc, &useAo, SHADER_UNIFORM_FLOAT);
     }
     for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
+        if (!ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)) {
+            continue;
+        }
+
         const engine::TextureHandle textureHandle = TextureForId(batch.textureId);
         const Texture2D* texture = assets.GetTexture(textureHandle);
         material.maps[MATERIAL_MAP_DIFFUSE].texture = (texture != nullptr)
@@ -818,11 +823,15 @@ void SectorMeshPreview::RenderBloomSource(engine::AssetManager& assets)
     bloomSourceMaterial.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
 
     for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
+        if (!ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(batch, visibilityResult)) {
+            continue;
+        }
+
         const Texture2D* decalTexture = nullptr;
         if (!batch.decalTextureId.empty()) {
             decalTexture = assets.GetTexture(TextureForId(batch.decalTextureId));
         }
-        if (decalTexture == nullptr || !batch.decalEmissive) {
+        if (decalTexture == nullptr) {
             continue;
         }
 
@@ -1023,6 +1032,12 @@ void SectorMeshPreview::UpdateVisibilityDebug(int preferredStartSectorId)
                 preferredStartSectorId);
     }
     visibilityDebugText = FormatRuntimePortalVisibilityDebugText(visibilityResult);
+    const size_t visibleDrawRecordCount =
+            CountSectorMeshDrawRecordsForVisibility(meshes.sectorDrawRecords, visibilityResult);
+    visibilityDebugText += " | draw records: "
+            + std::to_string(visibleDrawRecordCount)
+            + " / "
+            + std::to_string(meshes.sectorDrawRecords.size());
 }
 
 float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const

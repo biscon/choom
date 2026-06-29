@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorPortalVisibility.h"
 
 #include <raylib.h>
 
@@ -362,6 +363,42 @@ SectorMeshBuildResult BuildSectorMeshes(
     );
 
     return result;
+}
+
+bool ShouldDrawSectorMeshRecordForVisibility(
+        const SectorMeshBatch& record,
+        const RuntimePortalVisibilityResult& visibility)
+{
+    if (!visibility.validStartSector || visibility.fallbackDrawAll) {
+        return true;
+    }
+
+    return std::find(
+            visibility.visibleSectorIds.begin(),
+            visibility.visibleSectorIds.end(),
+            record.sectorId) != visibility.visibleSectorIds.end();
+}
+
+bool ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(
+        const SectorMeshBatch& record,
+        const RuntimePortalVisibilityResult& visibility)
+{
+    return record.decalEmissive
+            && !record.decalTextureId.empty()
+            && ShouldDrawSectorMeshRecordForVisibility(record, visibility);
+}
+
+size_t CountSectorMeshDrawRecordsForVisibility(
+        const std::vector<SectorMeshBatch>& records,
+        const RuntimePortalVisibilityResult& visibility)
+{
+    size_t count = 0;
+    for (const SectorMeshBatch& record : records) {
+        if (ShouldDrawSectorMeshRecordForVisibility(record, visibility)) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 void UnloadSectorMeshes(SectorMeshBuildResult& buildResult)

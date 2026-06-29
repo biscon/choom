@@ -1,6 +1,7 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshBuilder.h"
+#include "sector_demo/SectorPortalVisibility.h"
 
 #include <cmath>
 #include <cstdio>
@@ -291,6 +292,20 @@ game::SectorGeneratedSurface MakeBatchTestSurface(
                     Vector2{0.0f, 1.0f},
                     WHITE}};
     return surface;
+}
+
+game::SectorMeshBatch MakeDrawRecord(
+        int sectorId,
+        const char* textureId,
+        const char* decalTextureId = "",
+        bool decalEmissive = false)
+{
+    game::SectorMeshBatch record;
+    record.sectorId = sectorId;
+    record.textureId = textureId;
+    record.decalTextureId = decalTextureId;
+    record.decalEmissive = decalEmissive;
+    return record;
 }
 
 game::SectorGeneratedSurface MakeMiddleBatchTestSurface(const char* textureId, float xOffset)
@@ -843,6 +858,65 @@ void TestGeneratedGeometryPickingResolvesMiddleFacingRefs()
           "back-side ray picks back owner for back-assigned middle texture");
 }
 
+void TestDrawRecordVisibilitySelection()
+{
+    const std::vector<game::SectorMeshBatch> records = {
+            MakeDrawRecord(10, "a"),
+            MakeDrawRecord(20, "b"),
+            MakeDrawRecord(30, "c")};
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.validStartSector = false;
+    fallback.fallbackDrawAll = true;
+    Check(game::CountSectorMeshDrawRecordsForVisibility(records, fallback) == 3,
+          "draw selection returns all records for fallback draw-all");
+    Check(game::ShouldDrawSectorMeshRecordForVisibility(records[1], fallback),
+          "invalid start sector draws all records");
+
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10, 30};
+    Check(game::CountSectorMeshDrawRecordsForVisibility(records, visible) == 2,
+          "draw selection returns only visible sector records");
+    Check(game::ShouldDrawSectorMeshRecordForVisibility(records[0], visible),
+          "visible sector record is selected");
+    Check(!game::ShouldDrawSectorMeshRecordForVisibility(records[1], visible),
+          "disconnected hidden sector record is not selected");
+    Check(game::ShouldDrawSectorMeshRecordForVisibility(records[2], visible),
+          "second visible sector record is selected");
+
+    game::RuntimePortalVisibilityResult emptyVisible;
+    emptyVisible.validStartSector = true;
+    Check(game::CountSectorMeshDrawRecordsForVisibility(records, emptyVisible) == 0,
+          "draw selection handles empty visible set safely");
+}
+
+void TestBloomDrawRecordVisibilitySelection()
+{
+    const std::vector<game::SectorMeshBatch> records = {
+            MakeDrawRecord(10, "wall", "poster", true),
+            MakeDrawRecord(20, "wall", "hidden-poster", true),
+            MakeDrawRecord(30, "wall", "plain-decal", false),
+            MakeDrawRecord(40, "wall", "", true)};
+
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10, 30, 40};
+    Check(game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[0], visible),
+          "bloom selection includes visible emissive decal record");
+    Check(!game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[1], visible),
+          "bloom selection uses the same hidden-sector filtering");
+    Check(!game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[2], visible),
+          "bloom selection skips non-emissive decal records");
+    Check(!game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[3], visible),
+          "bloom selection skips records without decal textures");
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.fallbackDrawAll = true;
+    Check(game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[1], fallback),
+          "bloom selection falls back to draw-all visibility");
+}
+
 } // namespace
 
 int main()
@@ -864,6 +938,8 @@ int main()
     TestInvalidTopologyMeshBuilder();
     TestGeneratedGeometryPickingKeepsTopologyRefs();
     TestGeneratedGeometryPickingResolvesMiddleFacingRefs();
+    TestDrawRecordVisibilitySelection();
+    TestBloomDrawRecordVisibilitySelection();
     if (failures == 0) {
         std::puts("Sector topology mesh builder tests passed");
     }

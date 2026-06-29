@@ -4,6 +4,7 @@
 
 #include <raylib.h>
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,7 @@ namespace game {
 struct SectorGeneratedGeometry;
 struct SectorLightmapLayout;
 struct SectorTopologyMap;
+struct RuntimePortalVisibilityResult;
 
 struct SectorMeshBatchVertex {
     Vector3 position = {};
@@ -59,6 +61,15 @@ SectorMeshBuildResult BuildSectorMeshes(
         const SectorTopologyMap& map,
         const SectorLightmapLayout* lightmapLayout = nullptr,
         std::string* outError = nullptr);
+bool ShouldDrawSectorMeshRecordForVisibility(
+        const SectorMeshBatch& record,
+        const RuntimePortalVisibilityResult& visibility);
+bool ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(
+        const SectorMeshBatch& record,
+        const RuntimePortalVisibilityResult& visibility);
+size_t CountSectorMeshDrawRecordsForVisibility(
+        const std::vector<SectorMeshBatch>& records,
+        const RuntimePortalVisibilityResult& visibility);
 void UnloadSectorMeshes(SectorMeshBuildResult& buildResult);
 
 } // namespace game
