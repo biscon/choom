@@ -69,6 +69,30 @@ bool CoordAlignedToStep(SectorCoord value, int64_t step)
     return step <= 1 || PositiveModulo(value, step) == 0;
 }
 
+Vector3 PreviewForwardFromPose(const SectorViewPose& pose)
+{
+    const float cosPitch = std::cos(pose.pitchRadians);
+    return Vector3Normalize(Vector3{
+            std::cos(pose.yawRadians) * cosPitch,
+            std::sin(pose.pitchRadians),
+            std::sin(pose.yawRadians) * cosPitch});
+}
+
+SectorViewPose PreviewPoseLookingAt(Vector3 position, Vector3 target)
+{
+    Vector3 direction = Vector3Subtract(target, position);
+    if (Vector3LengthSqr(direction) <= 0.000001f) {
+        direction = Vector3{1.0f, 0.0f, 0.0f};
+    } else {
+        direction = Vector3Normalize(direction);
+    }
+
+    return SectorViewPose{
+            position,
+            std::atan2(direction.z, direction.x),
+            std::asin(Clamp(direction.y, -1.0f, 1.0f))};
+}
+
 int64_t LcmClamped(int64_t a, int64_t b)
 {
     if (a <= 0 || b <= 0) {
@@ -1371,6 +1395,11 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                 }
 
                 if (event.key.key == KEY_F3) {
+                    if (state.dynamicSpotLightPilot.active) {
+                        statusText = "Finish spotlight pilot before changing 3D control mode";
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
                     TogglePreviewControlMode();
                     controlModeToggled = true;
                     engine::ConsumeEvent(event);
@@ -1387,6 +1416,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                 }
 
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
+                    CancelDynamicSpotLightPilot(nullptr);
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
                 }
@@ -1467,7 +1497,8 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
             || !preview.IsRendererReady()
             || state.freeflyController.mouseLookEnabled
             || state.previewUiHidden
-            || state.texturePicker.open) {
+            || state.texturePicker.open
+            || state.dynamicSpotLightPilot.active) {
         state.hoveredSurface3D = SectorSurfaceHit{};
         return;
     }
@@ -1988,6 +2019,7 @@ void SectorEditor::ClearStaleTopologySelection()
     }
 
     if (stale) {
+        CancelDynamicSpotLightPilot(nullptr);
         state.topologySelectionKind = TopologySelectionKind::None;
         state.selectedTopologySectorId = -1;
         state.selectedTopologyVertexId = -1;
@@ -2401,6 +2433,7 @@ bool SectorEditor::DeleteDynamicSpotLightById(int topologyLightId)
     }
 
     if (state.selectedTopologyDynamicSpotLightId == topologyLightId) {
+        CancelDynamicSpotLightPilot(nullptr);
         ClearSelection();
     }
     if (state.hoveredTopologyDynamicSpotLightId == topologyLightId) {
@@ -2979,10 +3012,58 @@ void SectorEditor::DrawPreviewOverlay(
                 "Settings")) {
         OpenPreviewSettingsModal();
     }
+    const SectorTopologyDynamicSpotLight* selectedSpotLight = SelectedTopologyDynamicSpotLight();
+    if (state.dynamicSpotLightPilot.active) {
+        constexpr float buttonW = 108.0f;
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_preview_spotlight_pilot_apply",
+                    Rectangle{
+                            panel.x + panel.width - 152.0f - buttonW * 2.0f - 20.0f,
+                            panel.y + 12.0f,
+                            buttonW,
+                            36.0f},
+                    font,
+                    "Apply")) {
+            ApplyDynamicSpotLightPilot();
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_preview_spotlight_pilot_cancel",
+                    Rectangle{
+                            panel.x + panel.width - 152.0f - buttonW - 10.0f,
+                            panel.y + 12.0f,
+                            buttonW,
+                            36.0f},
+                    font,
+                    "Cancel")) {
+            CancelDynamicSpotLightPilot("Spotlight pilot cancelled");
+        }
+    } else if (selectedSpotLight != nullptr && state.previewControlMode == SectorPreviewControlMode::FreeFly) {
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_preview_spotlight_pilot_start",
+                    Rectangle{panel.x + panel.width - 290.0f, panel.y + 12.0f, 118.0f, 36.0f},
+                    font,
+                    "Pilot Light")) {
+            StartDynamicSpotLightPilot();
+        }
+    }
     const char* interactionText = state.freeflyController.mouseLookEnabled
-            ? (state.previewControlMode == SectorPreviewControlMode::Gameplay
+            ? (state.dynamicSpotLightPilot.active
+                    ? "Pilot Light | WASD move | Mouse look | Space/Ctrl up/down | Apply or Cancel"
+                    : (state.previewControlMode == SectorPreviewControlMode::Gameplay
                     ? "WASD move | Space jump | Shift run | Mouse look | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc"
-                    : "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc")
+                    : "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc"))
             : "F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | click surface to select | Tab/Esc";
     engine::Text(
             config,
@@ -7645,6 +7726,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
 
 void SectorEditor::LeavePreview3D()
 {
+    CancelDynamicSpotLightPilot(nullptr);
     if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
         ClearSectorFpsLandingDip(state.landingDipState);
         ApplyGameplayPoseToPreview();
@@ -7679,6 +7761,94 @@ void SectorEditor::TogglePreviewControlMode()
     }
 
     statusText = TextFormat("3D control mode: %s", PreviewControlModeName(state.previewControlMode));
+}
+
+bool SectorEditor::StartDynamicSpotLightPilot()
+{
+    if (state.mode != SectorEditorMode::Preview3D || state.previewControlMode != SectorPreviewControlMode::FreeFly) {
+        statusText = "Spotlight pilot requires 3D FreeFly mode";
+        return false;
+    }
+
+    const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight();
+    if (light == nullptr) {
+        statusText = "Select a dynamic spotlight to pilot";
+        return false;
+    }
+
+    const Vector3 originWorld = SectorAuthoringToWorldPosition(light->position);
+    const Vector3 targetWorld = SectorAuthoringToWorldPosition(light->target);
+    float targetDistanceWorld = Vector3Distance(originWorld, targetWorld);
+    if (!std::isfinite(targetDistanceWorld) || targetDistanceWorld <= 0.01f) {
+        targetDistanceWorld = std::max(SectorAuthoringToWorldDistance(light->range) * 0.5f, 4.0f);
+    }
+
+    state.dynamicSpotLightPilot.active = true;
+    state.dynamicSpotLightPilot.lightId = light->id;
+    state.dynamicSpotLightPilot.originalPosition = light->position;
+    state.dynamicSpotLightPilot.originalTarget = light->target;
+    state.dynamicSpotLightPilot.originalPreviewPose = ActivePreviewPose();
+    state.dynamicSpotLightPilot.originalMouseLookEnabled = state.freeflyController.mouseLookEnabled;
+    state.dynamicSpotLightPilot.targetDistanceWorld = targetDistanceWorld;
+
+    const SectorViewPose pilotPose = PreviewPoseLookingAt(originWorld, targetWorld);
+    ResetSectorFreeflyController(state.freeflyController, pilotPose);
+    EnterSectorFreeflyController(state.freeflyController);
+    preview.ApplyRendererPose(state.freeflyController.pose);
+    state.hoveredSurface3D = SectorSurfaceHit{};
+    statusText = TextFormat("Piloting dynamic spot %d", light->id);
+    return true;
+}
+
+bool SectorEditor::ApplyDynamicSpotLightPilot()
+{
+    if (!state.dynamicSpotLightPilot.active) {
+        return false;
+    }
+
+    SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(
+            state.topologyMap,
+            state.dynamicSpotLightPilot.lightId);
+    if (light == nullptr) {
+        CancelDynamicSpotLightPilot("Spotlight pilot cancelled: light missing");
+        return false;
+    }
+
+    const int lightId = light->id;
+    const SectorViewPose pose = ActivePreviewPose();
+    const Vector3 forward = PreviewForwardFromPose(pose);
+    const Vector3 targetWorld = Vector3Add(
+            pose.position,
+            Vector3Scale(forward, state.dynamicSpotLightPilot.targetDistanceWorld));
+    light->position = SectorWorldToAuthoringPosition(pose.position);
+    light->target = SectorWorldToAuthoringPosition(targetWorld);
+    state.dynamicSpotLightPilot = DynamicSpotLightPilotState{};
+    MarkTopologyDocumentEdited(TextFormat("Piloted dynamic spot %d", lightId));
+    preview.RefreshDynamicLightSources(state.topologyMap);
+    statusText = TextFormat("Applied dynamic spot %d pilot pose", lightId);
+    return true;
+}
+
+void SectorEditor::CancelDynamicSpotLightPilot(const char* message)
+{
+    if (!state.dynamicSpotLightPilot.active) {
+        return;
+    }
+
+    const DynamicSpotLightPilotState pilot = state.dynamicSpotLightPilot;
+    state.dynamicSpotLightPilot = DynamicSpotLightPilotState{};
+    if (SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(state.topologyMap, pilot.lightId)) {
+        light->position = pilot.originalPosition;
+        light->target = pilot.originalTarget;
+    }
+    if (state.mode == SectorEditorMode::Preview3D) {
+        ResetSectorFreeflyController(state.freeflyController, pilot.originalPreviewPose);
+        SetSectorFreeflyMouseLookEnabled(state.freeflyController, pilot.originalMouseLookEnabled);
+        preview.ApplyRendererPose(state.freeflyController.pose);
+    }
+    if (message != nullptr && message[0] != '\0') {
+        statusText = message;
+    }
 }
 
 bool SectorEditor::RebuildSectorCollisionWorld()
@@ -8211,6 +8381,7 @@ void SectorEditor::SelectTopologySector(int sectorId)
         return;
     }
 
+    CancelDynamicSpotLightPilot(nullptr);
     state.topologySelectionKind = TopologySelectionKind::Sector;
     state.selectedTopologySectorId = sectorId;
     state.selectedTopologyVertexId = -1;
@@ -8248,6 +8419,7 @@ void SectorEditor::SelectTopologyVertex(int vertexId)
         return;
     }
 
+    CancelDynamicSpotLightPilot(nullptr);
     state.topologySelectionKind = TopologySelectionKind::Vertex;
     state.selectedTopologySectorId = -1;
     state.selectedTopologyVertexId = vertex->id;
@@ -8281,6 +8453,7 @@ void SectorEditor::SelectTopologySideDef(int sideDefId, TopologyWallPart wallPar
         return;
     }
 
+    CancelDynamicSpotLightPilot(nullptr);
     state.topologySelectionKind = TopologySelectionKind::SideDef;
     state.selectedTopologySectorId = -1;
     state.selectedTopologyVertexId = -1;
@@ -8318,6 +8491,7 @@ void SectorEditor::SelectTopologyLineDef(
         return;
     }
 
+    CancelDynamicSpotLightPilot(nullptr);
     state.topologySelectionKind = TopologySelectionKind::LineDef;
     state.selectedTopologySectorId = -1;
     state.selectedTopologyVertexId = -1;
@@ -8351,6 +8525,7 @@ void SectorEditor::SelectTopologyLight(int topologyLightId)
         return;
     }
 
+    CancelDynamicSpotLightPilot(nullptr);
     state.selectedTopologyLightId = topologyLightId;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
@@ -8391,6 +8566,7 @@ void SectorEditor::SelectTopologyDynamicLight(int topologyLightId)
         return;
     }
 
+    CancelDynamicSpotLightPilot(nullptr);
     state.selectedTopologyDynamicLightId = topologyLightId;
     state.selectedTopologyLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
@@ -8431,6 +8607,10 @@ void SectorEditor::SelectTopologyDynamicSpotLight(int topologyLightId)
         return;
     }
 
+    if (state.dynamicSpotLightPilot.active
+            && state.dynamicSpotLightPilot.lightId != topologyLightId) {
+        CancelDynamicSpotLightPilot(nullptr);
+    }
     state.selectedTopologyDynamicSpotLightId = topologyLightId;
     state.selectedTopologyLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
@@ -8572,6 +8752,7 @@ void SectorEditor::ResetSurface3DUiState()
 
 void SectorEditor::ClearTopologySelectionOnly()
 {
+    CancelDynamicSpotLightPilot(nullptr);
     state.lightDrag = LightDragState{};
     state.topologySelectionKind = TopologySelectionKind::None;
     state.selectedTopologySectorId = -1;
@@ -8594,6 +8775,7 @@ void SectorEditor::ClearTopologySelectionOnly()
 
 void SectorEditor::ClearSelection()
 {
+    CancelDynamicSpotLightPilot(nullptr);
     state.authoringVertexDrag = AuthoringVertexDragState{};
     state.topologySelectionKind = TopologySelectionKind::None;
     state.selectedTopologySectorId = -1;

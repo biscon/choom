@@ -1265,6 +1265,21 @@ void SectorMeshPreview::ApplyRendererPose(const SectorViewPose& pose)
     UpdateVisibilityDebug();
 }
 
+void SectorMeshPreview::RefreshDynamicLightSources(const SectorTopologyMap& map)
+{
+    BuildSectorPreviewDynamicPointLightSources(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+            dynamicPointLightSources);
+    dynamicPointLightCandidates.clear();
+    dynamicPointLightCandidates.reserve(dynamicPointLightSources.size());
+    dynamicPointLights.clear();
+    dynamicPointLights.reserve(MaxDynamicLights);
+    selectedDynamicPointLightIds.clear();
+    selectedDynamicPointLightIds.reserve(MaxDynamicLights);
+    UpdateVisibilityDebug();
+}
+
 void SectorMeshPreview::UpdateVisibilityDebug(
         int preferredStartSectorId,
         float visibilitySeedRadiusWorld,

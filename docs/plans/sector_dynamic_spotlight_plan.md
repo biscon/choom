@@ -101,14 +101,14 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_05",
       "title": "Spotlight Pilot Mode",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05a",
       "title": "Add Pilot Selected Spotlight Apply Cancel Workflow",
       "type": "pass",
       "parent": "phase_05",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_06",
@@ -141,8 +141,8 @@ When an agent is asked to execute this plan, it must:
 | Phase 3B: Add Spotlight Shader Contribution                         | Completed   | 2026-06-29 | Dynamic spotlights now contribute cone-filtered direct light in the forward shader.       |
 | Phase 4: 3D Spotlight Visualization                                 | Completed   | 2026-06-29 | Completed with Phase 4A.                                                                 |
 | Phase 4A: Draw Selected Spotlight Cone Overlay In 3D Preview        | Completed   | 2026-06-29 | Added selected dynamic spotlight 3D wire overlay.                                        |
-| Phase 5: Spotlight Pilot Mode                                       | Not Started |      | Parent phase.                                                                            |
-| Phase 5A: Add Pilot Selected Spotlight Apply Cancel Workflow        | Not Started |      | Be-the-light workflow.                                                                   |
+| Phase 5: Spotlight Pilot Mode                                       | Completed   | 2026-06-29 | Completed with Phase 5A.                                                                 |
+| Phase 5A: Add Pilot Selected Spotlight Apply Cancel Workflow        | Completed   | 2026-06-29 | Added selected dynamic spotlight 3D pilot apply/cancel workflow.                         |
 | Phase 6: Polish Tests Documentation And Completion                  | Not Started |      | Parent phase.                                                                            |
 | Phase 6A: Tune Defaults Strengthen Tests Update Docs And Close Plan | Not Started |      | Final cleanup and documentation.                                                         |
 
@@ -322,6 +322,37 @@ Verification:
 * `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
 * `git diff --check` passed.
 * `git diff --stat` ran; 3 files changed.
+* `git status --short` ran; expected modified files remain uncommitted.
+
+### Phase 5A Completion Notes - 2026-06-29
+
+Summary:
+
+* Source code changed.
+* Added editor state for piloting a selected dynamic spotlight in 3D FreeFly mode.
+* Added 3D overlay controls: `Pilot Light`, `Apply`, and `Cancel`.
+* `Pilot Light` stores the original spotlight position/target, original free-fly camera pose/state, and target distance, then moves the camera to the spotlight origin looking at its target.
+* `Apply` writes the current camera position to the spotlight origin and writes the target as camera position plus camera forward times the preserved target distance.
+* `Apply` refreshes the 3D preview dynamic-light source cache so the moved spotlight updates in the live preview without rebuilding geometry.
+* `Cancel`, leaving 3D mode, selection loss, and deleting the selected spotlight cancel the pilot state safely.
+
+Behavior notes:
+
+* Dynamic spotlight authored data does not mutate while previewing; topology data changes only on `Apply`.
+* `Apply` uses `MarkTopologyDocumentEdited()`, so the document is marked dirty and the 2D topology render cache is invalidated.
+* `Cancel` restores the original spotlight position/target and original free-fly camera pose/state without marking the document dirty.
+* `SectorMeshPreview` gained a narrow `RefreshDynamicLightSources()` method for editor-side dynamic-light cache refresh after Apply.
+* Normal 3D camera mode is unchanged when not piloting.
+* Save/load schema, serialization, runtime shader behavior, generated geometry, static lightmaps, and lightmap source-hash behavior are unchanged.
+* Gameplay collision, sector lookup, physics, and camera behavior outside editor pilot camera control are unchanged.
+* Manual GUI smoke was not performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+* `git diff --check` passed.
+* `git diff --stat` ran; 6 files changed.
 * `git status --short` ran; expected modified files remain uncommitted.
 
 ## Execution Tracking Rules

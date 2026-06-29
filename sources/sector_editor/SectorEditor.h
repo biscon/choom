@@ -231,6 +231,9 @@ private:
     SectorViewPose ActivePreviewPose() const;
     void ApplyGameplayPoseToPreview();
     void TogglePreviewControlMode();
+    bool StartDynamicSpotLightPilot();
+    bool ApplyDynamicSpotLightPilot();
+    void CancelDynamicSpotLightPilot(const char* message);
     bool RebuildSectorCollisionWorld();
     SectorFpsVerticalContext BuildGameplayVerticalContext();
     void RefreshGameplaySectorAndVerticalContext();

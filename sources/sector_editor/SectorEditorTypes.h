@@ -332,6 +332,16 @@ struct LightDragState {
     Vector3 snappedPosition = {};
 };
 
+struct DynamicSpotLightPilotState {
+    bool active = false;
+    int lightId = -1;
+    Vector3 originalPosition = {};
+    Vector3 originalTarget = {};
+    SectorViewPose originalPreviewPose = {};
+    bool originalMouseLookEnabled = true;
+    float targetDistanceWorld = 4.0f;
+};
+
 struct CachedTopologyOutlineSegment {
     Vector2 a = {};
     Vector2 b = {};
@@ -517,6 +527,7 @@ struct SectorEditorState {
     SectorFpsLandingDipState landingDipState;
     bool hasPreviewPose = false;
     SectorViewPose lastPreviewPose = {};
+    DynamicSpotLightPilotState dynamicSpotLightPilot;
     SectorSurfaceHit hoveredSurface3D;
     SectorSurfaceRef selectedSurface3D;
     TopologySurfaceEditTarget selectedTopologySurface3D;
