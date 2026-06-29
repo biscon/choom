@@ -732,7 +732,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex: click an authoring line to split it, right click/Esc cancels";
         case SectorEditorTool::AuthoringMove: return "Move Vertex: drag authoring vertices";
         case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place, or drag an existing baked point light";
-        case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place, edit target and cone in Inspector";
+        case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place, or drag an existing baked spot origin/target";
         case SectorEditorTool::DynamicLight: return "Dynamic Light: click inside a sector to place, or drag an existing runtime point light";
         case SectorEditorTool::DynamicSpotLight: return "Dynamic Spot: click inside a sector to place, edit target and cone in Inspector";
         case SectorEditorTool::Move: return "Legacy move: unavailable in graph-authoritative mode; use Move Vertex for authoring vertices";

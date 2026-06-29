@@ -6535,6 +6535,10 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "static light placement remains available in graph-authoritative mode");
     Check(TextContains(game::ToolHelpText(game::SectorEditorTool::StaticLight), "drag"),
           "static light tool help preserves existing-light drag workflow");
+    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::StaticSpotLight),
+          "static spot placement remains available in graph-authoritative mode");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::StaticSpotLight), "drag"),
+          "static spot tool help describes existing-light drag workflow");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::DynamicLight),
           "dynamic light placement remains available in graph-authoritative mode");
     Check(TextContains(game::ToolName(game::SectorEditorTool::DynamicLight), "Dynamic Light"),

@@ -671,7 +671,11 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
     }
 
     if (state.currentTool == SectorEditorTool::StaticSpotLight) {
-        const int lightId = FindTopologyStaticSpotLightNearScreenPoint(input.MousePosition());
+        int lightId = -1;
+        SpotLightHandle handle = SpotLightHandle::Origin;
+        if (!FindTopologyStaticSpotLightHandleNearScreenPoint(input.MousePosition(), lightId, handle)) {
+            lightId = FindTopologyStaticSpotLightNearScreenPoint(input.MousePosition());
+        }
         if (lightId >= 0) {
             state.hoveredTopologyStaticSpotLightId = lightId;
             state.inspectedTopologyVertexId = -1;
@@ -688,7 +692,7 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
 
     if (state.currentTool == SectorEditorTool::DynamicSpotLight) {
         int lightId = -1;
-        DynamicSpotLightHandle handle = DynamicSpotLightHandle::Origin;
+        SpotLightHandle handle = SpotLightHandle::Origin;
         if (!FindTopologyDynamicSpotLightHandleNearScreenPoint(input.MousePosition(), lightId, handle)) {
             lightId = FindTopologyDynamicSpotLightNearScreenPoint(input.MousePosition());
         }
@@ -893,7 +897,18 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 if (state.currentTool == SectorEditorTool::StaticSpotLight
                         && event.mouseButton.button == MOUSE_LEFT_BUTTON
                         && Contains(canvasRect, event.mouseButton.position)) {
-                    const int lightId = FindTopologyStaticSpotLightNearScreenPoint(event.mouseButton.position);
+                    int lightId = -1;
+                    SpotLightHandle handle = SpotLightHandle::Origin;
+                    if (FindTopologyStaticSpotLightHandleNearScreenPoint(
+                                event.mouseButton.position,
+                                lightId,
+                                handle)) {
+                        StartLightDrag(lightId, handle);
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+
+                    lightId = FindTopologyStaticSpotLightNearScreenPoint(event.mouseButton.position);
                     if (lightId >= 0) {
                         SelectTopologyStaticSpotLight(lightId);
                         statusText = TextFormat("Selected static spot %d", lightId);
@@ -917,7 +932,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         && event.mouseButton.button == MOUSE_LEFT_BUTTON
                         && Contains(canvasRect, event.mouseButton.position)) {
                     int lightId = -1;
-                    DynamicSpotLightHandle handle = DynamicSpotLightHandle::Origin;
+                    SpotLightHandle handle = SpotLightHandle::Origin;
                     if (FindTopologyDynamicSpotLightHandleNearScreenPoint(
                                 event.mouseButton.position,
                                 lightId,
@@ -1184,8 +1199,31 @@ void SectorEditor::CancelAuthoringVertexDrag(const char* message)
     }
 }
 
-void SectorEditor::StartLightDrag(int topologyLightId, DynamicSpotLightHandle dynamicSpotHandle)
+void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandle)
 {
+    if (state.currentTool == SectorEditorTool::StaticSpotLight) {
+        const SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
+                state.topologyMap,
+                topologyLightId);
+        if (light == nullptr) {
+            return;
+        }
+
+        SelectTopologyStaticSpotLight(topologyLightId);
+        state.lightDrag.active = true;
+        state.lightDrag.topologyLightId = topologyLightId;
+        state.lightDrag.spotHandle = spotHandle;
+        state.lightDrag.originalPosition = light->position;
+        state.lightDrag.originalTarget = light->target;
+        state.lightDrag.snappedPosition = spotHandle == SpotLightHandle::Target
+                ? light->target
+                : light->position;
+        statusText = spotHandle == SpotLightHandle::Target
+                ? TextFormat("Aiming static spot %d", light->id)
+                : TextFormat("Moving static spot %d", light->id);
+        return;
+    }
+
     if (state.currentTool == SectorEditorTool::DynamicSpotLight) {
         const SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(
                 state.topologyMap,
@@ -1197,13 +1235,13 @@ void SectorEditor::StartLightDrag(int topologyLightId, DynamicSpotLightHandle dy
         SelectTopologyDynamicSpotLight(topologyLightId);
         state.lightDrag.active = true;
         state.lightDrag.topologyLightId = topologyLightId;
-        state.lightDrag.dynamicSpotHandle = dynamicSpotHandle;
+        state.lightDrag.spotHandle = spotHandle;
         state.lightDrag.originalPosition = light->position;
         state.lightDrag.originalTarget = light->target;
-        state.lightDrag.snappedPosition = dynamicSpotHandle == DynamicSpotLightHandle::Target
+        state.lightDrag.snappedPosition = spotHandle == SpotLightHandle::Target
                 ? light->target
                 : light->position;
-        statusText = dynamicSpotHandle == DynamicSpotLightHandle::Target
+        statusText = spotHandle == SpotLightHandle::Target
                 ? TextFormat("Aiming dynamic spot %d", light->id)
                 : TextFormat("Moving dynamic spot %d", light->id);
         return;
@@ -1274,7 +1312,7 @@ void SectorEditor::UpdateLightDrag(engine::Input& input)
             return;
         }
 
-        if (state.lightDrag.dynamicSpotHandle == DynamicSpotLightHandle::Target) {
+        if (state.lightDrag.spotHandle == SpotLightHandle::Target) {
             light->target.x = state.lightDrag.snappedPosition.x;
             light->target.y = state.lightDrag.originalTarget.y;
             light->target.z = state.lightDrag.snappedPosition.z;
@@ -1291,6 +1329,34 @@ void SectorEditor::UpdateLightDrag(engine::Input& input)
         light->target.y = state.lightDrag.originalTarget.y;
         light->target.z = state.lightDrag.originalTarget.z + dz;
         statusText = TextFormat("Moving dynamic spot %d", light->id);
+        return;
+    }
+
+    if (state.topologySelectionKind == TopologySelectionKind::StaticSpotLight) {
+        SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
+                state.topologyMap,
+                state.lightDrag.topologyLightId);
+        if (light == nullptr) {
+            return;
+        }
+
+        if (state.lightDrag.spotHandle == SpotLightHandle::Target) {
+            light->target.x = state.lightDrag.snappedPosition.x;
+            light->target.y = state.lightDrag.originalTarget.y;
+            light->target.z = state.lightDrag.snappedPosition.z;
+            statusText = TextFormat("Aiming static spot %d", light->id);
+            return;
+        }
+
+        const float dx = state.lightDrag.snappedPosition.x - state.lightDrag.originalPosition.x;
+        const float dz = state.lightDrag.snappedPosition.z - state.lightDrag.originalPosition.z;
+        light->position.x = state.lightDrag.snappedPosition.x;
+        light->position.y = state.lightDrag.originalPosition.y;
+        light->position.z = state.lightDrag.snappedPosition.z;
+        light->target.x = state.lightDrag.originalTarget.x + dx;
+        light->target.y = state.lightDrag.originalTarget.y;
+        light->target.z = state.lightDrag.originalTarget.z + dz;
+        statusText = TextFormat("Moving static spot %d", light->id);
         return;
     }
 
@@ -1315,7 +1381,7 @@ void SectorEditor::FinishLightDrag()
     const int lightId = state.lightDrag.topologyLightId;
     const Vector3 original = state.lightDrag.originalPosition;
     const Vector3 originalTarget = state.lightDrag.originalTarget;
-    const DynamicSpotLightHandle dynamicSpotHandle = state.lightDrag.dynamicSpotHandle;
+    const SpotLightHandle spotHandle = state.lightDrag.spotHandle;
     const TopologySelectionKind selectionKind = state.topologySelectionKind;
     state.lightDrag = LightDragState{};
 
@@ -1342,12 +1408,34 @@ void SectorEditor::FinishLightDrag()
         const bool movedTarget = std::fabs(light->target.x - originalTarget.x) > GeometryEpsilon
                 || std::fabs(light->target.z - originalTarget.z) > GeometryEpsilon;
         SectorEditorTopologyActionResult result;
-        result.changed = dynamicSpotHandle == DynamicSpotLightHandle::Target
+        result.changed = spotHandle == SpotLightHandle::Target
                 ? movedTarget
                 : (movedOrigin || movedTarget);
         result.status = result.changed
                 ? TextFormat("Moved dynamic spot %d", lightId)
                 : TextFormat("Dynamic spot %d unchanged", lightId);
+        FinishTopologyActionResult(result);
+        return;
+    }
+
+    if (selectionKind == TopologySelectionKind::StaticSpotLight) {
+        SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(state.topologyMap, lightId);
+        if (light == nullptr) {
+            return;
+        }
+
+        SelectTopologyStaticSpotLight(lightId);
+        const bool movedOrigin = std::fabs(light->position.x - original.x) > GeometryEpsilon
+                || std::fabs(light->position.z - original.z) > GeometryEpsilon;
+        const bool movedTarget = std::fabs(light->target.x - originalTarget.x) > GeometryEpsilon
+                || std::fabs(light->target.z - originalTarget.z) > GeometryEpsilon;
+        SectorEditorTopologyActionResult result;
+        result.changed = spotHandle == SpotLightHandle::Target
+                ? movedTarget
+                : (movedOrigin || movedTarget);
+        result.status = result.changed
+                ? TextFormat("Moved static spot %d", lightId)
+                : TextFormat("Static spot %d unchanged", lightId);
         FinishTopologyActionResult(result);
         return;
     }
@@ -1379,6 +1467,15 @@ void SectorEditor::CancelLightDrag(const char* message)
                 light->position = state.lightDrag.originalPosition;
                 light->target = state.lightDrag.originalTarget;
                 SelectTopologyDynamicSpotLight(light->id);
+            }
+        } else if (state.topologySelectionKind == TopologySelectionKind::StaticSpotLight) {
+            SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
+                    state.topologyMap,
+                    state.lightDrag.topologyLightId);
+            if (light != nullptr) {
+                light->position = state.lightDrag.originalPosition;
+                light->target = state.lightDrag.originalTarget;
+                SelectTopologyStaticSpotLight(light->id);
             }
         } else {
             SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
@@ -4266,6 +4363,7 @@ void SectorEditor::DrawAuthoringVertexMoveOverlay() const
 void SectorEditor::DrawLightMoveOverlay() const
 {
     if (state.currentTool != SectorEditorTool::StaticLight
+            && state.currentTool != SectorEditorTool::StaticSpotLight
             && state.currentTool != SectorEditorTool::DynamicLight
             && state.currentTool != SectorEditorTool::DynamicSpotLight
             && state.currentTool != SectorEditorTool::Move) {
@@ -4273,6 +4371,34 @@ void SectorEditor::DrawLightMoveOverlay() const
     }
 
     if (state.lightDrag.active) {
+        if (state.topologySelectionKind == TopologySelectionKind::StaticSpotLight) {
+            const SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
+                    state.topologyMap,
+                    state.lightDrag.topologyLightId);
+            if (light == nullptr) {
+                return;
+            }
+
+            const Vector2 origin = MapToScreen(Vector2{light->position.x, light->position.z});
+            const Vector2 target = MapToScreen(Vector2{light->target.x, light->target.z});
+            Color color = light->color;
+            color.a = 245;
+            DrawLineEx(origin, target, 3.0f, WithAlpha(color, 220));
+            DrawCircleLines(
+                    static_cast<int>(std::round(origin.x)),
+                    static_cast<int>(std::round(origin.y)),
+                    state.lightDrag.spotHandle == SpotLightHandle::Origin ? 15.0f : 11.0f,
+                    Color{120, 230, 154, 255});
+            DrawCircleV(origin, 6.5f, Color{120, 230, 154, 255});
+            DrawCircleLines(
+                    static_cast<int>(std::round(target.x)),
+                    static_cast<int>(std::round(target.y)),
+                    state.lightDrag.spotHandle == SpotLightHandle::Target ? 15.0f : 10.0f,
+                    Color{122, 220, 244, 255});
+            DrawCircleV(target, 5.0f, Color{122, 220, 244, 255});
+            return;
+        }
+
         if (state.topologySelectionKind == TopologySelectionKind::DynamicSpotLight) {
             const SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(
                     state.topologyMap,
@@ -4289,13 +4415,13 @@ void SectorEditor::DrawLightMoveOverlay() const
             DrawCircleLines(
                     static_cast<int>(std::round(origin.x)),
                     static_cast<int>(std::round(origin.y)),
-                    state.lightDrag.dynamicSpotHandle == DynamicSpotLightHandle::Origin ? 15.0f : 11.0f,
+                    state.lightDrag.spotHandle == SpotLightHandle::Origin ? 15.0f : 11.0f,
                     Color{120, 230, 154, 255});
             DrawCircleV(origin, 6.5f, Color{120, 230, 154, 255});
             DrawCircleLines(
                     static_cast<int>(std::round(target.x)),
                     static_cast<int>(std::round(target.y)),
-                    state.lightDrag.dynamicSpotHandle == DynamicSpotLightHandle::Target ? 15.0f : 10.0f,
+                    state.lightDrag.spotHandle == SpotLightHandle::Target ? 15.0f : 10.0f,
                     Color{122, 220, 244, 255});
             DrawCircleV(target, 5.0f, Color{122, 220, 244, 255});
             return;
@@ -4343,6 +4469,29 @@ void SectorEditor::DrawLightMoveOverlay() const
         );
         DrawCircleLines(static_cast<int>(std::round(center.x)), static_cast<int>(std::round(center.y)), 15.0f, Color{120, 230, 154, 255});
         DrawCircleV(center, 6.5f, Color{120, 230, 154, 255});
+        return;
+    }
+
+    if (state.currentTool == SectorEditorTool::StaticSpotLight) {
+        const SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
+                state.topologyMap,
+                state.hoveredTopologyStaticSpotLightId);
+        if (light == nullptr) {
+            return;
+        }
+
+        const Vector2 origin = MapToScreen(Vector2{light->position.x, light->position.z});
+        const Vector2 target = MapToScreen(Vector2{light->target.x, light->target.z});
+        DrawCircleLines(
+                static_cast<int>(std::round(origin.x)),
+                static_cast<int>(std::round(origin.y)),
+                13.0f,
+                Color{245, 226, 154, 255});
+        DrawCircleLines(
+                static_cast<int>(std::round(target.x)),
+                static_cast<int>(std::round(target.y)),
+                11.0f,
+                Color{122, 220, 244, 255});
         return;
     }
 
@@ -8415,23 +8564,61 @@ int SectorEditor::FindTopologyDynamicSpotLightNearScreenPoint(Vector2 screenPoin
     return bestId;
 }
 
-bool SectorEditor::FindTopologyDynamicSpotLightHandleNearScreenPoint(
+bool SectorEditor::FindTopologyStaticSpotLightHandleNearScreenPoint(
         Vector2 screenPoint,
         int& outLightId,
-        DynamicSpotLightHandle& outHandle) const
+        SpotLightHandle& outHandle) const
 {
     float bestDistance2 = ScreenLightPickPixels * ScreenLightPickPixels;
     outLightId = -1;
-    outHandle = DynamicSpotLightHandle::Origin;
+    outHandle = SpotLightHandle::Origin;
 
-    auto considerHandle = [&](int lightId, DynamicSpotLightHandle handle, Vector2 center) {
+    auto considerHandle = [&](int lightId, SpotLightHandle handle, Vector2 center) {
         const float dx = center.x - screenPoint.x;
         const float dy = center.y - screenPoint.y;
         const float distance2 = dx * dx + dy * dy;
         if (distance2 < bestDistance2 - 0.001f
                 || (std::fabs(distance2 - bestDistance2) <= 0.001f
                         && (outLightId < 0
-                                || handle == DynamicSpotLightHandle::Target
+                                || handle == SpotLightHandle::Target
+                                || lightId < outLightId))) {
+            bestDistance2 = distance2;
+            outLightId = lightId;
+            outHandle = handle;
+        }
+    };
+
+    for (const SectorTopologyStaticSpotLight& light : state.topologyMap.staticSpotLights) {
+        considerHandle(
+                light.id,
+                SpotLightHandle::Target,
+                MapToScreen(Vector2{light.target.x, light.target.z}));
+        considerHandle(
+                light.id,
+                SpotLightHandle::Origin,
+                MapToScreen(Vector2{light.position.x, light.position.z}));
+    }
+
+    return outLightId >= 0;
+}
+
+bool SectorEditor::FindTopologyDynamicSpotLightHandleNearScreenPoint(
+        Vector2 screenPoint,
+        int& outLightId,
+        SpotLightHandle& outHandle) const
+{
+    float bestDistance2 = ScreenLightPickPixels * ScreenLightPickPixels;
+    outLightId = -1;
+    outHandle = SpotLightHandle::Origin;
+
+    auto considerHandle = [&](int lightId, SpotLightHandle handle, Vector2 center) {
+        const float dx = center.x - screenPoint.x;
+        const float dy = center.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 < bestDistance2 - 0.001f
+                || (std::fabs(distance2 - bestDistance2) <= 0.001f
+                        && (outLightId < 0
+                                || handle == SpotLightHandle::Target
                                 || lightId < outLightId))) {
             bestDistance2 = distance2;
             outLightId = lightId;
@@ -8442,11 +8629,11 @@ bool SectorEditor::FindTopologyDynamicSpotLightHandleNearScreenPoint(
     for (const SectorTopologyDynamicSpotLight& light : state.topologyMap.dynamicSpotLights) {
         considerHandle(
                 light.id,
-                DynamicSpotLightHandle::Target,
+                SpotLightHandle::Target,
                 MapToScreen(Vector2{light.target.x, light.target.z}));
         considerHandle(
                 light.id,
-                DynamicSpotLightHandle::Origin,
+                SpotLightHandle::Origin,
                 MapToScreen(Vector2{light.position.x, light.position.z}));
     }
 

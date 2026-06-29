@@ -320,7 +320,7 @@ struct AuthoringVertexDragState {
     std::string errorMessage;
 };
 
-enum class DynamicSpotLightHandle {
+enum class SpotLightHandle {
     Origin,
     Target
 };
@@ -334,7 +334,7 @@ enum class SpotLightPilotKind {
 struct LightDragState {
     bool active = false;
     int topologyLightId = -1;
-    DynamicSpotLightHandle dynamicSpotHandle = DynamicSpotLightHandle::Origin;
+    SpotLightHandle spotHandle = SpotLightHandle::Origin;
     Vector3 originalPosition = {};
     Vector3 originalTarget = {};
     Vector3 snappedPosition = {};

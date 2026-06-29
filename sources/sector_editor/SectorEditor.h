@@ -54,7 +54,7 @@ private:
     void CancelAuthoringVertexDrag(const char* message);
     void StartLightDrag(
             int topologyLightId,
-            DynamicSpotLightHandle dynamicSpotHandle = DynamicSpotLightHandle::Origin);
+            SpotLightHandle spotHandle = SpotLightHandle::Origin);
     void UpdateLightDrag(engine::Input& input);
     void FinishLightDrag();
     void CancelLightDrag(const char* message);
@@ -205,10 +205,14 @@ private:
     int FindTopologyStaticSpotLightNearScreenPoint(Vector2 screenPoint) const;
     int FindTopologyDynamicLightNearScreenPoint(Vector2 screenPoint) const;
     int FindTopologyDynamicSpotLightNearScreenPoint(Vector2 screenPoint) const;
+    bool FindTopologyStaticSpotLightHandleNearScreenPoint(
+            Vector2 screenPoint,
+            int& outLightId,
+            SpotLightHandle& outHandle) const;
     bool FindTopologyDynamicSpotLightHandleNearScreenPoint(
             Vector2 screenPoint,
             int& outLightId,
-            DynamicSpotLightHandle& outHandle) const;
+            SpotLightHandle& outHandle) const;
     bool FindTopologyVertexNearScreenPoint(
             Vector2 screenPoint,
             int& outVertexId,
