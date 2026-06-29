@@ -254,6 +254,7 @@ void SectorEditor::Update(engine::Input& input, float dt)
     }
 
     if (state.mode == SectorEditorMode::Preview3D) {
+        preview.AdvanceRuntime(dt);
         if (state.texturePicker.open || HasDocumentModalOpen()) {
             return;
         }

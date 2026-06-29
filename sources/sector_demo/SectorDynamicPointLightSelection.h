@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sector_demo/SectorPortalVisibility.h"
+#include "sector_demo/SectorTopologyTypes.h"
 
 #include <raylib.h>
 
@@ -15,10 +16,15 @@ struct SectorTopologyDynamicPointLight;
 struct SectorTopologyMap;
 
 struct SectorPreviewDynamicPointLightUniform {
+    int lightId = 0;
     Vector3 position = {};
     Vector3 color = {};
     float radius = 0.0f;
+    // Authored/base intensity used for selection. Upload applies flicker to a local effective value.
     float intensity = 0.0f;
+    bool flicker = false;
+    float flickerSpeed = DynamicLightFlickerDefaultSpeed;
+    float flickerAmount = DynamicLightFlickerDefaultAmount;
 };
 
 struct SectorPreviewDynamicPointLightSource {
@@ -30,6 +36,16 @@ struct SectorPreviewDynamicPointLightSource {
 bool MakeSectorPreviewDynamicPointLightUniform(
         const SectorTopologyDynamicPointLight& light,
         SectorPreviewDynamicPointLightUniform& outLight);
+
+float EvaluateDynamicLightFlickerMultiplier(
+        int lightId,
+        float runtimeSeconds,
+        float flickerSpeed,
+        float flickerAmount);
+
+float DynamicLightEffectiveUploadIntensity(
+        const SectorPreviewDynamicPointLightUniform& light,
+        float runtimeSeconds);
 
 void BuildSectorPreviewDynamicPointLightSources(
         const SectorTopologyMap& map,

@@ -60,6 +60,7 @@ game::SectorPreviewDynamicPointLightSource LightSource(
     game::SectorPreviewDynamicPointLightSource source;
     source.lightId = lightId;
     source.ownerSectorId = ownerSectorId;
+    source.light.lightId = lightId;
     source.light.position = position;
     source.light.color = color;
     source.light.radius = radius;
@@ -1284,6 +1285,127 @@ void TestDynamicPointLightRankingAndPacking()
           "dynamic light ranking uses deterministic light-id tie breaking");
 }
 
+void TestDynamicPointLightFlickerHelper()
+{
+    const float a = game::EvaluateDynamicLightFlickerMultiplier(42, 1.25f, 1.0f, 0.5f);
+    const float b = game::EvaluateDynamicLightFlickerMultiplier(42, 1.25f, 1.0f, 0.5f);
+    Check(Near(a, b), "dynamic light flicker is deterministic for identical inputs");
+    Check(std::isfinite(a) && a >= 0.0f && a <= 1.0f,
+          "dynamic light flicker multiplier is finite and clamped");
+    Check(Near(game::EvaluateDynamicLightFlickerMultiplier(42, 1.25f, 3.0f, 0.0f), 1.0f),
+          "dynamic light flicker amount zero returns full brightness");
+    Check(Near(game::EvaluateDynamicLightFlickerMultiplier(42, std::numeric_limits<float>::infinity(), 1.0f, 0.5f), 1.0f),
+          "dynamic light flicker non-finite time returns full brightness");
+
+    bool foundTimeVariation = false;
+    float previous = game::EvaluateDynamicLightFlickerMultiplier(42, 0.0f, 1.0f, 0.8f);
+    for (int i = 1; i <= 240; ++i) {
+        const float current = game::EvaluateDynamicLightFlickerMultiplier(
+                42,
+                static_cast<float>(i) / 120.0f,
+                1.0f,
+                0.8f);
+        if (std::fabs(current - previous) > 0.0001f) {
+            foundTimeVariation = true;
+            break;
+        }
+        previous = current;
+    }
+    Check(foundTimeVariation, "dynamic light flicker can vary across absolute time samples");
+
+    bool foundLightVariation = false;
+    const float firstLight = game::EvaluateDynamicLightFlickerMultiplier(10, 0.375f, 1.0f, 1.0f);
+    for (int lightId = 11; lightId < 40; ++lightId) {
+        const float current = game::EvaluateDynamicLightFlickerMultiplier(lightId, 0.375f, 1.0f, 1.0f);
+        if (std::fabs(current - firstLight) > 0.0001f) {
+            foundLightVariation = true;
+            break;
+        }
+    }
+    Check(foundLightVariation, "dynamic light flicker varies across light IDs without requiring an exact pattern");
+
+    const float sameTimestampFrom60Hz = game::EvaluateDynamicLightFlickerMultiplier(7, 0.5f, 1.25f, 0.65f);
+    const float sameTimestampFrom144Hz = game::EvaluateDynamicLightFlickerMultiplier(7, 0.5f, 1.25f, 0.65f);
+    Check(Near(sameTimestampFrom60Hz, sameTimestampFrom144Hz),
+          "dynamic light flicker depends on absolute timestamp rather than sample cadence");
+
+    int slowChanges = 0;
+    int fastChanges = 0;
+    float slowPrevious = game::EvaluateDynamicLightFlickerMultiplier(30, 0.0f, 0.1f, 0.8f);
+    float fastPrevious = game::EvaluateDynamicLightFlickerMultiplier(30, 0.0f, 4.0f, 0.8f);
+    for (int i = 1; i <= 500; ++i) {
+        const float t = static_cast<float>(i) / 250.0f;
+        const float slowCurrent = game::EvaluateDynamicLightFlickerMultiplier(30, t, 0.1f, 0.8f);
+        const float fastCurrent = game::EvaluateDynamicLightFlickerMultiplier(30, t, 4.0f, 0.8f);
+        if (std::fabs(slowCurrent - slowPrevious) > 0.0001f) {
+            ++slowChanges;
+        }
+        if (std::fabs(fastCurrent - fastPrevious) > 0.0001f) {
+            ++fastChanges;
+        }
+        slowPrevious = slowCurrent;
+        fastPrevious = fastCurrent;
+    }
+    Check(fastChanges > slowChanges, "higher dynamic light flicker speed changes sampled multipliers more often");
+
+    const int slowSegmentCrossings = static_cast<int>(
+            std::floor(2.0f * game::DynamicLightFlickerBaseRateHz * game::ClampDynamicLightFlickerSpeed(0.1f)));
+    const int fastSegmentCrossings = static_cast<int>(
+            std::floor(2.0f * game::DynamicLightFlickerBaseRateHz * game::ClampDynamicLightFlickerSpeed(4.0f)));
+    Check(fastSegmentCrossings > slowSegmentCrossings,
+          "higher dynamic light flicker speed crosses more time segments over the same range");
+}
+
+void TestDynamicPointLightFlickerEffectiveIntensity()
+{
+    game::SectorPreviewDynamicPointLightUniform light;
+    light.lightId = 12;
+    light.intensity = 2.25f;
+    light.flicker = false;
+    light.flickerSpeed = 4.0f;
+    light.flickerAmount = 1.0f;
+    Check(Near(game::DynamicLightEffectiveUploadIntensity(light, 0.75f), 2.25f),
+          "disabled dynamic light flicker leaves upload intensity unchanged");
+
+    light.flicker = true;
+    light.flickerAmount = 0.0f;
+    Check(Near(game::DynamicLightEffectiveUploadIntensity(light, 0.75f), 2.25f),
+          "zero dynamic light flicker amount leaves upload intensity unchanged");
+
+    light.flickerAmount = 1.0f;
+    const float effective = game::DynamicLightEffectiveUploadIntensity(light, 0.75f);
+    Check(std::isfinite(effective) && effective >= 0.0f && effective <= light.intensity,
+          "enabled dynamic light flicker upload intensity remains within base intensity bounds");
+}
+
+void TestDynamicPointLightFlickerDoesNotAffectSelection()
+{
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates = {
+            LightSource(1, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 5.0f),
+            LightSource(2, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 4.0f)};
+    candidates[0].light.flicker = true;
+    candidates[0].light.flickerSpeed = 10.0f;
+    candidates[0].light.flickerAmount = 1.0f;
+
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    std::vector<int> selectedIds;
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            receiverBounds,
+            1,
+            selected,
+            &selectedIds);
+    Check(selectedIds.size() == 1 && selectedIds[0] == 1 && selected.size() == 1 && Near(selected[0].intensity, 5.0f),
+          "dynamic light selection uses base intensity even when flicker is enabled");
+}
+
 void TestDynamicPointLightFallbackUsesAllReceiverBounds()
 {
     std::vector<game::SectorPreviewDynamicPointLightSource> candidates = {
@@ -1431,6 +1553,9 @@ int main()
     TestDynamicPointLightVisibilityCandidateSelection();
     TestDynamicPointLightReceiverBoundCandidateSelection();
     TestDynamicPointLightRankingAndPacking();
+    TestDynamicPointLightFlickerHelper();
+    TestDynamicPointLightFlickerEffectiveIntensity();
+    TestDynamicPointLightFlickerDoesNotAffectSelection();
     TestDynamicPointLightFallbackUsesAllReceiverBounds();
     TestDynamicPointLightSelectionHysteresis();
     if (failures == 0) {

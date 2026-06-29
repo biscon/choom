@@ -5,11 +5,31 @@
 
 #include <raylib.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 namespace game {
+
+constexpr float DynamicLightFlickerBaseRateHz = 8.0f;
+constexpr float DynamicLightFlickerTransitionFraction = 0.18f;
+constexpr float DynamicLightFlickerDefaultSpeed = 1.0f;
+constexpr float DynamicLightFlickerDefaultAmount = 0.35f;
+constexpr float DynamicLightFlickerMinSpeed = 0.05f;
+constexpr float DynamicLightFlickerMaxSpeed = 10.0f;
+constexpr float DynamicLightFlickerMinAmount = 0.0f;
+constexpr float DynamicLightFlickerMaxAmount = 1.0f;
+
+inline float ClampDynamicLightFlickerSpeed(float value)
+{
+    return std::clamp(value, DynamicLightFlickerMinSpeed, DynamicLightFlickerMaxSpeed);
+}
+
+inline float ClampDynamicLightFlickerAmount(float value)
+{
+    return std::clamp(value, DynamicLightFlickerMinAmount, DynamicLightFlickerMaxAmount);
+}
 
 struct SectorTopologyVertex {
     int id = -1;
@@ -111,6 +131,10 @@ struct SectorTopologyDynamicPointLight {
     float intensity = 1.0f;
     float radius = SectorWorldToAuthoringDistance(8.0f);
     bool enabled = true;
+    bool flicker = false;
+    // 0.2-0.4 is subtle, 0.6-0.8 is a strong failing-light dip, near 1.0 can drop nearly off.
+    float flickerSpeed = DynamicLightFlickerDefaultSpeed;
+    float flickerAmount = DynamicLightFlickerDefaultAmount;
 };
 
 enum class SectorTopologyValidationSeverity {

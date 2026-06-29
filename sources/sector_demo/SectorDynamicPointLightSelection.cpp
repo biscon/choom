@@ -15,6 +15,9 @@ namespace {
 
 constexpr float ReceiverBoundsPadding = 0.05f;
 constexpr float DynamicPointLightHysteresisReplacementFactor = 1.2f;
+constexpr float DynamicLightFlickerTargetExponent = 3.0f;
+constexpr uint32_t DynamicLightFlickerSegmentSalt = 0x9e3779b9u;
+constexpr uint32_t DynamicLightFlickerPhaseSalt = 0x85ebca6bu;
 
 struct ScoredDynamicPointLightCandidate {
     const SectorPreviewDynamicPointLightSource* source = nullptr;
@@ -188,7 +191,86 @@ int FindWeakestPreviouslySelectedLightIndex(
     return weakestIndex;
 }
 
+uint32_t MixDynamicLightFlickerBits(uint32_t value)
+{
+    value ^= value >> 16u;
+    value *= 0x7feb352du;
+    value ^= value >> 15u;
+    value *= 0x846ca68bu;
+    value ^= value >> 16u;
+    return value;
+}
+
+float HashDynamicLightFlicker01(int lightId, int segment, uint32_t salt)
+{
+    uint32_t value = static_cast<uint32_t>(lightId);
+    value ^= static_cast<uint32_t>(segment) + DynamicLightFlickerSegmentSalt + (value << 6u) + (value >> 2u);
+    value ^= salt + (value << 6u) + (value >> 2u);
+    value = MixDynamicLightFlickerBits(value);
+    return static_cast<float>(value >> 8u) * (1.0f / 16777215.0f);
+}
+
+float DynamicLightFlickerTarget(int lightId, int segment, float flickerAmount)
+{
+    const float r = HashDynamicLightFlicker01(lightId, segment, DynamicLightFlickerSegmentSalt);
+    const float dip = std::pow(r, DynamicLightFlickerTargetExponent);
+    return std::clamp(1.0f - flickerAmount * dip, 0.0f, 1.0f);
+}
+
+float SmoothStep(float edge0, float edge1, float value)
+{
+    if (edge0 == edge1) {
+        return value < edge1 ? 0.0f : 1.0f;
+    }
+    const float t = std::clamp((value - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
+
 } // namespace
+
+float EvaluateDynamicLightFlickerMultiplier(
+        int lightId,
+        float runtimeSeconds,
+        float flickerSpeed,
+        float flickerAmount)
+{
+    if (!std::isfinite(runtimeSeconds) || !std::isfinite(flickerSpeed) || !std::isfinite(flickerAmount)) {
+        return 1.0f;
+    }
+
+    const float amount = ClampDynamicLightFlickerAmount(flickerAmount);
+    if (amount <= 0.0f) {
+        return 1.0f;
+    }
+
+    const float speed = ClampDynamicLightFlickerSpeed(flickerSpeed);
+    const float rateHz = DynamicLightFlickerBaseRateHz * speed;
+    const float stablePhase = HashDynamicLightFlicker01(lightId, 0, DynamicLightFlickerPhaseSalt);
+    const float x = runtimeSeconds * rateHz + stablePhase;
+    const float segmentFloat = std::floor(x);
+    const int segment = static_cast<int>(segmentFloat);
+    const float u = x - segmentFloat;
+
+    const float targetA = DynamicLightFlickerTarget(lightId, segment, amount);
+    const float targetB = DynamicLightFlickerTarget(lightId, segment + 1, amount);
+    const float transitionWeight = SmoothStep(0.0f, DynamicLightFlickerTransitionFraction, u);
+    const float multiplier = targetA + (targetB - targetA) * transitionWeight;
+    return std::isfinite(multiplier) ? std::clamp(multiplier, 0.0f, 1.0f) : 1.0f;
+}
+
+float DynamicLightEffectiveUploadIntensity(
+        const SectorPreviewDynamicPointLightUniform& light,
+        float runtimeSeconds)
+{
+    if (!light.flicker || light.flickerAmount <= 0.0f) {
+        return light.intensity;
+    }
+    return light.intensity * EvaluateDynamicLightFlickerMultiplier(
+            light.lightId,
+            runtimeSeconds,
+            light.flickerSpeed,
+            light.flickerAmount);
+}
 
 bool MakeSectorPreviewDynamicPointLightUniform(
         const SectorTopologyDynamicPointLight& light,
@@ -203,10 +285,14 @@ bool MakeSectorPreviewDynamicPointLightUniform(
         return false;
     }
 
+    outLight.lightId = light.id;
     outLight.position = SectorAuthoringToWorldPosition(light.position);
     outLight.color = ColorToUnitRgb(light.color);
     outLight.radius = SectorAuthoringToWorldDistance(light.radius);
     outLight.intensity = light.intensity;
+    outLight.flicker = light.flicker;
+    outLight.flickerSpeed = ClampDynamicLightFlickerSpeed(light.flickerSpeed);
+    outLight.flickerAmount = ClampDynamicLightFlickerAmount(light.flickerAmount);
     return std::isfinite(outLight.radius)
             && outLight.radius > 0.0f
             && std::isfinite(outLight.intensity)

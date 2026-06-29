@@ -33,6 +33,7 @@ public:
     void Shutdown(engine::AssetManager& assets);
     void ShutdownRendererResources(engine::AssetManager& assets);
 
+    void AdvanceRuntime(float dt);
     void Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
     void DrawScene(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
     void ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
@@ -118,6 +119,7 @@ private:
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;
     std::vector<SectorPreviewDynamicPointLightUniform> dynamicPointLights;
     std::vector<int> selectedDynamicPointLightIds;
+    float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
     Material bloomSourceMaterial = {};
     Texture2D bloomDefaultMaterialTexture = {};

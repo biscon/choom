@@ -32,6 +32,7 @@ float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError)
     }
     height += rowH + gap; // Delete.
     height += rowH + gap; // Enabled.
+    height += 3.0f * (rowH + gap); // Flicker controls.
     height += 5.0f * (rowH + gap); // Position/intensity/radius.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
@@ -214,7 +215,15 @@ bool DrawSelectedDynamicLightInspector(
     }
     y += rowH + gap;
 
-    const float numberLabelW = 92.0f;
+    bool flicker = light.flicker;
+    if (engine::Checkbox(ui, config, input, assets, "sector_editor_dynamic_light_flicker", Rectangle{0.0f, y, contentW, rowH}, font, "Flicker", flicker)
+            && flicker != light.flicker) {
+        light.flicker = flicker;
+        callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic light %d flicker", light.id));
+    }
+    y += rowH + gap;
+
+    const float numberLabelW = 116.0f;
     const float numberFieldW = 112.0f;
     auto drawLightFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
@@ -239,6 +248,25 @@ bool DrawSelectedDynamicLightInspector(
         }
         y += rowH + gap;
     };
+
+    drawLightFloat(
+            "sector_editor_dynamic_light_flicker_speed",
+            "Flicker speed:",
+            light.flickerSpeed,
+            uiState.lightFlickerSpeedInput,
+            DynamicLightFlickerMinSpeed,
+            DynamicLightFlickerMaxSpeed,
+            3);
+    light.flickerSpeed = ClampDynamicLightFlickerSpeed(light.flickerSpeed);
+    drawLightFloat(
+            "sector_editor_dynamic_light_flicker_amount",
+            "Flicker amount:",
+            light.flickerAmount,
+            uiState.lightFlickerAmountInput,
+            DynamicLightFlickerMinAmount,
+            DynamicLightFlickerMaxAmount,
+            3);
+    light.flickerAmount = ClampDynamicLightFlickerAmount(light.flickerAmount);
 
     drawLightFloat("sector_editor_dynamic_light_x", "X:", light.position.x, uiState.lightXInput, -8192.0f, 8192.0f, 2);
     drawLightFloat("sector_editor_dynamic_light_y", "Y:", light.position.y, uiState.lightYInput, -512.0f, 512.0f, 2);

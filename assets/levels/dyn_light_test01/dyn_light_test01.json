@@ -24,7 +24,25 @@
       "filter": "anisotropic8x"
     }
   },
-  "staticLights": [],
+  "staticLights": [
+    {
+      "id": 1,
+      "position": [
+        64.0,
+        14.399999618530273,
+        56.0
+      ],
+      "radius": 84.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.75,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    }
+  ],
   "dynamicPointLights": [
     {
       "id": 1,
@@ -40,7 +58,10 @@
         "g": 255,
         "b": 255,
         "a": 255
-      }
+      },
+      "flicker": true,
+      "flickerSpeed": 2.0,
+      "flickerAmount": 0.550000011920929
     },
     {
       "id": 2,
@@ -317,6 +338,12 @@
     },
     "intensity": 1.0
   },
+  "bakedLightmap": {
+    "path": "assets/levels/dyn_light_test01/dyn_light_test01.lightmap.png",
+    "width": 2048,
+    "height": 2048,
+    "sourceHash": "1d478d9247d0d609"
+  },
   "authoringGraph": {
     "vertices": [
       {
@@ -478,6 +505,46 @@
         "id": 32,
         "x": 5632,
         "y": 5248
+      },
+      {
+        "id": 33,
+        "x": 448,
+        "y": 448
+      },
+      {
+        "id": 34,
+        "x": 512,
+        "y": 384
+      },
+      {
+        "id": 35,
+        "x": 576,
+        "y": 384
+      },
+      {
+        "id": 36,
+        "x": 640,
+        "y": 448
+      },
+      {
+        "id": 37,
+        "x": 640,
+        "y": 512
+      },
+      {
+        "id": 38,
+        "x": 576,
+        "y": 576
+      },
+      {
+        "id": 39,
+        "x": 512,
+        "y": 576
+      },
+      {
+        "id": 40,
+        "x": 448,
+        "y": 512
       }
     ],
     "lines": [
@@ -600,6 +667,46 @@
         "id": 24,
         "startVertexId": 31,
         "endVertexId": 32
+      },
+      {
+        "id": 25,
+        "startVertexId": 33,
+        "endVertexId": 34
+      },
+      {
+        "id": 26,
+        "startVertexId": 34,
+        "endVertexId": 35
+      },
+      {
+        "id": 27,
+        "startVertexId": 35,
+        "endVertexId": 36
+      },
+      {
+        "id": 28,
+        "startVertexId": 36,
+        "endVertexId": 37
+      },
+      {
+        "id": 29,
+        "startVertexId": 37,
+        "endVertexId": 38
+      },
+      {
+        "id": 30,
+        "startVertexId": 38,
+        "endVertexId": 39
+      },
+      {
+        "id": 31,
+        "startVertexId": 39,
+        "endVertexId": 40
+      },
+      {
+        "id": 32,
+        "startVertexId": 40,
+        "endVertexId": 33
       }
     ],
     "lineSides": [],
@@ -1220,6 +1327,82 @@
         "y": 4876,
         "floorZ": 0.0,
         "ceilingZ": 24.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.30000001192092896,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 10,
+        "name": "Sector 10",
+        "x": 532,
+        "y": 390,
+        "floorZ": 24.0,
+        "ceilingZ": 25.0,
         "floorTextureId": "floor",
         "ceilingTextureId": "ceiling",
         "floorUv": {

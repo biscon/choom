@@ -301,6 +301,7 @@ void UploadDynamicPointLights(
         int dynamicLightIntensitiesLoc,
         int dynamicLightingClampLoc,
         bool dynamicLightingEnabled,
+        float runtimeSeconds,
         const std::vector<SectorPreviewDynamicPointLightUniform>& lights)
 {
     const int lightCount = dynamicLightingEnabled
@@ -325,7 +326,9 @@ void UploadDynamicPointLights(
         positions[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].position;
         colors[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].color;
         radii[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].radius;
-        intensities[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].intensity;
+        intensities[static_cast<size_t>(i)] = DynamicLightEffectiveUploadIntensity(
+                lights[static_cast<size_t>(i)],
+                runtimeSeconds);
     }
 
     if (dynamicLightPositionsLoc >= 0) {
@@ -682,6 +685,7 @@ bool SectorMeshPreview::RebuildRendererResources(
     dynamicPointLights.reserve(MaxDynamicLights);
     selectedDynamicPointLightIds.clear();
     selectedDynamicPointLightIds.reserve(MaxDynamicLights);
+    runtimeSeconds = 0.0f;
 
     if (!LoadPreviewMaterial(
                 material,
@@ -749,6 +753,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     dynamicPointLightCandidates.clear();
     dynamicPointLights.clear();
     selectedDynamicPointLightIds.clear();
+    runtimeSeconds = 0.0f;
     if (!initialized
             && engine::IsNull(assetScope)
             && meshes.batches.empty()
@@ -786,6 +791,13 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     }
 
     initialized = false;
+}
+
+void SectorMeshPreview::AdvanceRuntime(float dt)
+{
+    if (std::isfinite(dt) && dt > 0.0f) {
+        runtimeSeconds += dt;
+    }
 }
 
 void SectorMeshPreview::Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion)
@@ -829,6 +841,7 @@ void SectorMeshPreview::DrawScene(engine::AssetManager& assets, bool useBakedAmb
             dynamicLightIntensitiesLoc,
             dynamicLightingClampLoc,
             dynamicLightingEnabled,
+            runtimeSeconds,
             dynamicPointLights);
     for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
         if (!ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)) {

@@ -633,6 +633,14 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
             AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
                      "radius must be finite and positive");
         }
+        if (!std::isfinite(light.flickerSpeed)) {
+            AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
+                     "flicker speed must be finite");
+        }
+        if (!std::isfinite(light.flickerAmount)) {
+            AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
+                     "flicker amount must be finite");
+        }
     }
 
     std::unordered_set<uint64_t> endpointPairs;

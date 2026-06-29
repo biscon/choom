@@ -141,6 +141,30 @@ bool ReadOptionalBool(const Json& object, const char* field, const std::string& 
     return it->get<bool>();
 }
 
+float ReadOptionalClampedFloat(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        float defaultValue,
+        float minValue,
+        float maxValue)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        return defaultValue;
+    }
+    if (!it->is_number()) {
+        Fail(context + "." + field + " must be a number");
+    }
+    const double number = it->get<double>();
+    if (!std::isfinite(number)
+            || number < -std::numeric_limits<float>::max()
+            || number > std::numeric_limits<float>::max()) {
+        Fail(context + "." + field + " must be a finite float");
+    }
+    return std::clamp(static_cast<float>(number), minValue, maxValue);
+}
+
 Vector2 ReadVector2(const Json& value, const std::string& context)
 {
     if (!value.is_array() || value.size() != 2
@@ -756,6 +780,23 @@ Json WriteColor(Color color)
     };
 }
 
+void WriteDynamicLightFlickerFields(Json& lightJson, const SectorTopologyDynamicPointLight& light, const std::string& context)
+{
+    RequireFinite(light.flickerSpeed, context + ".flickerSpeed");
+    RequireFinite(light.flickerAmount, context + ".flickerAmount");
+    const float flickerSpeed = ClampDynamicLightFlickerSpeed(light.flickerSpeed);
+    const float flickerAmount = ClampDynamicLightFlickerAmount(light.flickerAmount);
+    if (light.flicker) {
+        lightJson["flicker"] = true;
+    }
+    if (flickerSpeed != DynamicLightFlickerDefaultSpeed) {
+        lightJson["flickerSpeed"] = flickerSpeed;
+    }
+    if (flickerAmount != DynamicLightFlickerDefaultAmount) {
+        lightJson["flickerAmount"] = flickerAmount;
+    }
+}
+
 Json WriteSkySettings(const SectorTopologySkySettings& settings)
 {
     const SectorTopologySkySettings normalized = NormalizeSectorTopologySkySettings(settings);
@@ -925,6 +966,21 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             light.intensity = ReadFloat(value, "intensity", context);
             light.color = ReadColor(RequireField(value, "color", context), context + ".color");
             light.enabled = ReadOptionalBool(value, "enabled", context, true);
+            light.flicker = ReadOptionalBool(value, "flicker", context, false);
+            light.flickerSpeed = ReadOptionalClampedFloat(
+                    value,
+                    "flickerSpeed",
+                    context,
+                    DynamicLightFlickerDefaultSpeed,
+                    DynamicLightFlickerMinSpeed,
+                    DynamicLightFlickerMaxSpeed);
+            light.flickerAmount = ReadOptionalClampedFloat(
+                    value,
+                    "flickerAmount",
+                    context,
+                    DynamicLightFlickerDefaultAmount,
+                    DynamicLightFlickerMinAmount,
+                    DynamicLightFlickerMaxAmount);
             map.dynamicPointLights.push_back(light);
         }
     }
@@ -1150,6 +1206,7 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
         if (!light->enabled) {
             lightJson["enabled"] = false;
         }
+        WriteDynamicLightFlickerFields(lightJson, *light, context);
         root["dynamicPointLights"].push_back(std::move(lightJson));
     }
 
@@ -1524,6 +1581,7 @@ Json SerializeMap(const SectorTopologyMap& map)
         if (!light->enabled) {
             lightJson["enabled"] = false;
         }
+        WriteDynamicLightFlickerFields(lightJson, *light, context);
         root["dynamicPointLights"].push_back(std::move(lightJson));
     }
 

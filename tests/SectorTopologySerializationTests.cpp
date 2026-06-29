@@ -451,7 +451,10 @@ void TestDynamicPointLightRoundTrip()
             Color{40, 80, 200, 255},
             0.5f,
             12.0f,
-            true
+            true,
+            true,
+            2.5f,
+            0.65f
     });
 
     const std::string text = SaveText(original);
@@ -464,6 +467,14 @@ void TestDynamicPointLightRoundTrip()
           "default enabled dynamic point light omits enabled field");
     Check(saved["dynamicPointLights"][1]["enabled"] == false,
           "disabled dynamic point light writes enabled field");
+    Check(saved["dynamicPointLights"][0]["flicker"] == true
+                  && Near(saved["dynamicPointLights"][0]["flickerSpeed"].get<float>(), 2.5f)
+                  && Near(saved["dynamicPointLights"][0]["flickerAmount"].get<float>(), 0.65f),
+          "non-default dynamic point light flicker fields are written");
+    Check(!saved["dynamicPointLights"][1].contains("flicker")
+                  && !saved["dynamicPointLights"][1].contains("flickerSpeed")
+                  && !saved["dynamicPointLights"][1].contains("flickerAmount"),
+          "default dynamic point light flicker fields are omitted");
 
     SectorTopologyMap loaded;
     std::string error;
@@ -480,9 +491,18 @@ void TestDynamicPointLightRoundTrip()
               "round-tripped dynamic point light preserves color");
         Check(std::fabs(light->intensity - 3.0f) <= 0.0001f
                       && std::fabs(light->radius - 24.0f) <= 0.0001f
-                      && !light->enabled,
-              "round-tripped dynamic point light preserves properties");
+                      && !light->enabled
+                      && !light->flicker
+                      && Near(light->flickerSpeed, game::DynamicLightFlickerDefaultSpeed)
+                      && Near(light->flickerAmount, game::DynamicLightFlickerDefaultAmount),
+              "round-tripped dynamic point light preserves properties and missing flicker defaults");
     }
+    const SectorTopologyDynamicPointLight* flickerLight = game::FindSectorTopologyDynamicLight(loaded, 5);
+    Check(flickerLight != nullptr
+                  && flickerLight->flicker
+                  && Near(flickerLight->flickerSpeed, 2.5f)
+                  && Near(flickerLight->flickerAmount, 0.65f),
+          "round-tripped dynamic point light preserves flicker settings");
     Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(loaded)),
           "topology with dynamic point lights validates");
 
@@ -1540,6 +1560,15 @@ void TestStrictValuesAndValidation()
     changed["dynamicPointLights"][0]["enabled"] = "yes";
     ExpectRejected(changed, "non-boolean dynamic point light enabled is rejected");
     changed["dynamicPointLights"][0]["enabled"] = true;
+    changed["dynamicPointLights"][0]["flicker"] = "yes";
+    ExpectRejected(changed, "non-boolean dynamic point light flicker is rejected");
+    changed["dynamicPointLights"][0]["flicker"] = true;
+    changed["dynamicPointLights"][0]["flickerSpeed"] = "fast";
+    ExpectRejected(changed, "non-number dynamic point light flicker speed is rejected");
+    changed["dynamicPointLights"][0]["flickerSpeed"] = 1.0f;
+    changed["dynamicPointLights"][0]["flickerAmount"] = "deep";
+    ExpectRejected(changed, "non-number dynamic point light flicker amount is rejected");
+    changed["dynamicPointLights"][0]["flickerAmount"] = 0.5f;
     changed["dynamicPointLights"][0]["color"]["r"] = 300;
     ExpectRejected(changed, "invalid dynamic point light color channel is rejected");
 }
@@ -1849,7 +1878,10 @@ void TestGraphNativeMapLevelRoundTrip()
             Color{70, 80, 90, 255},
             1.25f,
             48.0f,
-            false
+            false,
+            true,
+            3.0f,
+            0.75f
     });
     source.previewSettings.walkSpeed = 9.0f;
     source.skySettings.textureId = "sky";
@@ -1869,6 +1901,10 @@ void TestGraphNativeMapLevelRoundTrip()
     Check(saved["staticLights"][0]["id"] == 9, "graph-native static lights are persisted");
     Check(saved["dynamicPointLights"][0]["id"] == 10,
           "graph-native dynamic point lights are persisted");
+    Check(saved["dynamicPointLights"][0]["flicker"] == true
+                  && Near(saved["dynamicPointLights"][0]["flickerSpeed"].get<float>(), 3.0f)
+                  && Near(saved["dynamicPointLights"][0]["flickerAmount"].get<float>(), 0.75f),
+          "graph-native dynamic point light flicker fields are persisted");
     Check(saved["previewSettings"]["walkSpeed"] == 9.0f, "graph-native preview settings are persisted");
     Check(saved["skySettings"]["textureId"] == "sky", "graph-native sky settings are persisted");
     Check(saved["directionalLight"]["enabled"] == true,
@@ -1890,6 +1926,9 @@ void TestGraphNativeMapLevelRoundTrip()
     Check(loaded.mapData.texturesById.count("sky") == 1
                   && loaded.mapData.staticLights.size() == 1
                   && loaded.mapData.dynamicPointLights.size() == 1
+                  && loaded.mapData.dynamicPointLights[0].flicker
+                  && Near(loaded.mapData.dynamicPointLights[0].flickerSpeed, 3.0f)
+                  && Near(loaded.mapData.dynamicPointLights[0].flickerAmount, 0.75f)
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
                   && loaded.mapData.skySettings.textureId == "sky"
                   && loaded.mapData.directionalLight.enabled
@@ -1903,6 +1942,9 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.derivation.topology.texturesById.count("sky") == 1
                   && loaded.derivation.topology.staticLights.size() == 1
                   && loaded.derivation.topology.dynamicPointLights.size() == 1
+                  && loaded.derivation.topology.dynamicPointLights[0].flicker
+                  && Near(loaded.derivation.topology.dynamicPointLights[0].flickerSpeed, 3.0f)
+                  && Near(loaded.derivation.topology.dynamicPointLights[0].flickerAmount, 0.75f)
                   && loaded.derivation.topology.skySettings.textureId == "sky"
                   && loaded.derivation.topology.bakedLightmap.path == "assets/levels/test/test.lightmap.png"
                   && loaded.derivation.topology.bakedLightmap.sourceHash == "abc123",

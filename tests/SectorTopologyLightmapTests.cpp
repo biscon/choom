@@ -332,6 +332,9 @@ void TestSourceHashChanges()
     changedDynamicLight.dynamicPointLights.front().intensity += 0.25f;
     changedDynamicLight.dynamicPointLights.front().color.r = 64;
     changedDynamicLight.dynamicPointLights.front().enabled = false;
+    changedDynamicLight.dynamicPointLights.front().flicker = true;
+    changedDynamicLight.dynamicPointLights.front().flickerSpeed = 4.0f;
+    changedDynamicLight.dynamicPointLights.front().flickerAmount = 0.8f;
     Check(game::ComputeSectorLightmapSourceHash(changedDynamicLight) == hash,
           "hash ignores dynamic point light edits");
 

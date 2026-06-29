@@ -48,6 +48,7 @@ void SectorDemo::Update(engine::Input& input, float dt)
         return;
     }
 
+    preview.AdvanceRuntime(dt);
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
