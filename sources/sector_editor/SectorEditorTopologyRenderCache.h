@@ -20,10 +20,12 @@ struct SectorEditorTopologyDrawContext {
     int selectedVertexId = -1;
     int selectedLightId = -1;
     int selectedDynamicLightId = -1;
+    int selectedDynamicSpotLightId = -1;
     bool hasHoveredVertex = false;
     int hoveredVertexId = -1;
     int hoveredLightId = -1;
     int hoveredDynamicLightId = -1;
+    int hoveredDynamicSpotLightId = -1;
     SectorAuthoringSelectionTarget selectedAuthoring;
     SectorAuthoringSelectionTarget hoveredAuthoring;
 };
@@ -47,6 +49,9 @@ void DrawCachedTopologyStaticLights(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context);
 void DrawCachedTopologyDynamicLights(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context);
+void DrawCachedTopologyDynamicSpotLights(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context);
 void DrawCachedAuthoringGraphOverlay(

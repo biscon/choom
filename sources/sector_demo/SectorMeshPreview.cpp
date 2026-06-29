@@ -110,6 +110,10 @@ uniform vec3 dynamicLightPositions[MAX_DYNAMIC_LIGHTS];
 uniform vec3 dynamicLightColors[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightRadii[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightIntensities[MAX_DYNAMIC_LIGHTS];
+uniform int dynamicLightTypes[MAX_DYNAMIC_LIGHTS];
+uniform vec3 dynamicLightDirections[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightingClamp;
 
 out vec4 finalColor;
@@ -161,7 +165,20 @@ void main()
             float ndotl = max(dot(worldNormal, lightDirection), 0.0);
             float atten = clamp(1.0 - distanceToLight / radius, 0.0, 1.0);
             atten *= atten;
-            dynamicDirect += dynamicLightColors[i] * dynamicLightIntensities[i] * atten * ndotl;
+            float coneAtten = 1.0;
+            if (dynamicLightTypes[i] == 1) {
+                vec3 spotDirection = SafeNormalize(dynamicLightDirections[i], vec3(0.0, -1.0, 0.0));
+                vec3 fragmentDirectionFromLight = distanceToLight > 0.0001
+                        ? -lightDirection
+                        : spotDirection;
+                float coneDot = dot(spotDirection, fragmentDirectionFromLight);
+                float innerConeCos = dynamicLightInnerConeCos[i];
+                float outerConeCos = dynamicLightOuterConeCos[i];
+                coneAtten = abs(innerConeCos - outerConeCos) > 0.0001
+                        ? smoothstep(outerConeCos, innerConeCos, coneDot)
+                        : step(innerConeCos, coneDot);
+            }
+            dynamicDirect += dynamicLightColors[i] * dynamicLightIntensities[i] * atten * ndotl * coneAtten;
         }
     }
     vec3 bakedLighting = ambient + bakedDirect;
@@ -299,6 +316,10 @@ void UploadDynamicPointLights(
         int dynamicLightColorsLoc,
         int dynamicLightRadiiLoc,
         int dynamicLightIntensitiesLoc,
+        int dynamicLightTypesLoc,
+        int dynamicLightDirectionsLoc,
+        int dynamicLightInnerConeCosLoc,
+        int dynamicLightOuterConeCosLoc,
         int dynamicLightingClampLoc,
         bool dynamicLightingEnabled,
         float runtimeSeconds,
@@ -322,6 +343,10 @@ void UploadDynamicPointLights(
     std::array<Vector3, MaxDynamicLights> colors{};
     std::array<float, MaxDynamicLights> radii{};
     std::array<float, MaxDynamicLights> intensities{};
+    std::array<int, MaxDynamicLights> types{};
+    std::array<Vector3, MaxDynamicLights> directions{};
+    std::array<float, MaxDynamicLights> innerConeCos{};
+    std::array<float, MaxDynamicLights> outerConeCos{};
     for (int i = 0; i < lightCount; ++i) {
         positions[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].position;
         colors[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].color;
@@ -329,6 +354,10 @@ void UploadDynamicPointLights(
         intensities[static_cast<size_t>(i)] = DynamicLightEffectiveUploadIntensity(
                 lights[static_cast<size_t>(i)],
                 runtimeSeconds);
+        types[static_cast<size_t>(i)] = static_cast<int>(lights[static_cast<size_t>(i)].kind);
+        directions[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].direction;
+        innerConeCos[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].innerConeCos;
+        outerConeCos[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].outerConeCos;
     }
 
     if (dynamicLightPositionsLoc >= 0) {
@@ -342,6 +371,18 @@ void UploadDynamicPointLights(
     }
     if (dynamicLightIntensitiesLoc >= 0) {
         SetShaderValueV(shader, dynamicLightIntensitiesLoc, intensities.data(), SHADER_UNIFORM_FLOAT, lightCount);
+    }
+    if (dynamicLightTypesLoc >= 0) {
+        SetShaderValueV(shader, dynamicLightTypesLoc, types.data(), SHADER_UNIFORM_INT, lightCount);
+    }
+    if (dynamicLightDirectionsLoc >= 0) {
+        SetShaderValueV(shader, dynamicLightDirectionsLoc, directions.data(), SHADER_UNIFORM_VEC3, lightCount);
+    }
+    if (dynamicLightInnerConeCosLoc >= 0) {
+        SetShaderValueV(shader, dynamicLightInnerConeCosLoc, innerConeCos.data(), SHADER_UNIFORM_FLOAT, lightCount);
+    }
+    if (dynamicLightOuterConeCosLoc >= 0) {
+        SetShaderValueV(shader, dynamicLightOuterConeCosLoc, outerConeCos.data(), SHADER_UNIFORM_FLOAT, lightCount);
     }
 }
 
@@ -403,6 +444,10 @@ bool LoadPreviewMaterial(
         int& dynamicLightColorsLoc,
         int& dynamicLightRadiiLoc,
         int& dynamicLightIntensitiesLoc,
+        int& dynamicLightTypesLoc,
+        int& dynamicLightDirectionsLoc,
+        int& dynamicLightInnerConeCosLoc,
+        int& dynamicLightOuterConeCosLoc,
         int& dynamicLightingClampLoc,
         std::string& error)
 {
@@ -434,6 +479,10 @@ bool LoadPreviewMaterial(
     dynamicLightColorsLoc = GetShaderLocationArrayBase(material.shader, "dynamicLightColors");
     dynamicLightRadiiLoc = GetShaderLocationArrayBase(material.shader, "dynamicLightRadii");
     dynamicLightIntensitiesLoc = GetShaderLocationArrayBase(material.shader, "dynamicLightIntensities");
+    dynamicLightTypesLoc = GetShaderLocationArrayBase(material.shader, "dynamicLightTypes");
+    dynamicLightDirectionsLoc = GetShaderLocationArrayBase(material.shader, "dynamicLightDirections");
+    dynamicLightInnerConeCosLoc = GetShaderLocationArrayBase(material.shader, "dynamicLightInnerConeCos");
+    dynamicLightOuterConeCosLoc = GetShaderLocationArrayBase(material.shader, "dynamicLightOuterConeCos");
     dynamicLightingClampLoc = GetShaderLocation(material.shader, "dynamicLightingClamp");
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
@@ -705,6 +754,10 @@ bool SectorMeshPreview::RebuildRendererResources(
                 dynamicLightColorsLoc,
                 dynamicLightRadiiLoc,
                 dynamicLightIntensitiesLoc,
+                dynamicLightTypesLoc,
+                dynamicLightDirectionsLoc,
+                dynamicLightInnerConeCosLoc,
+                dynamicLightOuterConeCosLoc,
                 dynamicLightingClampLoc,
                 error)) {
         Shutdown(assets);
@@ -839,6 +892,10 @@ void SectorMeshPreview::DrawScene(engine::AssetManager& assets, bool useBakedAmb
             dynamicLightColorsLoc,
             dynamicLightRadiiLoc,
             dynamicLightIntensitiesLoc,
+            dynamicLightTypesLoc,
+            dynamicLightDirectionsLoc,
+            dynamicLightInnerConeCosLoc,
+            dynamicLightOuterConeCosLoc,
             dynamicLightingClampLoc,
             dynamicLightingEnabled,
             runtimeSeconds,

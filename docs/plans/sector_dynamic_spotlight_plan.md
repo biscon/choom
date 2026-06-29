@@ -48,41 +48,41 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_02",
       "title": "Dynamic Spotlight Editor Authoring",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02a",
       "title": "Add Dynamic Spotlight Tool And Inspector Fields",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02b",
       "title": "Add 2D Spotlight Overlay And Selection Handles",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03",
       "title": "Runtime Dynamic Spotlight Rendering",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03a",
       "title": "Extend Runtime Light Selection And Packing For Spotlights",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03b",
       "title": "Add Spotlight Shader Contribution",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04",
@@ -133,12 +133,12 @@ When an agent is asked to execute this plan, it must:
 | ------------------------------------------------------------------- | ----------- | ---- | ---------------------------------------------------------------------------------------- |
 | Phase 1: Dynamic Spotlight Data And Serialization                   | Completed   | 2026-06-29 | Completed with Phase 1A.                                                                 |
 | Phase 1A: Add Dynamic Spotlight Data Model And JSON Round Trip      | Completed   | 2026-06-29 | Added `dynamicSpotLights` data model, JSON round trip, validation, helpers, authoring map-level copy, and tests. |
-| Phase 2: Dynamic Spotlight Editor Authoring                         | Not Started |      | Parent phase.                                                                            |
-| Phase 2A: Add Dynamic Spotlight Tool And Inspector Fields           | Not Started |      | Add authoring tool and numeric inspector fields.                                         |
-| Phase 2B: Add 2D Spotlight Overlay And Selection Handles            | Not Started |      | Draw/edit origin/target/cone in 2D.                                                      |
-| Phase 3: Runtime Dynamic Spotlight Rendering                        | Not Started |      | Parent phase.                                                                            |
-| Phase 3A: Extend Runtime Light Selection And Packing For Spotlights | Not Started |      | Unified dynamic light budget, no shader cone contribution yet unless needed for packing. |
-| Phase 3B: Add Spotlight Shader Contribution                         | Not Started |      | Runtime visual spotlight contribution.                                                   |
+| Phase 2: Dynamic Spotlight Editor Authoring                         | Completed   | 2026-06-29 | Completed with Phase 2A and Phase 2B.                                                    |
+| Phase 2A: Add Dynamic Spotlight Tool And Inspector Fields           | Completed   | 2026-06-29 | Added `Dynamic Spot` tool, origin placement, origin picking, delete flow, and inspector fields. |
+| Phase 2B: Add 2D Spotlight Overlay And Selection Handles            | Completed   | 2026-06-29 | Added cached 2D origin/target/cone overlay and top-down origin/target drag handles.       |
+| Phase 3: Runtime Dynamic Spotlight Rendering                        | Completed   | 2026-06-29 | Completed with Phase 3A and Phase 3B.                                                    |
+| Phase 3A: Extend Runtime Light Selection And Packing For Spotlights | Completed   | 2026-06-29 | Dynamic spotlights join the runtime selection pool and packed uniform data under the shared cap. |
+| Phase 3B: Add Spotlight Shader Contribution                         | Completed   | 2026-06-29 | Dynamic spotlights now contribute cone-filtered direct light in the forward shader.       |
 | Phase 4: 3D Spotlight Visualization                                 | Not Started |      | Parent phase.                                                                            |
 | Phase 4A: Draw Selected Spotlight Cone Overlay In 3D Preview        | Not Started |      | Wire cone/line overlay for selected spotlight.                                           |
 | Phase 5: Spotlight Pilot Mode                                       | Not Started |      | Parent phase.                                                                            |
@@ -181,6 +181,121 @@ Validation and behavior notes:
 Verification:
 
 * `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+
+### Phase 2A Completion Notes - 2026-06-29
+
+Summary:
+
+* Source code changed.
+* Added a `Dynamic Spot` map-object tool.
+* Clicking inside a sector creates a dynamic spotlight origin at floor + 1.8 world units.
+* New spotlight target defaults to a forward X offset and slightly lower target height.
+* Added origin picking while the `Dynamic Spot` tool is active so saved/reloaded spotlights can be selected before Phase 2B overlays exist.
+* Added delete support for selected dynamic spotlights.
+* Added dynamic spotlight inspector fields: Enabled, Position X/Y/Z, Target X/Y/Z, Range, Inner cone degrees, Outer cone degrees, Intensity, Color RGB, Flicker, Flicker speed, and Flicker amount.
+* Added focused test coverage for the new tool label/help/availability.
+
+Behavior notes:
+
+* Existing static light and dynamic point light tools remain separate and unchanged.
+* Dynamic spotlight edits use the existing `MarkTopologyDocumentEdited()` / topology action finish path, so the document is marked dirty and the 2D topology render cache is invalidated.
+* Save/load schema from Phase 1 is unchanged.
+* Runtime rendering, shader behavior, 2D spotlight cone overlay, 2D drag handles, 3D overlay, and pilot mode are unchanged.
+* Static lightmap source-hash behavior is unchanged; dynamic spotlight data remains excluded from the static lightmap source hash.
+* Manual GUI smoke was not performed.
+
+Verification:
+
+* `git diff --check` passed.
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+
+### Phase 2B Completion Notes - 2026-06-29
+
+Summary:
+
+* Source code changed.
+* Added cached 2D dynamic spotlight overlay data for origin, target, range, and cone angles.
+* Draws dynamic spotlights in 2D with origin marker, target marker, line from origin to target, outer cone wedge, and selected inner cone guide.
+* Added hover/selection support for both origin and target handles while the `Dynamic Spot` tool is active.
+* Added simple top-down drag handles:
+    * dragging the origin moves both origin and target together, preserving the target offset and authored heights
+    * dragging the target updates target X/Z only, preserving target height
+
+Behavior notes:
+
+* Existing static point light and dynamic point light overlays are unchanged.
+* Sector, line, face, and vertex selection behavior is unchanged.
+* Dynamic spotlight save/load schema is unchanged.
+* Dynamic spotlight 2D overlay data is cached with the topology render cache; finished drag edits go through `FinishTopologyActionResult()` / `MarkTopologyDocumentEdited()`, so the document is marked dirty and the 2D topology render cache is invalidated.
+* Runtime rendering, shader behavior, 3D overlay, and pilot mode are unchanged.
+* Static lightmap source-hash behavior is unchanged; dynamic spotlight data remains excluded from the static lightmap source hash.
+* Manual GUI smoke was not performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+* `git diff --check` passed.
+* `git diff --stat` ran; 12 files changed.
+* `git status --short` ran; expected modified files remain uncommitted.
+
+### Phase 3A Completion Notes - 2026-06-29
+
+Summary:
+
+* Source code changed.
+* Added a packed runtime dynamic light kind with `Point` and `Spot` values.
+* Dynamic spotlights are collected into the same runtime dynamic light source/candidate/selection lists as dynamic point lights.
+* Dynamic point lights and dynamic spotlights share the existing `MAX_DYNAMIC_LIGHTS = 8` total selection cap.
+* Dynamic spotlight packing includes position, normalized direction, color, range, base intensity, inner/outer cone cosines, kind, and flicker settings.
+* Added focused tests for spotlight source packing, candidate selection, fallback draw-all behavior, shared cap/ranking, deterministic ties, and flicker ranking by base intensity.
+
+Behavior notes:
+
+* Dynamic point light selection, ranking, flicker upload, and shader contribution remain supported.
+* Dynamic spotlight candidate selection is conservative: owner visible sector or range-sphere overlap with visible receiver bounds; no cone test yet.
+* Ranking uses the same receiver-distance score as point lights and uses base intensity, not flickered upload intensity.
+* Fallback draw-all considers all valid enabled dynamic point lights and dynamic spotlights.
+* Shader uniform layout now includes `dynamicLightTypes`, `dynamicLightDirections`, `dynamicLightInnerConeCos`, and `dynamicLightOuterConeCos`.
+* Actual spotlight cone lighting is still deferred to Phase 3B; Phase 3A shader code skips non-point entries so spotlights do not render as point lights.
+* Serialization, editor behavior, 2D topology render-cache invalidation, 3D overlay, pilot mode, static lightmaps, and lightmap source-hash behavior are unchanged.
+* Manual GUI smoke was not performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `./cmake-build-debug/sector_topology_mesh_builder_tests` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+
+### Phase 3B Completion Notes - 2026-06-29
+
+Summary:
+
+* Source code changed.
+* Added runtime spotlight contribution in the sector lightmap forward shader.
+* Dynamic point lights keep the existing distance attenuation, normal Lambert term, flicker-upload intensity, and shared `MAX_DYNAMIC_LIGHTS = 8` budget behavior.
+* Dynamic spotlights use the existing packed uniform layout: `dynamicLightTypes`, `dynamicLightDirections`, `dynamicLightInnerConeCos`, and `dynamicLightOuterConeCos`.
+
+Shader behavior:
+
+* Type `0` lights remain point lights with cone attenuation fixed at `1.0`.
+* Type `1` lights use `spotDirection = normalize(light target direction)`, `fragmentDirectionFromLight = normalize(fragWorldPosition - light.position)`, `coneDot = dot(spotDirection, fragmentDirectionFromLight)`, and `coneAtten = smoothstep(outerConeCos, innerConeCos, coneDot)`.
+* Equal inner/outer cone cosines use a hard `step(innerConeCos, coneDot)` fallback to avoid undefined `smoothstep` edges.
+* Dynamic spotlight direct lighting is not multiplied by baked AO.
+
+Behavior notes:
+
+* Runtime shader output changed for selected dynamic spotlights; they no longer get skipped by the forward dynamic light loop.
+* Dynamic light selection/ranking behavior is unchanged from Phase 3A.
+* Serialization, editor behavior, 2D topology render-cache invalidation, 3D overlay, pilot mode, static lightmaps, and lightmap source-hash behavior are unchanged.
+* Manual GUI smoke was not performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `./cmake-build-debug/sector_topology_mesh_builder_tests` passed.
 * `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
 
 ## Execution Tracking Rules

@@ -117,6 +117,10 @@ private:
     int dynamicLightColorsLoc = -1;
     int dynamicLightRadiiLoc = -1;
     int dynamicLightIntensitiesLoc = -1;
+    int dynamicLightTypesLoc = -1;
+    int dynamicLightDirectionsLoc = -1;
+    int dynamicLightInnerConeCosLoc = -1;
+    int dynamicLightOuterConeCosLoc = -1;
     int dynamicLightingClampLoc = -1;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightSources;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;

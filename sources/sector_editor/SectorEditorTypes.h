@@ -35,6 +35,7 @@ enum class SectorEditorTool {
     AuthoringMove,
     StaticLight,
     DynamicLight,
+    DynamicSpotLight,
     Move
 };
 
@@ -99,7 +100,8 @@ enum class TopologySelectionKind {
     SideDef,
     LineDef,
     StaticLight,
-    DynamicLight
+    DynamicLight,
+    DynamicSpotLight
 };
 
 enum class SectorAuthoringSelectionKind {
@@ -316,10 +318,17 @@ struct AuthoringVertexDragState {
     std::string errorMessage;
 };
 
+enum class DynamicSpotLightHandle {
+    Origin,
+    Target
+};
+
 struct LightDragState {
     bool active = false;
     int topologyLightId = -1;
+    DynamicSpotLightHandle dynamicSpotHandle = DynamicSpotLightHandle::Origin;
     Vector3 originalPosition = {};
+    Vector3 originalTarget = {};
     Vector3 snappedPosition = {};
 };
 
@@ -364,6 +373,16 @@ struct CachedTopologyLightDraw {
     float sourceRadiusPixelsAtZoomOne = 0.0f;
 };
 
+struct CachedTopologySpotLightDraw {
+    int lightId = -1;
+    Vector2 origin = {};
+    Vector2 target = {};
+    Color color = WHITE;
+    float range = 0.0f;
+    float innerConeDegrees = 0.0f;
+    float outerConeDegrees = 0.0f;
+};
+
 struct CachedAuthoringVertexDraw {
     int vertexId = -1;
     SectorTopologyCoordPoint point = {};
@@ -406,6 +425,7 @@ struct SectorEditorTopologyRenderCache {
     std::vector<CachedTopologyVertexDraw> vertices;
     std::vector<CachedTopologyLightDraw> staticLights;
     std::vector<CachedTopologyLightDraw> dynamicLights;
+    std::vector<CachedTopologySpotLightDraw> dynamicSpotLights;
     std::vector<CachedAuthoringLineDraw> authoringLines;
     std::vector<CachedAuthoringVertexDraw> authoringVertices;
     std::vector<CachedAuthoringFaceHighlightDraw> authoringFaceHighlights;
@@ -445,8 +465,10 @@ struct SectorEditorState {
     TopologyMaterialLayer activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
     int selectedTopologyLightId = -1;
     int selectedTopologyDynamicLightId = -1;
+    int selectedTopologyDynamicSpotLightId = -1;
     int hoveredTopologyLightId = -1;
     int hoveredTopologyDynamicLightId = -1;
+    int hoveredTopologyDynamicSpotLightId = -1;
     bool hasHoveredVertex = false;
     int hoveredTopologyVertexId = -1;
     SectorTopologyCoordPoint hoveredTopologyVertexPoint = {};
@@ -523,8 +545,13 @@ struct SectorEditorUiState {
     engine::UIFloatInputState lightXInput;
     engine::UIFloatInputState lightYInput;
     engine::UIFloatInputState lightZInput;
+    engine::UIFloatInputState lightTargetXInput;
+    engine::UIFloatInputState lightTargetYInput;
+    engine::UIFloatInputState lightTargetZInput;
     engine::UIFloatInputState lightIntensityInput;
     engine::UIFloatInputState lightRadiusInput;
+    engine::UIFloatInputState lightInnerConeInput;
+    engine::UIFloatInputState lightOuterConeInput;
     engine::UIFloatInputState lightSourceRadiusInput;
     engine::UIFloatInputState lightFlickerSpeedInput;
     engine::UIFloatInputState lightFlickerAmountInput;

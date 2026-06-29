@@ -18,6 +18,7 @@ constexpr float DynamicPointLightHysteresisReplacementFactor = 1.2f;
 constexpr float DynamicLightFlickerTargetExponent = 3.0f;
 constexpr uint32_t DynamicLightFlickerSegmentSalt = 0x9e3779b9u;
 constexpr uint32_t DynamicLightFlickerPhaseSalt = 0x85ebca6bu;
+constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
 
 struct ScoredDynamicPointLightCandidate {
     const SectorPreviewDynamicPointLightSource* source = nullptr;
@@ -124,6 +125,21 @@ float NearestDistanceToBounds(
 float DynamicPointLightBrightness(Vector3 color)
 {
     return std::max(color.x, std::max(color.y, color.z));
+}
+
+Vector3 NormalizeOrFallback(Vector3 value, Vector3 fallback)
+{
+    const float lengthSq = value.x * value.x + value.y * value.y + value.z * value.z;
+    if (lengthSq <= 0.00000001f || !std::isfinite(lengthSq)) {
+        return fallback;
+    }
+    const float invLength = 1.0f / std::sqrt(lengthSq);
+    return Vector3{value.x * invLength, value.y * invLength, value.z * invLength};
+}
+
+float ConeCosine(float degrees)
+{
+    return std::cos(std::clamp(degrees, 0.0f, 179.0f) * DegreesToRadians);
 }
 
 float DynamicPointLightSelectionScore(
@@ -286,9 +302,13 @@ bool MakeSectorPreviewDynamicPointLightUniform(
     }
 
     outLight.lightId = light.id;
+    outLight.kind = SectorPreviewDynamicLightKind::Point;
     outLight.position = SectorAuthoringToWorldPosition(light.position);
+    outLight.direction = Vector3{0.0f, -1.0f, 0.0f};
     outLight.color = ColorToUnitRgb(light.color);
     outLight.radius = SectorAuthoringToWorldDistance(light.radius);
+    outLight.innerConeCos = -1.0f;
+    outLight.outerConeCos = -1.0f;
     outLight.intensity = light.intensity;
     outLight.flicker = light.flicker;
     outLight.flickerSpeed = ClampDynamicLightFlickerSpeed(light.flickerSpeed);
@@ -301,17 +321,85 @@ bool MakeSectorPreviewDynamicPointLightUniform(
             && IsFiniteVector3(outLight.color);
 }
 
+bool MakeSectorPreviewDynamicSpotLightUniform(
+        const SectorTopologyDynamicSpotLight& light,
+        SectorPreviewDynamicPointLightUniform& outLight)
+{
+    if (!light.enabled
+            || !std::isfinite(light.range)
+            || !std::isfinite(light.intensity)
+            || !std::isfinite(light.innerConeDegrees)
+            || !std::isfinite(light.outerConeDegrees)
+            || light.range <= 0.0f
+            || light.intensity <= 0.0f
+            || !IsFiniteVector3(light.position)
+            || !IsFiniteVector3(light.target)) {
+        return false;
+    }
+
+    const Vector3 worldPosition = SectorAuthoringToWorldPosition(light.position);
+    const Vector3 worldTarget = SectorAuthoringToWorldPosition(light.target);
+    const Vector3 direction = NormalizeOrFallback(
+            Vector3{
+                    worldTarget.x - worldPosition.x,
+                    worldTarget.y - worldPosition.y,
+                    worldTarget.z - worldPosition.z},
+            Vector3{0.0f, -1.0f, 0.0f});
+    const float innerDegrees = std::clamp(light.innerConeDegrees, 0.0f, 179.0f);
+    const float outerDegrees = std::max(innerDegrees, std::clamp(light.outerConeDegrees, 0.0f, 179.0f));
+
+    outLight.lightId = light.id;
+    outLight.kind = SectorPreviewDynamicLightKind::Spot;
+    outLight.position = worldPosition;
+    outLight.direction = direction;
+    outLight.color = ColorToUnitRgb(light.color);
+    outLight.radius = SectorAuthoringToWorldDistance(light.range);
+    outLight.innerConeCos = ConeCosine(innerDegrees);
+    outLight.outerConeCos = ConeCosine(outerDegrees);
+    outLight.intensity = light.intensity;
+    outLight.flicker = light.flicker;
+    outLight.flickerSpeed = ClampDynamicLightFlickerSpeed(light.flickerSpeed);
+    outLight.flickerAmount = ClampDynamicLightFlickerAmount(light.flickerAmount);
+    return std::isfinite(outLight.radius)
+            && outLight.radius > 0.0f
+            && std::isfinite(outLight.intensity)
+            && outLight.intensity > 0.0f
+            && IsFiniteVector3(outLight.position)
+            && IsFiniteVector3(outLight.direction)
+            && IsFiniteVector3(outLight.color)
+            && std::isfinite(outLight.innerConeCos)
+            && std::isfinite(outLight.outerConeCos);
+}
+
 void BuildSectorPreviewDynamicPointLightSources(
         const SectorTopologyMap& map,
         const SectorCollisionWorld* sectorLookupWorld,
         std::vector<SectorPreviewDynamicPointLightSource>& outSources)
 {
     outSources.clear();
-    outSources.reserve(map.dynamicPointLights.size());
+    outSources.reserve(map.dynamicPointLights.size() + map.dynamicSpotLights.size());
 
     for (const SectorTopologyDynamicPointLight& light : map.dynamicPointLights) {
         SectorPreviewDynamicPointLightUniform uniformLight;
         if (!MakeSectorPreviewDynamicPointLightUniform(light, uniformLight)) {
+            continue;
+        }
+
+        int ownerSectorId = 0;
+        if (sectorLookupWorld != nullptr) {
+            ownerSectorId = sectorLookupWorld->FindSectorContainingPoint(
+                    Vector2{uniformLight.position.x, uniformLight.position.z});
+        }
+
+        outSources.push_back(SectorPreviewDynamicPointLightSource{
+                light.id,
+                ownerSectorId,
+                uniformLight});
+    }
+
+    for (const SectorTopologyDynamicSpotLight& light : map.dynamicSpotLights) {
+        SectorPreviewDynamicPointLightUniform uniformLight;
+        if (!MakeSectorPreviewDynamicSpotLightUniform(light, uniformLight)) {
             continue;
         }
 

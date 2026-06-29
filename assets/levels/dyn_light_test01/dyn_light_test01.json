@@ -128,38 +128,6 @@
       }
     },
     {
-      "id": 6,
-      "position": [
-        112.0,
-        14.399999618530273,
-        272.0
-      ],
-      "radius": 64.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 255,
-        "b": 255,
-        "a": 255
-      }
-    },
-    {
-      "id": 7,
-      "position": [
-        112.0,
-        14.399999618530273,
-        344.0
-      ],
-      "radius": 64.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 255,
-        "b": 255,
-        "a": 255
-      }
-    },
-    {
       "id": 8,
       "position": [
         24.0,
@@ -304,6 +272,30 @@
       }
     }
   ],
+  "dynamicSpotLights": [
+    {
+      "id": 1,
+      "position": [
+        68.0,
+        14.399999618530273,
+        296.0
+      ],
+      "target": [
+        128.0,
+        8.0,
+        256.0
+      ],
+      "range": 100.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 0,
+        "b": 255,
+        "a": 255
+      },
+      "flicker": true
+    }
+  ],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
     "ambientOcclusionStrength": 0.550000011920929,
@@ -337,12 +329,6 @@
       "a": 255
     },
     "intensity": 1.0
-  },
-  "bakedLightmap": {
-    "path": "assets/levels/dyn_light_test01/dyn_light_test01.lightmap.png",
-    "width": 2048,
-    "height": 2048,
-    "sourceHash": "1d478d9247d0d609"
   },
   "authoringGraph": {
     "vertices": [
@@ -545,6 +531,26 @@
         "id": 40,
         "x": 448,
         "y": 512
+      },
+      {
+        "id": 41,
+        "x": 1600,
+        "y": 4352
+      },
+      {
+        "id": 42,
+        "x": 1664,
+        "y": 4352
+      },
+      {
+        "id": 43,
+        "x": 1664,
+        "y": 4416
+      },
+      {
+        "id": 44,
+        "x": 1600,
+        "y": 4416
       }
     ],
     "lines": [
@@ -707,6 +713,26 @@
         "id": 32,
         "startVertexId": 40,
         "endVertexId": 33
+      },
+      {
+        "id": 33,
+        "startVertexId": 41,
+        "endVertexId": 42
+      },
+      {
+        "id": 34,
+        "startVertexId": 42,
+        "endVertexId": 43
+      },
+      {
+        "id": 35,
+        "startVertexId": 43,
+        "endVertexId": 44
+      },
+      {
+        "id": 36,
+        "startVertexId": 44,
+        "endVertexId": 41
       }
     ],
     "lineSides": [],
@@ -1403,6 +1429,82 @@
         "y": 390,
         "floorZ": 24.0,
         "ceilingZ": 25.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.30000001192092896,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 11,
+        "name": "Sector 11",
+        "x": 1628,
+        "y": 4354,
+        "floorZ": 16.0,
+        "ceilingZ": 24.0,
         "floorTextureId": "floor",
         "ceilingTextureId": "ceiling",
         "floorUv": {

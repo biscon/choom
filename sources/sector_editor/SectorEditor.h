@@ -52,7 +52,9 @@ private:
     void UpdateAuthoringVertexDrag(engine::Input& input);
     void FinishAuthoringVertexDrag();
     void CancelAuthoringVertexDrag(const char* message);
-    void StartLightDrag(int topologyLightId);
+    void StartLightDrag(
+            int topologyLightId,
+            DynamicSpotLightHandle dynamicSpotHandle = DynamicSpotLightHandle::Origin);
     void UpdateLightDrag(engine::Input& input);
     void FinishLightDrag();
     void CancelLightDrag(const char* message);
@@ -200,6 +202,11 @@ private:
             SectorTopologyCoordPoint& outVertexPoint) const;
     int FindTopologyLightNearScreenPoint(Vector2 screenPoint) const;
     int FindTopologyDynamicLightNearScreenPoint(Vector2 screenPoint) const;
+    int FindTopologyDynamicSpotLightNearScreenPoint(Vector2 screenPoint) const;
+    bool FindTopologyDynamicSpotLightHandleNearScreenPoint(
+            Vector2 screenPoint,
+            int& outLightId,
+            DynamicSpotLightHandle& outHandle) const;
     bool FindTopologyVertexNearScreenPoint(
             Vector2 screenPoint,
             int& outVertexId,
@@ -251,6 +258,8 @@ private:
     const SectorTopologyStaticPointLight* SelectedTopologyLight() const;
     SectorTopologyDynamicPointLight* SelectedTopologyDynamicLight();
     const SectorTopologyDynamicPointLight* SelectedTopologyDynamicLight() const;
+    SectorTopologyDynamicSpotLight* SelectedTopologyDynamicSpotLight();
+    const SectorTopologyDynamicSpotLight* SelectedTopologyDynamicSpotLight() const;
     void ClearStaleTopologySelection();
     void SyncSelectedSectorIdBuffer();
     void SyncSelectedLightIdBuffer();
@@ -260,6 +269,7 @@ private:
     void SelectTopologyLineDef(int lineDefId, SectorTopologySideKind side, TopologyWallPart wallPart);
     void SelectTopologyLight(int topologyLightId);
     void SelectTopologyDynamicLight(int topologyLightId);
+    void SelectTopologyDynamicSpotLight(int topologyLightId);
     void SelectAuthoringLine(int lineId);
     bool DeleteSelectedAuthoringLine();
     void SelectAuthoringVertex(int vertexId);
@@ -331,6 +341,8 @@ private:
     void AddStaticLightAt(Vector2 mapPoint);
     bool DeleteDynamicLightById(int topologyLightId);
     void AddDynamicLightAt(Vector2 mapPoint);
+    bool DeleteDynamicSpotLightById(int topologyLightId);
+    void AddDynamicSpotLightAt(Vector2 mapPoint);
     bool BakeLightmaps();
     bool StartLightmapBake();
     void PollLightmapBakeResult(engine::AssetManager& assets);

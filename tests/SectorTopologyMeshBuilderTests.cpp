@@ -68,6 +68,28 @@ game::SectorPreviewDynamicPointLightSource LightSource(
     return source;
 }
 
+game::SectorPreviewDynamicPointLightSource SpotLightSource(
+        int lightId,
+        int ownerSectorId,
+        Vector3 position,
+        float radius,
+        float intensity = 1.0f,
+        Vector3 color = Vector3{1.0f, 1.0f, 1.0f})
+{
+    game::SectorPreviewDynamicPointLightSource source = LightSource(
+            lightId,
+            ownerSectorId,
+            position,
+            radius,
+            intensity,
+            color);
+    source.light.kind = game::SectorPreviewDynamicLightKind::Spot;
+    source.light.direction = Vector3{1.0f, 0.0f, 0.0f};
+    source.light.innerConeCos = std::cos(20.0f * 3.14159265358979323846f / 180.0f);
+    source.light.outerConeCos = std::cos(35.0f * 3.14159265358979323846f / 180.0f);
+    return source;
+}
+
 bool HasCandidateLightId(
         const std::vector<game::SectorPreviewDynamicPointLightSource>& candidates,
         int lightId)
@@ -78,6 +100,18 @@ bool HasCandidateLightId(
         }
     }
     return false;
+}
+
+const game::SectorPreviewDynamicPointLightSource* FindCandidateLightId(
+        const std::vector<game::SectorPreviewDynamicPointLightSource>& candidates,
+        int lightId)
+{
+    for (const game::SectorPreviewDynamicPointLightSource& candidate : candidates) {
+        if (candidate.lightId == lightId) {
+            return &candidate;
+        }
+    }
+    return nullptr;
 }
 
 bool HasSelectedLightId(const std::vector<int>& selectedLightIds, int lightId)
@@ -1214,6 +1248,106 @@ void TestDynamicPointLightReceiverBoundCandidateSelection()
           "dynamic light sphere overlap uses padded receiver bounds at boundaries");
 }
 
+void TestDynamicSpotLightRuntimeSourcePacking()
+{
+    game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::SectorCollisionWorld lookupWorld;
+    std::string error;
+    Check(lookupWorld.BuildFromTopology(map, &error), "dynamic spotlight sector lookup world builds");
+
+    map.dynamicSpotLights = {
+            game::SectorTopologyDynamicSpotLight{
+                    30,
+                    Vector3{2.0f, 8.0f, 2.0f},
+                    Vector3{10.0f, 8.0f, 2.0f},
+                    WHITE,
+                    2.0f,
+                    16.0f,
+                    20.0f,
+                    35.0f,
+                    true},
+            game::SectorTopologyDynamicSpotLight{
+                    31,
+                    Vector3{6.0f, 8.0f, 2.0f},
+                    Vector3{6.0f, 4.0f, 2.0f},
+                    RED,
+                    1.0f,
+                    8.0f,
+                    15.0f,
+                    40.0f,
+                    true,
+                    true,
+                    2.0f,
+                    0.5f},
+            game::SectorTopologyDynamicSpotLight{
+                    32,
+                    Vector3{2.0f, 8.0f, 2.0f},
+                    Vector3{2.0f, 8.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    -1.0f,
+                    20.0f,
+                    35.0f,
+                    true}};
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> sources;
+    game::BuildSectorPreviewDynamicPointLightSources(map, &lookupWorld, sources);
+    Check(sources.size() == 2, "dynamic spotlight source collection drops invalid lights");
+
+    const game::SectorPreviewDynamicPointLightSource* spot = FindCandidateLightId(sources, 30);
+    Check(spot != nullptr && spot->ownerSectorId == 10,
+          "dynamic spotlight source collection assigns origin sector ownership");
+    Check(spot != nullptr && spot->light.kind == game::SectorPreviewDynamicLightKind::Spot,
+          "dynamic spotlight source packing marks spot kind");
+    Check(spot != nullptr && Near(spot->light.position, Vector3{0.25f, 1.0f, 0.25f}),
+          "dynamic spotlight source packing converts position to world units");
+    Check(spot != nullptr && Near(spot->light.direction, Vector3{1.0f, 0.0f, 0.0f}),
+          "dynamic spotlight source packing stores normalized world direction");
+    Check(spot != nullptr && Near(spot->light.radius, 2.0f),
+          "dynamic spotlight source packing converts range to world units");
+    Check(spot != nullptr
+                  && Near(spot->light.innerConeCos, std::cos(20.0f * 3.14159265358979323846f / 180.0f))
+                  && Near(spot->light.outerConeCos, std::cos(35.0f * 3.14159265358979323846f / 180.0f)),
+          "dynamic spotlight source packing stores cone cosines");
+
+    const game::SectorPreviewDynamicPointLightSource* flickerSpot = FindCandidateLightId(sources, 31);
+    Check(flickerSpot != nullptr
+                  && flickerSpot->light.flicker
+                  && Near(flickerSpot->light.flickerSpeed, 2.0f)
+                  && Near(flickerSpot->light.flickerAmount, 0.5f),
+          "dynamic spotlight source packing preserves flicker upload settings");
+}
+
+void TestDynamicSpotLightCandidateSelection()
+{
+    const std::vector<game::SectorPreviewDynamicPointLightSource> sources = {
+            LightSource(1, 10, Vector3{0.5f, 0.5f, 0.5f}, 0.5f),
+            SpotLightSource(20, 20, Vector3{1.0f, 0.5f, 0.5f}, 0.75f),
+            SpotLightSource(21, 20, Vector3{3.0f, 0.5f, 0.5f}, 0.75f)};
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates;
+    game::CollectSectorPreviewDynamicPointLightCandidates(sources, visible, receiverBounds, candidates);
+    Check(HasCandidateLightId(candidates, 1), "dynamic light candidates keep point lights");
+    Check(HasCandidateLightId(candidates, 20),
+          "dynamic spotlight candidates include range sphere overlap with visible receivers");
+    Check(!HasCandidateLightId(candidates, 21),
+          "dynamic spotlight candidates exclude hidden irrelevant lights in normal visibility");
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.validStartSector = true;
+    fallback.fallbackDrawAll = true;
+    fallback.visibleSectorIds = {10};
+    game::CollectSectorPreviewDynamicPointLightCandidates(sources, fallback, receiverBounds, candidates);
+    Check(candidates.size() == 3,
+          "fallback draw-all dynamic light candidates include points and spotlights");
+}
+
 void TestDynamicPointLightRankingAndPacking()
 {
     std::vector<game::SectorPreviewDynamicPointLightSource> candidates = {
@@ -1283,6 +1417,58 @@ void TestDynamicPointLightRankingAndPacking()
             &selectedIds);
     Check(selected.size() == 1 && selectedIds.size() == 1 && selectedIds[0] == 7,
           "dynamic light ranking uses deterministic light-id tie breaking");
+}
+
+void TestDynamicSpotLightRankingAndPacking()
+{
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates;
+    for (int i = 0; i < 7; ++i) {
+        candidates.push_back(LightSource(
+                100 + i,
+                10,
+                Vector3{0.5f, 0.5f, 0.5f},
+                10.0f,
+                static_cast<float>(7 - i)));
+    }
+    candidates.push_back(SpotLightSource(200, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 20.0f));
+    candidates.push_back(SpotLightSource(201, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 19.0f));
+
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    std::vector<int> selectedIds;
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            receiverBounds,
+            8,
+            selected,
+            &selectedIds);
+    Check(selected.size() == 8 && selectedIds.size() == 8,
+          "dynamic points and spotlights share the total runtime light cap");
+    Check(selectedIds.size() >= 2 && selectedIds[0] == 200 && selectedIds[1] == 201,
+          "dynamic spotlight ranking uses the same receiver score as points");
+    Check(selected.size() >= 2
+                  && selected[0].kind == game::SectorPreviewDynamicLightKind::Spot
+                  && selected[1].kind == game::SectorPreviewDynamicLightKind::Spot,
+          "dynamic light packing preserves selected spotlight kind");
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> tiedCandidates = {
+            SpotLightSource(8, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f),
+            LightSource(7, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f)};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            tiedCandidates,
+            visible,
+            receiverBounds,
+            1,
+            selected,
+            &selectedIds);
+    Check(selected.size() == 1 && selectedIds.size() == 1 && selectedIds[0] == 7,
+          "dynamic point and spotlight tie ranking remains deterministic by light id");
 }
 
 void TestDynamicPointLightFlickerHelper()
@@ -1404,6 +1590,38 @@ void TestDynamicPointLightFlickerDoesNotAffectSelection()
             &selectedIds);
     Check(selectedIds.size() == 1 && selectedIds[0] == 1 && selected.size() == 1 && Near(selected[0].intensity, 5.0f),
           "dynamic light selection uses base intensity even when flicker is enabled");
+}
+
+void TestDynamicSpotLightFlickerDoesNotAffectSelection()
+{
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates = {
+            SpotLightSource(30, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 5.0f),
+            LightSource(31, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 4.0f)};
+    candidates[0].light.flicker = true;
+    candidates[0].light.flickerSpeed = 10.0f;
+    candidates[0].light.flickerAmount = 1.0f;
+
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    std::vector<int> selectedIds;
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            receiverBounds,
+            1,
+            selected,
+            &selectedIds);
+    Check(selectedIds.size() == 1
+                  && selectedIds[0] == 30
+                  && selected.size() == 1
+                  && selected[0].kind == game::SectorPreviewDynamicLightKind::Spot
+                  && Near(selected[0].intensity, 5.0f),
+          "dynamic spotlight selection uses base intensity even when flicker is enabled");
 }
 
 void TestDynamicPointLightFallbackUsesAllReceiverBounds()
@@ -1552,10 +1770,14 @@ int main()
     TestBloomDrawRecordVisibilitySelection();
     TestDynamicPointLightVisibilityCandidateSelection();
     TestDynamicPointLightReceiverBoundCandidateSelection();
+    TestDynamicSpotLightRuntimeSourcePacking();
+    TestDynamicSpotLightCandidateSelection();
     TestDynamicPointLightRankingAndPacking();
+    TestDynamicSpotLightRankingAndPacking();
     TestDynamicPointLightFlickerHelper();
     TestDynamicPointLightFlickerEffectiveIntensity();
     TestDynamicPointLightFlickerDoesNotAffectSelection();
+    TestDynamicSpotLightFlickerDoesNotAffectSelection();
     TestDynamicPointLightFallbackUsesAllReceiverBounds();
     TestDynamicPointLightSelectionHysteresis();
     if (failures == 0) {
