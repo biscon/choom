@@ -570,6 +570,27 @@ void TestDynamicSpotLightRoundTrip()
                   && !saved["dynamicSpotLights"][1].contains("flickerAmount"),
           "default dynamic spot light flicker fields are omitted");
 
+    SectorTopologyMap defaultMap = MakeSquare();
+    SectorTopologyDynamicSpotLight defaultLight;
+    defaultLight.id = 21;
+    defaultMap.dynamicSpotLights.push_back(defaultLight);
+    const Json savedDefaults = Json::parse(SaveText(defaultMap));
+    Check(Near(savedDefaults["dynamicSpotLights"][0]["position"][1].get<float>(),
+               game::SectorWorldToAuthoringDistance(1.8f))
+                  && Near(savedDefaults["dynamicSpotLights"][0]["target"][0].get<float>(),
+                          game::SectorWorldToAuthoringDistance(4.0f))
+                  && Near(savedDefaults["dynamicSpotLights"][0]["target"][1].get<float>(),
+                          game::SectorWorldToAuthoringDistance(1.0f))
+                  && Near(savedDefaults["dynamicSpotLights"][0]["range"].get<float>(),
+                          game::SectorWorldToAuthoringDistance(8.0f))
+                  && Near(savedDefaults["dynamicSpotLights"][0]["intensity"].get<float>(), 1.0f),
+          "default dynamic spot light authoring position target range and intensity are stable");
+    Check(!savedDefaults["dynamicSpotLights"][0].contains("enabled")
+                  && !savedDefaults["dynamicSpotLights"][0].contains("innerConeDegrees")
+                  && !savedDefaults["dynamicSpotLights"][0].contains("outerConeDegrees")
+                  && !savedDefaults["dynamicSpotLights"][0].contains("flicker"),
+          "default dynamic spot light optional fields remain omitted");
+
     SectorTopologyMap loaded;
     std::string error;
     Check(LoadText(text, loaded, error), "dynamic spot light topology JSON loads");

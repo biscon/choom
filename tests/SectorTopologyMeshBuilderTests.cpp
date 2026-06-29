@@ -1288,11 +1288,21 @@ void TestDynamicSpotLightRuntimeSourcePacking()
                     -1.0f,
                     20.0f,
                     35.0f,
+                    true},
+            game::SectorTopologyDynamicSpotLight{
+                    33,
+                    Vector3{4.0f, 8.0f, 4.0f},
+                    Vector3{4.0f, 8.0f, 4.0f},
+                    BLUE,
+                    1.5f,
+                    12.0f,
+                    80.0f,
+                    20.0f,
                     true}};
 
     std::vector<game::SectorPreviewDynamicPointLightSource> sources;
     game::BuildSectorPreviewDynamicPointLightSources(map, &lookupWorld, sources);
-    Check(sources.size() == 2, "dynamic spotlight source collection drops invalid lights");
+    Check(sources.size() == 3, "dynamic spotlight source collection drops invalid lights");
 
     const game::SectorPreviewDynamicPointLightSource* spot = FindCandidateLightId(sources, 30);
     Check(spot != nullptr && spot->ownerSectorId == 10,
@@ -1316,6 +1326,14 @@ void TestDynamicSpotLightRuntimeSourcePacking()
                   && Near(flickerSpot->light.flickerSpeed, 2.0f)
                   && Near(flickerSpot->light.flickerAmount, 0.5f),
           "dynamic spotlight source packing preserves flicker upload settings");
+
+    const game::SectorPreviewDynamicPointLightSource* degenerateSpot = FindCandidateLightId(sources, 33);
+    Check(degenerateSpot != nullptr && Near(degenerateSpot->light.direction, Vector3{0.0f, -1.0f, 0.0f}),
+          "dynamic spotlight source packing uses a safe fallback direction for coincident target");
+    Check(degenerateSpot != nullptr
+                  && Near(degenerateSpot->light.innerConeCos, std::cos(80.0f * 3.14159265358979323846f / 180.0f))
+                  && Near(degenerateSpot->light.outerConeCos, degenerateSpot->light.innerConeCos),
+          "dynamic spotlight source packing clamps outer cone to at least inner cone");
 }
 
 void TestDynamicSpotLightCandidateSelection()

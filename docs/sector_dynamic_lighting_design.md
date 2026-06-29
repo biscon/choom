@@ -4,31 +4,50 @@ This started as an audit/design document. The first dynamic point lighting pass
 is now implemented; this document records both the original constraints and the
 current behavior.
 
-Implemented goal: forward-rendered runtime point lights in the sector fragment
-shader. Dynamic lighting blends with the current sector ambient, baked lightmap
-direct lighting, baked AO, decals, and portal-culled sector drawing. Spotlights,
-shadow maps, and dynamic-sector lighting are future work.
+Implemented goal: forward-rendered runtime point and spot lights in the sector
+fragment shader. Dynamic lighting blends with the current sector ambient, baked
+lightmap direct lighting, baked AO, decals, and portal-culled sector drawing.
+Static baked spotlights, shadow maps, and dynamic-sector lighting are future
+work.
 
 ## Implemented First Pass Notes
 
 - Authored dynamic point lights are map-level runtime shader lights, separate
   from existing `staticLights`.
-- Static point lights remain baked lightmap inputs. Dynamic point lights do not
-  affect `ComputeSectorLightmapSourceHash()` and do not stale or recompute baked
-  lightmaps.
+- Authored dynamic spotlights are separate map-level runtime shader lights, also
+  separate from existing `staticLights`.
+- Static point lights remain baked lightmap inputs. Dynamic point and spot lights
+  do not affect `ComputeSectorLightmapSourceHash()` and do not stale or
+  recompute baked lightmaps.
 - Dynamic point lights serialize under `dynamicPointLights`; missing fields load
   as an empty list, and default `enabled: true` is omitted on save.
+- Dynamic spotlights serialize under `dynamicSpotLights`; missing fields load as
+  an empty list, and default `enabled`, cone, and flicker fields are omitted on
+  save.
 - Editor authoring uses a separate Dynamic Light tool and inspector controls for
   enabled state, position, color, radius, and intensity.
+- Editor authoring uses a separate Dynamic Spot tool and inspector controls for
+  enabled state, position, target, range, inner/outer cone angles, color,
+  intensity, and flicker.
 - New dynamic lights currently default to white, intensity `1.0`, and radius
   `8.0` world units converted to authoring units.
-- The first renderer pass supports point lights only. There are no spotlights,
-  cookies, shadow maps, PCF, or normal maps.
-- The sector shader evaluates up to `8` selected dynamic point lights using
-  fixed-size uniform arrays.
+- New dynamic spotlights default to white, intensity `1.0`, range `8.0` world
+  units, inner cone `20` degrees, outer cone `35` degrees, and a target `4.0`
+  world units forward in X at `1.0` world units high.
+- The renderer supports point lights and cone-filtered spotlights. There are no
+  static baked spotlights, cookies, shadow maps, PCF, or normal maps.
+- The sector shader evaluates up to `8` selected dynamic lights total using
+  fixed-size uniform arrays shared by points and spots.
 - Selected dynamic lights are rebuilt from authored lights, visibility
   candidates, receiver bounds, contribution ranking, and a small runtime-only
   top-N hysteresis step.
+- Dynamic spotlight candidates are conservatively selected by owner visible
+  sector or range-sphere overlap with visible receiver bounds; the candidate pass
+  does not cone-test receiver bounds.
+- Dynamic spotlight pilot mode copies the selected spotlight pose to the free-fly
+  camera, preserves the original target distance, and only mutates authored
+  position/target when Apply is used. Cancel restores the original authored
+  transform and camera pose.
 - If dynamic lighting is toggled off at runtime, the uploaded dynamic light count
   is zero and the old baked-only lighting path is preserved.
 - The dynamic lighting clamp is `4.0` for frames with active dynamic lights; the
@@ -556,7 +575,8 @@ This audit/design task changes only documentation. It does not touch topology
 mutation code, 2D topology render-cache invalidation, lightmap baking, or
 lightmap source-hash logic.
 
-For the future feature, runtime dynamic lights should not be included in
-`ComputeSectorLightmapSourceHash()` unless they become authored bake-affecting
-data. Existing `staticLights` remain bake lights and continue to affect the
-lightmap source hash.
+Runtime dynamic point lights and dynamic spotlights are excluded from
+`ComputeSectorLightmapSourceHash()` because they do not affect baked receiver
+layout, occlusion, or static lighting results. Existing `staticLights` remain
+bake lights and continue to affect the lightmap source hash. Static baked
+spotlights, if added in a later plan, should be treated as bake-affecting data.

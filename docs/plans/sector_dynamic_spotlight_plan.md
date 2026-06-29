@@ -114,14 +114,14 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_06",
       "title": "Polish Tests Documentation And Completion",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_06a",
       "title": "Tune Defaults Strengthen Tests Update Docs And Close Plan",
       "type": "pass",
       "parent": "phase_06",
-      "status": "Not Started"
+      "status": "Completed"
     }
   ]
 }
@@ -143,8 +143,8 @@ When an agent is asked to execute this plan, it must:
 | Phase 4A: Draw Selected Spotlight Cone Overlay In 3D Preview        | Completed   | 2026-06-29 | Added selected dynamic spotlight 3D wire overlay.                                        |
 | Phase 5: Spotlight Pilot Mode                                       | Completed   | 2026-06-29 | Completed with Phase 5A.                                                                 |
 | Phase 5A: Add Pilot Selected Spotlight Apply Cancel Workflow        | Completed   | 2026-06-29 | Added selected dynamic spotlight 3D pilot apply/cancel workflow.                         |
-| Phase 6: Polish Tests Documentation And Completion                  | Not Started |      | Parent phase.                                                                            |
-| Phase 6A: Tune Defaults Strengthen Tests Update Docs And Close Plan | Not Started |      | Final cleanup and documentation.                                                         |
+| Phase 6: Polish Tests Documentation And Completion                  | Completed   | 2026-06-29 | Completed with Phase 6A.                                                                 |
+| Phase 6A: Tune Defaults Strengthen Tests Update Docs And Close Plan | Completed   | 2026-06-29 | Strengthened defaults/runtime packing tests, updated dynamic-lighting docs, and closed the plan. |
 
 ### Phase 1A Completion Notes - 2026-06-29
 
@@ -353,6 +353,45 @@ Verification:
 * `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
 * `git diff --check` passed.
 * `git diff --stat` ran; 6 files changed.
+* `git status --short` ran; expected modified files remain uncommitted.
+
+### Phase 6A Completion Notes - 2026-06-29
+
+Summary:
+
+* Source code changed only in tests; runtime/editor behavior was not changed.
+* Added serialization coverage that pins dynamic spotlight authoring defaults:
+  origin height 1.8 world units, target 4.0 world units forward in X at 1.0
+  world unit high, range 8.0 world units, intensity 1.0, default omitted
+  enabled/cone/flicker fields, and existing 20/35 degree cone defaults.
+* Added runtime packing coverage for coincident spotlight position/target using
+  the safe fallback direction and for outer cone ordering when authored outer
+  angle is narrower than inner angle.
+* Updated `docs/sector_dynamic_lighting_design.md` to describe implemented
+  dynamic spotlights, shared dynamic point/spot light budget, conservative
+  candidate selection, pilot target-distance behavior, and deferred static
+  spotlight/shadow-map work.
+
+Behavior notes:
+
+* Dynamic point lights, dynamic point flicker, static baked lights, shader
+  runtime behavior, editor behavior, serialization schema, generated geometry,
+  and public APIs are unchanged.
+* This pass did not touch topology mutation code, so 2D topology render-cache
+  invalidation behavior is unchanged.
+* Static lightmap source-hash behavior is unchanged; dynamic point lights and
+  dynamic spotlights remain excluded from the static lightmap source hash.
+* Gameplay collision, sector lookup, physics, and camera behavior are unchanged.
+* Static baked spotlights, shadow maps, PCF, flashlight gameplay, and generic
+  object/entity work remain deferred to later plans.
+* Manual GUI smoke was not performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+* `git diff --check` passed.
+* `git diff --stat` ran; 3 files changed before the plan update.
 * `git status --short` ran; expected modified files remain uncommitted.
 
 ## Execution Tracking Rules
