@@ -600,6 +600,7 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
     }
     state.hasHoveredVertex = false;
     state.hoveredTopologyLightId = -1;
+    state.hoveredTopologyStaticSpotLightId = -1;
     state.hoveredTopologyDynamicLightId = -1;
     state.hoveredTopologyDynamicSpotLightId = -1;
     state.hoveredTopologyVertexId = -1;
@@ -669,6 +670,14 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
         }
     }
 
+    if (state.currentTool == SectorEditorTool::StaticSpotLight) {
+        const int lightId = FindTopologyStaticSpotLightNearScreenPoint(input.MousePosition());
+        if (lightId >= 0) {
+            state.hoveredTopologyStaticSpotLightId = lightId;
+            state.inspectedTopologyVertexId = -1;
+        }
+    }
+
     if (state.currentTool == SectorEditorTool::DynamicLight) {
         const int lightId = FindTopologyDynamicLightNearScreenPoint(input.MousePosition());
         if (lightId >= 0) {
@@ -713,6 +722,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                             || state.currentTool == SectorEditorTool::AuthoringInsertVertex) {
                         CancelPendingAuthoringInsertVertex("Insert Vertex cancelled");
                     } else if (state.selectedTopologyLightId >= 0
+                            || state.selectedTopologyStaticSpotLightId >= 0
                             || state.selectedTopologyDynamicLightId >= 0
                             || state.selectedTopologyDynamicSpotLightId >= 0
                             || state.topologySelectionKind != TopologySelectionKind::None
@@ -740,6 +750,9 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         DeleteSelectedAuthoringVertex();
                     } else if (state.topologySelectionKind == TopologySelectionKind::StaticLight
                             && state.selectedTopologyLightId >= 0) {
+                        DeleteSelectedLight();
+                    } else if (state.topologySelectionKind == TopologySelectionKind::StaticSpotLight
+                            && state.selectedTopologyStaticSpotLightId >= 0) {
                         DeleteSelectedLight();
                     } else if (state.topologySelectionKind == TopologySelectionKind::DynamicLight
                             && state.selectedTopologyDynamicLightId >= 0) {
@@ -872,6 +885,18 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     const int lightId = FindTopologyLightNearScreenPoint(event.mouseButton.position);
                     if (lightId >= 0) {
                         StartLightDrag(lightId);
+                        engine::ConsumeEvent(event);
+                    }
+                    return;
+                }
+
+                if (state.currentTool == SectorEditorTool::StaticSpotLight
+                        && event.mouseButton.button == MOUSE_LEFT_BUTTON
+                        && Contains(canvasRect, event.mouseButton.position)) {
+                    const int lightId = FindTopologyStaticSpotLightNearScreenPoint(event.mouseButton.position);
+                    if (lightId >= 0) {
+                        SelectTopologyStaticSpotLight(lightId);
+                        statusText = TextFormat("Selected static spot %d", lightId);
                         engine::ConsumeEvent(event);
                     }
                     return;
@@ -1028,6 +1053,12 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
 
                 if (state.currentTool == SectorEditorTool::StaticLight) {
                     AddStaticLightAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
+                if (state.currentTool == SectorEditorTool::StaticSpotLight) {
+                    AddStaticSpotLightAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -1395,7 +1426,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                 }
 
                 if (event.key.key == KEY_F3) {
-                    if (state.dynamicSpotLightPilot.active) {
+                    if (state.spotLightPilot.active) {
                         statusText = "Finish spotlight pilot before changing 3D control mode";
                         engine::ConsumeEvent(event);
                         return;
@@ -1416,7 +1447,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                 }
 
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
-                    CancelDynamicSpotLightPilot(nullptr);
+                    CancelSpotLightPilot(nullptr);
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
                 }
@@ -1498,7 +1529,7 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
             || state.freeflyController.mouseLookEnabled
             || state.previewUiHidden
             || state.texturePicker.open
-            || state.dynamicSpotLightPilot.active) {
+            || state.spotLightPilot.active) {
         state.hoveredSurface3D = SectorSurfaceHit{};
         return;
     }
@@ -1942,6 +1973,22 @@ const SectorTopologyStaticPointLight* SectorEditor::SelectedTopologyLight() cons
     return FindSectorTopologyStaticLight(state.topologyMap, state.selectedTopologyLightId);
 }
 
+SectorTopologyStaticSpotLight* SectorEditor::SelectedTopologyStaticSpotLight()
+{
+    if (state.topologySelectionKind != TopologySelectionKind::StaticSpotLight) {
+        return nullptr;
+    }
+    return FindSectorTopologyStaticSpotLight(state.topologyMap, state.selectedTopologyStaticSpotLightId);
+}
+
+const SectorTopologyStaticSpotLight* SectorEditor::SelectedTopologyStaticSpotLight() const
+{
+    if (state.topologySelectionKind != TopologySelectionKind::StaticSpotLight) {
+        return nullptr;
+    }
+    return FindSectorTopologyStaticSpotLight(state.topologyMap, state.selectedTopologyStaticSpotLightId);
+}
+
 SectorTopologyDynamicPointLight* SectorEditor::SelectedTopologyDynamicLight()
 {
     if (state.topologySelectionKind != TopologySelectionKind::DynamicLight) {
@@ -2008,6 +2055,11 @@ void SectorEditor::ClearStaleTopologySelection()
     } else if (state.topologySelectionKind == TopologySelectionKind::StaticLight) {
         stale = state.selectedTopologyLightId < 0
                 || FindSectorTopologyStaticLight(state.topologyMap, state.selectedTopologyLightId) == nullptr;
+    } else if (state.topologySelectionKind == TopologySelectionKind::StaticSpotLight) {
+        stale = state.selectedTopologyStaticSpotLightId < 0
+                || FindSectorTopologyStaticSpotLight(
+                        state.topologyMap,
+                        state.selectedTopologyStaticSpotLightId) == nullptr;
     } else if (state.topologySelectionKind == TopologySelectionKind::DynamicLight) {
         stale = state.selectedTopologyDynamicLightId < 0
                 || FindSectorTopologyDynamicLight(state.topologyMap, state.selectedTopologyDynamicLightId) == nullptr;
@@ -2019,13 +2071,14 @@ void SectorEditor::ClearStaleTopologySelection()
     }
 
     if (stale) {
-        CancelDynamicSpotLightPilot(nullptr);
+        CancelSpotLightPilot(nullptr);
         state.topologySelectionKind = TopologySelectionKind::None;
         state.selectedTopologySectorId = -1;
         state.selectedTopologyVertexId = -1;
         state.selectedTopologySideDefId = -1;
         state.selectedTopologyLineDefId = -1;
         state.selectedTopologyLightId = -1;
+        state.selectedTopologyStaticSpotLightId = -1;
         state.selectedTopologyDynamicLightId = -1;
         state.selectedTopologyDynamicSpotLightId = -1;
         state.selectedTopologySideKind = SectorTopologySideKind::Front;
@@ -2188,9 +2241,10 @@ void SectorEditor::SyncSelectedSectorIdBuffer()
 void SectorEditor::SyncSelectedLightIdBuffer()
 {
     const SectorTopologyStaticPointLight* light = SelectedTopologyLight();
+    const SectorTopologyStaticSpotLight* staticSpotLight = SelectedTopologyStaticSpotLight();
     const SectorTopologyDynamicPointLight* dynamicLight = SelectedTopologyDynamicLight();
     const SectorTopologyDynamicSpotLight* dynamicSpotLight = SelectedTopologyDynamicSpotLight();
-    if (light == nullptr && dynamicLight == nullptr && dynamicSpotLight == nullptr) {
+    if (light == nullptr && staticSpotLight == nullptr && dynamicLight == nullptr && dynamicSpotLight == nullptr) {
         uiState.selectedLightIdBuffer[0] = '\0';
         uiState.idBufferLightIndex = -1;
         if (state.topologySelectionKind == TopologySelectionKind::None) {
@@ -2201,7 +2255,9 @@ void SectorEditor::SyncSelectedLightIdBuffer()
 
     const int lightId = light != nullptr
             ? light->id
-            : (dynamicLight != nullptr ? dynamicLight->id : dynamicSpotLight->id);
+            : (staticSpotLight != nullptr
+                    ? staticSpotLight->id
+                    : (dynamicLight != nullptr ? dynamicLight->id : dynamicSpotLight->id));
     if (uiState.idBufferLightIndex == lightId) {
         return;
     }
@@ -2272,6 +2328,7 @@ bool SectorEditor::TryRenameSelectedTopologySector()
 bool SectorEditor::TryRenameSelectedLight()
 {
     if (SelectedTopologyLight() == nullptr
+            && SelectedTopologyStaticSpotLight() == nullptr
             && SelectedTopologyDynamicLight() == nullptr
             && SelectedTopologyDynamicSpotLight() == nullptr) {
         uiState.idEditError = "No light selected";
@@ -2287,25 +2344,36 @@ bool SectorEditor::TryRenameSelectedLight()
 bool SectorEditor::DeleteSelectedLight()
 {
     const SectorTopologyStaticPointLight* light = SelectedTopologyLight();
+    const SectorTopologyStaticSpotLight* staticSpotLight = SelectedTopologyStaticSpotLight();
     const SectorTopologyDynamicPointLight* dynamicLight = SelectedTopologyDynamicLight();
     const SectorTopologyDynamicSpotLight* dynamicSpotLight = SelectedTopologyDynamicSpotLight();
-    if (light == nullptr && dynamicLight == nullptr && dynamicSpotLight == nullptr) {
+    if (light == nullptr && staticSpotLight == nullptr && dynamicLight == nullptr && dynamicSpotLight == nullptr) {
         return false;
     }
 
     const int lightId = light != nullptr
             ? light->id
-            : (dynamicLight != nullptr ? dynamicLight->id : dynamicSpotLight->id);
+            : (staticSpotLight != nullptr
+                    ? staticSpotLight->id
+                    : (dynamicLight != nullptr ? dynamicLight->id : dynamicSpotLight->id));
     OpenConfirmation(
             "Delete Light",
             light != nullptr
                     ? TextFormat("Delete static light %d?", lightId)
-                    : (dynamicLight != nullptr
-                            ? TextFormat("Delete dynamic light %d?", lightId)
-                            : TextFormat("Delete dynamic spot %d?", lightId)),
-            [this, lightId, isDynamic = dynamicLight != nullptr, isDynamicSpot = dynamicSpotLight != nullptr]() {
+                    : (staticSpotLight != nullptr
+                            ? TextFormat("Delete static spot %d?", lightId)
+                            : (dynamicLight != nullptr
+                                    ? TextFormat("Delete dynamic light %d?", lightId)
+                                    : TextFormat("Delete dynamic spot %d?", lightId))),
+            [this,
+             lightId,
+             isStaticSpot = staticSpotLight != nullptr,
+             isDynamic = dynamicLight != nullptr,
+             isDynamicSpot = dynamicSpotLight != nullptr]() {
                 if (isDynamicSpot) {
                     DeleteDynamicSpotLightById(lightId);
+                } else if (isStaticSpot) {
+                    DeleteStaticSpotLightById(lightId);
                 } else if (isDynamic) {
                     DeleteDynamicLightById(lightId);
                 } else {
@@ -2359,6 +2427,57 @@ void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
     }
 
     SelectTopologyLight(result.lightId);
+    SectorEditorTopologyActionResult finish;
+    finish.changed = true;
+    finish.status = result.status;
+    FinishTopologyActionResult(finish);
+}
+
+bool SectorEditor::DeleteStaticSpotLightById(int topologyLightId)
+{
+    const bool hadLight = FindSectorTopologyStaticSpotLight(state.topologyMap, topologyLightId) != nullptr;
+    const SectorEditorTopologyActionResult result = DeleteStaticSpotLight(state.topologyMap, topologyLightId);
+    if (!result.changed) {
+        if (!hadLight) {
+            ClearStaleTopologySelection();
+        }
+        FinishTopologyActionResult(result);
+        return false;
+    }
+
+    if (!hadLight) {
+        ClearStaleTopologySelection();
+        return false;
+    }
+
+    if (state.selectedTopologyStaticSpotLightId == topologyLightId) {
+        CancelSpotLightPilot(nullptr);
+        ClearSelection();
+    }
+    if (state.hoveredTopologyStaticSpotLightId == topologyLightId) {
+        state.hoveredTopologyStaticSpotLightId = -1;
+    }
+    if (state.lightDrag.topologyLightId == topologyLightId) {
+        state.lightDrag = LightDragState{};
+    }
+    return FinishTopologyActionResult(result);
+}
+
+void SectorEditor::AddStaticSpotLightAt(Vector2 mapPoint)
+{
+    const int sectorId = FindTopologySectorAt(mapPoint);
+    const SectorEditorAddStaticSpotLightResult result = AddStaticSpotLightToSector(
+            state.topologyMap,
+            sectorId,
+            mapPoint);
+    if (!result.changed) {
+        if (!result.status.empty()) {
+            statusText = result.status;
+        }
+        return;
+    }
+
+    SelectTopologyStaticSpotLight(result.lightId);
     SectorEditorTopologyActionResult finish;
     finish.changed = true;
     finish.status = result.status;
@@ -2433,7 +2552,7 @@ bool SectorEditor::DeleteDynamicSpotLightById(int topologyLightId)
     }
 
     if (state.selectedTopologyDynamicSpotLightId == topologyLightId) {
-        CancelDynamicSpotLightPilot(nullptr);
+        CancelSpotLightPilot(nullptr);
         ClearSelection();
     }
     if (state.hoveredTopologyDynamicSpotLightId == topologyLightId) {
@@ -2836,7 +2955,7 @@ void SectorEditor::RenderPreview3DOverlays()
 {
     if (!state.previewUiHidden) {
         DrawPreviewSurfaceHighlights();
-        DrawPreviewDynamicSpotLightOverlay();
+        DrawPreviewSpotLightOverlay();
     }
 }
 
@@ -2917,19 +3036,37 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
     EndMode3D();
 }
 
-void SectorEditor::DrawPreviewDynamicSpotLightOverlay() const
+void SectorEditor::DrawPreviewSpotLightOverlay() const
 {
     if (!preview.IsRendererReady() || state.freeflyController.mouseLookEnabled) {
         return;
     }
 
-    const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight();
-    if (light == nullptr) {
+    Vector3 lightPosition = {};
+    Vector3 lightTarget = {};
+    float lightRange = 0.0f;
+    float innerConeDegrees = 0.0f;
+    float outerConeDegrees = 0.0f;
+    bool selectedStaticSpotLight = false;
+    if (const SectorTopologyStaticSpotLight* light = SelectedTopologyStaticSpotLight()) {
+        lightPosition = light->position;
+        lightTarget = light->target;
+        lightRange = light->range;
+        innerConeDegrees = light->innerConeDegrees;
+        outerConeDegrees = light->outerConeDegrees;
+        selectedStaticSpotLight = true;
+    } else if (const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight()) {
+        lightPosition = light->position;
+        lightTarget = light->target;
+        lightRange = light->range;
+        innerConeDegrees = light->innerConeDegrees;
+        outerConeDegrees = light->outerConeDegrees;
+    } else {
         return;
     }
 
-    const Vector3 origin = SectorAuthoringToWorldPosition(light->position);
-    const Vector3 target = SectorAuthoringToWorldPosition(light->target);
+    const Vector3 origin = SectorAuthoringToWorldPosition(lightPosition);
+    const Vector3 target = SectorAuthoringToWorldPosition(lightTarget);
     Vector3 forward = Vector3Subtract(target, origin);
     if (Vector3LengthSqr(forward) <= 0.000001f) {
         forward = Vector3{1.0f, 0.0f, 0.0f};
@@ -2943,30 +3080,31 @@ void SectorEditor::DrawPreviewDynamicSpotLightOverlay() const
     }
     const Vector3 right = Vector3Normalize(Vector3CrossProduct(basisUp, forward));
     const Vector3 up = Vector3Normalize(Vector3CrossProduct(forward, right));
-    const float range = SectorAuthoringToWorldDistance(light->range);
+    const float range = SectorAuthoringToWorldDistance(lightRange);
     const Vector3 rangeEnd = Vector3Add(origin, Vector3Scale(forward, range));
 
     constexpr float OriginMarkerRadius = 0.12f;
     constexpr float TargetMarkerRadius = 0.09f;
-    constexpr Color OriginColor{255, 236, 122, 255};
-    constexpr Color TargetColor{255, 170, 82, 255};
-    constexpr Color DirectionColor{255, 216, 88, 255};
-    constexpr Color OuterConeColor{255, 216, 88, 235};
-    constexpr Color InnerConeColor{110, 218, 255, 220};
+    const Color originColor = selectedStaticSpotLight ? Color{112, 232, 204, 255} : Color{255, 236, 122, 255};
+    const Color targetColor = selectedStaticSpotLight ? Color{92, 194, 255, 255} : Color{255, 170, 82, 255};
+    const Color directionColor = selectedStaticSpotLight ? Color{112, 232, 204, 255} : Color{255, 216, 88, 255};
+    const Color rangeColor = selectedStaticSpotLight ? Color{112, 232, 204, 170} : Color{255, 216, 88, 170};
+    const Color outerConeColor = selectedStaticSpotLight ? Color{112, 232, 204, 235} : Color{255, 216, 88, 235};
+    const Color innerConeColor = selectedStaticSpotLight ? Color{178, 246, 255, 220} : Color{110, 218, 255, 220};
 
     BeginMode3D(preview.RenderCamera());
-    DrawSphereWires(origin, OriginMarkerRadius, 8, 12, OriginColor);
-    DrawSphereWires(target, TargetMarkerRadius, 8, 12, TargetColor);
-    DrawLine3D(origin, target, DirectionColor);
-    DrawLine3D(origin, rangeEnd, Color{255, 216, 88, 170});
+    DrawSphereWires(origin, OriginMarkerRadius, 8, 12, originColor);
+    DrawSphereWires(target, TargetMarkerRadius, 8, 12, targetColor);
+    DrawLine3D(origin, target, directionColor);
+    DrawLine3D(origin, rangeEnd, rangeColor);
     DrawSpotLightConeRing(
             origin,
             forward,
             right,
             up,
             range,
-            light->outerConeDegrees,
-            OuterConeColor,
+            outerConeDegrees,
+            outerConeColor,
             true);
     DrawSpotLightConeRing(
             origin,
@@ -2974,8 +3112,8 @@ void SectorEditor::DrawPreviewDynamicSpotLightOverlay() const
             right,
             up,
             range,
-            light->innerConeDegrees,
-            InnerConeColor,
+            innerConeDegrees,
+            innerConeColor,
             false);
     EndMode3D();
 }
@@ -3012,8 +3150,9 @@ void SectorEditor::DrawPreviewOverlay(
                 "Settings")) {
         OpenPreviewSettingsModal();
     }
-    const SectorTopologyDynamicSpotLight* selectedSpotLight = SelectedTopologyDynamicSpotLight();
-    if (state.dynamicSpotLightPilot.active) {
+    const bool hasSelectedSpotLight = SelectedTopologyStaticSpotLight() != nullptr
+            || SelectedTopologyDynamicSpotLight() != nullptr;
+    if (state.spotLightPilot.active) {
         constexpr float buttonW = 108.0f;
         if (engine::Button(
                     ui,
@@ -3028,7 +3167,7 @@ void SectorEditor::DrawPreviewOverlay(
                             36.0f},
                     font,
                     "Apply")) {
-            ApplyDynamicSpotLightPilot();
+            ApplySpotLightPilot();
         }
         if (engine::Button(
                     ui,
@@ -3043,9 +3182,9 @@ void SectorEditor::DrawPreviewOverlay(
                             36.0f},
                     font,
                     "Cancel")) {
-            CancelDynamicSpotLightPilot("Spotlight pilot cancelled");
+            CancelSpotLightPilot("Spotlight pilot cancelled");
         }
-    } else if (selectedSpotLight != nullptr && state.previewControlMode == SectorPreviewControlMode::FreeFly) {
+    } else if (hasSelectedSpotLight && state.previewControlMode == SectorPreviewControlMode::FreeFly) {
         if (engine::Button(
                     ui,
                     config,
@@ -3055,11 +3194,11 @@ void SectorEditor::DrawPreviewOverlay(
                     Rectangle{panel.x + panel.width - 290.0f, panel.y + 12.0f, 118.0f, 36.0f},
                     font,
                     "Pilot Light")) {
-            StartDynamicSpotLightPilot();
+            StartSpotLightPilot();
         }
     }
     const char* interactionText = state.freeflyController.mouseLookEnabled
-            ? (state.dynamicSpotLightPilot.active
+            ? (state.spotLightPilot.active
                     ? "Pilot Light | WASD move | Mouse look | Space/Ctrl up/down | Apply or Cancel"
                     : (state.previewControlMode == SectorPreviewControlMode::Gameplay
                     ? "WASD move | Space jump | Shift run | Mouse look | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc"
@@ -3770,11 +3909,13 @@ void SectorEditor::DrawTopologyDocument()
             drawLegacyTopologySelection ? state.selectedTopologySectorId : -1,
             drawLegacyTopologySelection ? state.selectedTopologyVertexId : -1,
             drawLegacyTopologySelection ? state.selectedTopologyLightId : -1,
+            drawLegacyTopologySelection ? state.selectedTopologyStaticSpotLightId : -1,
             drawLegacyTopologySelection ? state.selectedTopologyDynamicLightId : -1,
             drawLegacyTopologySelection ? state.selectedTopologyDynamicSpotLightId : -1,
             state.hasHoveredVertex,
             state.hoveredTopologyVertexId,
             state.hoveredTopologyLightId,
+            state.hoveredTopologyStaticSpotLightId,
             state.hoveredTopologyDynamicLightId,
             state.hoveredTopologyDynamicSpotLightId,
             state.selectedAuthoring,
@@ -3791,6 +3932,7 @@ void SectorEditor::DrawTopologyDocument()
     DrawCachedAuthoringDiagnostics(state.topologyRenderCache, drawContext);
     DrawAuthoringVertexMoveOverlay();
     DrawCachedTopologyStaticLights(state.topologyRenderCache, drawContext);
+    DrawCachedTopologyStaticSpotLights(state.topologyRenderCache, drawContext);
     DrawCachedTopologyDynamicLights(state.topologyRenderCache, drawContext);
     DrawCachedTopologyDynamicSpotLights(state.topologyRenderCache, drawContext);
     DrawLightMoveOverlay();
@@ -4278,7 +4420,7 @@ void SectorEditor::DrawToolsPanel(
     const float separatorH = 22.0f;
     const float sectionLabelH = 26.0f;
     const float lightmapLabelH = 32.0f;
-    const float bottomPadding = rowH + gap * 2.0f;
+    const float bottomPadding = (rowH + gap * 2.0f) + 100;
     const auto rowsHeight = [rowH, gap](int count) {
         return static_cast<float>(count) * (rowH + gap);
     };
@@ -4409,6 +4551,7 @@ void SectorEditor::DrawToolsPanel(
     sectionLabel("Map objects");
     const SectorEditorTool mapTools[] = {
             SectorEditorTool::StaticLight,
+            SectorEditorTool::StaticSpotLight,
             SectorEditorTool::DynamicLight,
             SectorEditorTool::DynamicSpotLight
     };
@@ -4589,6 +4732,7 @@ void SectorEditor::DrawSectorsPanel(
     const bool hasSelectedTopologyLineDef = state.topologySelectionKind == TopologySelectionKind::LineDef
             && SelectedTopologyLineDef() != nullptr;
     const bool hasSelectedLight = SelectedTopologyLight() != nullptr;
+    const bool hasSelectedStaticSpotLight = SelectedTopologyStaticSpotLight() != nullptr;
     const bool hasSelectedDynamicLight = SelectedTopologyDynamicLight() != nullptr;
     const bool hasSelectedDynamicSpotLight = SelectedTopologyDynamicSpotLight() != nullptr;
     const SectorEditorInspectorTarget inspectorTarget = ResolveSectorEditorInspectorTarget(state);
@@ -4615,6 +4759,7 @@ void SectorEditor::DrawSectorsPanel(
             && !hasSelectedTopologySideDef
             && !hasSelectedTopologyLineDef
             && !hasSelectedLight
+            && !hasSelectedStaticSpotLight
             && !hasSelectedDynamicLight
             && !hasSelectedDynamicSpotLight
             && state.currentTool == SectorEditorTool::Move
@@ -4629,6 +4774,9 @@ void SectorEditor::DrawSectorsPanel(
         }
         if (hasSelectedLight) {
             return StaticLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
+        }
+        if (hasSelectedStaticSpotLight) {
+            return StaticSpotLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
         }
         if (hasSelectedDynamicLight) {
             return DynamicLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
@@ -5034,6 +5182,35 @@ void SectorEditor::DrawSectorsPanel(
                 rowH,
                 gap,
                 *SelectedTopologyLight(),
+                uiState,
+                callbacks);
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return;
+    }
+
+    if (hasSelectedStaticSpotLight) {
+        const SectorEditorLightInspectorCallbacks callbacks{
+                [this](const char* status) {
+                    SectorEditorTopologyActionResult result;
+                    result.changed = true;
+                    result.status = status == nullptr ? "" : status;
+                    FinishTopologyActionResult(result);
+                },
+                [this]() { return DeleteSelectedLight(); },
+                [this]() { return BakeLightmaps(); }
+        };
+        DrawSelectedStaticSpotLightInspector(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                scroll,
+                contentW,
+                rowH,
+                gap,
+                *SelectedTopologyStaticSpotLight(),
                 uiState,
                 callbacks);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
@@ -7381,6 +7558,8 @@ void SectorEditor::DrawStatusPanel(
     std::string selectedLabel = "none";
     if (const SectorTopologyStaticPointLight* light = SelectedTopologyLight()) {
         selectedLabel = TextFormat("static light %d", light->id);
+    } else if (const SectorTopologyStaticSpotLight* light = SelectedTopologyStaticSpotLight()) {
+        selectedLabel = TextFormat("static spot %d", light->id);
     } else if (const SectorTopologyDynamicPointLight* light = SelectedTopologyDynamicLight()) {
         selectedLabel = TextFormat("dynamic light %d", light->id);
     } else if (const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight()) {
@@ -7532,6 +7711,7 @@ bool SectorEditor::LoadLevel(
     state.decalTintModal = DecalTintModalState{};
     ClearSelection();
     state.hoveredTopologyLightId = -1;
+    state.hoveredTopologyStaticSpotLightId = -1;
     state.hoveredTopologyDynamicLightId = -1;
     state.hoveredTopologyDynamicSpotLightId = -1;
     state.hasHoveredVertex = false;
@@ -7726,7 +7906,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
 
 void SectorEditor::LeavePreview3D()
 {
-    CancelDynamicSpotLightPilot(nullptr);
+    CancelSpotLightPilot(nullptr);
     if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
         ClearSectorFpsLandingDip(state.landingDipState);
         ApplyGameplayPoseToPreview();
@@ -7763,81 +7943,120 @@ void SectorEditor::TogglePreviewControlMode()
     statusText = TextFormat("3D control mode: %s", PreviewControlModeName(state.previewControlMode));
 }
 
-bool SectorEditor::StartDynamicSpotLightPilot()
+bool SectorEditor::StartSpotLightPilot()
 {
     if (state.mode != SectorEditorMode::Preview3D || state.previewControlMode != SectorPreviewControlMode::FreeFly) {
         statusText = "Spotlight pilot requires 3D FreeFly mode";
         return false;
     }
 
-    const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight();
-    if (light == nullptr) {
-        statusText = "Select a dynamic spotlight to pilot";
+    int lightId = -1;
+    SpotLightPilotKind pilotKind = SpotLightPilotKind::None;
+    Vector3 lightPosition = {};
+    Vector3 lightTarget = {};
+    float lightRange = 0.0f;
+    if (const SectorTopologyStaticSpotLight* light = SelectedTopologyStaticSpotLight()) {
+        lightId = light->id;
+        pilotKind = SpotLightPilotKind::Static;
+        lightPosition = light->position;
+        lightTarget = light->target;
+        lightRange = light->range;
+    } else if (const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight()) {
+        lightId = light->id;
+        pilotKind = SpotLightPilotKind::Dynamic;
+        lightPosition = light->position;
+        lightTarget = light->target;
+        lightRange = light->range;
+    } else {
+        statusText = "Select a spotlight to pilot";
         return false;
     }
 
-    const Vector3 originWorld = SectorAuthoringToWorldPosition(light->position);
-    const Vector3 targetWorld = SectorAuthoringToWorldPosition(light->target);
+    const Vector3 originWorld = SectorAuthoringToWorldPosition(lightPosition);
+    const Vector3 targetWorld = SectorAuthoringToWorldPosition(lightTarget);
     float targetDistanceWorld = Vector3Distance(originWorld, targetWorld);
     if (!std::isfinite(targetDistanceWorld) || targetDistanceWorld <= 0.01f) {
-        targetDistanceWorld = std::max(SectorAuthoringToWorldDistance(light->range) * 0.5f, 4.0f);
+        targetDistanceWorld = std::max(SectorAuthoringToWorldDistance(lightRange) * 0.5f, 4.0f);
     }
 
-    state.dynamicSpotLightPilot.active = true;
-    state.dynamicSpotLightPilot.lightId = light->id;
-    state.dynamicSpotLightPilot.originalPosition = light->position;
-    state.dynamicSpotLightPilot.originalTarget = light->target;
-    state.dynamicSpotLightPilot.originalPreviewPose = ActivePreviewPose();
-    state.dynamicSpotLightPilot.originalMouseLookEnabled = state.freeflyController.mouseLookEnabled;
-    state.dynamicSpotLightPilot.targetDistanceWorld = targetDistanceWorld;
+    state.spotLightPilot.active = true;
+    state.spotLightPilot.kind = pilotKind;
+    state.spotLightPilot.lightId = lightId;
+    state.spotLightPilot.originalPosition = lightPosition;
+    state.spotLightPilot.originalTarget = lightTarget;
+    state.spotLightPilot.originalPreviewPose = ActivePreviewPose();
+    state.spotLightPilot.originalMouseLookEnabled = state.freeflyController.mouseLookEnabled;
+    state.spotLightPilot.targetDistanceWorld = targetDistanceWorld;
 
     const SectorViewPose pilotPose = PreviewPoseLookingAt(originWorld, targetWorld);
     ResetSectorFreeflyController(state.freeflyController, pilotPose);
     EnterSectorFreeflyController(state.freeflyController);
     preview.ApplyRendererPose(state.freeflyController.pose);
     state.hoveredSurface3D = SectorSurfaceHit{};
-    statusText = TextFormat("Piloting dynamic spot %d", light->id);
+    statusText = pilotKind == SpotLightPilotKind::Static
+            ? TextFormat("Piloting static spot %d", lightId)
+            : TextFormat("Piloting dynamic spot %d", lightId);
     return true;
 }
 
-bool SectorEditor::ApplyDynamicSpotLightPilot()
+bool SectorEditor::ApplySpotLightPilot()
 {
-    if (!state.dynamicSpotLightPilot.active) {
+    if (!state.spotLightPilot.active) {
         return false;
     }
 
-    SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(
-            state.topologyMap,
-            state.dynamicSpotLightPilot.lightId);
-    if (light == nullptr) {
-        CancelDynamicSpotLightPilot("Spotlight pilot cancelled: light missing");
+    const SpotLightPilotState pilot = state.spotLightPilot;
+    SectorTopologyStaticSpotLight* staticLight = pilot.kind == SpotLightPilotKind::Static
+            ? FindSectorTopologyStaticSpotLight(state.topologyMap, pilot.lightId)
+            : nullptr;
+    SectorTopologyDynamicSpotLight* dynamicLight = pilot.kind == SpotLightPilotKind::Dynamic
+            ? FindSectorTopologyDynamicSpotLight(state.topologyMap, pilot.lightId)
+            : nullptr;
+    if (staticLight == nullptr && dynamicLight == nullptr) {
+        CancelSpotLightPilot("Spotlight pilot cancelled: light missing");
         return false;
     }
 
-    const int lightId = light->id;
+    const int lightId = staticLight != nullptr ? staticLight->id : dynamicLight->id;
     const SectorViewPose pose = ActivePreviewPose();
     const Vector3 forward = PreviewForwardFromPose(pose);
     const Vector3 targetWorld = Vector3Add(
             pose.position,
-            Vector3Scale(forward, state.dynamicSpotLightPilot.targetDistanceWorld));
-    light->position = SectorWorldToAuthoringPosition(pose.position);
-    light->target = SectorWorldToAuthoringPosition(targetWorld);
-    state.dynamicSpotLightPilot = DynamicSpotLightPilotState{};
-    MarkTopologyDocumentEdited(TextFormat("Piloted dynamic spot %d", lightId));
-    preview.RefreshDynamicLightSources(state.topologyMap);
-    statusText = TextFormat("Applied dynamic spot %d pilot pose", lightId);
+            Vector3Scale(forward, pilot.targetDistanceWorld));
+    if (staticLight != nullptr) {
+        staticLight->position = SectorWorldToAuthoringPosition(pose.position);
+        staticLight->target = SectorWorldToAuthoringPosition(targetWorld);
+    } else {
+        dynamicLight->position = SectorWorldToAuthoringPosition(pose.position);
+        dynamicLight->target = SectorWorldToAuthoringPosition(targetWorld);
+    }
+    state.spotLightPilot = SpotLightPilotState{};
+    MarkTopologyDocumentEdited(staticLight != nullptr
+            ? TextFormat("Piloted static spot %d", lightId)
+            : TextFormat("Piloted dynamic spot %d", lightId));
+    if (dynamicLight != nullptr) {
+        preview.RefreshDynamicLightSources(state.topologyMap);
+    }
+    statusText = staticLight != nullptr
+            ? TextFormat("Applied static spot %d pilot pose", lightId)
+            : TextFormat("Applied dynamic spot %d pilot pose", lightId);
     return true;
 }
 
-void SectorEditor::CancelDynamicSpotLightPilot(const char* message)
+void SectorEditor::CancelSpotLightPilot(const char* message)
 {
-    if (!state.dynamicSpotLightPilot.active) {
+    if (!state.spotLightPilot.active) {
         return;
     }
 
-    const DynamicSpotLightPilotState pilot = state.dynamicSpotLightPilot;
-    state.dynamicSpotLightPilot = DynamicSpotLightPilotState{};
-    if (SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(state.topologyMap, pilot.lightId)) {
+    const SpotLightPilotState pilot = state.spotLightPilot;
+    state.spotLightPilot = SpotLightPilotState{};
+    if (pilot.kind == SpotLightPilotKind::Static) {
+        if (SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(state.topologyMap, pilot.lightId)) {
+            light->position = pilot.originalPosition;
+            light->target = pilot.originalTarget;
+        }
+    } else if (SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(state.topologyMap, pilot.lightId)) {
         light->position = pilot.originalPosition;
         light->target = pilot.originalTarget;
     }
@@ -8139,6 +8358,25 @@ int SectorEditor::FindTopologyLightNearScreenPoint(Vector2 screenPoint) const
     return bestId;
 }
 
+int SectorEditor::FindTopologyStaticSpotLightNearScreenPoint(Vector2 screenPoint) const
+{
+    float bestDistance2 = ScreenLightPickPixels * ScreenLightPickPixels;
+    int bestId = -1;
+    for (const SectorTopologyStaticSpotLight& light : state.topologyMap.staticSpotLights) {
+        const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
+        const float dx = center.x - screenPoint.x;
+        const float dy = center.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 < bestDistance2 - 0.001f
+                || (std::fabs(distance2 - bestDistance2) <= 0.001f
+                        && (bestId < 0 || light.id < bestId))) {
+            bestDistance2 = distance2;
+            bestId = light.id;
+        }
+    }
+    return bestId;
+}
+
 int SectorEditor::FindTopologyDynamicLightNearScreenPoint(Vector2 screenPoint) const
 {
     float bestDistance2 = ScreenLightPickPixels * ScreenLightPickPixels;
@@ -8381,13 +8619,14 @@ void SectorEditor::SelectTopologySector(int sectorId)
         return;
     }
 
-    CancelDynamicSpotLightPilot(nullptr);
+    CancelSpotLightPilot(nullptr);
     state.topologySelectionKind = TopologySelectionKind::Sector;
     state.selectedTopologySectorId = sectorId;
     state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
     state.selectedTopologyLightId = -1;
+    state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
@@ -8419,13 +8658,14 @@ void SectorEditor::SelectTopologyVertex(int vertexId)
         return;
     }
 
-    CancelDynamicSpotLightPilot(nullptr);
+    CancelSpotLightPilot(nullptr);
     state.topologySelectionKind = TopologySelectionKind::Vertex;
     state.selectedTopologySectorId = -1;
     state.selectedTopologyVertexId = vertex->id;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
     state.selectedTopologyLightId = -1;
+    state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
@@ -8453,13 +8693,14 @@ void SectorEditor::SelectTopologySideDef(int sideDefId, TopologyWallPart wallPar
         return;
     }
 
-    CancelDynamicSpotLightPilot(nullptr);
+    CancelSpotLightPilot(nullptr);
     state.topologySelectionKind = TopologySelectionKind::SideDef;
     state.selectedTopologySectorId = -1;
     state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = sideDef->id;
     state.selectedTopologyLineDefId = lineDef->id;
     state.selectedTopologyLightId = -1;
+    state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
     state.selectedTopologySideKind = sideDef->side;
@@ -8491,13 +8732,14 @@ void SectorEditor::SelectTopologyLineDef(
         return;
     }
 
-    CancelDynamicSpotLightPilot(nullptr);
+    CancelSpotLightPilot(nullptr);
     state.topologySelectionKind = TopologySelectionKind::LineDef;
     state.selectedTopologySectorId = -1;
     state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = lineDefId;
     state.selectedTopologyLightId = -1;
+    state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
     state.selectedTopologySideKind = side;
@@ -8525,11 +8767,58 @@ void SectorEditor::SelectTopologyLight(int topologyLightId)
         return;
     }
 
-    CancelDynamicSpotLightPilot(nullptr);
+    CancelSpotLightPilot(nullptr);
     state.selectedTopologyLightId = topologyLightId;
+    state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
     state.topologySelectionKind = TopologySelectionKind::StaticLight;
+    state.selectedTopologySectorId = -1;
+    state.selectedTopologyVertexId = -1;
+    state.selectedTopologySideDefId = -1;
+    state.selectedTopologyLineDefId = -1;
+    state.selectedTopologySideKind = SectorTopologySideKind::Front;
+    state.inspectedTopologyVertexId = -1;
+    state.selectedSurface3D = SectorSurfaceRef{};
+    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    ClearSectorEditorAuthoringSelection(state);
+    ResetSurface3DUiState();
+    uiState.inspectorScroll.offset = Vector2{};
+    uiState.lightXInput = engine::UIFloatInputState{};
+    uiState.lightYInput = engine::UIFloatInputState{};
+    uiState.lightZInput = engine::UIFloatInputState{};
+    uiState.lightTargetXInput = engine::UIFloatInputState{};
+    uiState.lightTargetYInput = engine::UIFloatInputState{};
+    uiState.lightTargetZInput = engine::UIFloatInputState{};
+    uiState.lightIntensityInput = engine::UIFloatInputState{};
+    uiState.lightRadiusInput = engine::UIFloatInputState{};
+    uiState.lightInnerConeInput = engine::UIFloatInputState{};
+    uiState.lightOuterConeInput = engine::UIFloatInputState{};
+    uiState.lightSourceRadiusInput = engine::UIFloatInputState{};
+    uiState.lightRedInput = engine::UIIntInputState{};
+    uiState.lightGreenInput = engine::UIIntInputState{};
+    uiState.lightBlueInput = engine::UIIntInputState{};
+    SyncSelectedLightIdBuffer();
+    SyncSelectedSectorIdBuffer();
+}
+
+void SectorEditor::SelectTopologyStaticSpotLight(int topologyLightId)
+{
+    if (FindSectorTopologyStaticSpotLight(state.topologyMap, topologyLightId) == nullptr) {
+        ClearSelection();
+        return;
+    }
+
+    if (state.spotLightPilot.active
+            && (state.spotLightPilot.kind != SpotLightPilotKind::Static
+                    || state.spotLightPilot.lightId != topologyLightId)) {
+        CancelSpotLightPilot(nullptr);
+    }
+    state.selectedTopologyStaticSpotLightId = topologyLightId;
+    state.selectedTopologyLightId = -1;
+    state.selectedTopologyDynamicLightId = -1;
+    state.selectedTopologyDynamicSpotLightId = -1;
+    state.topologySelectionKind = TopologySelectionKind::StaticSpotLight;
     state.selectedTopologySectorId = -1;
     state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
@@ -8566,9 +8855,10 @@ void SectorEditor::SelectTopologyDynamicLight(int topologyLightId)
         return;
     }
 
-    CancelDynamicSpotLightPilot(nullptr);
+    CancelSpotLightPilot(nullptr);
     state.selectedTopologyDynamicLightId = topologyLightId;
     state.selectedTopologyLightId = -1;
+    state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
     state.topologySelectionKind = TopologySelectionKind::DynamicLight;
     state.selectedTopologySectorId = -1;
@@ -8607,12 +8897,14 @@ void SectorEditor::SelectTopologyDynamicSpotLight(int topologyLightId)
         return;
     }
 
-    if (state.dynamicSpotLightPilot.active
-            && state.dynamicSpotLightPilot.lightId != topologyLightId) {
-        CancelDynamicSpotLightPilot(nullptr);
+    if (state.spotLightPilot.active
+            && (state.spotLightPilot.kind != SpotLightPilotKind::Dynamic
+                    || state.spotLightPilot.lightId != topologyLightId)) {
+        CancelSpotLightPilot(nullptr);
     }
     state.selectedTopologyDynamicSpotLightId = topologyLightId;
     state.selectedTopologyLightId = -1;
+    state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.topologySelectionKind = TopologySelectionKind::DynamicSpotLight;
     state.selectedTopologySectorId = -1;
@@ -8752,7 +9044,7 @@ void SectorEditor::ResetSurface3DUiState()
 
 void SectorEditor::ClearTopologySelectionOnly()
 {
-    CancelDynamicSpotLightPilot(nullptr);
+    CancelSpotLightPilot(nullptr);
     state.lightDrag = LightDragState{};
     state.topologySelectionKind = TopologySelectionKind::None;
     state.selectedTopologySectorId = -1;
@@ -8760,6 +9052,7 @@ void SectorEditor::ClearTopologySelectionOnly()
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
     state.selectedTopologyLightId = -1;
+    state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
@@ -8775,7 +9068,7 @@ void SectorEditor::ClearTopologySelectionOnly()
 
 void SectorEditor::ClearSelection()
 {
-    CancelDynamicSpotLightPilot(nullptr);
+    CancelSpotLightPilot(nullptr);
     state.authoringVertexDrag = AuthoringVertexDragState{};
     state.topologySelectionKind = TopologySelectionKind::None;
     state.selectedTopologySectorId = -1;
@@ -8783,6 +9076,7 @@ void SectorEditor::ClearSelection()
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
     state.selectedTopologyLightId = -1;
+    state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;

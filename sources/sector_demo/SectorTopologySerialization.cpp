@@ -834,6 +834,35 @@ Json WriteDynamicSpotLight(const SectorTopologyDynamicSpotLight& light, const st
     return lightJson;
 }
 
+Json WriteStaticSpotLight(const SectorTopologyStaticSpotLight& light, const std::string& context)
+{
+    RequireFinite(light.intensity, context + ".intensity");
+    RequireFinite(light.range, context + ".range");
+    RequireFinite(light.innerConeDegrees, context + ".innerConeDegrees");
+    RequireFinite(light.outerConeDegrees, context + ".outerConeDegrees");
+    RequireFinite(light.sourceRadius, context + ".sourceRadius");
+    const float innerConeDegrees = ClampDynamicSpotLightConeDegrees(light.innerConeDegrees);
+    const float outerConeDegrees = std::max(
+            ClampDynamicSpotLightConeDegrees(light.outerConeDegrees),
+            innerConeDegrees);
+    Json lightJson{
+            {"id", light.id},
+            {"position", WriteVector3(light.position, context + ".position")},
+            {"target", WriteVector3(light.target, context + ".target")},
+            {"range", light.range},
+            {"sourceRadius", light.sourceRadius},
+            {"intensity", light.intensity},
+            {"color", WriteColor(light.color)}
+    };
+    if (innerConeDegrees != 20.0f) {
+        lightJson["innerConeDegrees"] = innerConeDegrees;
+    }
+    if (outerConeDegrees != 35.0f) {
+        lightJson["outerConeDegrees"] = outerConeDegrees;
+    }
+    return lightJson;
+}
+
 Json WriteSkySettings(const SectorTopologySkySettings& settings)
 {
     const SectorTopologySkySettings normalized = NormalizeSectorTopologySkySettings(settings);
@@ -980,6 +1009,46 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             light.intensity = ReadFloat(value, "intensity", context);
             light.color = ReadColor(RequireField(value, "color", context), context + ".color");
             map.staticLights.push_back(light);
+        }
+    }
+
+    const auto staticSpotLightsIt = root.find("staticSpotLights");
+    if (staticSpotLightsIt != root.end()) {
+        if (!staticSpotLightsIt->is_array()) {
+            Fail("root.staticSpotLights must be an array");
+        }
+        const Json& staticSpotLights = *staticSpotLightsIt;
+        for (size_t i = 0; i < staticSpotLights.size(); ++i) {
+            const std::string context = "root.staticSpotLights[" + std::to_string(i) + "]";
+            const Json& value = staticSpotLights[i];
+            if (!value.is_object()) {
+                Fail(context + " must be an object");
+            }
+
+            SectorTopologyStaticSpotLight light;
+            light.id = ReadInt(value, "id", context);
+            light.position = ReadVector3(RequireField(value, "position", context), context + ".position");
+            light.target = ReadVector3(RequireField(value, "target", context), context + ".target");
+            light.range = ReadFloat(value, "range", context);
+            light.sourceRadius = ReadFloat(value, "sourceRadius", context);
+            light.intensity = ReadFloat(value, "intensity", context);
+            light.color = ReadColor(RequireField(value, "color", context), context + ".color");
+            light.innerConeDegrees = ReadOptionalClampedFloat(
+                    value,
+                    "innerConeDegrees",
+                    context,
+                    20.0f,
+                    0.0f,
+                    179.0f);
+            light.outerConeDegrees = ReadOptionalClampedFloat(
+                    value,
+                    "outerConeDegrees",
+                    context,
+                    35.0f,
+                    0.0f,
+                    179.0f);
+            light.outerConeDegrees = std::max(light.outerConeDegrees, light.innerConeDegrees);
+            map.staticSpotLights.push_back(light);
         }
     }
 
@@ -1209,6 +1278,7 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
 
     document.derivation.topology.texturesById = document.mapData.texturesById;
     document.derivation.topology.staticLights = document.mapData.staticLights;
+    document.derivation.topology.staticSpotLights = document.mapData.staticSpotLights;
     document.derivation.topology.dynamicPointLights = document.mapData.dynamicPointLights;
     document.derivation.topology.dynamicSpotLights = document.mapData.dynamicSpotLights;
     document.derivation.topology.previewSettings = document.mapData.previewSettings;
@@ -1282,6 +1352,12 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
         });
+    }
+
+    root["staticSpotLights"] = Json::array();
+    for (const SectorTopologyStaticSpotLight* light : SortedById(map.staticSpotLights)) {
+        const std::string context = "static spot light " + std::to_string(light->id);
+        root["staticSpotLights"].push_back(WriteStaticSpotLight(*light, context));
     }
 
     root["dynamicPointLights"] = Json::array();
@@ -1663,6 +1739,12 @@ Json SerializeMap(const SectorTopologyMap& map)
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
         });
+    }
+
+    root["staticSpotLights"] = Json::array();
+    for (const SectorTopologyStaticSpotLight* light : SortedById(map.staticSpotLights)) {
+        const std::string context = "static spot light " + std::to_string(light->id);
+        root["staticSpotLights"].push_back(WriteStaticSpotLight(*light, context));
     }
 
     root["dynamicPointLights"] = Json::array();

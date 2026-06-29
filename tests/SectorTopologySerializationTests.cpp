@@ -24,6 +24,7 @@ using game::SectorTopologySideKind;
 using game::SectorTopologyDynamicPointLight;
 using game::SectorTopologyDynamicSpotLight;
 using game::SectorTopologyStaticPointLight;
+using game::SectorTopologyStaticSpotLight;
 using game::SectorTopologyVertex;
 using Json = nlohmann::ordered_json;
 
@@ -248,6 +249,7 @@ game::SectorAuthoringDocument MakeAuthoringDocumentFromMap(const SectorTopologyM
     document.graph = game::ImportSectorTopologyMapToAuthoringGraph(map);
     document.mapData.texturesById = map.texturesById;
     document.mapData.staticLights = map.staticLights;
+    document.mapData.staticSpotLights = map.staticSpotLights;
     document.mapData.dynamicPointLights = map.dynamicPointLights;
     document.mapData.dynamicSpotLights = map.dynamicSpotLights;
     document.mapData.previewSettings = map.previewSettings;
@@ -434,6 +436,126 @@ void TestStaticLightRoundTrip()
     SectorTopologyMap oldStyle;
     Check(LoadText(withoutLights.dump(), oldStyle, error), "omitted staticLights field is accepted");
     Check(oldStyle.staticLights.empty(), "omitted staticLights field loads empty");
+}
+
+void TestStaticSpotLightRoundTrip()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.staticSpotLights.push_back(SectorTopologyStaticSpotLight{
+            17,
+            Vector3{2.5f, 18.0f, -4.25f},
+            Vector3{6.5f, 12.0f, -1.25f},
+            Color{255, 120, 64, 255},
+            3.0f,
+            24.0f,
+            15.0f,
+            42.0f,
+            1.25f
+    });
+    original.staticSpotLights.push_back(SectorTopologyStaticSpotLight{
+            9,
+            Vector3{-1.0f, 9.5f, 6.0f},
+            Vector3{-1.0f, 9.5f, 6.0f},
+            Color{40, 80, 200, 255},
+            0.5f,
+            12.0f,
+            20.0f,
+            35.0f,
+            0.0f
+    });
+
+    const std::string text = SaveText(original);
+    const Json saved = Json::parse(text);
+    Check(saved["staticSpotLights"].is_array(), "static spot light array is written");
+    Check(saved["staticSpotLights"][0]["id"].get<int>() == 9
+                  && saved["staticSpotLights"][1]["id"].get<int>() == 17,
+          "static spot lights serialize sorted by stable ID");
+    Check(!saved["staticSpotLights"][0].contains("innerConeDegrees")
+                  && !saved["staticSpotLights"][0].contains("outerConeDegrees"),
+          "default static spot light cone fields are omitted");
+    Check(Near(saved["staticSpotLights"][1]["innerConeDegrees"].get<float>(), 15.0f)
+                  && Near(saved["staticSpotLights"][1]["outerConeDegrees"].get<float>(), 42.0f),
+          "non-default static spot light cone fields are written");
+    Check(!saved["staticSpotLights"][0].contains("enabled")
+                  && !saved["staticSpotLights"][0].contains("flicker")
+                  && !saved["staticSpotLights"][0].contains("flickerSpeed")
+                  && !saved["staticSpotLights"][0].contains("flickerAmount"),
+          "static spot light does not write dynamic runtime fields");
+
+    SectorTopologyMap defaultMap = MakeSquare();
+    SectorTopologyStaticSpotLight defaultLight;
+    defaultLight.id = 21;
+    defaultMap.staticSpotLights.push_back(defaultLight);
+    const Json savedDefaults = Json::parse(SaveText(defaultMap));
+    Check(Near(savedDefaults["staticSpotLights"][0]["position"][1].get<float>(),
+               game::SectorWorldToAuthoringDistance(1.8f))
+                  && Near(savedDefaults["staticSpotLights"][0]["target"][0].get<float>(),
+                          game::SectorWorldToAuthoringDistance(4.0f))
+                  && Near(savedDefaults["staticSpotLights"][0]["target"][1].get<float>(),
+                          game::SectorWorldToAuthoringDistance(1.0f))
+                  && Near(savedDefaults["staticSpotLights"][0]["range"].get<float>(),
+                          game::SectorWorldToAuthoringDistance(8.0f))
+                  && Near(savedDefaults["staticSpotLights"][0]["sourceRadius"].get<float>(), 0.0f)
+                  && Near(savedDefaults["staticSpotLights"][0]["intensity"].get<float>(), 1.0f),
+          "default static spot light authoring position target range source radius and intensity are stable");
+    Check(!savedDefaults["staticSpotLights"][0].contains("innerConeDegrees")
+                  && !savedDefaults["staticSpotLights"][0].contains("outerConeDegrees"),
+          "default static spot light optional cone fields remain omitted");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "static spot light topology JSON loads");
+    Check(loaded.staticSpotLights.size() == 2, "static spot lights round-trip");
+    const SectorTopologyStaticSpotLight* light = game::FindSectorTopologyStaticSpotLight(loaded, 17);
+    Check(light != nullptr, "round-tripped static spot light can be found by stable ID");
+    if (light != nullptr) {
+        Check(Near(light->position, Vector3{2.5f, 18.0f, -4.25f})
+                      && Near(light->target, Vector3{6.5f, 12.0f, -1.25f}),
+              "round-tripped static spot light preserves position and target values");
+        Check(light->color.r == 255 && light->color.g == 120 && light->color.b == 64,
+              "round-tripped static spot light preserves color");
+        Check(Near(light->intensity, 3.0f)
+                      && Near(light->range, 24.0f)
+                      && Near(light->innerConeDegrees, 15.0f)
+                      && Near(light->outerConeDegrees, 42.0f)
+                      && Near(light->sourceRadius, 1.25f),
+              "round-tripped static spot light preserves numeric properties");
+    }
+    const SectorTopologyStaticSpotLight* coincident =
+            game::FindSectorTopologyStaticSpotLight(loaded, 9);
+    Check(coincident != nullptr && Near(coincident->position, coincident->target),
+          "round-tripped static spot light preserves coincident target");
+    Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(loaded)),
+          "topology with static spot lights validates");
+
+    Json withoutLights = saved;
+    withoutLights.erase("staticSpotLights");
+    SectorTopologyMap oldStyle;
+    Check(LoadText(withoutLights.dump(), oldStyle, error),
+          "omitted staticSpotLights field is accepted");
+    Check(oldStyle.staticSpotLights.empty(), "omitted staticSpotLights field loads empty");
+
+    Json clamped = saved;
+    clamped["staticSpotLights"][0]["innerConeDegrees"] = -20.0f;
+    clamped["staticSpotLights"][0]["outerConeDegrees"] = 240.0f;
+    Check(LoadText(clamped.dump(), loaded, error), "out-of-range static spot light cones load");
+    const SectorTopologyStaticSpotLight* clampedLight =
+            game::FindSectorTopologyStaticSpotLight(loaded, 9);
+    Check(clampedLight != nullptr
+                  && Near(clampedLight->innerConeDegrees, 0.0f)
+                  && Near(clampedLight->outerConeDegrees, 179.0f),
+          "out-of-range static spot light cones clamp on load");
+
+    Json widened = saved;
+    widened["staticSpotLights"][0]["innerConeDegrees"] = 80.0f;
+    widened["staticSpotLights"][0]["outerConeDegrees"] = 20.0f;
+    Check(LoadText(widened.dump(), loaded, error), "narrow outer static spot cone loads");
+    const SectorTopologyStaticSpotLight* widenedLight =
+            game::FindSectorTopologyStaticSpotLight(loaded, 9);
+    Check(widenedLight != nullptr
+                  && Near(widenedLight->innerConeDegrees, 80.0f)
+                  && Near(widenedLight->outerConeDegrees, 80.0f),
+          "outer static spot cone widens to inner cone on load");
 }
 
 void TestDynamicPointLightRoundTrip()
@@ -1669,6 +1791,60 @@ void TestStrictValuesAndValidation()
     ExpectRejected(changed, "invalid static light color channel is rejected");
 
     changed = valid;
+    changed["staticSpotLights"] = Json::array({
+            {
+                    {"id", 1},
+                    {"position", Json::array({1.0f, 2.0f, 3.0f})},
+                    {"target", Json::array({4.0f, 5.0f, 6.0f})},
+                    {"range", 8.0f},
+                    {"sourceRadius", 1.0f},
+                    {"intensity", 1.0f},
+                    {"color", {{"r", 255}, {"g", 220}, {"b", 180}, {"a", 255}}}
+            },
+            {
+                    {"id", 1},
+                    {"position", Json::array({7.0f, 8.0f, 9.0f})},
+                    {"target", Json::array({10.0f, 11.0f, 12.0f})},
+                    {"range", 8.0f},
+                    {"sourceRadius", 1.0f},
+                    {"intensity", 1.0f},
+                    {"color", {{"r", 255}, {"g", 220}, {"b", 180}, {"a", 255}}}
+            }
+    });
+    ExpectRejected(changed, "duplicate static spot light IDs are rejected");
+    changed["staticSpotLights"][1]["id"] = 2;
+    changed["staticSpotLights"][0].erase("position");
+    ExpectRejected(changed, "missing static spot light position is rejected");
+    changed = valid;
+    changed["staticSpotLights"] = Json::array({
+            {
+                    {"id", 1},
+                    {"position", Json::array({1.0f, 2.0f, 3.0f})},
+                    {"target", Json::array({4.0f, 5.0f, 6.0f})},
+                    {"range", 0.0f},
+                    {"sourceRadius", 0.0f},
+                    {"intensity", 1.0f},
+                    {"color", {{"r", 255}, {"g", 220}, {"b", 180}, {"a", 255}}}
+            }
+    });
+    ExpectRejected(changed, "non-positive static spot light range is rejected");
+    changed["staticSpotLights"][0]["range"] = 4.0f;
+    changed["staticSpotLights"][0]["sourceRadius"] = 5.0f;
+    ExpectRejected(changed, "oversized static spot light source radius is rejected");
+    changed["staticSpotLights"][0]["sourceRadius"] = 1.0f;
+    changed["staticSpotLights"][0]["intensity"] = -1.0f;
+    ExpectRejected(changed, "negative static spot light intensity is rejected");
+    changed["staticSpotLights"][0]["intensity"] = 1.0f;
+    changed["staticSpotLights"][0]["innerConeDegrees"] = "wide";
+    ExpectRejected(changed, "non-number static spot light inner cone is rejected");
+    changed["staticSpotLights"][0]["innerConeDegrees"] = 20.0f;
+    changed["staticSpotLights"][0]["outerConeDegrees"] = "wider";
+    ExpectRejected(changed, "non-number static spot light outer cone is rejected");
+    changed["staticSpotLights"][0]["outerConeDegrees"] = 35.0f;
+    changed["staticSpotLights"][0]["color"]["r"] = 300;
+    ExpectRejected(changed, "invalid static spot light color channel is rejected");
+
+    changed = valid;
     changed["dynamicPointLights"] = Json::array({
             {
                     {"id", 1},
@@ -1837,6 +2013,30 @@ void TestDeterministicOutput()
             1, Vector3{1.0f, 2.0f, 3.0f}, Color{10, 20, 30, 255}, 2.0f, 16.0f, 1.0f});
     second.staticLights = first.staticLights;
     std::reverse(second.staticLights.begin(), second.staticLights.end());
+    first.staticSpotLights.push_back(SectorTopologyStaticSpotLight{
+            6,
+            Vector3{1.0f, 2.0f, 3.0f},
+            Vector3{4.0f, 5.0f, 6.0f},
+            WHITE,
+            1.0f,
+            16.0f,
+            20.0f,
+            35.0f,
+            0.0f
+    });
+    first.staticSpotLights.push_back(SectorTopologyStaticSpotLight{
+            3,
+            Vector3{7.0f, 8.0f, 9.0f},
+            Vector3{10.0f, 11.0f, 12.0f},
+            WHITE,
+            2.0f,
+            24.0f,
+            15.0f,
+            45.0f,
+            1.0f
+    });
+    second.staticSpotLights = first.staticSpotLights;
+    std::reverse(second.staticSpotLights.begin(), second.staticSpotLights.end());
     first.dynamicPointLights.push_back(SectorTopologyDynamicPointLight{
             3, Vector3{3.0f, 4.0f, 5.0f}, WHITE, 1.0f, 8.0f, true});
     first.dynamicPointLights.push_back(SectorTopologyDynamicPointLight{
@@ -1918,6 +2118,46 @@ void TestDynamicPointLightHelpers()
           "topology dynamic light delete preserves remaining lights");
     Check(!game::RemoveSectorTopologyDynamicLight(map, 99),
           "topology dynamic light delete fails for unknown ID");
+}
+
+void TestStaticSpotLightHelpers()
+{
+    SectorTopologyMap map = MakeSquare();
+    Check(game::AllocateSectorTopologyStaticSpotLightId(map) == 1,
+          "first topology static spot light ID is 1");
+    map.staticSpotLights.push_back(SectorTopologyStaticSpotLight{
+            4,
+            Vector3{0.0f, 1.0f, 2.0f},
+            Vector3{1.0f, 2.0f, 3.0f},
+            WHITE,
+            1.0f,
+            8.0f,
+            20.0f,
+            35.0f,
+            0.0f
+    });
+    map.staticSpotLights.push_back(SectorTopologyStaticSpotLight{
+            2,
+            Vector3{3.0f, 4.0f, 5.0f},
+            Vector3{6.0f, 7.0f, 8.0f},
+            WHITE,
+            2.0f,
+            16.0f,
+            15.0f,
+            45.0f,
+            1.0f
+    });
+    Check(game::AllocateSectorTopologyStaticSpotLightId(map) == 5,
+          "topology static spot light allocation returns max plus one");
+    Check(game::FindSectorTopologyStaticSpotLight(map, 2) != nullptr,
+          "topology static spot light lookup finds existing ID");
+    Check(game::RemoveSectorTopologyStaticSpotLight(map, 2),
+          "topology static spot light delete succeeds for existing ID");
+    Check(game::FindSectorTopologyStaticSpotLight(map, 2) == nullptr
+                  && game::FindSectorTopologyStaticSpotLight(map, 4) != nullptr,
+          "topology static spot light delete preserves remaining lights");
+    Check(!game::RemoveSectorTopologyStaticSpotLight(map, 99),
+          "topology static spot light delete fails for unknown ID");
 }
 
 void TestDynamicSpotLightHelpers()
@@ -2140,6 +2380,17 @@ void TestGraphNativeMapLevelRoundTrip()
             32.0f,
             1.0f
     });
+    source.staticSpotLights.push_back(SectorTopologyStaticSpotLight{
+            12,
+            Vector3{2.0f, 3.0f, 4.0f},
+            Vector3{5.0f, 6.0f, 7.0f},
+            Color{40, 50, 60, 255},
+            1.75f,
+            40.0f,
+            16.0f,
+            38.0f,
+            0.75f
+    });
     source.dynamicPointLights.push_back(SectorTopologyDynamicPointLight{
             10,
             Vector3{4.0f, 5.0f, 6.0f},
@@ -2181,6 +2432,11 @@ void TestGraphNativeMapLevelRoundTrip()
     const Json saved = Json::parse(SaveAuthoringText(original));
     Check(saved["textures"].contains("sky"), "graph-native texture registry is persisted");
     Check(saved["staticLights"][0]["id"] == 9, "graph-native static lights are persisted");
+    Check(saved["staticSpotLights"][0]["id"] == 12
+                  && Near(saved["staticSpotLights"][0]["innerConeDegrees"].get<float>(), 16.0f)
+                  && Near(saved["staticSpotLights"][0]["outerConeDegrees"].get<float>(), 38.0f)
+                  && Near(saved["staticSpotLights"][0]["sourceRadius"].get<float>(), 0.75f),
+          "graph-native static spot lights are persisted");
     Check(saved["dynamicPointLights"][0]["id"] == 10,
           "graph-native dynamic point lights are persisted");
     Check(saved["dynamicPointLights"][0]["flicker"] == true
@@ -2213,6 +2469,11 @@ void TestGraphNativeMapLevelRoundTrip()
     Check(LoadAuthoringText(saved.dump(), loaded, error), "graph-native map-level data loads");
     Check(loaded.mapData.texturesById.count("sky") == 1
                   && loaded.mapData.staticLights.size() == 1
+                  && loaded.mapData.staticSpotLights.size() == 1
+                  && loaded.mapData.staticSpotLights[0].id == 12
+                  && Near(loaded.mapData.staticSpotLights[0].innerConeDegrees, 16.0f)
+                  && Near(loaded.mapData.staticSpotLights[0].outerConeDegrees, 38.0f)
+                  && Near(loaded.mapData.staticSpotLights[0].sourceRadius, 0.75f)
                   && loaded.mapData.dynamicPointLights.size() == 1
                   && loaded.mapData.dynamicPointLights[0].flicker
                   && Near(loaded.mapData.dynamicPointLights[0].flickerSpeed, 3.0f)
@@ -2235,6 +2496,8 @@ void TestGraphNativeMapLevelRoundTrip()
     Check(loaded.derivation.success
                   && loaded.derivation.topology.texturesById.count("sky") == 1
                   && loaded.derivation.topology.staticLights.size() == 1
+                  && loaded.derivation.topology.staticSpotLights.size() == 1
+                  && loaded.derivation.topology.staticSpotLights[0].id == 12
                   && loaded.derivation.topology.dynamicPointLights.size() == 1
                   && loaded.derivation.topology.dynamicPointLights[0].flicker
                   && Near(loaded.derivation.topology.dynamicPointLights[0].flickerSpeed, 3.0f)
@@ -2292,6 +2555,7 @@ int main()
     TestTextureFilterSerialization();
     TestCeilingSkySerialization();
     TestStaticLightRoundTrip();
+    TestStaticSpotLightRoundTrip();
     TestDynamicPointLightRoundTrip();
     TestDynamicSpotLightRoundTrip();
     TestLightmapMetadataRoundTrip();
@@ -2312,6 +2576,7 @@ int main()
     TestTransactionalFailures();
     TestDeterministicOutput();
     TestStaticLightHelpers();
+    TestStaticSpotLightHelpers();
     TestDynamicPointLightHelpers();
     TestDynamicSpotLightHelpers();
     TestIndependentFrontBackSidedefEdits();

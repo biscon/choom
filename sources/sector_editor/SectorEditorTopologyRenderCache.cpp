@@ -601,6 +601,18 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         cached.sourceRadiusPixelsAtZoomOne = SectorAuthoringToWorldDistance(light.sourceRadius);
         cache.staticLights.push_back(cached);
     }
+    cache.staticSpotLights.reserve(map.staticSpotLights.size());
+    for (const SectorTopologyStaticSpotLight& light : map.staticSpotLights) {
+        CachedTopologySpotLightDraw cached;
+        cached.lightId = light.id;
+        cached.origin = Vector2{light.position.x, light.position.z};
+        cached.target = Vector2{light.target.x, light.target.z};
+        cached.color = light.color;
+        cached.range = light.range;
+        cached.innerConeDegrees = light.innerConeDegrees;
+        cached.outerConeDegrees = light.outerConeDegrees;
+        cache.staticSpotLights.push_back(cached);
+    }
     cache.dynamicLights.reserve(map.dynamicPointLights.size());
     for (const SectorTopologyDynamicPointLight& light : map.dynamicPointLights) {
         CachedTopologyLightDraw cached;
@@ -993,6 +1005,100 @@ void DrawCachedTopologyDynamicLights(
         DrawLineEx(left, top, 2.0f, Color{20, 24, 32, 255});
         DrawLineEx(Vector2{center.x - 10.0f, center.y}, Vector2{center.x + 10.0f, center.y}, 2.0f, color);
         DrawLineEx(Vector2{center.x, center.y - 10.0f}, Vector2{center.x, center.y + 10.0f}, 2.0f, color);
+    }
+}
+
+void DrawCachedTopologyStaticSpotLights(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context)
+{
+    const Color outline = Color{20, 24, 32, 255};
+    for (const CachedTopologySpotLightDraw& light : cache.staticSpotLights) {
+        const Vector2 origin = CachedMapToScreen(context, light.origin);
+        const Vector2 target = CachedMapToScreen(context, light.target);
+        const bool selected = context.selectionKind == TopologySelectionKind::StaticSpotLight
+                && light.lightId == context.selectedStaticSpotLightId;
+        const bool hovered = light.lightId == context.hoveredStaticSpotLightId;
+        Color color = light.color;
+        color.a = selected ? 255 : hovered ? 235 : 205;
+
+        Vector2 direction{
+                light.target.x - light.origin.x,
+                light.target.y - light.origin.y
+        };
+        float directionLength = std::sqrt(direction.x * direction.x + direction.y * direction.y);
+        if (directionLength <= GeometryEpsilon) {
+            direction = Vector2{1.0f, 0.0f};
+            directionLength = 1.0f;
+        }
+        direction.x /= directionLength;
+        direction.y /= directionLength;
+
+        const float outerRadians = light.outerConeDegrees * 0.5f * DEG2RAD;
+        const float cosOuter = std::cos(outerRadians);
+        const float sinOuter = std::sin(outerRadians);
+        const Vector2 leftDir{
+                direction.x * cosOuter - direction.y * sinOuter,
+                direction.x * sinOuter + direction.y * cosOuter
+        };
+        const Vector2 rightDir{
+                direction.x * cosOuter + direction.y * sinOuter,
+                -direction.x * sinOuter + direction.y * cosOuter
+        };
+        const Vector2 leftMap{
+                light.origin.x + leftDir.x * light.range,
+                light.origin.y + leftDir.y * light.range
+        };
+        const Vector2 rightMap{
+                light.origin.x + rightDir.x * light.range,
+                light.origin.y + rightDir.y * light.range
+        };
+        const Vector2 left = CachedMapToScreen(context, leftMap);
+        const Vector2 right = CachedMapToScreen(context, rightMap);
+
+        const bool drawCone = selected || hovered || context.currentTool == SectorEditorTool::StaticSpotLight;
+        if (drawCone) {
+            DrawTriangle(origin, left, right, WithAlpha(color, selected ? 42 : 24));
+            DrawLineEx(origin, left, selected ? 2.5f : 1.5f, WithAlpha(color, selected ? 210 : 135));
+            DrawLineEx(origin, right, selected ? 2.5f : 1.5f, WithAlpha(color, selected ? 210 : 135));
+            DrawLineEx(left, right, selected ? 2.0f : 1.0f, WithAlpha(color, selected ? 150 : 90));
+
+            if (selected && light.innerConeDegrees > 0.0f
+                    && light.innerConeDegrees < light.outerConeDegrees - GeometryEpsilon) {
+                const float innerRadians = light.innerConeDegrees * 0.5f * DEG2RAD;
+                const float cosInner = std::cos(innerRadians);
+                const float sinInner = std::sin(innerRadians);
+                const Vector2 innerLeftMap{
+                        light.origin.x + (direction.x * cosInner - direction.y * sinInner) * light.range,
+                        light.origin.y + (direction.x * sinInner + direction.y * cosInner) * light.range
+                };
+                const Vector2 innerRightMap{
+                        light.origin.x + (direction.x * cosInner + direction.y * sinInner) * light.range,
+                        light.origin.y + (-direction.x * sinInner + direction.y * cosInner) * light.range
+                };
+                DrawLineEx(origin, CachedMapToScreen(context, innerLeftMap), 1.5f, WithAlpha(color, 150));
+                DrawLineEx(origin, CachedMapToScreen(context, innerRightMap), 1.5f, WithAlpha(color, 150));
+            }
+        }
+
+        DrawLineEx(origin, target, selected ? 3.0f : 2.0f, WithAlpha(color, selected ? 235 : 165));
+        const float originRadius = selected ? 8.5f : 7.0f;
+        const Vector2 markerTop{origin.x, origin.y - originRadius};
+        const Vector2 markerRight{origin.x + originRadius, origin.y};
+        const Vector2 markerBottom{origin.x, origin.y + originRadius};
+        const Vector2 markerLeft{origin.x - originRadius, origin.y};
+        DrawTriangle(markerTop, markerLeft, markerRight, color);
+        DrawTriangle(markerBottom, markerRight, markerLeft, color);
+        DrawLineEx(markerTop, markerRight, 2.0f, outline);
+        DrawLineEx(markerRight, markerBottom, 2.0f, outline);
+        DrawLineEx(markerBottom, markerLeft, 2.0f, outline);
+        DrawLineEx(markerLeft, markerTop, 2.0f, outline);
+        DrawCircleV(target, selected ? 5.5f : 4.5f, WithAlpha(color, selected ? 245 : 205));
+        DrawCircleLines(
+                static_cast<int>(std::round(target.x)),
+                static_cast<int>(std::round(target.y)),
+                selected ? 9.0f : 7.0f,
+                outline);
     }
 }
 

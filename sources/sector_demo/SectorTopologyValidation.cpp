@@ -592,6 +592,7 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
     ValidateIds(map.sideDefs, SectorTopologyObjectKind::SideDef, issues);
     ValidateIds(map.sectors, SectorTopologyObjectKind::Sector, issues);
     ValidateIds(map.staticLights, SectorTopologyObjectKind::StaticLight, issues);
+    ValidateIds(map.staticSpotLights, SectorTopologyObjectKind::StaticLight, issues);
     ValidateIds(map.dynamicPointLights, SectorTopologyObjectKind::DynamicLight, issues);
     ValidateIds(map.dynamicSpotLights, SectorTopologyObjectKind::DynamicLight, issues);
 
@@ -616,6 +617,54 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
         } else if (std::isfinite(light.radius) && light.sourceRadius > light.radius) {
             AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
                      "source radius must not exceed radius");
+        }
+    }
+
+    for (const SectorTopologyStaticSpotLight& light : map.staticSpotLights) {
+        if (!std::isfinite(light.position.x)
+                || !std::isfinite(light.position.y)
+                || !std::isfinite(light.position.z)) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "position values must be finite");
+        }
+        if (!std::isfinite(light.target.x)
+                || !std::isfinite(light.target.y)
+                || !std::isfinite(light.target.z)) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "target values must be finite");
+        }
+        if (!std::isfinite(light.intensity) || light.intensity < 0.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "intensity must be finite and non-negative");
+        }
+        if (!std::isfinite(light.range) || light.range <= 0.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "range must be finite and positive");
+        }
+        if (!std::isfinite(light.innerConeDegrees)
+                || light.innerConeDegrees < 0.0f
+                || light.innerConeDegrees > 179.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "inner cone degrees must be finite and between 0 and 179");
+        }
+        if (!std::isfinite(light.outerConeDegrees)
+                || light.outerConeDegrees < 0.0f
+                || light.outerConeDegrees > 179.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "outer cone degrees must be finite and between 0 and 179");
+        }
+        if (std::isfinite(light.innerConeDegrees)
+                && std::isfinite(light.outerConeDegrees)
+                && light.outerConeDegrees < light.innerConeDegrees) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "outer cone degrees must be greater than or equal to inner cone degrees");
+        }
+        if (!std::isfinite(light.sourceRadius) || light.sourceRadius < 0.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "source radius must be finite and non-negative");
+        } else if (std::isfinite(light.range) && light.sourceRadius > light.range) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "source radius must not exceed range");
         }
     }
 

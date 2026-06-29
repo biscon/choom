@@ -242,7 +242,11 @@ struct LightmapImageMetrics {
     double averageRgb = 0.0;
     unsigned char minAlpha = 255;
     int staticLightCount = 0;
+    int staticSpotLightCount = 0;
     long long directShadowRays = 0;
+    long long softShadowSourceRays = 0;
+    int ceilingCenterRgb = 0;
+    int floorCenterRgb = 0;
 };
 
 LightmapImageMetrics BakeAndMeasure(game::SectorTopologyMap map, const char* fileName)
@@ -250,6 +254,25 @@ LightmapImageMetrics BakeAndMeasure(game::SectorTopologyMap map, const char* fil
     game::SectorLightmapLayout layout;
     std::string error;
     Check(game::BuildSectorLightmapLayout(map, layout, error), "metric lightmap layout builds");
+    game::SectorGeneratedGeometry geometry;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "metric geometry builds");
+
+    int ceilingCenterPixel = -1;
+    int floorCenterPixel = -1;
+    for (const game::SectorLightmapChart& chart : layout.charts) {
+        if (chart.surfaceIndex < 0 || chart.surfaceIndex >= static_cast<int>(geometry.surfaces.size())) {
+            continue;
+        }
+        const game::SectorGeneratedSurface& surface = geometry.surfaces[static_cast<size_t>(chart.surfaceIndex)];
+        const int x = chart.usableX + chart.usableWidth / 2;
+        const int y = chart.usableY + chart.usableHeight / 2;
+        const int pixel = y * layout.atlasWidth + x;
+        if (surface.ref.topologySectorId == 10 && surface.ref.kind == game::SectorGeneratedSurfaceKind::Ceiling) {
+            ceilingCenterPixel = pixel;
+        } else if (surface.ref.topologySectorId == 10 && surface.ref.kind == game::SectorGeneratedSurfaceKind::Floor) {
+            floorCenterPixel = pixel;
+        }
+    }
 
     const std::filesystem::path path = std::filesystem::temp_directory_path() / fileName;
     game::SectorLightmapBakeResult result;
@@ -257,7 +280,9 @@ LightmapImageMetrics BakeAndMeasure(game::SectorTopologyMap map, const char* fil
           "metric lightmap bake succeeds");
     LightmapImageMetrics metrics;
     metrics.staticLightCount = result.staticLightCount;
+    metrics.staticSpotLightCount = result.staticSpotLightCount;
     metrics.directShadowRays = result.directShadowRays;
+    metrics.softShadowSourceRays = result.softShadowSourceRays;
 
     Image image = LoadImage(path.string().c_str());
     Check(image.data != nullptr, "metric lightmap image loads");
@@ -276,6 +301,14 @@ LightmapImageMetrics BakeAndMeasure(game::SectorTopologyMap map, const char* fil
             metrics.maxRgb = std::max(metrics.maxRgb, rgb);
             rgbSum += static_cast<uint64_t>(rgb);
             metrics.minAlpha = std::min(metrics.minAlpha, color.a);
+        }
+        if (ceilingCenterPixel >= 0 && ceilingCenterPixel < pixelCount) {
+            const Color color = colors[ceilingCenterPixel];
+            metrics.ceilingCenterRgb = static_cast<int>(color.r) + static_cast<int>(color.g) + static_cast<int>(color.b);
+        }
+        if (floorCenterPixel >= 0 && floorCenterPixel < pixelCount) {
+            const Color color = colors[floorCenterPixel];
+            metrics.floorCenterRgb = static_cast<int>(color.r) + static_cast<int>(color.g) + static_cast<int>(color.b);
         }
         metrics.averageRgb = static_cast<double>(rgbSum) / static_cast<double>(pixelCount);
         UnloadImageColors(colors);
@@ -316,11 +349,60 @@ void TestSourceHashChanges()
     changedLight.staticLights[0].radius += 1.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) != hash, "hash changes when light radius changes");
     changedLight = base;
+    changedLight.staticLights[0].sourceRadius += 1.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedLight) != hash, "hash changes when light source radius changes");
+    changedLight = base;
     changedLight.staticLights[0].intensity += 0.25f;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) != hash, "hash changes when light intensity changes");
     changedLight = base;
     changedLight.staticLights[0].color.r = 64;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) != hash, "hash changes when light color changes");
+
+    game::SectorTopologyMap changedStaticSpotLight = base;
+    changedStaticSpotLight.staticSpotLights.push_back(game::SectorTopologyStaticSpotLight{
+            3,
+            Vector3{16.0f, game::SectorWorldToAuthoringDistance(4.0f), 16.0f},
+            Vector3{48.0f, game::SectorWorldToAuthoringDistance(1.0f), 16.0f},
+            WHITE,
+            1.0f,
+            game::SectorWorldToAuthoringDistance(8.0f),
+            20.0f,
+            35.0f,
+            game::SectorWorldToAuthoringDistance(0.25f)
+    });
+    const std::string staticSpotHash = game::ComputeSectorLightmapSourceHash(changedStaticSpotLight);
+    Check(staticSpotHash != hash, "hash changes when static spot light is added");
+    changedStaticSpotLight.staticSpotLights.front().position.x += 1.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) != staticSpotHash,
+          "hash changes when static spot light position changes");
+    changedStaticSpotLight.staticSpotLights.front().position.x -= 1.0f;
+    changedStaticSpotLight.staticSpotLights.front().target.z += 1.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) != staticSpotHash,
+          "hash changes when static spot light target changes");
+    changedStaticSpotLight.staticSpotLights.front().target.z -= 1.0f;
+    changedStaticSpotLight.staticSpotLights.front().range += game::SectorWorldToAuthoringDistance(1.0f);
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) != staticSpotHash,
+          "hash changes when static spot light range changes");
+    changedStaticSpotLight.staticSpotLights.front().range -= game::SectorWorldToAuthoringDistance(1.0f);
+    changedStaticSpotLight.staticSpotLights.front().sourceRadius += game::SectorWorldToAuthoringDistance(0.25f);
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) != staticSpotHash,
+          "hash changes when static spot light source radius changes");
+    changedStaticSpotLight.staticSpotLights.front().sourceRadius -= game::SectorWorldToAuthoringDistance(0.25f);
+    changedStaticSpotLight.staticSpotLights.front().innerConeDegrees = 12.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) != staticSpotHash,
+          "hash changes when static spot light inner cone changes");
+    changedStaticSpotLight.staticSpotLights.front().innerConeDegrees = 20.0f;
+    changedStaticSpotLight.staticSpotLights.front().outerConeDegrees = 48.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) != staticSpotHash,
+          "hash changes when static spot light outer cone changes");
+    changedStaticSpotLight.staticSpotLights.front().outerConeDegrees = 35.0f;
+    changedStaticSpotLight.staticSpotLights.front().intensity += 0.25f;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) != staticSpotHash,
+          "hash changes when static spot light intensity changes");
+    changedStaticSpotLight.staticSpotLights.front().intensity -= 0.25f;
+    changedStaticSpotLight.staticSpotLights.front().color.r = 64;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) != staticSpotHash,
+          "hash changes when static spot light color changes");
 
     game::SectorTopologyMap changedDynamicLight = base;
     changedDynamicLight.dynamicPointLights.push_back(game::SectorTopologyDynamicPointLight{
@@ -462,6 +544,33 @@ void TestSourceHashStableWhenVectorsReordered()
     std::reverse(reordered.sideDefs.begin(), reordered.sideDefs.end());
     std::reverse(reordered.sectors.begin(), reordered.sectors.end());
     Check(game::ComputeSectorLightmapSourceHash(reordered) == hash, "hash is stable when topology vectors are reordered");
+
+    reordered.staticSpotLights.push_back(game::SectorTopologyStaticSpotLight{
+            7,
+            Vector3{16.0f, game::SectorWorldToAuthoringDistance(3.0f), 16.0f},
+            Vector3{32.0f, game::SectorWorldToAuthoringDistance(1.0f), 16.0f},
+            WHITE,
+            2.0f,
+            game::SectorWorldToAuthoringDistance(6.0f),
+            18.0f,
+            36.0f,
+            game::SectorWorldToAuthoringDistance(0.25f)
+    });
+    reordered.staticSpotLights.push_back(game::SectorTopologyStaticSpotLight{
+            3,
+            Vector3{48.0f, game::SectorWorldToAuthoringDistance(3.0f), 48.0f},
+            Vector3{32.0f, game::SectorWorldToAuthoringDistance(1.0f), 48.0f},
+            Color{255, 160, 96, 255},
+            1.5f,
+            game::SectorWorldToAuthoringDistance(5.0f),
+            12.0f,
+            30.0f,
+            0.0f
+    });
+    const std::string spotHash = game::ComputeSectorLightmapSourceHash(reordered);
+    std::reverse(reordered.staticSpotLights.begin(), reordered.staticSpotLights.end());
+    Check(game::ComputeSectorLightmapSourceHash(reordered) == spotHash,
+          "hash is stable when static spot light vector is reordered");
 }
 
 void TestLogicalSelfComparison()
@@ -652,9 +761,105 @@ void TestDirectionalLightBakeBehavior()
     const LightmapImageMetrics pointMetrics =
             BakeAndMeasure(pointLight, "sector_directional_point_light_lightmap_test.png");
     Check(pointMetrics.staticLightCount == static_cast<int>(pointLight.staticLights.size())
+                  && pointMetrics.staticSpotLightCount == 0
                   && pointMetrics.directShadowRays > 0,
           "point lights are still evaluated with directional settings present");
     Check(pointMetrics.minAlpha < 255, "ambient occlusion alpha behavior remains present");
+}
+
+game::SectorTopologyStaticSpotLight MakeStaticSpotlight(
+        Vector3 position,
+        Vector3 target,
+        float innerConeDegrees,
+        float outerConeDegrees,
+        float sourceRadius = 0.0f)
+{
+    return game::SectorTopologyStaticSpotLight{
+            100,
+            position,
+            target,
+            WHITE,
+            8.0f,
+            game::SectorWorldToAuthoringDistance(16.0f),
+            innerConeDegrees,
+            outerConeDegrees,
+            sourceRadius
+    };
+}
+
+void TestStaticSpotlightBakeBehavior()
+{
+    game::SectorTopologyMap baseline = MakeSquare();
+    baseline.staticLights.clear();
+    const LightmapImageMetrics baselineMetrics =
+            BakeAndMeasure(baseline, "sector_static_spotlight_baseline_lightmap_test.png");
+    Check(baselineMetrics.maxRgb == 0, "no-light baseline remains black before static spotlight bake");
+
+    game::SectorTopologyMap insideCone = baseline;
+    insideCone.staticSpotLights.push_back(MakeStaticSpotlight(
+            Vector3{2.0f, game::SectorWorldToAuthoringDistance(1.0f), 2.0f},
+            Vector3{2.0f, 24.0f, 2.0f},
+            20.0f,
+            35.0f,
+            game::SectorWorldToAuthoringDistance(0.2f)));
+    const LightmapImageMetrics insideMetrics =
+            BakeAndMeasure(insideCone, "sector_static_spotlight_inside_lightmap_test.png");
+    Check(insideMetrics.ceilingCenterRgb > baselineMetrics.ceilingCenterRgb + 100,
+          "sample inside static spotlight cone receives baked light");
+    Check(insideMetrics.staticLightCount == 1
+                  && insideMetrics.staticSpotLightCount == 1
+                  && insideMetrics.softShadowSourceRays > 0,
+          "static spotlight is counted and uses the soft source-radius shadow ray path");
+
+    game::SectorTopologyMap outsideCone = baseline;
+    outsideCone.staticSpotLights.push_back(MakeStaticSpotlight(
+            Vector3{2.0f, game::SectorWorldToAuthoringDistance(4.0f), 2.0f},
+            Vector3{2.0f, game::SectorWorldToAuthoringDistance(5.0f), 2.0f},
+            20.0f,
+            35.0f));
+    const LightmapImageMetrics outsideMetrics =
+            BakeAndMeasure(outsideCone, "sector_static_spotlight_outside_lightmap_test.png");
+    Check(outsideMetrics.ceilingCenterRgb == baselineMetrics.ceilingCenterRgb,
+          "sample outside static spotlight outer cone receives no baked light");
+
+    game::SectorTopologyMap partialCone = baseline;
+    partialCone.staticSpotLights.push_back(MakeStaticSpotlight(
+            Vector3{2.0f, game::SectorWorldToAuthoringDistance(1.0f), 2.0f},
+            Vector3{34.0f, 24.0f, 2.0f},
+            20.0f,
+            70.0f));
+    const LightmapImageMetrics partialMetrics =
+            BakeAndMeasure(partialCone, "sector_static_spotlight_partial_lightmap_test.png");
+    Check(partialMetrics.ceilingCenterRgb > outsideMetrics.ceilingCenterRgb,
+          "sample between static spotlight inner and outer cones receives partial baked light");
+    Check(partialMetrics.ceilingCenterRgb < insideMetrics.ceilingCenterRgb,
+          "partial static spotlight cone sample is dimmer than an inner-cone sample");
+
+    game::SectorTopologyMap degenerateTarget = baseline;
+    degenerateTarget.staticSpotLights.push_back(MakeStaticSpotlight(
+            Vector3{2.0f, game::SectorWorldToAuthoringDistance(1.0f), 2.0f},
+            Vector3{2.0f, game::SectorWorldToAuthoringDistance(1.0f), 2.0f},
+            20.0f,
+            35.0f));
+    const LightmapImageMetrics degenerateMetrics =
+            BakeAndMeasure(degenerateTarget, "sector_static_spotlight_degenerate_lightmap_test.png");
+    Check(degenerateMetrics.floorCenterRgb > baselineMetrics.floorCenterRgb,
+          "degenerate static spotlight target safely falls back to downward baked direction");
+
+    game::SectorTopologyMap occlusionRayPath = baseline;
+    occlusionRayPath.staticSpotLights.push_back(MakeStaticSpotlight(
+            Vector3{2.0f, game::SectorWorldToAuthoringDistance(1.0f), 0.5f},
+            Vector3{2.0f, 24.0f, 3.5f},
+            25.0f,
+            65.0f));
+
+    game::SectorTopologyMap occluded = MakePlatform();
+    occluded.staticLights.clear();
+    occluded.staticSpotLights = occlusionRayPath.staticSpotLights;
+    const LightmapImageMetrics occludedMetrics =
+            BakeAndMeasure(occluded, "sector_static_spotlight_occluded_lightmap_test.png");
+    Check(occludedMetrics.directShadowRays > 0,
+          "solid geometry is traversed by the static spotlight occlusion path");
 }
 
 } // namespace
@@ -668,6 +873,7 @@ int main()
     TestLayoutSmoke();
     TestMiddleSurfacesReceiveLightmapsWithoutOccluding();
     TestDirectionalLightBakeBehavior();
+    TestStaticSpotlightBakeBehavior();
 
     if (failures != 0) {
         std::fprintf(stderr, "%d sector topology lightmap test(s) failed\n", failures);

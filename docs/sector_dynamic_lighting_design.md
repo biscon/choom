@@ -7,8 +7,8 @@ current behavior.
 Implemented goal: forward-rendered runtime point and spot lights in the sector
 fragment shader. Dynamic lighting blends with the current sector ambient, baked
 lightmap direct lighting, baked AO, decals, and portal-culled sector drawing.
-Static baked spotlights, shadow maps, and dynamic-sector lighting are future
-work.
+Static baked spotlights are authored and baked separately from runtime dynamic
+lights. Shadow maps and dynamic-sector lighting are future work.
 
 ## Implemented First Pass Notes
 
@@ -16,9 +16,10 @@ work.
   from existing `staticLights`.
 - Authored dynamic spotlights are separate map-level runtime shader lights, also
   separate from existing `staticLights`.
-- Static point lights remain baked lightmap inputs. Dynamic point and spot lights
-  do not affect `ComputeSectorLightmapSourceHash()` and do not stale or
-  recompute baked lightmaps.
+- Static point lights and static spotlights remain baked lightmap inputs.
+  Dynamic point and spot lights do not affect
+  `ComputeSectorLightmapSourceHash()` and do not stale or recompute baked
+  lightmaps.
 - Dynamic point lights serialize under `dynamicPointLights`; missing fields load
   as an empty list, and default `enabled: true` is omitted on save.
 - Dynamic spotlights serialize under `dynamicSpotLights`; missing fields load as
@@ -34,8 +35,9 @@ work.
 - New dynamic spotlights default to white, intensity `1.0`, range `8.0` world
   units, inner cone `20` degrees, outer cone `35` degrees, and a target `4.0`
   world units forward in X at `1.0` world units high.
-- The renderer supports point lights and cone-filtered spotlights. There are no
-  static baked spotlights, cookies, shadow maps, PCF, or normal maps.
+- The runtime renderer supports point lights and cone-filtered dynamic
+  spotlights. Static spotlights are baked-only; there are no cookies, shadow
+  maps, PCF, or normal maps.
 - The sector shader evaluates up to `8` selected dynamic lights total using
   fixed-size uniform arrays shared by points and spots.
 - Selected dynamic lights are rebuilt from authored lights, visibility
@@ -276,6 +278,7 @@ Key files/functions:
 
 - `sources/sector_demo/SectorTopologyTypes.h`
   - `SectorTopologyStaticPointLight`
+  - `SectorTopologyStaticSpotLight`
 - `sources/sector_demo/SectorTopologySerialization.cpp`
   - `ReadMapLevelFields()`, `WriteMapLevelFields()`
 - `sources/sector_demo/SectorLightmap.cpp`
@@ -314,6 +317,22 @@ Lambert, occlusion, and optional soft-shadow source sampling.
 Static lights are included in `ComputeSectorLightmapSourceHash()` by sorted ID,
 world position, color, intensity, world radius, and clamped world source radius.
 They are bake-affecting data today.
+
+`SectorTopologyStaticSpotLight` is the baked spotlight counterpart. It stores a
+stable ID, position, target, color, intensity, range, source radius, and
+inner/outer cone angles. Defaults match dynamic spotlight authoring where
+practical: white, intensity `1.0`, range `8.0` world units, source radius `0.0`,
+inner cone `20` degrees, outer cone `35` degrees, and a target `4.0` world units
+forward in X at `1.0` world units high. Static spotlights serialize under root
+`staticSpotLights`; missing data loads as an empty list.
+
+Static spotlights are converted to world units for baking, evaluated with the
+same distance/Lambert/occlusion path as static point lights, and multiplied by
+smooth cone attenuation between the outer and inner cone. Degenerate targets
+fall back to a safe downward baked direction. The lightmap source hash includes
+static spotlights by sorted ID, world position, world target, color, intensity,
+world range, clamped world source radius, and cone angles. Static spotlights do
+not participate in runtime dynamic light selection or shader uniforms.
 
 Recommendation: keep existing `staticLights` as baked/static lights. Add a
 separate runtime dynamic light list/type for dynamic lighting. Reusing
@@ -577,6 +596,7 @@ lightmap source-hash logic.
 
 Runtime dynamic point lights and dynamic spotlights are excluded from
 `ComputeSectorLightmapSourceHash()` because they do not affect baked receiver
-layout, occlusion, or static lighting results. Existing `staticLights` remain
-bake lights and continue to affect the lightmap source hash. Static baked
-spotlights, if added in a later plan, should be treated as bake-affecting data.
+layout, occlusion, or static lighting results. Existing `staticLights` and
+`staticSpotLights` remain bake lights and continue to affect the lightmap source
+hash. Static baked spotlights are excluded from runtime dynamic light selection,
+shader uniforms, shadow maps, and volumetric effects.

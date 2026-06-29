@@ -107,6 +107,51 @@ SectorEditorAddDynamicLightResult AddDynamicLightToSector(
             TextFormat("Added dynamic light %d", lightId)};
 }
 
+SectorEditorAddStaticSpotLightResult AddStaticSpotLightToSector(
+        SectorTopologyMap& map,
+        int sectorId,
+        Vector2 mapPoint)
+{
+    const SectorTopologySector* sector = FindSectorTopologySector(map, sectorId);
+    if (sector == nullptr) {
+        return SectorEditorAddStaticSpotLightResult{
+                false,
+                -1,
+                "Static spot placement failed: click inside a sector"};
+    }
+
+    const int lightId = AllocateSectorTopologyStaticSpotLightId(map);
+    if (!IsValidSectorTopologyId(lightId)) {
+        return SectorEditorAddStaticSpotLightResult{
+                false,
+                -1,
+                "Static spot placement failed: no topology light IDs available"};
+    }
+
+    SectorTopologyStaticSpotLight light;
+    light.id = lightId;
+    light.position = Vector3{
+            mapPoint.x,
+            sector->floorZ + SectorWorldToAuthoringDistance(1.8f),
+            mapPoint.y};
+    light.target = Vector3{
+            mapPoint.x + SectorWorldToAuthoringDistance(4.0f),
+            sector->floorZ + SectorWorldToAuthoringDistance(1.0f),
+            mapPoint.y};
+    light.color = WHITE;
+    light.intensity = 1.0f;
+    light.range = SectorWorldToAuthoringDistance(8.0f);
+    light.sourceRadius = 0.0f;
+    light.innerConeDegrees = 20.0f;
+    light.outerConeDegrees = 35.0f;
+
+    map.staticSpotLights.push_back(light);
+    return SectorEditorAddStaticSpotLightResult{
+            true,
+            lightId,
+            TextFormat("Added static spot %d", lightId)};
+}
+
 SectorEditorAddDynamicSpotLightResult AddDynamicSpotLightToSector(
         SectorTopologyMap& map,
         int sectorId,
@@ -168,6 +213,21 @@ SectorEditorTopologyActionResult DeleteStaticLight(
     }
 
     return Changed(TextFormat("Deleted static light %d", lightId));
+}
+
+SectorEditorTopologyActionResult DeleteStaticSpotLight(
+        SectorTopologyMap& map,
+        int lightId)
+{
+    if (FindSectorTopologyStaticSpotLight(map, lightId) == nullptr) {
+        return Unchanged("Select a static spot to delete.");
+    }
+
+    if (!RemoveSectorTopologyStaticSpotLight(map, lightId)) {
+        return Unchanged("Failed to delete static spot.");
+    }
+
+    return Changed(TextFormat("Deleted static spot %d", lightId));
 }
 
 SectorEditorTopologyActionResult DeleteDynamicLight(

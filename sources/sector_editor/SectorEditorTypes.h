@@ -34,6 +34,7 @@ enum class SectorEditorTool {
     AuthoringInsertVertex,
     AuthoringMove,
     StaticLight,
+    StaticSpotLight,
     DynamicLight,
     DynamicSpotLight,
     Move
@@ -100,6 +101,7 @@ enum class TopologySelectionKind {
     SideDef,
     LineDef,
     StaticLight,
+    StaticSpotLight,
     DynamicLight,
     DynamicSpotLight
 };
@@ -323,6 +325,12 @@ enum class DynamicSpotLightHandle {
     Target
 };
 
+enum class SpotLightPilotKind {
+    None,
+    Static,
+    Dynamic
+};
+
 struct LightDragState {
     bool active = false;
     int topologyLightId = -1;
@@ -332,8 +340,9 @@ struct LightDragState {
     Vector3 snappedPosition = {};
 };
 
-struct DynamicSpotLightPilotState {
+struct SpotLightPilotState {
     bool active = false;
+    SpotLightPilotKind kind = SpotLightPilotKind::None;
     int lightId = -1;
     Vector3 originalPosition = {};
     Vector3 originalTarget = {};
@@ -434,6 +443,7 @@ struct SectorEditorTopologyRenderCache {
     std::vector<CachedTopologyLineDraw> lineDefs;
     std::vector<CachedTopologyVertexDraw> vertices;
     std::vector<CachedTopologyLightDraw> staticLights;
+    std::vector<CachedTopologySpotLightDraw> staticSpotLights;
     std::vector<CachedTopologyLightDraw> dynamicLights;
     std::vector<CachedTopologySpotLightDraw> dynamicSpotLights;
     std::vector<CachedAuthoringLineDraw> authoringLines;
@@ -474,9 +484,11 @@ struct SectorEditorState {
     TopologyWallPart selectedTopologyWallPart = TopologyWallPart::Wall;
     TopologyMaterialLayer activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
     int selectedTopologyLightId = -1;
+    int selectedTopologyStaticSpotLightId = -1;
     int selectedTopologyDynamicLightId = -1;
     int selectedTopologyDynamicSpotLightId = -1;
     int hoveredTopologyLightId = -1;
+    int hoveredTopologyStaticSpotLightId = -1;
     int hoveredTopologyDynamicLightId = -1;
     int hoveredTopologyDynamicSpotLightId = -1;
     bool hasHoveredVertex = false;
@@ -527,7 +539,7 @@ struct SectorEditorState {
     SectorFpsLandingDipState landingDipState;
     bool hasPreviewPose = false;
     SectorViewPose lastPreviewPose = {};
-    DynamicSpotLightPilotState dynamicSpotLightPilot;
+    SpotLightPilotState spotLightPilot;
     SectorSurfaceHit hoveredSurface3D;
     SectorSurfaceRef selectedSurface3D;
     TopologySurfaceEditTarget selectedTopologySurface3D;

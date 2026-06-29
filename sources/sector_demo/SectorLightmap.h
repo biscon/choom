@@ -56,6 +56,7 @@ struct SectorLightmapBakeResult {
     double bvhAverageTrianglesPerLeaf = 0.0;
     int bvhMaxTrianglesInLeaf = 0;
     int staticLightCount = 0;
+    int staticSpotLightCount = 0;
     long long directShadowRays = 0;
     long long softShadowSourceRays = 0;
     long long ambientOcclusionRays = 0;
@@ -111,9 +112,8 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 7: middle texture receiver surfaces allocate lightmap charts and
-// participate in stale-bake detection without casting baked occlusion.
-constexpr int kSectorLightmapBakeVersion = 7;
+// Version 8: static spotlights contribute baked direct lighting.
+constexpr int kSectorLightmapBakeVersion = 8;
 constexpr int kDirectSoftShadowSampleCount = 8;
 constexpr int kAmbientOcclusionSampleCount = 12;
 constexpr int kIndirectBounceSampleCount = 8;

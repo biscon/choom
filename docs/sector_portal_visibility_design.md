@@ -103,10 +103,11 @@ Lightmap data is topology-derived:
   - `BuildSectorLightmapLayout()` rebuilds generated geometry and assigns
     charts by generated surface index.
   - `BakeSectorLightmap()` bakes from generated geometry, static point lights,
-    directional light, AO, and indirect settings.
+    static spotlights, directional light, AO, and indirect settings.
   - `ComputeSectorLightmapSourceHash()` includes topology geometry, referenced
-    lightmap textures, side/sector material data, `ceilingSky`, static lights,
-    directional light, bake constants, and lightmap bake settings.
+    lightmap textures, side/sector material data, `ceilingSky`, static point
+    lights, static spotlights, directional light, bake constants, and lightmap
+    bake settings.
   - Sky visual settings are not in the source hash.
   - `GetSectorLightmapStatus()` compares `bakedLightmap.sourceHash` to the
     computed hash and verifies the atlas file exists.

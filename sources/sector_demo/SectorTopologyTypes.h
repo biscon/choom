@@ -124,6 +124,18 @@ struct SectorTopologyStaticPointLight {
     float sourceRadius = 0.0f;
 };
 
+struct SectorTopologyStaticSpotLight {
+    int id = -1;
+    Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
+    Vector3 target = {SectorWorldToAuthoringDistance(4.0f), SectorWorldToAuthoringDistance(1.0f), 0.0f};
+    Color color = WHITE;
+    float intensity = 1.0f;
+    float range = SectorWorldToAuthoringDistance(8.0f);
+    float innerConeDegrees = 20.0f;
+    float outerConeDegrees = 35.0f;
+    float sourceRadius = 0.0f;
+};
+
 struct SectorTopologyDynamicPointLight {
     int id = -1;
     Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};

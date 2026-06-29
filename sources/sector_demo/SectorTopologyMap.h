@@ -47,6 +47,7 @@ struct SectorTopologyMap {
     std::vector<SectorTopologySideDef> sideDefs;
     std::vector<SectorTopologySector> sectors;
     std::vector<SectorTopologyStaticPointLight> staticLights;
+    std::vector<SectorTopologyStaticSpotLight> staticSpotLights;
     std::vector<SectorTopologyDynamicPointLight> dynamicPointLights;
     std::vector<SectorTopologyDynamicSpotLight> dynamicSpotLights;
     SectorPreviewSettings previewSettings;
@@ -88,6 +89,7 @@ int AllocateSectorTopologyLineDefId(const SectorTopologyMap& map);
 int AllocateSectorTopologySideDefId(const SectorTopologyMap& map);
 int AllocateSectorTopologySectorId(const SectorTopologyMap& map);
 int AllocateSectorTopologyStaticLightId(const SectorTopologyMap& map);
+int AllocateSectorTopologyStaticSpotLightId(const SectorTopologyMap& map);
 int AllocateSectorTopologyDynamicLightId(const SectorTopologyMap& map);
 int AllocateSectorTopologyDynamicSpotLightId(const SectorTopologyMap& map);
 
@@ -107,6 +109,11 @@ const SectorTopologyStaticPointLight* FindSectorTopologyStaticLight(const Sector
 SectorTopologyStaticPointLight* FindSectorTopologyStaticLight(SectorTopologyMap& map, int id);
 
 bool RemoveSectorTopologyStaticLight(SectorTopologyMap& map, int id);
+
+const SectorTopologyStaticSpotLight* FindSectorTopologyStaticSpotLight(const SectorTopologyMap& map, int id);
+SectorTopologyStaticSpotLight* FindSectorTopologyStaticSpotLight(SectorTopologyMap& map, int id);
+
+bool RemoveSectorTopologyStaticSpotLight(SectorTopologyMap& map, int id);
 
 const SectorTopologyDynamicPointLight* FindSectorTopologyDynamicLight(const SectorTopologyMap& map, int id);
 SectorTopologyDynamicPointLight* FindSectorTopologyDynamicLight(SectorTopologyMap& map, int id);

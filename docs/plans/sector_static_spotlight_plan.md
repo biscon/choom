@@ -35,80 +35,80 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_01",
       "title": "Static Spotlight Data And Serialization",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01a",
       "title": "Add Static Spotlight Data Model And JSON Round Trip",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02",
       "title": "Static Spotlight Editor Authoring",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02a",
       "title": "Add Static Spotlight Tool And Inspector Fields",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02b",
       "title": "Reuse Spotlight Overlay And Pilot Mode For Static Spotlights",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03",
       "title": "Static Spotlight Lightmap Baking",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03a",
       "title": "Add Static Spotlight Source Hash And Bake Inputs",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03b",
       "title": "Evaluate Static Spotlight Direct Lighting In Baker",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04",
       "title": "Bake Preview And Debug Polish",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04a",
       "title": "Add Static Spotlight Bake Debug And Smoke Map Support",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05",
       "title": "Polish Tests Documentation And Completion",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05a",
       "title": "Tune Defaults Strengthen Tests Update Docs And Close Plan",
       "type": "pass",
       "parent": "phase_05",
-      "status": "Not Started"
+      "status": "Completed"
     }
   ]
 }
@@ -118,18 +118,18 @@ When an agent is asked to execute this plan, it must:
 
 | Phase / Pass                                                           | Status      | Date | Notes                                                                      |
 | ---------------------------------------------------------------------- | ----------- | ---- | -------------------------------------------------------------------------- |
-| Phase 1: Static Spotlight Data And Serialization                       | Not Started |      | Parent phase.                                                              |
-| Phase 1A: Add Static Spotlight Data Model And JSON Round Trip          | Not Started |      | First executable pass. Data/persistence only, no UI or bake behavior.      |
-| Phase 2: Static Spotlight Editor Authoring                             | Not Started |      | Parent phase.                                                              |
-| Phase 2A: Add Static Spotlight Tool And Inspector Fields               | Not Started |      | Add editor tool and inspector.                                             |
-| Phase 2B: Reuse Spotlight Overlay And Pilot Mode For Static Spotlights | Not Started |      | Static spotlights reuse dynamic spotlight aim/overlay workflow.            |
-| Phase 3: Static Spotlight Lightmap Baking                              | Not Started |      | Parent phase.                                                              |
-| Phase 3A: Add Static Spotlight Source Hash And Bake Inputs             | Not Started |      | Static spotlights become bake-affecting inputs.                            |
-| Phase 3B: Evaluate Static Spotlight Direct Lighting In Baker           | Not Started |      | Cone attenuation plus existing bake occlusion/shadow path where practical. |
-| Phase 4: Bake Preview And Debug Polish                                 | Not Started |      | Parent phase.                                                              |
-| Phase 4A: Add Static Spotlight Bake Debug And Smoke Map Support        | Not Started |      | Debug/readability pass.                                                    |
-| Phase 5: Polish Tests Documentation And Completion                     | Not Started |      | Parent phase.                                                              |
-| Phase 5A: Tune Defaults Strengthen Tests Update Docs And Close Plan    | Not Started |      | Final cleanup.                                                             |
+| Phase 1: Static Spotlight Data And Serialization                       | Completed   | 2026-06-30 | Completed with Phase 1A.                                                   |
+| Phase 1A: Add Static Spotlight Data Model And JSON Round Trip          | Completed   | 2026-06-30 | Added `SectorTopologyStaticSpotLight`, `staticSpotLights` JSON round trip, validation, helpers, and serialization coverage. Serialized fields: `id`, `position`, `target`, `range`, `sourceRadius`, `intensity`, `color`, optional `innerConeDegrees`, optional `outerConeDegrees`. Defaults: position y 1.8m in authoring units, target 4m forward/1m high in authoring units, range 8m in authoring units, source radius 0, intensity 1, inner cone 20, outer cone 35, white color. Load clamps cone values to 0..179 and widens outer cone to at least inner cone; validation rejects non-finite values, non-positive range, negative intensity/source radius, and source radius greater than range. Behavior notes: editor UI, renderer, bake contribution, and lightmap source hash behavior unchanged. Verification passed: `cmake --build cmake-build-debug -j2`, `./cmake-build-debug/sector_topology_serialization_tests`, `ctest --test-dir cmake-build-debug --output-on-failure`. |
+| Phase 2: Static Spotlight Editor Authoring                             | Completed   | 2026-06-30 | Completed with Phase 2A and Phase 2B.                                      |
+| Phase 2A: Add Static Spotlight Tool And Inspector Fields               | Completed   | 2026-06-30 | Added `Static Spot` map-object tool, static spotlight creation, separate selection/delete path, simple 2D origin marker/picking, and inspector fields for position, target, radius, source radius, inner/outer cone degrees, intensity, and RGB color. Inspector edits use `MarkTopologyDocumentEdited()`, so document dirty state and 2D topology render-cache invalidation follow existing light edit behavior. Static point light, dynamic point light, dynamic spotlight, runtime rendering, lightmap bake contribution, and lightmap source hash behavior are intended unchanged. Manual GUI smoke not performed. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`, `git diff --check`. |
+| Phase 2B: Reuse Spotlight Overlay And Pilot Mode For Static Spotlights | Completed   | 2026-06-30 | Static spotlights now use the spotlight 2D overlay with origin marker, target marker, origin-target line, outer cone wedge, and selected inner cone lines. The 3D preview overlay supports selected static and dynamic spotlights through the same cone visualization path. Pilot mode now supports selected static spotlights: start moves the camera to the authored position/target, Apply writes authored position/target and calls `MarkTopologyDocumentEdited()`, and Cancel restores the original authored transform and camera state. Dynamic spotlight pilot behavior remains intended unchanged, and point lights still cannot enter spotlight pilot mode. Runtime rendering, lightmap bake contribution, and lightmap source hash behavior are unchanged. Manual GUI smoke not performed. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`, `git diff --check`, `git diff --stat`, `git status --short`. |
+| Phase 3: Static Spotlight Lightmap Baking                              | Completed   | 2026-06-30 | Completed with Phase 3A and Phase 3B.                                      |
+| Phase 3A: Add Static Spotlight Source Hash And Bake Inputs             | Completed   | 2026-06-30 | Added world-space static spotlight bake input conversion and source-hash inclusion sorted by stable ID. Hashed fields: `id`, world `position`, world `target`, `color`, `intensity`, world `range`, clamped world `sourceRadius`, `innerConeDegrees`, and `outerConeDegrees`. Static spotlight edits now make existing baked lightmaps stale; maps without static spotlights keep the previous no-static-spot hash path. Direct lighting evaluation, bake output pixels, static point lights, directional lighting, AO, bounce lighting, dynamic lights, runtime shaders, editor behavior, and topology cache invalidation are intended unchanged. Manual bake smoke not performed. Verification passed: `cmake --build cmake-build-debug -j2`, `./cmake-build-debug/sector_topology_lightmap_tests`, `ctest --test-dir cmake-build-debug --output-on-failure`, `git diff --check`, `git diff --stat`, `git status --short`. |
+| Phase 3B: Evaluate Static Spotlight Direct Lighting In Baker           | Completed   | 2026-06-30 | Static spotlights now contribute baked direct light using existing point-light distance falloff and Lambert term multiplied by dynamic-spotlight-style cone attenuation: `smoothstep(outerConeCos, innerConeCos, dot(normalize(target - position), normalize(samplePosition - position)))`. Existing hard and source-radius soft occlusion ray paths are reused; degenerate targets safely fall back to a downward direction. Bake version bumped to 8 so existing baked outputs are treated stale under the new static-spotlight bake behavior. Static point lights, directional lighting, AO, indirect bounce, dynamic runtime lights/shaders, editor behavior, topology cache invalidation, and serialization behavior are intended unchanged. Manual bake smoke not performed. Verification passed: `cmake --build cmake-build-debug -j2`, `./cmake-build-debug/sector_topology_lightmap_tests`, `ctest --test-dir cmake-build-debug --output-on-failure`, `git diff --check`, `git diff --stat`, `git status --short`. |
+| Phase 4: Bake Preview And Debug Polish                                 | Completed   | 2026-06-30 | Completed with Phase 4A.                                                   |
+| Phase 4A: Add Static Spotlight Bake Debug And Smoke Map Support        | Completed   | 2026-06-30 | Static spotlight bake/debug readability improved: bake reports now show static light totals split into point and spot counts, selected static spotlights use a distinct cyan/teal 3D overlay palette, and 2D static spotlight origins use a diamond marker while dynamic spotlights keep their existing circular marker. No smoke map asset was added because the project plan did not identify an existing expected smoke-map location and Phase 4A made the map optional. Bake math, serialization, source-hash inputs, dynamic runtime light selection/shader uniforms, static point lights, dynamic point lights, dynamic spotlights, and topology mutation/cache invalidation behavior are intended unchanged. Manual GUI/bake smoke not performed. Verification passed: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`, `git diff --check`, `git diff --stat`, `git status --short`. |
+| Phase 5: Polish Tests Documentation And Completion                     | Completed   | 2026-06-30 | Completed with Phase 5A.                                                   |
+| Phase 5A: Tune Defaults Strengthen Tests Update Docs And Close Plan    | Completed   | 2026-06-30 | Final cleanup completed: kept current defaults unchanged (range 8m, source radius 0, target 4m forward/1m high, inner cone 20 degrees, outer cone 35 degrees), strengthened lightmap tests for static point source-radius hashing plus static spotlight result counting/soft source-radius rays, and updated docs to describe static baked spotlights as bake-only lights separate from runtime dynamic spotlights. Source hash behavior is documented as including sorted static spotlight ID, world position/target, color, intensity, world range, clamped world source radius, and cone angles while excluding dynamic lights and visual-only settings. Bake behavior is documented as distance/Lambert/occlusion plus smooth cone attenuation with degenerate targets falling back safely downward. Runtime dynamic shader/uniform behavior, dynamic point/spot behavior, static point behavior, shadow-map scope, volumetric scope, topology mutation behavior, and 2D topology render-cache invalidation behavior are intended unchanged. Manual GUI/bake smoke not performed. Verification passed: `cmake --build cmake-build-debug -j2`, `./cmake-build-debug/sector_topology_lightmap_tests`, `./cmake-build-debug/sector_topology_serialization_tests`, `ctest --test-dir cmake-build-debug --output-on-failure`. |
 
 ## Execution Tracking Rules
 
@@ -866,6 +866,9 @@ Manual smoke checklist:
 * portal culling still works
 
 ## Deferred Decisions For Later Plans
+
+Final completion note, 2026-06-30: all planned static baked spotlight phases are
+marked complete. Remaining items below are intentionally deferred to later plans.
 
 These are intentionally out of scope:
 
