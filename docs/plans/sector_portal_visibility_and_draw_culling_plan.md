@@ -23,7 +23,7 @@ This plan assumes the completed authoring-graph transition:
       "id": "phase_01_sector_portal_visibility_graph",
       "title": "Build sector portal visibility graph and traversal",
       "type": "phase",
-      "status": "Planned",
+      "status": "Completed",
       "parent": null
     },
     {
