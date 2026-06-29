@@ -4787,6 +4787,29 @@ void SectorEditor::DrawSectorsPanel(
                     return MutateSectorEditorAuthoringFaceAnchorById(state, faceAnchorId, status, mutate);
                 };
 
+        bool isVoidFace = selectedAuthoringFaceAnchor->isVoid;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_authoring_face_void",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font,
+                    "Void Face",
+                    isVoidFace)) {
+            mutateFaceAnchor(
+                    "Updated authoring face void state",
+                    [isVoidFace](SectorAuthoringFaceAnchor& anchor) {
+                        if (anchor.isVoid == isVoidFace) {
+                            return false;
+                        }
+                        anchor.isVoid = isVoidFace;
+                        return true;
+                    });
+        }
+        y += rowH + gap;
+
         auto drawHeight = [&](const char* id, const char* label, float current, engine::UIFloatInputState& inputState, bool floorField) {
             const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                     ui,

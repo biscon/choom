@@ -114,6 +114,7 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorTextureActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
             sources/sector_demo/SectorFpsController.cpp
+            sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp

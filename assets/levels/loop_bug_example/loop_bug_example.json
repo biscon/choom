@@ -44,6 +44,21 @@
     "headBobStrength": 0.019999999552965164,
     "headBobFrequency": 2.0
   },
+  "directionalLight": {
+    "enabled": false,
+    "directionToLight": [
+      -0.38533732295036316,
+      0.8807710409164429,
+      -0.275240957736969
+    ],
+    "color": {
+      "r": 255,
+      "g": 244,
+      "b": 214,
+      "a": 255
+    },
+    "intensity": 1.0
+  },
   "authoringGraph": {
     "vertices": [
       {
@@ -755,7 +770,8 @@
               0.0
             ]
           }
-        }
+        },
+        "isVoid": true
       },
       {
         "id": 7,

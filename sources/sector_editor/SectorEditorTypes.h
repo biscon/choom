@@ -380,6 +380,7 @@ struct CachedAuthoringLineDraw {
 struct CachedAuthoringFaceHighlightDraw {
     int faceAnchorId = -1;
     int topologySectorId = -1;
+    bool isVoid = false;
     std::vector<CachedTopologyOutlineSegment> outlineSegments;
 };
 
