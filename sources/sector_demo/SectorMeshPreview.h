@@ -57,7 +57,10 @@ public:
     float RendererAssetProgress(engine::AssetManager& assets) const;
     const char* LightmapStatusText() const;
     const char* RendererLightmapStatusText() const;
-    void UpdateVisibilityDebug(int preferredStartSectorId = 0);
+    void UpdateVisibilityDebug(
+            int preferredStartSectorId = 0,
+            float visibilitySeedRadiusWorld = 0.0f,
+            bool validateEyeY = false);
     const RuntimePortalVisibilityResult& VisibilityResult() const { return visibilityResult; }
     const std::string& PortalVisibilityDebugText() const { return portalVisibilityDebugText; }
     const std::string& VisibilityDebugText() const { return visibilityDebugText; }

@@ -20,6 +20,7 @@
 #include "sector_demo/SectorFreeflyController.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorTopologySerialization.h"
@@ -1278,7 +1279,12 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
             }
             UpdateSectorEditorGameplayPreview(state, controllerInput, previousVisualEyeY, dt);
             ApplyGameplayPoseToPreview();
-            preview.UpdateVisibilityDebug(state.fpsControllerState.currentSectorId);
+            const SectorFpsControllerConfig normalizedVisibilityConfig =
+                    NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
+            preview.UpdateVisibilityDebug(
+                    state.fpsControllerState.currentSectorId,
+                    ClampRuntimeVisibilitySeedRadiusWorld(normalizedVisibilityConfig.playerRadius),
+                    true);
             state.freeflyController.pose = preview.RendererPose();
         }
         UpdatePreview3DSelection(input);

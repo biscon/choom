@@ -1208,7 +1208,10 @@ void SectorMeshPreview::ApplyRendererPose(const SectorViewPose& pose)
     UpdateVisibilityDebug();
 }
 
-void SectorMeshPreview::UpdateVisibilityDebug(int preferredStartSectorId)
+void SectorMeshPreview::UpdateVisibilityDebug(
+        int preferredStartSectorId,
+        float visibilitySeedRadiusWorld,
+        bool validateEyeY)
 {
     if (!visibilityGraphValid) {
         visibilityResult = RuntimePortalVisibilityResult{};
@@ -1222,7 +1225,11 @@ void SectorMeshPreview::UpdateVisibilityDebug(int preferredStartSectorId)
                 Vector2{camera.position.x, camera.position.z},
                 PreviewYawForwardXZ(yawRadians),
                 VisibilityDebugHorizontalFovRadians(camera),
-                preferredStartSectorId);
+                preferredStartSectorId,
+                0,
+                visibilitySeedRadiusWorld,
+                camera.position.y,
+                validateEyeY);
     }
     portalVisibilityDebugText = FormatRuntimePortalVisibilityDebugText(visibilityResult);
     visibilityDebugText = portalVisibilityDebugText;

@@ -234,7 +234,10 @@
         "g": 235,
         "b": 135,
         "a": 255
-      }
+      },
+      "flicker": true,
+      "flickerSpeed": 2.0,
+      "flickerAmount": 0.25
     },
     {
       "id": 2,
@@ -266,7 +269,8 @@
         "g": 255,
         "b": 255,
         "a": 255
-      }
+      },
+      "flicker": true
     },
     {
       "id": 4,
@@ -682,12 +686,18 @@
       {
         "id": 13,
         "startVertexId": 17,
-        "endVertexId": 18
+        "endVertexId": 18,
+        "flags": {
+          "blocksPlayer": true
+        }
       },
       {
         "id": 14,
         "startVertexId": 19,
-        "endVertexId": 20
+        "endVertexId": 20,
+        "flags": {
+          "blocksPlayer": true
+        }
       },
       {
         "id": 15,

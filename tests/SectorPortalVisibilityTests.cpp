@@ -173,6 +173,41 @@ SectorTopologyMap MakeSidePortal()
     return map;
 }
 
+SectorTopologyMap MakeTurnFromMiddle()
+{
+    SectorTopologyMap map;
+    map.vertices = {
+            {1, 0, 0}, {2, 64, 0}, {3, 64, 64}, {4, 0, 64},
+            {5, 128, 0}, {6, 128, 64}, {7, 128, 128}, {8, 64, 128}};
+    map.lineDefs = {
+            {1, 1, 2, 1, -1},
+            {2, 2, 3, 2, 12},
+            {3, 3, 4, 3, -1},
+            {4, 4, 1, 4, -1},
+            {5, 2, 5, 5, -1},
+            {6, 5, 6, 6, -1},
+            {7, 6, 3, 7, -1},
+            {8, 6, 7, 8, -1},
+            {9, 7, 8, 9, -1},
+            {10, 8, 3, 10, 20}};
+    AddSide(map, 1, 1, SectorTopologySideKind::Front, 10);
+    AddSide(map, 2, 2, SectorTopologySideKind::Front, 10);
+    AddSide(map, 3, 3, SectorTopologySideKind::Front, 10);
+    AddSide(map, 4, 4, SectorTopologySideKind::Front, 10);
+    AddSide(map, 5, 5, SectorTopologySideKind::Front, 20);
+    AddSide(map, 6, 6, SectorTopologySideKind::Front, 20);
+    AddSide(map, 7, 7, SectorTopologySideKind::Front, 20);
+    AddSide(map, 8, 8, SectorTopologySideKind::Front, 30);
+    AddSide(map, 9, 9, SectorTopologySideKind::Front, 30);
+    AddSide(map, 10, 10, SectorTopologySideKind::Front, 30);
+    AddSide(map, 12, 2, SectorTopologySideKind::Back, 20);
+    AddSide(map, 20, 10, SectorTopologySideKind::Back, 20);
+    map.sectors.push_back(Sector(10));
+    map.sectors.push_back(Sector(20));
+    map.sectors.push_back(Sector(30));
+    return map;
+}
+
 SectorTopologyMap MakeWideCrossingPortal()
 {
     SectorTopologyMap map;
@@ -743,6 +778,206 @@ void TestViewOneSidedVoidBoundaryDoesNotTraverse()
           "view void-boundary cannot enter a non-sector face");
 }
 
+void TestViewMultiStartUnionAndSortedMetadata()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(MakeTurnFromMiddle(), graph, &error),
+          "multi-start graph builds");
+
+    const game::RuntimePortalVisibilityResult single =
+            game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+                    graph,
+                    game::SectorCoordToWorldPosition2(96, 32),
+                    ForwardFromPreviewYaw(Pi * 0.5f),
+                    Degrees(60.0f),
+                    {10},
+                    10);
+    Check(Contains(single.visibleSectorIds, 10), "single preferred seed includes A");
+    Check(!Contains(single.visibleSectorIds, 30),
+          "single preferred seed misses north sector through side portal");
+
+    const game::RuntimePortalVisibilityResult result =
+            game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+                    graph,
+                    game::SectorCoordToWorldPosition2(96, 32),
+                    ForwardFromPreviewYaw(Pi * 0.5f),
+                    Degrees(60.0f),
+                    {20, 10, 20},
+                    10);
+    Check(result.validStartSector, "multi-start has valid start");
+    Check(!result.fallbackDrawAll, "multi-start union does not fallback");
+    Check(result.startSectorId == 10, "preferred valid seed remains primary start sector");
+    Check(result.startSectorIds.size() == 2
+                  && result.startSectorIds[0] == 10
+                  && result.startSectorIds[1] == 20,
+          "multi-start seed ids are deduplicated and sorted");
+    Check(Contains(result.visibleSectorIds, 10)
+                  && Contains(result.visibleSectorIds, 20)
+                  && Contains(result.visibleSectorIds, 30),
+          "multi-start union includes sectors visible from both full-FOV seeds");
+    Check(std::is_sorted(result.visibleSectorIds.begin(), result.visibleSectorIds.end()),
+          "multi-start visible sectors are sorted");
+    Check(std::is_sorted(
+                  result.traversedPortalLineDefIds.begin(),
+                  result.traversedPortalLineDefIds.end()),
+          "multi-start traversed portal linedefs are sorted");
+
+    const std::string debugText = game::FormatRuntimePortalVisibilityDebugText(result);
+    Check(debugText.find("start sectors: 10,20") != std::string::npos,
+          "multi-start debug text reports multiple starts");
+}
+
+void TestViewMultiStartFallbackPropagates()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(MakeCycle(), graph, &error),
+          "multi-start fallback graph builds");
+
+    const game::RuntimePortalVisibilityResult result =
+            game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+                    graph,
+                    game::SectorCoordToWorldPosition2(32, 32),
+                    ForwardFromPreviewYaw(0.0f),
+                    Degrees(100.0f),
+                    {20, 10},
+                    10,
+                    1);
+    Check(result.fallbackDrawAll, "multi-start cap fallback requests draw-all");
+    Check(result.visibleSectorIds.size() == 3
+                  && Contains(result.visibleSectorIds, 10)
+                  && Contains(result.visibleSectorIds, 20)
+                  && Contains(result.visibleSectorIds, 30),
+          "multi-start fallback exposes all sectors as visible");
+    Check(result.startSectorIds.size() == 2
+                  && result.startSectorIds[0] == 10
+                  && result.startSectorIds[1] == 20,
+          "multi-start fallback keeps sorted seed metadata");
+}
+
+void TestViewCenterSeedDiffersFromPreferredSeed()
+{
+    const SectorTopologyMap map = MakeAdjacent();
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(map, graph, &error),
+          "center-seed graph builds");
+
+    game::SectorCollisionWorld world;
+    Check(world.BuildFromTopology(map, &error), "center-seed collision world builds");
+
+    const game::RuntimePortalVisibilityResult result =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    &world,
+                    game::SectorCoordToWorldPosition2(32, 32),
+                    ForwardFromPreviewYaw(0.0f),
+                    Degrees(60.0f),
+                    20);
+    Check(result.startSectorId == 20, "preferred gameplay sector remains primary");
+    Check(result.startSectorIds.size() == 2
+                  && result.startSectorIds[0] == 10
+                  && result.startSectorIds[1] == 20,
+          "camera center sector is added as a full-FOV seed");
+    Check(Contains(result.visibleSectorIds, 10),
+          "center sector full-FOV seed reveals sector missed from preferred seed alone");
+}
+
+void TestViewFootprintSamplingAndRadiusCap()
+{
+    const SectorTopologyMap map = MakeAdjacent();
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(map, graph, &error),
+          "footprint seed graph builds");
+
+    game::SectorCollisionWorld world;
+    Check(world.BuildFromTopology(map, &error), "footprint seed collision world builds");
+    Check(Near(game::ClampRuntimeVisibilitySeedRadiusWorld(4.0f), 0.5f),
+          "visibility seed radius is capped in world units");
+
+    const game::RuntimePortalVisibilityResult noRadius =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    &world,
+                    Vector2{0.45f, 0.25f},
+                    ForwardFromPreviewYaw(Pi),
+                    Degrees(45.0f),
+                    0,
+                    0,
+                    0.0f);
+    Check(noRadius.startSectorIds.size() == 1 && noRadius.startSectorIds[0] == 10,
+          "zero visibility seed radius does not add duplicate cardinal samples");
+
+    const game::RuntimePortalVisibilityResult capped =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    &world,
+                    Vector2{0.45f, 0.25f},
+                    ForwardFromPreviewYaw(Pi),
+                    Degrees(45.0f),
+                    0,
+                    0,
+                    4.0f);
+    Check(capped.startSectorIds.size() == 2
+                  && capped.startSectorIds[0] == 10
+                  && capped.startSectorIds[1] == 20,
+          "capped footprint sample reaches adjacent open sector");
+}
+
+void TestViewVerticalValidationIsTolerant()
+{
+    const SectorTopologyMap map = MakeAdjacent();
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(map, graph, &error),
+          "vertical seed graph builds");
+
+    game::SectorCollisionWorld world;
+    Check(world.BuildFromTopology(map, &error), "vertical seed collision world builds");
+
+    const game::RuntimePortalVisibilityResult result =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    &world,
+                    Vector2{0.45f, 0.25f},
+                    ForwardFromPreviewYaw(Pi),
+                    Degrees(45.0f),
+                    10,
+                    0,
+                    4.0f,
+                    1.30f,
+                    true);
+    Check(Contains(result.startSectorIds, 20),
+          "vertical seed validation remains tolerant for ledge-overstep eye height");
+}
+
+void TestViewSolidBoundaryDoesNotCreateSeed()
+{
+    const SectorTopologyMap map = MakeSquareOnly();
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(map, graph, &error),
+          "solid boundary seed graph builds");
+
+    game::SectorCollisionWorld world;
+    Check(world.BuildFromTopology(map, &error), "solid boundary collision world builds");
+
+    const game::RuntimePortalVisibilityResult result =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    &world,
+                    Vector2{0.45f, 0.25f},
+                    ForwardFromPreviewYaw(Pi),
+                    Degrees(45.0f),
+                    0,
+                    0,
+                    4.0f);
+    Check(result.startSectorIds.size() == 1 && result.startSectorIds[0] == 10,
+          "footprint sampling does not seed through a one-sided solid boundary");
+}
+
 void TestPointLookupVisibilityDebug()
 {
     const SectorTopologyMap map = MakeAdjacent();
@@ -833,6 +1068,12 @@ int main()
     TestViewInvalidStartFallbackDrawsAll();
     TestViewClosedPortalDoesNotTraverse();
     TestViewOneSidedVoidBoundaryDoesNotTraverse();
+    TestViewMultiStartUnionAndSortedMetadata();
+    TestViewMultiStartFallbackPropagates();
+    TestViewCenterSeedDiffersFromPreferredSeed();
+    TestViewFootprintSamplingAndRadiusCap();
+    TestViewVerticalValidationIsTolerant();
+    TestViewSolidBoundaryDoesNotCreateSeed();
     TestPointLookupVisibilityDebug();
     TestMalformedReferencesFailCleanly();
 

@@ -20,6 +20,8 @@ constexpr float Pi = 3.14159265358979323846f;
 constexpr float TwoPi = Pi * 2.0f;
 constexpr float PortalVisibilityAngularMarginRadians = Pi / 90.0f;
 constexpr float PortalVisibilityNearDistance = 0.125f;
+constexpr float kMaxVisibilitySeedRadiusWorld = 0.5f;
+constexpr float VisibilitySeedVerticalToleranceWorld = 0.75f;
 constexpr float WindowEpsilon = 0.0001f;
 constexpr size_t MaxWindowsPerSector = 8;
 
@@ -89,6 +91,9 @@ RuntimePortalVisibilityResult MakeFallbackResult(int startSectorId, const std::s
 {
     RuntimePortalVisibilityResult result;
     result.startSectorId = startSectorId;
+    if (startSectorId > 0) {
+        result.startSectorIds.push_back(startSectorId);
+    }
     result.validStartSector = false;
     result.fallbackDrawAll = true;
     result.status = status;
@@ -131,6 +136,146 @@ bool Normalize(Vector2 value, Vector2& out)
     const float invLength = 1.0f / std::sqrt(lengthSq);
     out = Vector2{value.x * invLength, value.y * invLength};
     return std::isfinite(out.x) && std::isfinite(out.y);
+}
+
+bool IsVerticallyPlausibleSeed(
+        const SectorCollisionWorld* collisionWorld,
+        int sectorId,
+        float eyeYWorld,
+        bool validateEyeY,
+        bool preferredSeed)
+{
+    if (!validateEyeY || collisionWorld == nullptr) {
+        return true;
+    }
+    if (preferredSeed) {
+        return true;
+    }
+
+    SectorCollisionHeights heights;
+    if (!collisionWorld->GetSectorFloorCeiling(sectorId, &heights)) {
+        return true;
+    }
+    return eyeYWorld + VisibilitySeedVerticalToleranceWorld >= heights.floorZ
+            && eyeYWorld - VisibilitySeedVerticalToleranceWorld <= heights.ceilingZ;
+}
+
+void AppendPointSeed(
+        const RuntimeSectorVisibilityGraph& graph,
+        const SectorCollisionWorld* collisionWorld,
+        std::vector<int>& seeds,
+        Vector2 xz,
+        float eyeYWorld,
+        bool validateEyeY)
+{
+    if (collisionWorld == nullptr) {
+        return;
+    }
+    const int sectorId = collisionWorld->FindSectorContainingPoint(xz);
+    if (sectorId == 0
+            || FindRuntimeSectorVisibilityNode(graph, sectorId) == nullptr
+            || !IsVerticallyPlausibleSeed(collisionWorld, sectorId, eyeYWorld, validateEyeY, false)) {
+        return;
+    }
+    seeds.push_back(sectorId);
+}
+
+bool HasOpenPortalBetween(
+        const RuntimeSectorVisibilityGraph& graph,
+        int fromSectorId,
+        int toSectorId)
+{
+    const RuntimeSectorNode* node = FindRuntimeSectorVisibilityNode(graph, fromSectorId);
+    if (node == nullptr) {
+        return false;
+    }
+
+    for (int edgeIndex : node->outgoingPortalEdgeIndices) {
+        if (edgeIndex < 0 || static_cast<size_t>(edgeIndex) >= graph.portals.size()) {
+            continue;
+        }
+        const RuntimePortalEdge& edge = graph.portals[static_cast<size_t>(edgeIndex)];
+        if (edge.open && edge.toSectorId == toSectorId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<int> DeduplicateSortedSeeds(
+        const RuntimeSectorVisibilityGraph& graph,
+        const std::vector<int>& rawSeeds)
+{
+    std::vector<int> seeds;
+    seeds.reserve(rawSeeds.size());
+    for (int seed : rawSeeds) {
+        if (FindRuntimeSectorVisibilityNode(graph, seed) != nullptr) {
+            seeds.push_back(seed);
+        }
+    }
+    SortUnique(seeds);
+    return seeds;
+}
+
+std::vector<int> GatherRuntimeVisibilityStartSeeds(
+        const RuntimeSectorVisibilityGraph& graph,
+        const SectorCollisionWorld* collisionWorld,
+        Vector2 xz,
+        int preferredStartSectorId,
+        float visibilitySeedRadiusWorld,
+        float eyeYWorld,
+        bool validateEyeY)
+{
+    std::vector<int> seeds;
+    seeds.reserve(6);
+
+    if (FindRuntimeSectorVisibilityNode(graph, preferredStartSectorId) != nullptr) {
+        seeds.push_back(preferredStartSectorId);
+    }
+
+    AppendPointSeed(graph, collisionWorld, seeds, xz, eyeYWorld, validateEyeY);
+
+    if (collisionWorld != nullptr
+            && std::isfinite(visibilitySeedRadiusWorld)
+            && visibilitySeedRadiusWorld > 0.0f) {
+        const Vector2 offsets[] = {
+                Vector2{visibilitySeedRadiusWorld, 0.0f},
+                Vector2{-visibilitySeedRadiusWorld, 0.0f},
+                Vector2{0.0f, visibilitySeedRadiusWorld},
+                Vector2{0.0f, -visibilitySeedRadiusWorld}};
+
+        for (Vector2 offset : offsets) {
+            const Vector2 sample{xz.x + offset.x, xz.y + offset.y};
+            const int beforeSize = static_cast<int>(seeds.size());
+            AppendPointSeed(graph, collisionWorld, seeds, sample, eyeYWorld, validateEyeY);
+            if (static_cast<int>(seeds.size()) == beforeSize) {
+                continue;
+            }
+
+            const int sampledSectorId = seeds.back();
+            if (sampledSectorId == preferredStartSectorId) {
+                continue;
+            }
+
+            bool connectedToAcceptedSeed = false;
+            for (size_t i = 0; i + 1 < seeds.size(); ++i) {
+                if (seeds[i] == sampledSectorId) {
+                    connectedToAcceptedSeed = true;
+                    break;
+                }
+                if (HasOpenPortalBetween(graph, seeds[i], sampledSectorId)
+                        || HasOpenPortalBetween(graph, sampledSectorId, seeds[i])) {
+                    connectedToAcceptedSeed = true;
+                    break;
+                }
+            }
+            if (!connectedToAcceptedSeed) {
+                seeds.pop_back();
+            }
+        }
+    }
+
+    return DeduplicateSortedSeeds(graph, seeds);
 }
 
 float RelativeAngle(Vector2 origin, Vector2 forward, Vector2 point)
@@ -667,6 +812,9 @@ RuntimePortalVisibilityResult TraverseRuntimeSectorVisibility(
 {
     RuntimePortalVisibilityResult result;
     result.startSectorId = startSectorId;
+    if (startSectorId > 0) {
+        result.startSectorIds.push_back(startSectorId);
+    }
     result.mode = "connected portal traversal";
     result.totalSectorCount = graph.sectors.size();
 
@@ -755,12 +903,20 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromPoint(
     return TraverseRuntimeSectorVisibility(graph, startSectorId);
 }
 
-RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
+float ClampRuntimeVisibilitySeedRadiusWorld(float playerRadiusWorld)
+{
+    if (!std::isfinite(playerRadiusWorld) || playerRadiusWorld <= 0.0f) {
+        return 0.0f;
+    }
+    return std::min(playerRadiusWorld, kMaxVisibilitySeedRadiusWorld);
+}
+
+RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
         const RuntimeSectorVisibilityGraph& graph,
-        const SectorCollisionWorld* collisionWorld,
         Vector2 xz,
         Vector2 forward,
         float horizontalFovRadians,
+        const std::vector<int>& startSectorIds,
         int preferredStartSectorId,
         size_t iterationCap)
 {
@@ -779,21 +935,8 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
         return result;
     }
 
-    int startSectorId = 0;
-    if (FindRuntimeSectorVisibilityNode(graph, preferredStartSectorId) != nullptr) {
-        startSectorId = preferredStartSectorId;
-    } else if (collisionWorld != nullptr) {
-        startSectorId = collisionWorld->FindSectorContainingPoint(xz);
-    } else {
-        result = MakeFallbackResult(-1, "sector lookup unavailable; fallback draw all");
-        result.mode = "view-aware portal traversal";
-        result.totalSectorCount = graph.sectors.size();
-        result.visibleSectorIds = AllSectorIds(graph);
-        return result;
-    }
-
-    result.startSectorId = startSectorId;
-    if (startSectorId == 0 || FindRuntimeSectorVisibilityNode(graph, startSectorId) == nullptr) {
+    const std::vector<int> seeds = DeduplicateSortedSeeds(graph, startSectorIds);
+    if (seeds.empty()) {
         result = MakeFallbackResult(-1, "outside sectors; fallback draw all");
         result.mode = "view-aware portal traversal";
         result.totalSectorCount = graph.sectors.size();
@@ -801,6 +944,10 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
         return result;
     }
 
+    result.startSectorIds = seeds;
+    result.startSectorId = std::binary_search(seeds.begin(), seeds.end(), preferredStartSectorId)
+            ? preferredStartSectorId
+            : seeds.front();
     result.validStartSector = true;
     result.fallbackDrawAll = false;
 
@@ -811,9 +958,11 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
     std::unordered_map<int, std::vector<AngularWindow>> windowsBySector;
     std::deque<ViewTraversalItem> pending;
 
-    visible.insert(startSectorId);
-    AddReachedWindow(windowsBySector, startSectorId, initialWindow);
-    pending.push_back(ViewTraversalItem{startSectorId, initialWindow});
+    for (int seed : seeds) {
+        visible.insert(seed);
+        AddReachedWindow(windowsBySector, seed, initialWindow);
+        pending.push_back(ViewTraversalItem{seed, initialWindow});
+    }
 
     const size_t cap = iterationCap == 0
             ? std::max<size_t>(graph.sectors.size() + graph.portals.size(), 1) * 8
@@ -890,15 +1039,66 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
     return result;
 }
 
+RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
+        const RuntimeSectorVisibilityGraph& graph,
+        const SectorCollisionWorld* collisionWorld,
+        Vector2 xz,
+        Vector2 forward,
+        float horizontalFovRadians,
+        int preferredStartSectorId,
+        size_t iterationCap,
+        float visibilitySeedRadiusWorld,
+        float eyeYWorld,
+        bool validateEyeY)
+{
+    if (collisionWorld == nullptr
+            && FindRuntimeSectorVisibilityNode(graph, preferredStartSectorId) == nullptr) {
+        RuntimePortalVisibilityResult result =
+                MakeFallbackResult(-1, "sector lookup unavailable; fallback draw all");
+        result.mode = "view-aware portal traversal";
+        result.totalSectorCount = graph.sectors.size();
+        result.visibleSectorIds = AllSectorIds(graph);
+        return result;
+    }
+
+    const std::vector<int> seeds = GatherRuntimeVisibilityStartSeeds(
+            graph,
+            collisionWorld,
+            xz,
+            preferredStartSectorId,
+            ClampRuntimeVisibilitySeedRadiusWorld(visibilitySeedRadiusWorld),
+            eyeYWorld,
+            validateEyeY);
+
+    return ComputeRuntimeSectorVisibilityFromViewSeeds(
+            graph,
+            xz,
+            forward,
+            horizontalFovRadians,
+            seeds,
+            preferredStartSectorId,
+            iterationCap);
+}
+
 std::string FormatRuntimePortalVisibilityDebugText(
         const RuntimePortalVisibilityResult& result)
 {
     std::ostringstream text;
-    text << "start sector: ";
     if (result.validStartSector) {
-        text << result.startSectorId;
+        if (result.startSectorIds.empty()) {
+            text << "start sector: ";
+            text << result.startSectorId;
+        } else {
+            text << (result.startSectorIds.size() == 1 ? "start sector: " : "start sectors: ");
+            for (size_t i = 0; i < result.startSectorIds.size(); ++i) {
+                if (i != 0) {
+                    text << ",";
+                }
+                text << result.startSectorIds[i];
+            }
+        }
     } else {
-        text << "none";
+        text << "start sector: none";
     }
     text << " | visible sectors: ";
     for (size_t i = 0; i < result.visibleSectorIds.size(); ++i) {
