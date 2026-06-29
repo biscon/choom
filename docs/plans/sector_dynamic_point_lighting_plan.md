@@ -55,21 +55,21 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_02",
       "title": "Shader Dynamic Point Light Support",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02a",
       "title": "Pass Fragment World Position And Normal Through Sector Shader",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02b",
       "title": "Add Fixed-Size Dynamic Point Light Shader Uniforms And Contribution",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03",
@@ -135,9 +135,9 @@ When an agent is asked to execute this plan, it must:
 | Phase 1: Dynamic Point Light Data And Editor Authoring                        | Completed   | 2026-06-29 | Dynamic light data and editor authoring are implemented.                   |
 | Phase 1A: Add Dynamic Point Light Data, Serialization, And Hash Isolation     | Completed   | 2026-06-29 | Added dynamic point light data/persistence and hash isolation tests; no renderer/editor UI behavior changes. |
 | Phase 1B: Add Dynamic Light Editor Tool, Selection, And Inspector             | Completed   | 2026-06-29 | Added separate Static Light and Dynamic Light editor tools, dynamic selection/drag/edit/delete support, and distinct 2D glyphs. |
-| Phase 2: Shader Dynamic Point Light Support                                   | Not Started |      | Parent phase.                                                              |
-| Phase 2A: Pass Fragment World Position And Normal Through Sector Shader       | Not Started |      | Shader plumbing only; dynamic light count remains zero.                    |
-| Phase 2B: Add Fixed-Size Dynamic Point Light Shader Uniforms And Contribution | Not Started |      | Adds actual point-light contribution.                                      |
+| Phase 2: Shader Dynamic Point Light Support                                   | Completed   | 2026-06-29 | Shader dynamic point light support is implemented.                         |
+| Phase 2A: Pass Fragment World Position And Normal Through Sector Shader       | Completed   | 2026-06-29 | Shader plumbing only; dynamic light count remains zero.                    |
+| Phase 2B: Add Fixed-Size Dynamic Point Light Shader Uniforms And Contribution | Completed   | 2026-06-29 | Adds capped fixed-array dynamic point-light contribution.                  |
 | Phase 3: Visibility-Aware Dynamic Light Selection                             | Not Started |      | Parent phase.                                                              |
 | Phase 3A: Assign Dynamic Lights To Sectors And Collect Visibility Candidates  | Not Started |      | Candidate collection using portal visibility.                              |
 | Phase 3B: Rank, Cap, And Pack Selected Dynamic Lights                         | Not Started |      | Top-N selection and shader packing.                                        |
@@ -200,6 +200,64 @@ Verification:
 
 * `cmake --build cmake-build-debug -j2` passed.
 * `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_authoring_graph|sector_topology_(serialization|lightmap)$"` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed.
+* `git diff --check` passed.
+* `git diff --stat` reviewed.
+* `git status --short` reviewed.
+
+### 2026-06-29: Phase 2A Completed
+
+Summary:
+
+* Added `fragWorldPosition` and `fragWorldNormal` plumbing to the embedded sector shader.
+* Added the `vertexNormal` shader attribute binding for preview and bloom-source materials that share the sector vertex shader.
+* Normalized fragment normals in the sector fragment shader without adding dynamic-light uniforms or contribution.
+
+Behavior notes:
+
+* Source code changed.
+* Visual behavior is intended unchanged; the baked ambient/direct lighting formula remains unchanged.
+* Dynamic light count remains effectively zero because Phase 2B has not added uniforms or light contribution yet.
+* Bloom source output remains emissive-only; only the shared vertex shader plumbing changed.
+* Lightmap source-hash behavior is unchanged; no lightmap hash code or baked-light inputs were touched.
+* No topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* No gameplay, collision, sector lookup, or physics behavior changed.
+* No manual GUI verification was performed, so shader runtime compilation was not manually smoke-tested.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed.
+* `git diff --check` passed.
+* `git diff --stat` reviewed.
+* `git status --short` reviewed.
+
+### 2026-06-29: Phase 2B Completed
+
+Summary:
+
+* Added fixed-size sector shader uniforms for up to 8 dynamic point lights.
+* Added per-pixel dynamic point light contribution using world position, world normal, squared falloff, and Lambert `ndotl`.
+* Added preview-side packing/upload for enabled, finite, positive-radius, positive-intensity authored dynamic point lights.
+
+Behavior notes:
+
+* Source code changed.
+* `MAX_DYNAMIC_LIGHTS` is 8.
+* Dynamic lighting clamp max is 4.0; the zero-dynamic-light path keeps the prior baked-only 0..1 clamp to preserve old output.
+* Upload order before Phase 3 ranking is authored `dynamicPointLights` insertion order, skipping invalid/disabled lights and capping at 8.
+* Dynamic light positions and radii are converted from authoring units to preview/runtime world units during preview rebuild.
+* Dynamic lights add direct lighting and are not multiplied by baked AO.
+* Bloom source output remains emissive-only; dynamic lights are not uploaded to or evaluated by the bloom-source shader.
+* Static baked lightmaps remain unchanged.
+* Lightmap source-hash behavior is unchanged; no lightmap hash code or baked-light inputs were touched.
+* No topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* No gameplay, collision, sector lookup, or physics behavior changed.
+* No manual GUI verification was performed, so visible dynamic-light behavior and runtime shader compilation were not manually smoke-tested.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
 * `ctest --test-dir cmake-build-debug --output-on-failure` passed.
 * `git diff --check` passed.
 * `git diff --stat` reviewed.

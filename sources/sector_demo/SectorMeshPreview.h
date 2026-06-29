@@ -11,10 +11,18 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace game {
 
 struct SectorTopologyMap;
+
+struct SectorPreviewDynamicPointLightUniform {
+    Vector3 position = {};
+    Vector3 color = {};
+    float radius = 0.0f;
+    float intensity = 0.0f;
+};
 
 class SectorMeshPreview {
 public:
@@ -99,6 +107,13 @@ private:
     int decalOpacityLoc = -1;
     int decalEmissiveLoc = -1;
     int decalTintLoc = -1;
+    int dynamicLightCountLoc = -1;
+    int dynamicLightPositionsLoc = -1;
+    int dynamicLightColorsLoc = -1;
+    int dynamicLightRadiiLoc = -1;
+    int dynamicLightIntensitiesLoc = -1;
+    int dynamicLightingClampLoc = -1;
+    std::vector<SectorPreviewDynamicPointLightUniform> dynamicPointLights;
     Material bloomSourceMaterial = {};
     Texture2D bloomDefaultMaterialTexture = {};
     bool bloomSourceMaterialLoaded = false;

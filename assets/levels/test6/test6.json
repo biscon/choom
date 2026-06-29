@@ -24,21 +24,39 @@
       "filter": "anisotropic8x"
     }
   },
-  "staticLights": [],
+  "staticLights": [
+    {
+      "id": 1,
+      "position": [
+        64.0,
+        14.399999618530273,
+        72.0
+      ],
+      "radius": 64.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 0,
+        "g": 100,
+        "b": 255,
+        "a": 255
+      }
+    }
+  ],
   "dynamicPointLights": [
     {
       "id": 1,
       "position": [
         32.0,
         20.0,
-        40.0
+        32.0
       ],
       "radius": 64.0,
-      "intensity": 1.0,
+      "intensity": 1.5,
       "color": {
         "r": 255,
-        "g": 0,
-        "b": 255,
+        "g": 245,
+        "b": 225,
         "a": 255
       }
     }
@@ -76,6 +94,12 @@
       "a": 255
     },
     "intensity": 1.0
+  },
+  "bakedLightmap": {
+    "path": "assets/levels/test6/test6.lightmap.png",
+    "width": 2048,
+    "height": 2048,
+    "sourceHash": "a81cf4ec4313532b"
   },
   "authoringGraph": {
     "vertices": [

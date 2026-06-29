@@ -217,16 +217,17 @@
         "b": 255,
         "a": 255
       }
-    },
+    }
+  ],
+  "dynamicPointLights": [
     {
-      "id": 10,
+      "id": 1,
       "position": [
         176.0,
         25.0,
         64.0
       ],
-      "radius": 16.0,
-      "sourceRadius": 2.0,
+      "radius": 24.0,
       "intensity": 1.5,
       "color": {
         "r": 255,
@@ -274,7 +275,7 @@
     "path": "assets/levels/test5/test5.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "d1974f379444e57e"
+    "sourceHash": "3d708be3e7254137"
   },
   "authoringGraph": {
     "vertices": [
@@ -2906,7 +2907,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.20000000298023224,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -2982,7 +2983,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.20000000298023224,
         "defaultWall": {
           "textureId": "wall",
           "uv": {

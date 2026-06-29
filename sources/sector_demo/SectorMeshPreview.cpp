@@ -14,6 +14,7 @@
 #include <rlgl.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -31,6 +32,8 @@ constexpr int BloomIterations = 3;
 constexpr int BloomDownsample = 4;
 constexpr float DefaultVisibilityDebugAspect = 16.0f / 9.0f;
 constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
+constexpr int MaxDynamicLights = 8;
+constexpr float DynamicLightingClamp = 4.0f;
 
 Vector2 PreviewYawForwardXZ(float yawRadians)
 {
@@ -51,6 +54,7 @@ float VisibilityDebugHorizontalFovRadians(const Camera3D& camera)
 const char* SectorLightmapVs = R"(
 #version 330
 in vec3 vertexPosition;
+in vec3 vertexNormal;
 in vec2 vertexTexCoord;
 in vec2 vertexTexCoord2;
 in vec4 vertexTangent;
@@ -61,6 +65,8 @@ uniform mat4 mvp;
 out vec2 fragTexCoord;
 out vec2 fragTexCoord2;
 out vec2 fragDecalUv;
+out vec3 fragWorldPosition;
+out vec3 fragWorldNormal;
 out vec4 fragColor;
 
 void main()
@@ -68,6 +74,8 @@ void main()
     fragTexCoord = vertexTexCoord;
     fragTexCoord2 = vertexTexCoord2;
     fragDecalUv = vertexTangent.xy;
+    fragWorldPosition = vertexPosition;
+    fragWorldNormal = normalize(vertexNormal);
     fragColor = vertexColor;
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }
@@ -78,6 +86,8 @@ const char* SectorLightmapFs = R"(
 in vec2 fragTexCoord;
 in vec2 fragTexCoord2;
 in vec2 fragDecalUv;
+in vec3 fragWorldPosition;
+in vec3 fragWorldNormal;
 in vec4 fragColor;
 
 uniform sampler2D texture0;
@@ -93,7 +103,21 @@ uniform float decalOpacity;
 uniform int decalEmissive;
 uniform vec3 decalTint;
 
+#define MAX_DYNAMIC_LIGHTS 8
+uniform int dynamicLightCount;
+uniform vec3 dynamicLightPositions[MAX_DYNAMIC_LIGHTS];
+uniform vec3 dynamicLightColors[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightRadii[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightIntensities[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightingClamp;
+
 out vec4 finalColor;
+
+vec3 SafeNormalize(vec3 value, vec3 fallback)
+{
+    float lengthSq = dot(value, value);
+    return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
+}
 
 void main()
 {
@@ -122,9 +146,27 @@ void main()
     }
     vec4 bakedSample = (useLightmap > 0.5 && hasLightmap != 0) ? texture(texture1, fragTexCoord2) : vec4(0.0, 0.0, 0.0, 1.0);
     float aoFactor = (useBakedAmbientOcclusion > 0.5 && hasLightmap != 0) ? bakedSample.a : 1.0;
+    vec3 worldNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
     vec3 ambient = fragColor.rgb * aoFactor;
     vec3 bakedDirect = bakedSample.rgb;
-    vec3 lighting = clamp(ambient + bakedDirect, 0.0, 1.0);
+    vec3 dynamicDirect = vec3(0.0);
+    for (int i = 0; i < dynamicLightCount && i < MAX_DYNAMIC_LIGHTS; ++i) {
+        float radius = dynamicLightRadii[i];
+        vec3 toLight = dynamicLightPositions[i] - fragWorldPosition;
+        float distanceSq = dot(toLight, toLight);
+        if (radius > 0.0 && distanceSq < radius * radius) {
+            float distanceToLight = sqrt(max(distanceSq, 0.0));
+            vec3 lightDirection = distanceToLight > 0.0001 ? toLight / distanceToLight : worldNormal;
+            float ndotl = max(dot(worldNormal, lightDirection), 0.0);
+            float atten = clamp(1.0 - distanceToLight / radius, 0.0, 1.0);
+            atten *= atten;
+            dynamicDirect += dynamicLightColors[i] * dynamicLightIntensities[i] * atten * ndotl;
+        }
+    }
+    vec3 bakedLighting = ambient + bakedDirect;
+    vec3 lighting = dynamicLightCount > 0
+            ? clamp(bakedLighting + dynamicDirect, 0.0, dynamicLightingClamp)
+            : clamp(bakedLighting, 0.0, 1.0);
     vec3 litRgb = surfaceRgb * lighting;
     finalColor = vec4(mix(litRgb, emissiveDecalRgb, emissiveDecalAlpha), baseColor.a * fragColor.a);
 }
@@ -238,6 +280,102 @@ bool StartsWith(const std::string& value, const char* prefix)
     return value.compare(0, prefixString.size(), prefixString) == 0;
 }
 
+int GetShaderLocationArrayBase(Shader shader, const char* name)
+{
+    const int location = GetShaderLocation(shader, name);
+    if (location >= 0) {
+        return location;
+    }
+
+    const std::string indexedName = std::string(name) + "[0]";
+    return GetShaderLocation(shader, indexedName.c_str());
+}
+
+bool IsFiniteVector3(Vector3 value)
+{
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+Vector3 ColorToUnitRgb(Color color)
+{
+    return Vector3{
+            static_cast<float>(color.r) / 255.0f,
+            static_cast<float>(color.g) / 255.0f,
+            static_cast<float>(color.b) / 255.0f};
+}
+
+bool MakeDynamicPointLightUniform(
+        const SectorTopologyDynamicPointLight& light,
+        SectorPreviewDynamicPointLightUniform& outLight)
+{
+    if (!light.enabled
+            || !std::isfinite(light.radius)
+            || !std::isfinite(light.intensity)
+            || light.radius <= 0.0f
+            || light.intensity <= 0.0f
+            || !IsFiniteVector3(light.position)) {
+        return false;
+    }
+
+    outLight.position = SectorAuthoringToWorldPosition(light.position);
+    outLight.color = ColorToUnitRgb(light.color);
+    outLight.radius = SectorAuthoringToWorldDistance(light.radius);
+    outLight.intensity = light.intensity;
+    return std::isfinite(outLight.radius)
+            && outLight.radius > 0.0f
+            && std::isfinite(outLight.intensity)
+            && outLight.intensity > 0.0f
+            && IsFiniteVector3(outLight.position)
+            && IsFiniteVector3(outLight.color);
+}
+
+void UploadDynamicPointLights(
+        Shader shader,
+        int dynamicLightCountLoc,
+        int dynamicLightPositionsLoc,
+        int dynamicLightColorsLoc,
+        int dynamicLightRadiiLoc,
+        int dynamicLightIntensitiesLoc,
+        int dynamicLightingClampLoc,
+        const std::vector<SectorPreviewDynamicPointLightUniform>& lights)
+{
+    const int lightCount = static_cast<int>(std::min(lights.size(), static_cast<size_t>(MaxDynamicLights)));
+    if (dynamicLightCountLoc >= 0) {
+        SetShaderValue(shader, dynamicLightCountLoc, &lightCount, SHADER_UNIFORM_INT);
+    }
+    if (dynamicLightingClampLoc >= 0) {
+        const float clampValue = DynamicLightingClamp;
+        SetShaderValue(shader, dynamicLightingClampLoc, &clampValue, SHADER_UNIFORM_FLOAT);
+    }
+    if (lightCount <= 0) {
+        return;
+    }
+
+    std::array<Vector3, MaxDynamicLights> positions{};
+    std::array<Vector3, MaxDynamicLights> colors{};
+    std::array<float, MaxDynamicLights> radii{};
+    std::array<float, MaxDynamicLights> intensities{};
+    for (int i = 0; i < lightCount; ++i) {
+        positions[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].position;
+        colors[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].color;
+        radii[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].radius;
+        intensities[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].intensity;
+    }
+
+    if (dynamicLightPositionsLoc >= 0) {
+        SetShaderValueV(shader, dynamicLightPositionsLoc, positions.data(), SHADER_UNIFORM_VEC3, lightCount);
+    }
+    if (dynamicLightColorsLoc >= 0) {
+        SetShaderValueV(shader, dynamicLightColorsLoc, colors.data(), SHADER_UNIFORM_VEC3, lightCount);
+    }
+    if (dynamicLightRadiiLoc >= 0) {
+        SetShaderValueV(shader, dynamicLightRadiiLoc, radii.data(), SHADER_UNIFORM_FLOAT, lightCount);
+    }
+    if (dynamicLightIntensitiesLoc >= 0) {
+        SetShaderValueV(shader, dynamicLightIntensitiesLoc, intensities.data(), SHADER_UNIFORM_FLOAT, lightCount);
+    }
+}
+
 std::vector<std::string> SortedTopologyTextureIds(const SectorTopologyMap& map)
 {
     std::vector<std::string> ids;
@@ -262,6 +400,12 @@ bool LoadPreviewMaterial(
         int& decalOpacityLoc,
         int& decalEmissiveLoc,
         int& decalTintLoc,
+        int& dynamicLightCountLoc,
+        int& dynamicLightPositionsLoc,
+        int& dynamicLightColorsLoc,
+        int& dynamicLightRadiiLoc,
+        int& dynamicLightIntensitiesLoc,
+        int& dynamicLightingClampLoc,
         std::string& error)
 {
     material = LoadMaterialDefault();
@@ -273,6 +417,7 @@ bool LoadPreviewMaterial(
         return false;
     }
     material.shader = shader;
+    material.shader.locs[SHADER_LOC_VERTEX_NORMAL] = GetShaderLocationAttrib(material.shader, "vertexNormal");
     material.shader.locs[SHADER_LOC_VERTEX_TANGENT] = GetShaderLocationAttrib(material.shader, "vertexTangent");
     material.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(material.shader, "texture0");
     material.shader.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(material.shader, "texture1");
@@ -286,6 +431,12 @@ bool LoadPreviewMaterial(
     decalOpacityLoc = GetShaderLocation(material.shader, "decalOpacity");
     decalEmissiveLoc = GetShaderLocation(material.shader, "decalEmissive");
     decalTintLoc = GetShaderLocation(material.shader, "decalTint");
+    dynamicLightCountLoc = GetShaderLocation(material.shader, "dynamicLightCount");
+    dynamicLightPositionsLoc = GetShaderLocationArrayBase(material.shader, "dynamicLightPositions");
+    dynamicLightColorsLoc = GetShaderLocationArrayBase(material.shader, "dynamicLightColors");
+    dynamicLightRadiiLoc = GetShaderLocationArrayBase(material.shader, "dynamicLightRadii");
+    dynamicLightIntensitiesLoc = GetShaderLocationArrayBase(material.shader, "dynamicLightIntensities");
+    dynamicLightingClampLoc = GetShaderLocation(material.shader, "dynamicLightingClamp");
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
     return true;
@@ -309,6 +460,7 @@ bool LoadBloomSourceMaterial(
         return false;
     }
     material.shader = shader;
+    material.shader.locs[SHADER_LOC_VERTEX_NORMAL] = GetShaderLocationAttrib(material.shader, "vertexNormal");
     material.shader.locs[SHADER_LOC_VERTEX_TANGENT] = GetShaderLocationAttrib(material.shader, "vertexTangent");
     material.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(material.shader, "texture0");
     material.shader.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(material.shader, "texture1");
@@ -525,6 +677,19 @@ bool SectorMeshPreview::RebuildRendererResources(
         return false;
     }
 
+    dynamicPointLights.clear();
+    dynamicPointLights.reserve(MaxDynamicLights);
+    for (const SectorTopologyDynamicPointLight& light : map.dynamicPointLights) {
+        if (dynamicPointLights.size() >= static_cast<size_t>(MaxDynamicLights)) {
+            break;
+        }
+
+        SectorPreviewDynamicPointLightUniform uniformLight;
+        if (MakeDynamicPointLightUniform(light, uniformLight)) {
+            dynamicPointLights.push_back(uniformLight);
+        }
+    }
+
     if (!LoadPreviewMaterial(
                 material,
                 defaultMaterialTexture,
@@ -538,6 +703,12 @@ bool SectorMeshPreview::RebuildRendererResources(
                 decalOpacityLoc,
                 decalEmissiveLoc,
                 decalTintLoc,
+                dynamicLightCountLoc,
+                dynamicLightPositionsLoc,
+                dynamicLightColorsLoc,
+                dynamicLightRadiiLoc,
+                dynamicLightIntensitiesLoc,
+                dynamicLightingClampLoc,
                 error)) {
         Shutdown(assets);
         return false;
@@ -579,6 +750,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     visibilityLookupWorld = SectorCollisionWorld{};
     visibilityGraphValid = false;
     visibilityLookupWorldValid = false;
+    dynamicPointLights.clear();
     if (!initialized
             && engine::IsNull(assetScope)
             && meshes.batches.empty()
@@ -650,6 +822,15 @@ void SectorMeshPreview::DrawScene(engine::AssetManager& assets, bool useBakedAmb
     if (useBakedAmbientOcclusionLoc >= 0) {
         SetShaderValue(material.shader, useBakedAmbientOcclusionLoc, &useAo, SHADER_UNIFORM_FLOAT);
     }
+    UploadDynamicPointLights(
+            material.shader,
+            dynamicLightCountLoc,
+            dynamicLightPositionsLoc,
+            dynamicLightColorsLoc,
+            dynamicLightRadiiLoc,
+            dynamicLightIntensitiesLoc,
+            dynamicLightingClampLoc,
+            dynamicPointLights);
     for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
         if (!ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)) {
             continue;
