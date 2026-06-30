@@ -19,6 +19,24 @@ struct SectorEditorAddStaticLightResult {
     std::string status;
 };
 
+struct SectorEditorAddDynamicLightResult {
+    bool changed = false;
+    int lightId = -1;
+    std::string status;
+};
+
+struct SectorEditorAddStaticSpotLightResult {
+    bool changed = false;
+    int lightId = -1;
+    std::string status;
+};
+
+struct SectorEditorAddDynamicSpotLightResult {
+    bool changed = false;
+    int lightId = -1;
+    std::string status;
+};
+
 SectorEditorAddStaticLightResult AddStaticLightToSector(
         SectorTopologyMap& map,
         int sectorId,
@@ -28,7 +46,39 @@ SectorEditorTopologyActionResult DeleteStaticLight(
         SectorTopologyMap& map,
         int lightId);
 
+SectorEditorAddStaticSpotLightResult AddStaticSpotLightToSector(
+        SectorTopologyMap& map,
+        int sectorId,
+        Vector2 mapPoint);
+
+SectorEditorTopologyActionResult DeleteStaticSpotLight(
+        SectorTopologyMap& map,
+        int lightId);
+
+SectorEditorAddDynamicLightResult AddDynamicLightToSector(
+        SectorTopologyMap& map,
+        int sectorId,
+        Vector2 mapPoint);
+
+SectorEditorTopologyActionResult DeleteDynamicLight(
+        SectorTopologyMap& map,
+        int lightId);
+
+SectorEditorAddDynamicSpotLightResult AddDynamicSpotLightToSector(
+        SectorTopologyMap& map,
+        int sectorId,
+        Vector2 mapPoint);
+
+SectorEditorTopologyActionResult DeleteDynamicSpotLight(
+        SectorTopologyMap& map,
+        int lightId);
+
 SectorEditorTopologyActionResult FinishMoveStaticLight(
+        SectorTopologyMap& map,
+        int lightId,
+        Vector3 originalPosition);
+
+SectorEditorTopologyActionResult FinishMoveDynamicLight(
         SectorTopologyMap& map,
         int lightId,
         Vector3 originalPosition);

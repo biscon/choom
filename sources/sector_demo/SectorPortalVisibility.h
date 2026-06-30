@@ -36,6 +36,7 @@ struct RuntimeSectorVisibilityGraph {
 
 struct RuntimePortalVisibilityResult {
     int startSectorId = -1;
+    std::vector<int> startSectorIds;
     std::vector<int> visibleSectorIds;
     std::vector<int> traversedPortalLineDefIds;
     size_t totalSectorCount = 0;
@@ -67,7 +68,21 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
         Vector2 forward,
         float horizontalFovRadians,
         int preferredStartSectorId = 0,
+        size_t iterationCap = 0,
+        float visibilitySeedRadiusWorld = 0.0f,
+        float eyeYWorld = 0.0f,
+        bool validateEyeY = false);
+
+RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
+        const RuntimeSectorVisibilityGraph& graph,
+        Vector2 xz,
+        Vector2 forward,
+        float horizontalFovRadians,
+        const std::vector<int>& startSectorIds,
+        int preferredStartSectorId = 0,
         size_t iterationCap = 0);
+
+float ClampRuntimeVisibilitySeedRadiusWorld(float playerRadiusWorld);
 
 std::string FormatRuntimePortalVisibilityDebugText(
         const RuntimePortalVisibilityResult& result);

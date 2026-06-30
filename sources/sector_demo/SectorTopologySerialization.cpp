@@ -141,6 +141,62 @@ bool ReadOptionalBool(const Json& object, const char* field, const std::string& 
     return it->get<bool>();
 }
 
+int ReadOptionalClampedInt(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        int defaultValue,
+        int minValue,
+        int maxValue)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        return defaultValue;
+    }
+    if (!it->is_number_integer() && !it->is_number_unsigned()) {
+        Fail(context + "." + field + " must be a JSON integer");
+    }
+    int value = 0;
+    if (it->is_number_unsigned()) {
+        const uint64_t number = it->get<uint64_t>();
+        if (number > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+            Fail(context + "." + field + " is outside the supported integer range");
+        }
+        value = static_cast<int>(number);
+    } else {
+        const int64_t number = it->get<int64_t>();
+        if (number < std::numeric_limits<int>::min() || number > std::numeric_limits<int>::max()) {
+            Fail(context + "." + field + " is outside the supported integer range");
+        }
+        value = static_cast<int>(number);
+    }
+    return std::clamp(value, minValue, maxValue);
+}
+
+float ReadOptionalClampedFloat(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        float defaultValue,
+        float minValue,
+        float maxValue)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        return defaultValue;
+    }
+    if (!it->is_number()) {
+        Fail(context + "." + field + " must be a number");
+    }
+    const double number = it->get<double>();
+    if (!std::isfinite(number)
+            || number < -std::numeric_limits<float>::max()
+            || number > std::numeric_limits<float>::max()) {
+        Fail(context + "." + field + " must be a finite float");
+    }
+    return std::clamp(static_cast<float>(number), minValue, maxValue);
+}
+
 Vector2 ReadVector2(const Json& value, const std::string& context)
 {
     if (!value.is_array() || value.size() != 2
@@ -756,6 +812,111 @@ Json WriteColor(Color color)
     };
 }
 
+template<typename T>
+void WriteDynamicLightFlickerFields(Json& lightJson, const T& light, const std::string& context)
+{
+    RequireFinite(light.flickerSpeed, context + ".flickerSpeed");
+    RequireFinite(light.flickerAmount, context + ".flickerAmount");
+    const float flickerSpeed = ClampDynamicLightFlickerSpeed(light.flickerSpeed);
+    const float flickerAmount = ClampDynamicLightFlickerAmount(light.flickerAmount);
+    if (light.flicker) {
+        lightJson["flicker"] = true;
+    }
+    if (flickerSpeed != DynamicLightFlickerDefaultSpeed) {
+        lightJson["flickerSpeed"] = flickerSpeed;
+    }
+    if (flickerAmount != DynamicLightFlickerDefaultAmount) {
+        lightJson["flickerAmount"] = flickerAmount;
+    }
+}
+
+float ClampDynamicSpotLightConeDegrees(float value)
+{
+    return std::clamp(value, 0.0f, 179.0f);
+}
+
+Json WriteDynamicSpotLight(const SectorTopologyDynamicSpotLight& light, const std::string& context)
+{
+    RequireFinite(light.intensity, context + ".intensity");
+    RequireFinite(light.range, context + ".range");
+    RequireFinite(light.innerConeDegrees, context + ".innerConeDegrees");
+    RequireFinite(light.outerConeDegrees, context + ".outerConeDegrees");
+    RequireFinite(light.shadowBias, context + ".shadowBias");
+    RequireFinite(light.shadowStrength, context + ".shadowStrength");
+    RequireFinite(light.shadowSoftness, context + ".shadowSoftness");
+    const float innerConeDegrees = ClampDynamicSpotLightConeDegrees(light.innerConeDegrees);
+    const float outerConeDegrees = std::max(
+            ClampDynamicSpotLightConeDegrees(light.outerConeDegrees),
+            innerConeDegrees);
+    const int shadowPriority = ClampDynamicSpotLightShadowPriority(light.shadowPriority);
+    const float shadowBias = ClampDynamicSpotLightShadowBias(light.shadowBias);
+    const float shadowStrength = ClampDynamicSpotLightShadowStrength(light.shadowStrength);
+    const float shadowSoftness = ClampDynamicSpotLightShadowSoftness(light.shadowSoftness);
+    Json lightJson{
+            {"id", light.id},
+            {"position", WriteVector3(light.position, context + ".position")},
+            {"target", WriteVector3(light.target, context + ".target")},
+            {"range", light.range},
+            {"intensity", light.intensity},
+            {"color", WriteColor(light.color)}
+    };
+    if (innerConeDegrees != 20.0f) {
+        lightJson["innerConeDegrees"] = innerConeDegrees;
+    }
+    if (outerConeDegrees != 35.0f) {
+        lightJson["outerConeDegrees"] = outerConeDegrees;
+    }
+    if (!light.enabled) {
+        lightJson["enabled"] = false;
+    }
+    WriteDynamicLightFlickerFields(lightJson, light, context);
+    if (light.castsShadow) {
+        lightJson["castsShadow"] = true;
+    }
+    if (shadowPriority != DynamicSpotLightDefaultShadowPriority) {
+        lightJson["shadowPriority"] = shadowPriority;
+    }
+    if (shadowBias != DynamicSpotLightDefaultShadowBias) {
+        lightJson["shadowBias"] = shadowBias;
+    }
+    if (shadowStrength != DynamicSpotLightDefaultShadowStrength) {
+        lightJson["shadowStrength"] = shadowStrength;
+    }
+    if (shadowSoftness != DynamicSpotLightDefaultShadowSoftness) {
+        lightJson["shadowSoftness"] = shadowSoftness;
+    }
+    return lightJson;
+}
+
+Json WriteStaticSpotLight(const SectorTopologyStaticSpotLight& light, const std::string& context)
+{
+    RequireFinite(light.intensity, context + ".intensity");
+    RequireFinite(light.range, context + ".range");
+    RequireFinite(light.innerConeDegrees, context + ".innerConeDegrees");
+    RequireFinite(light.outerConeDegrees, context + ".outerConeDegrees");
+    RequireFinite(light.sourceRadius, context + ".sourceRadius");
+    const float innerConeDegrees = ClampDynamicSpotLightConeDegrees(light.innerConeDegrees);
+    const float outerConeDegrees = std::max(
+            ClampDynamicSpotLightConeDegrees(light.outerConeDegrees),
+            innerConeDegrees);
+    Json lightJson{
+            {"id", light.id},
+            {"position", WriteVector3(light.position, context + ".position")},
+            {"target", WriteVector3(light.target, context + ".target")},
+            {"range", light.range},
+            {"sourceRadius", light.sourceRadius},
+            {"intensity", light.intensity},
+            {"color", WriteColor(light.color)}
+    };
+    if (innerConeDegrees != 20.0f) {
+        lightJson["innerConeDegrees"] = innerConeDegrees;
+    }
+    if (outerConeDegrees != 35.0f) {
+        lightJson["outerConeDegrees"] = outerConeDegrees;
+    }
+    return lightJson;
+}
+
 Json WriteSkySettings(const SectorTopologySkySettings& settings)
 {
     const SectorTopologySkySettings normalized = NormalizeSectorTopologySkySettings(settings);
@@ -905,6 +1066,169 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
         }
     }
 
+    const auto staticSpotLightsIt = root.find("staticSpotLights");
+    if (staticSpotLightsIt != root.end()) {
+        if (!staticSpotLightsIt->is_array()) {
+            Fail("root.staticSpotLights must be an array");
+        }
+        const Json& staticSpotLights = *staticSpotLightsIt;
+        for (size_t i = 0; i < staticSpotLights.size(); ++i) {
+            const std::string context = "root.staticSpotLights[" + std::to_string(i) + "]";
+            const Json& value = staticSpotLights[i];
+            if (!value.is_object()) {
+                Fail(context + " must be an object");
+            }
+
+            SectorTopologyStaticSpotLight light;
+            light.id = ReadInt(value, "id", context);
+            light.position = ReadVector3(RequireField(value, "position", context), context + ".position");
+            light.target = ReadVector3(RequireField(value, "target", context), context + ".target");
+            light.range = ReadFloat(value, "range", context);
+            light.sourceRadius = ReadFloat(value, "sourceRadius", context);
+            light.intensity = ReadFloat(value, "intensity", context);
+            light.color = ReadColor(RequireField(value, "color", context), context + ".color");
+            light.innerConeDegrees = ReadOptionalClampedFloat(
+                    value,
+                    "innerConeDegrees",
+                    context,
+                    20.0f,
+                    0.0f,
+                    179.0f);
+            light.outerConeDegrees = ReadOptionalClampedFloat(
+                    value,
+                    "outerConeDegrees",
+                    context,
+                    35.0f,
+                    0.0f,
+                    179.0f);
+            light.outerConeDegrees = std::max(light.outerConeDegrees, light.innerConeDegrees);
+            map.staticSpotLights.push_back(light);
+        }
+    }
+
+    const auto dynamicLightsIt = root.find("dynamicPointLights");
+    if (dynamicLightsIt != root.end()) {
+        if (!dynamicLightsIt->is_array()) {
+            Fail("root.dynamicPointLights must be an array");
+        }
+        const Json& dynamicLights = *dynamicLightsIt;
+        for (size_t i = 0; i < dynamicLights.size(); ++i) {
+            const std::string context = "root.dynamicPointLights[" + std::to_string(i) + "]";
+            const Json& value = dynamicLights[i];
+            if (!value.is_object()) {
+                Fail(context + " must be an object");
+            }
+
+            SectorTopologyDynamicPointLight light;
+            light.id = ReadInt(value, "id", context);
+            light.position = ReadVector3(RequireField(value, "position", context), context + ".position");
+            light.radius = ReadFloat(value, "radius", context);
+            light.intensity = ReadFloat(value, "intensity", context);
+            light.color = ReadColor(RequireField(value, "color", context), context + ".color");
+            light.enabled = ReadOptionalBool(value, "enabled", context, true);
+            light.flicker = ReadOptionalBool(value, "flicker", context, false);
+            light.flickerSpeed = ReadOptionalClampedFloat(
+                    value,
+                    "flickerSpeed",
+                    context,
+                    DynamicLightFlickerDefaultSpeed,
+                    DynamicLightFlickerMinSpeed,
+                    DynamicLightFlickerMaxSpeed);
+            light.flickerAmount = ReadOptionalClampedFloat(
+                    value,
+                    "flickerAmount",
+                    context,
+                    DynamicLightFlickerDefaultAmount,
+                    DynamicLightFlickerMinAmount,
+                    DynamicLightFlickerMaxAmount);
+            map.dynamicPointLights.push_back(light);
+        }
+    }
+
+    const auto dynamicSpotLightsIt = root.find("dynamicSpotLights");
+    if (dynamicSpotLightsIt != root.end()) {
+        if (!dynamicSpotLightsIt->is_array()) {
+            Fail("root.dynamicSpotLights must be an array");
+        }
+        const Json& dynamicSpotLights = *dynamicSpotLightsIt;
+        for (size_t i = 0; i < dynamicSpotLights.size(); ++i) {
+            const std::string context = "root.dynamicSpotLights[" + std::to_string(i) + "]";
+            const Json& value = dynamicSpotLights[i];
+            if (!value.is_object()) {
+                Fail(context + " must be an object");
+            }
+
+            SectorTopologyDynamicSpotLight light;
+            light.id = ReadInt(value, "id", context);
+            light.position = ReadVector3(RequireField(value, "position", context), context + ".position");
+            light.target = ReadVector3(RequireField(value, "target", context), context + ".target");
+            light.range = ReadFloat(value, "range", context);
+            light.intensity = ReadFloat(value, "intensity", context);
+            light.color = ReadColor(RequireField(value, "color", context), context + ".color");
+            light.innerConeDegrees = ReadOptionalClampedFloat(
+                    value,
+                    "innerConeDegrees",
+                    context,
+                    20.0f,
+                    0.0f,
+                    179.0f);
+            light.outerConeDegrees = ReadOptionalClampedFloat(
+                    value,
+                    "outerConeDegrees",
+                    context,
+                    35.0f,
+                    0.0f,
+                    179.0f);
+            light.outerConeDegrees = std::max(light.outerConeDegrees, light.innerConeDegrees);
+            light.enabled = ReadOptionalBool(value, "enabled", context, true);
+            light.flicker = ReadOptionalBool(value, "flicker", context, false);
+            light.flickerSpeed = ReadOptionalClampedFloat(
+                    value,
+                    "flickerSpeed",
+                    context,
+                    DynamicLightFlickerDefaultSpeed,
+                    DynamicLightFlickerMinSpeed,
+                    DynamicLightFlickerMaxSpeed);
+            light.flickerAmount = ReadOptionalClampedFloat(
+                    value,
+                    "flickerAmount",
+                    context,
+                    DynamicLightFlickerDefaultAmount,
+                    DynamicLightFlickerMinAmount,
+                    DynamicLightFlickerMaxAmount);
+            light.castsShadow = ReadOptionalBool(value, "castsShadow", context, false);
+            light.shadowPriority = ReadOptionalClampedInt(
+                    value,
+                    "shadowPriority",
+                    context,
+                    DynamicSpotLightDefaultShadowPriority,
+                    DynamicSpotLightMinShadowPriority,
+                    DynamicSpotLightMaxShadowPriority);
+            light.shadowBias = ReadOptionalClampedFloat(
+                    value,
+                    "shadowBias",
+                    context,
+                    DynamicSpotLightDefaultShadowBias,
+                    DynamicSpotLightMinShadowBias,
+                    DynamicSpotLightMaxShadowBias);
+            light.shadowStrength = ReadOptionalClampedFloat(
+                    value,
+                    "shadowStrength",
+                    context,
+                    DynamicSpotLightDefaultShadowStrength,
+                    DynamicSpotLightMinShadowStrength,
+                    DynamicSpotLightMaxShadowStrength);
+            light.shadowSoftness = ReadOptionalClampedFloat(
+                    value,
+                    "shadowSoftness",
+                    context,
+                    DynamicSpotLightDefaultShadowSoftness,
+                    DynamicSpotLightMinShadowSoftness,
+                    DynamicSpotLightMaxShadowSoftness);
+            map.dynamicSpotLights.push_back(light);
+        }
+    }
+
     const auto lightmapSettingsIt = root.find("lightmapSettings");
     if (lightmapSettingsIt != root.end()) {
         map.lightmapSettings = ReadLightmapSettings(*lightmapSettingsIt, "root.lightmapSettings");
@@ -1037,6 +1361,9 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
 
     document.derivation.topology.texturesById = document.mapData.texturesById;
     document.derivation.topology.staticLights = document.mapData.staticLights;
+    document.derivation.topology.staticSpotLights = document.mapData.staticSpotLights;
+    document.derivation.topology.dynamicPointLights = document.mapData.dynamicPointLights;
+    document.derivation.topology.dynamicSpotLights = document.mapData.dynamicSpotLights;
     document.derivation.topology.previewSettings = document.mapData.previewSettings;
     document.derivation.topology.skySettings = document.mapData.skySettings;
     document.derivation.topology.directionalLight = document.mapData.directionalLight;
@@ -1108,6 +1435,37 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
         });
+    }
+
+    root["staticSpotLights"] = Json::array();
+    for (const SectorTopologyStaticSpotLight* light : SortedById(map.staticSpotLights)) {
+        const std::string context = "static spot light " + std::to_string(light->id);
+        root["staticSpotLights"].push_back(WriteStaticSpotLight(*light, context));
+    }
+
+    root["dynamicPointLights"] = Json::array();
+    for (const SectorTopologyDynamicPointLight* light : SortedById(map.dynamicPointLights)) {
+        const std::string context = "dynamic point light " + std::to_string(light->id);
+        RequireFinite(light->intensity, context + ".intensity");
+        RequireFinite(light->radius, context + ".radius");
+        Json lightJson{
+                {"id", light->id},
+                {"position", WriteVector3(light->position, context + ".position")},
+                {"radius", light->radius},
+                {"intensity", light->intensity},
+                {"color", WriteColor(light->color)}
+        };
+        if (!light->enabled) {
+            lightJson["enabled"] = false;
+        }
+        WriteDynamicLightFlickerFields(lightJson, *light, context);
+        root["dynamicPointLights"].push_back(std::move(lightJson));
+    }
+
+    root["dynamicSpotLights"] = Json::array();
+    for (const SectorTopologyDynamicSpotLight* light : SortedById(map.dynamicSpotLights)) {
+        const std::string context = "dynamic spot light " + std::to_string(light->id);
+        root["dynamicSpotLights"].push_back(WriteDynamicSpotLight(*light, context));
     }
 
     root["lightmapSettings"] = WriteLightmapSettings(map.lightmapSettings);
@@ -1464,6 +1822,37 @@ Json SerializeMap(const SectorTopologyMap& map)
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
         });
+    }
+
+    root["staticSpotLights"] = Json::array();
+    for (const SectorTopologyStaticSpotLight* light : SortedById(map.staticSpotLights)) {
+        const std::string context = "static spot light " + std::to_string(light->id);
+        root["staticSpotLights"].push_back(WriteStaticSpotLight(*light, context));
+    }
+
+    root["dynamicPointLights"] = Json::array();
+    for (const SectorTopologyDynamicPointLight* light : SortedById(map.dynamicPointLights)) {
+        const std::string context = "dynamic point light " + std::to_string(light->id);
+        RequireFinite(light->intensity, context + ".intensity");
+        RequireFinite(light->radius, context + ".radius");
+        Json lightJson{
+                {"id", light->id},
+                {"position", WriteVector3(light->position, context + ".position")},
+                {"radius", light->radius},
+                {"intensity", light->intensity},
+                {"color", WriteColor(light->color)}
+        };
+        if (!light->enabled) {
+            lightJson["enabled"] = false;
+        }
+        WriteDynamicLightFlickerFields(lightJson, *light, context);
+        root["dynamicPointLights"].push_back(std::move(lightJson));
+    }
+
+    root["dynamicSpotLights"] = Json::array();
+    for (const SectorTopologyDynamicSpotLight* light : SortedById(map.dynamicSpotLights)) {
+        const std::string context = "dynamic spot light " + std::to_string(light->id);
+        root["dynamicSpotLights"].push_back(WriteDynamicSpotLight(*light, context));
     }
 
     root["lightmapSettings"] = WriteLightmapSettings(map.lightmapSettings);

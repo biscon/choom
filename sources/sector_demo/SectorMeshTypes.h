@@ -23,9 +23,16 @@ struct SectorMeshBatch {
     int triangleCount = 0;
 };
 
+struct SectorReceiverBounds {
+    int sectorId = -1;
+    Vector3 min = {};
+    Vector3 max = {};
+};
+
 struct SectorMeshBuildResult {
     std::vector<SectorMeshBatch> batches;
     std::vector<SectorMeshBatch> sectorDrawRecords;
+    std::vector<SectorReceiverBounds> sectorReceiverBounds;
     int vertexCount = 0;
     int triangleCount = 0;
 };

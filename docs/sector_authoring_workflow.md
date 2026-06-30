@@ -90,9 +90,10 @@ not be presented as the current runtime result.
 
 Lightmaps are tied to the derived `SectorTopologyMap` source hash. Derivation
 changes that affect generated geometry, hash-sensitive topology IDs,
-`ceilingSky`, directional light settings, static lights, bake settings, or
-bake-relevant materials should stale or clear baked metadata. Visual-only preview
-settings and sky visual settings remain outside the source hash.
+`ceilingSky`, directional light settings, static point lights, static
+spotlights, bake settings, or bake-relevant materials should stale or clear
+baked metadata. Visual-only preview settings, sky visual settings, and runtime
+dynamic point/spot lights remain outside the source hash.
 
 Authoring graph mutations that change live topology or visible cached 2D editor
 state should go through the authoring edit/refresh path so document-edited state,

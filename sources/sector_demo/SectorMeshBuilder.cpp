@@ -13,6 +13,7 @@
 #include <limits>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace game {
@@ -218,6 +219,60 @@ Mesh CreateMeshFromBatch(const SectorMeshBatchData& batch)
     return mesh;
 }
 
+bool IsFiniteVector3(Vector3 value)
+{
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+bool IsValidReceiverBounds(const SectorReceiverBounds& bounds)
+{
+    return bounds.sectorId > 0
+            && IsFiniteVector3(bounds.min)
+            && IsFiniteVector3(bounds.max)
+            && bounds.min.x <= bounds.max.x
+            && bounds.min.y <= bounds.max.y
+            && bounds.min.z <= bounds.max.z;
+}
+
+void AccumulateReceiverBounds(
+        std::vector<SectorReceiverBounds>& bounds,
+        std::unordered_map<int, size_t>& boundIndexBySectorId,
+        const SectorMeshBatchData& batch)
+{
+    if (batch.sectorId <= 0 || batch.vertices.empty()) {
+        return;
+    }
+
+    const auto existing = boundIndexBySectorId.find(batch.sectorId);
+    if (existing == boundIndexBySectorId.end()) {
+        SectorReceiverBounds sectorBounds;
+        sectorBounds.sectorId = batch.sectorId;
+        sectorBounds.min = Vector3{
+                std::numeric_limits<float>::max(),
+                std::numeric_limits<float>::max(),
+                std::numeric_limits<float>::max()};
+        sectorBounds.max = Vector3{
+                -std::numeric_limits<float>::max(),
+                -std::numeric_limits<float>::max(),
+                -std::numeric_limits<float>::max()};
+        bounds.push_back(sectorBounds);
+        boundIndexBySectorId.emplace(batch.sectorId, bounds.size() - 1u);
+    }
+
+    SectorReceiverBounds& sectorBounds = bounds[boundIndexBySectorId[batch.sectorId]];
+    for (const SectorMeshBatchVertex& vertex : batch.vertices) {
+        if (!IsFiniteVector3(vertex.position)) {
+            continue;
+        }
+        sectorBounds.min.x = std::min(sectorBounds.min.x, vertex.position.x);
+        sectorBounds.min.y = std::min(sectorBounds.min.y, vertex.position.y);
+        sectorBounds.min.z = std::min(sectorBounds.min.z, vertex.position.z);
+        sectorBounds.max.x = std::max(sectorBounds.max.x, vertex.position.x);
+        sectorBounds.max.y = std::max(sectorBounds.max.y, vertex.position.y);
+        sectorBounds.max.z = std::max(sectorBounds.max.z, vertex.position.z);
+    }
+}
+
 SectorMeshBatchDataResult BuildSectorMeshBatchDataInternal(
         const SectorGeneratedGeometry& geometry,
         const SectorLightmapLayout* lightmapLayout,
@@ -306,6 +361,26 @@ SectorMeshBatchDataResult BuildSectorMeshDrawRecordData(
     return BuildSectorMeshBatchDataInternal(geometry, lightmapLayout, true);
 }
 
+std::vector<SectorReceiverBounds> BuildSectorReceiverBounds(
+        const SectorMeshBatchDataResult& drawRecordData)
+{
+    std::vector<SectorReceiverBounds> bounds;
+    std::unordered_map<int, size_t> boundIndexBySectorId;
+    bounds.reserve(drawRecordData.batches.size());
+    for (const SectorMeshBatchData& batch : drawRecordData.batches) {
+        AccumulateReceiverBounds(bounds, boundIndexBySectorId, batch);
+    }
+    bounds.erase(
+            std::remove_if(
+                    bounds.begin(),
+                    bounds.end(),
+                    [](const SectorReceiverBounds& sectorBounds) {
+                        return !IsValidReceiverBounds(sectorBounds);
+                    }),
+            bounds.end());
+    return bounds;
+}
+
 SectorMeshBuildResult BuildSectorMeshes(
         const SectorTopologyMap& map,
         const SectorLightmapLayout* lightmapLayout,
@@ -342,6 +417,7 @@ SectorMeshBuildResult BuildSectorMeshes(
 
     const SectorMeshBatchDataResult drawRecordData = BuildSectorMeshDrawRecordData(geometry, lightmapLayout);
     result.sectorDrawRecords.reserve(drawRecordData.batches.size());
+    result.sectorReceiverBounds = BuildSectorReceiverBounds(drawRecordData);
     for (const SectorMeshBatchData& builder : drawRecordData.batches) {
         Mesh mesh = CreateMeshFromBatch(builder);
         if (mesh.vertexCount <= 0) {

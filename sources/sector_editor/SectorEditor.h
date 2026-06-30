@@ -22,6 +22,7 @@ public:
 
     void Update(engine::Input& input, float dt);
     void Render(engine::AssetManager& assets);
+    void RenderPreview3DShadowMaps(engine::AssetManager& assets);
     void RenderPreview3DScene(engine::AssetManager& assets);
     void RenderPreview3DOverlays();
     void ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
@@ -52,7 +53,9 @@ private:
     void UpdateAuthoringVertexDrag(engine::Input& input);
     void FinishAuthoringVertexDrag();
     void CancelAuthoringVertexDrag(const char* message);
-    void StartLightDrag(int topologyLightId);
+    void StartLightDrag(
+            int topologyLightId,
+            SpotLightHandle spotHandle = SpotLightHandle::Origin);
     void UpdateLightDrag(engine::Input& input);
     void FinishLightDrag();
     void CancelLightDrag(const char* message);
@@ -89,6 +92,7 @@ private:
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
     void RenderPreview3D(engine::AssetManager& assets);
     void DrawPreviewSurfaceHighlights() const;
+    void DrawPreviewSpotLightOverlay() const;
     void DrawPreviewOverlay(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -199,6 +203,17 @@ private:
             SectorAuthoringSelectionTarget& outTarget,
             SectorTopologyCoordPoint& outVertexPoint) const;
     int FindTopologyLightNearScreenPoint(Vector2 screenPoint) const;
+    int FindTopologyStaticSpotLightNearScreenPoint(Vector2 screenPoint) const;
+    int FindTopologyDynamicLightNearScreenPoint(Vector2 screenPoint) const;
+    int FindTopologyDynamicSpotLightNearScreenPoint(Vector2 screenPoint) const;
+    bool FindTopologyStaticSpotLightHandleNearScreenPoint(
+            Vector2 screenPoint,
+            int& outLightId,
+            SpotLightHandle& outHandle) const;
+    bool FindTopologyDynamicSpotLightHandleNearScreenPoint(
+            Vector2 screenPoint,
+            int& outLightId,
+            SpotLightHandle& outHandle) const;
     bool FindTopologyVertexNearScreenPoint(
             Vector2 screenPoint,
             int& outVertexId,
@@ -222,6 +237,9 @@ private:
     SectorViewPose ActivePreviewPose() const;
     void ApplyGameplayPoseToPreview();
     void TogglePreviewControlMode();
+    bool StartSpotLightPilot();
+    bool ApplySpotLightPilot();
+    void CancelSpotLightPilot(const char* message);
     bool RebuildSectorCollisionWorld();
     SectorFpsVerticalContext BuildGameplayVerticalContext();
     void RefreshGameplaySectorAndVerticalContext();
@@ -248,6 +266,12 @@ private:
     const SectorTopologyLineDef* SelectedTopologyLineDef() const;
     SectorTopologyStaticPointLight* SelectedTopologyLight();
     const SectorTopologyStaticPointLight* SelectedTopologyLight() const;
+    SectorTopologyStaticSpotLight* SelectedTopologyStaticSpotLight();
+    const SectorTopologyStaticSpotLight* SelectedTopologyStaticSpotLight() const;
+    SectorTopologyDynamicPointLight* SelectedTopologyDynamicLight();
+    const SectorTopologyDynamicPointLight* SelectedTopologyDynamicLight() const;
+    SectorTopologyDynamicSpotLight* SelectedTopologyDynamicSpotLight();
+    const SectorTopologyDynamicSpotLight* SelectedTopologyDynamicSpotLight() const;
     void ClearStaleTopologySelection();
     void SyncSelectedSectorIdBuffer();
     void SyncSelectedLightIdBuffer();
@@ -256,6 +280,9 @@ private:
     void SelectTopologySideDef(int sideDefId, TopologyWallPart wallPart);
     void SelectTopologyLineDef(int lineDefId, SectorTopologySideKind side, TopologyWallPart wallPart);
     void SelectTopologyLight(int topologyLightId);
+    void SelectTopologyStaticSpotLight(int topologyLightId);
+    void SelectTopologyDynamicLight(int topologyLightId);
+    void SelectTopologyDynamicSpotLight(int topologyLightId);
     void SelectAuthoringLine(int lineId);
     bool DeleteSelectedAuthoringLine();
     void SelectAuthoringVertex(int vertexId);
@@ -325,6 +352,12 @@ private:
     bool DeleteSelectedLight();
     bool DeleteLightById(int topologyLightId);
     void AddStaticLightAt(Vector2 mapPoint);
+    bool DeleteStaticSpotLightById(int topologyLightId);
+    void AddStaticSpotLightAt(Vector2 mapPoint);
+    bool DeleteDynamicLightById(int topologyLightId);
+    void AddDynamicLightAt(Vector2 mapPoint);
+    bool DeleteDynamicSpotLightById(int topologyLightId);
+    void AddDynamicSpotLightAt(Vector2 mapPoint);
     bool BakeLightmaps();
     bool StartLightmapBake();
     void PollLightmapBakeResult(engine::AssetManager& assets);

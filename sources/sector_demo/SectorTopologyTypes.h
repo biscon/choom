@@ -5,11 +5,63 @@
 
 #include <raylib.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 namespace game {
+
+constexpr float DynamicLightFlickerBaseRateHz = 8.0f;
+constexpr float DynamicLightFlickerTransitionFraction = 0.18f;
+constexpr float DynamicLightFlickerDefaultSpeed = 1.0f;
+constexpr float DynamicLightFlickerDefaultAmount = 0.35f;
+constexpr float DynamicLightFlickerMinSpeed = 0.05f;
+constexpr float DynamicLightFlickerMaxSpeed = 10.0f;
+constexpr float DynamicLightFlickerMinAmount = 0.0f;
+constexpr float DynamicLightFlickerMaxAmount = 1.0f;
+constexpr int DynamicSpotLightMinShadowPriority = -1000;
+constexpr int DynamicSpotLightMaxShadowPriority = 1000;
+constexpr int DynamicSpotLightDefaultShadowPriority = 0;
+constexpr float DynamicSpotLightMinShadowBias = 0.0f;
+constexpr float DynamicSpotLightMaxShadowBias = 0.1f;
+constexpr float DynamicSpotLightDefaultShadowBias = 0.00015f;
+constexpr float DynamicSpotLightMinShadowStrength = 0.0f;
+constexpr float DynamicSpotLightMaxShadowStrength = 1.0f;
+constexpr float DynamicSpotLightDefaultShadowStrength = 1.0f;
+constexpr float DynamicSpotLightMinShadowSoftness = 0.0f;
+constexpr float DynamicSpotLightMaxShadowSoftness = 8.0f;
+constexpr float DynamicSpotLightDefaultShadowSoftness = 1.0f;
+
+inline float ClampDynamicLightFlickerSpeed(float value)
+{
+    return std::clamp(value, DynamicLightFlickerMinSpeed, DynamicLightFlickerMaxSpeed);
+}
+
+inline float ClampDynamicLightFlickerAmount(float value)
+{
+    return std::clamp(value, DynamicLightFlickerMinAmount, DynamicLightFlickerMaxAmount);
+}
+
+inline int ClampDynamicSpotLightShadowPriority(int value)
+{
+    return std::clamp(value, DynamicSpotLightMinShadowPriority, DynamicSpotLightMaxShadowPriority);
+}
+
+inline float ClampDynamicSpotLightShadowBias(float value)
+{
+    return std::clamp(value, DynamicSpotLightMinShadowBias, DynamicSpotLightMaxShadowBias);
+}
+
+inline float ClampDynamicSpotLightShadowStrength(float value)
+{
+    return std::clamp(value, DynamicSpotLightMinShadowStrength, DynamicSpotLightMaxShadowStrength);
+}
+
+inline float ClampDynamicSpotLightShadowSoftness(float value)
+{
+    return std::clamp(value, DynamicSpotLightMinShadowSoftness, DynamicSpotLightMaxShadowSoftness);
+}
 
 struct SectorTopologyVertex {
     int id = -1;
@@ -104,6 +156,51 @@ struct SectorTopologyStaticPointLight {
     float sourceRadius = 0.0f;
 };
 
+struct SectorTopologyStaticSpotLight {
+    int id = -1;
+    Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
+    Vector3 target = {SectorWorldToAuthoringDistance(4.0f), SectorWorldToAuthoringDistance(1.0f), 0.0f};
+    Color color = WHITE;
+    float intensity = 1.0f;
+    float range = SectorWorldToAuthoringDistance(8.0f);
+    float innerConeDegrees = 20.0f;
+    float outerConeDegrees = 35.0f;
+    float sourceRadius = 0.0f;
+};
+
+struct SectorTopologyDynamicPointLight {
+    int id = -1;
+    Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
+    Color color = WHITE;
+    float intensity = 1.0f;
+    float radius = SectorWorldToAuthoringDistance(8.0f);
+    bool enabled = true;
+    bool flicker = false;
+    // 0.2-0.4 is subtle, 0.6-0.8 is a strong failing-light dip, near 1.0 can drop nearly off.
+    float flickerSpeed = DynamicLightFlickerDefaultSpeed;
+    float flickerAmount = DynamicLightFlickerDefaultAmount;
+};
+
+struct SectorTopologyDynamicSpotLight {
+    int id = -1;
+    Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
+    Vector3 target = {SectorWorldToAuthoringDistance(4.0f), SectorWorldToAuthoringDistance(1.0f), 0.0f};
+    Color color = WHITE;
+    float intensity = 1.0f;
+    float range = SectorWorldToAuthoringDistance(8.0f);
+    float innerConeDegrees = 20.0f;
+    float outerConeDegrees = 35.0f;
+    bool enabled = true;
+    bool flicker = false;
+    float flickerSpeed = DynamicLightFlickerDefaultSpeed;
+    float flickerAmount = DynamicLightFlickerDefaultAmount;
+    bool castsShadow = false;
+    int shadowPriority = DynamicSpotLightDefaultShadowPriority;
+    float shadowBias = DynamicSpotLightDefaultShadowBias;
+    float shadowStrength = DynamicSpotLightDefaultShadowStrength;
+    float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
+};
+
 enum class SectorTopologyValidationSeverity {
     Warning,
     Error
@@ -115,7 +212,8 @@ enum class SectorTopologyObjectKind {
     LineDef,
     SideDef,
     Sector,
-    StaticLight
+    StaticLight,
+    DynamicLight
 };
 
 struct SectorTopologyValidationIssue {

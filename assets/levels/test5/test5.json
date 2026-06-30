@@ -195,9 +195,9 @@
       "sourceRadius": 2.0,
       "intensity": 1.75,
       "color": {
-        "r": 255,
+        "r": 0,
         "g": 255,
-        "b": 255,
+        "b": 0,
         "a": 255
       }
     },
@@ -212,9 +212,9 @@
       "sourceRadius": 2.0,
       "intensity": 1.75,
       "color": {
-        "r": 255,
+        "r": 0,
         "g": 255,
-        "b": 255,
+        "b": 0,
         "a": 255
       }
     },
@@ -222,18 +222,119 @@
       "id": 10,
       "position": [
         176.0,
-        25.0,
+        24.0,
         64.0
       ],
       "radius": 16.0,
-      "sourceRadius": 2.0,
-      "intensity": 1.5,
+      "sourceRadius": 4.0,
+      "intensity": 1.0,
       "color": {
         "r": 255,
         "g": 235,
         "b": 135,
         "a": 255
       }
+    }
+  ],
+  "staticSpotLights": [
+    {
+      "id": 1,
+      "position": [
+        220.0,
+        24.0902099609375,
+        64.0
+      ],
+      "target": [
+        194.0,
+        4.211063385009766,
+        64.0
+      ],
+      "range": 70.0,
+      "sourceRadius": 2.0,
+      "intensity": 3.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "innerConeDegrees": 35.0,
+      "outerConeDegrees": 50.0
+    }
+  ],
+  "dynamicPointLights": [
+    {
+      "id": 2,
+      "position": [
+        168.0,
+        14.399999618530273,
+        248.0
+      ],
+      "radius": 64.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    },
+    {
+      "id": 3,
+      "position": [
+        224.0,
+        14.399999618530273,
+        176.0
+      ],
+      "radius": 64.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "flicker": true
+    },
+    {
+      "id": 4,
+      "position": [
+        304.0,
+        14.399999618530273,
+        168.0
+      ],
+      "radius": 64.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    }
+  ],
+  "dynamicSpotLights": [
+    {
+      "id": 1,
+      "position": [
+        176.0,
+        25.39914894104004,
+        64.0
+      ],
+      "target": [
+        172.06802368164063,
+        -6.996774673461914,
+        63.938682556152344
+      ],
+      "range": 64.0,
+      "intensity": 3.0,
+      "color": {
+        "r": 255,
+        "g": 235,
+        "b": 135,
+        "a": 255
+      },
+      "flicker": true
     }
   ],
   "lightmapSettings": {
@@ -274,7 +375,7 @@
     "path": "assets/levels/test5/test5.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "d1974f379444e57e"
+    "sourceHash": "51a05ada70c9656f"
   },
   "authoringGraph": {
     "vertices": [
@@ -633,12 +734,18 @@
       {
         "id": 13,
         "startVertexId": 17,
-        "endVertexId": 18
+        "endVertexId": 18,
+        "flags": {
+          "blocksPlayer": true
+        }
       },
       {
         "id": 14,
         "startVertexId": 19,
-        "endVertexId": 20
+        "endVertexId": 20,
+        "flags": {
+          "blocksPlayer": true
+        }
       },
       {
         "id": 15,
@@ -2906,7 +3013,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.20000000298023224,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -2982,7 +3089,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.20000000298023224,
         "defaultWall": {
           "textureId": "wall",
           "uv": {

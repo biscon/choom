@@ -1,10 +1,13 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorCollisionWorld.h"
+#include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorMeshBuilder.h"
 #include "sector_demo/SectorPortalVisibility.h"
 
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -35,6 +38,150 @@ bool Near(Vector3 actual, Vector3 expected, float epsilon = 0.00001f)
     return Near(actual.x, expected.x, epsilon)
             && Near(actual.y, expected.y, epsilon)
             && Near(actual.z, expected.z, epsilon);
+}
+
+bool FiniteMatrix(Matrix matrix)
+{
+    return std::isfinite(matrix.m0) && std::isfinite(matrix.m1) && std::isfinite(matrix.m2) && std::isfinite(matrix.m3)
+            && std::isfinite(matrix.m4) && std::isfinite(matrix.m5) && std::isfinite(matrix.m6) && std::isfinite(matrix.m7)
+            && std::isfinite(matrix.m8) && std::isfinite(matrix.m9) && std::isfinite(matrix.m10) && std::isfinite(matrix.m11)
+            && std::isfinite(matrix.m12) && std::isfinite(matrix.m13) && std::isfinite(matrix.m14) && std::isfinite(matrix.m15);
+}
+
+Vector4 TransformHomogeneous(Vector3 point, Matrix matrix)
+{
+    return Vector4{
+            matrix.m0 * point.x + matrix.m4 * point.y + matrix.m8 * point.z + matrix.m12,
+            matrix.m1 * point.x + matrix.m5 * point.y + matrix.m9 * point.z + matrix.m13,
+            matrix.m2 * point.x + matrix.m6 * point.y + matrix.m10 * point.z + matrix.m14,
+            matrix.m3 * point.x + matrix.m7 * point.y + matrix.m11 * point.z + matrix.m15};
+}
+
+game::SectorReceiverBounds Bounds(int sectorId, Vector3 min, Vector3 max)
+{
+    game::SectorReceiverBounds bounds;
+    bounds.sectorId = sectorId;
+    bounds.min = min;
+    bounds.max = max;
+    return bounds;
+}
+
+game::SectorPreviewDynamicPointLightSource LightSource(
+        int lightId,
+        int ownerSectorId,
+        Vector3 position,
+        float radius,
+        float intensity = 1.0f,
+        Vector3 color = Vector3{1.0f, 1.0f, 1.0f})
+{
+    game::SectorPreviewDynamicPointLightSource source;
+    source.lightId = lightId;
+    source.ownerSectorId = ownerSectorId;
+    source.light.lightId = lightId;
+    source.light.position = position;
+    source.light.color = color;
+    source.light.radius = radius;
+    source.light.intensity = intensity;
+    return source;
+}
+
+game::SectorPreviewDynamicPointLightSource SpotLightSource(
+        int lightId,
+        int ownerSectorId,
+        Vector3 position,
+        float radius,
+        float intensity = 1.0f,
+        Vector3 color = Vector3{1.0f, 1.0f, 1.0f})
+{
+    game::SectorPreviewDynamicPointLightSource source = LightSource(
+            lightId,
+            ownerSectorId,
+            position,
+            radius,
+            intensity,
+            color);
+    source.light.kind = game::SectorPreviewDynamicLightKind::Spot;
+    source.light.direction = Vector3{1.0f, 0.0f, 0.0f};
+    source.light.innerConeCos = std::cos(20.0f * 3.14159265358979323846f / 180.0f);
+    source.light.outerConeCos = std::cos(35.0f * 3.14159265358979323846f / 180.0f);
+    return source;
+}
+
+game::SectorPreviewDynamicPointLightSource ShadowSpotLightSource(
+        int lightId,
+        int ownerSectorId,
+        Vector3 position,
+        float radius,
+        float intensity = 1.0f,
+        int shadowPriority = game::DynamicSpotLightDefaultShadowPriority)
+{
+    game::SectorPreviewDynamicPointLightSource source = SpotLightSource(
+            lightId,
+            ownerSectorId,
+            position,
+            radius,
+            intensity);
+    source.light.castsShadow = true;
+    source.light.shadowPriority = shadowPriority;
+    return source;
+}
+
+bool HasCandidateLightId(
+        const std::vector<game::SectorPreviewDynamicPointLightSource>& candidates,
+        int lightId)
+{
+    for (const game::SectorPreviewDynamicPointLightSource& candidate : candidates) {
+        if (candidate.lightId == lightId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool HasShadowCasterLightId(
+        const std::vector<game::SectorPreviewDynamicSpotLightShadowCaster>& shadowCasters,
+        int lightId)
+{
+    for (const game::SectorPreviewDynamicSpotLightShadowCaster& shadowCaster : shadowCasters) {
+        if (shadowCaster.lightId == lightId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const game::SectorPreviewDynamicPointLightSource* FindCandidateLightId(
+        const std::vector<game::SectorPreviewDynamicPointLightSource>& candidates,
+        int lightId)
+{
+    for (const game::SectorPreviewDynamicPointLightSource& candidate : candidates) {
+        if (candidate.lightId == lightId) {
+            return &candidate;
+        }
+    }
+    return nullptr;
+}
+
+bool HasSelectedLightId(const std::vector<int>& selectedLightIds, int lightId)
+{
+    for (int selectedLightId : selectedLightIds) {
+        if (selectedLightId == lightId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const game::SectorReceiverBounds* FindBounds(
+        const std::vector<game::SectorReceiverBounds>& bounds,
+        int sectorId)
+{
+    for (const game::SectorReceiverBounds& sectorBounds : bounds) {
+        if (sectorBounds.sectorId == sectorId) {
+            return &sectorBounds;
+        }
+    }
+    return nullptr;
 }
 
 game::SectorTopologyWallPartSettings Part(const char* textureId)
@@ -975,6 +1122,29 @@ void TestDrawRecordVisibilitySelection()
           "draw selection handles empty visible set safely");
 }
 
+void TestSectorReceiverBoundsFromDrawRecords()
+{
+    const game::SectorGeneratedGeometry geometry =
+            BuildGeometryOrFail(MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f),
+                                "receiver bounds geometry builds");
+    const game::SectorMeshBatchDataResult drawRecords = game::BuildSectorMeshDrawRecordData(geometry);
+    const std::vector<game::SectorReceiverBounds> receiverBounds =
+            game::BuildSectorReceiverBounds(drawRecords);
+
+    const game::SectorReceiverBounds* left = FindBounds(receiverBounds, 10);
+    const game::SectorReceiverBounds* right = FindBounds(receiverBounds, 20);
+    Check(left != nullptr, "receiver bounds include left sector");
+    Check(right != nullptr, "receiver bounds include right sector");
+    Check(left != nullptr && Near(left->min, Vector3{0.0f, 0.0f, 0.0f}),
+          "left receiver bounds min comes from generated draw geometry");
+    Check(left != nullptr && Near(left->max, Vector3{0.5f, 3.0f, 0.5f}),
+          "left receiver bounds max comes from generated draw geometry");
+    Check(right != nullptr && Near(right->min, Vector3{0.5f, 0.0f, 0.0f}),
+          "right receiver bounds min comes from generated draw geometry");
+    Check(right != nullptr && Near(right->max, Vector3{1.0f, 3.0f, 0.5f}),
+          "right receiver bounds max comes from generated draw geometry");
+}
+
 void TestBloomDrawRecordVisibilitySelection()
 {
     const std::vector<game::SectorMeshBatch> records = {
@@ -999,6 +1169,873 @@ void TestBloomDrawRecordVisibilitySelection()
     fallback.fallbackDrawAll = true;
     Check(game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[1], fallback),
           "bloom selection falls back to draw-all visibility");
+}
+
+void TestDynamicPointLightVisibilityCandidateSelection()
+{
+    game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::SectorCollisionWorld lookupWorld;
+    std::string error;
+    Check(lookupWorld.BuildFromTopology(map, &error), "dynamic light sector lookup world builds");
+
+    map.dynamicPointLights = {
+            game::SectorTopologyDynamicPointLight{
+                    1,
+                    Vector3{2.0f, 1.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    8.0f,
+                    true},
+            game::SectorTopologyDynamicPointLight{
+                    2,
+                    Vector3{6.0f, 1.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    8.0f,
+                    true},
+            game::SectorTopologyDynamicPointLight{
+                    3,
+                    Vector3{2.0f, 1.0f, 2.0f},
+                    WHITE,
+                    0.0f,
+                    8.0f,
+                    true},
+            game::SectorTopologyDynamicPointLight{
+                    4,
+                    Vector3{18.0f, 1.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    8.0f,
+                    true},
+            game::SectorTopologyDynamicPointLight{
+                    5,
+                    Vector3{2.0f, 1.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    8.0f,
+                    false},
+            game::SectorTopologyDynamicPointLight{
+                    6,
+                    Vector3{2.0f, 1.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    -1.0f,
+                    true},
+            game::SectorTopologyDynamicPointLight{
+                    7,
+                    Vector3{2.0f, 1.0f, 2.0f},
+                    WHITE,
+                    -1.0f,
+                    8.0f,
+                    true},
+            game::SectorTopologyDynamicPointLight{
+                    8,
+                    Vector3{std::numeric_limits<float>::quiet_NaN(), 1.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    8.0f,
+                    true}};
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> sources;
+    game::BuildSectorPreviewDynamicPointLightSources(map, &lookupWorld, sources);
+    Check(sources.size() == 3, "dynamic light source collection drops invalid lights");
+    Check(sources[0].lightId == 1 && sources[0].ownerSectorId == 10,
+          "dynamic light source collection assigns left-sector ownership");
+    Check(sources[1].lightId == 2 && sources[1].ownerSectorId == 20,
+          "dynamic light source collection assigns right-sector ownership");
+    Check(sources[2].lightId == 4 && sources[2].ownerSectorId == 0,
+          "dynamic light source collection leaves outside lights unassigned");
+
+    game::RuntimePortalVisibilityResult visibleLeft;
+    visibleLeft.validStartSector = true;
+    visibleLeft.visibleSectorIds = {10};
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.5f, 3.0f, 0.5f}),
+            Bounds(20, Vector3{0.5f, 0.0f, 0.0f}, Vector3{1.0f, 3.0f, 0.5f})};
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates;
+    game::CollectSectorPreviewDynamicPointLightCandidates(sources, visibleLeft, receiverBounds, candidates);
+    Check(candidates.size() == 2,
+          "dynamic light candidates include owner-visible and visible-receiver-overlap lights");
+    Check(HasCandidateLightId(candidates, 1), "dynamic light candidates include visible owner sector");
+    Check(HasCandidateLightId(candidates, 2), "dynamic light candidates include hidden owner touching visible receivers");
+    Check(!HasCandidateLightId(candidates, 4), "dynamic light candidates exclude irrelevant hidden outside light");
+    Check(!candidates.empty() && Near(candidates[0].light.position, Vector3{0.25f, 0.125f, 0.25f}),
+          "dynamic light candidates preserve world-space uniform data");
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.fallbackDrawAll = true;
+    game::CollectSectorPreviewDynamicPointLightCandidates(sources, fallback, receiverBounds, candidates);
+    Check(candidates.size() == 3,
+          "dynamic light candidates include all valid lights during fallback draw-all");
+}
+
+void TestDynamicPointLightReceiverBoundCandidateSelection()
+{
+    const std::vector<game::SectorPreviewDynamicPointLightSource> sources = {
+            LightSource(1, 20, Vector3{1.0f, 0.5f, 1.0f}, 0.75f),
+            LightSource(2, 20, Vector3{1.99f, 0.5f, 0.5f}, 0.0f),
+            LightSource(3, 20, Vector3{3.0f, 0.5f, 0.5f}, 0.9f)};
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates;
+    game::CollectSectorPreviewDynamicPointLightCandidates(sources, visible, receiverBounds, candidates);
+    Check(HasCandidateLightId(candidates, 1),
+          "hidden-owner light overlapping visible receiver bounds is included");
+    Check(!HasCandidateLightId(candidates, 3),
+          "hidden-owner light outside visible receiver bounds is excluded");
+
+    const std::vector<game::SectorPreviewDynamicPointLightSource> boundarySources = {
+            LightSource(4, 20, Vector3{1.052f, 0.5f, 0.5f}, 0.005f)};
+    game::CollectSectorPreviewDynamicPointLightCandidates(boundarySources, visible, receiverBounds, candidates);
+    Check(HasCandidateLightId(candidates, 4),
+          "dynamic light sphere overlap uses padded receiver bounds at boundaries");
+}
+
+void TestDynamicSpotLightRuntimeSourcePacking()
+{
+    game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::SectorCollisionWorld lookupWorld;
+    std::string error;
+    Check(lookupWorld.BuildFromTopology(map, &error), "dynamic spotlight sector lookup world builds");
+
+    map.dynamicSpotLights = {
+            game::SectorTopologyDynamicSpotLight{
+                    30,
+                    Vector3{2.0f, 8.0f, 2.0f},
+                    Vector3{10.0f, 8.0f, 2.0f},
+                    WHITE,
+                    2.0f,
+                    16.0f,
+                    20.0f,
+                    35.0f,
+                    true,
+                    false,
+                    game::DynamicLightFlickerDefaultSpeed,
+                    game::DynamicLightFlickerDefaultAmount,
+                    true,
+                    7,
+                    0.01f,
+                    0.75f,
+                    2.0f},
+            game::SectorTopologyDynamicSpotLight{
+                    31,
+                    Vector3{6.0f, 8.0f, 2.0f},
+                    Vector3{6.0f, 4.0f, 2.0f},
+                    RED,
+                    1.0f,
+                    8.0f,
+                    15.0f,
+                    40.0f,
+                    true,
+                    true,
+                    2.0f,
+                    0.5f},
+            game::SectorTopologyDynamicSpotLight{
+                    32,
+                    Vector3{2.0f, 8.0f, 2.0f},
+                    Vector3{2.0f, 8.0f, 2.0f},
+                    WHITE,
+                    1.0f,
+                    -1.0f,
+                    20.0f,
+                    35.0f,
+                    true},
+            game::SectorTopologyDynamicSpotLight{
+                    33,
+                    Vector3{4.0f, 8.0f, 4.0f},
+                    Vector3{4.0f, 8.0f, 4.0f},
+                    BLUE,
+                    1.5f,
+                    12.0f,
+                    80.0f,
+                    20.0f,
+                    true}};
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> sources;
+    game::BuildSectorPreviewDynamicPointLightSources(map, &lookupWorld, sources);
+    Check(sources.size() == 3, "dynamic spotlight source collection drops invalid lights");
+
+    const game::SectorPreviewDynamicPointLightSource* spot = FindCandidateLightId(sources, 30);
+    Check(spot != nullptr && spot->ownerSectorId == 10,
+          "dynamic spotlight source collection assigns origin sector ownership");
+    Check(spot != nullptr && spot->light.kind == game::SectorPreviewDynamicLightKind::Spot,
+          "dynamic spotlight source packing marks spot kind");
+    Check(spot != nullptr && Near(spot->light.position, Vector3{0.25f, 1.0f, 0.25f}),
+          "dynamic spotlight source packing converts position to world units");
+    Check(spot != nullptr && Near(spot->light.direction, Vector3{1.0f, 0.0f, 0.0f}),
+          "dynamic spotlight source packing stores normalized world direction");
+    Check(spot != nullptr && Near(spot->light.radius, 2.0f),
+          "dynamic spotlight source packing converts range to world units");
+    Check(spot != nullptr
+                  && Near(spot->light.innerConeCos, std::cos(20.0f * 3.14159265358979323846f / 180.0f))
+                  && Near(spot->light.outerConeCos, std::cos(35.0f * 3.14159265358979323846f / 180.0f)),
+          "dynamic spotlight source packing stores cone cosines");
+    Check(spot != nullptr
+                  && spot->light.castsShadow
+                  && spot->light.shadowPriority == 7
+                  && Near(spot->light.shadowBias, 0.01f)
+                  && Near(spot->light.shadowStrength, 0.75f)
+                  && Near(spot->light.shadowSoftness, 2.0f),
+          "dynamic spotlight source packing preserves shadow selection settings");
+
+    const game::SectorPreviewDynamicPointLightSource* flickerSpot = FindCandidateLightId(sources, 31);
+    Check(flickerSpot != nullptr
+                  && flickerSpot->light.flicker
+                  && Near(flickerSpot->light.flickerSpeed, 2.0f)
+                  && Near(flickerSpot->light.flickerAmount, 0.5f),
+          "dynamic spotlight source packing preserves flicker upload settings");
+
+    const game::SectorPreviewDynamicPointLightSource* degenerateSpot = FindCandidateLightId(sources, 33);
+    Check(degenerateSpot != nullptr && Near(degenerateSpot->light.direction, Vector3{0.0f, -1.0f, 0.0f}),
+          "dynamic spotlight source packing uses a safe fallback direction for coincident target");
+    Check(degenerateSpot != nullptr
+                  && Near(degenerateSpot->light.innerConeCos, std::cos(80.0f * 3.14159265358979323846f / 180.0f))
+                  && Near(degenerateSpot->light.outerConeCos, degenerateSpot->light.innerConeCos),
+          "dynamic spotlight source packing clamps outer cone to at least inner cone");
+}
+
+void TestDynamicSpotLightCandidateSelection()
+{
+    const std::vector<game::SectorPreviewDynamicPointLightSource> sources = {
+            LightSource(1, 10, Vector3{0.5f, 0.5f, 0.5f}, 0.5f),
+            SpotLightSource(20, 20, Vector3{1.0f, 0.5f, 0.5f}, 0.75f),
+            SpotLightSource(21, 20, Vector3{3.0f, 0.5f, 0.5f}, 0.75f)};
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates;
+    game::CollectSectorPreviewDynamicPointLightCandidates(sources, visible, receiverBounds, candidates);
+    Check(HasCandidateLightId(candidates, 1), "dynamic light candidates keep point lights");
+    Check(HasCandidateLightId(candidates, 20),
+          "dynamic spotlight candidates include range sphere overlap with visible receivers");
+    Check(!HasCandidateLightId(candidates, 21),
+          "dynamic spotlight candidates exclude hidden irrelevant lights in normal visibility");
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.validStartSector = true;
+    fallback.fallbackDrawAll = true;
+    fallback.visibleSectorIds = {10};
+    game::CollectSectorPreviewDynamicPointLightCandidates(sources, fallback, receiverBounds, candidates);
+    Check(candidates.size() == 3,
+          "fallback draw-all dynamic light candidates include points and spotlights");
+}
+
+void TestDynamicPointLightRankingAndPacking()
+{
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates = {
+            LightSource(1, 10, Vector3{20.0f, 0.0f, 0.0f}, 10.0f, 100.0f),
+            LightSource(2, 20, Vector3{4.0f, 0.5f, 0.5f}, 10.0f, 1.0f),
+            LightSource(3, 20, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 1.0f),
+            LightSource(4, 20, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 4.0f)};
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    game::SelectRankedSectorPreviewDynamicPointLights(candidates, visible, receiverBounds, 2, selected);
+    Check(selected.size() == 2, "dynamic light ranking applies max-light cap");
+    Check(!selected.empty() && Near(selected[0].position, Vector3{0.5f, 0.5f, 0.5f}),
+          "dynamic light ranking lets receiver-relevant stronger lights win");
+    Check(selected.size() > 1 && Near(selected[1].position, Vector3{0.5f, 0.5f, 0.5f}),
+          "dynamic light ranking prioritizes receiver overlap over owner-sector visibility alone");
+
+    game::SelectRankedSectorPreviewDynamicPointLights(candidates, visible, receiverBounds, 8, selected);
+    Check(selected.size() == 4,
+          "dynamic light ranking does not drop candidates solely because they do not affect receiver bounds");
+
+    std::vector<int> selectedIds = {99};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            receiverBounds,
+            0,
+            selected,
+            &selectedIds);
+    Check(selected.empty() && selectedIds.empty(),
+          "dynamic light packing zero-count clears selected lights and IDs");
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> manyCandidates;
+    for (int i = 0; i < 12; ++i) {
+        manyCandidates.push_back(LightSource(
+                100 + i,
+                10,
+                Vector3{0.5f, 0.5f, 0.5f},
+                10.0f,
+                static_cast<float>(12 - i)));
+    }
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            manyCandidates,
+            visible,
+            receiverBounds,
+            8,
+            selected,
+            &selectedIds);
+    Check(selected.size() == 8 && selectedIds.size() == 8,
+          "dynamic light packing applies shader max-count cap");
+    Check(selectedIds.front() == 100 && selectedIds.back() == 107,
+          "dynamic light packing keeps deterministic strongest-light order at max count");
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> tiedCandidates = {
+            LightSource(8, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f),
+            LightSource(7, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f)};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            tiedCandidates,
+            visible,
+            receiverBounds,
+            1,
+            selected,
+            &selectedIds);
+    Check(selected.size() == 1 && selectedIds.size() == 1 && selectedIds[0] == 7,
+          "dynamic light ranking uses deterministic light-id tie breaking");
+}
+
+void TestDynamicSpotLightRankingAndPacking()
+{
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates;
+    for (int i = 0; i < 7; ++i) {
+        candidates.push_back(LightSource(
+                100 + i,
+                10,
+                Vector3{0.5f, 0.5f, 0.5f},
+                10.0f,
+                static_cast<float>(7 - i)));
+    }
+    candidates.push_back(SpotLightSource(200, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 20.0f));
+    candidates.push_back(SpotLightSource(201, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 19.0f));
+
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    std::vector<int> selectedIds;
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            receiverBounds,
+            8,
+            selected,
+            &selectedIds);
+    Check(selected.size() == 8 && selectedIds.size() == 8,
+          "dynamic points and spotlights share the total runtime light cap");
+    Check(selectedIds.size() >= 2 && selectedIds[0] == 200 && selectedIds[1] == 201,
+          "dynamic spotlight ranking uses the same receiver score as points");
+    Check(selected.size() >= 2
+                  && selected[0].kind == game::SectorPreviewDynamicLightKind::Spot
+                  && selected[1].kind == game::SectorPreviewDynamicLightKind::Spot,
+          "dynamic light packing preserves selected spotlight kind");
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> tiedCandidates = {
+            SpotLightSource(8, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f),
+            LightSource(7, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f)};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            tiedCandidates,
+            visible,
+            receiverBounds,
+            1,
+            selected,
+            &selectedIds);
+    Check(selected.size() == 1 && selectedIds.size() == 1 && selectedIds[0] == 7,
+          "dynamic point and spotlight tie ranking remains deterministic by light id");
+}
+
+void TestDynamicSpotLightShadowCasterSelection()
+{
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates = {
+            ShadowSpotLightSource(10, 10, Vector3{0.5f, 0.5f, 0.5f}, 8.0f, 4.0f),
+            ShadowSpotLightSource(11, 10, Vector3{0.5f, 0.5f, 0.5f}, 8.0f, 3.0f),
+            ShadowSpotLightSource(12, 10, Vector3{0.5f, 0.5f, 0.5f}, 8.0f, 2.0f)};
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    std::vector<int> selectedIds;
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            receiverBounds,
+            2,
+            selected,
+            &selectedIds);
+    for (game::SectorPreviewDynamicPointLightUniform& light : selected) {
+        if (light.lightId == 10) {
+            light.shadowSoftness = 2.5f;
+        }
+    }
+
+    std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> shadowCasters;
+    game::SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+            selected,
+            visible,
+            receiverBounds,
+            game::MaxDynamicSpotLightShadowCasters,
+            shadowCasters);
+    Check(shadowCasters.size() == 2
+                  && HasShadowCasterLightId(shadowCasters, 10)
+                  && HasShadowCasterLightId(shadowCasters, 11)
+                  && !HasShadowCasterLightId(shadowCasters, 12),
+          "dynamic spotlight shadow selection only assigns slots to already-selected dynamic lights");
+    Check(shadowCasters.size() == game::MaxDynamicSpotLightShadowCasters,
+          "dynamic spotlight shadow selection applies the default shadow caster cap");
+    Check(shadowCasters.size() >= 2
+                  && shadowCasters[0].dynamicLightIndex == 0
+                  && shadowCasters[0].shadowSlot == 0
+                  && shadowCasters[1].dynamicLightIndex == 1
+                  && shadowCasters[1].shadowSlot == 1,
+          "dynamic spotlight shadow selection records dynamic light index and sequential shadow slot");
+    Check(!shadowCasters.empty()
+                  && shadowCasters[0].lightId == 10
+                  && Near(shadowCasters[0].shadowSoftness, 2.5f),
+          "dynamic spotlight shadow selection carries softness into the shadow caster slot");
+
+    selected = {
+            LightSource(20, 10, Vector3{0.5f, 0.5f, 0.5f}, 8.0f, 10.0f).light,
+            SpotLightSource(21, 10, Vector3{0.5f, 0.5f, 0.5f}, 8.0f, 9.0f).light,
+            ShadowSpotLightSource(22, 10, Vector3{0.5f, 0.5f, 0.5f}, 8.0f, 1.0f).light};
+    selected[0].castsShadow = true;
+    game::SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+            selected,
+            visible,
+            receiverBounds,
+            game::MaxDynamicSpotLightShadowCasters,
+            shadowCasters);
+    Check(shadowCasters.size() == 1 && shadowCasters[0].lightId == 22,
+          "dynamic spotlight shadow selection ignores dynamic points and castsShadow=false spotlights");
+
+    selected = {
+            ShadowSpotLightSource(30, 10, Vector3{0.5f, 0.5f, 0.5f}, 8.0f, 10.0f, 0).light,
+            ShadowSpotLightSource(31, 10, Vector3{0.5f, 0.5f, 0.5f}, 8.0f, 1.0f, 1).light,
+            ShadowSpotLightSource(32, 10, Vector3{0.5f, 0.5f, 0.5f}, 8.0f, 9.0f, 0).light,
+            ShadowSpotLightSource(33, 10, Vector3{0.5f, 0.5f, 0.5f}, 8.0f, 9.0f, 0).light};
+    game::SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+            selected,
+            visible,
+            receiverBounds,
+            4,
+            shadowCasters);
+    Check(shadowCasters.size() == 4
+                  && shadowCasters[0].lightId == 31
+                  && shadowCasters[1].lightId == 30
+                  && shadowCasters[2].lightId == 32
+                  && shadowCasters[3].lightId == 33,
+          "dynamic spotlight shadow selection orders by priority then score then light id");
+
+    game::SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+            selected,
+            visible,
+            receiverBounds,
+            0,
+            shadowCasters);
+    Check(shadowCasters.empty(),
+          "dynamic spotlight shadow selection clears output for zero shadow caster budget");
+}
+
+void TestDynamicSpotLightShadowMatrices()
+{
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected = {
+            ShadowSpotLightSource(40, 10, Vector3{0.5f, 1.5f, 0.5f}, 8.0f, 4.0f).light,
+            ShadowSpotLightSource(41, 10, Vector3{0.5f, 1.5f, 0.5f}, 8.0f, 3.0f).light,
+            ShadowSpotLightSource(42, 10, Vector3{0.5f, 1.5f, 0.5f}, 8.0f, 2.0f).light};
+    selected[0].lightId = 40;
+    selected[0].direction = Vector3{1.0f, 0.0f, 0.0f};
+    selected[1].lightId = 41;
+    selected[1].direction = Vector3{0.0f, -1.0f, 0.0f};
+    selected[2].lightId = 42;
+    selected[2].direction = Vector3{0.0f, 0.0f, 0.0f};
+
+    game::SectorPreviewDynamicSpotLightShadowMatrix matrix;
+    Check(game::MakeSectorPreviewDynamicSpotLightShadowMatrix(selected[0], 0, 0, matrix),
+          "dynamic spotlight shadow matrix builds for a valid spotlight");
+    Check(matrix.lightId == 40
+                  && matrix.dynamicLightIndex == 0
+                  && matrix.shadowSlot == 0
+                  && FiniteMatrix(matrix.view)
+                  && FiniteMatrix(matrix.projection)
+                  && FiniteMatrix(matrix.lightViewProjection),
+          "dynamic spotlight shadow matrix output is finite and preserves slot metadata");
+    const Vector4 centerClip = TransformHomogeneous(
+            Vector3{selected[0].position.x + 2.0f, selected[0].position.y, selected[0].position.z},
+            matrix.lightViewProjection);
+    const Vector3 centerNdc{
+            centerClip.x / centerClip.w,
+            centerClip.y / centerClip.w,
+            centerClip.z / centerClip.w};
+    Check(centerClip.w > 0.0f
+                  && std::isfinite(centerNdc.x)
+                  && std::isfinite(centerNdc.y)
+                  && std::isfinite(centerNdc.z)
+                  && std::fabs(centerNdc.x) < 0.001f
+                  && std::fabs(centerNdc.y) < 0.001f
+                  && centerNdc.z >= -1.0f
+                  && centerNdc.z <= 1.0f,
+          "dynamic spotlight shadow matrix projects a point in front of the light into clip space");
+
+    Check(game::MakeSectorPreviewDynamicSpotLightShadowMatrix(selected[1], 1, 1, matrix)
+                  && FiniteMatrix(matrix.lightViewProjection),
+          "dynamic spotlight shadow matrix handles near-vertical spotlight directions");
+    Check(game::MakeSectorPreviewDynamicSpotLightShadowMatrix(selected[2], 2, 0, matrix)
+                  && FiniteMatrix(matrix.lightViewProjection),
+          "dynamic spotlight shadow matrix uses a finite fallback for degenerate directions");
+
+    selected[0].kind = game::SectorPreviewDynamicLightKind::Point;
+    Check(!game::MakeSectorPreviewDynamicSpotLightShadowMatrix(selected[0], 0, 0, matrix),
+          "dynamic spotlight shadow matrix rejects point lights");
+    selected[0].kind = game::SectorPreviewDynamicLightKind::Spot;
+    selected[0].radius = 0.01f;
+    Check(!game::MakeSectorPreviewDynamicSpotLightShadowMatrix(selected[0], 0, 0, matrix),
+          "dynamic spotlight shadow matrix rejects invalid shadow ranges");
+    selected[0].radius = 8.0f;
+
+    std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> shadowCasters = {
+            game::SectorPreviewDynamicSpotLightShadowCaster{40, 0, 0, 0, 1.0f, 0.002f, 1.0f, 1.0f},
+            game::SectorPreviewDynamicSpotLightShadowCaster{41, 1, 1, 0, 1.0f, 0.002f, 1.0f, 1.0f},
+            game::SectorPreviewDynamicSpotLightShadowCaster{99, 99, 2, 0, 1.0f, 0.002f, 1.0f, 1.0f}};
+    std::vector<game::SectorPreviewDynamicSpotLightShadowMatrix> matrices;
+    game::BuildSectorPreviewDynamicSpotLightShadowMatrices(selected, shadowCasters, matrices);
+    Check(matrices.size() == game::MaxDynamicSpotLightShadowCasters
+                  && matrices[0].shadowSlot == 0
+                  && matrices[1].shadowSlot == 1,
+          "dynamic spotlight shadow matrix build respects selected caster slots and skips invalid indices");
+    Check(game::DynamicSpotLightShadowMapResolution == 1024,
+          "dynamic spotlight shadow map default resolution is 1024");
+}
+
+void TestDynamicSpotLightShadowUniformPacking()
+{
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected = {
+            ShadowSpotLightSource(50, 10, Vector3{0.5f, 1.5f, 0.5f}, 8.0f, 4.0f).light,
+            LightSource(51, 10, Vector3{0.5f, 1.5f, 0.5f}, 8.0f, 6.0f).light,
+            ShadowSpotLightSource(52, 10, Vector3{0.5f, 1.5f, 0.5f}, 8.0f, 3.0f).light};
+    selected[0].lightId = 50;
+    selected[0].shadowBias = 0.004f;
+    selected[0].shadowStrength = 0.75f;
+    selected[0].shadowSoftness = 2.0f;
+    selected[1].lightId = 51;
+    selected[1].castsShadow = true;
+    selected[2].lightId = 52;
+    selected[2].shadowBias = 0.006f;
+    selected[2].shadowStrength = 0.5f;
+    selected[2].shadowSoftness = 4.0f;
+
+    std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> shadowCasters = {
+            game::SectorPreviewDynamicSpotLightShadowCaster{50, 0, 0, 0, 1.0f, 0.004f, 0.75f, 2.0f},
+            game::SectorPreviewDynamicSpotLightShadowCaster{52, 2, 1, 0, 1.0f, 0.006f, 0.5f, 4.0f}};
+    std::vector<game::SectorPreviewDynamicSpotLightShadowMatrix> matrices;
+    game::BuildSectorPreviewDynamicSpotLightShadowMatrices(selected, shadowCasters, matrices);
+
+    const game::SectorPreviewDynamicSpotLightShadowUniforms uniforms =
+            game::PackSectorPreviewDynamicSpotLightShadowUniforms(selected, shadowCasters, matrices);
+    Check(uniforms.dynamicLightShadowSlots[0] == 0
+                  && uniforms.dynamicLightShadowSlots[1] == -1
+                  && uniforms.dynamicLightShadowSlots[2] == 1,
+          "dynamic spotlight shadow uniform packing assigns slots only to shadowed spotlights");
+    Check(Near(uniforms.shadowBias[0], 0.004f)
+                  && Near(uniforms.shadowStrength[0], 0.75f)
+                  && Near(uniforms.shadowSoftness[0], 2.0f)
+                  && Near(uniforms.shadowBias[1], 0.006f)
+                  && Near(uniforms.shadowStrength[1], 0.5f)
+                  && Near(uniforms.shadowSoftness[1], 4.0f),
+          "dynamic spotlight shadow uniform packing carries per-slot bias strength and softness");
+    Check(FiniteMatrix(uniforms.shadowLightMatrices[0]) && FiniteMatrix(uniforms.shadowLightMatrices[1]),
+          "dynamic spotlight shadow uniform packing carries finite light-space matrices");
+
+    const game::SectorPreviewDynamicSpotLightShadowUniforms emptyUniforms =
+            game::PackSectorPreviewDynamicSpotLightShadowUniforms(selected, {}, {});
+    bool allSlotsEmpty = true;
+    for (int slot : emptyUniforms.dynamicLightShadowSlots) {
+        allSlotsEmpty = allSlotsEmpty && slot == -1;
+    }
+    Check(allSlotsEmpty
+                  && Near(emptyUniforms.shadowBias[0], game::DynamicSpotLightDefaultShadowBias)
+                  && Near(emptyUniforms.shadowStrength[0], 0.0f)
+                  && Near(emptyUniforms.shadowSoftness[0], game::DynamicSpotLightDefaultShadowSoftness),
+          "dynamic spotlight shadow uniform packing is safe when zero shadow casters are active");
+}
+
+void TestDynamicPointLightFlickerHelper()
+{
+    const float a = game::EvaluateDynamicLightFlickerMultiplier(42, 1.25f, 1.0f, 0.5f);
+    const float b = game::EvaluateDynamicLightFlickerMultiplier(42, 1.25f, 1.0f, 0.5f);
+    Check(Near(a, b), "dynamic light flicker is deterministic for identical inputs");
+    Check(std::isfinite(a) && a >= 0.0f && a <= 1.0f,
+          "dynamic light flicker multiplier is finite and clamped");
+    Check(Near(game::EvaluateDynamicLightFlickerMultiplier(42, 1.25f, 3.0f, 0.0f), 1.0f),
+          "dynamic light flicker amount zero returns full brightness");
+    Check(Near(game::EvaluateDynamicLightFlickerMultiplier(42, std::numeric_limits<float>::infinity(), 1.0f, 0.5f), 1.0f),
+          "dynamic light flicker non-finite time returns full brightness");
+
+    bool foundTimeVariation = false;
+    float previous = game::EvaluateDynamicLightFlickerMultiplier(42, 0.0f, 1.0f, 0.8f);
+    for (int i = 1; i <= 240; ++i) {
+        const float current = game::EvaluateDynamicLightFlickerMultiplier(
+                42,
+                static_cast<float>(i) / 120.0f,
+                1.0f,
+                0.8f);
+        if (std::fabs(current - previous) > 0.0001f) {
+            foundTimeVariation = true;
+            break;
+        }
+        previous = current;
+    }
+    Check(foundTimeVariation, "dynamic light flicker can vary across absolute time samples");
+
+    bool foundLightVariation = false;
+    const float firstLight = game::EvaluateDynamicLightFlickerMultiplier(10, 0.375f, 1.0f, 1.0f);
+    for (int lightId = 11; lightId < 40; ++lightId) {
+        const float current = game::EvaluateDynamicLightFlickerMultiplier(lightId, 0.375f, 1.0f, 1.0f);
+        if (std::fabs(current - firstLight) > 0.0001f) {
+            foundLightVariation = true;
+            break;
+        }
+    }
+    Check(foundLightVariation, "dynamic light flicker varies across light IDs without requiring an exact pattern");
+
+    const float sameTimestampFrom60Hz = game::EvaluateDynamicLightFlickerMultiplier(7, 0.5f, 1.25f, 0.65f);
+    const float sameTimestampFrom144Hz = game::EvaluateDynamicLightFlickerMultiplier(7, 0.5f, 1.25f, 0.65f);
+    Check(Near(sameTimestampFrom60Hz, sameTimestampFrom144Hz),
+          "dynamic light flicker depends on absolute timestamp rather than sample cadence");
+
+    int slowChanges = 0;
+    int fastChanges = 0;
+    float slowPrevious = game::EvaluateDynamicLightFlickerMultiplier(30, 0.0f, 0.1f, 0.8f);
+    float fastPrevious = game::EvaluateDynamicLightFlickerMultiplier(30, 0.0f, 4.0f, 0.8f);
+    for (int i = 1; i <= 500; ++i) {
+        const float t = static_cast<float>(i) / 250.0f;
+        const float slowCurrent = game::EvaluateDynamicLightFlickerMultiplier(30, t, 0.1f, 0.8f);
+        const float fastCurrent = game::EvaluateDynamicLightFlickerMultiplier(30, t, 4.0f, 0.8f);
+        if (std::fabs(slowCurrent - slowPrevious) > 0.0001f) {
+            ++slowChanges;
+        }
+        if (std::fabs(fastCurrent - fastPrevious) > 0.0001f) {
+            ++fastChanges;
+        }
+        slowPrevious = slowCurrent;
+        fastPrevious = fastCurrent;
+    }
+    Check(fastChanges > slowChanges, "higher dynamic light flicker speed changes sampled multipliers more often");
+
+    const int slowSegmentCrossings = static_cast<int>(
+            std::floor(2.0f * game::DynamicLightFlickerBaseRateHz * game::ClampDynamicLightFlickerSpeed(0.1f)));
+    const int fastSegmentCrossings = static_cast<int>(
+            std::floor(2.0f * game::DynamicLightFlickerBaseRateHz * game::ClampDynamicLightFlickerSpeed(4.0f)));
+    Check(fastSegmentCrossings > slowSegmentCrossings,
+          "higher dynamic light flicker speed crosses more time segments over the same range");
+}
+
+void TestDynamicPointLightFlickerEffectiveIntensity()
+{
+    game::SectorPreviewDynamicPointLightUniform light;
+    light.lightId = 12;
+    light.intensity = 2.25f;
+    light.flicker = false;
+    light.flickerSpeed = 4.0f;
+    light.flickerAmount = 1.0f;
+    Check(Near(game::DynamicLightEffectiveUploadIntensity(light, 0.75f), 2.25f),
+          "disabled dynamic light flicker leaves upload intensity unchanged");
+
+    light.flicker = true;
+    light.flickerAmount = 0.0f;
+    Check(Near(game::DynamicLightEffectiveUploadIntensity(light, 0.75f), 2.25f),
+          "zero dynamic light flicker amount leaves upload intensity unchanged");
+
+    light.flickerAmount = 1.0f;
+    const float effective = game::DynamicLightEffectiveUploadIntensity(light, 0.75f);
+    Check(std::isfinite(effective) && effective >= 0.0f && effective <= light.intensity,
+          "enabled dynamic light flicker upload intensity remains within base intensity bounds");
+}
+
+void TestDynamicPointLightFlickerDoesNotAffectSelection()
+{
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates = {
+            LightSource(1, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 5.0f),
+            LightSource(2, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 4.0f)};
+    candidates[0].light.flicker = true;
+    candidates[0].light.flickerSpeed = 10.0f;
+    candidates[0].light.flickerAmount = 1.0f;
+
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    std::vector<int> selectedIds;
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            receiverBounds,
+            1,
+            selected,
+            &selectedIds);
+    Check(selectedIds.size() == 1 && selectedIds[0] == 1 && selected.size() == 1 && Near(selected[0].intensity, 5.0f),
+          "dynamic light selection uses base intensity even when flicker is enabled");
+}
+
+void TestDynamicSpotLightFlickerDoesNotAffectSelection()
+{
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates = {
+            SpotLightSource(30, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 5.0f),
+            LightSource(31, 10, Vector3{0.5f, 0.5f, 0.5f}, 10.0f, 4.0f)};
+    candidates[0].light.flicker = true;
+    candidates[0].light.flickerSpeed = 10.0f;
+    candidates[0].light.flickerAmount = 1.0f;
+
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    std::vector<int> selectedIds;
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            receiverBounds,
+            1,
+            selected,
+            &selectedIds);
+    Check(selectedIds.size() == 1
+                  && selectedIds[0] == 30
+                  && selected.size() == 1
+                  && selected[0].kind == game::SectorPreviewDynamicLightKind::Spot
+                  && Near(selected[0].intensity, 5.0f),
+          "dynamic spotlight selection uses base intensity even when flicker is enabled");
+}
+
+void TestDynamicPointLightFallbackUsesAllReceiverBounds()
+{
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates = {
+            LightSource(1, 10, Vector3{0.5f, 0.5f, 0.5f}, 5.0f, 1.0f),
+            LightSource(2, 20, Vector3{20.5f, 0.5f, 0.5f}, 5.0f, 4.0f)};
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f}),
+            Bounds(20, Vector3{20.0f, 0.0f, 0.0f}, Vector3{21.0f, 1.0f, 1.0f})};
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.validStartSector = true;
+    fallback.fallbackDrawAll = true;
+    fallback.visibleSectorIds = {10};
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> collected;
+    game::CollectSectorPreviewDynamicPointLightCandidates(candidates, fallback, receiverBounds, collected);
+    Check(collected.size() == 2,
+          "fallback draw-all candidate collection includes all valid lights");
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    game::SelectRankedSectorPreviewDynamicPointLights(collected, fallback, receiverBounds, 1, selected);
+    Check(selected.size() == 1 && Near(selected[0].position, Vector3{20.5f, 0.5f, 0.5f}),
+          "fallback draw-all ranking treats all receiver bounds as visible");
+
+    const std::vector<game::SectorReceiverBounds> noBounds;
+    game::CollectSectorPreviewDynamicPointLightCandidates(candidates, fallback, noBounds, collected);
+    game::SelectRankedSectorPreviewDynamicPointLights(collected, fallback, noBounds, 2, selected);
+    Check(selected.size() == 2,
+          "fallback draw-all without receiver bounds still selects valid lights conservatively");
+}
+
+void TestDynamicPointLightSelectionHysteresis()
+{
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+    const std::vector<game::SectorReceiverBounds> noReceiverBounds;
+
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates = {
+            LightSource(1, 10, Vector3{0.0f, 0.0f, 0.0f}, 5.0f, 1.0f),
+            LightSource(2, 10, Vector3{1.0f, 0.0f, 0.0f}, 5.0f, 1.1f)};
+    std::vector<int> selectedIds = {1};
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            noReceiverBounds,
+            1,
+            selected,
+            &selectedIds,
+            &selectedIds);
+    Check(selectedIds.size() == 1 && selectedIds[0] == 1,
+          "dynamic light hysteresis retains old selected light against small score difference");
+
+    candidates = {
+            LightSource(1, 10, Vector3{0.0f, 0.0f, 0.0f}, 5.0f, 1.0f),
+            LightSource(2, 10, Vector3{1.0f, 0.0f, 0.0f}, 5.0f, 1.25f)};
+    selectedIds = {1};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            noReceiverBounds,
+            1,
+            selected,
+            &selectedIds,
+            &selectedIds);
+    Check(selectedIds.size() == 1 && selectedIds[0] == 2,
+          "dynamic light hysteresis replaces old selected light with clearly better candidate");
+
+    candidates = {
+            LightSource(2, 10, Vector3{1.0f, 0.0f, 0.0f}, 5.0f, 1.0f)};
+    selectedIds = {1};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            noReceiverBounds,
+            1,
+            selected,
+            &selectedIds,
+            &selectedIds);
+    Check(selectedIds.size() == 1 && selectedIds[0] == 2,
+          "dynamic light hysteresis removes deleted or disabled old selected light immediately");
+
+    candidates = {
+            LightSource(1, 10, Vector3{0.0f, 0.0f, 0.0f}, 5.0f, 1.0f),
+            LightSource(2, 10, Vector3{1.0f, 0.0f, 0.0f}, 5.0f, 1.0f),
+            LightSource(3, 10, Vector3{2.0f, 0.0f, 0.0f}, 5.0f, 1.0f)};
+    selectedIds = {1, 2, 3};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            noReceiverBounds,
+            2,
+            selected,
+            &selectedIds,
+            &selectedIds);
+    Check(selectedIds.size() == 2,
+          "dynamic light hysteresis keeps selected count capped");
+
+    const std::vector<game::SectorReceiverBounds> receiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+    candidates = {
+            LightSource(1, 10, Vector3{20.0f, 0.0f, 0.0f}, 5.0f, 1.0f),
+            LightSource(2, 10, Vector3{0.5f, 0.5f, 0.5f}, 5.0f, 1.0f)};
+    selectedIds = {1};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            receiverBounds,
+            1,
+            selected,
+            &selectedIds,
+            &selectedIds);
+    Check(selectedIds.size() == 1 && selectedIds[0] == 2 && !HasSelectedLightId(selectedIds, 1),
+          "dynamic light hysteresis does not retain outside-radius old selected light");
 }
 
 } // namespace
@@ -1026,7 +2063,23 @@ int main()
     TestGeneratedGeometryPickingUsesVisibilityFilter();
     TestGeneratedSurfaceHighlightVisibilitySelection();
     TestDrawRecordVisibilitySelection();
+    TestSectorReceiverBoundsFromDrawRecords();
     TestBloomDrawRecordVisibilitySelection();
+    TestDynamicPointLightVisibilityCandidateSelection();
+    TestDynamicPointLightReceiverBoundCandidateSelection();
+    TestDynamicSpotLightRuntimeSourcePacking();
+    TestDynamicSpotLightCandidateSelection();
+    TestDynamicPointLightRankingAndPacking();
+    TestDynamicSpotLightRankingAndPacking();
+    TestDynamicSpotLightShadowCasterSelection();
+    TestDynamicSpotLightShadowMatrices();
+    TestDynamicSpotLightShadowUniformPacking();
+    TestDynamicPointLightFlickerHelper();
+    TestDynamicPointLightFlickerEffectiveIntensity();
+    TestDynamicPointLightFlickerDoesNotAffectSelection();
+    TestDynamicSpotLightFlickerDoesNotAffectSelection();
+    TestDynamicPointLightFallbackUsesAllReceiverBounds();
+    TestDynamicPointLightSelectionHysteresis();
     if (failures == 0) {
         std::puts("Sector topology mesh builder tests passed");
     }

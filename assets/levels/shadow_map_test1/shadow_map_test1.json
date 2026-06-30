@@ -11,6 +11,10 @@
       "path": "assets/images/floor.png",
       "filter": "anisotropic8x"
     },
+    "metal_bars_01": {
+      "path": "assets/images/middle/metal_bars_01.png",
+      "filter": "anisotropic8x"
+    },
     "step_wall": {
       "path": "assets/images/wall.png",
       "filter": "anisotropic8x"
@@ -24,41 +28,81 @@
       "filter": "anisotropic8x"
     }
   },
-  "staticLights": [
+  "staticLights": [],
+  "staticSpotLights": [
     {
       "id": 1,
       "position": [
-        64.0,
+        160.0,
+        14.399999618530273,
+        56.0
+      ],
+      "target": [
+        160.0,
+        8.0,
+        16.0
+      ],
+      "range": 80.0,
+      "sourceRadius": 2.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "outerConeDegrees": 45.0
+    }
+  ],
+  "dynamicPointLights": [],
+  "dynamicSpotLights": [
+    {
+      "id": 1,
+      "position": [
+        72.0,
         14.399999618530273,
         72.0
       ],
-      "radius": 64.0,
-      "sourceRadius": 2.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 0,
-        "g": 100,
-        "b": 255,
-        "a": 255
-      }
-    }
-  ],
-  "dynamicPointLights": [
-    {
-      "id": 1,
-      "position": [
-        32.0,
-        20.0,
-        32.0
+      "target": [
+        72.0,
+        8.0,
+        8.0
       ],
-      "radius": 64.0,
-      "intensity": 1.5,
+      "range": 80.0,
+      "intensity": 3.0,
       "color": {
         "r": 255,
-        "g": 245,
-        "b": 225,
+        "g": 255,
+        "b": 255,
         "a": 255
-      }
+      },
+      "outerConeDegrees": 45.0,
+      "castsShadow": true,
+      "shadowSoftness": 4.0
+    },
+    {
+      "id": 2,
+      "position": [
+        76.0,
+        14.399999618530273,
+        152.0
+      ],
+      "target": [
+        76.0,
+        8.0,
+        196.0
+      ],
+      "range": 80.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "outerConeDegrees": 45.0,
+      "castsShadow": true,
+      "shadowSoftness": 2.0
     }
   ],
   "lightmapSettings": {
@@ -96,10 +140,10 @@
     "intensity": 1.0
   },
   "bakedLightmap": {
-    "path": "assets/levels/test6/test6.lightmap.png",
+    "path": "assets/levels/shadow_map_test1/shadow_map_test1.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "a81cf4ec4313532b"
+    "sourceHash": "4618301d85196f88"
   },
   "authoringGraph": {
     "vertices": [
@@ -110,158 +154,98 @@
       },
       {
         "id": 2,
-        "x": 1280,
+        "x": 3200,
         "y": 256
       },
       {
         "id": 3,
-        "x": 1280,
-        "y": 1408
+        "x": 3200,
+        "y": 2688
       },
       {
         "id": 4,
         "x": 256,
-        "y": 1408
+        "y": 2688
       },
       {
         "id": 5,
-        "x": 2048,
-        "y": 256
+        "x": 1088,
+        "y": 448
       },
       {
         "id": 6,
-        "x": 3072,
-        "y": 256
+        "x": 1216,
+        "y": 448
       },
       {
         "id": 7,
-        "x": 3072,
-        "y": 1408
+        "x": 1216,
+        "y": 576
       },
       {
         "id": 8,
-        "x": 2048,
-        "y": 1408
+        "x": 1088,
+        "y": 576
       },
       {
         "id": 9,
-        "x": 1280,
-        "y": 640
+        "x": 2496,
+        "y": 448
       },
       {
         "id": 10,
-        "x": 2048,
-        "y": 640
+        "x": 2624,
+        "y": 448
       },
       {
         "id": 11,
-        "x": 1280,
-        "y": 896
+        "x": 2624,
+        "y": 576
       },
       {
         "id": 12,
-        "x": 2048,
-        "y": 896
+        "x": 2496,
+        "y": 576
       },
       {
         "id": 13,
-        "x": 2432,
-        "y": 1408
+        "x": 1024,
+        "y": 2688
       },
       {
         "id": 14,
-        "x": 2432,
-        "y": 2048
+        "x": 1024,
+        "y": 3712
       },
       {
         "id": 15,
-        "x": 2816,
-        "y": 1408
+        "x": 1408,
+        "y": 3712
       },
       {
         "id": 16,
-        "x": 2816,
-        "y": 2048
+        "x": 1408,
+        "y": 2688
       },
       {
         "id": 17,
-        "x": 1024,
-        "y": 2048
+        "x": 1088,
+        "y": 2816
       },
       {
         "id": 18,
-        "x": 3072,
-        "y": 2048
+        "x": 1344,
+        "y": 2816
       },
       {
         "id": 19,
-        "x": 3072,
-        "y": 2816
+        "x": 1344,
+        "y": 2880
       },
       {
         "id": 20,
-        "x": 1024,
-        "y": 2816
-      },
-      {
-        "id": 21,
-        "x": 1280,
-        "y": 2816
-      },
-      {
-        "id": 22,
-        "x": 1280,
-        "y": 4096
-      },
-      {
-        "id": 23,
-        "x": 3584,
-        "y": 4096
-      },
-      {
-        "id": 24,
-        "x": 3584,
-        "y": 3200
-      },
-      {
-        "id": 25,
-        "x": 3200,
-        "y": 3200
-      },
-      {
-        "id": 26,
-        "x": 3200,
-        "y": 3712
-      },
-      {
-        "id": 27,
-        "x": 2816,
-        "y": 3712
-      },
-      {
-        "id": 28,
-        "x": 2816,
-        "y": 3200
-      },
-      {
-        "id": 29,
-        "x": 2432,
-        "y": 3200
-      },
-      {
-        "id": 30,
-        "x": 2432,
-        "y": 3712
-      },
-      {
-        "id": 31,
-        "x": 1664,
-        "y": 3712
-      },
-      {
-        "id": 32,
-        "x": 1664,
-        "y": 2816
+        "x": 1088,
+        "y": 2880
       }
     ],
     "lines": [
@@ -312,102 +296,119 @@
       },
       {
         "id": 10,
+        "startVertexId": 10,
+        "endVertexId": 11
+      },
+      {
+        "id": 11,
         "startVertexId": 11,
         "endVertexId": 12
       },
       {
-        "id": 11,
+        "id": 12,
+        "startVertexId": 12,
+        "endVertexId": 9
+      },
+      {
+        "id": 13,
         "startVertexId": 13,
         "endVertexId": 14
       },
       {
-        "id": 12,
+        "id": 14,
+        "startVertexId": 14,
+        "endVertexId": 15
+      },
+      {
+        "id": 15,
         "startVertexId": 15,
         "endVertexId": 16
       },
       {
-        "id": 13,
+        "id": 16,
         "startVertexId": 17,
         "endVertexId": 18
       },
       {
-        "id": 14,
+        "id": 17,
         "startVertexId": 18,
         "endVertexId": 19
       },
       {
-        "id": 15,
+        "id": 18,
         "startVertexId": 19,
         "endVertexId": 20
       },
       {
-        "id": 16,
+        "id": 19,
         "startVertexId": 20,
         "endVertexId": 17
-      },
-      {
-        "id": 17,
-        "startVertexId": 21,
-        "endVertexId": 22
-      },
-      {
-        "id": 18,
-        "startVertexId": 22,
-        "endVertexId": 23
-      },
-      {
-        "id": 19,
-        "startVertexId": 23,
-        "endVertexId": 24
-      },
-      {
-        "id": 20,
-        "startVertexId": 24,
-        "endVertexId": 25
-      },
-      {
-        "id": 21,
-        "startVertexId": 25,
-        "endVertexId": 26
-      },
-      {
-        "id": 22,
-        "startVertexId": 26,
-        "endVertexId": 27
-      },
-      {
-        "id": 23,
-        "startVertexId": 27,
-        "endVertexId": 28
-      },
-      {
-        "id": 24,
-        "startVertexId": 28,
-        "endVertexId": 29
-      },
-      {
-        "id": 25,
-        "startVertexId": 29,
-        "endVertexId": 30
-      },
-      {
-        "id": 26,
-        "startVertexId": 30,
-        "endVertexId": 31
-      },
-      {
-        "id": 27,
-        "startVertexId": 31,
-        "endVertexId": 32
       }
     ],
-    "lineSides": [],
+    "lineSides": [
+      {
+        "lineId": 16,
+        "side": "front",
+        "wall": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "middle": {
+          "textureId": "metal_bars_01",
+          "uv": {
+            "scale": [
+              1.0,
+              0.6666666865348816
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      }
+    ],
     "faceAnchors": [
       {
         "id": 1,
         "name": "Sector 1",
-        "x": 704,
-        "y": 292,
+        "x": 1544,
+        "y": 332,
         "floorZ": 0.0,
         "ceilingZ": 24.0,
         "floorTextureId": "floor",
@@ -482,10 +483,10 @@
       {
         "id": 2,
         "name": "Sector 2",
-        "x": 2496,
-        "y": 292,
-        "floorZ": 0.0,
-        "ceilingZ": 24.0,
+        "x": 1144,
+        "y": 452,
+        "floorZ": 24.0,
+        "ceilingZ": 25.0,
         "floorTextureId": "floor",
         "ceilingTextureId": "ceiling",
         "floorUv": {
@@ -558,8 +559,84 @@
       {
         "id": 3,
         "name": "Sector 3",
-        "x": 1616,
-        "y": 648,
+        "x": 2552,
+        "y": 452,
+        "floorZ": 24.0,
+        "ceilingZ": 25.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 4,
+        "name": "Sector 4",
+        "x": 1192,
+        "y": 2720,
         "floorZ": 0.0,
         "ceilingZ": 24.0,
         "floorTextureId": "floor",
@@ -632,87 +709,11 @@
         }
       },
       {
-        "id": 4,
-        "name": "Sector 4",
-        "x": 1920,
-        "y": 2072,
-        "floorZ": 0.0,
-        "ceilingZ": 24.0,
-        "floorTextureId": "floor",
-        "ceilingTextureId": "ceiling",
-        "floorUv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        },
-        "ceilingUv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        },
-        "ambientColor": {
-          "r": 255,
-          "g": 255,
-          "b": 255,
-          "a": 255
-        },
-        "ambientIntensity": 1.0,
-        "defaultWall": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "defaultLower": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "defaultUpper": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
         "id": 5,
         "name": "Sector 5",
-        "x": 2600,
-        "y": 1428,
-        "floorZ": 0.0,
+        "x": 1208,
+        "y": 2820,
+        "floorZ": 1.0,
         "ceilingZ": 24.0,
         "floorTextureId": "floor",
         "ceilingTextureId": "ceiling",
@@ -742,83 +743,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
-        "defaultWall": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "defaultLower": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "defaultUpper": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
-        "id": 6,
-        "name": "Sector 6",
-        "x": 1568,
-        "y": 2856,
-        "floorZ": 0.0,
-        "ceilingZ": 24.0,
-        "floorTextureId": "floor",
-        "ceilingTextureId": "ceiling",
-        "floorUv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        },
-        "ceilingUv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        },
-        "ambientColor": {
-          "r": 255,
-          "g": 255,
-          "b": 255,
-          "a": 255
-        },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.20000000298023224,
         "defaultWall": {
           "textureId": "wall",
           "uv": {

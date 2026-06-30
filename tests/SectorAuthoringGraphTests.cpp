@@ -6531,10 +6531,24 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "rectangle remains available in graph-authoritative mode");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::AuthoringMove),
           "authoring move remains available in graph-authoritative mode");
-    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::Light),
-          "map light placement remains available in graph-authoritative mode");
-    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Light), "drag"),
-          "light tool help preserves existing-light drag workflow");
+    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::StaticLight),
+          "static light placement remains available in graph-authoritative mode");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::StaticLight), "drag"),
+          "static light tool help preserves existing-light drag workflow");
+    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::StaticSpotLight),
+          "static spot placement remains available in graph-authoritative mode");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::StaticSpotLight), "drag"),
+          "static spot tool help describes existing-light drag workflow");
+    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::DynamicLight),
+          "dynamic light placement remains available in graph-authoritative mode");
+    Check(TextContains(game::ToolName(game::SectorEditorTool::DynamicLight), "Dynamic Light"),
+          "dynamic light tool label is separate from static light");
+    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::DynamicSpotLight),
+          "dynamic spot placement remains available in graph-authoritative mode");
+    Check(TextContains(game::ToolName(game::SectorEditorTool::DynamicSpotLight), "Dynamic Spot"),
+          "dynamic spot tool label is separate from dynamic point light");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::DynamicSpotLight), "Inspector"),
+          "dynamic spot tool help points users to inspector editing before 2D handles exist");
     Check(game::IsSectorEditorGraphAuthoritativeMode(),
           "sector editor runs in graph-authoritative mode");
     Check(!game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::Move),

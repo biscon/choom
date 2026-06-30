@@ -2,6 +2,7 @@
 
 #include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorCollisionWorld.h"
+#include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
@@ -9,8 +10,10 @@
 
 #include <raylib.h>
 
+#include <array>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace game {
 
@@ -31,7 +34,9 @@ public:
     void Shutdown(engine::AssetManager& assets);
     void ShutdownRendererResources(engine::AssetManager& assets);
 
+    void AdvanceRuntime(float dt);
     void Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
+    void RenderDynamicSpotLightShadowMaps(engine::AssetManager& assets);
     void DrawScene(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
     void ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
     void ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
@@ -45,6 +50,7 @@ public:
     SectorViewPose RendererPose() const;
     void ApplyPose(const SectorViewPose& pose);
     void ApplyRendererPose(const SectorViewPose& pose);
+    void RefreshDynamicLightSources(const SectorTopologyMap& map);
     size_t SectorCount() const { return sectorCount; }
     size_t BatchCount() const { return meshes.sectorDrawRecords.size(); }
     int TriangleCount() const { return meshes.triangleCount; }
@@ -54,9 +60,17 @@ public:
     float RendererAssetProgress(engine::AssetManager& assets) const;
     const char* LightmapStatusText() const;
     const char* RendererLightmapStatusText() const;
-    void UpdateVisibilityDebug(int preferredStartSectorId = 0);
+    void UpdateVisibilityDebug(
+            int preferredStartSectorId = 0,
+            float visibilitySeedRadiusWorld = 0.0f,
+            bool validateEyeY = false);
     const RuntimePortalVisibilityResult& VisibilityResult() const { return visibilityResult; }
+    const std::string& PortalVisibilityDebugText() const { return portalVisibilityDebugText; }
     const std::string& VisibilityDebugText() const { return visibilityDebugText; }
+    const std::string& RenderDebugText() const { return renderDebugText; }
+    bool DynamicLightingEnabled() const { return dynamicLightingEnabled; }
+    void SetDynamicLightingEnabled(bool enabled) { dynamicLightingEnabled = enabled; }
+    void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
 
 private:
     static std::string ResolveAssetPath(const std::string& path);
@@ -67,12 +81,16 @@ private:
     void RenderBloomSource(engine::AssetManager& assets);
     void UnloadSkyCylinderMesh();
     void DrawSkyCylinder(const Texture2D& texture);
+    bool EnsureDynamicSpotLightShadowMapResources();
+    void UnloadDynamicSpotLightShadowMapResources();
 
     SectorMeshBuildResult meshes;
     SectorGeneratedGeometry generatedGeometry;
     RuntimeSectorVisibilityGraph visibilityGraph;
     RuntimePortalVisibilityResult visibilityResult;
+    std::string portalVisibilityDebugText;
     std::string visibilityDebugText;
+    std::string renderDebugText;
     SectorCollisionWorld visibilityLookupWorld;
     bool visibilityGraphValid = false;
     bool visibilityLookupWorldValid = false;
@@ -99,6 +117,40 @@ private:
     int decalOpacityLoc = -1;
     int decalEmissiveLoc = -1;
     int decalTintLoc = -1;
+    int dynamicLightCountLoc = -1;
+    int dynamicLightPositionsLoc = -1;
+    int dynamicLightColorsLoc = -1;
+    int dynamicLightRadiiLoc = -1;
+    int dynamicLightIntensitiesLoc = -1;
+    int dynamicLightTypesLoc = -1;
+    int dynamicLightDirectionsLoc = -1;
+    int dynamicLightInnerConeCosLoc = -1;
+    int dynamicLightOuterConeCosLoc = -1;
+    int dynamicLightShadowSlotsLoc = -1;
+    std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrixLocs = [] {
+        std::array<int, MaxDynamicSpotLightShadowCasters> locs{};
+        locs.fill(-1);
+        return locs;
+    }();
+    int shadowBiasLoc = -1;
+    int shadowStrengthLoc = -1;
+    int shadowSoftnessLoc = -1;
+    int dynamicLightingClampLoc = -1;
+    std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightSources;
+    std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;
+    std::vector<SectorPreviewDynamicPointLightUniform> dynamicPointLights;
+    std::vector<int> selectedDynamicPointLightIds;
+    std::vector<SectorPreviewDynamicSpotLightShadowCaster> dynamicSpotLightShadowCasters;
+    std::vector<SectorPreviewDynamicSpotLightShadowMatrix> dynamicSpotLightShadowMatrices;
+    std::array<RenderTexture2D, MaxDynamicSpotLightShadowCasters> dynamicSpotLightShadowMaps{};
+    Material dynamicSpotLightShadowMaterial = {};
+    Texture2D dynamicSpotLightShadowDefaultTexture = {};
+    bool dynamicSpotLightShadowMaterialLoaded = false;
+    int dynamicSpotLightShadowLightViewProjectionLoc = -1;
+    int dynamicSpotLightShadowAlphaTestLoc = -1;
+    int dynamicSpotLightShadowAlphaCutoffLoc = -1;
+    float runtimeSeconds = 0.0f;
+    bool dynamicLightingEnabled = true;
     Material bloomSourceMaterial = {};
     Texture2D bloomDefaultMaterialTexture = {};
     bool bloomSourceMaterialLoaded = false;

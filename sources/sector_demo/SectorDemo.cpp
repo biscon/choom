@@ -48,6 +48,18 @@ void SectorDemo::Update(engine::Input& input, float dt)
         return;
     }
 
+    preview.AdvanceRuntime(dt);
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [this](engine::InputEvent& event) {
+                if (event.key.key != KEY_F4) {
+                    return;
+                }
+                preview.ToggleDynamicLightingEnabled();
+                engine::ConsumeEvent(event);
+            });
+
     UpdateSectorFreeflyController(freeflyController, input, dt);
     preview.ApplyRendererPose(freeflyController.pose);
 }
@@ -65,7 +77,7 @@ void SectorDemo::RenderOverlay(engine::AssetManager& assets)
 
     const Vector3 position = preview.Position();
     DrawText("Sector Mesh Demo", 40, 36, 30, RAYWHITE);
-    DrawText("WASD move  |  Mouse look  |  Space/Ctrl up/down  |  F11 cursor toggle", 40, 76, 20, LIGHTGRAY);
+    DrawText("WASD move  |  Mouse look  |  Space/Ctrl up/down  |  F4 dynamic lights  |  F11 cursor toggle", 40, 76, 20, LIGHTGRAY);
     DrawText(
             TextFormat(
                     "pos %.2f %.2f %.2f   sectors %zu   batches %zu   assets %.0f%%",

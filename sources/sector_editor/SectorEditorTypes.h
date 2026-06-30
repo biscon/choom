@@ -33,7 +33,10 @@ enum class SectorEditorTool {
     AuthoringRectangle,
     AuthoringInsertVertex,
     AuthoringMove,
-    Light,
+    StaticLight,
+    StaticSpotLight,
+    DynamicLight,
+    DynamicSpotLight,
     Move
 };
 
@@ -97,7 +100,10 @@ enum class TopologySelectionKind {
     Vertex,
     SideDef,
     LineDef,
-    Light
+    StaticLight,
+    StaticSpotLight,
+    DynamicLight,
+    DynamicSpotLight
 };
 
 enum class SectorAuthoringSelectionKind {
@@ -314,11 +320,35 @@ struct AuthoringVertexDragState {
     std::string errorMessage;
 };
 
+enum class SpotLightHandle {
+    Origin,
+    Target
+};
+
+enum class SpotLightPilotKind {
+    None,
+    Static,
+    Dynamic
+};
+
 struct LightDragState {
     bool active = false;
     int topologyLightId = -1;
+    SpotLightHandle spotHandle = SpotLightHandle::Origin;
     Vector3 originalPosition = {};
+    Vector3 originalTarget = {};
     Vector3 snappedPosition = {};
+};
+
+struct SpotLightPilotState {
+    bool active = false;
+    SpotLightPilotKind kind = SpotLightPilotKind::None;
+    int lightId = -1;
+    Vector3 originalPosition = {};
+    Vector3 originalTarget = {};
+    SectorViewPose originalPreviewPose = {};
+    bool originalMouseLookEnabled = true;
+    float targetDistanceWorld = 4.0f;
 };
 
 struct CachedTopologyOutlineSegment {
@@ -362,6 +392,16 @@ struct CachedTopologyLightDraw {
     float sourceRadiusPixelsAtZoomOne = 0.0f;
 };
 
+struct CachedTopologySpotLightDraw {
+    int lightId = -1;
+    Vector2 origin = {};
+    Vector2 target = {};
+    Color color = WHITE;
+    float range = 0.0f;
+    float innerConeDegrees = 0.0f;
+    float outerConeDegrees = 0.0f;
+};
+
 struct CachedAuthoringVertexDraw {
     int vertexId = -1;
     SectorTopologyCoordPoint point = {};
@@ -403,6 +443,9 @@ struct SectorEditorTopologyRenderCache {
     std::vector<CachedTopologyLineDraw> lineDefs;
     std::vector<CachedTopologyVertexDraw> vertices;
     std::vector<CachedTopologyLightDraw> staticLights;
+    std::vector<CachedTopologySpotLightDraw> staticSpotLights;
+    std::vector<CachedTopologyLightDraw> dynamicLights;
+    std::vector<CachedTopologySpotLightDraw> dynamicSpotLights;
     std::vector<CachedAuthoringLineDraw> authoringLines;
     std::vector<CachedAuthoringVertexDraw> authoringVertices;
     std::vector<CachedAuthoringFaceHighlightDraw> authoringFaceHighlights;
@@ -441,7 +484,13 @@ struct SectorEditorState {
     TopologyWallPart selectedTopologyWallPart = TopologyWallPart::Wall;
     TopologyMaterialLayer activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
     int selectedTopologyLightId = -1;
+    int selectedTopologyStaticSpotLightId = -1;
+    int selectedTopologyDynamicLightId = -1;
+    int selectedTopologyDynamicSpotLightId = -1;
     int hoveredTopologyLightId = -1;
+    int hoveredTopologyStaticSpotLightId = -1;
+    int hoveredTopologyDynamicLightId = -1;
+    int hoveredTopologyDynamicSpotLightId = -1;
     bool hasHoveredVertex = false;
     int hoveredTopologyVertexId = -1;
     SectorTopologyCoordPoint hoveredTopologyVertexPoint = {};
@@ -490,6 +539,7 @@ struct SectorEditorState {
     SectorFpsLandingDipState landingDipState;
     bool hasPreviewPose = false;
     SectorViewPose lastPreviewPose = {};
+    SpotLightPilotState spotLightPilot;
     SectorSurfaceHit hoveredSurface3D;
     SectorSurfaceRef selectedSurface3D;
     TopologySurfaceEditTarget selectedTopologySurface3D;
@@ -518,9 +568,20 @@ struct SectorEditorUiState {
     engine::UIFloatInputState lightXInput;
     engine::UIFloatInputState lightYInput;
     engine::UIFloatInputState lightZInput;
+    engine::UIFloatInputState lightTargetXInput;
+    engine::UIFloatInputState lightTargetYInput;
+    engine::UIFloatInputState lightTargetZInput;
     engine::UIFloatInputState lightIntensityInput;
     engine::UIFloatInputState lightRadiusInput;
+    engine::UIFloatInputState lightInnerConeInput;
+    engine::UIFloatInputState lightOuterConeInput;
     engine::UIFloatInputState lightSourceRadiusInput;
+    engine::UIFloatInputState lightFlickerSpeedInput;
+    engine::UIFloatInputState lightFlickerAmountInput;
+    engine::UIIntInputState lightShadowPriorityInput;
+    engine::UIFloatInputState lightShadowBiasInput;
+    engine::UIFloatInputState lightShadowStrengthInput;
+    engine::UIFloatInputState lightShadowSoftnessInput;
     engine::UIFloatInputState ambientOcclusionRadiusInput;
     engine::UIFloatInputState ambientOcclusionStrengthInput;
     engine::UIFloatInputState indirectBounceRadiusInput;
