@@ -110,6 +110,20 @@ int64_t LcmClamped(int64_t a, int64_t b)
     return std::max<int64_t>(1, divided * b);
 }
 
+Color ColorFromObjectProbeAmbientCube(const SectorBakedObjectLightProbe& probe)
+{
+    Vector3 rgb = {};
+    for (const Vector3& face : probe.ambientCube) {
+        rgb = Vector3Add(rgb, face);
+    }
+    rgb = Vector3Scale(rgb, 1.0f / 6.0f);
+    return Color{
+            static_cast<unsigned char>(std::round(Clamp(rgb.x, 0.0f, 1.0f) * 255.0f)),
+            static_cast<unsigned char>(std::round(Clamp(rgb.y, 0.0f, 1.0f) * 255.0f)),
+            static_cast<unsigned char>(std::round(Clamp(rgb.z, 0.0f, 1.0f) * 255.0f)),
+            235};
+}
+
 int64_t CoordinateSequencePeriod(SectorCoord stepDelta, int64_t snapStep)
 {
     if (snapStep <= 1) {
@@ -2726,6 +2740,7 @@ bool SectorEditor::StartLightmapBake()
     input.temporaryOutputPath = temporaryOutputPath;
 
     DeleteFileIfExists(temporaryOutputPath);
+    DeleteFileIfExists(MakeSectorObjectProbeSidecarPathForLightmapPath(temporaryOutputPath));
 
     lightmapBake.progress.phase.store(SectorLightmapBakePhase::Preparing);
     lightmapBake.progress.completedWork.store(0);
@@ -2843,11 +2858,14 @@ void SectorEditor::ShutdownLightmapBake()
     }
     JoinLightmapBakeWorker();
     DeleteFileIfExists(lightmapBake.temporaryOutputPath);
+    DeleteFileIfExists(MakeSectorObjectProbeSidecarPathForLightmapPath(lightmapBake.temporaryOutputPath));
     lightmapBake.temporaryOutputPath.clear();
     {
         std::lock_guard<std::mutex> lock(lightmapBake.resultMutex);
         if (lightmapBake.pendingResult.has_value()) {
             DeleteFileIfExists(lightmapBake.pendingResult->temporaryOutputPath);
+            DeleteFileIfExists(MakeSectorObjectProbeSidecarPathForLightmapPath(
+                    lightmapBake.pendingResult->temporaryOutputPath));
             lightmapBake.pendingResult.reset();
         }
     }
@@ -2871,6 +2889,7 @@ bool SectorEditor::ConsumeLightmapBakeResult(const SectorLightmapBakeAsyncResult
 
     if (result.cancelled) {
         DeleteFileIfExists(result.temporaryOutputPath);
+        DeleteFileIfExists(result.bakeResult.objectProbes.path);
         lightmapBake.terminalMessage = "Lightmap bake cancelled";
         lightmapBake.terminalCancelled = true;
         lightmapBake.awaitingAcknowledgement = true;
@@ -2880,6 +2899,7 @@ bool SectorEditor::ConsumeLightmapBakeResult(const SectorLightmapBakeAsyncResult
 
     if (!result.succeeded) {
         DeleteFileIfExists(result.temporaryOutputPath);
+        DeleteFileIfExists(result.bakeResult.objectProbes.path);
         lightmapBake.terminalMessage = result.errorMessage.empty() ? "Bake failed" : result.errorMessage;
         lightmapBake.terminalSuccess = false;
         lightmapBake.awaitingAcknowledgement = true;
@@ -2901,8 +2921,13 @@ bool SectorEditor::ConsumeLightmapBakeResult(const SectorLightmapBakeAsyncResult
 
 bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets)
 {
+    const std::string temporaryObjectProbePath = result.bakeResult.objectProbes.path.empty()
+            ? MakeSectorObjectProbeSidecarPathForLightmapPath(result.temporaryOutputPath)
+            : result.bakeResult.objectProbes.path;
+
     if (ComputeSectorLightmapSourceHash(state.topologyMap) != result.expectedSourceHash) {
         DeleteFileIfExists(result.temporaryOutputPath);
+        DeleteFileIfExists(temporaryObjectProbePath);
         statusText = "Bake discarded: document changed during bake";
         return false;
     }
@@ -2910,7 +2935,14 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
     std::error_code ec;
     if (!std::filesystem::exists(result.temporaryOutputPath, ec) || ec) {
         DeleteFileIfExists(result.temporaryOutputPath);
+        DeleteFileIfExists(temporaryObjectProbePath);
         statusText = "Bake failed: temporary lightmap output missing";
+        return false;
+    }
+    if (!std::filesystem::exists(temporaryObjectProbePath, ec) || ec) {
+        DeleteFileIfExists(result.temporaryOutputPath);
+        DeleteFileIfExists(temporaryObjectProbePath);
+        statusText = "Bake failed: temporary object probe output missing";
         return false;
     }
 
@@ -2919,11 +2951,25 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
         std::filesystem::create_directories(finalPath.parent_path(), ec);
         if (ec) {
             DeleteFileIfExists(result.temporaryOutputPath);
+            DeleteFileIfExists(temporaryObjectProbePath);
             statusText = TextFormat("Bake failed: could not create output directory: %s", ec.message().c_str());
             return false;
         }
     }
 
+    const std::string finalObjectProbePath = MakeSectorObjectProbeSidecarPathForLightmapPath(result.finalOutputPath);
+    std::filesystem::copy_file(
+            temporaryObjectProbePath,
+            finalObjectProbePath,
+            std::filesystem::copy_options::overwrite_existing,
+            ec
+    );
+    if (ec) {
+        DeleteFileIfExists(result.temporaryOutputPath);
+        DeleteFileIfExists(temporaryObjectProbePath);
+        statusText = TextFormat("Bake failed: could not install object probe sidecar: %s", ec.message().c_str());
+        return false;
+    }
     std::filesystem::copy_file(
             result.temporaryOutputPath,
             result.finalOutputPath,
@@ -2932,15 +2978,19 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
     );
     if (ec) {
         DeleteFileIfExists(result.temporaryOutputPath);
+        DeleteFileIfExists(temporaryObjectProbePath);
+        DeleteFileIfExists(finalObjectProbePath);
         statusText = TextFormat("Bake failed: could not install lightmap: %s", ec.message().c_str());
         return false;
     }
     DeleteFileIfExists(result.temporaryOutputPath);
+    DeleteFileIfExists(temporaryObjectProbePath);
 
     LevelPaths levelPaths;
     std::string pathError;
     if (!BuildLevelPaths(state.currentLevelName, levelPaths, pathError)) {
         DeleteFileIfExists(result.temporaryOutputPath);
+        DeleteFileIfExists(temporaryObjectProbePath);
         statusText = TextFormat("Bake failed: %s", pathError.c_str());
         return false;
     }
@@ -2948,6 +2998,10 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
     state.topologyMap.bakedLightmap.width = result.bakeResult.width;
     state.topologyMap.bakedLightmap.height = result.bakeResult.height;
     state.topologyMap.bakedLightmap.sourceHash = result.bakeResult.sourceHash;
+    state.topologyMap.bakedLightmap.objectProbes = result.bakeResult.objectProbes;
+    state.topologyMap.bakedLightmap.objectProbes.path =
+            MakeSectorAssetRelativePath(finalObjectProbePath);
+    state.topologyMap.bakedLightmap.objectProbes.sourceHash = result.bakeResult.sourceHash;
     state.hasUnsavedChanges = true;
     state.topologyDocumentDirty = true;
 
@@ -3062,6 +3116,7 @@ void SectorEditor::RenderPreview3DOverlays()
     if (!state.previewUiHidden) {
         DrawPreviewSurfaceHighlights();
         DrawPreviewSpotLightOverlay();
+        DrawPreviewObjectProbeOverlay();
     }
 }
 
@@ -3224,6 +3279,50 @@ void SectorEditor::DrawPreviewSpotLightOverlay() const
     EndMode3D();
 }
 
+void SectorEditor::DrawPreviewObjectProbeOverlay() const
+{
+    if (!preview.IsRendererReady()
+            || state.freeflyController.mouseLookEnabled
+            || !state.showObjectProbeDebugOverlay
+            || state.objectProbeDebugData.probes.empty()) {
+        return;
+    }
+
+    constexpr float MarkerRadius = 0.08f;
+    BeginMode3D(preview.RenderCamera());
+    for (const SectorBakedObjectLightProbe& probe : state.objectProbeDebugData.probes) {
+        const Color color = ColorFromObjectProbeAmbientCube(probe);
+        DrawSphere(probe.position, MarkerRadius, color);
+        DrawSphereWires(probe.position, MarkerRadius * 1.65f, 8, 8, Color{255, 255, 255, 155});
+    }
+    EndMode3D();
+}
+
+void SectorEditor::RefreshPreviewObjectProbeDebugData()
+{
+    state.objectProbeDebugData = SectorBakedObjectLightProbeRuntimeData{};
+    state.objectProbeDebugStatus.clear();
+
+    if (state.topologyMap.bakedLightmap.objectProbes.path.empty()) {
+        state.objectProbeDebugStatus = "Object probes: none";
+        return;
+    }
+
+    std::string error;
+    if (!LoadSectorBakedObjectLightProbeRuntimeData(
+                state.topologyMap,
+                state.objectProbeDebugData,
+                error)) {
+        state.objectProbeDebugData = SectorBakedObjectLightProbeRuntimeData{};
+        state.objectProbeDebugStatus = error.empty() ? "Object probes: unavailable" : error;
+        return;
+    }
+
+    state.objectProbeDebugStatus = TextFormat(
+            "Object probes: %zu loaded",
+            state.objectProbeDebugData.probes.size());
+}
+
 void SectorEditor::DrawPreviewOverlay(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -3231,7 +3330,7 @@ void SectorEditor::DrawPreviewOverlay(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
-    const Rectangle panel{32.0f, 32.0f, EditorWidth - 64.0f, 262.0f};
+    const Rectangle panel{32.0f, 32.0f, EditorWidth - 64.0f, 292.0f};
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
@@ -3408,6 +3507,28 @@ void SectorEditor::DrawPreviewOverlay(
             engine::UITextJustify::Left,
             config.mutedTextColor
     );
+    engine::Checkbox(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_show_object_probe_debug_overlay",
+            Rectangle{panel.x + 18.0f, panel.y + 212.0f, 240.0f, 30.0f},
+            font,
+            "Show Object Probes",
+            state.showObjectProbeDebugOverlay);
+    const char* objectProbeStatus = state.objectProbeDebugStatus.empty()
+            ? "Object probes: none"
+            : state.objectProbeDebugStatus.c_str();
+    engine::Text(
+            config,
+            assets,
+            Rectangle{panel.x + 276.0f, panel.y + 212.0f, panel.width - 294.0f, 30.0f},
+            font,
+            objectProbeStatus,
+            engine::UITextJustify::Left,
+            config.mutedTextColor
+    );
     const char* previewStatusText = statusText.empty() ? "Ready" : statusText.c_str();
     const char* collisionWarningText = state.sectorCollisionWorldWarning.empty()
             ? previewStatusText
@@ -3415,7 +3536,7 @@ void SectorEditor::DrawPreviewOverlay(
     engine::Text(
             config,
             assets,
-            Rectangle{panel.x + 18.0f, panel.y + 220.0f, panel.width - 36.0f, 30.0f},
+            Rectangle{panel.x + 18.0f, panel.y + 250.0f, panel.width - 36.0f, 30.0f},
             font,
             state.previewControlMode == SectorPreviewControlMode::Gameplay
                     ? TextFormat(
@@ -8016,6 +8137,8 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
 
     std::string error;
     if (!preview.RebuildRendererResources(assets, state.topologyMap, "sector_editor_preview", error)) {
+        state.objectProbeDebugData = SectorBakedObjectLightProbeRuntimeData{};
+        state.objectProbeDebugStatus.clear();
         state.sectorCollisionWorldValid = false;
         state.sectorCollisionWorldWarning.clear();
         state.previewCollisionSectorId = 0;
@@ -8034,6 +8157,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
         }
         return false;
     }
+    RefreshPreviewObjectProbeDebugData();
 
     if (state.hasPreviewPose) {
         preview.ApplyRendererPose(state.lastPreviewPose);
@@ -9969,6 +10093,8 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
 
     std::string error;
     if (!preview.RebuildRendererResources(assets, state.topologyMap, "sector_editor_preview", error)) {
+        state.objectProbeDebugData = SectorBakedObjectLightProbeRuntimeData{};
+        state.objectProbeDebugStatus.clear();
         state.sectorCollisionWorldValid = false;
         state.sectorCollisionWorldWarning.clear();
         state.previewCollisionSectorId = 0;
@@ -9986,6 +10112,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
         LeaveSectorFreeflyController();
         return false;
     }
+    RefreshPreviewObjectProbeDebugData();
 
     preview.ApplyRendererPose(pose);
     ResetSectorFreeflyController(state.freeflyController, pose);

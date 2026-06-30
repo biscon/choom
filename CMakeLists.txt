@@ -119,6 +119,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp
             sources/sector_demo/SectorTextureTypes.cpp
+            sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologySerialization.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
@@ -172,6 +173,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
+            sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp

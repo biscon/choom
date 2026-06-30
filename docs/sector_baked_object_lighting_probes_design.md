@@ -2,11 +2,11 @@
 
 ## Scope
 
-This is an audit/design document for a future baked object-lighting probe system
+This document describes the implemented v1 baked object-lighting probe system
 for movable 3D models, billboard sprites, pickups, NPCs, particles, and other
-dynamic objects. It does not implement probes and does not change production
-rendering, mesh generation, baking, collision, save/load, editor tools, shaders,
-or lightmap output.
+dynamic objects. It also records the future consumer contract. The probe bake,
+storage, load, sample, and debug paths exist; model, billboard, actor/entity,
+dynamic object shadow, and runtime GI consumers remain deferred.
 
 Future consumer contract:
 
@@ -19,9 +19,36 @@ Future consumer contract:
 - Runtime dynamic point/spot lights and supported dynamic spotlight shadow maps
   are added on top of baked object lighting.
 
-## Current Lightmap Bake Pipeline Audit
+Current implementation notes:
 
-Key files audited:
+- Successful lightmap bakes write object probe data to a binary sidecar beside
+  the lightmap atlas, using magic `SOPB`, version `1`, and format
+  `ambientCubeF32LE`.
+- JSON stores compact `bakedLightmap.objectProbes` metadata only: path, version,
+  source hash, count, spacing, height, and format.
+- `LoadSectorBakedObjectLightProbeRuntimeData()` loads valid sidecars and builds
+  sorted per-sector probe ranges for allocation-free sampling.
+- `SampleBakedObjectLighting()` prefers the caller's sector, includes unique
+  adjacent-sector probe ranges near open two-sided portals, blends up to four
+  nearest probes by inverse distance, falls back to any loaded probe when the
+  preferred sector has no probes, then sector ambient, then neutral RGB `0.15`
+  on all cube faces.
+- The 3D preview overlay has a read-only `Show Object Probes` toggle. It draws
+  small markers at loaded probe positions, colored by average ambient-cube RGB,
+  and reports absent/stale/unavailable probe data in the overlay text.
+- Probe debug visualization is visual-only. It does not mutate topology, change
+  save data, invalidate the 2D topology render cache, or affect the lightmap
+  source hash.
+
+Ambient cube face order:
+
+```text
++X RGB, -X RGB, +Y RGB, -Y RGB, +Z RGB, -Z RGB
+```
+
+## Implementation Files and Bake Pipeline
+
+Key implementation files inspected:
 
 - `sources/sector_demo/SectorLightmap.h`
 - `sources/sector_demo/SectorLightmap.cpp`
@@ -32,9 +59,12 @@ Key files audited:
 - `sources/sector_demo/SectorGeneratedGeometry.cpp`
 - `sources/sector_demo/SectorTopologyGeometry.h`
 - `sources/sector_demo/SectorTopologyGeometry.cpp`
-- `sources/sector_editor/SectorEditorLightmapModal.cpp`
+- `sources/sector_editor/SectorEditor.cpp`
+- `sources/sector_editor/SectorEditor.h`
+- `sources/sector_editor/SectorEditorTypes.h`
 - `tests/SectorTopologyLightmapTests.cpp`
 - `tests/SectorTopologySerializationTests.cpp`
+- `tests/SectorAuthoringGraphTests.cpp`
 
 The public bake entry points are in `SectorLightmap.h`:
 
@@ -122,10 +152,10 @@ Output facts:
 
 Settings and metadata facts:
 
-- `SectorLightmapBakeSettings` currently stores only AO radius/strength and
-  indirect bounce radius/strength.
-- `SectorLightmapMetadata` currently stores only `path`, `width`, `height`, and
-  `sourceHash`.
+- `SectorLightmapBakeSettings` stores AO radius/strength, indirect bounce
+  radius/strength, `objectProbeSpacingWorld`, and `objectProbeHeightWorld`.
+- `SectorLightmapMetadata` stores `path`, `width`, `height`, `sourceHash`, and
+  optional compact `objectProbes` sidecar metadata.
 - JSON save/load reads and writes `lightmapSettings` and optional `bakedLightmap`
   in `SectorTopologySerialization.cpp`.
 - Old maps may omit lightmap settings and baked lightmap metadata.
@@ -134,8 +164,8 @@ Settings and metadata facts:
 
 Source hash facts:
 
-- `kSectorLightmapBakeVersion` is currently 9 for alpha-tested middle texture
-  direct-light occlusion.
+- `kSectorLightmapBakeVersion` is currently 10 because successful bakes now
+  include object lighting probe sidecar data.
 - `ComputeSectorLightmapSourceHash()` includes bake constants, bake settings,
   world-unit scale, sample counts, neutral bounce albedo, directional light,
   coordinate subdivisions, referenced lightmap texture IDs/paths/filter modes,
@@ -149,142 +179,191 @@ Source hash facts:
 - Sky visual settings and preview settings are not included in the lightmap
   source hash, matching the existing visual-only rule.
 
-## Where Probe Data Should Live
+## Data Storage
 
-Object lighting probes should be bake output, not authored topology. They should
-not live in linedefs, sidedefs, sectors, or the authoring graph as editable
-objects.
+Object lighting probes are derived bake output, not authored topology. They do
+not live in vertices, linedefs, sidedefs, sectors, or the editor authoring graph
+as editable objects.
 
-Recommended v1 storage:
+V1 stores the probe payload in a binary sidecar beside the lightmap atlas. JSON
+stores compact `bakedLightmap.objectProbes` metadata only. Probe arrays are not
+embedded in JSON.
+
+Implemented data structs:
 
 ```cpp
 struct SectorBakedObjectLightProbe {
-    int sectorId;
-    Vector3 position;              // world units
-    Vector3 ambientCube[6];         // +X, -X, +Y, -Y, +Z, -Z linear-ish RGB
+    int sectorId = 0;
+    Vector3 position = {};
+    Vector3 ambientCube[6] = {};
 };
 
-struct SectorBakedObjectLightProbeSet {
-    int version;
-    std::string sourceHash;
-    float probeSpacingWorld;
-    float probeHeightWorld;
-    std::vector<SectorBakedObjectLightProbe> probes;
-};
-```
-
-Keep this as a separate baked probe payload beside `SectorLightmapMetadata`,
-rather than encoding it into the RGBA lightmap atlas. The current atlas is a GPU
-surface texture with RGB/A semantics already assigned to direct+indirect and AO;
-object probes are CPU/runtime query data and need sector IDs and positions.
-
-Recommended metadata shape for a later implementation:
-
-```cpp
-struct SectorLightmapMetadata {
+struct SectorBakedObjectLightProbeMetadata {
     std::string path;
-    int width = 0;
-    int height = 0;
+    int version = 0;
     std::string sourceHash;
-    SectorBakedObjectLightProbeSet objectProbes;
+    int count = 0;
+    float probeSpacingWorld = 4.0f;
+    float probeHeightWorld = 1.2f;
+    std::string format;
+};
+
+struct SectorBakedObjectLightProbeRuntimeData {
+    std::vector<SectorBakedObjectLightProbe> probes;
+    std::vector<SectorBakedObjectLightProbeSectorRange> sectorRanges;
+    SectorBakedObjectLightProbeMetadata metadata;
 };
 ```
 
-Alternatively, if file size becomes a concern, keep only a probe-data path in
-metadata and write probes to a sidecar file next to the atlas. For v1, embedding
-JSON data under `bakedLightmap.objectProbes` is simpler and keeps map/probe
-validity together.
+`SectorLightmapMetadata` contains `SectorBakedObjectLightProbeMetadata
+objectProbes`. The surface atlas remains a GPU texture with RGB/A semantics
+assigned to direct+indirect lighting and AO; object probes are CPU/runtime query
+data with sector IDs, world positions, and ambient cubes.
 
-Missing probe data must be nonfatal:
+Missing probe data is nonfatal:
 
-- Old maps with valid surface lightmaps but no probes should load.
-- Runtime `SampleBakedObjectLighting()` returns a valid fallback sample.
-- Editor/debug status should distinguish "surface lightmap valid, object probes
-  missing" once object probes are expected.
+- Old maps with valid surface lightmaps but no probes load.
+- `GetSectorBakedObjectLightProbeStatus()` reports `None` when metadata is
+  absent and `Stale` when metadata or the sidecar is invalid.
+- Runtime `SampleBakedObjectLighting()` returns documented fallback lighting
+  when no probe payload is available.
 
-Probe data should be considered stale whenever the surface lightmap is stale.
-If probe generation settings become configurable, those settings must be included
-in the same source hash or in a probe-specific hash that is compared together
-with the lightmap source hash.
+## Binary Sidecar
+
+Sidecar helpers:
+
+- `MakeSectorObjectProbeSidecarPathForLightmapPath()`
+- `WriteSectorBakedObjectLightProbeSidecar()`
+- `ReadSectorBakedObjectLightProbeSidecar()`
+- `LoadSectorBakedObjectLightProbeRuntimeData()`
+
+Path convention:
+
+- The sidecar path is derived from the lightmap atlas path by replacing the
+  extension with `.object_probes.bin`.
+- Example: `level.lightmap.png` writes `level.lightmap.object_probes.bin`.
+- Runtime loading resolves `assets/...` paths through `ResolveSectorAssetPath()`.
+
+Sidecar format:
+
+- Magic: `SOPB`
+- Version: `kSectorBakedObjectLightProbeSidecarVersion == 1`
+- Metadata format string: `ambientCubeF32LE`
+- Endianness: little-endian integer and float writes/reads
+
+Header layout:
+
+```text
+char[4]  magic = "SOPB"
+u32      version
+u32      probeCount
+f32      probeSpacingWorld
+f32      probeHeightWorld
+u32      reserved0 = 0
+u32      reserved1 = 0
+```
+
+Record layout, repeated `probeCount` times:
+
+```text
+i32      sectorId
+f32[3]   position world XYZ
+f32[3]   ambientCube +X RGB
+f32[3]   ambientCube -X RGB
+f32[3]   ambientCube +Y RGB
+f32[3]   ambientCube -Y RGB
+f32[3]   ambientCube +Z RGB
+f32[3]   ambientCube -Z RGB
+```
+
+That is 88 bytes per probe record plus a 28-byte header.
+
+Validation and failure behavior:
+
+- Writes reject empty paths, non-finite settings, non-finite positions, non-finite
+  ambient cube values, and probe counts that do not fit `u32`.
+- Writes create the parent directory when needed.
+- Reads reject missing files, bad magic, unsupported version, truncated headers
+  or records, non-finite settings, too many probes, non-finite payload values,
+  and mismatches against expected metadata version/count/format.
+- Runtime loading also rejects missing metadata, invalid metadata, stale source
+  hashes, and unreadable sidecars.
+
+Implemented JSON metadata fields:
+
+```json
+"objectProbes": {
+  "path": "...object_probes.bin",
+  "version": 1,
+  "sourceHash": "...",
+  "count": 0,
+  "probeSpacingWorld": 4.0,
+  "probeHeightWorld": 1.2,
+  "format": "ambientCubeF32LE"
+}
+```
+
+`objectProbes` is omitted when the path is empty. On load, present metadata must
+have a non-empty path/source hash/format, positive version, non-negative count,
+positive spacing, and non-negative height.
 
 ## Probe Placement
 
-First-pass placement should generate multiple probes per sector at one vertical
-layer:
+`BuildSectorBakedObjectLightProbePlacements()` generates one vertical probe
+layer with multiple probes per sector:
 
 ```text
-probeHeight = sector floor + 1.2 world units
-probeSpacing = 4.0 world units by default
+default probeSpacingWorld = 4.0
+default probeHeightWorld = 1.2
+probe world Y = sector floor world Y + probeHeightWorld
 ```
 
-Use 4.0 world units as the default starting point. It gives long corridors and
-large rooms more than one sample without immediately multiplying bake rays too
-hard. Add 2.0 world units as an editor/bake setting later for dense hero spaces
-or heavily shadowed maps. If the setting is added in v1, store it in
-`SectorLightmapBakeSettings` and include the world-space clamped value in
-`ComputeSectorLightmapSourceHash()`.
+The settings are stored in `SectorLightmapBakeSettings` as
+`objectProbeSpacingWorld` and `objectProbeHeightWorld`. Serialization clamps
+spacing to `[0.25, 128.0]` world units and height to `[0.0, 16.0]` world units.
+The bake path uses the same clamped values and records them in sidecar metadata.
 
-Placement algorithm:
+Implemented placement behavior:
 
-1. For each `SectorTopologySector`, call `ExtractSectorTopologyLoops()`.
-2. Build integer-coordinate outer and hole polygons from loop vertex IDs.
-3. Compute the sector's integer-coordinate AABB from the outer loop.
-4. Convert `probeSpacing` to topology coordinate units using
-   `SectorWorldToAuthoringDistance()` and `SectorCoordSubdivisions`.
-5. Walk a 2D grid over the AABB. Offset the grid by half a cell so probes are
-   centered in cells.
-6. Keep candidates where `SectorTopologyClassifyPointInPolygon(outer, point)`
-   is `Inside` and every hole polygon classifies the point as `Outside`.
-7. Reject boundary points to avoid probes exactly on walls or portals.
-8. Convert accepted X/Y topology coordinates to world X/Z with existing unit
-   helpers and set world Y to `SectorAuthoringToWorldDistance(floorZ) + 1.2f`.
-9. Reject or clamp probes above sector ceiling. If
-   `ceilingWorld - floorWorld < 1.2f`, place at the midpoint between floor and
-   ceiling and mark the sector as cramped in bake diagnostics.
-10. If a sector is too small for the grid to produce any point, place one probe
-    at a polygon-safe representative point. A conservative first fallback is the
-    center of the first valid earcut/floor triangle or the first accepted
-    inward-biased floor texel position.
+1. `BuildSectorTopologyIndexes()` is built once for the map.
+2. Each `SectorTopologySector` extracts loops through
+   `ExtractSectorTopologyLoops()`.
+3. The outer loop and hole loops are converted to integer coordinate polygons
+   from their vertex IDs.
+4. The outer loop AABB is scanned on a half-cell-offset grid.
+5. Grid spacing converts world units through `SectorWorldToAuthoringDistance()`
+   and `SectorCoordSubdivisions`.
+6. `IsStrictlyInsideProbePolygon()` keeps only candidates classified `Inside`
+   the outer polygon and `Outside` every hole. Boundary points are rejected.
+7. Accepted topology X/Y coordinates are converted to world X/Z with
+   `SectorCoordToWorldDistance()`.
+8. If the requested floor-relative Y is at or above the ceiling, Y is clamped to
+   the midpoint between floor and ceiling and a placement diagnostic is recorded.
+9. If no grid point survives for a sector, `FindRepresentativeProbePoint()` tries
+   the AABB center, the outer-vertex centroid, then a 16x16 interior fallback
+   search. A successful fallback records a diagnostic.
 
-Middle blockers:
+Current limitations:
 
-- V1 should not spend heavy effort solving 2D blocker subtraction for middle
-  textures.
-- Practical first step: reject candidates very close to any linedef segment and
-  rely on alpha-aware visibility rays during lighting evaluation.
-- Later, middle textures flagged as solid/blocking can carve out small exclusion
-  bands or participate in a 2D clearance test.
-
-This placement is derived data. It should be generated during the bake from the
-current topology snapshot and should not invalidate the 2D editor render cache by
-itself because no live topology or visible cached 2D editor state changes unless
-probe debug drawing is added.
+- There is one vertical layer only.
+- Middle blockers do not carve placement holes or clearance bands. Their alpha
+  and occlusion behavior affects lighting rays, not 2D placement.
+- Placement is derived bake data and does not invalidate the 2D topology render
+  cache by itself.
 
 ## Probe Lighting Representation
 
-Recommended target representation is an ambient cube per probe:
+V1 bakes one ambient cube per probe:
 
 ```text
 +X RGB, -X RGB, +Y RGB, -Y RGB, +Z RGB, -Z RGB
 ```
 
-Why ambient cube:
+Ambient cubes give 3D models directional baked lighting by normal without static
+surface lightmap UVs. Billboards can use an average or stable hemisphere blend.
+They must not use the camera-facing quad normal for baked lighting.
 
-- It fits the engine's 2008-ish static-lighting direction better than full
-  spherical harmonics.
-- It is cheaper and easier to debug than SH.
-- It gives 3D models directional baked lighting by normal without needing static
-  lightmap UVs.
-- It can be averaged or hemisphere-weighted for billboards.
-- It avoids a single flat sector brightness, which fails in corridors, concave
-  rooms, spotlit areas, and spaces with bright/dark ends.
-
-Simple RGB ambient is too crude as the final design, but it is acceptable as a
-temporary staged implementation if bake complexity needs to be reduced. A single
-dominant direction plus RGB is more complex for sprites and less robust for
-multi-light spaces than an ambient cube.
-
-Future usage:
+Ambient cube evaluation for future model shaders:
 
 ```cpp
 Vector3 EvaluateAmbientCube(const Vector3 cube[6], Vector3 normal)
@@ -302,105 +381,118 @@ Vector3 EvaluateAmbientCube(const Vector3 cube[6], Vector3 normal)
 ```
 
 Billboards should normally use the average cube color or a stable hemisphere
-blend. They must not use the camera-facing quad normal for baked lighting.
+blend.
 
-## Baking Probe Values
+## Probe Baking
 
-Best v1 implementation target: bake ambient cubes directly, but with simple
-directional sampling that reuses the existing lightmap bake machinery.
+`BakeSectorBakedObjectLightProbeAmbientCubes()` bakes the placed probes. The
+full lightmap bake calls it after the surface atlas has been exported and before
+writing the sidecar.
 
-Recommended direct-light probe approximation:
+Probe baking builds its own generated geometry, lightmap layout, opaque bake
+triangles, BVH, alpha-test occluder triangles, alpha mask cache, world-space
+point lights, world-space spotlights, and directional light from the same map
+snapshot. `BakeProbeAmbientCube()` then evaluates each of the six cube face
+directions as a virtual normal at the probe position.
 
-- Treat each cube face direction as a virtual normal at the probe position.
-- Evaluate static point lights, static spotlights, and directional light against
-  that virtual normal.
-- Use the same attenuation, cone attenuation, source-radius soft shadow sampling,
-  BVH occlusion, and alpha-tested middle occlusion semantics as surface direct
-  light.
-- For point and spot lights, only add contribution to faces where
-  `dot(faceDirection, directionToLight) > 0`.
-- For directional light, use `dot(faceDirection, directionToLight) > 0` and cast
-  a shadow ray along `directionToLight`. Unlike surface bake, object probes
-  should evaluate directional light anywhere the ray is unoccluded; do not
-  restrict it to sky-owned surfaces because probes are not surfaces.
+Implemented lighting contents:
 
-Recommended indirect/ambient approximation:
+- Sector ambient baseline is added to every cube face through
+  `SectorAmbientBaseline()`.
+- Static point lights use the existing `EvaluateDirectLight()` point-light path
+  through `EvaluateProbePointLight()`.
+- Static spotlights use the existing `EvaluateDirectLight()` spotlight path
+  through `EvaluateProbeSpotLight()`.
+- Directional light uses `EvaluateDirectionalLight()` through
+  `EvaluateProbeDirectionalLight()`. Probe directional light is evaluated at the
+  probe position as virtual faces, not only on sky-owned surface texels.
+- Point and spot source radii use the same soft-shadow sampling behavior as the
+  surface bake (`kDirectSoftShadowSampleCount == 8`) because the existing direct
+  light helpers are reused.
+- Opaque generated surfaces use the bake BVH for shadow/visibility rays.
+- Alpha-tested middle occluders use `RaycastBakeOcclusionAlphaAware()` through
+  the same direct-light paths. Missing alpha masks are conservative opaque.
+- Each face result is clamped to RGB `[0, 1]` before storage.
 
-- Add sector ambient color/intensity as a low baseline to all six cube faces.
-  Current generated geometry already uses `MakeTopologySectorVertexColor()` for
-  sector ambient vertex color, and the source hash includes sector ambient.
-- Add a cheap occlusion term per cube face by casting a small fixed set of rays
-  in the face hemisphere, similar to `BakeAmbientOcclusion()` but centered on
-  the probe.
-- Optionally sample bounced light by tracing rays from the probe, hitting the
-  baked geometry BVH, and sampling the dilated direct-light atlas at
-  `RayHit.lightmapUv` via `SampleDirectLightingAtLightmapUv()`. This reuses the
-  existing indirect-bounce data flow and avoids inventing GI.
+Deferred quality work:
 
-Staged recommendation:
-
-- Phase 1 should bake ambient cube probes, not just RGB, because the data format
-  and runtime API should settle early.
-- The first ambient cube quality can be simple: sector ambient plus direct
-  static light evaluation per cube face plus alpha-aware occlusion.
-- A later quality phase can add probe indirect bounce from nearby lightmap
-  samples and per-face AO.
-
-Implementation detail: existing direct-light helpers currently take
-`RasterHit`, a source surface ref/index, and source triangle index so they can
-ignore self hits. Probe baking should either:
-
-- extract lower-level "object/probe direct light" helpers that do not require a
-  source surface, or
-- call the same occlusion path with default source refs and `-1` indices.
-
-The first option is cleaner because probes are not surfaces and have no logical
-self surface.
+- Probe-specific indirect bounce from nearby lightmap samples is not implemented.
+- Probe-specific per-face AO is not implemented.
+- Middle textures currently participate in alpha-aware light occlusion but do
+  not carve placement or cast non-alpha-aware baked shadows beyond existing
+  lightmap behavior.
 
 ## Runtime Lookup API
 
-Conceptual API:
+Implemented API:
 
 ```cpp
 struct BakedObjectLightingSample {
-    Vector3 position = {};
     Vector3 ambientCube[6] = {};
     bool valid = false;
 };
 
 BakedObjectLightingSample SampleBakedObjectLighting(
-        const SectorBakedObjectLightProbeSet& probes,
+        const SectorBakedObjectLightProbeRuntimeData& probes,
         Vector3 worldPosition,
-        int preferredSectorId);
+        int preferredSectorId,
+        const SectorTopologyMap* mapForFallback);
 ```
 
-Runtime lookup should prefer sector-local samples:
+`LoadSectorBakedObjectLightProbeRuntimeData()` loads the sidecar, validates the
+metadata/source hash, sorts probes by `sectorId`, and builds
+`SectorBakedObjectLightProbeSectorRange` entries. The current implementation
+allocates while loading the vectors. `SampleBakedObjectLighting()` itself uses
+fixed local arrays and performs no heap allocation.
 
-1. Use `preferredSectorId` when the caller has current sector knowledge from
-   movement/collision/sector lookup.
-2. Interpolate the nearest probes in that sector by inverse distance, capped to a
-   small fixed count such as 4.
-3. If there is only one sector probe, return it directly.
-4. Near portal edges, optionally include adjacent portal-connected sectors in a
-   later phase to reduce discontinuities.
-5. Fall back to nearest probe in current sector, then nearest probe in adjacent
-   portal-connected sectors, then sector ambient, then neutral dim light.
+Sampling behavior:
 
-Suggested fallback hierarchy:
+- If probes are loaded and `preferredSectorId` has a range, stream that range
+  once.
+- If a topology map is supplied and the sample point is within
+  `kObjectProbeAdjacentPortalBlendDistanceWorld` (`1.0` world unit) of an open
+  two-sided portal segment from the preferred sector, also stream each adjacent
+  sector's probe range once.
+- Adjacent sector discovery is capped by
+  `kObjectProbeMaxAdjacentBlendSectors` (`8`) and uses a fixed local array.
+  Duplicate adjacent sector IDs and accidental `preferredSectorId` matches are
+  skipped, so a sector sharing multiple portal edges is not overweighted.
+- If the preferred sector has probes but adjacency is unavailable, missing,
+  capped, malformed, or has no probe ranges, the query still samples preferred
+  sector probes only.
+- If the preferred sector has no probes, sample all loaded probes as a
+  cross-sector fallback.
+- The sampler selects up to four nearest probes.
+- If the closest probe is effectively exact, return that cube directly with
+  `valid = true`.
+- Otherwise, blend selected probes by inverse distance and clamp faces to RGB
+  `[0, 1]`, with `valid = true`.
+- If no loaded probe can be sampled and `mapForFallback` contains the preferred
+  sector, return sector ambient on all six faces with `valid = false`.
+- Otherwise, return neutral RGB `0.15` on all six faces with `valid = false`.
+
+Adjacent portal filtering:
+
+- Only valid two-sided linedefs can add adjacent probe sectors.
+- The point-to-portal test measures distance from world-position XZ to the
+  actual portal segment XZ using closest-point-on-segment distance.
+- Vertical openness matches runtime portal visibility:
+  `openBottom = max(floorA, floorB)`, `openTop = min(ceilingA, ceilingB)`, and
+  the portal is open only when `openBottom < openTop`.
+- One-sided walls, void boundaries, malformed linedefs/sidedefs, vertically
+  closed portals, and merely nearby non-neighbor sectors do not blend.
+
+Current fallback order:
 
 ```text
-1. inverse-distance interpolation of nearby probes in current sector
-2. nearest probe in current sector
-3. nearest probe in adjacent portal-connected sector
-4. current sector ambient color/intensity
-5. neutral dim ambient cube, e.g. RGB 0.15 on all faces
+1. up to four nearest probes from preferred sector plus unique near-portal
+   adjacent sectors
+2. preferred sector only, when adjacency is unavailable or adds no usable probes
+3. up to four nearest probes from all loaded probes, when preferred sector has
+   no probes
+4. preferred-sector ambient, if a fallback map is supplied
+5. neutral RGB 0.15 cube
 ```
-
-For v1, a linear scan over probes in the current sector is acceptable if probe
-counts stay modest. Store probes sorted or grouped by sector ID so lookup can
-skip unrelated sectors cheaply. Add per-sector probe ranges after the data
-format exists. Spatial acceleration is only needed if maps produce thousands of
-probes and object counts become high.
 
 ## Future Billboard Usage
 
@@ -445,165 +537,156 @@ is a renderer feature layered on top of probe lighting.
 
 ## Debug and Editor Visualization
 
-Minimal first debug visualization:
+Current debug visualization:
 
-- Add a toggle such as "Show Object Lighting Probes".
-- Draw small 3D or 2D markers at probe positions.
-- Color each marker by average ambient cube RGB.
-- Show selected/hovered probe sector ID, world position, and six RGB face
-  values in debug text.
+- The 3D preview overlay exposes the `Show Object Probes` checkbox with UI id
+  `sector_editor_show_object_probe_debug_overlay`.
+- Entering or rebuilding 3D preview loads the baked sidecar into editor debug
+  runtime data with `LoadSectorBakedObjectLightProbeRuntimeData()`.
+- `DrawPreviewObjectProbeOverlay()` draws small read-only 3D sphere markers at
+  baked probe positions when the preview renderer is ready, mouse-look is not
+  active, the toggle is enabled, and debug probe data is loaded.
+- Marker fill color is the average RGB of the six ambient-cube faces, clamped to
+  8-bit color with alpha 235.
+- Markers also draw a white wire sphere outline.
+- Status text appears beside the toggle. It reports `Object probes: none`,
+  `Object probes: N loaded`, `Object probes: unavailable`, or the concrete load
+  failure such as stale source hash or missing sidecar.
 
-No complex UI is needed for v1. Probe debug drawing should use the baked probe
-payload and should not mutate topology. If 2D debug drawing is cached later,
-probe-data install/rebake should invalidate only that debug/probe cache, not the
-topology render cache unless probe markers are folded into it.
+The debug overlay is 3D-only in v1. It uses the baked probe payload and does not
+mutate topology, change save data, invalidate the 2D topology render cache, or
+affect the lightmap source hash.
 
 ## Performance and Storage
 
 Probe count estimate:
 
 - 4.0 world-unit spacing produces about one probe per 16 square world units.
-- 2.0 world-unit spacing produces about one probe per 4 square world units, four
-  times as many probes and roughly four times the probe bake work.
+- 2.0 world-unit spacing, if used later, would produce about one probe per 4
+  square world units, four times as many probes and roughly four times the probe
+  bake work.
 - Long corridors benefit from 4.0 spacing because they get multiple samples
   along the length instead of one sector average.
-- Large rooms may need 4.0 initially and a future 2.0 override for strong
-  spotlights, bars, or sharp shadow patterns.
+- Large rooms or strong localized lighting may need future density controls.
 
 Storage estimate:
 
-- Float ambient cube: position (3 floats) + six RGB faces (18 floats) + sector ID
-  is about 88 bytes per probe before vector/string/JSON overhead.
-- JSON embedding is convenient but bloated. It is acceptable for v1 if probe
-  counts are low to moderate.
-- A later binary or quantized sidecar can store RGB16F, RGB10A2-style packed
-  values, or 8-bit/log-encoded colors.
+- V1 uses the binary sidecar, not JSON embedding, for probe payloads.
+- Each probe record is 88 bytes: one `i32` sector ID, three `f32` position
+  values, and eighteen `f32` ambient-cube RGB values.
+- The sidecar header is 28 bytes.
+- Future sidecar revisions can add quantization or compression, such as RGB16F,
+  packed/log-encoded RGB, or chunk compression.
 
 Bake cost:
 
 - Direct probe lighting cost is roughly `probeCount * 6 faces * staticLightCount`
   plus shadow rays, multiplied by source-radius samples when enabled.
 - Alpha-tested occlusion can add extra ray traversal and CPU alpha-mask sampling.
-- Keep progress reporting separate from surface texel work when probes are added.
-- Reuse the existing BVH and alpha mask cache from the surface bake.
+- Probe baking currently rebuilds generated geometry, layout, BVH, and alpha
+  occluder data for the probe pass.
+- `SectorLightmapBakeResult` reports probe count metadata, placement diagnostic
+  count, object probe bake seconds, and sidecar write seconds.
 
 Runtime cost:
 
-- Per-object lookup can start with sector-grouped nearest-neighbor or small-count
-  inverse-distance interpolation.
-- Avoid allocating during runtime lookup.
-- Precompute per-sector probe ranges after loading baked data.
+- Runtime loading allocates the probe and sector-range vectors.
+- Sampling scans the preferred sector range or all loaded probes, keeps up to
+  four nearest candidates in a fixed local array, and blends without heap
+  allocation.
+- Spatial acceleration is deferred until probe/object counts justify it.
 
 ## Versioning and Invalidation
 
-When probes are implemented:
+Implemented probe versioning behavior:
 
-- Bump `kSectorLightmapBakeVersion`.
-- Include probe-generation constants in the hash if they affect output:
-  representation version, default probe height, default or configured spacing,
-  per-face sample counts, probe AO/indirect sample counts, and any clamps.
-- If probe spacing/height become configurable fields in
-  `SectorLightmapBakeSettings`, serialize them in `lightmapSettings` and include
-  the clamped world-space values in `ComputeSectorLightmapSourceHash()`.
-- Store `objectProbes.sourceHash` equal to the final lightmap source hash.
-- Treat probes as stale if their source hash does not match the current
-  `ComputeSectorLightmapSourceHash()`.
-- Old maps without probe data should load. They should report missing/stale
-  object probes once a renderer requests probe lighting, but they should not
-  crash or invalidate unrelated topology data.
+- `kSectorLightmapBakeVersion` was bumped to 10 when object probe sidecar output
+  became part of successful lightmap bakes. Old bakes do not contain object
+  probes and stale through the source hash.
+- `ComputeSectorLightmapSourceHash()` includes the bake version, probe placement
+  spacing/height settings after clamping, and the static world/light inputs that
+  affect surface and probe bake results.
+- `objectProbes.sourceHash` is stored equal to the final lightmap source hash.
+- Object probes are stale if their metadata source hash does not match the
+  current `ComputeSectorLightmapSourceHash()`.
+- `GetSectorBakedObjectLightProbeStatus()` also reports stale for invalid
+  metadata, wrong sidecar version/format, negative counts, invalid settings, or
+  missing sidecar files.
+- Old maps without probe data still load. They report missing object probes to
+  probe consumers without crashing or invalidating unrelated topology data.
+- Probe visual/debug settings remain excluded from the source hash.
 
-Lightmap source-hash behavior recommendation: object probes are baked output tied
-to the lightmap source hash. Adding probe generation should bump the bake version
-because old bakes do not contain object probes. Probe visual/debug settings
-should not enter the source hash.
+## Implementation Status
 
-## Implementation Plan
+Implemented:
 
-Phase 1: Data structures, metadata, serialization, versioning
+- Probe payload structs, metadata structs, runtime data, sector ranges, and
+  sample struct.
+- Binary probe sidecar write/read helpers with versioned validation.
+- Compact JSON metadata under `bakedLightmap.objectProbes`.
+- Lightmap bake version/source-hash integration for probe-affecting settings.
+- Per-sector polygon-aware placement with holes, fallback points, and low-ceiling
+  diagnostics.
+- Ambient cube baking from sector ambient, static point lights, static spotlights,
+  directional light, opaque occlusion, source-radius soft shadows, and
+  alpha-tested middle occlusion.
+- Runtime sidecar loading, source-hash validation, sector-range construction, and
+  allocation-free sampling.
+- 3D preview debug toggle, marker drawing, and load/status text.
 
-- Add `SectorBakedObjectLightProbe` and `SectorBakedObjectLightProbeSet`.
-- Add optional probe data under `SectorLightmapMetadata` or a sidecar metadata
-  path.
-- Add JSON read/write with backward-compatible optional fields.
-- Bump bake version and include probe constants/settings in the source hash.
-- Add serialization and stale/missing probe tests.
+Deferred:
 
-Phase 2: Probe placement per sector
+- Future 3D model renderer, billboard sprite renderer, actor/entity consumers,
+  and their shaders.
+- Multiple vertical probe layers.
+- Spatial acceleration for very high probe counts.
+- Probe-specific indirect bounce and per-face AO.
+- Probe placement exclusion bands for middle blockers.
+- Selected-probe detail UI.
+- Quantized or compressed sidecar formats.
 
-- Add a probe placement builder that uses `ExtractSectorTopologyLoops()` and
-  `SectorTopologyClassifyPointInPolygon()`.
-- Generate one height layer at floor + 1.2 world units.
-- Start with 4.0 world-unit spacing, with a path to expose 2.0 or 4.0 as a bake
-  setting.
-- Reject outer-boundary and hole points.
-- Add tests for long corridors, large rooms, concave sectors, holes, and small
-  sectors.
+## Tests
 
-Phase 3: Bake simple ambient cube lighting
+Probe-related coverage is in:
 
-- Reuse generated geometry, BVH, alpha occluders, alpha mask cache, and world
-  static light conversion from the current surface bake.
-- Evaluate sector ambient plus direct static point/spot/directional light per
-  cube face.
-- Use alpha-aware occlusion for probe shadow rays.
-- Add bake result counts/timing for probes.
+- `tests/SectorTopologyLightmapTests.cpp`
+- `tests/SectorTopologySerializationTests.cpp`
+- `tests/SectorAuthoringGraphTests.cpp`
 
-Phase 4: Runtime sampling API
+Covered behaviors include:
 
-- Add a no-allocation `SampleBakedObjectLighting()` helper.
-- Group probes by sector ID at load/preview rebuild time.
-- Implement current-sector nearest or inverse-distance interpolation.
-- Implement safe fallback to sector ambient and neutral dim light.
+- Source hash changes for probe spacing and height.
+- Old bake-version/source-hash invalidation.
+- Sidecar round-trip and rejection of invalid files.
+- Runtime loading, sector-range construction, unavailable-input rejection, and
+  sampling fallback behavior.
+- Successful bake sidecar output, metadata, timing/report fields, and
+  cancellation cleanup.
+- Placement counts, concave-sector rejection, hole rejection, small-sector
+  fallback, and low-ceiling clamping.
+- Static point, static spotlight, directional, wall-occluded, alpha-occluded,
+  ambient, and degenerate finite probe lighting.
+- JSON serialization defaults and compact object probe metadata without embedded
+  payload arrays.
 
-Phase 5: Quality extension
+## Known Gaps / Follow-Ups
 
-- Add per-face AO and optional nearby surface-lightmap indirect gather.
-- Tune sample counts and progress reporting.
-- Consider adjacent portal-sector interpolation near portals.
-
-Phase 6: Debug visualization and docs
-
-- Add probe marker toggle.
-- Color markers by average cube lighting.
-- Show selected probe details.
-- Document expected model and billboard renderer usage.
-
-## Goblins / Risks
-
-- One probe per sector is too crude for large rooms, corridors, spotlights, bars,
-  shadows, and bright/dark sector ends.
-- Probe density trades quality against bake time, storage, and runtime lookup
-  work.
-- Large or concave sectors need polygon-aware placement; AABB center samples are
-  not enough.
-- Holes and void areas must reject probes.
-- Portals and sector edges can create lighting discontinuities unless adjacent
-  sector probes are considered later.
-- Actor/object height at floor + 1.2 world units is a good first torso-height
-  default, but short pickups, floor particles, flying actors, and tall monsters
-  may need offsets.
-- Tall spaces may need multiple vertical probe layers later.
-- Ambient cube quality depends on enough directional samples; simple RGB is
-  cheaper but loses model normal response.
-- Billboards using camera-facing normals for baked lighting will visibly pulse as
-  the camera rotates.
-- Dynamic lights can be double-counted if static-authored lights also remain as
-  runtime dynamic lights for the same fixture.
-- Stale probe data must not be silently used as if valid.
-- Missing probe data needs graceful fallback for old maps and partial bakes.
-- CPU JSON floats are easy first; GPU buffers, binary sidecars, compression, and
-  quantization can wait.
-- Source hash and bake version changes are easy to miss; probe-affecting
-  settings and constants must be hashed.
+- No current consumer renderer samples probes yet.
+- No multiple-height probe layers for tall spaces, flying actors, or very short
+  pickups.
+- No probe-specific indirect bounce or per-face AO.
+- The probe pass rebuilds bake geometry/BVH instead of sharing the surface bake's
+  already-built structures.
+- Runtime sampling is a linear scan over a sector range or all probes.
 
 ## Explicit Out Of Scope
 
-- Implementing probes.
 - 3D model renderer.
 - Billboard sprite renderer.
 - Actor/entity system.
 - Skeletal animation.
 - Dynamic object shadows.
+- Multiple vertical probe layers.
 - Runtime GI.
 - Spherical harmonics except as a future alternative.
 - Reflection cubemaps.
@@ -611,3 +694,15 @@ Phase 6: Debug visualization and docs
 - Shadow map changes.
 - Clustered, tiled, or deferred lighting.
 
+## Future Consumer Checklist
+
+- Static world geometry continues to use surface lightmaps.
+- Movable models, sprites, pickups, particles, NPCs, and actors sample probes
+  through `SampleBakedObjectLighting()`.
+- Model shaders should evaluate the ambient cube by model normals.
+- Billboard shaders should use average, upper-hemisphere, or other stable
+  probe-derived lighting.
+- Billboards must not use camera-facing quad normals for baked lighting.
+- Runtime dynamic lights are added on top of baked object probe lighting.
+- Missing, stale, or unavailable probes must use the documented fallback behavior.
+- Movable objects must not sample static surface lightmaps.
