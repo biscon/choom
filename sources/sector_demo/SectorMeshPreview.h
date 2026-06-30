@@ -36,7 +36,7 @@ public:
 
     void AdvanceRuntime(float dt);
     void Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
-    void RenderDynamicSpotLightShadowMaps();
+    void RenderDynamicSpotLightShadowMaps(engine::AssetManager& assets);
     void DrawScene(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
     void ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
     void ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
@@ -126,6 +126,14 @@ private:
     int dynamicLightDirectionsLoc = -1;
     int dynamicLightInnerConeCosLoc = -1;
     int dynamicLightOuterConeCosLoc = -1;
+    int dynamicLightShadowSlotsLoc = -1;
+    std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrixLocs = [] {
+        std::array<int, MaxDynamicSpotLightShadowCasters> locs{};
+        locs.fill(-1);
+        return locs;
+    }();
+    int shadowBiasLoc = -1;
+    int shadowStrengthLoc = -1;
     int dynamicLightingClampLoc = -1;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightSources;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;
@@ -138,6 +146,8 @@ private:
     Texture2D dynamicSpotLightShadowDefaultTexture = {};
     bool dynamicSpotLightShadowMaterialLoaded = false;
     int dynamicSpotLightShadowLightViewProjectionLoc = -1;
+    int dynamicSpotLightShadowAlphaTestLoc = -1;
+    int dynamicSpotLightShadowAlphaCutoffLoc = -1;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
     Material bloomSourceMaterial = {};

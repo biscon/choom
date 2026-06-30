@@ -5,11 +5,13 @@
 
 #include <raylib.h>
 
+#include <array>
 #include <cstddef>
 #include <vector>
 
 namespace game {
 
+constexpr std::size_t MaxDynamicLights = 8;
 constexpr std::size_t MaxDynamicSpotLightShadowCasters = 2;
 constexpr int DynamicSpotLightShadowMapResolution = 1024;
 
@@ -69,6 +71,13 @@ struct SectorPreviewDynamicSpotLightShadowMatrix {
     Matrix lightViewProjection = {};
 };
 
+struct SectorPreviewDynamicSpotLightShadowUniforms {
+    std::array<int, MaxDynamicLights> dynamicLightShadowSlots{};
+    std::array<Matrix, MaxDynamicSpotLightShadowCasters> shadowLightMatrices{};
+    std::array<float, MaxDynamicSpotLightShadowCasters> shadowBias{};
+    std::array<float, MaxDynamicSpotLightShadowCasters> shadowStrength{};
+};
+
 bool MakeSectorPreviewDynamicPointLightUniform(
         const SectorTopologyDynamicPointLight& light,
         SectorPreviewDynamicPointLightUniform& outLight);
@@ -124,5 +133,10 @@ void BuildSectorPreviewDynamicSpotLightShadowMatrices(
         const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights,
         const std::vector<SectorPreviewDynamicSpotLightShadowCaster>& shadowCasters,
         std::vector<SectorPreviewDynamicSpotLightShadowMatrix>& outMatrices);
+
+SectorPreviewDynamicSpotLightShadowUniforms PackSectorPreviewDynamicSpotLightShadowUniforms(
+        const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights,
+        const std::vector<SectorPreviewDynamicSpotLightShadowCaster>& shadowCasters,
+        const std::vector<SectorPreviewDynamicSpotLightShadowMatrix>& shadowMatrices);
 
 } // namespace game

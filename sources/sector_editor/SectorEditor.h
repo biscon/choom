@@ -22,7 +22,7 @@ public:
 
     void Update(engine::Input& input, float dt);
     void Render(engine::AssetManager& assets);
-    void RenderPreview3DShadowMaps();
+    void RenderPreview3DShadowMaps(engine::AssetManager& assets);
     void RenderPreview3DScene(engine::AssetManager& assets);
     void RenderPreview3DOverlays();
     void ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);

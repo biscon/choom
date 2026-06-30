@@ -2,6 +2,7 @@
 
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorUnits.h"
 
 #include <algorithm>
@@ -65,6 +66,7 @@ float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdEr
     height += rowH + gap; // Enabled.
     height += 3.0f * (rowH + gap); // Flicker controls.
     height += 4.0f * (rowH + gap); // Shadow controls.
+    height += 38.0f + gap; // Shadow budget note.
     height += 11.0f * (rowH + gap); // Position/target/intensity/range/cones.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
@@ -587,6 +589,26 @@ bool DrawSelectedDynamicSpotLightInspector(
         callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d shadow request", light.id));
     }
     y += rowH + gap;
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{0.0f, y, contentW, 18.0f},
+            font,
+            TextFormat("Requests one of %zu shadow slots.", MaxDynamicSpotLightShadowCasters),
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
+    y += 18.0f;
+    engine::Text(
+            ui,
+            config,
+            assets,
+            Rectangle{0.0f, y, contentW, 18.0f},
+            font,
+            "Priority decides budget; over-budget spots still light.",
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
+    y += 20.0f + gap;
 
     {
         const SectorEditorIntInputResult result = DrawLabeledIntInput(

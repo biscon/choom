@@ -3031,17 +3031,17 @@ bool SectorEditor::SnapAuthoringVertexMoveTarget(
 
 void SectorEditor::RenderPreview3D(engine::AssetManager& assets)
 {
-    RenderPreview3DShadowMaps();
+    RenderPreview3DShadowMaps(assets);
     RenderPreview3DScene(assets);
     RenderPreview3DOverlays();
 }
 
-void SectorEditor::RenderPreview3DShadowMaps()
+void SectorEditor::RenderPreview3DShadowMaps(engine::AssetManager& assets)
 {
     if (state.mode != SectorEditorMode::Preview3D) {
         return;
     }
-    preview.RenderDynamicSpotLightShadowMaps();
+    preview.RenderDynamicSpotLightShadowMaps(assets);
 }
 
 void SectorEditor::RenderPreview3DScene(engine::AssetManager& assets)

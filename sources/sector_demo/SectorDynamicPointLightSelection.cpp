@@ -677,7 +677,7 @@ bool MakeSectorPreviewDynamicSpotLightShadowMatrix(
     const Vector3 target = Vector3Add(light.position, direction);
     const Matrix view = MatrixLookAt(light.position, target, SpotlightShadowUpVector(direction));
     const Matrix projection = MatrixPerspective(static_cast<double>(fovyRadians), 1.0, ShadowNearPlane, light.radius);
-    const Matrix lightViewProjection = MatrixMultiply(projection, view);
+    const Matrix lightViewProjection = MatrixMultiply(view, projection);
 
     if (!IsFiniteMatrix(view) || !IsFiniteMatrix(projection) || !IsFiniteMatrix(lightViewProjection)) {
         return false;
@@ -715,6 +715,56 @@ void BuildSectorPreviewDynamicSpotLightShadowMatrices(
             outMatrices.push_back(matrix);
         }
     }
+}
+
+SectorPreviewDynamicSpotLightShadowUniforms PackSectorPreviewDynamicSpotLightShadowUniforms(
+        const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights,
+        const std::vector<SectorPreviewDynamicSpotLightShadowCaster>& shadowCasters,
+        const std::vector<SectorPreviewDynamicSpotLightShadowMatrix>& shadowMatrices)
+{
+    SectorPreviewDynamicSpotLightShadowUniforms uniforms;
+    uniforms.dynamicLightShadowSlots.fill(-1);
+    uniforms.shadowLightMatrices.fill(MatrixIdentity());
+    uniforms.shadowBias.fill(DynamicSpotLightDefaultShadowBias);
+    uniforms.shadowStrength.fill(0.0f);
+
+    for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : shadowMatrices) {
+        if (matrix.shadowSlot < 0
+                || static_cast<std::size_t>(matrix.shadowSlot) >= MaxDynamicSpotLightShadowCasters
+                || matrix.dynamicLightIndex < 0
+                || static_cast<std::size_t>(matrix.dynamicLightIndex) >= selectedDynamicLights.size()
+                || static_cast<std::size_t>(matrix.dynamicLightIndex) >= MaxDynamicLights
+                || !IsFiniteMatrix(matrix.lightViewProjection)) {
+            continue;
+        }
+
+        const SectorPreviewDynamicPointLightUniform& light =
+                selectedDynamicLights[static_cast<std::size_t>(matrix.dynamicLightIndex)];
+        if (light.kind != SectorPreviewDynamicLightKind::Spot || light.lightId != matrix.lightId) {
+            continue;
+        }
+
+        const SectorPreviewDynamicSpotLightShadowCaster* caster = nullptr;
+        for (const SectorPreviewDynamicSpotLightShadowCaster& candidate : shadowCasters) {
+            if (candidate.lightId == matrix.lightId
+                    && candidate.dynamicLightIndex == matrix.dynamicLightIndex
+                    && candidate.shadowSlot == matrix.shadowSlot) {
+                caster = &candidate;
+                break;
+            }
+        }
+        if (caster == nullptr) {
+            continue;
+        }
+
+        const std::size_t shadowSlot = static_cast<std::size_t>(matrix.shadowSlot);
+        uniforms.dynamicLightShadowSlots[static_cast<std::size_t>(matrix.dynamicLightIndex)] = matrix.shadowSlot;
+        uniforms.shadowLightMatrices[shadowSlot] = matrix.lightViewProjection;
+        uniforms.shadowBias[shadowSlot] = caster->shadowBias;
+        uniforms.shadowStrength[shadowSlot] = caster->shadowStrength;
+    }
+
+    return uniforms;
 }
 
 } // namespace game

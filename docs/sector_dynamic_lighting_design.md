@@ -8,7 +8,8 @@ Implemented goal: forward-rendered runtime point and spot lights in the sector
 fragment shader. Dynamic lighting blends with the current sector ambient, baked
 lightmap direct lighting, baked AO, decals, and portal-culled sector drawing.
 Static baked spotlights are authored and baked separately from runtime dynamic
-lights. Shadow maps and dynamic-sector lighting are future work.
+lights. Dynamic spotlights can optionally use runtime shadow maps; dynamic-sector
+lighting is future work.
 
 ## Implemented First Pass Notes
 
@@ -23,23 +24,34 @@ lights. Shadow maps and dynamic-sector lighting are future work.
 - Dynamic point lights serialize under `dynamicPointLights`; missing fields load
   as an empty list, and default `enabled: true` is omitted on save.
 - Dynamic spotlights serialize under `dynamicSpotLights`; missing fields load as
-  an empty list, and default `enabled`, cone, and flicker fields are omitted on
-  save.
+  an empty list, and default `enabled`, cone, flicker, and shadow fields are
+  omitted on save.
 - Editor authoring uses a separate Dynamic Light tool and inspector controls for
   enabled state, position, color, radius, and intensity.
 - Editor authoring uses a separate Dynamic Spot tool and inspector controls for
   enabled state, position, target, range, inner/outer cone angles, color,
-  intensity, and flicker.
+  intensity, flicker, and opt-in shadow-map settings.
 - New dynamic lights currently default to white, intensity `1.0`, and radius
   `8.0` world units converted to authoring units.
 - New dynamic spotlights default to white, intensity `1.0`, range `8.0` world
   units, inner cone `20` degrees, outer cone `35` degrees, and a target `4.0`
   world units forward in X at `1.0` world units high.
 - The runtime renderer supports point lights and cone-filtered dynamic
-  spotlights. Static spotlights are baked-only; there are no cookies, shadow
-  maps, PCF, or normal maps.
+  spotlights. Dynamic spotlights can opt in to Cast Shadows. Static spotlights
+  are baked-only; there are no cookies or normal maps.
 - The sector shader evaluates up to `8` selected dynamic lights total using
   fixed-size uniform arrays shared by points and spots.
+- Runtime shadow maps are limited to `2` selected dynamic spotlights by default.
+  Shadow caster selection is deterministic: higher shadow priority wins, then
+  higher selected-light contribution score, then lower stable light ID.
+- Shadow maps attenuate only the owning dynamic spotlight direct contribution.
+  Dynamic points never cast shadows, static point/spot lights remain baked-only,
+  and dynamic spotlights without a shadow slot still illuminate unshadowed.
+- Shadow maps use a fixed `1024` resolution, fixed `3x3` PCF, default bias
+  `0.002`, and default strength `1.0`.
+- Sector floors, ceilings, walls, and middle textures cast into dynamic
+  spotlight shadow maps. Alpha-tested middle textures discard by base texture
+  alpha in the shadow pass.
 - Selected dynamic lights are rebuilt from authored lights, visibility
   candidates, receiver bounds, contribution ranking, and a small runtime-only
   top-N hysteresis step.
@@ -56,6 +68,8 @@ lights. Shadow maps and dynamic-sector lighting are future work.
   zero-count path keeps the previous `0..1` baked-lighting clamp.
 - Preview debug text reports `selected / candidates / total` dynamic light
   counts and selected stable dynamic light IDs when present.
+- Preview debug text also reports dynamic spotlight shadow caster count,
+  candidate count, max shadow budget, and active shadow caster IDs.
 
 ## Current Shader and Material Pipeline
 
@@ -532,18 +546,24 @@ current shader except for any intentional clamp range audit.
 - Dynamic-light disabled/default data path matches current output defaults where
   testable without screenshots.
 
-## Shadow Map Future Path
+## Dynamic Spotlight Shadow Maps
 
-Shadow-casting dynamic lights should be opt-in. Point-light shadows are
-expensive because cubemap shadows need multiple faces or equivalent layered
-rendering. Spot/flashlight shadow maps are the likely first shadow feature.
+Shadow-casting dynamic spotlights are opt-in through the inspector's Cast
+Shadows setting. Cast Shadows requests a shadow map; only the highest-priority
+selected dynamic spotlights up to the shadow budget receive runtime shadow
+slots. Over-budget dynamic spotlights still illuminate without shadows.
 
 PCF means percentage-closer filtering; it samples neighboring shadow-map depths
-to soften shadow edges. Shadow maps require depth render targets, light
-view/projection matrices, shader sampling, bias tuning, and careful handling of
-surface acne/peter-panning. Shadow rendering should eventually reuse
-portal/sector culling for both caster selection and receiver drawing, but this
-document does not design that full system.
+to soften shadow edges. The current dynamic spotlight shadow path uses a fixed
+3x3 PCF kernel. Per-light bias controls acne/peter-panning tradeoffs, and
+per-light strength blends between unshadowed lighting and the sampled shadow
+visibility.
+
+Point-light shadows remain deferred because cubemap shadows need multiple faces
+or equivalent layered rendering. Static point and spot lights do not use runtime
+shadow maps because they are baked. Flashlights, volumetric shafts, god rays,
+projected cookies/gobos, per-light shadow resolution, and shadow quality
+settings are also deferred.
 
 ## Dynamic Sectors and Moving Geometry
 
@@ -571,13 +591,17 @@ consistently. This document does not design dynamic sectors or moving geometry.
   valid lights.
 - Top-N selection can flicker without stable ordering or hysteresis.
 - Dynamic sectors can invalidate baked lightmaps or make them stale.
-- Shadow maps are a separate complexity tier and should not be bundled into the
-  first dynamic-light pass.
+- Shadow maps are limited to dynamic spotlights in this implementation; point
+  shadows, static runtime shadows, volumetric effects, and flashlight-specific
+  behavior remain separate future work.
 
 ## Explicit Out of Scope
 
-- Shadow maps.
-- PCF implementation.
+- Dynamic point-light cubemap shadows.
+- Static runtime shadow maps.
+- Flashlight gameplay or forced flashlight shadow slots.
+- Shadow quality settings.
+- Per-light shadow resolution.
 - Deferred rendering.
 - Clustered/tiled forward lighting.
 - Dynamic floors/doors.
@@ -600,3 +624,7 @@ layout, occlusion, or static lighting results. Existing `staticLights` and
 `staticSpotLights` remain bake lights and continue to affect the lightmap source
 hash. Static baked spotlights are excluded from runtime dynamic light selection,
 shader uniforms, shadow maps, and volumetric effects.
+
+Runtime dynamic spotlight shadow settings, selected shadow slots, shadow map
+resources, light-space matrices, PCF sampling, and visual shadow strength/bias
+remain runtime preview behavior and do not affect the lightmap source hash.

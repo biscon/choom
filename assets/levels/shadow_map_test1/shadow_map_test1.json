@@ -25,7 +25,31 @@
     }
   },
   "staticLights": [],
-  "staticSpotLights": [],
+  "staticSpotLights": [
+    {
+      "id": 1,
+      "position": [
+        160.0,
+        14.399999618530273,
+        56.0
+      ],
+      "target": [
+        160.0,
+        8.0,
+        16.0
+      ],
+      "range": 80.0,
+      "sourceRadius": 2.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "outerConeDegrees": 45.0
+    }
+  ],
   "dynamicPointLights": [],
   "dynamicSpotLights": [
     {
@@ -33,7 +57,7 @@
       "position": [
         72.0,
         14.399999618530273,
-        56.0
+        80.0
       ],
       "target": [
         72.0,
@@ -41,7 +65,7 @@
         16.0
       ],
       "range": 80.0,
-      "intensity": 3.0,
+      "intensity": 4.0,
       "color": {
         "r": 255,
         "g": 255,
@@ -71,11 +95,26 @@
     "headBobStrength": 0.019999999552965164,
     "headBobFrequency": 2.0
   },
+  "directionalLight": {
+    "enabled": false,
+    "directionToLight": [
+      -0.38533732295036316,
+      0.8807710409164429,
+      -0.275240957736969
+    ],
+    "color": {
+      "r": 255,
+      "g": 244,
+      "b": 214,
+      "a": 255
+    },
+    "intensity": 1.0
+  },
   "bakedLightmap": {
     "path": "assets/levels/shadow_map_test1/shadow_map_test1.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "cba9c0402dda078c"
+    "sourceHash": "979d9c109ec6593c"
   },
   "authoringGraph": {
     "vertices": [
@@ -117,6 +156,26 @@
       {
         "id": 8,
         "x": 1088,
+        "y": 576
+      },
+      {
+        "id": 9,
+        "x": 2496,
+        "y": 448
+      },
+      {
+        "id": 10,
+        "x": 2624,
+        "y": 448
+      },
+      {
+        "id": 11,
+        "x": 2624,
+        "y": 576
+      },
+      {
+        "id": 12,
+        "x": 2496,
         "y": 576
       }
     ],
@@ -160,6 +219,26 @@
         "id": 8,
         "startVertexId": 8,
         "endVertexId": 5
+      },
+      {
+        "id": 9,
+        "startVertexId": 9,
+        "endVertexId": 10
+      },
+      {
+        "id": 10,
+        "startVertexId": 10,
+        "endVertexId": 11
+      },
+      {
+        "id": 11,
+        "startVertexId": 11,
+        "endVertexId": 12
+      },
+      {
+        "id": 12,
+        "startVertexId": 12,
+        "endVertexId": 9
       }
     ],
     "lineSides": [],
@@ -244,6 +323,82 @@
         "id": 2,
         "name": "Sector 2",
         "x": 1144,
+        "y": 452,
+        "floorZ": 24.0,
+        "ceilingZ": 25.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 3,
+        "name": "Sector 3",
+        "x": 2552,
         "y": 452,
         "floorZ": 24.0,
         "ceilingZ": 25.0,

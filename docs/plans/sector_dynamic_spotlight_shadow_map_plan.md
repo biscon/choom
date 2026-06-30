@@ -75,7 +75,7 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_03",
       "title": "Shadow Map Depth Rendering",
       "type": "phase",
-      "status": "In Progress"
+      "status": "Completed"
     },
     {
       "id": "phase_03a",
@@ -89,40 +89,40 @@ When an agent is asked to execute this plan, it must:
       "title": "Support Alpha-Tested Middle Textures In Shadow Pass",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04",
       "title": "Main Shader Shadow Sampling",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04a",
       "title": "Pack Shadow Slots And Light-Space Matrices For Dynamic Lights",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04b",
       "title": "Apply PCF Shadowing To Dynamic Spotlight Contribution",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05",
       "title": "Debug Polish Tests And Completion",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05a",
       "title": "Add Shadow Debug Readout Tune Defaults And Close Plan",
       "type": "pass",
       "parent": "phase_05",
-      "status": "Not Started"
+      "status": "Completed"
     }
   ]
 }
@@ -138,14 +138,14 @@ When an agent is asked to execute this plan, it must:
 | Phase 2: Shadow Caster Selection And Shadow Map Resources               | Completed   | 2026-06-30 | Phase 2A and Phase 2B complete.                                           |
 | Phase 2A: Select Shadow-Casting Dynamic Spotlights Under Budget         | Completed   | 2026-06-30 | Selects up to 2 shadow-casting dynamic spotlights from selected runtime lights. |
 | Phase 2B: Create Shadow Map Render Targets And Light View Projections   | Completed   | 2026-06-30 | Allocates preview-owned 1024x1024 shadow maps and computes finite spotlight matrices. |
-| Phase 3: Shadow Map Depth Rendering                                     | In Progress | 2026-06-30 | Phase 3A complete; Phase 3B remains.                                      |
+| Phase 3: Shadow Map Depth Rendering                                     | Completed   | 2026-06-30 | Phase 3A and Phase 3B complete.                                          |
 | Phase 3A: Render Sector Geometry Into Spotlight Shadow Maps             | Completed   | 2026-06-30 | Renders cached sector draw records into selected dynamic spotlight shadow maps. |
-| Phase 3B: Support Alpha-Tested Middle Textures In Shadow Pass           | Not Started |      | Required from the start for grates/bars/middle textures.                  |
-| Phase 4: Main Shader Shadow Sampling                                    | Not Started |      | Parent phase.                                                             |
-| Phase 4A: Pack Shadow Slots And Light-Space Matrices For Dynamic Lights | Not Started |      | Main shader receives shadow slot/matrix data.                             |
-| Phase 4B: Apply PCF Shadowing To Dynamic Spotlight Contribution         | Not Started |      | Dynamic spotlight direct lighting becomes shadowed.                       |
-| Phase 5: Debug Polish Tests And Completion                              | Not Started |      | Parent phase.                                                             |
-| Phase 5A: Add Shadow Debug Readout Tune Defaults And Close Plan         | Not Started |      | Final tuning, docs, and smoke checks.                                     |
+| Phase 3B: Support Alpha-Tested Middle Textures In Shadow Pass           | Completed   | 2026-06-30 | Alpha-tested shadow caster records sample base textures and discard below cutoff. |
+| Phase 4: Main Shader Shadow Sampling                                    | Completed   | 2026-06-30 | Phase 4A and Phase 4B complete.                                           |
+| Phase 4A: Pack Shadow Slots And Light-Space Matrices For Dynamic Lights | Completed   | 2026-06-30 | Main shader receives shadow slot/matrix/bias/strength data and shadow map samplers. |
+| Phase 4B: Apply PCF Shadowing To Dynamic Spotlight Contribution         | Completed   | 2026-06-30 | Dynamic spotlight direct lighting is attenuated with 3x3 PCF shadow sampling. |
+| Phase 5: Debug Polish Tests And Completion                              | Completed   | 2026-06-30 | Phase 5A complete; dynamic spotlight shadow map plan closed.              |
+| Phase 5A: Add Shadow Debug Readout Tune Defaults And Close Plan         | Completed   | 2026-06-30 | Added shadow budget debug readout, inspector budget note, and final docs. |
 
 ## Execution Log
 
@@ -282,7 +282,7 @@ Summary:
 
 * Added a dedicated dynamic spotlight shadow caster shader/material for `SectorMeshPreview`.
 * The shadow caster vertex shader transforms sector mesh positions with the selected spotlight `lightViewProjection` matrix.
-* The shadow caster fragment shader writes normalized depth (`gl_FragCoord.z`) into the render target color texture while normal depth testing resolves nearest sector geometry.
+* The shadow caster pass writes depth into the shadow render target depth texture while normal depth testing resolves nearest sector geometry.
 * The shadow render pass explicitly enables depth testing while drawing each shadow map and disables it before returning to the main scene path.
 * The active editor preview path now calls `SectorEditor::RenderPreview3DShadowMaps()` before binding `worldTarget` for the visible 3D scene.
 * `SectorEditor::RenderPreview3DShadowMaps()` delegates to `SectorMeshPreview::RenderDynamicSpotLightShadowMaps()`; `SectorMeshPreview::DrawScene()` only draws the visible scene and no longer switches render targets internally.
@@ -310,6 +310,139 @@ Verification:
 * `git diff --check` passed.
 * `git diff --stat` reported 15 files changed total in the worktree, including prior Phase 1A/1B/2A/2B changes plus this Phase 3A update.
 * `git status --short` showed the active plan plus current source/test scope: `Main.cpp`, dynamic spotlight selection, `SectorMeshPreview`, topology light serialization/types, `SectorEditor` preview/inspector/types, and topology lightmap/mesh builder/serialization tests.
+
+### 2026-06-30 - Phase 3B
+
+Status: Completed.
+
+Summary:
+
+* Updated the dynamic spotlight shadow caster shader to carry base texture UVs into the fragment shader.
+* Added shadow caster uniforms for `alphaTest` and `alphaCutoff`.
+* Alpha-tested sector draw records now bind the same base/diffuse texture used by visible rendering and discard fragments whose sampled alpha is below the record cutoff.
+* Opaque sector draw records continue to render depth normally and do not depend on alpha texture sampling.
+* The editor preview shadow-map pass now receives `AssetManager&` so it can resolve the base texture for alpha-tested shadow casters.
+
+Behavior notes:
+
+* Source code changed.
+* Shader behavior changed only for the dynamic spotlight shadow caster pass; alpha-tested middle texture records no longer cast solid rectangular shadow slabs when their base texture alpha is available.
+* The shadow pass still excludes sky cylinder, sky cap, debug overlays, UI, bloom fullscreen passes, and editor gizmos.
+* Decal textures and lightmaps are not used by the shadow pass.
+* Main scene visual output is intended to remain unchanged until Phase 4 shader sampling uses the shadow maps.
+* Dynamic lighting selection, static light baking, serialization, editor UI, topology mutation, collision, sector lookup, and physics behavior were not changed.
+* `ComputeSectorLightmapSourceHash()` remains unchanged and ignores runtime dynamic spotlight shadow rendering.
+* No topology mutation paths were changed, so topology render-cache invalidation behavior is unchanged.
+* No generated artifacts were created. The plan currently has no `sandbox_dir` field.
+* No manual GUI verification was performed; manual smoke with an alpha-tested grate/bars middle texture and a shadow-casting spotlight remains recommended once Phase 4 makes shadows visible in the main shader.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_mesh_builder` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+* Final `git diff --check`, `git diff --stat`, and `git status --short` results are recorded in the final report for this pass.
+
+### 2026-06-30 - Phase 4A
+
+Status: Completed.
+
+Summary:
+
+* Added packed dynamic spotlight shadow uniforms: `dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS]`, `shadowLightMatrices[MAX_DYNAMIC_SHADOW_CASTERS]`, `shadowBias[MAX_DYNAMIC_SHADOW_CASTERS]`, and `shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS]`.
+* Dynamic lights without an active shadow map slot pack `shadowSlot=-1`; active dynamic spotlight shadow casters pack deterministic slots `0..1`.
+* Dynamic point lights cannot receive non-negative shadow slots even if their local test data has `castsShadow=true`.
+* The main sector shader now declares explicit shadow samplers `shadowMap0` and `shadowMap1`.
+* `SectorMeshPreview` uploads packed shadow slots, per-slot light-space matrices, per-slot bias/strength, and binds the two preview-owned shadow map textures to the explicit samplers.
+* Added mesh-builder test coverage for shadow slot packing, point-light exclusion, bias/strength packing, finite matrix packing, and zero-caster defaults.
+
+Behavior notes:
+
+* Source code changed.
+* Shader uniform/sampler layout changed for the main sector shader. Existing material maps remain `texture0` for base/diffuse, `texture1` for lightmap, and `decalTexture` for decals; runtime shadow maps use explicit `shadowMap0` and `shadowMap1` samplers.
+* No PCF sampling, shadow comparison, or dynamic light attenuation was added in this pass; visible lighting is intended to remain unchanged until Phase 4B.
+* Dynamic point lights remain unshadowed. Dynamic spotlights without shadow slots remain unshadowed but still lit.
+* Static baked lighting, AO, ambient, decals, bloom source rendering, serialization, editor UI, topology mutation, collision, sector lookup, and physics behavior were not changed.
+* `ComputeSectorLightmapSourceHash()` remains unchanged and ignores runtime dynamic spotlight shadow slots, matrices, samplers, bias, and strength.
+* No topology mutation paths were changed, so topology render-cache invalidation behavior is unchanged.
+* No generated artifacts were created. The plan currently has no `sandbox_dir` field.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug --target sector_topology_mesh_builder_tests -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_mesh_builder` passed.
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+* Final `git diff --check`, `git diff --stat`, and `git status --short` results are recorded in the final report for this pass.
+
+### 2026-06-30 - Phase 4B
+
+Status: Completed.
+
+Summary:
+
+* Added main sector fragment shader shadow visibility helpers for selected dynamic spotlight shadow slots.
+* Dynamic spotlights with `dynamicLightShadowSlots[i] >= 0` now project the fragment world position through that slot's `shadowLightMatrices` entry.
+* Shadow map sampling uses fixed 3x3 PCF and compares projected depth against the selected shadow map's stored depth.
+* `shadowBias[slot]` subtracts from projected compare depth, and `shadowStrength[slot]` blends between fully visible lighting and PCF visibility.
+* Dynamic spotlight direct contribution is attenuated by the resulting shadow factor; dynamic point lights and unshadowed dynamic spotlights keep their existing contribution path.
+
+Behavior notes:
+
+* Source code changed.
+* Shader behavior changed for the main sector shader: runtime dynamic spotlight direct lighting can now be attenuated by selected shadow maps.
+* Sampler/uniform layout remains the Phase 4A layout: base/diffuse `texture0`, lightmap `texture1`, decals `decalTexture`, and explicit runtime shadow samplers `shadowMap0` and `shadowMap1`; shadow metadata remains `dynamicLightShadowSlots`, `shadowLightMatrices`, `shadowBias`, and `shadowStrength`.
+* The PCF kernel is fixed 3x3 over the shadow map texel size. Out-of-frustum or invalid projected shadow coordinates are treated as fully visible.
+* Shadows affect only runtime dynamic spotlight direct lighting. Baked direct lighting, sector ambient, baked AO, decals, bloom source rendering, static lights, and dynamic point lights are not shadowed by this pass.
+* Alpha-tested visible rendering behavior is unchanged; alpha-tested shadow caster behavior remains the Phase 3B behavior.
+* Serialization, editor UI, topology mutation, collision, sector lookup, and physics behavior were not changed.
+* `ComputeSectorLightmapSourceHash()` remains unchanged and ignores runtime dynamic spotlight shadow sampling.
+* No topology mutation paths were changed, so topology render-cache invalidation behavior is unchanged.
+* No generated artifacts were created. The plan currently has no `sandbox_dir` field.
+* No manual GUI verification was performed; manual smoke with an occluder, alpha-tested middle texture, and shadow-casting dynamic spotlight remains recommended.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_mesh_builder` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+* Final `git diff --check`, `git diff --stat`, and `git status --short` results are recorded in the final report for this pass.
+
+### 2026-06-30 - Phase 5A
+
+Status: Completed.
+
+Summary:
+
+* Added runtime preview debug text for dynamic spotlight shadow budget state: active shadow caster count, selected shadow-request candidate count, max budget, and active shadow caster IDs.
+* Added a dynamic spotlight inspector note explaining that Cast Shadows requests one of the 2 shadow slots, priority decides budget allocation, and over-budget spotlights still illuminate.
+* Kept the established shadow defaults unchanged: `castsShadow=false`, `shadowPriority=0`, `shadowBias=0.002`, `shadowStrength=1.0`, `MaxDynamicSpotLightShadowCasters=2`, `DynamicSpotLightShadowMapResolution=1024`, and fixed 3x3 PCF.
+* Updated `docs/sector_dynamic_lighting_design.md` to describe the completed dynamic spotlight shadow-map behavior, exclusions, defaults, debug output, and deferred shadow/volumetric work.
+* Closed Phase 5A and the parent Phase 5 in this plan.
+
+Behavior notes:
+
+* Source code changed.
+* Runtime debug text changed: `RenderDebugText()` now appends dynamic spotlight shadow caster/candidate/budget state.
+* Editor behavior changed only by adding a static explanatory note in the selected dynamic spotlight inspector; no inspector data fields or save/load behavior changed.
+* Shader math, dynamic light selection, shadow caster selection, shadow rendering, PCF sampling, static light baking, serialization, public topology schema, collision, sector lookup, and physics behavior were not changed.
+* `ComputeSectorLightmapSourceHash()` remains unchanged and ignores runtime dynamic spotlight shadow settings, slots, resources, matrices, and sampling.
+* No topology mutation paths were changed, so topology render-cache invalidation behavior is unchanged.
+* No generated artifacts were created. The plan currently has no `sandbox_dir` field.
+* No manual GUI verification was performed. Manual smoke remains recommended for visible shadows, over-budget behavior, priority, bias/strength, alpha-tested middle textures, dynamic point lights, static baked lights, flicker, pilot/overlay, and portal culling.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+* `git diff --check` passed.
+* `git diff --stat` reported 11 files changed total in the worktree, including prior Phase 1A through Phase 4B changes plus this Phase 5A update.
+* `git status --short` showed the active plan, prior phase source/test files, and this Phase 5A doc/debug/inspector files modified.
+
+Final completion note:
+
+* All planned phases and passes are now marked `Completed`. Deferred work remains limited to later plans: dynamic point-light cubemap shadows, static runtime shadows, flashlight-specific behavior, shadow quality/per-light resolution, volumetric shafts/god rays, projected cookies/gobos, cascaded/variance/contact shadows, and clustered/tiled/deferred lighting.
 
 ## Execution Tracking Rules
 
@@ -671,7 +804,7 @@ view = look from light.position toward light.target/direction
 projection = perspective using outerConeDegrees
 near plane = small sane value
 far plane = light range
-lightViewProjection = projection * view
+lightViewProjection = view * projection
 ```
 
 Use the same direction convention as dynamic spotlights.

@@ -48,6 +48,15 @@ bool FiniteMatrix(Matrix matrix)
             && std::isfinite(matrix.m12) && std::isfinite(matrix.m13) && std::isfinite(matrix.m14) && std::isfinite(matrix.m15);
 }
 
+Vector4 TransformHomogeneous(Vector3 point, Matrix matrix)
+{
+    return Vector4{
+            matrix.m0 * point.x + matrix.m4 * point.y + matrix.m8 * point.z + matrix.m12,
+            matrix.m1 * point.x + matrix.m5 * point.y + matrix.m9 * point.z + matrix.m13,
+            matrix.m2 * point.x + matrix.m6 * point.y + matrix.m10 * point.z + matrix.m14,
+            matrix.m3 * point.x + matrix.m7 * point.y + matrix.m11 * point.z + matrix.m15};
+}
+
 game::SectorReceiverBounds Bounds(int sectorId, Vector3 min, Vector3 max)
 {
     game::SectorReceiverBounds bounds;
@@ -1649,6 +1658,22 @@ void TestDynamicSpotLightShadowMatrices()
                   && FiniteMatrix(matrix.projection)
                   && FiniteMatrix(matrix.lightViewProjection),
           "dynamic spotlight shadow matrix output is finite and preserves slot metadata");
+    const Vector4 centerClip = TransformHomogeneous(
+            Vector3{selected[0].position.x + 2.0f, selected[0].position.y, selected[0].position.z},
+            matrix.lightViewProjection);
+    const Vector3 centerNdc{
+            centerClip.x / centerClip.w,
+            centerClip.y / centerClip.w,
+            centerClip.z / centerClip.w};
+    Check(centerClip.w > 0.0f
+                  && std::isfinite(centerNdc.x)
+                  && std::isfinite(centerNdc.y)
+                  && std::isfinite(centerNdc.z)
+                  && std::fabs(centerNdc.x) < 0.001f
+                  && std::fabs(centerNdc.y) < 0.001f
+                  && centerNdc.z >= -1.0f
+                  && centerNdc.z <= 1.0f,
+          "dynamic spotlight shadow matrix projects a point in front of the light into clip space");
 
     Check(game::MakeSectorPreviewDynamicSpotLightShadowMatrix(selected[1], 1, 1, matrix)
                   && FiniteMatrix(matrix.lightViewProjection),
@@ -1678,6 +1703,53 @@ void TestDynamicSpotLightShadowMatrices()
           "dynamic spotlight shadow matrix build respects selected caster slots and skips invalid indices");
     Check(game::DynamicSpotLightShadowMapResolution == 1024,
           "dynamic spotlight shadow map default resolution is 1024");
+}
+
+void TestDynamicSpotLightShadowUniformPacking()
+{
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected = {
+            ShadowSpotLightSource(50, 10, Vector3{0.5f, 1.5f, 0.5f}, 8.0f, 4.0f).light,
+            LightSource(51, 10, Vector3{0.5f, 1.5f, 0.5f}, 8.0f, 6.0f).light,
+            ShadowSpotLightSource(52, 10, Vector3{0.5f, 1.5f, 0.5f}, 8.0f, 3.0f).light};
+    selected[0].lightId = 50;
+    selected[0].shadowBias = 0.004f;
+    selected[0].shadowStrength = 0.75f;
+    selected[1].lightId = 51;
+    selected[1].castsShadow = true;
+    selected[2].lightId = 52;
+    selected[2].shadowBias = 0.006f;
+    selected[2].shadowStrength = 0.5f;
+
+    std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> shadowCasters = {
+            game::SectorPreviewDynamicSpotLightShadowCaster{50, 0, 0, 0, 1.0f, 0.004f, 0.75f},
+            game::SectorPreviewDynamicSpotLightShadowCaster{52, 2, 1, 0, 1.0f, 0.006f, 0.5f}};
+    std::vector<game::SectorPreviewDynamicSpotLightShadowMatrix> matrices;
+    game::BuildSectorPreviewDynamicSpotLightShadowMatrices(selected, shadowCasters, matrices);
+
+    const game::SectorPreviewDynamicSpotLightShadowUniforms uniforms =
+            game::PackSectorPreviewDynamicSpotLightShadowUniforms(selected, shadowCasters, matrices);
+    Check(uniforms.dynamicLightShadowSlots[0] == 0
+                  && uniforms.dynamicLightShadowSlots[1] == -1
+                  && uniforms.dynamicLightShadowSlots[2] == 1,
+          "dynamic spotlight shadow uniform packing assigns slots only to shadowed spotlights");
+    Check(Near(uniforms.shadowBias[0], 0.004f)
+                  && Near(uniforms.shadowStrength[0], 0.75f)
+                  && Near(uniforms.shadowBias[1], 0.006f)
+                  && Near(uniforms.shadowStrength[1], 0.5f),
+          "dynamic spotlight shadow uniform packing carries per-slot bias and strength");
+    Check(FiniteMatrix(uniforms.shadowLightMatrices[0]) && FiniteMatrix(uniforms.shadowLightMatrices[1]),
+          "dynamic spotlight shadow uniform packing carries finite light-space matrices");
+
+    const game::SectorPreviewDynamicSpotLightShadowUniforms emptyUniforms =
+            game::PackSectorPreviewDynamicSpotLightShadowUniforms(selected, {}, {});
+    bool allSlotsEmpty = true;
+    for (int slot : emptyUniforms.dynamicLightShadowSlots) {
+        allSlotsEmpty = allSlotsEmpty && slot == -1;
+    }
+    Check(allSlotsEmpty
+                  && Near(emptyUniforms.shadowBias[0], game::DynamicSpotLightDefaultShadowBias)
+                  && Near(emptyUniforms.shadowStrength[0], 0.0f),
+          "dynamic spotlight shadow uniform packing is safe when zero shadow casters are active");
 }
 
 void TestDynamicPointLightFlickerHelper()
@@ -1985,6 +2057,7 @@ int main()
     TestDynamicSpotLightRankingAndPacking();
     TestDynamicSpotLightShadowCasterSelection();
     TestDynamicSpotLightShadowMatrices();
+    TestDynamicSpotLightShadowUniformPacking();
     TestDynamicPointLightFlickerHelper();
     TestDynamicPointLightFlickerEffectiveIntensity();
     TestDynamicPointLightFlickerDoesNotAffectSelection();
