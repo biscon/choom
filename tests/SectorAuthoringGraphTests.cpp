@@ -7030,6 +7030,8 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
           "editor graph-native save persists baked lightmap dimensions");
     Check(saved["bakedLightmap"]["sourceHash"] == state.topologyMap.bakedLightmap.sourceHash,
           "editor graph-native save persists baked lightmap source hash");
+    Check(!saved["bakedLightmap"].contains("objectProbes"),
+          "editor graph-native save omits absent object probe metadata");
 
     const std::filesystem::path path =
             TempJsonPath("sector_editor_map_level_graph_native_reload_test.json");
@@ -7060,6 +7062,9 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
           "editor graph-native derivation receives map-level fields after load");
     Check(game::GetSectorLightmapStatus(loadedState.topologyMap) == game::SectorLightmapStatus::Valid,
           "editor graph-native reload reports matching baked lightmap metadata as valid");
+    Check(game::GetSectorBakedObjectLightProbeStatus(loadedState.topologyMap)
+                  == game::SectorLightmapStatus::None,
+          "editor graph-native reload treats missing object probe metadata as none");
 
     game::SectorEditorState staleState = loadedState;
     staleState.topologyMap.bakedLightmap.sourceHash = "mismatched-source-hash";
@@ -7076,9 +7081,71 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && resaved["bakedLightmap"]["height"] == saved["bakedLightmap"]["height"]
                   && resaved["bakedLightmap"]["sourceHash"] == saved["bakedLightmap"]["sourceHash"],
           "editor graph-native save/load/save preserves baked lightmap metadata");
+
+    game::SectorEditorState probeState = loadedState;
+    const std::filesystem::path probePath =
+            TempJsonPath("sector_editor_map_level_graph_native.object_probes.bin");
+    WriteTextFile(probePath, "fake-probe-sidecar");
+    probeState.topologyMap.bakedLightmap.objectProbes.path = probePath.string();
+    probeState.topologyMap.bakedLightmap.objectProbes.version =
+            game::kSectorBakedObjectLightProbeSidecarVersion;
+    probeState.topologyMap.bakedLightmap.objectProbes.sourceHash =
+            probeState.topologyMap.bakedLightmap.sourceHash;
+    probeState.topologyMap.bakedLightmap.objectProbes.count = 3;
+    probeState.topologyMap.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
+    probeState.topologyMap.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
+    probeState.topologyMap.bakedLightmap.objectProbes.format =
+            game::kSectorBakedObjectLightProbeSidecarFormat;
+
+    const Json savedWithProbes = SaveEditorStateToJson(
+            probeState,
+            "sector_editor_map_level_graph_native_object_probes_save_test.json");
+    const Json& savedObjectProbes = savedWithProbes["bakedLightmap"]["objectProbes"];
+    Check(savedObjectProbes["path"] == probePath.string()
+                  && savedObjectProbes["version"] == game::kSectorBakedObjectLightProbeSidecarVersion
+                  && savedObjectProbes["sourceHash"] == probeState.topologyMap.bakedLightmap.sourceHash
+                  && savedObjectProbes["count"] == 3
+                  && savedObjectProbes["probeSpacingWorld"] == 4.0f
+                  && savedObjectProbes["probeHeightWorld"] == 1.2f
+                  && savedObjectProbes["format"] == game::kSectorBakedObjectLightProbeSidecarFormat,
+          "editor graph-native save persists compact object probe metadata");
+    Check(!savedObjectProbes.contains("probes") && !savedObjectProbes.contains("payload"),
+          "editor graph-native save does not embed object probe payload");
+    Check(game::GetSectorLightmapStatus(probeState.topologyMap) == game::SectorLightmapStatus::Valid,
+          "object probe metadata does not invalidate valid surface lightmap status");
+    Check(game::GetSectorBakedObjectLightProbeStatus(probeState.topologyMap)
+                  == game::SectorLightmapStatus::Valid,
+          "object probe status reports valid metadata and existing sidecar");
+
+    const std::filesystem::path probeDocumentPath =
+            TempJsonPath("sector_editor_map_level_graph_native_object_probes_reload_test.json");
+    WriteTextFile(probeDocumentPath, savedWithProbes.dump(2));
+    game::SectorEditorLoadedDocument loadedWithProbes;
+    Check(game::LoadSectorEditorDocumentFromAsset(probeDocumentPath.string(), loadedWithProbes, error),
+          "editor graph-native object probe metadata document reloads");
+    Check(loadedWithProbes.mapData.bakedLightmap.objectProbes.path == probePath.string()
+                  && loadedWithProbes.mapData.bakedLightmap.objectProbes.version
+                             == game::kSectorBakedObjectLightProbeSidecarVersion
+                  && loadedWithProbes.mapData.bakedLightmap.objectProbes.sourceHash
+                             == probeState.topologyMap.bakedLightmap.sourceHash
+                  && loadedWithProbes.mapData.bakedLightmap.objectProbes.count == 3
+                  && Near(loadedWithProbes.mapData.bakedLightmap.objectProbes.probeSpacingWorld, 4.0f)
+                  && Near(loadedWithProbes.mapData.bakedLightmap.objectProbes.probeHeightWorld, 1.2f)
+                  && loadedWithProbes.mapData.bakedLightmap.objectProbes.format
+                             == game::kSectorBakedObjectLightProbeSidecarFormat,
+          "editor graph-native load preserves object probe metadata");
+
     std::error_code removeError;
+    std::filesystem::remove(probePath, removeError);
+    Check(game::GetSectorLightmapStatus(probeState.topologyMap) == game::SectorLightmapStatus::Valid,
+          "missing object probe sidecar does not invalidate surface lightmap status");
+    Check(game::GetSectorBakedObjectLightProbeStatus(probeState.topologyMap)
+                  == game::SectorLightmapStatus::Stale,
+          "object probe status reports missing sidecar as stale");
+
     std::filesystem::remove(path, removeError);
     std::filesystem::remove(lightmapPath, removeError);
+    std::filesystem::remove(probeDocumentPath, removeError);
 }
 
 } // namespace

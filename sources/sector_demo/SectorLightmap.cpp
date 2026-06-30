@@ -1,6 +1,7 @@
 #include "sector_demo/SectorLightmap.h"
 
 #include "sector_demo/SectorGeneratedGeometry.h"
+#include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorUnits.h"
 
 #include <raylib.h>
@@ -12,6 +13,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -147,6 +149,7 @@ constexpr int kSectorLightmapBvhTraversalStackSize = 128;
 constexpr int kSectorLightmapAlphaOcclusionIterationLimit = 64;
 constexpr uint32_t kSectorLightmapProgressChunk = 512;
 constexpr float Pi = 3.14159265358979323846f;
+constexpr char kObjectProbeSidecarMagic[4] = {'S', 'O', 'P', 'B'};
 
 bool StartsWith(const std::string& value, const char* prefix)
 {
@@ -360,6 +363,222 @@ bool RayIntersectsTriangle(
 bool IsFinite(Vector3 value)
 {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+uint32_t FloatToLittleEndianBits(float value)
+{
+    uint32_t bits = 0;
+    static_assert(sizeof(bits) == sizeof(value), "float32 sidecar fields must be 32 bits");
+    std::memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+float FloatFromLittleEndianBits(uint32_t bits)
+{
+    float value = 0.0f;
+    static_assert(sizeof(bits) == sizeof(value), "float32 sidecar fields must be 32 bits");
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+bool WriteU32LE(std::ostream& output, uint32_t value)
+{
+    const char bytes[4] = {
+            static_cast<char>(value & 0xffu),
+            static_cast<char>((value >> 8u) & 0xffu),
+            static_cast<char>((value >> 16u) & 0xffu),
+            static_cast<char>((value >> 24u) & 0xffu)};
+    output.write(bytes, sizeof(bytes));
+    return output.good();
+}
+
+bool WriteI32LE(std::ostream& output, int32_t value)
+{
+    return WriteU32LE(output, static_cast<uint32_t>(value));
+}
+
+bool WriteF32LE(std::ostream& output, float value)
+{
+    return WriteU32LE(output, FloatToLittleEndianBits(value));
+}
+
+bool ReadU32LE(std::istream& input, uint32_t& outValue)
+{
+    unsigned char bytes[4] = {};
+    input.read(reinterpret_cast<char*>(bytes), sizeof(bytes));
+    if (input.gcount() != static_cast<std::streamsize>(sizeof(bytes))) {
+        return false;
+    }
+
+    outValue = static_cast<uint32_t>(bytes[0])
+            | (static_cast<uint32_t>(bytes[1]) << 8u)
+            | (static_cast<uint32_t>(bytes[2]) << 16u)
+            | (static_cast<uint32_t>(bytes[3]) << 24u);
+    return true;
+}
+
+bool ReadI32LE(std::istream& input, int32_t& outValue)
+{
+    uint32_t value = 0;
+    if (!ReadU32LE(input, value)) {
+        return false;
+    }
+    outValue = static_cast<int32_t>(value);
+    return true;
+}
+
+bool ReadF32LE(std::istream& input, float& outValue)
+{
+    uint32_t bits = 0;
+    if (!ReadU32LE(input, bits)) {
+        return false;
+    }
+    outValue = FloatFromLittleEndianBits(bits);
+    return true;
+}
+
+bool WriteProbeVector(std::ostream& output, Vector3 value)
+{
+    return WriteF32LE(output, value.x)
+            && WriteF32LE(output, value.y)
+            && WriteF32LE(output, value.z);
+}
+
+bool ReadProbeVector(std::istream& input, Vector3& outValue)
+{
+    return ReadF32LE(input, outValue.x)
+            && ReadF32LE(input, outValue.y)
+            && ReadF32LE(input, outValue.z);
+}
+
+bool AppendLoopPolygon(
+        const SectorTopologyMap& map,
+        const SectorTopologyLoop& loop,
+        std::vector<SectorTopologyCoordPoint>& outPolygon,
+        std::string& outError)
+{
+    outPolygon.clear();
+    outPolygon.reserve(loop.vertexIds.size());
+    for (const int vertexId : loop.vertexIds) {
+        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(map, vertexId);
+        if (vertex == nullptr) {
+            outError = "Object probe placement failed: missing topology vertex "
+                    + std::to_string(vertexId);
+            return false;
+        }
+        outPolygon.push_back(SectorTopologyCoordPoint{vertex->x, vertex->y});
+    }
+    if (outPolygon.size() < 3) {
+        outError = "Object probe placement failed: topology loop has fewer than three vertices";
+        return false;
+    }
+    return true;
+}
+
+bool IsStrictlyInsideProbePolygon(
+        const std::vector<SectorTopologyCoordPoint>& outer,
+        const std::vector<std::vector<SectorTopologyCoordPoint>>& holes,
+        SectorTopologyCoordPoint point)
+{
+    if (SectorTopologyClassifyPointInPolygon(outer, point) != SectorTopologyPointContainment::Inside) {
+        return false;
+    }
+    for (const std::vector<SectorTopologyCoordPoint>& hole : holes) {
+        if (SectorTopologyClassifyPointInPolygon(hole, point) != SectorTopologyPointContainment::Outside) {
+            return false;
+        }
+    }
+    return true;
+}
+
+SectorTopologyCoordPoint ProbePolygonAabbCenter(
+        SectorCoord minX,
+        SectorCoord minY,
+        SectorCoord maxX,
+        SectorCoord maxY)
+{
+    return SectorTopologyCoordPoint{
+            static_cast<SectorCoord>(
+                    (static_cast<int64_t>(minX) + static_cast<int64_t>(maxX)) / 2),
+            static_cast<SectorCoord>(
+                    (static_cast<int64_t>(minY) + static_cast<int64_t>(maxY)) / 2)};
+}
+
+bool FindRepresentativeProbePoint(
+        const std::vector<SectorTopologyCoordPoint>& outer,
+        const std::vector<std::vector<SectorTopologyCoordPoint>>& holes,
+        SectorCoord minX,
+        SectorCoord minY,
+        SectorCoord maxX,
+        SectorCoord maxY,
+        SectorTopologyCoordPoint& outPoint)
+{
+    const SectorTopologyCoordPoint center = ProbePolygonAabbCenter(minX, minY, maxX, maxY);
+    if (IsStrictlyInsideProbePolygon(outer, holes, center)) {
+        outPoint = center;
+        return true;
+    }
+
+    int64_t sumX = 0;
+    int64_t sumY = 0;
+    for (const SectorTopologyCoordPoint point : outer) {
+        sumX += point.x;
+        sumY += point.y;
+    }
+    if (!outer.empty()) {
+        const SectorTopologyCoordPoint centroid{
+                static_cast<SectorCoord>(sumX / static_cast<int64_t>(outer.size())),
+                static_cast<SectorCoord>(sumY / static_cast<int64_t>(outer.size()))};
+        if (IsStrictlyInsideProbePolygon(outer, holes, centroid)) {
+            outPoint = centroid;
+            return true;
+        }
+    }
+
+    constexpr int fallbackDivisions = 16;
+    for (int yStep = 0; yStep < fallbackDivisions; ++yStep) {
+        for (int xStep = 0; xStep < fallbackDivisions; ++xStep) {
+            const int64_t x = static_cast<int64_t>(minX)
+                    + ((static_cast<int64_t>(maxX) - static_cast<int64_t>(minX)) * (2 * xStep + 1))
+                            / (2 * fallbackDivisions);
+            const int64_t y = static_cast<int64_t>(minY)
+                    + ((static_cast<int64_t>(maxY) - static_cast<int64_t>(minY)) * (2 * yStep + 1))
+                            / (2 * fallbackDivisions);
+            const SectorTopologyCoordPoint candidate{
+                    static_cast<SectorCoord>(x),
+                    static_cast<SectorCoord>(y)};
+            if (IsStrictlyInsideProbePolygon(outer, holes, candidate)) {
+                outPoint = candidate;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+Vector3 MakeProbeWorldPosition(
+        SectorTopologyCoordPoint point,
+        const SectorTopologySector& sector,
+        float probeHeightWorld,
+        std::vector<SectorBakedObjectLightProbePlacementDiagnostic>* diagnostics)
+{
+    const float floorWorld = SectorAuthoringToWorldDistance(sector.floorZ);
+    const float ceilingWorld = SectorAuthoringToWorldDistance(sector.ceilingZ);
+    float y = floorWorld + probeHeightWorld;
+    if (ceilingWorld > floorWorld && y >= ceilingWorld) {
+        y = (floorWorld + ceilingWorld) * 0.5f;
+        if (diagnostics != nullptr) {
+            diagnostics->push_back(SectorBakedObjectLightProbePlacementDiagnostic{
+                    sector.id,
+                    "Object probe height clamped to sector midpoint because the ceiling is below the requested probe height"});
+        }
+    }
+
+    return Vector3{
+            SectorCoordToWorldDistance(point.x),
+            y,
+            SectorCoordToWorldDistance(point.y)};
 }
 
 float BvhSceneDiagonalWithMargin(const SectorLightmapBvh& bvh)
@@ -1387,6 +1606,320 @@ Vector3 EvaluateDirectionalLight(
     };
 }
 
+Vector3 ClampRgb01(Vector3 value)
+{
+    return Vector3{
+            std::clamp(value.x, 0.0f, 1.0f),
+            std::clamp(value.y, 0.0f, 1.0f),
+            std::clamp(value.z, 0.0f, 1.0f)};
+}
+
+Vector3 SectorAmbientBaseline(const SectorTopologyMap& map, int sectorId)
+{
+    const SectorTopologySector* sector = FindSectorTopologySector(map, sectorId);
+    if (sector == nullptr || sector->ambientIntensity <= 0.0f) {
+        return Vector3{};
+    }
+
+    const float scale = sector->ambientIntensity;
+    return Vector3{
+            (static_cast<float>(sector->ambientColor.r) / 255.0f) * scale,
+            (static_cast<float>(sector->ambientColor.g) / 255.0f) * scale,
+            (static_cast<float>(sector->ambientColor.b) / 255.0f) * scale};
+}
+
+BakedObjectLightingSample MakeObjectLightingSampleFromCube(const Vector3 (&ambientCube)[6], bool valid)
+{
+    BakedObjectLightingSample sample;
+    sample.valid = valid;
+    for (int face = 0; face < 6; ++face) {
+        sample.ambientCube[face] = ClampRgb01(ambientCube[face]);
+    }
+    return sample;
+}
+
+BakedObjectLightingSample MakeNeutralObjectLightingSample()
+{
+    BakedObjectLightingSample sample;
+    sample.valid = false;
+    for (Vector3& face : sample.ambientCube) {
+        face = Vector3{0.15f, 0.15f, 0.15f};
+    }
+    return sample;
+}
+
+BakedObjectLightingSample MakeSectorAmbientObjectLightingSample(const SectorTopologyMap& map, int sectorId)
+{
+    BakedObjectLightingSample sample;
+    sample.valid = false;
+    const Vector3 ambient = ClampRgb01(SectorAmbientBaseline(map, sectorId));
+    for (Vector3& face : sample.ambientCube) {
+        face = ambient;
+    }
+    return sample;
+}
+
+const SectorBakedObjectLightProbeSectorRange* FindProbeSectorRange(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        int sectorId)
+{
+    int begin = 0;
+    int end = static_cast<int>(probes.sectorRanges.size());
+    while (begin < end) {
+        const int middle = begin + (end - begin) / 2;
+        const SectorBakedObjectLightProbeSectorRange& range = probes.sectorRanges[static_cast<size_t>(middle)];
+        if (range.sectorId < sectorId) {
+            begin = middle + 1;
+        } else if (range.sectorId > sectorId) {
+            end = middle;
+        } else {
+            return &range;
+        }
+    }
+    return nullptr;
+}
+
+BakedObjectLightingSample SampleNearestObjectLightProbes(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        Vector3 worldPosition,
+        int begin,
+        int count)
+{
+    constexpr int kMaxSampleProbes = 4;
+    constexpr float kExactProbeDistanceSquared = 0.000001f;
+    int selectedIndices[kMaxSampleProbes] = {-1, -1, -1, -1};
+    float selectedDistanceSquared[kMaxSampleProbes] = {
+            std::numeric_limits<float>::max(),
+            std::numeric_limits<float>::max(),
+            std::numeric_limits<float>::max(),
+            std::numeric_limits<float>::max()};
+    int selectedCount = 0;
+
+    for (int offset = 0; offset < count; ++offset) {
+        const int probeIndex = begin + offset;
+        if (probeIndex < 0 || probeIndex >= static_cast<int>(probes.probes.size())) {
+            continue;
+        }
+
+        const float distanceSquared =
+                Vector3DistanceSqr(worldPosition, probes.probes[static_cast<size_t>(probeIndex)].position);
+        if (!std::isfinite(distanceSquared)) {
+            continue;
+        }
+
+        int insertAt = selectedCount < kMaxSampleProbes ? selectedCount : -1;
+        for (int selected = 0; selected < selectedCount; ++selected) {
+            if (distanceSquared < selectedDistanceSquared[selected]) {
+                insertAt = selected;
+                break;
+            }
+        }
+        if (insertAt < 0 || insertAt >= kMaxSampleProbes) {
+            continue;
+        }
+
+        const int shiftEnd = std::min(selectedCount, kMaxSampleProbes - 1);
+        for (int shift = shiftEnd; shift > insertAt; --shift) {
+            selectedIndices[shift] = selectedIndices[shift - 1];
+            selectedDistanceSquared[shift] = selectedDistanceSquared[shift - 1];
+        }
+        selectedIndices[insertAt] = probeIndex;
+        selectedDistanceSquared[insertAt] = distanceSquared;
+        selectedCount = std::min(selectedCount + 1, kMaxSampleProbes);
+    }
+
+    if (selectedCount == 0) {
+        return MakeNeutralObjectLightingSample();
+    }
+
+    if (selectedDistanceSquared[0] <= kExactProbeDistanceSquared) {
+        return MakeObjectLightingSampleFromCube(probes.probes[static_cast<size_t>(selectedIndices[0])].ambientCube, true);
+    }
+
+    BakedObjectLightingSample sample;
+    sample.valid = true;
+    float totalWeight = 0.0f;
+    for (int selected = 0; selected < selectedCount; ++selected) {
+        const float distance = std::sqrt(selectedDistanceSquared[selected]);
+        const float weight = 1.0f / std::max(distance, 0.001f);
+        totalWeight += weight;
+        const SectorBakedObjectLightProbe& probe = probes.probes[static_cast<size_t>(selectedIndices[selected])];
+        for (int face = 0; face < 6; ++face) {
+            sample.ambientCube[face] = Vector3Add(
+                    sample.ambientCube[face],
+                    Vector3Scale(probe.ambientCube[face], weight));
+        }
+    }
+
+    if (totalWeight <= 0.0f || !std::isfinite(totalWeight)) {
+        return MakeNeutralObjectLightingSample();
+    }
+
+    for (Vector3& face : sample.ambientCube) {
+        face = ClampRgb01(Vector3Scale(face, 1.0f / totalWeight));
+    }
+    return sample;
+}
+
+Vector3 EvaluateProbePointLight(
+        const SectorTopologyMap& map,
+        const LightmapWorldPointLight& light,
+        Vector3 probePosition,
+        Vector3 faceDirection,
+        const SectorLightmapBvh& bvh,
+        const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        SectorLightmapAlphaMaskCache& alphaMaskCache,
+        BakeRayStats& stats)
+{
+    RasterHit hit;
+    hit.hit = true;
+    hit.position = probePosition;
+    hit.normal = faceDirection;
+    hit.triangleIndex = -1;
+    return EvaluateDirectLight(
+            map,
+            light,
+            hit,
+            SectorGeneratedSurfaceRef{},
+            -1,
+            bvh,
+            triangles,
+            alphaOccluders,
+            alphaMaskCache,
+            stats);
+}
+
+Vector3 EvaluateProbeSpotLight(
+        const SectorTopologyMap& map,
+        const LightmapWorldSpotLight& light,
+        Vector3 probePosition,
+        Vector3 faceDirection,
+        const SectorLightmapBvh& bvh,
+        const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        SectorLightmapAlphaMaskCache& alphaMaskCache,
+        BakeRayStats& stats)
+{
+    RasterHit hit;
+    hit.hit = true;
+    hit.position = probePosition;
+    hit.normal = faceDirection;
+    hit.triangleIndex = -1;
+    return EvaluateDirectLight(
+            map,
+            light,
+            hit,
+            SectorGeneratedSurfaceRef{},
+            -1,
+            bvh,
+            triangles,
+            alphaOccluders,
+            alphaMaskCache,
+            stats);
+}
+
+Vector3 EvaluateProbeDirectionalLight(
+        const SectorTopologyMap& map,
+        const LightmapWorldDirectionalLight& light,
+        Vector3 probePosition,
+        Vector3 faceDirection,
+        float shadowMaxDistance,
+        const SectorLightmapBvh& bvh,
+        const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        SectorLightmapAlphaMaskCache& alphaMaskCache,
+        BakeRayStats& stats)
+{
+    RasterHit hit;
+    hit.hit = true;
+    hit.position = probePosition;
+    hit.normal = faceDirection;
+    hit.triangleIndex = -1;
+    return EvaluateDirectionalLight(
+            map,
+            light,
+            hit,
+            SectorGeneratedSurfaceRef{},
+            -1,
+            shadowMaxDistance,
+            bvh,
+            triangles,
+            alphaOccluders,
+            alphaMaskCache,
+            stats);
+}
+
+void BakeProbeAmbientCube(
+        const SectorTopologyMap& map,
+        const std::vector<LightmapWorldPointLight>& worldLights,
+        const std::vector<LightmapWorldSpotLight>& worldSpotLights,
+        const LightmapWorldDirectionalLight& directionalLight,
+        float directionalShadowMaxDistance,
+        const SectorLightmapBvh& bvh,
+        const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        SectorLightmapAlphaMaskCache& alphaMaskCache,
+        BakeRayStats& stats,
+        SectorBakedObjectLightProbe& probe)
+{
+    constexpr Vector3 faceDirections[6] = {
+            Vector3{1.0f, 0.0f, 0.0f},
+            Vector3{-1.0f, 0.0f, 0.0f},
+            Vector3{0.0f, 1.0f, 0.0f},
+            Vector3{0.0f, -1.0f, 0.0f},
+            Vector3{0.0f, 0.0f, 1.0f},
+            Vector3{0.0f, 0.0f, -1.0f}};
+    const Vector3 ambient = SectorAmbientBaseline(map, probe.sectorId);
+
+    for (int face = 0; face < 6; ++face) {
+        const Vector3 faceDirection = faceDirections[face];
+        Vector3 rgb = ambient;
+        for (const LightmapWorldPointLight& light : worldLights) {
+            rgb = Vector3Add(
+                    rgb,
+                    EvaluateProbePointLight(
+                            map,
+                            light,
+                            probe.position,
+                            faceDirection,
+                            bvh,
+                            triangles,
+                            alphaOccluders,
+                            alphaMaskCache,
+                            stats));
+        }
+        for (const LightmapWorldSpotLight& light : worldSpotLights) {
+            rgb = Vector3Add(
+                    rgb,
+                    EvaluateProbeSpotLight(
+                            map,
+                            light,
+                            probe.position,
+                            faceDirection,
+                            bvh,
+                            triangles,
+                            alphaOccluders,
+                            alphaMaskCache,
+                            stats));
+        }
+        rgb = Vector3Add(
+                rgb,
+                EvaluateProbeDirectionalLight(
+                        map,
+                        directionalLight,
+                        probe.position,
+                        faceDirection,
+                        directionalShadowMaxDistance,
+                        bvh,
+                        triangles,
+                        alphaOccluders,
+                        alphaMaskCache,
+                        stats));
+        probe.ambientCube[face] = ClampRgb01(rgb);
+    }
+}
+
 LightmapWorldPointLight MakeWorldSpaceLight(const SectorTopologyStaticPointLight& authoringLight)
 {
     LightmapWorldPointLight light;
@@ -1697,6 +2230,15 @@ bool FileExistsResolved(const std::string& path)
     return static_cast<bool>(file);
 }
 
+void RemoveFileIfExists(const std::string& path)
+{
+    if (path.empty()) {
+        return;
+    }
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+}
+
 void ReportProgress(
         const SectorLightmapBakeCallbacks& callbacks,
         SectorLightmapBakePhase phase,
@@ -1847,6 +2389,8 @@ void FnvAppendLightmapBakeConstantsAndSettings(
     FnvAppendFloat(hash, std::clamp(settings.ambientOcclusionStrength, 0.0f, 1.0f));
     FnvAppendFloat(hash, std::clamp(SectorAuthoringToWorldDistance(settings.indirectBounceRadius), 0.05f, 16.0f));
     FnvAppendFloat(hash, std::clamp(settings.indirectBounceStrength, 0.0f, 1.0f));
+    FnvAppendFloat(hash, std::clamp(settings.objectProbeSpacingWorld, 0.25f, 128.0f));
+    FnvAppendFloat(hash, std::clamp(settings.objectProbeHeightWorld, 0.0f, 16.0f));
 }
 
 void FnvAppendDirectionalLightSettings(
@@ -2031,6 +2575,130 @@ std::vector<SectorLightmapAlphaOccluderTriangle> CollectSectorLightmapAlphaOcclu
     return BuildAlphaTestOccluderTriangles(geometry);
 }
 
+bool BuildSectorBakedObjectLightProbePlacements(
+        const SectorTopologyMap& map,
+        const SectorBakedObjectLightProbePlacementSettings& settings,
+        std::vector<SectorBakedObjectLightProbe>& outProbes,
+        std::vector<SectorBakedObjectLightProbePlacementDiagnostic>* outDiagnostics,
+        std::string& outError)
+{
+    outError.clear();
+    outProbes.clear();
+    if (outDiagnostics != nullptr) {
+        outDiagnostics->clear();
+    }
+
+    if (!std::isfinite(settings.probeSpacingWorld) || settings.probeSpacingWorld <= 0.0f) {
+        outError = "Object probe placement failed: probe spacing must be positive";
+        return false;
+    }
+    if (!std::isfinite(settings.probeHeightWorld) || settings.probeHeightWorld < 0.0f) {
+        outError = "Object probe placement failed: probe height must be non-negative";
+        return false;
+    }
+
+    const double spacingCoord = static_cast<double>(SectorWorldToAuthoringDistance(settings.probeSpacingWorld))
+            * static_cast<double>(SectorCoordSubdivisions);
+    if (!(spacingCoord > 0.0) || !std::isfinite(spacingCoord)) {
+        outError = "Object probe placement failed: invalid probe spacing";
+        return false;
+    }
+
+    const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(map);
+    for (const SectorTopologySector& sector : map.sectors) {
+        SectorTopologyLoopSet loops;
+        std::vector<SectorTopologyValidationIssue> loopIssues;
+        if (!ExtractSectorTopologyLoops(map, indexes, sector.id, loops, &loopIssues)) {
+            outError = "Object probe placement failed: could not extract loops for sector "
+                    + std::to_string(sector.id);
+            return false;
+        }
+
+        std::vector<SectorTopologyCoordPoint> outer;
+        if (!AppendLoopPolygon(map, loops.outer, outer, outError)) {
+            return false;
+        }
+
+        std::vector<std::vector<SectorTopologyCoordPoint>> holes;
+        holes.reserve(loops.holes.size());
+        for (const SectorTopologyLoop& holeLoop : loops.holes) {
+            std::vector<SectorTopologyCoordPoint> hole;
+            if (!AppendLoopPolygon(map, holeLoop, hole, outError)) {
+                return false;
+            }
+            holes.push_back(std::move(hole));
+        }
+
+        SectorCoord minX = outer.front().x;
+        SectorCoord minY = outer.front().y;
+        SectorCoord maxX = outer.front().x;
+        SectorCoord maxY = outer.front().y;
+        for (const SectorTopologyCoordPoint point : outer) {
+            minX = std::min(minX, point.x);
+            minY = std::min(minY, point.y);
+            maxX = std::max(maxX, point.x);
+            maxY = std::max(maxY, point.y);
+        }
+
+        const size_t beforeCount = outProbes.size();
+        for (double y = static_cast<double>(minY) + spacingCoord * 0.5;
+                y < static_cast<double>(maxY);
+                y += spacingCoord) {
+            for (double x = static_cast<double>(minX) + spacingCoord * 0.5;
+                    x < static_cast<double>(maxX);
+                    x += spacingCoord) {
+                if (x < static_cast<double>(std::numeric_limits<SectorCoord>::min())
+                        || x > static_cast<double>(std::numeric_limits<SectorCoord>::max())
+                        || y < static_cast<double>(std::numeric_limits<SectorCoord>::min())
+                        || y > static_cast<double>(std::numeric_limits<SectorCoord>::max())) {
+                    continue;
+                }
+
+                const SectorTopologyCoordPoint candidate{
+                        static_cast<SectorCoord>(std::llround(x)),
+                        static_cast<SectorCoord>(std::llround(y))};
+                if (!IsStrictlyInsideProbePolygon(outer, holes, candidate)) {
+                    continue;
+                }
+
+                SectorBakedObjectLightProbe probe;
+                probe.sectorId = sector.id;
+                probe.position = MakeProbeWorldPosition(
+                        candidate,
+                        sector,
+                        settings.probeHeightWorld,
+                        outDiagnostics);
+                outProbes.push_back(probe);
+            }
+        }
+
+        if (outProbes.size() == beforeCount) {
+            SectorTopologyCoordPoint representative;
+            if (!FindRepresentativeProbePoint(outer, holes, minX, minY, maxX, maxY, representative)) {
+                outError = "Object probe placement failed: could not place a probe in sector "
+                        + std::to_string(sector.id);
+                return false;
+            }
+
+            SectorBakedObjectLightProbe probe;
+            probe.sectorId = sector.id;
+            probe.position = MakeProbeWorldPosition(
+                    representative,
+                    sector,
+                    settings.probeHeightWorld,
+                    outDiagnostics);
+            outProbes.push_back(probe);
+            if (outDiagnostics != nullptr) {
+                outDiagnostics->push_back(SectorBakedObjectLightProbePlacementDiagnostic{
+                        sector.id,
+                        "Object probe placement used a representative fallback point because no grid point survived"});
+            }
+        }
+    }
+
+    return true;
+}
+
 bool IsSectorLightmapStaticRayOccludedForTests(
         const SectorTopologyMap& map,
         const SectorGeneratedGeometry& geometry,
@@ -2064,6 +2732,76 @@ bool IsSectorLightmapStaticRayOccludedForTests(
             &stats);
 }
 
+bool BakeSectorBakedObjectLightProbeAmbientCubes(
+        const SectorTopologyMap& map,
+        std::vector<SectorBakedObjectLightProbe>& probes,
+        std::string& outError)
+{
+    outError.clear();
+    for (const SectorBakedObjectLightProbe& probe : probes) {
+        if (!IsFinite(probe.position)) {
+            outError = "Object probe bake failed: non-finite probe position";
+            return false;
+        }
+    }
+
+    SectorGeneratedGeometry geometry;
+    if (!BuildLightmapGeneratedGeometryForBake(map, geometry, outError)) {
+        return false;
+    }
+
+    SectorLightmapLayout layout;
+    if (!BuildSectorLightmapLayoutFromGeometry(geometry, layout, outError)) {
+        return false;
+    }
+
+    const std::vector<BakeTriangle> triangles = BuildBakeTriangles(geometry, layout);
+    SectorLightmapBvh bvh;
+    BakeBvhBuildStats bvhStats;
+    if (!BuildSectorLightmapBvh(triangles, bvh, bvhStats, outError)) {
+        if (outError.empty()) {
+            outError = "Object probe bake failed: could not build lightmap BVH";
+        }
+        return false;
+    }
+
+    std::vector<LightmapWorldPointLight> worldLights;
+    worldLights.reserve(map.staticLights.size());
+    for (const SectorTopologyStaticPointLight& light : map.staticLights) {
+        worldLights.push_back(MakeWorldSpaceLight(light));
+    }
+
+    std::vector<LightmapWorldSpotLight> worldSpotLights;
+    worldSpotLights.reserve(map.staticSpotLights.size());
+    for (const SectorTopologyStaticSpotLight& light : map.staticSpotLights) {
+        worldSpotLights.push_back(MakeWorldSpaceLight(light));
+    }
+
+    const LightmapWorldDirectionalLight directionalLight =
+            MakeWorldSpaceDirectionalLight(map.directionalLight);
+    const float directionalShadowMaxDistance = BvhSceneDiagonalWithMargin(bvh);
+    const std::vector<SectorLightmapAlphaOccluderTriangle> alphaOccluders =
+            CollectSectorLightmapAlphaOccluders(geometry);
+    SectorLightmapAlphaMaskCache alphaMaskCache;
+    BakeRayStats stats;
+    for (SectorBakedObjectLightProbe& probe : probes) {
+        BakeProbeAmbientCube(
+                map,
+                worldLights,
+                worldSpotLights,
+                directionalLight,
+                directionalShadowMaxDistance,
+                bvh,
+                triangles,
+                alphaOccluders,
+                alphaMaskCache,
+                stats,
+                probe);
+    }
+
+    return true;
+}
+
 bool IsSameLogicalSectorLightmapSurface(
         const SectorGeneratedSurfaceRef& a,
         const SectorGeneratedSurfaceRef& b)
@@ -2088,6 +2826,294 @@ bool IsSameLogicalSectorLightmapSurface(
     }
 
     return false;
+}
+
+bool WriteSectorBakedObjectLightProbeSidecar(
+        const std::string& path,
+        const std::vector<SectorBakedObjectLightProbe>& probes,
+        float probeSpacingWorld,
+        float probeHeightWorld,
+        std::string& outError)
+{
+    outError.clear();
+    if (path.empty()) {
+        outError = "Object probe sidecar write failed: missing output path";
+        return false;
+    }
+    if (!std::isfinite(probeSpacingWorld) || !std::isfinite(probeHeightWorld)) {
+        outError = "Object probe sidecar write failed: non-finite probe settings";
+        return false;
+    }
+    if (probes.size() > static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
+        outError = "Object probe sidecar write failed: too many probes";
+        return false;
+    }
+
+    for (const SectorBakedObjectLightProbe& probe : probes) {
+        if (!IsFinite(probe.position)) {
+            outError = "Object probe sidecar write failed: non-finite probe position";
+            return false;
+        }
+        for (const Vector3& cubeFace : probe.ambientCube) {
+            if (!IsFinite(cubeFace)) {
+                outError = "Object probe sidecar write failed: non-finite ambient cube value";
+                return false;
+            }
+        }
+    }
+
+    const std::filesystem::path outputPath(path);
+    if (outputPath.has_parent_path()) {
+        std::error_code ec;
+        std::filesystem::create_directories(outputPath.parent_path(), ec);
+        if (ec) {
+            outError = "Object probe sidecar write failed: could not create output directory";
+            return false;
+        }
+    }
+
+    std::ofstream output(path, std::ios::binary);
+    if (!output.is_open()) {
+        outError = "Object probe sidecar write failed: could not open output file";
+        return false;
+    }
+
+    output.write(kObjectProbeSidecarMagic, sizeof(kObjectProbeSidecarMagic));
+    if (!output.good()
+            || !WriteU32LE(output, static_cast<uint32_t>(kSectorBakedObjectLightProbeSidecarVersion))
+            || !WriteU32LE(output, static_cast<uint32_t>(probes.size()))
+            || !WriteF32LE(output, probeSpacingWorld)
+            || !WriteF32LE(output, probeHeightWorld)
+            || !WriteU32LE(output, 0)
+            || !WriteU32LE(output, 0)) {
+        outError = "Object probe sidecar write failed: could not write header";
+        return false;
+    }
+
+    for (const SectorBakedObjectLightProbe& probe : probes) {
+        if (!WriteI32LE(output, static_cast<int32_t>(probe.sectorId))
+                || !WriteProbeVector(output, probe.position)) {
+            outError = "Object probe sidecar write failed: could not write probe record";
+            return false;
+        }
+        for (const Vector3& cubeFace : probe.ambientCube) {
+            if (!WriteProbeVector(output, cubeFace)) {
+                outError = "Object probe sidecar write failed: could not write probe ambient cube";
+                return false;
+            }
+        }
+    }
+
+    if (!output.good()) {
+        outError = "Object probe sidecar write failed: output stream error";
+        return false;
+    }
+
+    return true;
+}
+
+bool ReadSectorBakedObjectLightProbeSidecar(
+        const std::string& path,
+        const SectorBakedObjectLightProbeMetadata* expectedMetadata,
+        std::vector<SectorBakedObjectLightProbe>& outProbes,
+        SectorBakedObjectLightProbeMetadata& outMetadata,
+        std::string& outError)
+{
+    outError.clear();
+    outProbes.clear();
+    outMetadata = {};
+
+    if (path.empty()) {
+        outError = "Object probe sidecar read failed: missing input path";
+        return false;
+    }
+
+    std::ifstream input(path, std::ios::binary);
+    if (!input.is_open()) {
+        outError = "Object probe sidecar read failed: could not open input file";
+        return false;
+    }
+
+    char magic[4] = {};
+    input.read(magic, sizeof(magic));
+    if (input.gcount() != static_cast<std::streamsize>(sizeof(magic))
+            || !std::equal(std::begin(magic), std::end(magic), std::begin(kObjectProbeSidecarMagic))) {
+        outError = "Object probe sidecar read failed: bad magic";
+        return false;
+    }
+
+    uint32_t version = 0;
+    uint32_t probeCount = 0;
+    float probeSpacingWorld = 0.0f;
+    float probeHeightWorld = 0.0f;
+    uint32_t reserved0 = 0;
+    uint32_t reserved1 = 0;
+    if (!ReadU32LE(input, version)
+            || !ReadU32LE(input, probeCount)
+            || !ReadF32LE(input, probeSpacingWorld)
+            || !ReadF32LE(input, probeHeightWorld)
+            || !ReadU32LE(input, reserved0)
+            || !ReadU32LE(input, reserved1)) {
+        outError = "Object probe sidecar read failed: truncated header";
+        return false;
+    }
+
+    if (version != static_cast<uint32_t>(kSectorBakedObjectLightProbeSidecarVersion)) {
+        outError = "Object probe sidecar read failed: unsupported version";
+        return false;
+    }
+    if (!std::isfinite(probeSpacingWorld) || !std::isfinite(probeHeightWorld)) {
+        outError = "Object probe sidecar read failed: non-finite probe settings";
+        return false;
+    }
+    if (probeCount > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+        outError = "Object probe sidecar read failed: too many probes";
+        return false;
+    }
+    if (expectedMetadata != nullptr) {
+        if (expectedMetadata->version != 0
+                && expectedMetadata->version != static_cast<int>(version)) {
+            outError = "Object probe sidecar read failed: metadata version mismatch";
+            return false;
+        }
+        if (expectedMetadata->count >= 0
+                && expectedMetadata->count != static_cast<int>(probeCount)) {
+            outError = "Object probe sidecar read failed: metadata count mismatch";
+            return false;
+        }
+        if (!expectedMetadata->format.empty()
+                && expectedMetadata->format != kSectorBakedObjectLightProbeSidecarFormat) {
+            outError = "Object probe sidecar read failed: metadata format mismatch";
+            return false;
+        }
+    }
+
+    std::vector<SectorBakedObjectLightProbe> probes;
+    probes.reserve(probeCount);
+    for (uint32_t probeIndex = 0; probeIndex < probeCount; ++probeIndex) {
+        SectorBakedObjectLightProbe probe;
+        int32_t sectorId = 0;
+        if (!ReadI32LE(input, sectorId) || !ReadProbeVector(input, probe.position)) {
+            outError = "Object probe sidecar read failed: truncated probe record";
+            return false;
+        }
+        probe.sectorId = static_cast<int>(sectorId);
+        if (!IsFinite(probe.position)) {
+            outError = "Object probe sidecar read failed: non-finite probe position";
+            return false;
+        }
+        for (Vector3& cubeFace : probe.ambientCube) {
+            if (!ReadProbeVector(input, cubeFace)) {
+                outError = "Object probe sidecar read failed: truncated probe ambient cube";
+                return false;
+            }
+            if (!IsFinite(cubeFace)) {
+                outError = "Object probe sidecar read failed: non-finite ambient cube value";
+                return false;
+            }
+        }
+        probes.push_back(probe);
+    }
+
+    outMetadata.path = path;
+    outMetadata.version = static_cast<int>(version);
+    outMetadata.count = static_cast<int>(probeCount);
+    outMetadata.probeSpacingWorld = probeSpacingWorld;
+    outMetadata.probeHeightWorld = probeHeightWorld;
+    outMetadata.format = kSectorBakedObjectLightProbeSidecarFormat;
+    outProbes = std::move(probes);
+    return true;
+}
+
+bool LoadSectorBakedObjectLightProbeRuntimeData(
+        const SectorTopologyMap& map,
+        SectorBakedObjectLightProbeRuntimeData& outData,
+        std::string& outError)
+{
+    outError.clear();
+    outData = {};
+
+    const SectorBakedObjectLightProbeMetadata& metadata = map.bakedLightmap.objectProbes;
+    if (metadata.path.empty()) {
+        outError = "Object probe runtime load skipped: missing probe metadata";
+        return false;
+    }
+
+    if (metadata.version != kSectorBakedObjectLightProbeSidecarVersion
+            || metadata.sourceHash.empty()
+            || metadata.count < 0
+            || metadata.probeSpacingWorld <= 0.0f
+            || metadata.probeHeightWorld < 0.0f
+            || metadata.format != kSectorBakedObjectLightProbeSidecarFormat) {
+        outError = "Object probe runtime load failed: invalid probe metadata";
+        return false;
+    }
+
+    if (metadata.sourceHash != ComputeSectorLightmapSourceHash(map)) {
+        outError = "Object probe runtime load failed: stale source hash";
+        return false;
+    }
+
+    const std::string resolvedPath = ResolveSectorAssetPath(metadata.path);
+    std::vector<SectorBakedObjectLightProbe> probes;
+    SectorBakedObjectLightProbeMetadata loadedMetadata;
+    if (!ReadSectorBakedObjectLightProbeSidecar(resolvedPath, &metadata, probes, loadedMetadata, outError)) {
+        if (outError.empty()) {
+            outError = "Object probe runtime load failed: could not read sidecar";
+        }
+        return false;
+    }
+
+    std::sort(probes.begin(), probes.end(), [](const SectorBakedObjectLightProbe& a, const SectorBakedObjectLightProbe& b) {
+        return a.sectorId < b.sectorId;
+    });
+
+    std::vector<SectorBakedObjectLightProbeSectorRange> sectorRanges;
+    sectorRanges.reserve(probes.size());
+    for (size_t begin = 0; begin < probes.size();) {
+        const int sectorId = probes[begin].sectorId;
+        size_t end = begin + 1;
+        while (end < probes.size() && probes[end].sectorId == sectorId) {
+            ++end;
+        }
+
+        SectorBakedObjectLightProbeSectorRange range;
+        range.sectorId = sectorId;
+        range.begin = static_cast<int>(begin);
+        range.count = static_cast<int>(end - begin);
+        sectorRanges.push_back(range);
+        begin = end;
+    }
+
+    loadedMetadata.path = metadata.path;
+    loadedMetadata.sourceHash = metadata.sourceHash;
+    outData.probes = std::move(probes);
+    outData.sectorRanges = std::move(sectorRanges);
+    outData.metadata = std::move(loadedMetadata);
+    return true;
+}
+
+BakedObjectLightingSample SampleBakedObjectLighting(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        Vector3 worldPosition,
+        int preferredSectorId,
+        const SectorTopologyMap* mapForFallback)
+{
+    if (!probes.probes.empty()) {
+        if (const SectorBakedObjectLightProbeSectorRange* range = FindProbeSectorRange(probes, preferredSectorId)) {
+            if (range->count > 0) {
+                return SampleNearestObjectLightProbes(probes, worldPosition, range->begin, range->count);
+            }
+        }
+
+        return SampleNearestObjectLightProbes(probes, worldPosition, 0, static_cast<int>(probes.probes.size()));
+    }
+
+    if (mapForFallback != nullptr && FindSectorTopologySector(*mapForFallback, preferredSectorId) != nullptr) {
+        return MakeSectorAmbientObjectLightingSample(*mapForFallback, preferredSectorId);
+    }
+
+    return MakeNeutralObjectLightingSample();
 }
 
 std::string ResolveSectorAssetPath(const std::string& path)
@@ -2116,6 +3142,13 @@ std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath)
     std::filesystem::path path(mapPath);
     path.replace_extension(".lightmap.png");
     return MakeSectorAssetRelativePath(path.generic_string());
+}
+
+std::string MakeSectorObjectProbeSidecarPathForLightmapPath(const std::string& lightmapPath)
+{
+    std::filesystem::path path(lightmapPath);
+    path.replace_extension(".object_probes.bin");
+    return path.generic_string();
 }
 
 bool BuildSectorLightmapLayout(
@@ -2479,6 +3512,67 @@ bool BakeSectorLightmapForMap(
     }
     ReportProgress(callbacks, SectorLightmapBakePhase::DilatingAndEncoding, static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()), static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()));
     const auto exportEnd = Clock::now();
+    if (CheckBakeCancelled(callbacks, outError)) {
+        RemoveFileIfExists(outputPath);
+        return false;
+    }
+
+    const float objectProbeSpacingWorld = std::clamp(map.lightmapSettings.objectProbeSpacingWorld, 0.25f, 128.0f);
+    const float objectProbeHeightWorld = std::clamp(map.lightmapSettings.objectProbeHeightWorld, 0.0f, 16.0f);
+    std::vector<SectorBakedObjectLightProbe> objectProbes;
+    std::vector<SectorBakedObjectLightProbePlacementDiagnostic> objectProbeDiagnostics;
+    const auto objectProbeBakeStart = Clock::now();
+    if (!BuildSectorBakedObjectLightProbePlacements(
+                map,
+                SectorBakedObjectLightProbePlacementSettings{objectProbeSpacingWorld, objectProbeHeightWorld},
+                objectProbes,
+                &objectProbeDiagnostics,
+                outError)) {
+        if (outError.empty()) {
+            outError = "Bake failed: could not place object light probes";
+        } else {
+            outError = "Bake failed: " + outError;
+        }
+        RemoveFileIfExists(outputPath);
+        return false;
+    }
+    if (CheckBakeCancelled(callbacks, outError)) {
+        RemoveFileIfExists(outputPath);
+        return false;
+    }
+    if (!BakeSectorBakedObjectLightProbeAmbientCubes(map, objectProbes, outError)) {
+        if (outError.empty()) {
+            outError = "Bake failed: could not bake object light probes";
+        } else {
+            outError = "Bake failed: " + outError;
+        }
+        RemoveFileIfExists(outputPath);
+        return false;
+    }
+    const auto objectProbeBakeEnd = Clock::now();
+    if (CheckBakeCancelled(callbacks, outError)) {
+        RemoveFileIfExists(outputPath);
+        return false;
+    }
+
+    const std::string objectProbeSidecarPath = MakeSectorObjectProbeSidecarPathForLightmapPath(outputPath);
+    const auto objectProbeSidecarStart = Clock::now();
+    if (!WriteSectorBakedObjectLightProbeSidecar(
+                objectProbeSidecarPath,
+                objectProbes,
+                objectProbeSpacingWorld,
+                objectProbeHeightWorld,
+                outError)) {
+        if (outError.empty()) {
+            outError = "Bake failed: could not write object light probe sidecar";
+        } else {
+            outError = "Bake failed: " + outError;
+        }
+        RemoveFileIfExists(outputPath);
+        RemoveFileIfExists(objectProbeSidecarPath);
+        return false;
+    }
+    const auto objectProbeSidecarEnd = Clock::now();
 
     outResult.width = width;
     outResult.height = height;
@@ -2503,12 +3597,23 @@ bool BakeSectorLightmapForMap(
     outResult.softShadowSourceStats = stats.softShadowSource;
     outResult.ambientOcclusionStats = stats.ambientOcclusion;
     outResult.indirectBounceStats = stats.indirectBounce;
+    outResult.objectProbes.path = objectProbeSidecarPath;
+    outResult.objectProbes.version = kSectorBakedObjectLightProbeSidecarVersion;
+    outResult.objectProbes.sourceHash = outResult.sourceHash;
+    outResult.objectProbes.count = static_cast<int>(objectProbes.size());
+    outResult.objectProbes.probeSpacingWorld = objectProbeSpacingWorld;
+    outResult.objectProbes.probeHeightWorld = objectProbeHeightWorld;
+    outResult.objectProbes.format = kSectorBakedObjectLightProbeSidecarFormat;
+    outResult.objectProbePlacementDiagnostics = static_cast<int>(objectProbeDiagnostics.size());
     outResult.bvhBuildSeconds = std::chrono::duration<double>(bvhBuildEnd - bvhBuildStart).count();
     outResult.directLightingSeconds = std::chrono::duration<double>(directEnd - directStart).count();
     outResult.ambientOcclusionSeconds = std::chrono::duration<double>(aoEnd - aoStart).count();
     outResult.indirectBounceSeconds = std::chrono::duration<double>(indirectEnd - indirectStart).count();
+    outResult.objectProbeBakeSeconds = std::chrono::duration<double>(objectProbeBakeEnd - objectProbeBakeStart).count();
+    outResult.objectProbeSidecarWriteSeconds =
+            std::chrono::duration<double>(objectProbeSidecarEnd - objectProbeSidecarStart).count();
     outResult.gutterExportSeconds = std::chrono::duration<double>(exportEnd - exportStart).count();
-    outResult.totalBakeSeconds = std::chrono::duration<double>(exportEnd - totalStart).count();
+    outResult.totalBakeSeconds = std::chrono::duration<double>(objectProbeSidecarEnd - totalStart).count();
     return true;
 }
 
@@ -2551,6 +3656,7 @@ bool BakeSectorLightmap(
     outResult.totalBakeSeconds += outResult.layoutSeconds;
     if (!input.expectedSourceHash.empty()) {
         outResult.sourceHash = input.expectedSourceHash;
+        outResult.objectProbes.sourceHash = input.expectedSourceHash;
     }
     return true;
 }
@@ -2608,6 +3714,12 @@ std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& resul
             result.staticLightCount,
             result.staticLightCount - result.staticSpotLightCount,
             result.staticSpotLightCount);
+    report << TextFormat("  Object light probes: %d\n", result.objectProbes.count);
+    report << TextFormat("  Object probe placement diagnostics: %d\n", result.objectProbePlacementDiagnostics);
+    if (!result.objectProbes.path.empty()) {
+        report << TextFormat("  Object probe sidecar: %s\n", result.objectProbes.path.c_str());
+    }
+    report << "\n";
     auto appendRayStats = [&](const char* label, const SectorLightmapRaycastStats& stats) {
         report << TextFormat("  %s: %llu\n", label, static_cast<unsigned long long>(stats.raysCast));
         report << TextFormat("    AABB tests: %llu\n", static_cast<unsigned long long>(stats.aabbTests));
@@ -2634,6 +3746,8 @@ std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& resul
     report << TextFormat("  Direct lighting: %.2fs\n", result.directLightingSeconds);
     report << TextFormat("  AO: %.2fs\n", result.ambientOcclusionSeconds);
     report << TextFormat("  Indirect bounce: %.2fs\n", result.indirectBounceSeconds);
+    report << TextFormat("  Object probe bake: %.2fs\n", result.objectProbeBakeSeconds);
+    report << TextFormat("  Object probe sidecar write: %.2fs\n", result.objectProbeSidecarWriteSeconds);
     report << TextFormat("  Gutter dilation/export: %.2fs\n", result.gutterExportSeconds);
     report << TextFormat("  Total bake: %.2fs", result.totalBakeSeconds);
     return report.str();
@@ -2764,6 +3878,33 @@ SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map)
     }
 
     if (!FileExistsResolved(ResolveSectorAssetPath(map.bakedLightmap.path))) {
+        return SectorLightmapStatus::Stale;
+    }
+
+    return SectorLightmapStatus::Valid;
+}
+
+SectorLightmapStatus GetSectorBakedObjectLightProbeStatus(const SectorTopologyMap& map)
+{
+    const SectorBakedObjectLightProbeMetadata& metadata = map.bakedLightmap.objectProbes;
+    if (metadata.path.empty()) {
+        return SectorLightmapStatus::None;
+    }
+
+    if (metadata.version != kSectorBakedObjectLightProbeSidecarVersion
+            || metadata.sourceHash.empty()
+            || metadata.count < 0
+            || metadata.probeSpacingWorld <= 0.0f
+            || metadata.probeHeightWorld < 0.0f
+            || metadata.format != kSectorBakedObjectLightProbeSidecarFormat) {
+        return SectorLightmapStatus::Stale;
+    }
+
+    if (metadata.sourceHash != ComputeSectorLightmapSourceHash(map)) {
+        return SectorLightmapStatus::Stale;
+    }
+
+    if (!FileExistsResolved(ResolveSectorAssetPath(metadata.path))) {
         return SectorLightmapStatus::Stale;
     }
 

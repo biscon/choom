@@ -114,11 +114,15 @@ struct SectorLightmapBakeResult {
     SectorLightmapRaycastStats softShadowSourceStats;
     SectorLightmapRaycastStats ambientOcclusionStats;
     SectorLightmapRaycastStats indirectBounceStats;
+    SectorBakedObjectLightProbeMetadata objectProbes;
+    int objectProbePlacementDiagnostics = 0;
     double layoutSeconds = 0.0;
     double bvhBuildSeconds = 0.0;
     double directLightingSeconds = 0.0;
     double ambientOcclusionSeconds = 0.0;
     double indirectBounceSeconds = 0.0;
+    double objectProbeBakeSeconds = 0.0;
+    double objectProbeSidecarWriteSeconds = 0.0;
     double gutterExportSeconds = 0.0;
     double totalBakeSeconds = 0.0;
 };
@@ -143,6 +147,11 @@ struct SectorLightmapBakeCallbacks {
     std::function<bool()> isCancellationRequested;
 };
 
+struct SectorBakedObjectLightProbePlacementDiagnostic {
+    int sectorId = -1;
+    std::string message;
+};
+
 struct SectorTopologyLightmapBakeInput {
     SectorTopologyMap mapSnapshot;
     std::string expectedSourceHash;
@@ -161,8 +170,10 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 9: alpha-tested middle textures affect baked direct-light occlusion.
-constexpr int kSectorLightmapBakeVersion = 9;
+// Version 10: baked output includes object lighting probe sidecar data.
+constexpr int kSectorLightmapBakeVersion = 10;
+constexpr int kSectorBakedObjectLightProbeSidecarVersion = 1;
+constexpr const char* kSectorBakedObjectLightProbeSidecarFormat = "ambientCubeF32LE";
 constexpr int kDirectSoftShadowSampleCount = 8;
 constexpr int kAmbientOcclusionSampleCount = 12;
 constexpr int kIndirectBounceSampleCount = 8;
@@ -175,6 +186,17 @@ bool BuildSectorLightmapLayout(
 
 std::vector<SectorLightmapAlphaOccluderTriangle> CollectSectorLightmapAlphaOccluders(
         const SectorGeneratedGeometry& geometry);
+
+bool BuildSectorBakedObjectLightProbePlacements(
+        const SectorTopologyMap& map,
+        const SectorBakedObjectLightProbePlacementSettings& settings,
+        std::vector<SectorBakedObjectLightProbe>& outProbes,
+        std::vector<SectorBakedObjectLightProbePlacementDiagnostic>* outDiagnostics,
+        std::string& outError);
+bool BakeSectorBakedObjectLightProbeAmbientCubes(
+        const SectorTopologyMap& map,
+        std::vector<SectorBakedObjectLightProbe>& probes,
+        std::string& outError);
 
 bool IsSectorLightmapStaticRayOccludedForTests(
         const SectorTopologyMap& map,
@@ -208,12 +230,35 @@ std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& resul
 void PrintSectorLightmapBakeReport(const SectorLightmapBakeResult& result);
 std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map);
 SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map);
+SectorLightmapStatus GetSectorBakedObjectLightProbeStatus(const SectorTopologyMap& map);
 const char* SectorLightmapStatusText(SectorLightmapStatus status);
 bool IsSameLogicalSectorLightmapSurface(
         const SectorGeneratedSurfaceRef& a,
         const SectorGeneratedSurfaceRef& b);
+bool WriteSectorBakedObjectLightProbeSidecar(
+        const std::string& path,
+        const std::vector<SectorBakedObjectLightProbe>& probes,
+        float probeSpacingWorld,
+        float probeHeightWorld,
+        std::string& outError);
+bool ReadSectorBakedObjectLightProbeSidecar(
+        const std::string& path,
+        const SectorBakedObjectLightProbeMetadata* expectedMetadata,
+        std::vector<SectorBakedObjectLightProbe>& outProbes,
+        SectorBakedObjectLightProbeMetadata& outMetadata,
+        std::string& outError);
+bool LoadSectorBakedObjectLightProbeRuntimeData(
+        const SectorTopologyMap& map,
+        SectorBakedObjectLightProbeRuntimeData& outData,
+        std::string& outError);
+BakedObjectLightingSample SampleBakedObjectLighting(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        Vector3 worldPosition,
+        int preferredSectorId,
+        const SectorTopologyMap* mapForFallback);
 std::string ResolveSectorAssetPath(const std::string& path);
 std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath);
+std::string MakeSectorObjectProbeSidecarPathForLightmapPath(const std::string& lightmapPath);
 std::string MakeSectorAssetRelativePath(const std::string& path);
 
 } // namespace game

@@ -93,6 +93,8 @@ private:
     void RenderPreview3D(engine::AssetManager& assets);
     void DrawPreviewSurfaceHighlights() const;
     void DrawPreviewSpotLightOverlay() const;
+    void DrawPreviewObjectProbeOverlay() const;
+    void RefreshPreviewObjectProbeDebugData();
     void DrawPreviewOverlay(
             engine::UIContext& ui,
             const engine::UIConfig& config,

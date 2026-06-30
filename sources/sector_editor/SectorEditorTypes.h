@@ -522,6 +522,9 @@ struct SectorEditorState {
     bool hasCurrentLevelPath = false;
     bool hasUnsavedChanges = false;
     bool useBakedAmbientOcclusion = true;
+    bool showObjectProbeDebugOverlay = false;
+    SectorBakedObjectLightProbeRuntimeData objectProbeDebugData;
+    std::string objectProbeDebugStatus;
     bool previewUiHidden = false;
     SectorPreviewControlMode previewControlMode = SectorPreviewControlMode::FreeFly;
     SectorFreeflyControllerState freeflyController;

@@ -1,5 +1,6 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorTopologyGeometry.h"
 
 #include <raymath.h>
 
@@ -8,6 +9,8 @@
 #include <cstdio>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -34,6 +37,51 @@ game::SectorTextureDefinition Texture(const char* id)
 std::filesystem::path Phase01bSandboxDir()
 {
     return std::filesystem::temp_directory_path() / "sector_lightmap_alpha_occlusion_phase_01b";
+}
+
+std::filesystem::path ObjectProbePhase01aSandboxDir()
+{
+    return std::filesystem::temp_directory_path() / "sector_baked_object_light_probes_phase_01a";
+}
+
+void PatchByte(const std::filesystem::path& path, std::streamoff offset, unsigned char value)
+{
+    std::fstream file(path, std::ios::in | std::ios::out | std::ios::binary);
+    Check(file.is_open(), "binary patch test file opens");
+    file.seekp(offset);
+    file.put(static_cast<char>(value));
+}
+
+void TruncateFileByOneByte(const std::filesystem::path& path)
+{
+    const auto size = std::filesystem::file_size(path);
+    Check(size > 0, "binary truncate test file has data");
+    std::filesystem::resize_file(path, size - 1);
+}
+
+bool Near(float a, float b, float tolerance = 0.001f)
+{
+    return std::fabs(a - b) <= tolerance;
+}
+
+bool SameVector(Vector3 a, Vector3 b)
+{
+    return Near(a.x, b.x) && Near(a.y, b.y) && Near(a.z, b.z);
+}
+
+bool FiniteVector(Vector3 value)
+{
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+float Brightness(Vector3 value)
+{
+    return value.x + value.y + value.z;
+}
+
+Vector3 WorldToAuthoring(Vector3 value)
+{
+    return game::SectorWorldToAuthoringPosition(value);
 }
 
 void WriteAlphaMaskTestTexture(const std::filesystem::path& path)
@@ -161,6 +209,60 @@ game::SectorTopologyMap MakePlatform()
     game::SectorTopologyMap map = MakeSquare();
     map.vertices.insert(map.vertices.end(), {
             {5, 16, 16}, {6, 48, 16}, {7, 48, 48}, {8, 16, 48}});
+    for (int i = 5; i <= 8; ++i) {
+        const int end = i == 8 ? 5 : i + 1;
+        const int frontSideId = i;
+        const int backSideId = i + 4;
+        map.lineDefs.push_back({i, i, end, frontSideId, backSideId});
+        AddSide(map, frontSideId, i, game::SectorTopologySideKind::Front, 20);
+        AddSide(map, backSideId, i, game::SectorTopologySideKind::Back, 10);
+    }
+    map.sectors.push_back(Sector(20, 8.0f, 24.0f));
+    return map;
+}
+
+game::SectorTopologyMap MakeProbeRectangle(game::SectorCoord width, game::SectorCoord height)
+{
+    game::SectorTopologyMap map;
+    AddTextureDefaults(map);
+    map.vertices = {{1, 0, 0}, {2, width, 0}, {3, width, height}, {4, 0, height}};
+    for (int i = 1; i <= 4; ++i) {
+        const int end = i == 4 ? 1 : i + 1;
+        map.lineDefs.push_back({i, i, end, i, -1});
+        AddSide(map, i, i, game::SectorTopologySideKind::Front, 10);
+    }
+    map.sectors.push_back(Sector(10));
+    return map;
+}
+
+game::SectorTopologyMap MakeProbeConcaveSector()
+{
+    game::SectorTopologyMap map;
+    AddTextureDefaults(map);
+    map.vertices = {
+            {1, 0, 0},
+            {2, 1024, 0},
+            {3, 1024, 512},
+            {4, 512, 512},
+            {5, 512, 1024},
+            {6, 0, 1024}};
+    for (int i = 1; i <= 6; ++i) {
+        const int end = i == 6 ? 1 : i + 1;
+        map.lineDefs.push_back({i, i, end, i, -1});
+        AddSide(map, i, i, game::SectorTopologySideKind::Front, 10);
+    }
+    map.sectors.push_back(Sector(10));
+    return map;
+}
+
+game::SectorTopologyMap MakeProbeHoleSector()
+{
+    game::SectorTopologyMap map = MakeProbeRectangle(1536, 1536);
+    map.vertices.insert(map.vertices.end(), {
+            {5, 512, 512},
+            {6, 1024, 512},
+            {7, 1024, 1024},
+            {8, 512, 1024}});
     for (int i = 5; i <= 8; ++i) {
         const int end = i == 8 ? 5 : i + 1;
         const int frontSideId = i;
@@ -627,6 +729,15 @@ void TestSourceHashChanges()
     changedSky.skySettings.topColor = Color{10, 20, 30, 255};
     Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
           "hash ignores sky top color");
+
+    game::SectorTopologyMap changedProbeSettings = base;
+    changedProbeSettings.lightmapSettings.objectProbeSpacingWorld = 3.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedProbeSettings) != hash,
+          "hash changes when object probe spacing changes");
+    changedProbeSettings = base;
+    changedProbeSettings.lightmapSettings.objectProbeHeightWorld = 1.6f;
+    Check(game::ComputeSectorLightmapSourceHash(changedProbeSettings) != hash,
+          "hash changes when object probe height changes");
 }
 
 void TestSourceHashIncludesMiddleTextureData()
@@ -696,10 +807,10 @@ void TestSourceHashStableWhenVectorsReordered()
 
 void TestBakeVersionInvalidatesOldLightmaps()
 {
-    Check(game::kSectorLightmapBakeVersion == 9,
-          "lightmap bake version is bumped for alpha-tested static occlusion");
+    Check(game::kSectorLightmapBakeVersion == 10,
+          "lightmap bake version is bumped for baked object lighting probes");
 
-    const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase03a_status_lightmap.png";
+    const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase06a_status_lightmap.png";
     WriteSolidAlphaTestTexture(lightmapPath, 255);
 
     game::SectorTopologyMap map = MakeSquare();
@@ -710,9 +821,31 @@ void TestBakeVersionInvalidatesOldLightmaps()
     Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Valid,
           "current bake version source hash keeps existing lightmap valid");
 
-    map.bakedLightmap.sourceHash = "pre-alpha-occlusion-source-hash";
+    const std::filesystem::path objectProbePath =
+            game::MakeSectorObjectProbeSidecarPathForLightmapPath(lightmapPath.string());
+    std::string probeError;
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(objectProbePath.string(), {}, 4.0f, 1.2f, probeError),
+          "object probe version invalidation sidecar fixture writes");
+    map.bakedLightmap.objectProbes.path = objectProbePath.string();
+    map.bakedLightmap.objectProbes.version = game::kSectorBakedObjectLightProbeSidecarVersion;
+    map.bakedLightmap.objectProbes.sourceHash = map.bakedLightmap.sourceHash;
+    map.bakedLightmap.objectProbes.count = 0;
+    map.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
+    map.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
+    map.bakedLightmap.objectProbes.format = game::kSectorBakedObjectLightProbeSidecarFormat;
+    Check(game::GetSectorBakedObjectLightProbeStatus(map) == game::SectorLightmapStatus::Valid,
+          "current bake version source hash keeps object probe metadata valid");
+
+    map.bakedLightmap.sourceHash = "pre-object-probe-source-hash";
     Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Stale,
-          "old bake version source hash is stale after alpha-tested occlusion change");
+          "old bake version source hash is stale after object probe bake output change");
+    map.bakedLightmap.objectProbes.sourceHash = "pre-object-probe-source-hash";
+    Check(game::GetSectorBakedObjectLightProbeStatus(map) == game::SectorLightmapStatus::Stale,
+          "old bake version source hash is stale for object probe metadata");
+
+    std::error_code removeError;
+    std::filesystem::remove(objectProbePath, removeError);
+    std::filesystem::remove(lightmapPath, removeError);
 }
 
 void TestLogicalSelfComparison()
@@ -1251,10 +1384,732 @@ void TestStaticSpotlightBakeBehavior()
           "solid geometry is traversed by the static spotlight occlusion path");
 }
 
+std::vector<game::SectorBakedObjectLightProbe> MakeObjectLightProbesForSidecarTest()
+{
+    std::vector<game::SectorBakedObjectLightProbe> probes(2);
+    probes[0].sectorId = 10;
+    probes[0].position = Vector3{1.0f, 2.0f, 3.0f};
+    probes[1].sectorId = -5;
+    probes[1].position = Vector3{-4.0f, 5.0f, 6.5f};
+
+    for (size_t probeIndex = 0; probeIndex < probes.size(); ++probeIndex) {
+        for (int face = 0; face < 6; ++face) {
+            const float base = static_cast<float>(probeIndex * 10 + static_cast<size_t>(face));
+            probes[probeIndex].ambientCube[face] = Vector3{
+                    base + 0.1f,
+                    base + 0.2f,
+                    base + 0.3f};
+        }
+    }
+    return probes;
+}
+
+void TestObjectLightProbeSidecarRoundTrip()
+{
+    const std::filesystem::path sandbox = ObjectProbePhase01aSandboxDir();
+    std::filesystem::create_directories(sandbox);
+    const std::filesystem::path path = sandbox / "round_trip.object_probes.bin";
+    const std::vector<game::SectorBakedObjectLightProbe> probes = MakeObjectLightProbesForSidecarTest();
+
+    std::string error;
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 1.2f, error),
+          "object light probe sidecar writes");
+
+    game::SectorBakedObjectLightProbeMetadata expected;
+    expected.version = game::kSectorBakedObjectLightProbeSidecarVersion;
+    expected.count = static_cast<int>(probes.size());
+    expected.format = game::kSectorBakedObjectLightProbeSidecarFormat;
+
+    std::vector<game::SectorBakedObjectLightProbe> loaded;
+    game::SectorBakedObjectLightProbeMetadata metadata;
+    Check(game::ReadSectorBakedObjectLightProbeSidecar(path.string(), &expected, loaded, metadata, error),
+          "object light probe sidecar reads");
+    Check(metadata.path == path.string()
+                  && metadata.version == game::kSectorBakedObjectLightProbeSidecarVersion
+                  && metadata.count == static_cast<int>(probes.size())
+                  && Near(metadata.probeSpacingWorld, 4.0f)
+                  && Near(metadata.probeHeightWorld, 1.2f)
+                  && metadata.format == game::kSectorBakedObjectLightProbeSidecarFormat,
+          "object light probe sidecar metadata is populated");
+    Check(loaded.size() == probes.size(), "object light probe sidecar preserves probe count");
+    for (size_t probeIndex = 0; probeIndex < probes.size() && probeIndex < loaded.size(); ++probeIndex) {
+        Check(loaded[probeIndex].sectorId == probes[probeIndex].sectorId,
+              "object light probe sidecar preserves sector id");
+        Check(SameVector(loaded[probeIndex].position, probes[probeIndex].position),
+              "object light probe sidecar preserves position");
+        for (int face = 0; face < 6; ++face) {
+            Check(SameVector(loaded[probeIndex].ambientCube[face], probes[probeIndex].ambientCube[face]),
+                  "object light probe sidecar preserves ambient cube face");
+        }
+    }
+}
+
+void TestObjectLightProbeSidecarRejectsInvalidFiles()
+{
+    const std::filesystem::path sandbox = ObjectProbePhase01aSandboxDir();
+    std::filesystem::create_directories(sandbox);
+    const std::vector<game::SectorBakedObjectLightProbe> probes = MakeObjectLightProbesForSidecarTest();
+
+    auto writeFixture = [&](const char* name) {
+        const std::filesystem::path path = sandbox / name;
+        std::string error;
+        Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 1.2f, error),
+              "object light probe invalid fixture writes");
+        return path;
+    };
+
+    auto readRejected = [](const std::filesystem::path& path, const game::SectorBakedObjectLightProbeMetadata* expected) {
+        std::vector<game::SectorBakedObjectLightProbe> loaded;
+        game::SectorBakedObjectLightProbeMetadata metadata;
+        std::string error;
+        return !game::ReadSectorBakedObjectLightProbeSidecar(path.string(), expected, loaded, metadata, error)
+                && !error.empty()
+                && loaded.empty();
+    };
+
+    const std::filesystem::path badMagic = writeFixture("bad_magic.object_probes.bin");
+    PatchByte(badMagic, 0, static_cast<unsigned char>('X'));
+    Check(readRejected(badMagic, nullptr), "object light probe sidecar rejects bad magic");
+
+    const std::filesystem::path badVersion = writeFixture("bad_version.object_probes.bin");
+    PatchByte(badVersion, 4, 2);
+    Check(readRejected(badVersion, nullptr), "object light probe sidecar rejects bad version");
+
+    const std::filesystem::path truncated = writeFixture("truncated.object_probes.bin");
+    TruncateFileByOneByte(truncated);
+    Check(readRejected(truncated, nullptr), "object light probe sidecar rejects truncated file");
+
+    const std::filesystem::path nonFinite = writeFixture("non_finite.object_probes.bin");
+    PatchByte(nonFinite, 32, 0x00);
+    PatchByte(nonFinite, 33, 0x00);
+    PatchByte(nonFinite, 34, 0x80);
+    PatchByte(nonFinite, 35, 0x7f);
+    Check(readRejected(nonFinite, nullptr), "object light probe sidecar rejects non-finite floats");
+
+    const std::filesystem::path mismatch = writeFixture("metadata_mismatch.object_probes.bin");
+    game::SectorBakedObjectLightProbeMetadata expected;
+    expected.version = game::kSectorBakedObjectLightProbeSidecarVersion;
+    expected.count = static_cast<int>(probes.size() + 1);
+    expected.format = game::kSectorBakedObjectLightProbeSidecarFormat;
+    Check(readRejected(mismatch, &expected), "object light probe sidecar detects metadata count mismatch");
+
+    std::vector<game::SectorBakedObjectLightProbe> invalid = probes;
+    invalid[0].position.x = std::numeric_limits<float>::infinity();
+    std::string error;
+    Check(!game::WriteSectorBakedObjectLightProbeSidecar(
+                  (sandbox / "write_non_finite.object_probes.bin").string(),
+                  invalid,
+                  4.0f,
+                  1.2f,
+                  error)
+                  && !error.empty(),
+          "object light probe sidecar refuses non-finite values on write");
+}
+
+void TestObjectLightProbeRuntimeDataLoadsAndBuildsSectorRanges()
+{
+    const std::filesystem::path sandbox = ObjectProbePhase01aSandboxDir();
+    std::filesystem::create_directories(sandbox);
+    const std::filesystem::path path = sandbox / "runtime_ranges.object_probes.bin";
+
+    std::vector<game::SectorBakedObjectLightProbe> probes = MakeObjectLightProbesForSidecarTest();
+    game::SectorBakedObjectLightProbe thirdProbe;
+    thirdProbe.sectorId = 10;
+    thirdProbe.position = Vector3{7.0f, 8.0f, 9.0f};
+    for (int face = 0; face < 6; ++face) {
+        thirdProbe.ambientCube[face] = Vector3{20.0f + static_cast<float>(face), 0.5f, 0.25f};
+    }
+    probes.push_back(thirdProbe);
+
+    std::string error;
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 1.2f, error),
+          "runtime object probe sidecar fixture writes");
+
+    game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
+    map.bakedLightmap.objectProbes.path = path.string();
+    map.bakedLightmap.objectProbes.version = game::kSectorBakedObjectLightProbeSidecarVersion;
+    map.bakedLightmap.objectProbes.sourceHash = game::ComputeSectorLightmapSourceHash(map);
+    map.bakedLightmap.objectProbes.count = static_cast<int>(probes.size());
+    map.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
+    map.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
+    map.bakedLightmap.objectProbes.format = game::kSectorBakedObjectLightProbeSidecarFormat;
+
+    game::SectorBakedObjectLightProbeRuntimeData runtimeData;
+    Check(game::LoadSectorBakedObjectLightProbeRuntimeData(map, runtimeData, error),
+          "valid runtime object probe sidecar loads");
+    Check(runtimeData.probes.size() == probes.size(), "runtime object probe load preserves probe count");
+    Check(runtimeData.metadata.path == path.string()
+                  && runtimeData.metadata.sourceHash == map.bakedLightmap.objectProbes.sourceHash
+                  && runtimeData.metadata.count == static_cast<int>(probes.size()),
+          "runtime object probe load preserves metadata contract");
+    Check(runtimeData.sectorRanges.size() == 2, "runtime object probe load builds one range per sector");
+    Check(runtimeData.sectorRanges[0].sectorId == -5
+                  && runtimeData.sectorRanges[0].begin == 0
+                  && runtimeData.sectorRanges[0].count == 1,
+          "runtime object probe sector range for first sorted sector is correct");
+    Check(runtimeData.sectorRanges[1].sectorId == 10
+                  && runtimeData.sectorRanges[1].begin == 1
+                  && runtimeData.sectorRanges[1].count == 2,
+          "runtime object probe sector range for repeated sector is correct");
+    for (const game::SectorBakedObjectLightProbeSectorRange& range : runtimeData.sectorRanges) {
+        for (int index = range.begin; index < range.begin + range.count; ++index) {
+            Check(runtimeData.probes[static_cast<size_t>(index)].sectorId == range.sectorId,
+                  "runtime object probe range covers matching sorted probes");
+        }
+    }
+}
+
+void TestObjectLightProbeRuntimeDataRejectsUnavailableInputs()
+{
+    const std::filesystem::path sandbox = ObjectProbePhase01aSandboxDir();
+    std::filesystem::create_directories(sandbox);
+    const std::filesystem::path path = sandbox / "runtime_unavailable.object_probes.bin";
+    const std::vector<game::SectorBakedObjectLightProbe> probes = MakeObjectLightProbesForSidecarTest();
+
+    std::string error;
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 1.2f, error),
+          "runtime unavailable object probe fixture writes");
+
+    game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
+    map.bakedLightmap.objectProbes.path = path.string();
+    map.bakedLightmap.objectProbes.version = game::kSectorBakedObjectLightProbeSidecarVersion;
+    map.bakedLightmap.objectProbes.sourceHash = game::ComputeSectorLightmapSourceHash(map);
+    map.bakedLightmap.objectProbes.count = static_cast<int>(probes.size());
+    map.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
+    map.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
+    map.bakedLightmap.objectProbes.format = game::kSectorBakedObjectLightProbeSidecarFormat;
+
+    auto loadRejected = [](const game::SectorTopologyMap& candidate) {
+        game::SectorBakedObjectLightProbeRuntimeData runtimeData;
+        std::string loadError;
+        return !game::LoadSectorBakedObjectLightProbeRuntimeData(candidate, runtimeData, loadError)
+                && !loadError.empty()
+                && runtimeData.probes.empty()
+                && runtimeData.sectorRanges.empty();
+    };
+
+    game::SectorTopologyMap stale = map;
+    stale.bakedLightmap.objectProbes.sourceHash = "stale-probe-source-hash";
+    Check(loadRejected(stale), "runtime object probe load rejects stale source hash");
+
+    game::SectorTopologyMap missing = map;
+    missing.bakedLightmap.objectProbes.path = (sandbox / "missing_runtime.object_probes.bin").string();
+    Check(loadRejected(missing), "runtime object probe load handles missing sidecar");
+
+    const std::filesystem::path malformedPath = sandbox / "runtime_malformed.object_probes.bin";
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(malformedPath.string(), probes, 4.0f, 1.2f, error),
+          "runtime malformed object probe fixture writes");
+    PatchByte(malformedPath, 0, static_cast<unsigned char>('X'));
+    game::SectorTopologyMap malformed = map;
+    malformed.bakedLightmap.objectProbes.path = malformedPath.string();
+    Check(loadRejected(malformed), "runtime object probe load rejects malformed binary safely");
+}
+
+game::SectorBakedObjectLightProbe SamplingProbe(
+        int sectorId,
+        Vector3 position,
+        Vector3 ambient)
+{
+    game::SectorBakedObjectLightProbe probe;
+    probe.sectorId = sectorId;
+    probe.position = position;
+    for (Vector3& face : probe.ambientCube) {
+        face = ambient;
+    }
+    return probe;
+}
+
+game::SectorBakedObjectLightProbeRuntimeData MakeSamplingRuntimeData(
+        std::vector<game::SectorBakedObjectLightProbe> probes)
+{
+    std::sort(probes.begin(), probes.end(), [](const auto& a, const auto& b) {
+        return a.sectorId < b.sectorId;
+    });
+
+    game::SectorBakedObjectLightProbeRuntimeData data;
+    data.probes = std::move(probes);
+    for (size_t begin = 0; begin < data.probes.size();) {
+        const int sectorId = data.probes[begin].sectorId;
+        size_t end = begin + 1;
+        while (end < data.probes.size() && data.probes[end].sectorId == sectorId) {
+            ++end;
+        }
+
+        game::SectorBakedObjectLightProbeSectorRange range;
+        range.sectorId = sectorId;
+        range.begin = static_cast<int>(begin);
+        range.count = static_cast<int>(end - begin);
+        data.sectorRanges.push_back(range);
+        begin = end;
+    }
+    return data;
+}
+
+void TestObjectLightProbeSamplingInterpolatesAndPrefersSector()
+{
+    game::SectorBakedObjectLightProbeRuntimeData data = MakeSamplingRuntimeData({
+            SamplingProbe(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}),
+            SamplingProbe(10, Vector3{10.0f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}),
+            SamplingProbe(20, Vector3{5.0f, 0.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}),
+    });
+
+    const game::BakedObjectLightingSample sameSector =
+            game::SampleBakedObjectLighting(data, Vector3{5.0f, 0.0f, 0.0f}, 10, nullptr);
+    Check(sameSector.valid, "object light probe sampling returns valid sample for loaded sector probes");
+    Check(SameVector(sameSector.ambientCube[0], Vector3{0.5f, 0.0f, 0.5f}),
+          "object light probe sampling interpolates nearest same-sector probes");
+
+    const game::BakedObjectLightingSample preferred =
+            game::SampleBakedObjectLighting(data, Vector3{5.0f, 0.0f, 0.0f}, 20, nullptr);
+    Check(preferred.valid, "object light probe sampling returns valid exact preferred-sector sample");
+    Check(SameVector(preferred.ambientCube[0], Vector3{0.0f, 1.0f, 0.0f}),
+          "object light probe sampling prefers same-sector probes over nearer or coincident other-sector probes");
+
+    const game::BakedObjectLightingSample anyProbe =
+            game::SampleBakedObjectLighting(data, Vector3{10.0f, 0.0f, 0.0f}, 999, nullptr);
+    Check(anyProbe.valid, "object light probe sampling falls back to any loaded probe when preferred sector has no probes");
+    Check(SameVector(anyProbe.ambientCube[0], Vector3{0.0f, 0.0f, 1.0f}),
+          "object light probe sampling any-probe fallback is deterministic nearest-probe lighting");
+}
+
+void TestObjectLightProbeSamplingFallbacksAndFiniteOutput()
+{
+    const game::SectorBakedObjectLightProbeRuntimeData emptyData;
+    game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
+    game::SectorTopologySector* sector = game::FindSectorTopologySector(map, 10);
+    Check(sector != nullptr, "object light probe sampling fallback test sector exists");
+    if (sector != nullptr) {
+        sector->ambientColor = Color{64, 128, 255, 255};
+        sector->ambientIntensity = 0.5f;
+    }
+
+    const game::BakedObjectLightingSample sectorAmbient =
+            game::SampleBakedObjectLighting(emptyData, Vector3{}, 10, &map);
+    Check(!sectorAmbient.valid, "object light probe sampling sector-ambient fallback is marked fallback");
+    Check(SameVector(sectorAmbient.ambientCube[0], Vector3{0.125490f, 0.250980f, 0.5f}),
+          "object light probe sampling falls back to sector ambient when map and sector are available");
+
+    const game::BakedObjectLightingSample neutral =
+            game::SampleBakedObjectLighting(emptyData, Vector3{}, 999, nullptr);
+    Check(!neutral.valid, "object light probe sampling neutral result is marked fallback");
+    for (int face = 0; face < 6; ++face) {
+        Check(SameVector(neutral.ambientCube[face], Vector3{0.15f, 0.15f, 0.15f}),
+              "object light probe sampling neutral fallback uses dim neutral cube");
+        Check(FiniteVector(sectorAmbient.ambientCube[face]) && FiniteVector(neutral.ambientCube[face]),
+              "object light probe sampling fallback outputs are finite");
+    }
+}
+
+void TestObjectLightProbeBakeWritesSidecarAndStats()
+{
+    const std::filesystem::path sandbox = ObjectProbePhase01aSandboxDir();
+    std::filesystem::create_directories(sandbox);
+    const std::filesystem::path outputPath = sandbox / "phase_03b_success.lightmap.png";
+    const std::filesystem::path sidecarPath =
+            game::MakeSectorObjectProbeSidecarPathForLightmapPath(outputPath.string());
+    std::error_code removeError;
+    std::filesystem::remove(outputPath, removeError);
+    std::filesystem::remove(sidecarPath, removeError);
+
+    game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
+    map.lightmapSettings.objectProbeSpacingWorld = 4.0f;
+    map.lightmapSettings.objectProbeHeightWorld = 1.2f;
+
+    game::SectorLightmapLayout layout;
+    std::string error;
+    Check(game::BuildSectorLightmapLayout(map, layout, error), "phase 3b lightmap layout builds");
+
+    game::SectorLightmapBakeResult result;
+    Check(game::BakeSectorLightmap(map, layout, outputPath.string().c_str(), result, error),
+          "phase 3b bake writes atlas and object probe sidecar");
+    Check(std::filesystem::exists(outputPath), "phase 3b bake writes atlas file");
+    Check(std::filesystem::exists(sidecarPath), "phase 3b bake writes object probe sidecar file");
+    Check(result.objectProbes.path == sidecarPath.string(),
+          "phase 3b bake result reports object probe sidecar path");
+    Check(result.objectProbes.version == game::kSectorBakedObjectLightProbeSidecarVersion
+                  && result.objectProbes.sourceHash == result.sourceHash
+                  && result.objectProbes.count > 0
+                  && Near(result.objectProbes.probeSpacingWorld, 4.0f)
+                  && Near(result.objectProbes.probeHeightWorld, 1.2f)
+                  && result.objectProbes.format == game::kSectorBakedObjectLightProbeSidecarFormat,
+          "phase 3b bake result reports compact object probe metadata");
+    Check(result.objectProbeBakeSeconds >= 0.0 && result.objectProbeSidecarWriteSeconds >= 0.0,
+          "phase 3b bake result reports object probe timings");
+
+    std::vector<game::SectorBakedObjectLightProbe> loaded;
+    game::SectorBakedObjectLightProbeMetadata metadata;
+    Check(game::ReadSectorBakedObjectLightProbeSidecar(
+                  sidecarPath.string(),
+                  &result.objectProbes,
+                  loaded,
+                  metadata,
+                  error),
+          "phase 3b written object probe sidecar reads with result metadata");
+    Check(static_cast<int>(loaded.size()) == result.objectProbes.count
+                  && metadata.count == result.objectProbes.count,
+          "phase 3b sidecar probe count matches metadata");
+
+    const std::string report = game::FormatSectorLightmapBakeReport(result);
+    Check(report.find("Object light probes:") != std::string::npos
+                  && report.find("Object probe sidecar:") != std::string::npos
+                  && report.find("Object probe bake:") != std::string::npos,
+          "phase 3b bake report includes object probe stats");
+
+    std::filesystem::remove(outputPath, removeError);
+    std::filesystem::remove(sidecarPath, removeError);
+}
+
+void TestObjectLightProbeBakeCancellationDoesNotMarkValid()
+{
+    const std::filesystem::path sandbox = ObjectProbePhase01aSandboxDir();
+    std::filesystem::create_directories(sandbox);
+    const std::filesystem::path outputPath = sandbox / "phase_03b_cancelled.lightmap.png";
+    const std::filesystem::path sidecarPath =
+            game::MakeSectorObjectProbeSidecarPathForLightmapPath(outputPath.string());
+    std::error_code removeError;
+    std::filesystem::remove(outputPath, removeError);
+    std::filesystem::remove(sidecarPath, removeError);
+
+    const game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
+    game::SectorLightmapLayout layout;
+    std::string error;
+    Check(game::BuildSectorLightmapLayout(map, layout, error), "phase 3b cancellation layout builds");
+
+    game::SectorLightmapBakeCallbacks callbacks;
+    callbacks.isCancellationRequested = []() { return true; };
+
+    game::SectorLightmapBakeResult result;
+    Check(!game::BakeSectorLightmap(map, layout, outputPath.string().c_str(), callbacks, result, error),
+          "phase 3b cancelled bake fails without installing probe metadata");
+    Check(result.objectProbes.path.empty() && result.objectProbes.count == 0,
+          "phase 3b cancelled bake leaves object probe metadata empty");
+    Check(!std::filesystem::exists(sidecarPath),
+          "phase 3b cancelled bake does not leave an object probe sidecar");
+
+    std::filesystem::remove(outputPath, removeError);
+    std::filesystem::remove(sidecarPath, removeError);
+}
+
+std::vector<game::SectorBakedObjectLightProbe> BuildObjectProbePlacementsForTest(
+        const game::SectorTopologyMap& map,
+        std::vector<game::SectorBakedObjectLightProbePlacementDiagnostic>* diagnostics = nullptr)
+{
+    std::vector<game::SectorBakedObjectLightProbe> probes;
+    std::string error;
+    const game::SectorBakedObjectLightProbePlacementSettings settings;
+    Check(game::BuildSectorBakedObjectLightProbePlacements(map, settings, probes, diagnostics, error),
+          "object light probe placement builds");
+    Check(error.empty(), "object light probe placement has no error on success");
+    return probes;
+}
+
+int CountProbesForSector(const std::vector<game::SectorBakedObjectLightProbe>& probes, int sectorId)
+{
+    int count = 0;
+    for (const game::SectorBakedObjectLightProbe& probe : probes) {
+        if (probe.sectorId == sectorId) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool HasProbeNear(
+        const std::vector<game::SectorBakedObjectLightProbe>& probes,
+        int sectorId,
+        float x,
+        float z)
+{
+    for (const game::SectorBakedObjectLightProbe& probe : probes) {
+        if (probe.sectorId == sectorId && Near(probe.position.x, x) && Near(probe.position.z, z)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void TestObjectLightProbePlacementGridCounts()
+{
+    const std::vector<game::SectorBakedObjectLightProbe> corridor =
+            BuildObjectProbePlacementsForTest(MakeProbeRectangle(2048, 512));
+    Check(CountProbesForSector(corridor, 10) == 4,
+          "long corridor receives multiple object light probes");
+
+    const std::vector<game::SectorBakedObjectLightProbe> room =
+            BuildObjectProbePlacementsForTest(MakeProbeRectangle(1024, 1024));
+    Check(CountProbesForSector(room, 10) == 4,
+          "large room receives multiple object light probes");
+    Check(HasProbeNear(room, 10, 2.0f, 2.0f)
+                  && HasProbeNear(room, 10, 6.0f, 2.0f)
+                  && HasProbeNear(room, 10, 2.0f, 6.0f)
+                  && HasProbeNear(room, 10, 6.0f, 6.0f),
+          "object light probe placement converts topology coordinates to world positions");
+    for (const game::SectorBakedObjectLightProbe& probe : room) {
+        Check(Near(probe.position.y, 1.2f), "object light probe uses floor plus default torso height");
+    }
+}
+
+void TestObjectLightProbePlacementRejectsConcaveVoid()
+{
+    const std::vector<game::SectorBakedObjectLightProbe> probes =
+            BuildObjectProbePlacementsForTest(MakeProbeConcaveSector());
+    Check(CountProbesForSector(probes, 10) == 3,
+          "concave sector object light probe placement keeps only interior grid points");
+    Check(!HasProbeNear(probes, 10, 6.0f, 6.0f),
+          "concave sector object light probe placement rejects AABB points outside the polygon");
+}
+
+void TestObjectLightProbePlacementRejectsHoles()
+{
+    const std::vector<game::SectorBakedObjectLightProbe> probes =
+            BuildObjectProbePlacementsForTest(MakeProbeHoleSector());
+    Check(!HasProbeNear(probes, 10, 6.0f, 6.0f),
+          "object light probe placement rejects parent-sector hole points");
+    Check(HasProbeNear(probes, 20, 6.0f, 6.0f),
+          "object light probe placement still places probes in the sector inside the hole");
+}
+
+void TestObjectLightProbePlacementFallbackAndLowCeiling()
+{
+    game::SectorTopologyMap small = MakeSquare();
+    game::FindSectorTopologySector(small, 10)->ceilingZ = game::SectorWorldToAuthoringDistance(0.8f);
+
+    std::vector<game::SectorBakedObjectLightProbePlacementDiagnostic> diagnostics;
+    const std::vector<game::SectorBakedObjectLightProbe> probes =
+            BuildObjectProbePlacementsForTest(small, &diagnostics);
+    Check(CountProbesForSector(probes, 10) == 1,
+          "small sector receives one fallback object light probe");
+    Check(!probes.empty() && Near(probes.front().position.y, 0.4f),
+          "low ceiling object light probe height is clamped to sector midpoint");
+
+    bool sawFallback = false;
+    bool sawHeightClamp = false;
+    for (const game::SectorBakedObjectLightProbePlacementDiagnostic& diagnostic : diagnostics) {
+        sawFallback = sawFallback || diagnostic.message.find("fallback") != std::string::npos;
+        sawHeightClamp = sawHeightClamp || diagnostic.message.find("clamped") != std::string::npos;
+    }
+    Check(sawFallback, "object light probe placement records small-sector fallback diagnostic");
+    Check(sawHeightClamp, "object light probe placement records low-ceiling height diagnostic");
+}
+
+game::SectorBakedObjectLightProbe MakeProbeAt(Vector3 position, int sectorId = 10)
+{
+    game::SectorBakedObjectLightProbe probe;
+    probe.sectorId = sectorId;
+    probe.position = position;
+    return probe;
+}
+
+game::SectorTopologyMap MakeObjectProbeLightingMap()
+{
+    game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
+    map.staticLights.clear();
+    map.staticSpotLights.clear();
+    map.directionalLight.enabled = false;
+    for (game::SectorTopologySector& sector : map.sectors) {
+        sector.ambientIntensity = 0.0f;
+    }
+    return map;
+}
+
+std::vector<game::SectorBakedObjectLightProbe> BakeObjectProbeLighting(
+        game::SectorTopologyMap map,
+        std::vector<game::SectorBakedObjectLightProbe> probes)
+{
+    std::string error;
+    Check(game::BakeSectorBakedObjectLightProbeAmbientCubes(map, probes, error),
+          "object light probe ambient cube bake succeeds");
+    Check(error.empty(), "object light probe ambient cube bake has no error on success");
+    return probes;
+}
+
+void TestObjectLightProbePointAndDirectionalLighting()
+{
+    game::SectorTopologyMap pointMap = MakeObjectProbeLightingMap();
+    pointMap.staticLights.push_back(game::SectorTopologyStaticPointLight{
+            200,
+            WorldToAuthoring(Vector3{6.0f, 1.2f, 4.0f}),
+            Color{255, 64, 32, 255},
+            2.0f,
+            game::SectorWorldToAuthoringDistance(6.0f),
+            0.0f
+    });
+    const std::vector<game::SectorBakedObjectLightProbe> pointProbes =
+            BakeObjectProbeLighting(pointMap, {MakeProbeAt(Vector3{4.0f, 1.2f, 4.0f})});
+    Check(!pointProbes.empty() && Brightness(pointProbes.front().ambientCube[0]) > 0.05f,
+          "static point light contributes to facing object probe cube side");
+    Check(Brightness(pointProbes.front().ambientCube[0])
+                  > Brightness(pointProbes.front().ambientCube[1]) + 0.05f,
+          "static point light is strongest on the object probe side facing the light");
+
+    game::SectorTopologyMap directionalMap = MakeObjectProbeLightingMap();
+    directionalMap.sectors[0].ceilingSky = true;
+    directionalMap.directionalLight.enabled = true;
+    directionalMap.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
+    directionalMap.directionalLight.color = Color{64, 128, 255, 255};
+    directionalMap.directionalLight.intensity = 0.75f;
+    const std::vector<game::SectorBakedObjectLightProbe> directionalProbes =
+            BakeObjectProbeLighting(directionalMap, {MakeProbeAt(Vector3{4.0f, 1.2f, 4.0f})});
+    Check(Brightness(directionalProbes.front().ambientCube[2]) > 0.05f,
+          "static directional light contributes to object probes when unoccluded");
+    Check(Brightness(directionalProbes.front().ambientCube[2])
+                  > Brightness(directionalProbes.front().ambientCube[3]) + 0.05f,
+          "static directional light follows ambient cube face direction");
+}
+
+void TestObjectLightProbeSpotlightCone()
+{
+    game::SectorTopologyMap insideCone = MakeObjectProbeLightingMap();
+    insideCone.staticSpotLights.push_back(game::SectorTopologyStaticSpotLight{
+            201,
+            WorldToAuthoring(Vector3{6.0f, 1.2f, 4.0f}),
+            WorldToAuthoring(Vector3{4.0f, 1.2f, 4.0f}),
+            WHITE,
+            4.0f,
+            game::SectorWorldToAuthoringDistance(8.0f),
+            12.0f,
+            24.0f,
+            0.0f
+    });
+    const std::vector<game::SectorBakedObjectLightProbe> lit =
+            BakeObjectProbeLighting(insideCone, {MakeProbeAt(Vector3{4.0f, 1.2f, 4.0f})});
+
+    game::SectorTopologyMap outsideCone = MakeObjectProbeLightingMap();
+    outsideCone.staticSpotLights.push_back(game::SectorTopologyStaticSpotLight{
+            202,
+            WorldToAuthoring(Vector3{6.0f, 1.2f, 4.0f}),
+            WorldToAuthoring(Vector3{8.0f, 1.2f, 4.0f}),
+            WHITE,
+            4.0f,
+            game::SectorWorldToAuthoringDistance(8.0f),
+            12.0f,
+            24.0f,
+            0.0f
+    });
+    const std::vector<game::SectorBakedObjectLightProbe> unlit =
+            BakeObjectProbeLighting(outsideCone, {MakeProbeAt(Vector3{4.0f, 1.2f, 4.0f})});
+
+    Check(Brightness(lit.front().ambientCube[0]) > Brightness(unlit.front().ambientCube[0]) + 0.2f,
+          "static spotlight cone affects object probe cube contribution");
+    Check(Brightness(lit.front().ambientCube[0]) > Brightness(lit.front().ambientCube[1]) + 0.2f,
+          "static spotlight contribution follows object probe face direction");
+}
+
+void TestObjectLightProbeOcclusionAndAlphaOcclusion()
+{
+    game::SectorTopologyMap solidWall = MakeObjectProbeLightingMap();
+    solidWall.staticLights.push_back(game::SectorTopologyStaticPointLight{
+            203,
+            WorldToAuthoring(Vector3{10.0f, 1.2f, 4.0f}),
+            WHITE,
+            8.0f,
+            game::SectorWorldToAuthoringDistance(8.0f),
+            0.0f
+    });
+    const std::vector<game::SectorBakedObjectLightProbe> blocked =
+            BakeObjectProbeLighting(solidWall, {MakeProbeAt(Vector3{6.0f, 1.2f, 4.0f})});
+    Check(Brightness(blocked.front().ambientCube[0]) < 0.01f,
+          "solid sector wall blocks object probe direct point light contribution");
+
+    const std::filesystem::path transparentPath = Phase01bSandboxDir() / "phase03a_probe_transparent.png";
+    const std::filesystem::path opaquePath = Phase01bSandboxDir() / "phase03a_probe_opaque.png";
+    WriteSolidAlphaTestTexture(transparentPath, 0);
+    WriteSolidAlphaTestTexture(opaquePath, 255);
+
+    auto makeAlphaProbeMap = [](const std::filesystem::path& texturePath) {
+        game::SectorTopologyMap map = MakeAlphaMiddleOcclusionBakeMap(texturePath);
+        map.staticLights.clear();
+        map.staticSpotLights.clear();
+        map.directionalLight.enabled = false;
+        for (game::SectorTopologySector& sector : map.sectors) {
+            sector.ambientIntensity = 0.0f;
+        }
+        map.staticLights.push_back(game::SectorTopologyStaticPointLight{
+                204,
+                WorldToAuthoring(Vector3{0.75f, 0.25f, 0.25f}),
+                WHITE,
+                8.0f,
+                game::SectorWorldToAuthoringDistance(2.0f),
+                0.0f
+        });
+        return map;
+    };
+
+    const std::vector<game::SectorBakedObjectLightProbe> transparent =
+            BakeObjectProbeLighting(
+                    makeAlphaProbeMap(transparentPath),
+                    {MakeProbeAt(Vector3{0.25f, 0.25f, 0.25f})});
+    const std::vector<game::SectorBakedObjectLightProbe> opaque =
+            BakeObjectProbeLighting(
+                    makeAlphaProbeMap(opaquePath),
+                    {MakeProbeAt(Vector3{0.25f, 0.25f, 0.25f})});
+    Check(Brightness(transparent.front().ambientCube[0])
+                  > Brightness(opaque.front().ambientCube[0]) + 0.2f,
+          "alpha-tested transparent middle texels let object probe direct lighting pass");
+}
+
+void TestObjectLightProbeAmbientAndDegenerateFiniteOutput()
+{
+    game::SectorTopologyMap map = MakeObjectProbeLightingMap();
+    game::SectorTopologySector* sector = game::FindSectorTopologySector(map, 10);
+    Check(sector != nullptr, "object probe ambient test sector exists");
+    if (sector != nullptr) {
+        sector->ambientColor = Color{64, 128, 255, 255};
+        sector->ambientIntensity = 0.5f;
+    }
+    map.staticLights.push_back(game::SectorTopologyStaticPointLight{
+            205,
+            WorldToAuthoring(Vector3{4.0f, 1.2f, 4.0f}),
+            WHITE,
+            8.0f,
+            game::SectorWorldToAuthoringDistance(8.0f),
+            0.0f
+    });
+    map.staticSpotLights.push_back(game::SectorTopologyStaticSpotLight{
+            206,
+            WorldToAuthoring(Vector3{4.0f, 1.2f, 4.0f}),
+            WorldToAuthoring(Vector3{4.0f, 1.2f, 4.0f}),
+            WHITE,
+            8.0f,
+            game::SectorWorldToAuthoringDistance(8.0f),
+            12.0f,
+            24.0f,
+            0.0f
+    });
+
+    const std::vector<game::SectorBakedObjectLightProbe> probes =
+            BakeObjectProbeLighting(map, {MakeProbeAt(Vector3{4.0f, 1.2f, 4.0f})});
+    Check(!probes.empty(), "object probe ambient and degenerate test produced a probe");
+    for (int face = 0; face < 6 && !probes.empty(); ++face) {
+        Check(FiniteVector(probes.front().ambientCube[face]),
+              "object probe degenerate direct light cases produce finite ambient cube output");
+        Check(probes.front().ambientCube[face].x > 0.12f
+                      && probes.front().ambientCube[face].y > 0.24f
+                      && probes.front().ambientCube[face].z > 0.49f,
+              "sector ambient baseline appears on every object probe cube face");
+    }
+}
+
 } // namespace
 
 int main()
 {
+    TestObjectLightProbeSidecarRoundTrip();
+    TestObjectLightProbeSidecarRejectsInvalidFiles();
+    TestObjectLightProbeRuntimeDataLoadsAndBuildsSectorRanges();
+    TestObjectLightProbeRuntimeDataRejectsUnavailableInputs();
+    TestObjectLightProbeSamplingInterpolatesAndPrefersSector();
+    TestObjectLightProbeSamplingFallbacksAndFiniteOutput();
+    TestObjectLightProbeBakeWritesSidecarAndStats();
+    TestObjectLightProbeBakeCancellationDoesNotMarkValid();
+    TestObjectLightProbePlacementGridCounts();
+    TestObjectLightProbePlacementRejectsConcaveVoid();
+    TestObjectLightProbePlacementRejectsHoles();
+    TestObjectLightProbePlacementFallbackAndLowCeiling();
+    TestObjectLightProbePointAndDirectionalLighting();
+    TestObjectLightProbeSpotlightCone();
+    TestObjectLightProbeOcclusionAndAlphaOcclusion();
+    TestObjectLightProbeAmbientAndDegenerateFiniteOutput();
     TestSourceHashChanges();
     TestSourceHashIncludesMiddleTextureData();
     TestSourceHashStableWhenVectorsReordered();

@@ -834,6 +834,8 @@ void TestLightmapMetadataRoundTrip()
     original.lightmapSettings.ambientOcclusionStrength = 0.25f;
     original.lightmapSettings.indirectBounceRadius = 9.0f;
     original.lightmapSettings.indirectBounceStrength = 0.35f;
+    original.lightmapSettings.objectProbeSpacingWorld = 5.5f;
+    original.lightmapSettings.objectProbeHeightWorld = 1.4f;
     original.bakedLightmap.path = "assets/levels/test/test.lightmap.png";
     original.bakedLightmap.width = 2048;
     original.bakedLightmap.height = 2048;
@@ -852,7 +854,9 @@ void TestLightmapMetadataRoundTrip()
     Check(std::fabs(loaded.lightmapSettings.ambientOcclusionRadius - 3.5f) <= 0.0001f
                   && std::fabs(loaded.lightmapSettings.ambientOcclusionStrength - 0.25f) <= 0.0001f
                   && std::fabs(loaded.lightmapSettings.indirectBounceRadius - 9.0f) <= 0.0001f
-                  && std::fabs(loaded.lightmapSettings.indirectBounceStrength - 0.35f) <= 0.0001f,
+                  && std::fabs(loaded.lightmapSettings.indirectBounceStrength - 0.35f) <= 0.0001f
+                  && Near(loaded.lightmapSettings.objectProbeSpacingWorld, 5.5f)
+                  && Near(loaded.lightmapSettings.objectProbeHeightWorld, 1.4f),
           "topology lightmap settings round-trip");
     Check(loaded.bakedLightmap.path == original.bakedLightmap.path
                   && loaded.bakedLightmap.width == 2048
@@ -870,6 +874,15 @@ void TestLightmapMetadataRoundTrip()
                   && oldStyle.bakedLightmap.height == 0
                   && oldStyle.bakedLightmap.sourceHash.empty(),
           "omitted baked lightmap metadata loads empty");
+
+    Json oldSettings = saved;
+    oldSettings["lightmapSettings"].erase("objectProbeSpacingWorld");
+    oldSettings["lightmapSettings"].erase("objectProbeHeightWorld");
+    SectorTopologyMap oldSettingsStyle;
+    Check(LoadText(oldSettings.dump(), oldSettingsStyle, error), "old topology lightmap settings load");
+    Check(Near(oldSettingsStyle.lightmapSettings.objectProbeSpacingWorld, 4.0f)
+                  && Near(oldSettingsStyle.lightmapSettings.objectProbeHeightWorld, 1.2f),
+          "old topology lightmap settings default object probe settings");
 }
 
 void TestPreviewSettingsRoundTripAndValidation()

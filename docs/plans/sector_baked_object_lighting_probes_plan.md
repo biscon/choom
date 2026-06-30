@@ -35,107 +35,107 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_01",
       "title": "Probe Data Metadata And Binary Sidecar Format",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01a",
       "title": "Add Probe Types Metadata And Binary Read Write Helpers",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01b",
       "title": "Wire Probe Metadata Into Lightmap Status And Serialization",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02",
       "title": "Probe Placement Builder",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02a",
       "title": "Generate Sector Probe Positions At Actor Torso Height",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02b",
       "title": "Add Probe Placement Settings Hashing And Tests",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03",
       "title": "Bake Ambient Cube Probe Lighting",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03a",
       "title": "Bake Direct Static Lighting Into Probe Ambient Cubes",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03b",
       "title": "Add Probe Bake Output Sidecar And Bake Result Stats",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04",
       "title": "Runtime Probe Loading And Sampling API",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04a",
       "title": "Load Probe Sidecar And Build Sector Probe Ranges",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04b",
       "title": "Add SampleBakedObjectLighting Runtime API",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05",
       "title": "Probe Debug Visualization And Consumer Documentation",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05a",
       "title": "Add Probe Debug Overlay And Documentation",
       "type": "pass",
       "parent": "phase_05",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_06",
       "title": "Polish Tests Versioning And Plan Completion",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_06a",
       "title": "Bump Bake Version Strengthen Tests And Close Plan",
       "type": "pass",
       "parent": "phase_06",
-      "status": "Not Started"
+      "status": "Completed"
     }
   ]
 }
@@ -145,22 +145,22 @@ When an agent is asked to execute this plan, it must:
 
 | Phase / Pass                                                         | Status      | Date | Notes                                                                                |
 | -------------------------------------------------------------------- | ----------- | ---- | ------------------------------------------------------------------------------------ |
-| Phase 1: Probe Data Metadata And Binary Sidecar Format               | Not Started |      | Parent phase.                                                                        |
-| Phase 1A: Add Probe Types Metadata And Binary Read Write Helpers     | Not Started |      | First executable pass. Defines data and sidecar format without changing bake output. |
-| Phase 1B: Wire Probe Metadata Into Lightmap Status And Serialization | Not Started |      | JSON stores sidecar metadata/path only, not full probe payload.                      |
-| Phase 2: Probe Placement Builder                                     | Not Started |      | Parent phase.                                                                        |
-| Phase 2A: Generate Sector Probe Positions At Actor Torso Height      | Not Started |      | Multiple probes per sector at floor + 1.2 world units.                               |
-| Phase 2B: Add Probe Placement Settings Hashing And Tests             | Not Started |      | Settings/source hash/version integration.                                            |
-| Phase 3: Bake Ambient Cube Probe Lighting                            | Not Started |      | Parent phase.                                                                        |
-| Phase 3A: Bake Direct Static Lighting Into Probe Ambient Cubes       | Not Started |      | Static point/spot/directional probe direct lighting.                                 |
-| Phase 3B: Add Probe Bake Output Sidecar And Bake Result Stats        | Not Started |      | Writes binary sidecar next to lightmap atlas.                                        |
-| Phase 4: Runtime Probe Loading And Sampling API                      | Not Started |      | Parent phase.                                                                        |
-| Phase 4A: Load Probe Sidecar And Build Sector Probe Ranges           | Not Started |      | Runtime data preparation.                                                            |
-| Phase 4B: Add SampleBakedObjectLighting Runtime API                  | Not Started |      | Consumer API for future sprites/models.                                              |
-| Phase 5: Probe Debug Visualization And Consumer Documentation        | Not Started |      | Parent phase.                                                                        |
-| Phase 5A: Add Probe Debug Overlay And Documentation                  | Not Started |      | Visualization and docs for future renderers.                                         |
-| Phase 6: Polish Tests Versioning And Plan Completion                 | Not Started |      | Parent phase.                                                                        |
-| Phase 6A: Bump Bake Version Strengthen Tests And Close Plan          | Not Started |      | Final validation and closure.                                                        |
+| Phase 1: Probe Data Metadata And Binary Sidecar Format               | Completed   | 2026-06-30 | Phase 1A and Phase 1B complete.                                                      |
+| Phase 1A: Add Probe Types Metadata And Binary Read Write Helpers     | Completed   | 2026-06-30 | Added probe data/metadata types and explicit little-endian binary sidecar helpers with tests. Bake/render output unchanged. |
+| Phase 1B: Wire Probe Metadata Into Lightmap Status And Serialization | Completed   | 2026-06-30 | JSON stores optional sidecar metadata/path only; object probe status is separate from surface lightmap status. |
+| Phase 2: Probe Placement Builder                                     | Completed   | 2026-06-30 | Phase 2A and Phase 2B complete.                                                      |
+| Phase 2A: Generate Sector Probe Positions At Actor Torso Height      | Completed   | 2026-06-30 | Added placement builder for per-sector probe positions at floor + 1.2 world units.   |
+| Phase 2B: Add Probe Placement Settings Hashing And Tests             | Completed   | 2026-06-30 | Added placement settings to bake settings, serialization defaults, and source-hash coverage. |
+| Phase 3: Bake Ambient Cube Probe Lighting                            | Completed   | 2026-06-30 | Phase 3A and Phase 3B complete.                                                      |
+| Phase 3A: Bake Direct Static Lighting Into Probe Ambient Cubes       | Completed   | 2026-06-30 | Added direct static probe ambient-cube bake helper with focused tests.                |
+| Phase 3B: Add Probe Bake Output Sidecar And Bake Result Stats        | Completed   | 2026-06-30 | Lightmap bake now writes object probe sidecars and reports probe stats.              |
+| Phase 4: Runtime Probe Loading And Sampling API                      | Completed   | 2026-06-30 | Phase 4A and Phase 4B complete.                                                      |
+| Phase 4A: Load Probe Sidecar And Build Sector Probe Ranges           | Completed   | 2026-06-30 | Added runtime probe sidecar loading and per-sector probe ranges.                     |
+| Phase 4B: Add SampleBakedObjectLighting Runtime API                  | Completed   | 2026-06-30 | Added allocation-free runtime sampling API with probe, sector ambient, and neutral fallbacks. |
+| Phase 5: Probe Debug Visualization And Consumer Documentation        | Completed   | 2026-06-30 | Phase 5A complete.                                                                   |
+| Phase 5A: Add Probe Debug Overlay And Documentation                  | Completed   | 2026-06-30 | Added read-only 3D preview object-probe markers and updated consumer docs.           |
+| Phase 6: Polish Tests Versioning And Plan Completion                 | Completed   | 2026-06-30 | Phase 6A complete.                                                                   |
+| Phase 6A: Bump Bake Version Strengthen Tests And Close Plan          | Completed   | 2026-06-30 | Bumped bake version for object probe output, strengthened version/status tests, and closed the plan. |
 
 ## Execution Tracking Rules
 
@@ -428,6 +428,19 @@ Tests:
 * metadata count mismatch detected where applicable
 * no JSON full-payload writing
 
+Phase 1A result, 2026-06-30:
+
+* Source code changed: yes.
+* Added `SectorBakedObjectLightProbe` and `SectorBakedObjectLightProbeMetadata`.
+* Added binary sidecar helpers using magic `SOPB`, version `1`, and format `ambientCubeF32LE`.
+* Sidecar fields are written explicitly in little-endian order; helpers do not rely on C++ struct binary layout.
+* Metadata fields defined for later JSON wiring: `path`, `version`, `sourceHash`, `count`, `probeSpacingWorld`, `probeHeightWorld`, and `format`.
+* Invalid sector IDs are preserved by the binary helper because topology validation is not part of this format pass.
+* Phase 1A did not wire helpers into the bake path, serialization path, runtime loading, rendering, cache invalidation, or lightmap source hash.
+* Bake output, render output, existing lightmap metadata, and old map behavior are intended unchanged.
+* Generated test artifacts were written under `/tmp/sector_baked_object_light_probes_phase_01a`; the plan state block has no `sandbox_dir` field.
+* Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_lightmap`; `ctest --test-dir cmake-build-debug --output-on-failure`.
+
 #### Phase 1B: Wire Probe Metadata Into Lightmap Status And Serialization
 
 Goal:
@@ -470,6 +483,21 @@ Tests:
 * baked lightmap metadata with object probe metadata round-trips
 * metadata does not embed full probe payload
 * missing sidecar path/status handled safely
+
+Phase 1B result, 2026-06-30:
+
+* Source code changed: yes.
+* Added optional `objectProbes` metadata under `SectorLightmapMetadata`, using an empty probe path as absent metadata.
+* JSON writes compact probe sidecar metadata fields only: `path`, `version`, `sourceHash`, `count`, `probeSpacingWorld`, `probeHeightWorld`, and `format`.
+* JSON does not embed probe arrays or binary payload contents.
+* Old baked lightmap metadata without `objectProbes` remains backward compatible and round-trips without adding the field.
+* Added `GetSectorBakedObjectLightProbeStatus()` so missing, stale, invalid, or absent object probes are detectable separately from `GetSectorLightmapStatus()`.
+* Missing object probe metadata reports `None`; missing probe sidecar files report `Stale` for object probe status only.
+* Existing surface lightmap status, bake output, render output, runtime loading, and editor tools are intended unchanged.
+* Lightmap source-hash behavior is unchanged; object probe status compares probe metadata against the existing lightmap source hash but does not add metadata fields to `ComputeSectorLightmapSourceHash()`.
+* No topology mutation code was touched, so 2D topology render-cache invalidation behavior is unchanged.
+* Generated test artifacts were limited to existing test temp paths; the plan state block has no `sandbox_dir` field.
+* Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_authoring_graph|sector_topology_lightmap"`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`.
 
 ### Phase 2: Probe Placement Builder
 
@@ -573,6 +601,20 @@ Tests:
 * low ceiling does not produce invalid probe height
 * world/authoring unit conversion works
 
+Phase 2A result, 2026-06-30:
+
+* Source code changed: yes.
+* Added `BuildSectorBakedObjectLightProbePlacements()` with default placement settings of `probeSpacingWorld = 4.0f` and `probeHeightWorld = 1.2f`.
+* Placement extracts existing topology loops, builds exact-coordinate outer/hole polygons, walks grid cell centers over each sector AABB, rejects boundary/outside/hole points, and converts accepted topology coordinates to runtime world positions.
+* Probe Y is sector floor world height plus 1.2 world units by default; low ceilings clamp placement to the sector floor/ceiling midpoint and record a placement diagnostic.
+* Small sectors or sectors where no grid point survives receive one representative fallback probe inside the sector and record a fallback diagnostic.
+* Added focused placement tests for long corridors, large rooms, concave sectors, hole sectors, fallback placement, low ceilings, and world/authoring unit conversion.
+* Bake output, sidecar output, serialization output, runtime rendering, runtime loading, and editor tools are intended unchanged; the placement builder is not called by the bake path yet.
+* Lightmap source-hash behavior is unchanged in this pass; Phase 2B remains responsible for placement settings hash integration.
+* No topology mutation code was touched, so 2D topology render-cache invalidation behavior is unchanged.
+* No Phase 2A generated artifacts are written; existing Phase 1A sidecar tests continue to use `/tmp/sector_baked_object_light_probes_phase_01a`. The plan state block has no `sandbox_dir` field.
+* Verification passed: `cmake --build cmake-build-debug --target sector_topology_lightmap_tests -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_lightmap`; `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`.
+
 #### Phase 2B: Add Probe Placement Settings Hashing And Tests
 
 Goal:
@@ -603,6 +645,20 @@ Tests:
 * default settings load when missing
 * settings serialize if project style expects lightmapSettings to include them
 * old maps load with defaults
+
+Phase 2B result, 2026-06-30:
+
+* Source code changed: yes.
+* Added `objectProbeSpacingWorld = 4.0f` and `objectProbeHeightWorld = 1.2f` to `SectorLightmapBakeSettings`.
+* `lightmapSettings` JSON now writes those placement settings and loads old maps with default values when the fields are absent.
+* `ComputeSectorLightmapSourceHash()` now includes clamped object probe spacing and height settings, so changes to either setting stale baked output that shares the lightmap source hash.
+* Placement settings are stored and hashed in world units; serialization/hash clamping uses spacing range `0.25..128.0` world units and height range `0.0..16.0` world units.
+* Added tests covering source hash changes for spacing/height, serialization round-trip, and old-map default loading.
+* Bake output, sidecar output, runtime rendering, runtime loading, editor UI, and topology data are intended unchanged by this pass.
+* No topology mutation code was touched, so 2D topology render-cache invalidation behavior is unchanged.
+* No lightmap bake version bump was made in this pass; Phase 6A remains responsible for final versioning polish.
+* No generated artifacts were written by Phase 2B; existing Phase 1A sidecar tests continue to use `/tmp/sector_baked_object_light_probes_phase_01a`. The plan state block has no `sandbox_dir` field.
+* Verification passed: `cmake --build cmake-build-debug --target sector_topology_lightmap_tests sector_topology_serialization_tests -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_topology_lightmap|sector_topology_serialization"`.
 
 ### Phase 3: Bake Ambient Cube Probe Lighting
 
@@ -721,6 +777,23 @@ Tests:
 * sector ambient appears on all faces
 * degenerate cases produce finite output
 
+Phase 3A result, 2026-06-30:
+
+* Source code changed: yes.
+* Added `BakeSectorBakedObjectLightProbeAmbientCubes()` to compute ambient cubes for existing object probe placements without writing sidecars or updating baked metadata.
+* Probe face order remains the sidecar order: `+X`, `-X`, `+Y`, `-Y`, `+Z`, `-Z`.
+* Probe lighting formula is `clamp01(sector ambient baseline + static direct point/spot/directional contribution)` per cube face.
+* Static point lights and static spotlights reuse existing world-space attenuation, cone, source-radius sampling, and alpha-aware BVH occlusion semantics.
+* Static directional light contributes to probe faces when the face points toward `directionToLight` and the alpha-aware occlusion ray is unblocked; it is not explicitly restricted to sky-owned surfaces, but closed indoor geometry can still block it.
+* Sector ambient color/intensity is added to every cube face for probes whose sector ID resolves to a sector.
+* Added focused tests for point-light face direction, spotlight cone behavior, solid occlusion, alpha-tested transparent occlusion, directional contribution, sector ambient, and degenerate finite output.
+* Phase 3A does not generate probe placements, write object-probe sidecars, update object-probe metadata, add bake result stats, load runtime probes, or alter rendering.
+* Surface lightmap atlas RGB/A behavior and existing surface static-light evaluation are intended unchanged.
+* Lightmap source-hash behavior is unchanged in this pass; Phase 2B already added probe placement settings to the hash, and Phase 6A remains responsible for final versioning polish.
+* No topology mutation code was touched, so 2D topology render-cache invalidation behavior is unchanged.
+* Generated test artifacts were limited to existing test temp paths under `/tmp/sector_lightmap_alpha_occlusion_phase_01b`; the plan state block has no `sandbox_dir` field.
+* Verification passed: `cmake --build cmake-build-debug --target sector_topology_lightmap_tests -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_lightmap`; `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`.
+
 #### Phase 3B: Add Probe Bake Output Sidecar And Bake Result Stats
 
 Goal:
@@ -758,6 +831,22 @@ Manual smoke:
 * confirm `.object_probes.bin` appears next to `.lightmap.png`
 * confirm metadata references it
 * confirm old maps without sidecar still load
+
+Phase 3B result, 2026-06-30:
+
+* Source code changed: yes.
+* `BakeSectorLightmap()` now generates object probe placements, bakes ambient cubes, and writes `<lightmap atlas basename>.object_probes.bin` after successful atlas export.
+* `SectorLightmapBakeResult` now carries compact object probe metadata, placement diagnostic count, object probe bake timing, and sidecar write timing; bake reports print those stats.
+* Async editor lightmap install now treats the temporary object probe sidecar as part of the bake output: cancelled/failed/discarded bakes delete temp sidecars, successful installs copy the sidecar beside the final atlas, and saved metadata points at the final asset-relative probe sidecar path.
+* Probe metadata source hash is set to the same bake source hash as the surface lightmap metadata; Phase 3B did not change `ComputeSectorLightmapSourceHash()` behavior or bump the bake version.
+* The binary sidecar format remains version `1`, magic `SOPB`, and format `ambientCubeF32LE`.
+* Existing maps without object probe metadata still load through the Phase 1B optional metadata path; this pass does not add runtime probe loading or sampling.
+* Surface lightmap RGB/A evaluation is intended unchanged except that successful bakes now also emit the derived object-probe sidecar.
+* No topology mutation code was touched, so 2D topology render-cache invalidation behavior is unchanged.
+* No gameplay, collision, sector lookup, camera, dynamic light, model renderer, or sprite renderer behavior changed.
+* Generated test artifacts were written only under `/tmp/sector_baked_object_light_probes_phase_01a` and existing lightmap test temp paths; the plan state block has no `sandbox_dir` field.
+* Manual GUI smoke was not performed.
+* Verification passed: `cmake --build cmake-build-debug --target sector_topology_lightmap_tests -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_lightmap`; `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`.
 
 ### Phase 4: Runtime Probe Loading And Sampling API
 
@@ -856,6 +945,21 @@ Tests:
 * sector ranges built correctly
 * malformed binary rejected safely
 
+Phase 4A result, 2026-06-30:
+
+* Source code changed: yes.
+* Added `SectorBakedObjectLightProbeRuntimeData` with loaded probes, compact per-sector ranges, and loaded metadata.
+* Added `LoadSectorBakedObjectLightProbeRuntimeData()` to load the resolved object-probe sidecar path from baked lightmap metadata.
+* Runtime loading requires object-probe metadata to be present, version `1`, format `ambientCubeF32LE`, non-stale source hash, and a readable binary sidecar.
+* The loader reuses the existing sidecar binary reader, so malformed files fail safely without leaving partial runtime data.
+* Loaded probes are sorted by `sectorId`; `sectorRanges` stores contiguous `[begin, begin + count)` ranges per sector for allocation-free future sampling queries.
+* Missing metadata, missing sidecar files, stale source hashes, invalid metadata, and malformed binaries report probes unavailable via a failed load and cleared runtime data.
+* Phase 4A does not add the `SampleBakedObjectLighting()` API; Phase 4B remains responsible for sampling and final fallback lighting values.
+* Existing sector rendering, dynamic lighting, save/load, bake output, binary format, and lightmap source-hash behavior are intended unchanged.
+* No topology mutation code was touched, so 2D topology render-cache invalidation behavior is unchanged.
+* Generated test artifacts were written only under `/tmp/sector_baked_object_light_probes_phase_01a`; the plan state block has no `sandbox_dir` field.
+* Verification passed: `cmake --build cmake-build-debug --target sector_topology_lightmap_tests -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_lightmap`; `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`.
+
 #### Phase 4B: Add SampleBakedObjectLighting Runtime API
 
 Goal:
@@ -905,6 +1009,22 @@ Tests:
 * neutral fallback safe
 * no allocations if testable
 * result is finite
+
+Phase 4B result, 2026-06-30:
+
+* Source code changed: yes.
+* Added `BakedObjectLightingSample` and `SampleBakedObjectLighting()` for future sprite/model consumers.
+* Sampling first looks up the `preferredSectorId` range built by Phase 4A, selects up to four nearest probes from that sector, and blends their ambient cubes with inverse-distance weights.
+* Sampling uses exact-probe lighting when the query is effectively on a probe, uses one probe directly when only one candidate exists, and keeps all query scratch state on the stack.
+* If the preferred sector has no loaded probes, sampling falls back deterministically to nearest probes from the loaded runtime probe array.
+* If no runtime probes are loaded, sampling falls back to the preferred sector ambient cube when a map/sector is available, otherwise to a neutral dim cube with RGB `0.15` on every face.
+* Added focused tests for interpolation, same-sector preference, any-probe fallback, sector-ambient fallback, neutral fallback, and finite fallback output.
+* Existing runtime probe loading path, binary sidecar format, bake output, serialization, rendering, dynamic lighting, save/load, and lightmap source-hash behavior are intended unchanged.
+* No topology mutation code was touched, so 2D topology render-cache invalidation behavior is unchanged.
+* No gameplay, collision, sector lookup, physics, camera, model renderer, sprite renderer, dynamic object shadows, or dynamic lights changed.
+* No new generated artifact location was added by Phase 4B; existing object-probe tests continue to use `/tmp/sector_baked_object_light_probes_phase_01a`. The plan state block has no `sandbox_dir` field.
+* Manual GUI verification was not performed.
+* Verification passed: `cmake --build cmake-build-debug --target sector_topology_lightmap_tests -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_lightmap`; `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`.
 
 ### Phase 5: Probe Debug Visualization And Consumer Documentation
 
@@ -1007,6 +1127,22 @@ Document future consumer contract:
 * missing probes fallback behavior
 * ambient cube face order
 
+Phase 5A result, 2026-06-30:
+
+* Source code changed: yes.
+* Added a read-only `Show Object Probes` toggle to the 3D preview overlay.
+* Entering or rebuilding 3D preview now loads valid baked object probe sidecars into editor debug runtime data; loading happens during preview setup/rebuild, not in the steady draw path.
+* The object-probe overlay draws small 3D markers at baked probe positions and colors each marker by average ambient-cube RGB.
+* The preview overlay reports object probe load status, including absent, stale, unavailable, or loaded probe data.
+* Updated `docs/sector_baked_object_lighting_probes_design.md` with the current sidecar, runtime sampling, debug overlay, fallback behavior, and future model/billboard consumer contract.
+* The debug overlay is visual-only and does not allow editing baked probes.
+* Bake output, binary sidecar format, runtime sampling behavior, save/load schema, and lightmap source-hash behavior are intended unchanged.
+* No topology mutation code was touched, so 2D topology render-cache invalidation behavior is unchanged.
+* No gameplay, collision, sector lookup, physics, camera, model renderer, sprite renderer, dynamic object shadows, or dynamic lights changed.
+* No generated artifacts were written by Phase 5A. The plan state block has no `sandbox_dir` field.
+* Manual GUI verification was not performed.
+* Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`.
+
 ### Phase 6: Polish Tests Versioning And Plan Completion
 
 Goal:
@@ -1106,6 +1242,28 @@ Ensure tests cover:
 * sector ambient fallback
 * neutral fallback
 * docs mention billboard/model usage contract
+
+Phase 6A result, 2026-06-30:
+
+* Source code changed: yes.
+* Bumped `kSectorLightmapBakeVersion` from `9` to `10` because successful lightmap bakes now include baked object lighting probe sidecar output.
+* `ComputeSectorLightmapSourceHash()` continues to include the bake version and clamped object probe spacing/height settings, so old bakes and old object-probe metadata stale through the source hash.
+* Strengthened the bake-version invalidation test to verify current object-probe metadata remains valid with the current hash and stale with a pre-object-probe hash.
+* Existing tests cover sidecar binary round-trip/rejection, compact metadata round-trip and old metadata loading, missing/stale sidecar status, placement for large/concave/hole/small sectors, finite ambient cube bake output, static point/spot/directional probe lighting, alpha-tested occlusion, runtime interpolation, sector ambient fallback, and neutral fallback.
+* Updated `docs/sector_baked_object_lighting_probes_design.md` to describe the implemented bake version, settings, metadata, source-hash, stale-probe, and fallback behavior.
+* Binary sidecar format remains magic `SOPB`, version `1`, and format `ambientCubeF32LE`.
+* Save/load remains backward compatible for old maps without object probe metadata.
+* No topology mutation code was touched, so 2D topology render-cache invalidation behavior is unchanged.
+* No gameplay, collision, sector lookup, physics, camera, model renderer, sprite renderer, dynamic object shadows, dynamic lights, or lightmap surface rendering behavior changed except source-hash version invalidation for old bakes.
+* Generated artifacts were limited to the existing test temp paths; the plan state block has no `sandbox_dir` field.
+* Manual GUI smoke was not performed.
+* Known deferred work remains limited to the deferred decisions below.
+* Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`.
+
+Final completion note, 2026-06-30:
+
+* All planned baked object lighting probe phases are complete.
+* The implementation stores compact JSON metadata, writes binary probe sidecars during successful bakes, loads and samples runtime probe data, provides read-only debug visualization, documents future model/billboard usage, and keeps out-of-scope renderer/entity/shadow work deferred.
 
 Manual smoke checklist:
 

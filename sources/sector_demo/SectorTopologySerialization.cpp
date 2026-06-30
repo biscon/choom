@@ -413,6 +413,20 @@ SectorLightmapBakeSettings ReadLightmapSettings(const Json& value, const std::st
             ReadFloat(value, "indirectBounceStrength", context),
             0.0f,
             1.0f);
+    settings.objectProbeSpacingWorld = ReadOptionalClampedFloat(
+            value,
+            "objectProbeSpacingWorld",
+            context,
+            settings.objectProbeSpacingWorld,
+            0.25f,
+            128.0f);
+    settings.objectProbeHeightWorld = ReadOptionalClampedFloat(
+            value,
+            "objectProbeHeightWorld",
+            context,
+            settings.objectProbeHeightWorld,
+            0.0f,
+            16.0f);
     return settings;
 }
 
@@ -547,6 +561,47 @@ SectorTopologyDirectionalLightSettings ReadDirectionalLightSettings(
     return NormalizeSectorTopologyDirectionalLightSettings(settings);
 }
 
+SectorBakedObjectLightProbeMetadata ReadBakedObjectLightProbeMetadata(
+        const Json& value,
+        const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorBakedObjectLightProbeMetadata metadata;
+    metadata.path = ReadString(value, "path", context);
+    metadata.version = ReadInt(value, "version", context);
+    metadata.sourceHash = ReadString(value, "sourceHash", context);
+    metadata.count = ReadInt(value, "count", context);
+    metadata.probeSpacingWorld = ReadFloat(value, "probeSpacingWorld", context);
+    metadata.probeHeightWorld = ReadFloat(value, "probeHeightWorld", context);
+    metadata.format = ReadString(value, "format", context);
+
+    if (metadata.path.empty()) {
+        Fail(context + ".path must not be empty");
+    }
+    if (metadata.version <= 0) {
+        Fail(context + ".version must be positive");
+    }
+    if (metadata.sourceHash.empty()) {
+        Fail(context + ".sourceHash must not be empty");
+    }
+    if (metadata.count < 0) {
+        Fail(context + ".count must not be negative");
+    }
+    if (metadata.probeSpacingWorld <= 0.0f) {
+        Fail(context + ".probeSpacingWorld must be positive");
+    }
+    if (metadata.probeHeightWorld < 0.0f) {
+        Fail(context + ".probeHeightWorld must not be negative");
+    }
+    if (metadata.format.empty()) {
+        Fail(context + ".format must not be empty");
+    }
+    return metadata;
+}
+
 SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -566,6 +621,11 @@ SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& c
     }
     if (metadata.sourceHash.empty()) {
         Fail(context + ".sourceHash must not be empty");
+    }
+    const auto objectProbesIt = value.find("objectProbes");
+    if (objectProbesIt != value.end()) {
+        metadata.objectProbes =
+                ReadBakedObjectLightProbeMetadata(*objectProbesIt, context + ".objectProbes");
     }
     return metadata;
 }
@@ -769,7 +829,9 @@ Json WriteLightmapSettings(const SectorLightmapBakeSettings& settings)
                     settings.indirectBounceRadius,
                     SectorWorldToAuthoringDistance(0.05f),
                     SectorWorldToAuthoringDistance(16.0f))},
-            {"indirectBounceStrength", std::clamp(settings.indirectBounceStrength, 0.0f, 1.0f)}
+            {"indirectBounceStrength", std::clamp(settings.indirectBounceStrength, 0.0f, 1.0f)},
+            {"objectProbeSpacingWorld", std::clamp(settings.objectProbeSpacingWorld, 0.25f, 128.0f)},
+            {"objectProbeHeightWorld", std::clamp(settings.objectProbeHeightWorld, 0.0f, 16.0f)}
     };
 }
 
@@ -972,14 +1034,31 @@ bool IsDefaultDirectionalLightSettings(const SectorTopologyDirectionalLightSetti
             && normalized.intensity == defaults.intensity;
 }
 
-Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
+Json WriteBakedObjectLightProbeMetadata(const SectorBakedObjectLightProbeMetadata& metadata)
 {
     return Json{
+            {"path", metadata.path},
+            {"version", metadata.version},
+            {"sourceHash", metadata.sourceHash},
+            {"count", metadata.count},
+            {"probeSpacingWorld", metadata.probeSpacingWorld},
+            {"probeHeightWorld", metadata.probeHeightWorld},
+            {"format", metadata.format}
+    };
+}
+
+Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
+{
+    Json lightmap = Json{
             {"path", metadata.path},
             {"width", metadata.width},
             {"height", metadata.height},
             {"sourceHash", metadata.sourceHash}
     };
+    if (!metadata.objectProbes.path.empty()) {
+        lightmap["objectProbes"] = WriteBakedObjectLightProbeMetadata(metadata.objectProbes);
+    }
+    return lightmap;
 }
 
 template<typename T>
