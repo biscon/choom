@@ -1,0 +1,974 @@
+# Sector Billboard Sprite Objects Plan
+
+## How To Use This Plan
+
+This is a living execution plan.
+
+When an agent is asked to execute this plan, it must:
+
+1. Read this section first.
+2. Read the `plan-state-json` block.
+3. Identify the selected phase/pass.
+4. Execute only that selected phase/pass.
+5. Do not skip ahead.
+6. Do not execute multiple phases/passes in one run unless the selected item explicitly says it is a combined pass.
+7. If the selected item is too broad, update this plan with smaller child passes and stop.
+8. If smaller passes are added, do not also implement source changes in the same run unless explicitly instructed.
+9. After executing a phase/pass, update this plan with status, date, summary, verification results, and behavior notes.
+10. Do not claim manual verification unless it was actually performed.
+11. Keep this plan self-tracking so future fresh-context runs can resume from it.
+
+```plan-state-json id="sector-billboard-sprites"
+{
+  "plan_id": "sector_billboard_sprite_objects_plan",
+  "status_values": [
+    "Not Started",
+    "Planned",
+    "In Progress",
+    "Completed",
+    "Deferred",
+    "Blocked",
+    "Partial"
+  ],
+  "items": [
+    {
+      "id": "phase_01",
+      "title": "ECS Runtime Object Foundation",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_01a",
+      "title": "Add Sector Runtime Object Components And World Integration",
+      "type": "pass",
+      "parent": "phase_01",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_01b",
+      "title": "Add Current Sector And Baked Probe Lighting Systems",
+      "type": "pass",
+      "parent": "phase_01",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_02",
+      "title": "Aseprite Billboard Sprite Components",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_02a",
+      "title": "Add Billboard Sprite Animation Component And Asset Requests",
+      "type": "pass",
+      "parent": "phase_02",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_02b",
+      "title": "Resolve Goblin Test Animation Clips",
+      "type": "pass",
+      "parent": "phase_02",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_03",
+      "title": "3D Billboard Rendering And Lighting",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_03a",
+      "title": "Render Camera-Facing Billboard Quads In Sector 3D Preview",
+      "type": "pass",
+      "parent": "phase_03",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_03b",
+      "title": "Apply Baked Probe Lighting And Basic Dynamic Light Contribution",
+      "type": "pass",
+      "parent": "phase_03",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_04",
+      "title": "Directional Billboard Animation Selection",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_04a",
+      "title": "Select Front Back Left Right Clips By Camera Relative Facing",
+      "type": "pass",
+      "parent": "phase_04",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_05",
+      "title": "Temporary Goblin Test Spawn",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_05a",
+      "title": "Add Removable Goblin Debug Spawn Path",
+      "type": "pass",
+      "parent": "phase_05",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_06",
+      "title": "Polish Tests Documentation And Completion",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_06a",
+      "title": "Document ECS Object Split And Close Plan",
+      "type": "pass",
+      "parent": "phase_06",
+      "status": "Not Started"
+    }
+  ]
+}
+```
+
+## Current Progress
+
+| Phase / Pass                                                              | Status      | Date | Notes                                                                |
+| ------------------------------------------------------------------------- | ----------- | ---- | -------------------------------------------------------------------- |
+| Phase 1: ECS Runtime Object Foundation                                    | Not Started |      | Parent phase.                                                        |
+| Phase 1A: Add Sector Runtime Object Components And World Integration      | Not Started |      | First executable pass. ECS object foundation only, no rendering yet. |
+| Phase 1B: Add Current Sector And Baked Probe Lighting Systems             | Not Started |      | Sector lookup and object probe sampling for ECS objects.             |
+| Phase 2: Aseprite Billboard Sprite Components                             | Not Started |      | Parent phase.                                                        |
+| Phase 2A: Add Billboard Sprite Animation Component And Asset Requests     | Not Started |      | Use existing Aseprite `SpriteAnimationHandle` asset path.            |
+| Phase 2B: Resolve Goblin Test Animation Clips                             | Not Started |      | Resolve Front/Back/Left/Right clips for the test goblin asset.       |
+| Phase 3: 3D Billboard Rendering And Lighting                              | Not Started |      | Parent phase.                                                        |
+| Phase 3A: Render Camera-Facing Billboard Quads In Sector 3D Preview       | Not Started |      | First visual billboard rendering.                                    |
+| Phase 3B: Apply Baked Probe Lighting And Basic Dynamic Light Contribution | Not Started |      | Use object probes and simple dynamic light contribution.             |
+| Phase 4: Directional Billboard Animation Selection                        | Not Started |      | Parent phase.                                                        |
+| Phase 4A: Select Front Back Left Right Clips By Camera Relative Facing    | Not Started |      | 4-direction Doom-style directional clip selection.                   |
+| Phase 5: Temporary Goblin Test Spawn                                      | Not Started |      | Parent phase.                                                        |
+| Phase 5A: Add Removable Goblin Debug Spawn Path                           | Not Started |      | Temporary test code, clearly marked for removal.                     |
+| Phase 6: Polish Tests Documentation And Completion                        | Not Started |      | Parent phase.                                                        |
+| Phase 6A: Document ECS Object Split And Close Plan                        | Not Started |      | Final cleanup and docs.                                              |
+
+## Execution Tracking Rules
+
+* Each pass must leave the project buildable and runnable.
+* Each pass final report must state whether source code changed.
+* Each implementation pass must update this document before finishing.
+* The update should be small and local.
+* Do not rewrite unrelated phases when marking progress.
+* If behavior is intended to remain unchanged, explicitly state that.
+* If a pass changes runtime rendering, ECS components, asset loading, probe lighting, dynamic light sampling, serialization, editor behavior, or build/test behavior, clearly say so.
+* Do not claim manual GUI verification unless it was actually performed.
+* If a pass is too broad, split it into smaller child passes and stop without source changes.
+
+## Goal And Desired End State
+
+Add the first ECS-backed movable object renderer for the sector engine: animated 3D billboards using Aseprite sprite animation assets.
+
+Desired end state:
+
+* The sector/static world remains purpose-built topology/mesh/lightmap data, not ECS.
+* Movable/high-level runtime objects use the existing small ECS.
+* A test goblin billboard can appear in the 3D sector world.
+* The goblin uses the existing Aseprite sprite animation asset system.
+* The goblin can use named animation clips `Front`, `Back`, `Left`, and `Right`.
+* Directional clip selection is data-driven enough to avoid hardcoded gameplay enums.
+* Billboards sample baked object lighting probes.
+* Billboards can receive simple runtime dynamic light contribution.
+* Billboard baked lighting does not depend on the camera-facing quad normal.
+* Temporary test spawn code is clearly marked as temporary and easy to remove.
+* No NPC AI, collision, combat, placement editor, inspector, 3D model renderer, or glTF support is implemented in this plan.
+
+## Architecture Policy
+
+Use ECS for movable/high-level runtime objects.
+
+Do not convert these into ECS:
+
+* sectors
+* vertices
+* linedefs
+* sidedefs
+* authoring graph data
+* generated sector geometry
+* lightmap atlas data
+* static sector draw records
+* portal visibility graph
+
+Those systems are low-level world/map structures and remain purpose-built.
+
+Use ECS for future high-level objects such as:
+
+* billboard sprites
+* future 3D models
+* NPCs
+* pickups
+* projectiles
+* temporary effects
+* attached lights
+* doors/lifts when they become gameplay/runtime objects
+
+This plan only implements enough ECS object support for billboard sprites.
+
+## Asset Assumptions
+
+A test Aseprite asset exists under:
+
+```text id="9i7z8e"
+assets/sprites/goblin
+```
+
+The implementation must inspect the actual file names and use the real JSON path.
+
+Expected animation clip names:
+
+```text id="gotw36"
+Front
+Back
+Left
+Right
+```
+
+Each clip is currently one frame.
+
+Use the existing `AssetManager::RequestSpriteAnimation()` path for Aseprite JSON.
+
+Do not invent a separate sprite-sheet loader.
+
+Do not load textures directly outside the asset system for this feature.
+
+Use point filtering for pixel-art sprite assets unless the existing asset metadata says otherwise.
+
+## Proposed Phases
+
+### Phase 1: ECS Runtime Object Foundation
+
+Goal:
+
+Introduce a tiny ECS runtime object layer for sector-world movable objects.
+
+Why it helps:
+
+Billboards, future 3D models, pickups, projectiles, attached lights, NPCs, and other dynamic things need shared position, sector, and lighting plumbing.
+
+Files/functions likely touched:
+
+* `sources/engine/ecs/*`
+* sector preview/runtime files
+* new sector object component/system files
+* `EngineContext` or sector preview state if needed
+
+Exact behavior that must remain unchanged:
+
+* Sector topology editing unchanged.
+* Static sector rendering unchanged.
+* Lightmap baking unchanged.
+* Dynamic lights unchanged.
+* Old 2D sprite/rectangle test systems should not be used by the new sector billboard renderer.
+* Do not delete old test render systems in this phase unless explicitly isolated and safe.
+
+Risks/goblins:
+
+* Accidentally trying to ECS-ify sector topology.
+* Component registration/allocation warnings if capacities are not reserved.
+* Object systems becoming coupled to editor UI.
+* Spawning/debug object code leaking into permanent gameplay architecture.
+
+Non-goals:
+
+* No rendering yet.
+* No Aseprite use yet.
+* No placement editor.
+* No object inspector.
+* No NPC behavior.
+* No physics/collision for actors.
+
+Suggested checks:
+
+```bash id="rhi97o"
+git diff --check
+git diff --stat
+git status --short
+```
+
+Run relevant tests.
+
+Final report expectations:
+
+* State components added.
+* State how ECS world is owned/updated in sector preview/runtime.
+* State what remains temporary/deferred.
+* State verification results.
+
+How to update this plan after completion:
+
+* Mark completed pass in JSON and table.
+* Mark Phase 1 `Completed` only after Phase 1A and Phase 1B are complete.
+* Add date, summary, verification results, and behavior notes.
+
+#### Phase 1A: Add Sector Runtime Object Components And World Integration
+
+Goal:
+
+Add a minimal ECS world for sector runtime objects and core components.
+
+Implementation guidance:
+
+Add components like:
+
+```cpp id="kxx7rk"
+struct SectorObjectTransform {
+    Vector3 position = {};
+    float yawRadians = 0.0f;
+};
+
+struct SectorObject {
+    int currentSectorId = -1;
+    bool visible = true;
+};
+```
+
+Use actual project naming/style.
+
+Integrate an `engine::World` instance into the sector preview/runtime object state.
+
+Reserve expected initial capacities during setup/load to avoid ECS allocation warnings.
+
+Do not create generic gameplay architecture yet.
+
+Do not add rendering.
+
+Tests if practical:
+
+* create entity
+* add transform/object components
+* update/iterate without structural modification during `ForEach`
+* destruction flush works if used
+
+#### Phase 1B: Add Current Sector And Baked Probe Lighting Systems
+
+Goal:
+
+Let ECS objects know their current sector and sampled baked object lighting.
+
+Implementation guidance:
+
+Add a component like:
+
+```cpp id="j2czbs"
+struct SectorObjectLighting {
+    BakedObjectLightingSample baked = {};
+};
+```
+
+or store only the ambient cube/valid flag if that fits better.
+
+Add systems:
+
+```text id="rlwyrc"
+UpdateSectorObjectCurrentSectorSystem
+UpdateSectorObjectBakedLightingSystem
+```
+
+Current sector lookup:
+
+* use existing sector/collision/topology lookup helpers
+* prefer stable current sector if available
+* no actor collision/physics yet
+
+Baked lighting:
+
+* call `SampleBakedObjectLighting()`
+* use object position and current/preferred sector
+* tolerate missing/stale probes and use fallback lighting
+
+No rendering yet.
+
+Tests:
+
+* object in sector receives current sector ID
+* object lighting system gets valid/fallback sample without crashing
+* missing probes fallback safely
+
+### Phase 2: Aseprite Billboard Sprite Components
+
+Goal:
+
+Add billboard sprite components that use existing Aseprite `SpriteAnimationHandle` assets.
+
+Why it helps:
+
+This uses the existing threaded asset manager and clip metadata instead of inventing sprite loading again.
+
+Files/functions likely touched:
+
+* asset manager use sites
+* new billboard component/system files
+* sector preview/runtime load/setup code
+
+Exact behavior that must remain unchanged:
+
+* Existing asset manager behavior unchanged.
+* Old 2D sprite renderer/test systems unchanged unless explicitly isolated.
+* No 3D rendering yet unless selected pass says so.
+
+Risks/goblins:
+
+* Requesting assets every frame instead of during setup/load.
+* Storing raw `Texture2D*` or `SpriteAnimationAsset*` in components.
+* Hardcoding animation enums.
+* Clip name resolution failing before asset is ready.
+
+Non-goals:
+
+* No object placement editor.
+* No NPC state machine.
+* No complex animation graph.
+* No 8-direction support yet if the goblin only has 4 directions.
+
+Suggested checks:
+
+```bash id="p7f57p"
+git diff --check
+git diff --stat
+git status --short
+```
+
+Run relevant asset/ECS tests.
+
+Final report expectations:
+
+* State component fields.
+* State asset request path/key.
+* State clip resolution behavior.
+* State fallback behavior when asset is not ready.
+* State verification results.
+
+How to update this plan after completion:
+
+* Mark completed pass in JSON and table.
+* Mark Phase 2 `Completed` only after Phase 2A and Phase 2B are complete.
+* Add date, summary, verification results, and behavior notes.
+
+#### Phase 2A: Add Billboard Sprite Animation Component And Asset Requests
+
+Goal:
+
+Create billboard sprite components backed by Aseprite assets.
+
+Implementation guidance:
+
+Add components similar to:
+
+```cpp id="7rht8p"
+struct SectorBillboardSprite {
+    engine::SpriteAnimationHandle animation;
+    uint32_t clipIndex = 0;
+    Rectangle source = {};
+    engine::TextureHandle texture;
+    Vector2 sizeWorld = {1.0f, 1.0f};
+    Vector2 originNormalized = {0.5f, 1.0f};
+    Color tint = WHITE;
+};
+
+struct SectorBillboardAnimator {
+    std::string animationId;
+    float timeSeconds = 0.0f;
+    bool loop = true;
+};
+```
+
+Use actual project style.
+
+Important:
+
+* Components store handles/indices/state only.
+* Do not store raw texture pointers or raw animation asset pointers.
+* AssetManager is passed to systems when needed.
+* Asset requests happen during explicit setup/test spawn/load path, not every frame.
+
+No rendering yet.
+
+#### Phase 2B: Resolve Goblin Test Animation Clips
+
+Goal:
+
+Resolve and store the test goblin clip indices.
+
+Implementation guidance:
+
+Use the actual goblin Aseprite JSON path under `assets/sprites/goblin`.
+
+Expected clip names:
+
+```text id="uosbsc"
+Front
+Back
+Left
+Right
+```
+
+Resolve by name through existing AssetManager sprite clip lookup after the animation asset is ready.
+
+If a clip is missing:
+
+* log/warn
+* fall back to clip 0 or `Default`
+* do not crash
+
+Keep animation IDs string/data-driven.
+
+Do not introduce hardcoded gameplay enums such as:
+
+```text id="rgzovk"
+WALK_FRONT
+WALK_BACK
+```
+
+For this test asset, it is acceptable to create a small test-only directional mapping:
+
+```text id="g80ndm"
+Front -> clip index
+Back  -> clip index
+Left  -> clip index
+Right -> clip index
+```
+
+but mark it as test/prototype data, not final NPC animation architecture.
+
+### Phase 3: 3D Billboard Rendering And Lighting
+
+Goal:
+
+Render animated billboard sprites in the 3D sector world.
+
+Why it helps:
+
+This is the first visible ECS object consumer of baked object probes.
+
+Files/functions likely touched:
+
+* `SectorMeshPreview.cpp/.h`
+* new sector billboard renderer files
+* shader/material code if needed
+* asset manager access
+* dynamic light data access
+* object probe sampling code
+
+Exact behavior that must remain unchanged:
+
+* Sector world rendering unchanged.
+* Dynamic point/spot lights unchanged.
+* Static/baked lighting unchanged.
+* Probe baking/loading unchanged.
+* Billboard rendering should not affect portal culling for world geometry.
+
+Risks/goblins:
+
+* Wrong alpha blending/cutout behavior.
+* Billboard sorting/depth issues.
+* Camera-facing normal causing baked lighting to change with camera rotation.
+* Sprite scale/origin wrong.
+* Asset not ready causing crash.
+* Dynamic light math duplicating too much sector shader complexity.
+
+Non-goals:
+
+* No AI.
+* No collision.
+* No placement editor.
+* No sprite shadows.
+* No normal maps.
+* No 3D model renderer.
+
+Suggested checks:
+
+```bash id="zvk05e"
+git diff --check
+git diff --stat
+git status --short
+```
+
+Run relevant tests/build.
+
+Final report expectations:
+
+* State render path.
+* State alpha/depth behavior.
+* State baked probe lighting behavior.
+* State dynamic light behavior.
+* State manual GUI smoke status.
+
+How to update this plan after completion:
+
+* Mark completed pass in JSON and table.
+* Mark Phase 3 `Completed` only after Phase 3A and Phase 3B are complete.
+* Add date, summary, verification results, and behavior notes.
+
+#### Phase 3A: Render Camera-Facing Billboard Quads In Sector 3D Preview
+
+Goal:
+
+Draw billboard sprites as quads in the 3D sector world.
+
+Implementation guidance:
+
+Draw a camera-facing quad using the current animation frame texture/source rectangle.
+
+Requirements:
+
+* world position from `SectorObjectTransform`
+* bottom-centered origin by default
+* configurable world size
+* faces camera horizontally or fully, choose the simplest stable first approach and document it
+* alpha blending or alpha test chosen deliberately
+* depth test enabled so sprites can be occluded by world geometry
+* no crash when animation/texture asset is missing or not ready
+* draw a visible fallback marker if asset failed/missing, or skip with debug warning
+
+Use the existing Aseprite animation asset data to get current frame source rectangle and atlas texture handle.
+
+Do not use the old 2D `SpriteRenderSystem` directly.
+
+#### Phase 3B: Apply Baked Probe Lighting And Basic Dynamic Light Contribution
+
+Goal:
+
+Light billboards consistently with the sector lighting system.
+
+Baked lighting:
+
+* use `SectorObjectLighting` / `SampleBakedObjectLighting()`
+* for billboards, use average ambient cube or stable upper-hemisphere average
+* do not use the camera-facing quad normal for baked lighting
+
+Dynamic lights:
+
+* add simple center-point contribution from selected/relevant dynamic point and spot lights
+* first pass can use attenuation only or a stable fake/cylindrical normal
+* do not require dynamic shadow receiving for billboards yet
+* do not let billboard dynamic light code affect existing world dynamic lights
+
+If shader support is needed, add a small billboard shader/material.
+
+Manual smoke:
+
+* goblin appears bright/dim according to probe-lit area
+* moving goblin/test spawn between bright/dark probe areas changes lighting
+* rotating camera does not pulse baked brightness
+* dynamic light near goblin brightens it
+
+### Phase 4: Directional Billboard Animation Selection
+
+Goal:
+
+Pick the correct directional clip based on object facing and camera/view direction.
+
+Why it helps:
+
+This supports Doom-style 4-direction or later 8-direction NPC sprites without hardcoding gameplay enums.
+
+Files/functions likely touched:
+
+* billboard animation system
+* billboard directional mapping component/data
+* tests for direction selection math
+
+Exact behavior that must remain unchanged:
+
+* Non-directional billboard rendering still works.
+* Asset loading unchanged.
+* Gameplay/AI not implemented.
+
+Risks/goblins:
+
+* Front/back convention inverted.
+* Left/right convention inverted.
+* Camera angle vs object yaw confusion.
+* Clip missing causing crash.
+* Animation IDs becoming hardcoded enums.
+
+Non-goals:
+
+* No AI state machine.
+* No attack/walk/death logic.
+* No 8-direction goblin art requirement.
+* No WAD/PK3 import.
+
+Suggested checks:
+
+```bash id="embegt"
+git diff --check
+git diff --stat
+git status --short
+```
+
+Run direction selection tests.
+
+Final report expectations:
+
+* State direction convention.
+* State clip mapping behavior.
+* State missing-clip fallback.
+* State verification results.
+
+How to update this plan after completion:
+
+* Mark Phase 4A and Phase 4 `Completed` if done.
+* Add date, summary, verification results, and behavior notes.
+
+#### Phase 4A: Select Front Back Left Right Clips By Camera Relative Facing
+
+Goal:
+
+Choose among `Front`, `Back`, `Left`, and `Right` clips for the goblin test asset.
+
+Implementation guidance:
+
+Use object yaw/facing and camera position/yaw to determine what side of the sprite the camera sees.
+
+For the test goblin asset:
+
+```text id="boj27j"
+Front
+Back
+Left
+Right
+```
+
+Each is currently one frame.
+
+Rules:
+
+* higher-level gameplay should set a logical animation id later
+* this pass may use a test/prototype mapping for the goblin
+* do not create hardcoded gameplay enums
+* missing clip falls back safely
+
+Add pure math tests for:
+
+* camera in front selects `Front`
+* camera behind selects `Back`
+* camera to left selects `Left`
+* camera to right selects `Right`
+* wraparound at ±pi works
+
+Document the convention.
+
+### Phase 5: Temporary Goblin Test Spawn
+
+Goal:
+
+Add an easy way to spawn/test a goblin billboard in the current sector world.
+
+Why it helps:
+
+There is no placement editor/inspector yet, but the renderer needs manual smoke testing.
+
+Files/functions likely touched:
+
+* `SectorMeshPreview.cpp/.h`
+* sector editor debug UI/input code
+* test object setup code
+
+Exact behavior that must remain unchanged:
+
+* Save/load unchanged.
+* No authored object placement data added.
+* No object inspector.
+* No NPC behavior.
+* No permanent gameplay spawn system.
+
+Risks/goblins:
+
+* Temporary code becoming permanent accidentally.
+* Test spawn tied to a specific user map.
+* Asset requested every frame.
+* Spawned entity leaking between level loads/rebuilds.
+
+Non-goals:
+
+* No placement editor.
+* No inspector.
+* No persistent object serialization.
+* No NPC AI.
+* No collision/combat.
+
+Suggested checks:
+
+```bash id="nkvzci"
+git diff --check
+git diff --stat
+git status --short
+```
+
+Manual smoke expected.
+
+Final report expectations:
+
+* State test spawn trigger/UI.
+* State temporary code marker.
+* State cleanup/removal notes.
+* State manual GUI smoke status.
+
+How to update this plan after completion:
+
+* Mark Phase 5A and Phase 5 `Completed` if done.
+* Add date, summary, verification results, and behavior notes.
+
+#### Phase 5A: Add Removable Goblin Debug Spawn Path
+
+Goal:
+
+Spawn a temporary test goblin billboard.
+
+Implementation guidance:
+
+Add a debug/test-only path to create a goblin billboard entity.
+
+Use clear names/comments such as:
+
+```text id="spn731"
+TODO_REMOVE_BILLBOARD_TEST_SPAWN
+temporary goblin billboard test spawn
+```
+
+Requirements:
+
+* asset requested once during setup/load/test spawn path
+* entity uses ECS components from earlier phases
+* spawn at player/camera position or a fixed safe position in the current sector
+* allow despawn/reset if easy
+* do not serialize the spawned goblin
+* do not add placement editor or inspector
+* make removal easy when real object placement/NPC system arrives
+
+Manual smoke:
+
+* spawn goblin
+* goblin appears in 3D
+* goblin is depth-tested against world
+* directional clip changes as camera/object relation changes
+* baked probe lighting affects goblin
+* dynamic lights affect goblin
+* missing asset failure is handled safely
+
+### Phase 6: Polish Tests Documentation And Completion
+
+Goal:
+
+Document the ECS object split and close the billboard prototype plan.
+
+Why it helps:
+
+This feature defines the foundation for future NPCs, props, pickups, projectiles, attached lights, and 3D models.
+
+Files/functions likely touched:
+
+* docs
+* tests
+* this plan document
+* maybe removal/deprecation notes for old 2D test render systems
+
+Exact behavior that must remain unchanged:
+
+* Sector topology remains non-ECS.
+* Object placement/editor/inspector remains deferred.
+* No NPC AI or model renderer added.
+
+Risks/goblins:
+
+* Leaving temporary goblin code undocumented.
+* Future tasks using old 2D sprite renderer by mistake.
+* Not documenting billboard lighting conventions.
+* Not documenting ECS scope boundary.
+
+Non-goals:
+
+* No cleanup crusade across unrelated old sample systems unless tiny and obvious.
+* No model renderer.
+* No placement editor.
+
+Suggested checks:
+
+```bash id="eiftfq"
+git diff --check
+git diff --stat
+git status --short
+```
+
+Run relevant tests.
+
+Final report expectations:
+
+* State docs updated.
+* State temporary debug spawn status.
+* State deferred follow-ups.
+* State verification results.
+
+How to update this plan after completion:
+
+* Mark Phase 6A and Phase 6 `Completed`.
+* If all phases are complete, ensure all parent phases are `Completed`.
+* Leave a final completion note.
+
+#### Phase 6A: Document ECS Object Split And Close Plan
+
+Goal:
+
+Update docs for future dynamic-object work.
+
+Documentation should state:
+
+* sectors/linedefs/sidedefs/lightmaps remain purpose-built non-ECS data
+* movable/high-level runtime objects use ECS
+* billboard sprites use Aseprite `SpriteAnimationHandle`
+* old 2D sprite/rectangle renderer systems are legacy/test examples and not the sector-world billboard path
+* billboards sample baked object probes
+* billboards do not use camera-facing normal for baked lighting
+* dynamic lights are added on top
+* placement editor/inspector is deferred until real prop/NPC object authoring
+* temporary goblin spawn code is marked for later removal
+
+## Deferred Decisions For Later Plans
+
+These are intentionally out of scope:
+
+* Placement editor for objects.
+* Object inspector.
+* Persistent object serialization.
+* NPC definition system.
+* AI/state machines.
+* Actor collision/physics.
+* Doors/lifts as ECS runtime objects.
+* Pickups/projectiles.
+* Attached light emitters.
+* 8-direction or 16-direction production art.
+* WAD/PK3 import.
+* 3D glTF model renderer.
+* Skeletal animation.
+* Billboard dynamic shadow receiving.
+* Sprite normal maps.
+* Cleanup/removal of old 2D sprite/rectangle test systems, unless done as a later cleanup task.
+
+## Final Completion Criteria
+
+This plan is complete when:
+
+* ECS runtime object foundation exists for sector-world movable objects
+* objects can track current sector
+* objects can sample baked object probe lighting
+* Aseprite billboard sprite components exist
+* the `assets/sprites/goblin` test asset can be requested and used
+* `Front`, `Back`, `Left`, and `Right` clips can be resolved safely
+* a goblin billboard can render in the 3D sector world
+* billboard baked lighting uses probe-derived stable lighting
+* billboard dynamic lighting works at a basic level
+* 4-direction directional clip selection works
+* temporary goblin test spawn is clearly marked and easy to remove
+* no placement editor/inspector/NPC/3D-model scope leaks into this implementation
