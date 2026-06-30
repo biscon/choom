@@ -181,10 +181,8 @@ void main()
             dynamicDirect += dynamicLightColors[i] * dynamicLightIntensities[i] * atten * ndotl * coneAtten;
         }
     }
-    vec3 bakedLighting = ambient + bakedDirect;
-    vec3 lighting = dynamicLightCount > 0
-            ? clamp(bakedLighting + dynamicDirect, 0.0, dynamicLightingClamp)
-            : clamp(bakedLighting, 0.0, 1.0);
+    vec3 bakedLighting = clamp(ambient + bakedDirect, 0.0, 1.0);
+    vec3 lighting = clamp(bakedLighting + dynamicDirect, 0.0, dynamicLightingClamp);
     vec3 litRgb = surfaceRgb * lighting;
     finalColor = vec4(mix(litRgb, emissiveDecalRgb, emissiveDecalAlpha), baseColor.a * fragColor.a);
 }
