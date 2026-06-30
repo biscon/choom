@@ -10,6 +10,7 @@
 
 #include <raylib.h>
 
+#include <array>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -35,6 +36,7 @@ public:
 
     void AdvanceRuntime(float dt);
     void Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
+    void RenderDynamicSpotLightShadowMaps();
     void DrawScene(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
     void ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
     void ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
@@ -79,6 +81,8 @@ private:
     void RenderBloomSource(engine::AssetManager& assets);
     void UnloadSkyCylinderMesh();
     void DrawSkyCylinder(const Texture2D& texture);
+    bool EnsureDynamicSpotLightShadowMapResources();
+    void UnloadDynamicSpotLightShadowMapResources();
 
     SectorMeshBuildResult meshes;
     SectorGeneratedGeometry generatedGeometry;
@@ -127,6 +131,13 @@ private:
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;
     std::vector<SectorPreviewDynamicPointLightUniform> dynamicPointLights;
     std::vector<int> selectedDynamicPointLightIds;
+    std::vector<SectorPreviewDynamicSpotLightShadowCaster> dynamicSpotLightShadowCasters;
+    std::vector<SectorPreviewDynamicSpotLightShadowMatrix> dynamicSpotLightShadowMatrices;
+    std::array<RenderTexture2D, MaxDynamicSpotLightShadowCasters> dynamicSpotLightShadowMaps{};
+    Material dynamicSpotLightShadowMaterial = {};
+    Texture2D dynamicSpotLightShadowDefaultTexture = {};
+    bool dynamicSpotLightShadowMaterialLoaded = false;
+    int dynamicSpotLightShadowLightViewProjectionLoc = -1;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
     Material bloomSourceMaterial = {};

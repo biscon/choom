@@ -141,6 +141,38 @@ bool ReadOptionalBool(const Json& object, const char* field, const std::string& 
     return it->get<bool>();
 }
 
+int ReadOptionalClampedInt(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        int defaultValue,
+        int minValue,
+        int maxValue)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        return defaultValue;
+    }
+    if (!it->is_number_integer() && !it->is_number_unsigned()) {
+        Fail(context + "." + field + " must be a JSON integer");
+    }
+    int value = 0;
+    if (it->is_number_unsigned()) {
+        const uint64_t number = it->get<uint64_t>();
+        if (number > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+            Fail(context + "." + field + " is outside the supported integer range");
+        }
+        value = static_cast<int>(number);
+    } else {
+        const int64_t number = it->get<int64_t>();
+        if (number < std::numeric_limits<int>::min() || number > std::numeric_limits<int>::max()) {
+            Fail(context + "." + field + " is outside the supported integer range");
+        }
+        value = static_cast<int>(number);
+    }
+    return std::clamp(value, minValue, maxValue);
+}
+
 float ReadOptionalClampedFloat(
         const Json& object,
         const char* field,
@@ -809,10 +841,15 @@ Json WriteDynamicSpotLight(const SectorTopologyDynamicSpotLight& light, const st
     RequireFinite(light.range, context + ".range");
     RequireFinite(light.innerConeDegrees, context + ".innerConeDegrees");
     RequireFinite(light.outerConeDegrees, context + ".outerConeDegrees");
+    RequireFinite(light.shadowBias, context + ".shadowBias");
+    RequireFinite(light.shadowStrength, context + ".shadowStrength");
     const float innerConeDegrees = ClampDynamicSpotLightConeDegrees(light.innerConeDegrees);
     const float outerConeDegrees = std::max(
             ClampDynamicSpotLightConeDegrees(light.outerConeDegrees),
             innerConeDegrees);
+    const int shadowPriority = ClampDynamicSpotLightShadowPriority(light.shadowPriority);
+    const float shadowBias = ClampDynamicSpotLightShadowBias(light.shadowBias);
+    const float shadowStrength = ClampDynamicSpotLightShadowStrength(light.shadowStrength);
     Json lightJson{
             {"id", light.id},
             {"position", WriteVector3(light.position, context + ".position")},
@@ -831,6 +868,18 @@ Json WriteDynamicSpotLight(const SectorTopologyDynamicSpotLight& light, const st
         lightJson["enabled"] = false;
     }
     WriteDynamicLightFlickerFields(lightJson, light, context);
+    if (light.castsShadow) {
+        lightJson["castsShadow"] = true;
+    }
+    if (shadowPriority != DynamicSpotLightDefaultShadowPriority) {
+        lightJson["shadowPriority"] = shadowPriority;
+    }
+    if (shadowBias != DynamicSpotLightDefaultShadowBias) {
+        lightJson["shadowBias"] = shadowBias;
+    }
+    if (shadowStrength != DynamicSpotLightDefaultShadowStrength) {
+        lightJson["shadowStrength"] = shadowStrength;
+    }
     return lightJson;
 }
 
@@ -1142,6 +1191,28 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
                     DynamicLightFlickerDefaultAmount,
                     DynamicLightFlickerMinAmount,
                     DynamicLightFlickerMaxAmount);
+            light.castsShadow = ReadOptionalBool(value, "castsShadow", context, false);
+            light.shadowPriority = ReadOptionalClampedInt(
+                    value,
+                    "shadowPriority",
+                    context,
+                    DynamicSpotLightDefaultShadowPriority,
+                    DynamicSpotLightMinShadowPriority,
+                    DynamicSpotLightMaxShadowPriority);
+            light.shadowBias = ReadOptionalClampedFloat(
+                    value,
+                    "shadowBias",
+                    context,
+                    DynamicSpotLightDefaultShadowBias,
+                    DynamicSpotLightMinShadowBias,
+                    DynamicSpotLightMaxShadowBias);
+            light.shadowStrength = ReadOptionalClampedFloat(
+                    value,
+                    "shadowStrength",
+                    context,
+                    DynamicSpotLightDefaultShadowStrength,
+                    DynamicSpotLightMinShadowStrength,
+                    DynamicSpotLightMaxShadowStrength);
             map.dynamicSpotLights.push_back(light);
         }
     }

@@ -578,6 +578,9 @@ struct SectorEditorUiState {
     engine::UIFloatInputState lightSourceRadiusInput;
     engine::UIFloatInputState lightFlickerSpeedInput;
     engine::UIFloatInputState lightFlickerAmountInput;
+    engine::UIIntInputState lightShadowPriorityInput;
+    engine::UIFloatInputState lightShadowBiasInput;
+    engine::UIFloatInputState lightShadowStrengthInput;
     engine::UIFloatInputState ambientOcclusionRadiusInput;
     engine::UIFloatInputState ambientOcclusionStrengthInput;
     engine::UIFloatInputState indirectBounceRadiusInput;

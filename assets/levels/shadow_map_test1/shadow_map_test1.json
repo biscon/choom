@@ -1,0 +1,321 @@
+{
+  "formatVersion": 3,
+  "topology": "authoringGraph",
+  "coordSubdivisions": 16,
+  "textures": {
+    "ceiling": {
+      "path": "assets/images/ceiling.png",
+      "filter": "anisotropic8x"
+    },
+    "floor": {
+      "path": "assets/images/floor.png",
+      "filter": "anisotropic8x"
+    },
+    "step_wall": {
+      "path": "assets/images/wall.png",
+      "filter": "anisotropic8x"
+    },
+    "upper_wall": {
+      "path": "assets/images/wall.png",
+      "filter": "anisotropic8x"
+    },
+    "wall": {
+      "path": "assets/images/wall.png",
+      "filter": "anisotropic8x"
+    }
+  },
+  "staticLights": [],
+  "staticSpotLights": [],
+  "dynamicPointLights": [],
+  "dynamicSpotLights": [
+    {
+      "id": 1,
+      "position": [
+        72.0,
+        14.399999618530273,
+        56.0
+      ],
+      "target": [
+        72.0,
+        8.0,
+        16.0
+      ],
+      "range": 80.0,
+      "intensity": 3.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "outerConeDegrees": 45.0,
+      "castsShadow": true
+    }
+  ],
+  "lightmapSettings": {
+    "ambientOcclusionRadius": 10.0,
+    "ambientOcclusionStrength": 0.550000011920929,
+    "indirectBounceRadius": 32.0,
+    "indirectBounceStrength": 0.20000000298023224
+  },
+  "previewSettings": {
+    "walkSpeed": 6.0,
+    "runSpeed": 12.0,
+    "mouseSensitivity": 1.0,
+    "eyeHeight": 1.2000000476837158,
+    "gravity": 25.0,
+    "playerRadius": 0.25,
+    "playerHeight": 1.600000023841858,
+    "stepHeight": 0.25,
+    "jumpHeight": 0.6000000238418579,
+    "headBobStrength": 0.019999999552965164,
+    "headBobFrequency": 2.0
+  },
+  "bakedLightmap": {
+    "path": "assets/levels/shadow_map_test1/shadow_map_test1.lightmap.png",
+    "width": 2048,
+    "height": 2048,
+    "sourceHash": "cba9c0402dda078c"
+  },
+  "authoringGraph": {
+    "vertices": [
+      {
+        "id": 1,
+        "x": 256,
+        "y": 256
+      },
+      {
+        "id": 2,
+        "x": 3200,
+        "y": 256
+      },
+      {
+        "id": 3,
+        "x": 3200,
+        "y": 2688
+      },
+      {
+        "id": 4,
+        "x": 256,
+        "y": 2688
+      },
+      {
+        "id": 5,
+        "x": 1088,
+        "y": 448
+      },
+      {
+        "id": 6,
+        "x": 1216,
+        "y": 448
+      },
+      {
+        "id": 7,
+        "x": 1216,
+        "y": 576
+      },
+      {
+        "id": 8,
+        "x": 1088,
+        "y": 576
+      }
+    ],
+    "lines": [
+      {
+        "id": 1,
+        "startVertexId": 1,
+        "endVertexId": 2
+      },
+      {
+        "id": 2,
+        "startVertexId": 2,
+        "endVertexId": 3
+      },
+      {
+        "id": 3,
+        "startVertexId": 3,
+        "endVertexId": 4
+      },
+      {
+        "id": 4,
+        "startVertexId": 4,
+        "endVertexId": 1
+      },
+      {
+        "id": 5,
+        "startVertexId": 5,
+        "endVertexId": 6
+      },
+      {
+        "id": 6,
+        "startVertexId": 6,
+        "endVertexId": 7
+      },
+      {
+        "id": 7,
+        "startVertexId": 7,
+        "endVertexId": 8
+      },
+      {
+        "id": 8,
+        "startVertexId": 8,
+        "endVertexId": 5
+      }
+    ],
+    "lineSides": [],
+    "faceAnchors": [
+      {
+        "id": 1,
+        "name": "Sector 1",
+        "x": 1544,
+        "y": 332,
+        "floorZ": 0.0,
+        "ceilingZ": 24.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.20000000298023224,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 2,
+        "name": "Sector 2",
+        "x": 1144,
+        "y": 452,
+        "floorZ": 24.0,
+        "ceilingZ": 25.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

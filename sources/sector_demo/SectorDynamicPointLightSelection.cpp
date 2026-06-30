@@ -5,6 +5,8 @@
 #include "sector_demo/SectorTopologyTypes.h"
 #include "sector_demo/SectorUnits.h"
 
+#include <raymath.h>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -19,11 +21,18 @@ constexpr float DynamicLightFlickerTargetExponent = 3.0f;
 constexpr uint32_t DynamicLightFlickerSegmentSalt = 0x9e3779b9u;
 constexpr uint32_t DynamicLightFlickerPhaseSalt = 0x85ebca6bu;
 constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
+constexpr float ShadowNearPlane = 0.05f;
 
 struct ScoredDynamicPointLightCandidate {
     const SectorPreviewDynamicPointLightSource* source = nullptr;
     float score = -1.0f;
     bool previouslySelected = false;
+};
+
+struct ScoredDynamicSpotLightShadowCandidate {
+    const SectorPreviewDynamicPointLightUniform* light = nullptr;
+    int dynamicLightIndex = -1;
+    float score = -1.0f;
 };
 
 bool IsFiniteVector3(Vector3 value)
@@ -137,6 +146,21 @@ Vector3 NormalizeOrFallback(Vector3 value, Vector3 fallback)
     return Vector3{value.x * invLength, value.y * invLength, value.z * invLength};
 }
 
+bool IsFiniteMatrix(Matrix matrix)
+{
+    return std::isfinite(matrix.m0) && std::isfinite(matrix.m1) && std::isfinite(matrix.m2) && std::isfinite(matrix.m3)
+            && std::isfinite(matrix.m4) && std::isfinite(matrix.m5) && std::isfinite(matrix.m6) && std::isfinite(matrix.m7)
+            && std::isfinite(matrix.m8) && std::isfinite(matrix.m9) && std::isfinite(matrix.m10) && std::isfinite(matrix.m11)
+            && std::isfinite(matrix.m12) && std::isfinite(matrix.m13) && std::isfinite(matrix.m14) && std::isfinite(matrix.m15);
+}
+
+Vector3 SpotlightShadowUpVector(Vector3 direction)
+{
+    const Vector3 worldUp{0.0f, 1.0f, 0.0f};
+    const Vector3 worldForward{0.0f, 0.0f, 1.0f};
+    return std::fabs(Vector3DotProduct(direction, worldUp)) > 0.98f ? worldForward : worldUp;
+}
+
 float ConeCosine(float degrees)
 {
     return std::cos(std::clamp(degrees, 0.0f, 179.0f) * DegreesToRadians);
@@ -174,6 +198,19 @@ bool BetterScoredDynamicPointLight(
         return lhs.score > rhs.score;
     }
     return lhs.source->lightId < rhs.source->lightId;
+}
+
+bool BetterScoredDynamicSpotLightShadowCandidate(
+        const ScoredDynamicSpotLightShadowCandidate& lhs,
+        const ScoredDynamicSpotLightShadowCandidate& rhs)
+{
+    if (lhs.light->shadowPriority != rhs.light->shadowPriority) {
+        return lhs.light->shadowPriority > rhs.light->shadowPriority;
+    }
+    if (lhs.score != rhs.score) {
+        return lhs.score > rhs.score;
+    }
+    return lhs.light->lightId < rhs.light->lightId;
 }
 
 int FindSelectedLightIndex(
@@ -313,6 +350,10 @@ bool MakeSectorPreviewDynamicPointLightUniform(
     outLight.flicker = light.flicker;
     outLight.flickerSpeed = ClampDynamicLightFlickerSpeed(light.flickerSpeed);
     outLight.flickerAmount = ClampDynamicLightFlickerAmount(light.flickerAmount);
+    outLight.castsShadow = false;
+    outLight.shadowPriority = DynamicSpotLightDefaultShadowPriority;
+    outLight.shadowBias = DynamicSpotLightDefaultShadowBias;
+    outLight.shadowStrength = DynamicSpotLightDefaultShadowStrength;
     return std::isfinite(outLight.radius)
             && outLight.radius > 0.0f
             && std::isfinite(outLight.intensity)
@@ -360,6 +401,10 @@ bool MakeSectorPreviewDynamicSpotLightUniform(
     outLight.flicker = light.flicker;
     outLight.flickerSpeed = ClampDynamicLightFlickerSpeed(light.flickerSpeed);
     outLight.flickerAmount = ClampDynamicLightFlickerAmount(light.flickerAmount);
+    outLight.castsShadow = light.castsShadow;
+    outLight.shadowPriority = ClampDynamicSpotLightShadowPriority(light.shadowPriority);
+    outLight.shadowBias = ClampDynamicSpotLightShadowBias(light.shadowBias);
+    outLight.shadowStrength = ClampDynamicSpotLightShadowStrength(light.shadowStrength);
     return std::isfinite(outLight.radius)
             && outLight.radius > 0.0f
             && std::isfinite(outLight.intensity)
@@ -550,6 +595,124 @@ void SelectRankedSectorPreviewDynamicPointLights(
         outSelectedLights.push_back(candidate.source->light);
         if (outSelectedLightIds != nullptr) {
             outSelectedLightIds->push_back(candidate.source->lightId);
+        }
+    }
+}
+
+void SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+        const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights,
+        const RuntimePortalVisibilityResult& visibility,
+        const std::vector<SectorReceiverBounds>& receiverBounds,
+        std::size_t maxShadowCasters,
+        std::vector<SectorPreviewDynamicSpotLightShadowCaster>& outShadowCasters)
+{
+    outShadowCasters.clear();
+    outShadowCasters.reserve(std::min(selectedDynamicLights.size(), maxShadowCasters));
+    if (maxShadowCasters == 0) {
+        return;
+    }
+
+    std::vector<const SectorReceiverBounds*> relevantBounds;
+    BuildRelevantReceiverBounds(visibility, receiverBounds, relevantBounds);
+
+    std::vector<ScoredDynamicSpotLightShadowCandidate> ranked;
+    ranked.reserve(selectedDynamicLights.size());
+    for (std::size_t i = 0; i < selectedDynamicLights.size(); ++i) {
+        const SectorPreviewDynamicPointLightUniform& light = selectedDynamicLights[i];
+        if (light.kind != SectorPreviewDynamicLightKind::Spot || !light.castsShadow) {
+            continue;
+        }
+
+        const float score = DynamicPointLightSelectionScore(light, relevantBounds);
+        if (score < 0.0f) {
+            continue;
+        }
+
+        ranked.push_back(ScoredDynamicSpotLightShadowCandidate{
+                &light,
+                static_cast<int>(i),
+                score});
+    }
+
+    std::sort(ranked.begin(), ranked.end(), BetterScoredDynamicSpotLightShadowCandidate);
+
+    for (const ScoredDynamicSpotLightShadowCandidate& candidate : ranked) {
+        if (outShadowCasters.size() >= maxShadowCasters) {
+            break;
+        }
+        const int shadowSlot = static_cast<int>(outShadowCasters.size());
+        outShadowCasters.push_back(SectorPreviewDynamicSpotLightShadowCaster{
+                candidate.light->lightId,
+                candidate.dynamicLightIndex,
+                shadowSlot,
+                candidate.light->shadowPriority,
+                candidate.score,
+                candidate.light->shadowBias,
+                candidate.light->shadowStrength});
+    }
+}
+
+bool MakeSectorPreviewDynamicSpotLightShadowMatrix(
+        const SectorPreviewDynamicPointLightUniform& light,
+        int dynamicLightIndex,
+        int shadowSlot,
+        SectorPreviewDynamicSpotLightShadowMatrix& outMatrix)
+{
+    if (light.kind != SectorPreviewDynamicLightKind::Spot
+            || light.radius <= ShadowNearPlane
+            || !std::isfinite(light.radius)
+            || !IsFiniteVector3(light.position)
+            || !IsFiniteVector3(light.direction)
+            || !std::isfinite(light.outerConeCos)) {
+        return false;
+    }
+
+    const Vector3 direction = NormalizeOrFallback(light.direction, Vector3{0.0f, -1.0f, 0.0f});
+    if (!IsFiniteVector3(direction)) {
+        return false;
+    }
+
+    const float outerHalfAngleRadians = std::acos(std::clamp(light.outerConeCos, -0.999f, 0.999f));
+    const float fovyRadians = std::clamp(outerHalfAngleRadians * 2.0f, 1.0f * DegreesToRadians, 178.0f * DegreesToRadians);
+    const Vector3 target = Vector3Add(light.position, direction);
+    const Matrix view = MatrixLookAt(light.position, target, SpotlightShadowUpVector(direction));
+    const Matrix projection = MatrixPerspective(static_cast<double>(fovyRadians), 1.0, ShadowNearPlane, light.radius);
+    const Matrix lightViewProjection = MatrixMultiply(projection, view);
+
+    if (!IsFiniteMatrix(view) || !IsFiniteMatrix(projection) || !IsFiniteMatrix(lightViewProjection)) {
+        return false;
+    }
+
+    outMatrix.lightId = light.lightId;
+    outMatrix.dynamicLightIndex = dynamicLightIndex;
+    outMatrix.shadowSlot = shadowSlot;
+    outMatrix.view = view;
+    outMatrix.projection = projection;
+    outMatrix.lightViewProjection = lightViewProjection;
+    return true;
+}
+
+void BuildSectorPreviewDynamicSpotLightShadowMatrices(
+        const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights,
+        const std::vector<SectorPreviewDynamicSpotLightShadowCaster>& shadowCasters,
+        std::vector<SectorPreviewDynamicSpotLightShadowMatrix>& outMatrices)
+{
+    outMatrices.clear();
+    outMatrices.reserve(shadowCasters.size());
+
+    for (const SectorPreviewDynamicSpotLightShadowCaster& caster : shadowCasters) {
+        if (caster.dynamicLightIndex < 0
+                || static_cast<std::size_t>(caster.dynamicLightIndex) >= selectedDynamicLights.size()) {
+            continue;
+        }
+
+        SectorPreviewDynamicSpotLightShadowMatrix matrix;
+        if (MakeSectorPreviewDynamicSpotLightShadowMatrix(
+                    selectedDynamicLights[static_cast<std::size_t>(caster.dynamicLightIndex)],
+                    caster.dynamicLightIndex,
+                    caster.shadowSlot,
+                    matrix)) {
+            outMatrices.push_back(matrix);
         }
     }
 }

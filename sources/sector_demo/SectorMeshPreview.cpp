@@ -228,6 +228,29 @@ void main()
 }
 )";
 
+const char* SectorSpotLightShadowVs = R"(
+#version 330
+in vec3 vertexPosition;
+
+uniform mat4 lightViewProjection;
+
+void main()
+{
+    gl_Position = lightViewProjection * vec4(vertexPosition, 1.0);
+}
+)";
+
+const char* SectorSpotLightShadowFs = R"(
+#version 330
+out vec4 finalColor;
+
+void main()
+{
+    float depth = gl_FragCoord.z;
+    finalColor = vec4(depth, depth, depth, 1.0);
+}
+)";
+
 const char* BloomBlurFs = R"(
 #version 330
 in vec2 fragTexCoord;
@@ -520,6 +543,27 @@ bool LoadBloomSourceMaterial(
     return true;
 }
 
+bool LoadDynamicSpotLightShadowMaterial(
+        Material& material,
+        Texture2D& defaultMaterialTexture,
+        bool& materialLoaded,
+        int& lightViewProjectionLoc)
+{
+    material = LoadMaterialDefault();
+    Shader shader = LoadShaderFromMemory(SectorSpotLightShadowVs, SectorSpotLightShadowFs);
+    if (shader.id == 0) {
+        UnloadMaterial(material);
+        material = Material{};
+        return false;
+    }
+    material.shader = shader;
+    material.shader.locs[SHADER_LOC_VERTEX_POSITION] = GetShaderLocationAttrib(material.shader, "vertexPosition");
+    lightViewProjectionLoc = GetShaderLocation(material.shader, "lightViewProjection");
+    defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
+    materialLoaded = true;
+    return true;
+}
+
 bool ComputeGeometryBounds(const SectorGeneratedGeometry& geometry, Vector3& outMin, Vector3& outMax)
 {
     outMin = Vector3{
@@ -732,7 +776,27 @@ bool SectorMeshPreview::RebuildRendererResources(
     dynamicPointLights.reserve(MaxDynamicLights);
     selectedDynamicPointLightIds.clear();
     selectedDynamicPointLightIds.reserve(MaxDynamicLights);
+    dynamicSpotLightShadowCasters.clear();
+    dynamicSpotLightShadowCasters.reserve(MaxDynamicSpotLightShadowCasters);
+    dynamicSpotLightShadowMatrices.clear();
+    dynamicSpotLightShadowMatrices.reserve(MaxDynamicSpotLightShadowCasters);
     runtimeSeconds = 0.0f;
+
+    if (!EnsureDynamicSpotLightShadowMapResources()) {
+        Shutdown(assets);
+        error = "Preview failed: could not create dynamic spotlight shadow maps";
+        return false;
+    }
+
+    if (!LoadDynamicSpotLightShadowMaterial(
+                dynamicSpotLightShadowMaterial,
+                dynamicSpotLightShadowDefaultTexture,
+                dynamicSpotLightShadowMaterialLoaded,
+                dynamicSpotLightShadowLightViewProjectionLoc)) {
+        Shutdown(assets);
+        error = "Preview failed: could not load dynamic spotlight shadow shader";
+        return false;
+    }
 
     if (!LoadPreviewMaterial(
                 material,
@@ -804,12 +868,15 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     dynamicPointLightCandidates.clear();
     dynamicPointLights.clear();
     selectedDynamicPointLightIds.clear();
+    dynamicSpotLightShadowCasters.clear();
+    dynamicSpotLightShadowMatrices.clear();
     runtimeSeconds = 0.0f;
     if (!initialized
             && engine::IsNull(assetScope)
             && meshes.batches.empty()
             && meshes.sectorDrawRecords.empty()
             && !materialLoaded
+            && !dynamicSpotLightShadowMaterialLoaded
             && skyCylinderMesh.vertexCount <= 0
             && skyTopCapMesh.vertexCount <= 0
             && !skyMaterialLoaded) {
@@ -817,6 +884,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     }
 
     UnloadBloomResources();
+    UnloadDynamicSpotLightShadowMapResources();
     UnloadSkyCylinderMesh();
     UnloadSectorMeshes(meshes);
     textureHandlesById.clear();
@@ -836,6 +904,15 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
         materialLoaded = false;
     }
 
+    if (dynamicSpotLightShadowMaterialLoaded) {
+        dynamicSpotLightShadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = dynamicSpotLightShadowDefaultTexture;
+        UnloadMaterial(dynamicSpotLightShadowMaterial);
+        dynamicSpotLightShadowMaterial = Material{};
+        dynamicSpotLightShadowDefaultTexture = Texture2D{};
+        dynamicSpotLightShadowMaterialLoaded = false;
+        dynamicSpotLightShadowLightViewProjectionLoc = -1;
+    }
+
     if (!engine::IsNull(assetScope)) {
         assets.UnloadScope(assetScope);
         assetScope = engine::NullAssetScopeHandle();
@@ -853,6 +930,7 @@ void SectorMeshPreview::AdvanceRuntime(float dt)
 
 void SectorMeshPreview::Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion)
 {
+    RenderDynamicSpotLightShadowMaps();
     DrawScene(assets, useBakedAmbientOcclusion);
 }
 
@@ -1062,6 +1140,73 @@ void SectorMeshPreview::UnloadBloomResources()
     bloomSceneHeight = 0;
     bloomTargetWidth = 0;
     bloomTargetHeight = 0;
+}
+
+bool SectorMeshPreview::EnsureDynamicSpotLightShadowMapResources()
+{
+    for (RenderTexture2D& shadowMap : dynamicSpotLightShadowMaps) {
+        if (shadowMap.texture.id != 0) {
+            continue;
+        }
+
+        shadowMap = LoadRenderTexture(
+                DynamicSpotLightShadowMapResolution,
+                DynamicSpotLightShadowMapResolution);
+        if (shadowMap.texture.id == 0) {
+            UnloadDynamicSpotLightShadowMapResources();
+            return false;
+        }
+        SetTextureFilter(shadowMap.texture, TEXTURE_FILTER_POINT);
+        SetTextureWrap(shadowMap.texture, TEXTURE_WRAP_CLAMP);
+    }
+
+    return true;
+}
+
+void SectorMeshPreview::UnloadDynamicSpotLightShadowMapResources()
+{
+    for (RenderTexture2D& shadowMap : dynamicSpotLightShadowMaps) {
+        if (shadowMap.texture.id != 0) {
+            UnloadRenderTexture(shadowMap);
+            shadowMap = RenderTexture2D{};
+        }
+    }
+}
+
+void SectorMeshPreview::RenderDynamicSpotLightShadowMaps()
+{
+    if (!dynamicSpotLightShadowMaterialLoaded
+            || dynamicSpotLightShadowLightViewProjectionLoc < 0
+            || dynamicSpotLightShadowMatrices.empty()) {
+        return;
+    }
+
+    for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : dynamicSpotLightShadowMatrices) {
+        if (matrix.shadowSlot < 0
+                || static_cast<std::size_t>(matrix.shadowSlot) >= dynamicSpotLightShadowMaps.size()) {
+            continue;
+        }
+
+        RenderTexture2D& shadowMap = dynamicSpotLightShadowMaps[static_cast<std::size_t>(matrix.shadowSlot)];
+        if (shadowMap.texture.id == 0) {
+            continue;
+        }
+
+        BeginTextureMode(shadowMap);
+        ClearBackground(WHITE);
+        rlEnableDepthTest();
+        if (dynamicSpotLightShadowLightViewProjectionLoc >= 0) {
+            SetShaderValueMatrix(
+                    dynamicSpotLightShadowMaterial.shader,
+                    dynamicSpotLightShadowLightViewProjectionLoc,
+                    matrix.lightViewProjection);
+        }
+        for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
+            DrawMesh(batch.mesh, dynamicSpotLightShadowMaterial, MatrixIdentity());
+        }
+        rlDisableDepthTest();
+        EndTextureMode();
+    }
 }
 
 void SectorMeshPreview::RenderBloomSource(engine::AssetManager& assets)
@@ -1275,6 +1420,10 @@ void SectorMeshPreview::RefreshDynamicLightSources(const SectorTopologyMap& map)
     dynamicPointLights.reserve(MaxDynamicLights);
     selectedDynamicPointLightIds.clear();
     selectedDynamicPointLightIds.reserve(MaxDynamicLights);
+    dynamicSpotLightShadowCasters.clear();
+    dynamicSpotLightShadowCasters.reserve(MaxDynamicSpotLightShadowCasters);
+    dynamicSpotLightShadowMatrices.clear();
+    dynamicSpotLightShadowMatrices.reserve(MaxDynamicSpotLightShadowCasters);
     UpdateVisibilityDebug();
 }
 
@@ -1318,6 +1467,16 @@ void SectorMeshPreview::UpdateVisibilityDebug(
             dynamicPointLights,
             &selectedDynamicPointLightIds,
             &selectedDynamicPointLightIds);
+    SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+            dynamicPointLights,
+            visibilityResult,
+            meshes.sectorReceiverBounds,
+            MaxDynamicSpotLightShadowCasters,
+            dynamicSpotLightShadowCasters);
+    BuildSectorPreviewDynamicSpotLightShadowMatrices(
+            dynamicPointLights,
+            dynamicSpotLightShadowCasters,
+            dynamicSpotLightShadowMatrices);
     renderDebugText = "draw records: "
             + std::to_string(visibleDrawRecordCount)
             + " / "

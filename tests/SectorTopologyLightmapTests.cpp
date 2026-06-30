@@ -445,8 +445,12 @@ void TestSourceHashChanges()
     changedDynamicSpotLight.dynamicSpotLights.front().flicker = true;
     changedDynamicSpotLight.dynamicSpotLights.front().flickerSpeed = 4.0f;
     changedDynamicSpotLight.dynamicSpotLights.front().flickerAmount = 0.8f;
+    changedDynamicSpotLight.dynamicSpotLights.front().castsShadow = true;
+    changedDynamicSpotLight.dynamicSpotLights.front().shadowPriority = 42;
+    changedDynamicSpotLight.dynamicSpotLights.front().shadowBias = 0.01f;
+    changedDynamicSpotLight.dynamicSpotLights.front().shadowStrength = 0.5f;
     Check(game::ComputeSectorLightmapSourceHash(changedDynamicSpotLight) == hash,
-          "hash ignores dynamic spot light edits");
+          "hash ignores dynamic spot light edits including shadow settings");
 
     game::SectorTopologyMap changedDirectional = base;
     changedDirectional.directionalLight.enabled = true;

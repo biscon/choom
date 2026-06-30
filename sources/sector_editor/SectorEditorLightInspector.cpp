@@ -64,6 +64,7 @@ float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdEr
     height += rowH + gap; // Delete.
     height += rowH + gap; // Enabled.
     height += 3.0f * (rowH + gap); // Flicker controls.
+    height += 4.0f * (rowH + gap); // Shadow controls.
     height += 11.0f * (rowH + gap); // Position/target/intensity/range/cones.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
@@ -578,6 +579,87 @@ bool DrawSelectedDynamicSpotLightInspector(
             DynamicLightFlickerMaxAmount,
             3);
     light.flickerAmount = ClampDynamicLightFlickerAmount(light.flickerAmount);
+
+    bool castsShadow = light.castsShadow;
+    if (engine::Checkbox(ui, config, input, assets, "sector_editor_dynamic_spot_light_casts_shadow", Rectangle{0.0f, y, contentW, rowH}, font, "Cast Shadows", castsShadow)
+            && castsShadow != light.castsShadow) {
+        light.castsShadow = castsShadow;
+        callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d shadow request", light.id));
+    }
+    y += rowH + gap;
+
+    {
+        const SectorEditorIntInputResult result = DrawLabeledIntInput(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                "sector_editor_dynamic_spot_light_shadow_priority",
+                "Shadow priority:",
+                Rectangle{0.0f, y, numberLabelW, rowH},
+                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                engine::UITextJustify::Right,
+                light.shadowPriority,
+                uiState.lightShadowPriorityInput,
+                DynamicSpotLightMinShadowPriority,
+                DynamicSpotLightMaxShadowPriority,
+                1);
+        const int edited = ClampDynamicSpotLightShadowPriority(result.value);
+        if (result.changed && edited != light.shadowPriority) {
+            light.shadowPriority = edited;
+            callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d shadow priority", light.id));
+        }
+        y += rowH + gap;
+    }
+    {
+        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                "sector_editor_dynamic_spot_light_shadow_bias",
+                "Shadow bias:",
+                Rectangle{0.0f, y, numberLabelW, rowH},
+                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                engine::UITextJustify::Right,
+                light.shadowBias,
+                uiState.lightShadowBiasInput,
+                DynamicSpotLightMinShadowBias,
+                DynamicSpotLightMaxShadowBias,
+                4);
+        const float edited = ClampDynamicSpotLightShadowBias(result.value);
+        if (result.changed && edited != light.shadowBias) {
+            light.shadowBias = edited;
+            callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d shadow bias", light.id));
+        }
+        y += rowH + gap;
+    }
+    {
+        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                "sector_editor_dynamic_spot_light_shadow_strength",
+                "Shadow strength:",
+                Rectangle{0.0f, y, numberLabelW, rowH},
+                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                engine::UITextJustify::Right,
+                light.shadowStrength,
+                uiState.lightShadowStrengthInput,
+                DynamicSpotLightMinShadowStrength,
+                DynamicSpotLightMaxShadowStrength,
+                3);
+        const float edited = ClampDynamicSpotLightShadowStrength(result.value);
+        if (result.changed && edited != light.shadowStrength) {
+            light.shadowStrength = edited;
+            callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d shadow strength", light.id));
+        }
+        y += rowH + gap;
+    }
 
     drawLightFloat("sector_editor_dynamic_spot_light_x", "Position X:", light.position.x, uiState.lightXInput, -8192.0f, 8192.0f, 2);
     drawLightFloat("sector_editor_dynamic_spot_light_y", "Position Y:", light.position.y, uiState.lightYInput, -512.0f, 512.0f, 2);

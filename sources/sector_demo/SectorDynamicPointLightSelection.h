@@ -10,6 +10,9 @@
 
 namespace game {
 
+constexpr std::size_t MaxDynamicSpotLightShadowCasters = 2;
+constexpr int DynamicSpotLightShadowMapResolution = 1024;
+
 class SectorCollisionWorld;
 struct SectorReceiverBounds;
 struct SectorTopologyDynamicPointLight;
@@ -35,12 +38,35 @@ struct SectorPreviewDynamicPointLightUniform {
     bool flicker = false;
     float flickerSpeed = DynamicLightFlickerDefaultSpeed;
     float flickerAmount = DynamicLightFlickerDefaultAmount;
+    bool castsShadow = false;
+    int shadowPriority = DynamicSpotLightDefaultShadowPriority;
+    float shadowBias = DynamicSpotLightDefaultShadowBias;
+    float shadowStrength = DynamicSpotLightDefaultShadowStrength;
 };
 
 struct SectorPreviewDynamicPointLightSource {
     int lightId = 0;
     int ownerSectorId = 0;
     SectorPreviewDynamicPointLightUniform light = {};
+};
+
+struct SectorPreviewDynamicSpotLightShadowCaster {
+    int lightId = 0;
+    int dynamicLightIndex = -1;
+    int shadowSlot = -1;
+    int shadowPriority = DynamicSpotLightDefaultShadowPriority;
+    float selectionScore = 0.0f;
+    float shadowBias = DynamicSpotLightDefaultShadowBias;
+    float shadowStrength = DynamicSpotLightDefaultShadowStrength;
+};
+
+struct SectorPreviewDynamicSpotLightShadowMatrix {
+    int lightId = 0;
+    int dynamicLightIndex = -1;
+    int shadowSlot = -1;
+    Matrix view = {};
+    Matrix projection = {};
+    Matrix lightViewProjection = {};
 };
 
 bool MakeSectorPreviewDynamicPointLightUniform(
@@ -80,5 +106,23 @@ void SelectRankedSectorPreviewDynamicPointLights(
         std::vector<SectorPreviewDynamicPointLightUniform>& outSelectedLights,
         std::vector<int>* outSelectedLightIds = nullptr,
         const std::vector<int>* previousSelectedLightIds = nullptr);
+
+void SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+        const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights,
+        const RuntimePortalVisibilityResult& visibility,
+        const std::vector<SectorReceiverBounds>& receiverBounds,
+        std::size_t maxShadowCasters,
+        std::vector<SectorPreviewDynamicSpotLightShadowCaster>& outShadowCasters);
+
+bool MakeSectorPreviewDynamicSpotLightShadowMatrix(
+        const SectorPreviewDynamicPointLightUniform& light,
+        int dynamicLightIndex,
+        int shadowSlot,
+        SectorPreviewDynamicSpotLightShadowMatrix& outMatrix);
+
+void BuildSectorPreviewDynamicSpotLightShadowMatrices(
+        const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights,
+        const std::vector<SectorPreviewDynamicSpotLightShadowCaster>& shadowCasters,
+        std::vector<SectorPreviewDynamicSpotLightShadowMatrix>& outMatrices);
 
 } // namespace game

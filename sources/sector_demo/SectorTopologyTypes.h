@@ -20,6 +20,15 @@ constexpr float DynamicLightFlickerMinSpeed = 0.05f;
 constexpr float DynamicLightFlickerMaxSpeed = 10.0f;
 constexpr float DynamicLightFlickerMinAmount = 0.0f;
 constexpr float DynamicLightFlickerMaxAmount = 1.0f;
+constexpr int DynamicSpotLightMinShadowPriority = -1000;
+constexpr int DynamicSpotLightMaxShadowPriority = 1000;
+constexpr int DynamicSpotLightDefaultShadowPriority = 0;
+constexpr float DynamicSpotLightMinShadowBias = 0.0f;
+constexpr float DynamicSpotLightMaxShadowBias = 0.1f;
+constexpr float DynamicSpotLightDefaultShadowBias = 0.002f;
+constexpr float DynamicSpotLightMinShadowStrength = 0.0f;
+constexpr float DynamicSpotLightMaxShadowStrength = 1.0f;
+constexpr float DynamicSpotLightDefaultShadowStrength = 1.0f;
 
 inline float ClampDynamicLightFlickerSpeed(float value)
 {
@@ -29,6 +38,21 @@ inline float ClampDynamicLightFlickerSpeed(float value)
 inline float ClampDynamicLightFlickerAmount(float value)
 {
     return std::clamp(value, DynamicLightFlickerMinAmount, DynamicLightFlickerMaxAmount);
+}
+
+inline int ClampDynamicSpotLightShadowPriority(int value)
+{
+    return std::clamp(value, DynamicSpotLightMinShadowPriority, DynamicSpotLightMaxShadowPriority);
+}
+
+inline float ClampDynamicSpotLightShadowBias(float value)
+{
+    return std::clamp(value, DynamicSpotLightMinShadowBias, DynamicSpotLightMaxShadowBias);
+}
+
+inline float ClampDynamicSpotLightShadowStrength(float value)
+{
+    return std::clamp(value, DynamicSpotLightMinShadowStrength, DynamicSpotLightMaxShadowStrength);
 }
 
 struct SectorTopologyVertex {
@@ -162,6 +186,10 @@ struct SectorTopologyDynamicSpotLight {
     bool flicker = false;
     float flickerSpeed = DynamicLightFlickerDefaultSpeed;
     float flickerAmount = DynamicLightFlickerDefaultAmount;
+    bool castsShadow = false;
+    int shadowPriority = DynamicSpotLightDefaultShadowPriority;
+    float shadowBias = DynamicSpotLightDefaultShadowBias;
+    float shadowStrength = DynamicSpotLightDefaultShadowStrength;
 };
 
 enum class SectorTopologyValidationSeverity {

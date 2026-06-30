@@ -35,54 +35,54 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_01",
       "title": "Shadow-Casting Dynamic Spotlight Data And UI",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01a",
       "title": "Add Dynamic Spotlight Shadow Settings And Serialization",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01b",
       "title": "Add Dynamic Spotlight Shadow Inspector Controls",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02",
       "title": "Shadow Caster Selection And Shadow Map Resources",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02a",
       "title": "Select Shadow-Casting Dynamic Spotlights Under Budget",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02b",
       "title": "Create Shadow Map Render Targets And Light View Projections",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03",
       "title": "Shadow Map Depth Rendering",
       "type": "phase",
-      "status": "Not Started"
+      "status": "In Progress"
     },
     {
       "id": "phase_03a",
       "title": "Render Sector Geometry Into Spotlight Shadow Maps",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03b",
@@ -132,20 +132,184 @@ When an agent is asked to execute this plan, it must:
 
 | Phase / Pass                                                            | Status      | Date | Notes                                                                     |
 | ----------------------------------------------------------------------- | ----------- | ---- | ------------------------------------------------------------------------- |
-| Phase 1: Shadow-Casting Dynamic Spotlight Data And UI                   | Not Started |      | Parent phase.                                                             |
-| Phase 1A: Add Dynamic Spotlight Shadow Settings And Serialization       | Not Started |      | First executable pass. Data/persistence only.                             |
-| Phase 1B: Add Dynamic Spotlight Shadow Inspector Controls               | Not Started |      | Editor controls only; no rendering yet.                                   |
-| Phase 2: Shadow Caster Selection And Shadow Map Resources               | Not Started |      | Parent phase.                                                             |
-| Phase 2A: Select Shadow-Casting Dynamic Spotlights Under Budget         | Not Started |      | Select up to max shadow casters from already-selected dynamic spotlights. |
-| Phase 2B: Create Shadow Map Render Targets And Light View Projections   | Not Started |      | Allocate 2D shadow maps and compute spotlight view/projection matrices.   |
-| Phase 3: Shadow Map Depth Rendering                                     | Not Started |      | Parent phase.                                                             |
-| Phase 3A: Render Sector Geometry Into Spotlight Shadow Maps             | Not Started |      | Depth pass for sector geometry.                                           |
+| Phase 1: Shadow-Casting Dynamic Spotlight Data And UI                   | Completed   | 2026-06-30 | Phase 1A and Phase 1B complete.                                           |
+| Phase 1A: Add Dynamic Spotlight Shadow Settings And Serialization       | Completed   | 2026-06-30 | Added dynamic spotlight shadow data and JSON persistence only.             |
+| Phase 1B: Add Dynamic Spotlight Shadow Inspector Controls               | Completed   | 2026-06-30 | Added dynamic spotlight-only shadow inspector controls.                    |
+| Phase 2: Shadow Caster Selection And Shadow Map Resources               | Completed   | 2026-06-30 | Phase 2A and Phase 2B complete.                                           |
+| Phase 2A: Select Shadow-Casting Dynamic Spotlights Under Budget         | Completed   | 2026-06-30 | Selects up to 2 shadow-casting dynamic spotlights from selected runtime lights. |
+| Phase 2B: Create Shadow Map Render Targets And Light View Projections   | Completed   | 2026-06-30 | Allocates preview-owned 1024x1024 shadow maps and computes finite spotlight matrices. |
+| Phase 3: Shadow Map Depth Rendering                                     | In Progress | 2026-06-30 | Phase 3A complete; Phase 3B remains.                                      |
+| Phase 3A: Render Sector Geometry Into Spotlight Shadow Maps             | Completed   | 2026-06-30 | Renders cached sector draw records into selected dynamic spotlight shadow maps. |
 | Phase 3B: Support Alpha-Tested Middle Textures In Shadow Pass           | Not Started |      | Required from the start for grates/bars/middle textures.                  |
 | Phase 4: Main Shader Shadow Sampling                                    | Not Started |      | Parent phase.                                                             |
 | Phase 4A: Pack Shadow Slots And Light-Space Matrices For Dynamic Lights | Not Started |      | Main shader receives shadow slot/matrix data.                             |
 | Phase 4B: Apply PCF Shadowing To Dynamic Spotlight Contribution         | Not Started |      | Dynamic spotlight direct lighting becomes shadowed.                       |
 | Phase 5: Debug Polish Tests And Completion                              | Not Started |      | Parent phase.                                                             |
 | Phase 5A: Add Shadow Debug Readout Tune Defaults And Close Plan         | Not Started |      | Final tuning, docs, and smoke checks.                                     |
+
+## Execution Log
+
+### 2026-06-30 - Phase 1A
+
+Status: Completed.
+
+Summary:
+
+* Added persisted dynamic spotlight shadow request fields: `castsShadow`, `shadowPriority`, `shadowBias`, and `shadowStrength`.
+* Defaults are `castsShadow=false`, `shadowPriority=0`, `shadowBias=0.002`, and `shadowStrength=1.0`.
+* Missing fields load as defaults. Default-valued fields are omitted on save. Finite numeric shadow values are clamped defensively on load/save.
+* Added serialization and authoring round-trip coverage, invalid-type rejection coverage, and explicit lightmap source hash coverage for dynamic spotlight shadow edits.
+
+Behavior notes:
+
+* Source code changed.
+* No inspector fields were added in this pass.
+* No renderer, shader, shadow map resource, dynamic lighting, static lighting, collision, or preview behavior changed.
+* `ComputeSectorLightmapSourceHash()` remains unchanged and ignores dynamic spotlight shadow settings.
+* No topology mutation paths were changed, so topology render-cache invalidation behavior is unchanged.
+* No generated artifacts were created.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+* `git diff --check` passed.
+* `git diff --stat` reported 5 files changed.
+* `git status --short` showed only the active plan, data, serialization, and test files modified.
+
+### 2026-06-30 - Phase 1B
+
+Status: Completed.
+
+Summary:
+
+* Added dynamic spotlight-only inspector controls for `Cast Shadows`, `Shadow Priority`, `Shadow Bias`, and `Shadow Strength`.
+* Shadow priority, bias, and strength edits use the existing clamped authoring ranges.
+* Inspector content height now accounts for the added dynamic spotlight shadow rows.
+
+Behavior notes:
+
+* Source code changed.
+* Editor behavior changed only for selected dynamic spotlights; dynamic point lights, static point lights, and static spotlights do not show these controls.
+* Editing these fields calls the existing topology document edited path, so normal document dirty/cache invalidation behavior is followed.
+* Serialization field names and defaults remain those added in Phase 1A: `castsShadow=false`, `shadowPriority=0`, `shadowBias=0.002`, and `shadowStrength=1.0`.
+* `ComputeSectorLightmapSourceHash()` remains unchanged and ignores dynamic spotlight shadow settings.
+* No renderer, shader, shadow map resource, dynamic lighting, static lighting, collision, or preview behavior changed.
+* No generated artifacts were created.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+* `git diff --check` passed.
+* `git diff --stat` reported 7 files changed total in the worktree, including prior Phase 1A changes and this Phase 1B inspector update.
+* `git status --short` showed the active plan, prior Phase 1A source/test files, and this Phase 1B inspector source files modified.
+
+### 2026-06-30 - Phase 2A
+
+Status: Completed.
+
+Summary:
+
+* Added the named default dynamic spotlight shadow budget: `MaxDynamicSpotLightShadowCasters = 2`.
+* Dynamic spotlight runtime uniforms now carry shadow request metadata: `castsShadow`, `shadowPriority`, `shadowBias`, and `shadowStrength`.
+* Added `SelectRankedSectorPreviewDynamicSpotLightShadowCasters()` to select shadow casters only from already-selected runtime dynamic lights.
+* Shadow caster selection filters to dynamic spotlights with `castsShadow=true`, ranks by higher `shadowPriority`, then higher dynamic light contribution score, then lower stable light ID, and assigns sequential shadow slots.
+* Added tests covering selected-light eligibility, `castsShadow=false` filtering, dynamic point filtering, priority/score/ID ordering, slot/index output, and the cap of 2.
+
+Behavior notes:
+
+* Source code changed.
+* Dynamic light selection and packing remain otherwise unchanged; selected dynamic lights can still illuminate without a shadow slot.
+* Dynamic point lights and static lights do not receive shadow slots.
+* No shadow map render targets, light view/projection matrices, depth rendering, shader sampling, resource lifecycle, dynamic lighting visuals, static lighting, serialization, editor UI, topology mutation, collision, sector lookup, or physics behavior changed.
+* `ComputeSectorLightmapSourceHash()` remains unchanged and ignores runtime dynamic spotlight shadow selection.
+* No topology mutation paths were changed, so topology render-cache invalidation behavior is unchanged.
+* No generated artifacts were created. The plan currently has no `sandbox_dir` field.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `ctest --test-dir cmake-build-debug --output-on-failure -R SectorTopologyMeshBuilder` found no tests because the registered test name is lowercase.
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+* `git diff --check` passed.
+* `git diff --stat` reported 10 files changed total in the worktree, including prior Phase 1A/1B changes and this Phase 2A selection update.
+* `git status --short` showed the active plan, prior Phase 1A/1B source/test files, and this Phase 2A source/test files modified.
+
+### 2026-06-30 - Phase 2B
+
+Status: Completed.
+
+Summary:
+
+* Added the named dynamic spotlight shadow map resolution: `DynamicSpotLightShadowMapResolution = 1024`.
+* Added per-shadow-slot matrix data for selected dynamic spotlight shadow casters: view, projection, and `projection * view` light-view-projection matrices.
+* Spotlight shadow matrix construction uses the selected dynamic spotlight position/direction, a perspective projection based on the outer cone, a 0.05 near plane, and the light range as the far plane.
+* Degenerate spotlight directions use the existing safe downward fallback and vertical directions choose a non-parallel up vector.
+* `SectorMeshPreview` now allocates two preview-owned 1024x1024 render textures during renderer resource setup and unloads them during preview resource teardown.
+* Added matrix coverage for finite output, degenerate/vertical directions, invalid point/range rejection, slot metadata, invalid caster-index skipping, and the 1024 default resolution.
+
+Behavior notes:
+
+* Source code changed.
+* Resource lifecycle changed: dynamic spotlight shadow maps are created with preview renderer resources and unloaded with preview renderer resources. They are not allocated per frame.
+* Dynamic light selection remains otherwise unchanged; selected dynamic lights can still illuminate without a shadow slot.
+* No depth rendering, shader sampling, visible dynamic lighting attenuation, static lighting, serialization, editor UI, topology mutation, collision, sector lookup, or physics behavior changed.
+* `ComputeSectorLightmapSourceHash()` remains unchanged and ignores runtime dynamic spotlight shadow resources and matrices.
+* No topology mutation paths were changed, so topology render-cache invalidation behavior is unchanged.
+* No generated artifacts were created. The plan currently has no `sandbox_dir` field.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug --target sector_topology_mesh_builder_tests -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_mesh_builder_tests` found no tests because the registered test name is `sector_topology_mesh_builder`.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_mesh_builder` passed.
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+* `git diff --check` passed.
+* `git diff --stat` reported 12 files changed total in the worktree, including prior Phase 1A/1B and Phase 2A changes plus this Phase 2B update.
+* `git status --short` showed the active plan, prior Phase 1A/1B/2A source/test files, and this Phase 2B source/test files modified.
+
+### 2026-06-30 - Phase 3A
+
+Status: Completed.
+
+Summary:
+
+* Added a dedicated dynamic spotlight shadow caster shader/material for `SectorMeshPreview`.
+* The shadow caster vertex shader transforms sector mesh positions with the selected spotlight `lightViewProjection` matrix.
+* The shadow caster fragment shader writes normalized depth (`gl_FragCoord.z`) into the render target color texture while normal depth testing resolves nearest sector geometry.
+* The shadow render pass explicitly enables depth testing while drawing each shadow map and disables it before returning to the main scene path.
+* The active editor preview path now calls `SectorEditor::RenderPreview3DShadowMaps()` before binding `worldTarget` for the visible 3D scene.
+* `SectorEditor::RenderPreview3DShadowMaps()` delegates to `SectorMeshPreview::RenderDynamicSpotLightShadowMaps()`; `SectorMeshPreview::DrawScene()` only draws the visible scene and no longer switches render targets internally.
+* Each selected dynamic spotlight shadow slot renders all cached sector draw records into its existing preview-owned shadow render target.
+
+Behavior notes:
+
+* Source code changed.
+* Main scene visual output is intended to remain unchanged because no main shader shadow sampling was added in this pass.
+* Framebuffer ownership changed so shadow maps are rendered before the visible scene target is bound, avoiding hidden render-target changes during `DrawScene()`.
+* Geometry included in the shadow pass: cached sector draw records, including floors, ceilings, walls, lower/upper strips, and middle texture records.
+* Geometry excluded from the shadow pass: sky cylinder, sky cap, debug overlays, UI, bloom fullscreen passes, and editor gizmos.
+* Alpha-tested draw records are included as opaque casters in this pass; alpha-cutout shadow behavior remains explicitly deferred to Phase 3B.
+* Dynamic lighting selection, dynamic light contribution, bloom source rendering, static light baking, serialization, editor UI, topology mutation, collision, sector lookup, and physics behavior were not changed.
+* `ComputeSectorLightmapSourceHash()` remains unchanged and ignores runtime dynamic spotlight shadow map rendering.
+* No topology mutation paths were changed, so topology render-cache invalidation behavior is unchanged.
+* No generated artifacts were created. The plan currently has no `sandbox_dir` field.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_mesh_builder` passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure` passed, 13/13 tests.
+* `git diff --check` passed.
+* `git diff --stat` reported 15 files changed total in the worktree, including prior Phase 1A/1B/2A/2B changes plus this Phase 3A update.
+* `git status --short` showed the active plan plus current source/test scope: `Main.cpp`, dynamic spotlight selection, `SectorMeshPreview`, topology light serialization/types, `SectorEditor` preview/inspector/types, and topology lightmap/mesh builder/serialization tests.
 
 ## Execution Tracking Rules
 
@@ -649,9 +813,9 @@ Manual smoke:
 
 Goal:
 
-Make alpha-tested middle textures cast cutout shadows correctly from the start.
+Complete alpha-tested middle texture cutout shadow casting in this plan by replacing Phase 3A's temporary opaque-caster behavior for alpha-tested draw records.
 
-This is required, not optional.
+This is required before Phase 3 can be marked complete.
 
 Implementation guidance:
 
@@ -960,9 +1124,9 @@ Cast Shadows requests a shadow map. Only the highest-priority selected dynamic s
 
 Tune:
 
-* default shadow bias
-* default shadow strength
-* shadow map resolution constant
+* confirm the established default shadow bias (`0.002`) or intentionally update related tests/docs/compat notes if changing it
+* confirm the established default shadow strength (`1.0`) or intentionally update related tests/docs/compat notes if changing it
+* confirm the established shadow map resolution constant (`1024`) or intentionally update related tests/docs/compat notes if changing it
 * PCF kernel if too expensive/soft/hard
 
 Document:
