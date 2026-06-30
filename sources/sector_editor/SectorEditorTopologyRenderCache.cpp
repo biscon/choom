@@ -263,6 +263,17 @@ void DrawCachedTopologySector(
     }
 }
 
+void DrawTopologyLightTypeLabel(Vector2 anchor, const char* label)
+{
+    const Color labelColor = Color{92, 255, 176, 255};
+    DrawText(
+            label,
+            static_cast<int>(anchor.x + 12.0f),
+            static_cast<int>(anchor.y - 22.0f),
+            18,
+            labelColor);
+}
+
 const CachedAuthoringLineDraw* FindCachedAuthoringLine(
         const SectorEditorTopologyRenderCache& cache,
         int lineId)
@@ -967,6 +978,7 @@ void DrawCachedTopologyStaticLights(
                 Color{20, 24, 32, 255});
         DrawLineEx(Vector2{center.x - 10.0f, center.y}, Vector2{center.x + 10.0f, center.y}, 2.0f, color);
         DrawLineEx(Vector2{center.x, center.y - 10.0f}, Vector2{center.x, center.y + 10.0f}, 2.0f, color);
+        DrawTopologyLightTypeLabel(center, "SL");
     }
 }
 
@@ -1005,6 +1017,7 @@ void DrawCachedTopologyDynamicLights(
         DrawLineEx(left, top, 2.0f, Color{20, 24, 32, 255});
         DrawLineEx(Vector2{center.x - 10.0f, center.y}, Vector2{center.x + 10.0f, center.y}, 2.0f, color);
         DrawLineEx(Vector2{center.x, center.y - 10.0f}, Vector2{center.x, center.y + 10.0f}, 2.0f, color);
+        DrawTopologyLightTypeLabel(center, "DL");
     }
 }
 
@@ -1099,6 +1112,7 @@ void DrawCachedTopologyStaticSpotLights(
                 static_cast<int>(std::round(target.y)),
                 selected ? 9.0f : 7.0f,
                 outline);
+        DrawTopologyLightTypeLabel(origin, "SS");
     }
 }
 
@@ -1188,6 +1202,7 @@ void DrawCachedTopologyDynamicSpotLights(
                 static_cast<int>(std::round(target.y)),
                 selected ? 9.0f : 7.0f,
                 outline);
+        DrawTopologyLightTypeLabel(origin, "DS");
     }
 }
 

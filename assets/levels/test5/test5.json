@@ -195,9 +195,9 @@
       "sourceRadius": 2.0,
       "intensity": 1.75,
       "color": {
-        "r": 255,
+        "r": 0,
         "g": 255,
-        "b": 255,
+        "b": 0,
         "a": 255
       }
     },
@@ -212,33 +212,57 @@
       "sourceRadius": 2.0,
       "intensity": 1.75,
       "color": {
-        "r": 255,
+        "r": 0,
         "g": 255,
-        "b": 255,
+        "b": 0,
         "a": 255
       }
-    }
-  ],
-  "dynamicPointLights": [
+    },
     {
-      "id": 1,
+      "id": 10,
       "position": [
         176.0,
-        25.0,
+        24.0,
         64.0
       ],
-      "radius": 24.0,
-      "intensity": 1.5,
+      "radius": 16.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.0,
       "color": {
         "r": 255,
         "g": 235,
         "b": 135,
         "a": 255
+      }
+    }
+  ],
+  "staticSpotLights": [
+    {
+      "id": 1,
+      "position": [
+        220.0,
+        24.0902099609375,
+        64.0
+      ],
+      "target": [
+        194.0,
+        4.211063385009766,
+        64.0
+      ],
+      "range": 70.0,
+      "sourceRadius": 2.0,
+      "intensity": 3.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
       },
-      "flicker": true,
-      "flickerSpeed": 2.0,
-      "flickerAmount": 0.25
-    },
+      "innerConeDegrees": 35.0,
+      "outerConeDegrees": 50.0
+    }
+  ],
+  "dynamicPointLights": [
     {
       "id": 2,
       "position": [
@@ -289,6 +313,30 @@
       }
     }
   ],
+  "dynamicSpotLights": [
+    {
+      "id": 1,
+      "position": [
+        176.0,
+        25.39914894104004,
+        64.0
+      ],
+      "target": [
+        172.06802368164063,
+        -6.996774673461914,
+        63.938682556152344
+      ],
+      "range": 64.0,
+      "intensity": 3.0,
+      "color": {
+        "r": 255,
+        "g": 235,
+        "b": 135,
+        "a": 255
+      },
+      "flicker": true
+    }
+  ],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
     "ambientOcclusionStrength": 0.550000011920929,
@@ -327,7 +375,7 @@
     "path": "assets/levels/test5/test5.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "3d708be3e7254137"
+    "sourceHash": "51a05ada70c9656f"
   },
   "authoringGraph": {
     "vertices": [
