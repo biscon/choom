@@ -21,6 +21,7 @@ When an agent is asked to execute this plan, it must:
 ```plan-state-json id="lightmap-alpha-occlusion"
 {
   "plan_id": "sector_lightmap_alpha_test_occlusion_plan",
+  "sandbox_dir": "/tmp/sector_lightmap_alpha_occlusion_phase_01b",
   "status_values": [
     "Not Started",
     "Planned",
@@ -35,54 +36,54 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_01",
       "title": "Alpha-Test Occluder Data And Texture Sampling",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01a",
       "title": "Collect Alpha-Tested Middle Texture Occluders For Baking",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01b",
       "title": "Add CPU Alpha Mask Sampling Cache For Bake Occlusion",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02",
       "title": "Alpha-Aware Static Light Occlusion",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02a",
       "title": "Integrate Alpha-Tested Occluders Into Static Ray Occlusion",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02b",
       "title": "Apply Alpha-Aware Occlusion To Static Points Spots And Directional Light",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03",
       "title": "Bake Version Tests Polish And Completion",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03a",
       "title": "Bump Bake Version Strengthen Tests And Close Plan",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     }
   ]
 }
@@ -92,14 +93,14 @@ When an agent is asked to execute this plan, it must:
 
 | Phase / Pass                                                                       | Status      | Date | Notes                                                                                              |
 | ---------------------------------------------------------------------------------- | ----------- | ---- | -------------------------------------------------------------------------------------------------- |
-| Phase 1: Alpha-Test Occluder Data And Texture Sampling                             | Not Started |      | Parent phase.                                                                                      |
-| Phase 1A: Collect Alpha-Tested Middle Texture Occluders For Baking                 | Not Started |      | First executable pass. Build bake-side occluder data, no lighting behavior change yet if possible. |
-| Phase 1B: Add CPU Alpha Mask Sampling Cache For Bake Occlusion                     | Not Started |      | CPU texture alpha lookup for bake rays.                                                            |
-| Phase 2: Alpha-Aware Static Light Occlusion                                        | Not Started |      | Parent phase.                                                                                      |
-| Phase 2A: Integrate Alpha-Tested Occluders Into Static Ray Occlusion               | Not Started |      | Rays continue through transparent texels and block on opaque texels.                               |
-| Phase 2B: Apply Alpha-Aware Occlusion To Static Points Spots And Directional Light | Not Started |      | Ensure shared static bake paths use the new occlusion behavior.                                    |
-| Phase 3: Bake Version Tests Polish And Completion                                  | Not Started |      | Parent phase.                                                                                      |
-| Phase 3A: Bump Bake Version Strengthen Tests And Close Plan                        | Not Started |      | Invalidate old baked data, add coverage, document behavior.                                        |
+| Phase 1: Alpha-Test Occluder Data And Texture Sampling                             | Completed   | 2026-06-30 | Phase 1A and Phase 1B complete.                                                                    |
+| Phase 1A: Collect Alpha-Tested Middle Texture Occluders For Baking                 | Completed   | 2026-06-30 | Added bake-side alpha-tested middle occluder triangle collection and tests. Bake output unchanged. |
+| Phase 1B: Add CPU Alpha Mask Sampling Cache For Bake Occlusion                     | Completed   | 2026-06-30 | Added bake-side CPU alpha mask cache and tests. Bake output unchanged.                             |
+| Phase 2: Alpha-Aware Static Light Occlusion                                        | Completed   | 2026-06-30 | Phase 2A and Phase 2B complete.                                                                    |
+| Phase 2A: Integrate Alpha-Tested Occluders Into Static Ray Occlusion               | Completed   | 2026-06-30 | Shared static ray occlusion now continues through transparent alpha texels and blocks on opaque texels. |
+| Phase 2B: Apply Alpha-Aware Occlusion To Static Points Spots And Directional Light | Completed   | 2026-06-30 | Added bake-path coverage for point/spot cutout behavior and audited directional direct shadow usage. |
+| Phase 3: Bake Version Tests Polish And Completion                                  | Completed   | 2026-06-30 | Phase 3A complete; plan completion criteria satisfied.                                             |
+| Phase 3A: Bump Bake Version Strengthen Tests And Close Plan                        | Completed   | 2026-06-30 | Bumped bake version, added stale-hash coverage, documented completed behavior.                     |
 
 ## Execution Tracking Rules
 
@@ -112,6 +113,157 @@ When an agent is asked to execute this plan, it must:
 * If a pass changes bake output, bake versioning, source hash behavior, texture loading, generated geometry, runtime rendering, save/load, cache invalidation, or build/test behavior, clearly say so.
 * Do not claim manual GUI verification unless it was actually performed.
 * If a pass is too broad, split it into smaller child passes and stop without source changes.
+
+## Pass Execution Notes
+
+### 2026-06-30 - Phase 1A: Collect Alpha-Tested Middle Texture Occluders For Baking
+
+Status: Completed.
+
+Summary:
+
+* Added bake-side `SectorLightmapAlphaOccluderTriangle` data for alpha-tested middle texture surfaces.
+* Added collection of world-space triangle positions, normals, visible texture UVs, texture ID, alpha cutoff, and source surface/triangle references.
+* Wired bake setup to collect the data without using it for static ray occlusion yet.
+* Added lightmap tests for alpha-tested middle collection, opaque floor/wall/ceiling exclusion, sky exclusion, decal exclusion, and UV/cutoff preservation.
+
+Behavior notes:
+
+* Bake output is intended to remain unchanged in this pass.
+* Lightmap source hash and bake version are unchanged.
+* Runtime rendering and dynamic shadow maps are unchanged.
+* Save/load, generated topology geometry, and editor topology cache invalidation behavior are unchanged.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2 --target sector_topology_lightmap_tests` - passed
+* `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_lightmap` - passed
+* `cmake --build cmake-build-debug -j2` - passed
+* `ctest --test-dir cmake-build-debug --output-on-failure` - passed
+
+### 2026-06-30 - Phase 1B: Add CPU Alpha Mask Sampling Cache For Bake Occlusion
+
+Status: Completed.
+
+Summary:
+
+* Added `SectorLightmapAlphaMaskCache`, a bake-side CPU alpha cache keyed by texture ID/definition/path.
+* Added deterministic nearest-neighbor alpha sampling with repeated/tiled UV behavior.
+* Missing or unreadable textures are cached as invalid and sampled conservatively opaque with a warning.
+* Added lightmap tests for transparent/opaque cutoff behavior, tiled UVs, missing texture fallback, and one-load cache behavior.
+* Test-generated image artifacts are written under `/tmp/sector_lightmap_alpha_occlusion_phase_01b`.
+
+Behavior notes:
+
+* Bake output is intended to remain unchanged in this pass; static ray occlusion does not use alpha masks until Phase 2.
+* Lightmap source hash and bake version are unchanged.
+* Runtime rendering, dynamic shadow maps, save/load, generated topology geometry, and editor topology cache invalidation behavior are unchanged.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2 --target sector_topology_lightmap_tests` - passed
+* `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_lightmap` - passed
+* `cmake --build cmake-build-debug -j2` - passed
+* `ctest --test-dir cmake-build-debug --output-on-failure` - passed
+* `git diff --check` - passed
+* `git diff --stat` - reviewed
+* `git status --short` - reviewed
+
+### 2026-06-30 - Phase 2A: Integrate Alpha-Tested Occluders Into Static Ray Occlusion
+
+Status: Completed.
+
+Summary:
+
+* Added a shared alpha-aware static occlusion ray helper.
+* The helper compares the nearest opaque geometry hit with the nearest alpha-tested middle-texture hit.
+* Opaque geometry blocks as before; alpha-tested middle hits sample CPU texture alpha and block only when `alpha >= alphaCutoff`.
+* Transparent alpha-tested hits advance the ray by a small epsilon and continue until reaching the endpoint, hitting an opaque/alpha-opaque blocker, or hitting a conservative iteration cap.
+* Added focused ray tests for transparent alpha pass-through, opaque alpha blocking, transparent alpha followed by farther opaque wall blocking, repeated transparent alpha hits, and unchanged opaque-geometry blocking.
+
+Behavior notes:
+
+* Bake output can change for static direct lighting where alpha-tested middle textures lie between a light and receiver.
+* The bake version and lightmap source hash are unchanged in this pass; Phase 3A remains responsible for invalidating old baked data.
+* Runtime rendering, dynamic shadow maps, save/load, generated topology geometry, and editor topology cache invalidation behavior are unchanged.
+* The shared helper is now used by current static direct occlusion call sites; Phase 2B remains for light-type-specific bake coverage and audit.
+* Test-generated image artifacts are written under `/tmp/sector_lightmap_alpha_occlusion_phase_01b`.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2 --target sector_topology_lightmap_tests` - passed
+* `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_lightmap` - passed
+* `cmake --build cmake-build-debug -j2` - passed
+* `ctest --test-dir cmake-build-debug --output-on-failure` - passed
+* `git diff --check` - passed
+* `git diff --stat` - reviewed
+* `git status --short` - reviewed
+
+### 2026-06-30 - Phase 2B: Apply Alpha-Aware Occlusion To Static Points Spots And Directional Light
+
+Status: Completed.
+
+Summary:
+
+* Audited the static direct-light bake paths and confirmed point, spot, and directional direct-light evaluation call the shared alpha-aware occlusion helper.
+* Added bake-level tests that compare transparent and opaque alpha-tested middle textures for static point light direct lighting.
+* Added bake-level tests that compare transparent and opaque alpha-tested middle textures for static spotlight direct lighting.
+* Added directional-light bake-path coverage that exercises the direct shadow ray path with alpha-tested middle geometry present.
+* Moved lightmap test-generated image artifacts under `/tmp/sector_lightmap_alpha_occlusion_phase_01b`.
+
+Behavior notes:
+
+* Static point and spot direct bake output changes where alpha-tested middle textures lie between a light and receiver.
+* Static directional light direct-shadow rays use the same alpha-aware helper; the added directional test verifies path participation rather than a separate image-delta fixture.
+* Soft point/spot source samples naturally use alpha-aware occlusion because each source sample calls the shared direct-light sample path.
+* The bake version and lightmap source hash are unchanged in this pass; Phase 3A remains responsible for invalidating old baked data.
+* Runtime rendering, dynamic shadow maps, save/load, generated topology geometry, and editor topology cache invalidation behavior are unchanged.
+* No manual GUI verification was performed.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2 --target sector_topology_lightmap_tests` - passed
+* `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_lightmap` - passed
+* `cmake --build cmake-build-debug -j2` - passed
+* `ctest --test-dir cmake-build-debug --output-on-failure` - passed
+* `git diff --check` - passed
+* `git diff --stat` - reviewed
+* `git status --short` - reviewed
+
+### 2026-06-30 - Phase 3A: Bump Bake Version Strengthen Tests And Close Plan
+
+Status: Completed.
+
+Summary:
+
+* Bumped `kSectorLightmapBakeVersion` from 8 to 9 so old baked lightmaps are invalidated through the source hash.
+* Added lightmap status coverage that treats a current source hash as valid and a pre-alpha-occlusion/mismatched hash as stale.
+* Confirmed existing alpha-aware tests cover transparent alpha pass-through, opaque alpha blocking, opaque geometry blocking, missing alpha fallback, tiled UV sampling, static point lights, static spotlights, and directional direct-shadow path participation.
+* Closed Phase 3 and this plan.
+
+Behavior notes:
+
+* Bake output already changed in Phase 2 for static direct lighting where alpha-tested middle textures lie between a light and receiver.
+* Lightmap source hashes now change because the bake version changed from 8 to 9.
+* Old baked lightmap metadata with a version-8 source hash is stale and requires rebake.
+* Alpha-tested middle textures affect static point and static spot baked shadows; directional direct-shadow rays use the same alpha-aware occlusion helper.
+* This remains binary alpha-test behavior, not colored transparency or partial transmission.
+* Dynamic shadow map alpha-test code is separate and unchanged; it is intended to visually match the baked result.
+* Runtime rendering, save/load format, generated topology geometry, and editor topology cache invalidation behavior are unchanged.
+* No manual GUI verification was performed, including the manual bake smoke checklist.
+
+Verification:
+
+* `cmake --build cmake-build-debug -j2 --target sector_topology_lightmap_tests` - passed
+* `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_lightmap` - passed
+* `cmake --build cmake-build-debug -j2` - passed
+* `ctest --test-dir cmake-build-debug --output-on-failure` - passed
+* `git diff --check` - passed
+* `git diff --stat` - reviewed
+* `git status --short` - reviewed
 
 ## Goal And Desired End State
 

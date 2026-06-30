@@ -19,6 +19,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 namespace game {
 
@@ -54,6 +55,14 @@ struct RayHit {
     float barycentric0 = 0.0f;
     float barycentric1 = 0.0f;
     float barycentric2 = 0.0f;
+};
+
+struct AlphaRayHit {
+    bool hit = false;
+    float distance = 0.0f;
+    Vector2 uv = {};
+    std::string textureId;
+    float alphaCutoff = 0.5f;
 };
 
 struct BakeTexel {
@@ -135,8 +144,26 @@ constexpr float RayHitEpsilon = 0.001f;
 constexpr float BvhAabbEpsilon = 0.00001f;
 constexpr int kSectorLightmapBvhLeafTriangleCount = 4;
 constexpr int kSectorLightmapBvhTraversalStackSize = 128;
+constexpr int kSectorLightmapAlphaOcclusionIterationLimit = 64;
 constexpr uint32_t kSectorLightmapProgressChunk = 512;
 constexpr float Pi = 3.14159265358979323846f;
+
+bool StartsWith(const std::string& value, const char* prefix)
+{
+    const std::string prefixString(prefix);
+    return value.size() >= prefixString.size() && value.compare(0, prefixString.size(), prefixString) == 0;
+}
+
+std::string ResolveLightmapTexturePath(const std::string& path)
+{
+#ifdef ASSETS_PATH
+    if (StartsWith(path, "assets/")) {
+        return std::string(ASSETS_PATH) + path.substr(7);
+    }
+#endif
+
+    return path;
+}
 
 bool RayIntersectsTriangle(
         Vector3 origin,
@@ -212,6 +239,14 @@ Vector3 Interpolate(Vector3 a, Vector3 b, Vector3 c, float wa, float wb, float w
             a.x * wa + b.x * wb + c.x * wc,
             a.y * wa + b.y * wb + c.y * wc,
             a.z * wa + b.z * wb + c.z * wc
+    };
+}
+
+Vector2 Interpolate(Vector2 a, Vector2 b, Vector2 c, float wa, float wb, float wc)
+{
+    return Vector2{
+            a.x * wa + b.x * wb + c.x * wc,
+            a.y * wa + b.y * wb + c.y * wc
     };
 }
 
@@ -295,6 +330,31 @@ bool RayIntersectsTriangle(Vector3 origin, Vector3 direction, const BakeTriangle
 {
     float distance = 0.0f;
     return RayIntersectsTriangle(origin, direction, tri, maxDistance, distance);
+}
+
+bool RayIntersectsTriangle(
+        Vector3 origin,
+        Vector3 direction,
+        const SectorLightmapAlphaOccluderTriangle& tri,
+        float maxDistance,
+        float& outDistance,
+        float& outBarycentric0,
+        float& outBarycentric1,
+        float& outBarycentric2)
+{
+    BakeTriangle bakeTri;
+    bakeTri.worldPosition0 = tri.worldPosition0;
+    bakeTri.worldPosition1 = tri.worldPosition1;
+    bakeTri.worldPosition2 = tri.worldPosition2;
+    return RayIntersectsTriangle(
+            origin,
+            direction,
+            bakeTri,
+            maxDistance,
+            outDistance,
+            outBarycentric0,
+            outBarycentric1,
+            outBarycentric2);
 }
 
 bool IsFinite(Vector3 value)
@@ -482,6 +542,13 @@ bool CastsLightmapOcclusion(const SectorGeneratedSurface& surface)
     return surface.ref.kind != SectorGeneratedSurfaceKind::Middle;
 }
 
+bool CastsAlphaTestLightmapOcclusion(const SectorGeneratedSurface& surface)
+{
+    return surface.ref.kind == SectorGeneratedSurfaceKind::Middle
+            && surface.alphaTest
+            && !surface.textureId.empty();
+}
+
 bool IntersectRayAabb(const Ray& ray, const BakeAabb& bounds, float maxDistance, float& outEntryDistance)
 {
     if (maxDistance <= 0.0f || !std::isfinite(maxDistance)
@@ -536,6 +603,16 @@ bool ShouldIgnoreBakeTriangle(
         int sourceTriangleIndex)
 {
     return IsExactSourceTriangle(tri, sourceSurfaceIndex, sourceTriangleIndex)
+            || IsSameLogicalSectorLightmapSurface(tri.surfaceRef, sourceSurfaceRef);
+}
+
+bool ShouldIgnoreAlphaOccluderTriangle(
+        const SectorLightmapAlphaOccluderTriangle& tri,
+        const SectorGeneratedSurfaceRef& sourceSurfaceRef,
+        int sourceSurfaceIndex,
+        int sourceTriangleIndex)
+{
+    return (tri.sourceSurfaceIndex == sourceSurfaceIndex && tri.triangleIndex == sourceTriangleIndex)
             || IsSameLogicalSectorLightmapSurface(tri.surfaceRef, sourceSurfaceRef);
 }
 
@@ -739,7 +816,127 @@ RayHit RaycastBakeTrianglesClosest(
     return closest;
 }
 
+AlphaRayHit RaycastAlphaOccludersClosest(
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        const Ray& ray,
+        float maxDistance,
+        const SectorGeneratedSurfaceRef& sourceSurfaceRef,
+        int sourceSurfaceIndex,
+        int sourceTriangleIndex,
+        SectorLightmapRaycastStats* stats)
+{
+    AlphaRayHit closest{};
+    closest.distance = maxDistance;
+    for (const SectorLightmapAlphaOccluderTriangle& tri : alphaOccluders) {
+        if (ShouldIgnoreAlphaOccluderTriangle(tri, sourceSurfaceRef, sourceSurfaceIndex, sourceTriangleIndex)) {
+            continue;
+        }
+
+        float distance = 0.0f;
+        float barycentric0 = 0.0f;
+        float barycentric1 = 0.0f;
+        float barycentric2 = 0.0f;
+        if (stats != nullptr) {
+            ++stats->triangleTests;
+        }
+        if (!RayIntersectsTriangle(
+                    ray.position,
+                    ray.direction,
+                    tri,
+                    closest.distance,
+                    distance,
+                    barycentric0,
+                    barycentric1,
+                    barycentric2)) {
+            continue;
+        }
+
+        if (stats != nullptr) {
+            ++stats->triangleHits;
+        }
+        closest.hit = true;
+        closest.distance = distance;
+        closest.uv = Interpolate(tri.uv0, tri.uv1, tri.uv2, barycentric0, barycentric1, barycentric2);
+        closest.textureId = tri.textureId;
+        closest.alphaCutoff = tri.alphaCutoff;
+    }
+    return closest;
+}
+
+bool RaycastBakeOcclusionAlphaAware(
+        const SectorTopologyMap& map,
+        SectorLightmapAlphaMaskCache& alphaMaskCache,
+        const SectorLightmapBvh& bvh,
+        const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        const Ray& ray,
+        float maxDistance,
+        const SectorGeneratedSurfaceRef& sourceSurfaceRef,
+        int sourceSurfaceIndex,
+        int sourceTriangleIndex,
+        SectorLightmapRaycastStats* stats)
+{
+    if (alphaOccluders.empty()) {
+        return RaycastBakeTrianglesAnyHit(
+                bvh,
+                triangles,
+                ray,
+                maxDistance,
+                sourceSurfaceRef,
+                sourceSurfaceIndex,
+                sourceTriangleIndex,
+                stats);
+    }
+
+    Vector3 origin = ray.position;
+    float remainingDistance = maxDistance;
+    for (int i = 0; i < kSectorLightmapAlphaOcclusionIterationLimit; ++i) {
+        const Ray currentRay{origin, ray.direction};
+        const RayHit opaqueHit = RaycastBakeTrianglesClosest(
+                bvh,
+                triangles,
+                currentRay,
+                remainingDistance,
+                sourceSurfaceRef,
+                sourceSurfaceIndex,
+                sourceTriangleIndex,
+                stats);
+        const AlphaRayHit alphaHit = RaycastAlphaOccludersClosest(
+                alphaOccluders,
+                currentRay,
+                remainingDistance,
+                sourceSurfaceRef,
+                sourceSurfaceIndex,
+                sourceTriangleIndex,
+                stats);
+
+        if (!opaqueHit.hit && !alphaHit.hit) {
+            return false;
+        }
+        if (opaqueHit.hit && (!alphaHit.hit || opaqueHit.distance <= alphaHit.distance)) {
+            return true;
+        }
+
+        const SectorLightmapAlphaSample alphaSample =
+                alphaMaskCache.Sample(map, alphaHit.textureId, alphaHit.uv, alphaHit.alphaCutoff);
+        if (alphaSample.opaque) {
+            return true;
+        }
+
+        const float stepDistance = alphaHit.distance + RayHitEpsilon * 2.0f;
+        if (stepDistance >= remainingDistance) {
+            return false;
+        }
+        origin = Vector3Add(origin, Vector3Scale(ray.direction, stepDistance));
+        remainingDistance -= stepDistance;
+    }
+
+    TraceLog(LOG_WARNING, "Sector lightmap alpha occlusion ray exceeded transparent-hit iteration limit");
+    return true;
+}
+
 bool IsOccluded(
+        const SectorTopologyMap& map,
         Vector3 position,
         Vector3 normal,
         Vector3 lightPosition,
@@ -748,6 +945,8 @@ bool IsOccluded(
         int sourceTriangleIndex,
         const SectorLightmapBvh& bvh,
         const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        SectorLightmapAlphaMaskCache& alphaMaskCache,
         bool softShadowSample,
         BakeRayStats& stats)
 {
@@ -762,9 +961,12 @@ bool IsOccluded(
     const float maxDistance = std::max(0.0f, distance - RayOriginEpsilon * 2.0f);
     const Ray ray{origin, direction};
 
-    return RaycastBakeTrianglesAnyHit(
+    return RaycastBakeOcclusionAlphaAware(
+            map,
+            alphaMaskCache,
             bvh,
             triangles,
+            alphaOccluders,
             ray,
             maxDistance,
             sourceSurfaceRef,
@@ -844,6 +1046,7 @@ Vector3 CosineHemisphereSample(Vector3 normal, int sampleIndex, int sampleCount)
 }
 
 Vector3 EvaluateDirectLightSample(
+        const SectorTopologyMap& map,
         const LightmapWorldPointLight& light,
         Vector3 lightPosition,
         const RasterHit& hit,
@@ -851,6 +1054,8 @@ Vector3 EvaluateDirectLightSample(
         int surfaceIndex,
         const SectorLightmapBvh& bvh,
         const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        SectorLightmapAlphaMaskCache& alphaMaskCache,
         bool softShadowSample,
         BakeRayStats& stats)
 {
@@ -866,7 +1071,20 @@ Vector3 EvaluateDirectLightSample(
         return Vector3{};
     }
 
-    if (IsOccluded(hit.position, hit.normal, lightPosition, surfaceRef, surfaceIndex, hit.triangleIndex, bvh, triangles, softShadowSample, stats)) {
+    if (IsOccluded(
+                map,
+                hit.position,
+                hit.normal,
+                lightPosition,
+                surfaceRef,
+                surfaceIndex,
+                hit.triangleIndex,
+                bvh,
+                triangles,
+                alphaOccluders,
+                alphaMaskCache,
+                softShadowSample,
+                stats)) {
         return Vector3{};
     }
 
@@ -904,6 +1122,7 @@ Vector3 NormalizeOrFallback(Vector3 value, Vector3 fallback)
 }
 
 Vector3 EvaluateDirectLightSample(
+        const SectorTopologyMap& map,
         const LightmapWorldSpotLight& light,
         Vector3 lightPosition,
         const RasterHit& hit,
@@ -911,6 +1130,8 @@ Vector3 EvaluateDirectLightSample(
         int surfaceIndex,
         const SectorLightmapBvh& bvh,
         const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        SectorLightmapAlphaMaskCache& alphaMaskCache,
         bool softShadowSample,
         BakeRayStats& stats)
 {
@@ -940,7 +1161,20 @@ Vector3 EvaluateDirectLightSample(
         return Vector3{};
     }
 
-    if (IsOccluded(hit.position, hit.normal, lightPosition, surfaceRef, surfaceIndex, hit.triangleIndex, bvh, triangles, softShadowSample, stats)) {
+    if (IsOccluded(
+                map,
+                hit.position,
+                hit.normal,
+                lightPosition,
+                surfaceRef,
+                surfaceIndex,
+                hit.triangleIndex,
+                bvh,
+                triangles,
+                alphaOccluders,
+                alphaMaskCache,
+                softShadowSample,
+                stats)) {
         return Vector3{};
     }
 
@@ -955,12 +1189,15 @@ Vector3 EvaluateDirectLightSample(
 }
 
 Vector3 EvaluateDirectLight(
+        const SectorTopologyMap& map,
         const LightmapWorldPointLight& light,
         const RasterHit& hit,
         const SectorGeneratedSurfaceRef& surfaceRef,
         int surfaceIndex,
         const SectorLightmapBvh& bvh,
         const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        SectorLightmapAlphaMaskCache& alphaMaskCache,
         BakeRayStats& stats)
 {
     if (light.radius <= 0.0f || light.intensity <= 0.0f) {
@@ -969,25 +1206,54 @@ Vector3 EvaluateDirectLight(
 
     const float sourceRadius = std::min(std::clamp(light.sourceRadius, 0.0f, 8.0f), light.radius * 0.5f);
     if (sourceRadius <= BakeEpsilon) {
-        return EvaluateDirectLightSample(light, light.position, hit, surfaceRef, surfaceIndex, bvh, triangles, false, stats);
+        return EvaluateDirectLightSample(
+                map,
+                light,
+                light.position,
+                hit,
+                surfaceRef,
+                surfaceIndex,
+                bvh,
+                triangles,
+                alphaOccluders,
+                alphaMaskCache,
+                false,
+                stats);
     }
 
     Vector3 direct{};
     for (int i = 0; i < kDirectSoftShadowSampleCount; ++i) {
         const Vector3 sampleOffset = Vector3Scale(FibonacciSphereSample(i, kDirectSoftShadowSampleCount), sourceRadius);
         const Vector3 samplePosition = Vector3Add(light.position, sampleOffset);
-        direct = Vector3Add(direct, EvaluateDirectLightSample(light, samplePosition, hit, surfaceRef, surfaceIndex, bvh, triangles, true, stats));
+        direct = Vector3Add(
+                direct,
+                EvaluateDirectLightSample(
+                        map,
+                        light,
+                        samplePosition,
+                        hit,
+                        surfaceRef,
+                        surfaceIndex,
+                        bvh,
+                        triangles,
+                        alphaOccluders,
+                        alphaMaskCache,
+                        true,
+                        stats));
     }
     return Vector3Scale(direct, 1.0f / static_cast<float>(kDirectSoftShadowSampleCount));
 }
 
 Vector3 EvaluateDirectLight(
+        const SectorTopologyMap& map,
         const LightmapWorldSpotLight& light,
         const RasterHit& hit,
         const SectorGeneratedSurfaceRef& surfaceRef,
         int surfaceIndex,
         const SectorLightmapBvh& bvh,
         const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        SectorLightmapAlphaMaskCache& alphaMaskCache,
         BakeRayStats& stats)
 {
     if (light.range <= 0.0f || light.intensity <= 0.0f) {
@@ -996,14 +1262,40 @@ Vector3 EvaluateDirectLight(
 
     const float sourceRadius = std::min(std::clamp(light.sourceRadius, 0.0f, 8.0f), light.range * 0.5f);
     if (sourceRadius <= BakeEpsilon) {
-        return EvaluateDirectLightSample(light, light.position, hit, surfaceRef, surfaceIndex, bvh, triangles, false, stats);
+        return EvaluateDirectLightSample(
+                map,
+                light,
+                light.position,
+                hit,
+                surfaceRef,
+                surfaceIndex,
+                bvh,
+                triangles,
+                alphaOccluders,
+                alphaMaskCache,
+                false,
+                stats);
     }
 
     Vector3 direct{};
     for (int i = 0; i < kDirectSoftShadowSampleCount; ++i) {
         const Vector3 sampleOffset = Vector3Scale(FibonacciSphereSample(i, kDirectSoftShadowSampleCount), sourceRadius);
         const Vector3 samplePosition = Vector3Add(light.position, sampleOffset);
-        direct = Vector3Add(direct, EvaluateDirectLightSample(light, samplePosition, hit, surfaceRef, surfaceIndex, bvh, triangles, true, stats));
+        direct = Vector3Add(
+                direct,
+                EvaluateDirectLightSample(
+                        map,
+                        light,
+                        samplePosition,
+                        hit,
+                        surfaceRef,
+                        surfaceIndex,
+                        bvh,
+                        triangles,
+                        alphaOccluders,
+                        alphaMaskCache,
+                        true,
+                        stats));
     }
     return Vector3Scale(direct, 1.0f / static_cast<float>(kDirectSoftShadowSampleCount));
 }
@@ -1017,6 +1309,7 @@ bool IsSkyOwnedLightmapSurface(
 }
 
 bool IsDirectionOccluded(
+        const SectorTopologyMap& map,
         Vector3 position,
         Vector3 normal,
         Vector3 directionToLight,
@@ -1026,15 +1319,20 @@ bool IsDirectionOccluded(
         int sourceTriangleIndex,
         const SectorLightmapBvh& bvh,
         const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        SectorLightmapAlphaMaskCache& alphaMaskCache,
         BakeRayStats& stats)
 {
     if (maxDistance <= RayHitEpsilon || bvh.nodes.empty()) {
         return false;
     }
     const Vector3 origin = Vector3Add(position, Vector3Scale(normal, RayOriginEpsilon));
-    return RaycastBakeTrianglesAnyHit(
+    return RaycastBakeOcclusionAlphaAware(
+            map,
+            alphaMaskCache,
             bvh,
             triangles,
+            alphaOccluders,
             Ray{origin, directionToLight},
             maxDistance,
             sourceSurfaceRef,
@@ -1045,6 +1343,7 @@ bool IsDirectionOccluded(
 }
 
 Vector3 EvaluateDirectionalLight(
+        const SectorTopologyMap& map,
         const LightmapWorldDirectionalLight& light,
         const RasterHit& hit,
         const SectorGeneratedSurfaceRef& surfaceRef,
@@ -1052,6 +1351,8 @@ Vector3 EvaluateDirectionalLight(
         float shadowMaxDistance,
         const SectorLightmapBvh& bvh,
         const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        SectorLightmapAlphaMaskCache& alphaMaskCache,
         BakeRayStats& stats)
 {
     if (!light.enabled || light.intensity <= 0.0f) {
@@ -1062,6 +1363,7 @@ Vector3 EvaluateDirectionalLight(
         return Vector3{};
     }
     if (IsDirectionOccluded(
+                map,
                 hit.position,
                 hit.normal,
                 light.directionToLight,
@@ -1071,6 +1373,8 @@ Vector3 EvaluateDirectionalLight(
                 hit.triangleIndex,
                 bvh,
                 triangles,
+                alphaOccluders,
+                alphaMaskCache,
                 stats)) {
         return Vector3{};
     }
@@ -1184,6 +1488,41 @@ std::vector<BakeTriangle> BuildBakeTriangles(const SectorGeneratedGeometry& geom
                     uv0,
                     uv1,
                     uv2,
+                    surface.ref,
+                    static_cast<int>(surfaceIndex),
+                    static_cast<int>(i / 3)
+            });
+        }
+    }
+    return triangles;
+}
+
+std::vector<SectorLightmapAlphaOccluderTriangle> BuildAlphaTestOccluderTriangles(
+        const SectorGeneratedGeometry& geometry)
+{
+    std::vector<SectorLightmapAlphaOccluderTriangle> triangles;
+    for (size_t surfaceIndex = 0; surfaceIndex < geometry.surfaces.size(); ++surfaceIndex) {
+        const SectorGeneratedSurface& surface = geometry.surfaces[surfaceIndex];
+        if (!CastsAlphaTestLightmapOcclusion(surface)) {
+            continue;
+        }
+        for (size_t i = 0; i + 2 < surface.vertices.size(); i += 3) {
+            Vector3 normal = surface.normal;
+            if (Vector3LengthSqr(normal) <= BakeEpsilon) {
+                const Vector3 edge1 = Vector3Subtract(surface.vertices[i + 1].position, surface.vertices[i + 0].position);
+                const Vector3 edge2 = Vector3Subtract(surface.vertices[i + 2].position, surface.vertices[i + 0].position);
+                normal = Vector3Normalize(Vector3CrossProduct(edge1, edge2));
+            }
+            triangles.push_back(SectorLightmapAlphaOccluderTriangle{
+                    surface.vertices[i + 0].position,
+                    surface.vertices[i + 1].position,
+                    surface.vertices[i + 2].position,
+                    Vector3Normalize(normal),
+                    surface.vertices[i + 0].uv,
+                    surface.vertices[i + 1].uv,
+                    surface.vertices[i + 2].uv,
+                    surface.textureId,
+                    surface.alphaCutoff,
                     surface.ref,
                     static_cast<int>(surfaceIndex),
                     static_cast<int>(i / 3)
@@ -1575,6 +1914,156 @@ std::vector<std::string> SortedReferencedLightmapTextureIds(const SectorTopology
 
 } // namespace
 
+std::string SectorLightmapAlphaMaskCache::CacheKey(const SectorTopologyMap& map, const std::string& textureId)
+{
+    const auto it = map.texturesById.find(textureId);
+    if (it == map.texturesById.end()) {
+        return textureId + "\n\n";
+    }
+
+    return textureId + "\n" + it->second.id + "\n" + it->second.path;
+}
+
+const SectorLightmapAlphaMaskCache::AlphaMask& SectorLightmapAlphaMaskCache::LoadOrGet(
+        const SectorTopologyMap& map,
+        const std::string& textureId)
+{
+    const std::string key = CacheKey(map, textureId);
+    const auto found = masksByKey.find(key);
+    if (found != masksByKey.end()) {
+        return found->second;
+    }
+
+    ++loadAttemptsByKey[key];
+
+    AlphaMask mask;
+    const auto textureIt = map.texturesById.find(textureId);
+    if (textureIt == map.texturesById.end()) {
+        TraceLog(LOG_WARNING, "Sector lightmap alpha cache missing texture id '%s'", textureId.c_str());
+        return masksByKey.emplace(key, std::move(mask)).first->second;
+    }
+
+    const std::string resolvedPath = ResolveLightmapTexturePath(textureIt->second.path);
+    Image image = LoadImage(resolvedPath.c_str());
+    if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
+        TraceLog(LOG_WARNING,
+                 "Sector lightmap alpha cache could not load texture '%s' from '%s'",
+                 textureId.c_str(),
+                 resolvedPath.c_str());
+        if (image.data != nullptr) {
+            UnloadImage(image);
+        }
+        return masksByKey.emplace(key, std::move(mask)).first->second;
+    }
+
+    Color* colors = LoadImageColors(image);
+    if (colors == nullptr) {
+        TraceLog(LOG_WARNING,
+                 "Sector lightmap alpha cache could not read pixels for texture '%s' from '%s'",
+                 textureId.c_str(),
+                 resolvedPath.c_str());
+        UnloadImage(image);
+        return masksByKey.emplace(key, std::move(mask)).first->second;
+    }
+
+    mask.valid = true;
+    mask.width = image.width;
+    mask.height = image.height;
+    mask.alpha.resize(static_cast<size_t>(image.width * image.height), 255);
+    for (int i = 0; i < image.width * image.height; ++i) {
+        mask.alpha[static_cast<size_t>(i)] = colors[i].a;
+    }
+
+    UnloadImageColors(colors);
+    UnloadImage(image);
+    return masksByKey.emplace(key, std::move(mask)).first->second;
+}
+
+SectorLightmapAlphaSample SectorLightmapAlphaMaskCache::Sample(
+        const SectorTopologyMap& map,
+        const std::string& textureId,
+        Vector2 uv,
+        float alphaCutoff)
+{
+    const AlphaMask& mask = LoadOrGet(map, textureId);
+    SectorLightmapAlphaSample sample;
+    sample.valid = mask.valid;
+    sample.width = mask.width;
+    sample.height = mask.height;
+    if (!mask.valid || mask.width <= 0 || mask.height <= 0 || mask.alpha.empty()) {
+        sample.opaque = true;
+        sample.alpha = 255;
+        return sample;
+    }
+
+    auto wrapUnit = [](float value) {
+        if (!std::isfinite(value)) {
+            return 0.0f;
+        }
+        return value - std::floor(value);
+    };
+
+    const float wrappedU = wrapUnit(uv.x);
+    const float wrappedV = wrapUnit(uv.y);
+    const int x = std::clamp(static_cast<int>(std::floor(wrappedU * static_cast<float>(mask.width))), 0, mask.width - 1);
+    const int y = std::clamp(static_cast<int>(std::floor(wrappedV * static_cast<float>(mask.height))), 0, mask.height - 1);
+    const size_t index = static_cast<size_t>(y * mask.width + x);
+    sample.alpha = index < mask.alpha.size() ? mask.alpha[index] : 255;
+    sample.opaque = (static_cast<float>(sample.alpha) / 255.0f) >= alphaCutoff;
+    return sample;
+}
+
+size_t SectorLightmapAlphaMaskCache::CachedTextureCount() const
+{
+    return masksByKey.size();
+}
+
+int SectorLightmapAlphaMaskCache::LoadAttemptCount(const SectorTopologyMap& map, const std::string& textureId) const
+{
+    const std::string key = CacheKey(map, textureId);
+    const auto found = loadAttemptsByKey.find(key);
+    return found == loadAttemptsByKey.end() ? 0 : found->second;
+}
+
+std::vector<SectorLightmapAlphaOccluderTriangle> CollectSectorLightmapAlphaOccluders(
+        const SectorGeneratedGeometry& geometry)
+{
+    return BuildAlphaTestOccluderTriangles(geometry);
+}
+
+bool IsSectorLightmapStaticRayOccludedForTests(
+        const SectorTopologyMap& map,
+        const SectorGeneratedGeometry& geometry,
+        const SectorLightmapLayout& layout,
+        Ray ray,
+        float maxDistance)
+{
+    const std::vector<BakeTriangle> triangles = BuildBakeTriangles(geometry, layout);
+    SectorLightmapBvh bvh;
+    BakeBvhBuildStats bvhStats;
+    std::string error;
+    if (!BuildSectorLightmapBvh(triangles, bvh, bvhStats, error)) {
+        return false;
+    }
+
+    SectorLightmapAlphaMaskCache alphaMaskCache;
+    SectorLightmapRaycastStats stats;
+    const std::vector<SectorLightmapAlphaOccluderTriangle> alphaOccluders =
+            CollectSectorLightmapAlphaOccluders(geometry);
+    return RaycastBakeOcclusionAlphaAware(
+            map,
+            alphaMaskCache,
+            bvh,
+            triangles,
+            alphaOccluders,
+            ray,
+            maxDistance,
+            SectorGeneratedSurfaceRef{},
+            -1,
+            -1,
+            &stats);
+}
+
 bool IsSameLogicalSectorLightmapSurface(
         const SectorGeneratedSurfaceRef& a,
         const SectorGeneratedSurfaceRef& b)
@@ -1697,6 +2186,9 @@ bool BakeSectorLightmapForMap(
     std::vector<float> ambientOcclusionFloat(atlasPixelCount, 1.0f);
     std::vector<unsigned char> validChartTexel(atlasPixelCount, 0);
     std::vector<BakeTexel> bakeTexels;
+    const std::vector<SectorLightmapAlphaOccluderTriangle> alphaOccluders =
+            CollectSectorLightmapAlphaOccluders(geometry);
+    SectorLightmapAlphaMaskCache alphaMaskCache;
     const std::vector<BakeTriangle> triangles = BuildBakeTriangles(geometry, layout);
     ReportProgress(callbacks, SectorLightmapBakePhase::BuildingBvh, 0, 1);
     const auto bvhBuildStart = Clock::now();
@@ -1792,15 +2284,40 @@ bool BakeSectorLightmapForMap(
 
             Vector3 direct{};
             for (const LightmapWorldPointLight& light : worldLights) {
-                direct = Vector3Add(direct, EvaluateDirectLight(light, hit, texel.surfaceRef, texel.sourceSurfaceIndex, bvh, triangles, stats));
+                direct = Vector3Add(
+                        direct,
+                        EvaluateDirectLight(
+                                map,
+                                light,
+                                hit,
+                                texel.surfaceRef,
+                                texel.sourceSurfaceIndex,
+                                bvh,
+                                triangles,
+                                alphaOccluders,
+                                alphaMaskCache,
+                                stats));
             }
             for (const LightmapWorldSpotLight& light : worldSpotLights) {
-                direct = Vector3Add(direct, EvaluateDirectLight(light, hit, texel.surfaceRef, texel.sourceSurfaceIndex, bvh, triangles, stats));
+                direct = Vector3Add(
+                        direct,
+                        EvaluateDirectLight(
+                                map,
+                                light,
+                                hit,
+                                texel.surfaceRef,
+                                texel.sourceSurfaceIndex,
+                                bvh,
+                                triangles,
+                                alphaOccluders,
+                                alphaMaskCache,
+                                stats));
             }
             if (IsSkyOwnedLightmapSurface(map, texel.surfaceRef)) {
                 direct = Vector3Add(
                         direct,
                         EvaluateDirectionalLight(
+                                map,
                                 directionalLight,
                                 hit,
                                 texel.surfaceRef,
@@ -1808,6 +2325,8 @@ bool BakeSectorLightmapForMap(
                                 directionalShadowMaxDistance,
                                 bvh,
                                 triangles,
+                                alphaOccluders,
+                                alphaMaskCache,
                                 stats));
             }
             directLightingFloat[texel.pixelIndex] = direct;

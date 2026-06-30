@@ -28,7 +28,25 @@
       "filter": "anisotropic8x"
     }
   },
-  "staticLights": [],
+  "staticLights": [
+    {
+      "id": 1,
+      "position": [
+        164.0,
+        14.399999618530273,
+        176.0
+      ],
+      "radius": 80.0,
+      "sourceRadius": 1.0,
+      "intensity": 3.0,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 135,
+        "a": 255
+      }
+    }
+  ],
   "staticSpotLights": [
     {
       "id": 1,
@@ -45,6 +63,29 @@
       "range": 80.0,
       "sourceRadius": 2.0,
       "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "outerConeDegrees": 45.0
+    },
+    {
+      "id": 2,
+      "position": [
+        180.0,
+        14.06606674194336,
+        92.0
+      ],
+      "target": [
+        244.0,
+        16.630359649658203,
+        92.0
+      ],
+      "range": 90.0,
+      "sourceRadius": 1.0,
+      "intensity": 3.0,
       "color": {
         "r": 255,
         "g": 255,
@@ -101,6 +142,9 @@
         "a": 255
       },
       "outerConeDegrees": 45.0,
+      "flicker": true,
+      "flickerSpeed": 1.5,
+      "flickerAmount": 0.6000000238418579,
       "castsShadow": true,
       "shadowSoftness": 2.0
     }
@@ -114,13 +158,13 @@
   "previewSettings": {
     "walkSpeed": 6.0,
     "runSpeed": 12.0,
-    "mouseSensitivity": 1.0,
-    "eyeHeight": 1.2000000476837158,
+    "mouseSensitivity": 0.5,
+    "eyeHeight": 1.600000023841858,
     "gravity": 25.0,
-    "playerRadius": 0.25,
-    "playerHeight": 1.600000023841858,
-    "stepHeight": 0.25,
-    "jumpHeight": 0.6000000238418579,
+    "playerRadius": 0.5,
+    "playerHeight": 1.75,
+    "stepHeight": 0.4000000059604645,
+    "jumpHeight": 1.0,
     "headBobStrength": 0.019999999552965164,
     "headBobFrequency": 2.0
   },
@@ -143,7 +187,7 @@
     "path": "assets/levels/shadow_map_test1/shadow_map_test1.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "4618301d85196f88"
+    "sourceHash": "4fd3e0908d3489c1"
   },
   "authoringGraph": {
     "vertices": [
@@ -246,6 +290,46 @@
         "id": 20,
         "x": 1088,
         "y": 2880
+      },
+      {
+        "id": 21,
+        "x": 2816,
+        "y": 2688
+      },
+      {
+        "id": 22,
+        "x": 2432,
+        "y": 2688
+      },
+      {
+        "id": 23,
+        "x": 2432,
+        "y": 3712
+      },
+      {
+        "id": 24,
+        "x": 2816,
+        "y": 3712
+      },
+      {
+        "id": 25,
+        "x": 3200,
+        "y": 1664
+      },
+      {
+        "id": 26,
+        "x": 3200,
+        "y": 1280
+      },
+      {
+        "id": 27,
+        "x": 4480,
+        "y": 1280
+      },
+      {
+        "id": 28,
+        "x": 4480,
+        "y": 1664
       }
     ],
     "lines": [
@@ -253,16 +337,6 @@
         "id": 1,
         "startVertexId": 1,
         "endVertexId": 2
-      },
-      {
-        "id": 2,
-        "startVertexId": 2,
-        "endVertexId": 3
-      },
-      {
-        "id": 3,
-        "startVertexId": 3,
-        "endVertexId": 4
       },
       {
         "id": 4,
@@ -343,6 +417,66 @@
         "id": 19,
         "startVertexId": 20,
         "endVertexId": 17
+      },
+      {
+        "id": 20,
+        "startVertexId": 3,
+        "endVertexId": 21
+      },
+      {
+        "id": 22,
+        "startVertexId": 21,
+        "endVertexId": 22
+      },
+      {
+        "id": 23,
+        "startVertexId": 22,
+        "endVertexId": 4
+      },
+      {
+        "id": 24,
+        "startVertexId": 22,
+        "endVertexId": 23
+      },
+      {
+        "id": 25,
+        "startVertexId": 23,
+        "endVertexId": 24
+      },
+      {
+        "id": 26,
+        "startVertexId": 24,
+        "endVertexId": 21
+      },
+      {
+        "id": 28,
+        "startVertexId": 25,
+        "endVertexId": 3
+      },
+      {
+        "id": 29,
+        "startVertexId": 2,
+        "endVertexId": 26
+      },
+      {
+        "id": 30,
+        "startVertexId": 26,
+        "endVertexId": 25
+      },
+      {
+        "id": 31,
+        "startVertexId": 26,
+        "endVertexId": 27
+      },
+      {
+        "id": 32,
+        "startVertexId": 27,
+        "endVertexId": 28
+      },
+      {
+        "id": 33,
+        "startVertexId": 28,
+        "endVertexId": 25
       }
     ],
     "lineSides": [
@@ -393,6 +527,118 @@
           "uv": {
             "scale": [
               1.0,
+              0.6666666865348816
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 22,
+        "side": "front",
+        "wall": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "middle": {
+          "textureId": "metal_bars_01",
+          "uv": {
+            "scale": [
+              0.6666666865348816,
+              0.6666666865348816
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 30,
+        "side": "front",
+        "wall": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "middle": {
+          "textureId": "metal_bars_01",
+          "uv": {
+            "scale": [
+              0.6666666865348816,
               0.6666666865348816
             ],
             "offset": [
@@ -714,6 +960,158 @@
         "x": 1208,
         "y": 2820,
         "floorZ": 1.0,
+        "ceilingZ": 24.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.20000000298023224,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 6,
+        "name": "Sector 6",
+        "x": 2600,
+        "y": 2720,
+        "floorZ": 0.0,
+        "ceilingZ": 24.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.20000000298023224,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 7,
+        "name": "Sector 7",
+        "x": 3760,
+        "y": 1292,
+        "floorZ": 0.0,
         "ceilingZ": 24.0,
         "floorTextureId": "floor",
         "ceilingTextureId": "ceiling",

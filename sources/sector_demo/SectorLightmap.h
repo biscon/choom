@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
@@ -7,11 +8,10 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace game {
-
-struct SectorGeneratedSurfaceRef;
 
 struct SectorLightmapChart {
     int surfaceIndex = -1;
@@ -32,6 +32,55 @@ struct SectorLightmapLayout {
     int gutter = 2;
     float texelsPerWorldUnit = 8.0f;
     std::vector<SectorLightmapChart> charts;
+};
+
+struct SectorLightmapAlphaOccluderTriangle {
+    Vector3 worldPosition0 = {};
+    Vector3 worldPosition1 = {};
+    Vector3 worldPosition2 = {};
+    Vector3 normal = {};
+    Vector2 uv0 = {};
+    Vector2 uv1 = {};
+    Vector2 uv2 = {};
+    std::string textureId;
+    float alphaCutoff = 0.5f;
+    SectorGeneratedSurfaceRef surfaceRef;
+    int sourceSurfaceIndex = -1;
+    int triangleIndex = -1;
+};
+
+struct SectorLightmapAlphaSample {
+    bool valid = false;
+    bool opaque = true;
+    unsigned char alpha = 255;
+    int width = 0;
+    int height = 0;
+};
+
+class SectorLightmapAlphaMaskCache {
+public:
+    SectorLightmapAlphaSample Sample(
+            const SectorTopologyMap& map,
+            const std::string& textureId,
+            Vector2 uv,
+            float alphaCutoff);
+
+    size_t CachedTextureCount() const;
+    int LoadAttemptCount(const SectorTopologyMap& map, const std::string& textureId) const;
+
+private:
+    struct AlphaMask {
+        bool valid = false;
+        int width = 0;
+        int height = 0;
+        std::vector<unsigned char> alpha;
+    };
+
+    const AlphaMask& LoadOrGet(const SectorTopologyMap& map, const std::string& textureId);
+    static std::string CacheKey(const SectorTopologyMap& map, const std::string& textureId);
+
+    std::unordered_map<std::string, AlphaMask> masksByKey;
+    std::unordered_map<std::string, int> loadAttemptsByKey;
 };
 
 struct SectorLightmapRaycastStats {
@@ -112,8 +161,8 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 8: static spotlights contribute baked direct lighting.
-constexpr int kSectorLightmapBakeVersion = 8;
+// Version 9: alpha-tested middle textures affect baked direct-light occlusion.
+constexpr int kSectorLightmapBakeVersion = 9;
 constexpr int kDirectSoftShadowSampleCount = 8;
 constexpr int kAmbientOcclusionSampleCount = 12;
 constexpr int kIndirectBounceSampleCount = 8;
@@ -123,6 +172,16 @@ bool BuildSectorLightmapLayout(
         const SectorTopologyMap& map,
         SectorLightmapLayout& outLayout,
         std::string& outError);
+
+std::vector<SectorLightmapAlphaOccluderTriangle> CollectSectorLightmapAlphaOccluders(
+        const SectorGeneratedGeometry& geometry);
+
+bool IsSectorLightmapStaticRayOccludedForTests(
+        const SectorTopologyMap& map,
+        const SectorGeneratedGeometry& geometry,
+        const SectorLightmapLayout& layout,
+        Ray ray,
+        float maxDistance);
 
 bool BakeSectorLightmap(
         const SectorTopologyMap& map,
