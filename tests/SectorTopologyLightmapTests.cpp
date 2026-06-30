@@ -1,11 +1,15 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
 
+#include <raymath.h>
+
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -25,6 +29,31 @@ game::SectorTextureDefinition Texture(const char* id)
     texture.id = id;
     texture.path = std::string("assets/textures/") + id + ".png";
     return texture;
+}
+
+std::filesystem::path Phase01bSandboxDir()
+{
+    return std::filesystem::temp_directory_path() / "sector_lightmap_alpha_occlusion_phase_01b";
+}
+
+void WriteAlphaMaskTestTexture(const std::filesystem::path& path)
+{
+    std::filesystem::create_directories(path.parent_path());
+    Image image = GenImageColor(2, 2, Color{255, 255, 255, 255});
+    ImageDrawPixel(&image, 0, 0, Color{255, 255, 255, 0});
+    ImageDrawPixel(&image, 1, 0, Color{255, 255, 255, 255});
+    ImageDrawPixel(&image, 0, 1, Color{255, 255, 255, 96});
+    ImageDrawPixel(&image, 1, 1, Color{255, 255, 255, 192});
+    Check(ExportImage(image, path.string().c_str()), "alpha mask test texture exports");
+    UnloadImage(image);
+}
+
+void WriteSolidAlphaTestTexture(const std::filesystem::path& path, unsigned char alpha)
+{
+    std::filesystem::create_directories(path.parent_path());
+    Image image = GenImageColor(2, 2, Color{255, 255, 255, alpha});
+    Check(ExportImage(image, path.string().c_str()), "solid alpha test texture exports");
+    UnloadImage(image);
 }
 
 game::SectorTopologyWallPartSettings Part(const char* textureId)
@@ -198,6 +227,19 @@ int CountGeneratedTrianglesExceptMiddle(const game::SectorGeneratedGeometry& geo
     return count;
 }
 
+int CountAlphaOccluderTrianglesForKind(
+        const std::vector<game::SectorLightmapAlphaOccluderTriangle>& occluders,
+        game::SectorGeneratedSurfaceKind kind)
+{
+    int count = 0;
+    for (const game::SectorLightmapAlphaOccluderTriangle& occluder : occluders) {
+        if (occluder.surfaceRef.kind == kind) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 int CountValidChartsForKind(
         const game::SectorGeneratedGeometry& geometry,
         const game::SectorLightmapLayout& layout,
@@ -274,7 +316,8 @@ LightmapImageMetrics BakeAndMeasure(game::SectorTopologyMap map, const char* fil
         }
     }
 
-    const std::filesystem::path path = std::filesystem::temp_directory_path() / fileName;
+    std::filesystem::create_directories(Phase01bSandboxDir());
+    const std::filesystem::path path = Phase01bSandboxDir() / fileName;
     game::SectorLightmapBakeResult result;
     Check(game::BakeSectorLightmap(map, layout, path.string().c_str(), result, error),
           "metric lightmap bake succeeds");
@@ -317,6 +360,79 @@ LightmapImageMetrics BakeAndMeasure(game::SectorTopologyMap map, const char* fil
     std::error_code removeError;
     std::filesystem::remove(path, removeError);
     return metrics;
+}
+
+game::SectorTopologyMap MakeAlphaMiddleOcclusionBakeMap(const std::filesystem::path& texturePath)
+{
+    game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::SectorTextureDefinition texture;
+    texture.id = "bars";
+    texture.path = texturePath.string();
+    map.texturesById["bars"] = texture;
+
+    game::SectorTopologySideDef* frontMiddle = game::FindSectorTopologySideDef(map, 2);
+    game::SectorTopologySideDef* backMiddle = game::FindSectorTopologySideDef(map, 8);
+    Check(frontMiddle != nullptr && backMiddle != nullptr, "alpha middle occlusion map has portal sidedefs");
+    if (frontMiddle != nullptr) {
+        frontMiddle->middle = Part("bars");
+    }
+    if (backMiddle != nullptr) {
+        backMiddle->middle = Part("bars");
+    }
+    return map;
+}
+
+LightmapImageMetrics BakeAlphaMiddlePointLight(const std::filesystem::path& texturePath, const char* fileName)
+{
+    game::SectorTopologyMap map = MakeAlphaMiddleOcclusionBakeMap(texturePath);
+    map.staticLights.clear();
+    map.staticSpotLights.clear();
+    map.directionalLight.enabled = false;
+    map.staticLights.push_back(game::SectorTopologyStaticPointLight{
+            20,
+            Vector3{6.0f, game::SectorWorldToAuthoringDistance(2.0f), 2.0f},
+            WHITE,
+            8.0f,
+            game::SectorWorldToAuthoringDistance(4.0f),
+            0.0f
+    });
+    return BakeAndMeasure(map, fileName);
+}
+
+game::SectorTopologyStaticSpotLight MakeStaticSpotlight(
+        Vector3 position,
+        Vector3 target,
+        float innerConeDegrees,
+        float outerConeDegrees,
+        float sourceRadius = 0.0f);
+
+LightmapImageMetrics BakeAlphaMiddleSpotLight(const std::filesystem::path& texturePath, const char* fileName)
+{
+    game::SectorTopologyMap map = MakeAlphaMiddleOcclusionBakeMap(texturePath);
+    map.staticLights.clear();
+    map.staticSpotLights.clear();
+    map.directionalLight.enabled = false;
+    map.staticSpotLights.push_back(MakeStaticSpotlight(
+            Vector3{6.0f, game::SectorWorldToAuthoringDistance(2.0f), 2.0f},
+            Vector3{2.0f, 0.0f, 2.0f},
+            12.0f,
+            24.0f));
+    return BakeAndMeasure(map, fileName);
+}
+
+LightmapImageMetrics BakeAlphaMiddleDirectionalLight(const std::filesystem::path& texturePath, const char* fileName)
+{
+    game::SectorTopologyMap map = MakeAlphaMiddleOcclusionBakeMap(texturePath);
+    map.staticLights.clear();
+    map.staticSpotLights.clear();
+    for (game::SectorTopologySector& sector : map.sectors) {
+        sector.ceilingSky = true;
+    }
+    map.directionalLight.enabled = true;
+    map.directionalLight.directionToLight = Vector3Normalize(Vector3{0.95f, 0.3f, 0.0f});
+    map.directionalLight.color = WHITE;
+    map.directionalLight.intensity = 4.0f;
+    return BakeAndMeasure(map, fileName);
 }
 
 void TestSourceHashChanges()
@@ -578,6 +694,27 @@ void TestSourceHashStableWhenVectorsReordered()
           "hash is stable when static spot light vector is reordered");
 }
 
+void TestBakeVersionInvalidatesOldLightmaps()
+{
+    Check(game::kSectorLightmapBakeVersion == 9,
+          "lightmap bake version is bumped for alpha-tested static occlusion");
+
+    const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase03a_status_lightmap.png";
+    WriteSolidAlphaTestTexture(lightmapPath, 255);
+
+    game::SectorTopologyMap map = MakeSquare();
+    map.bakedLightmap.path = lightmapPath.string();
+    map.bakedLightmap.width = 2;
+    map.bakedLightmap.height = 2;
+    map.bakedLightmap.sourceHash = game::ComputeSectorLightmapSourceHash(map);
+    Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Valid,
+          "current bake version source hash keeps existing lightmap valid");
+
+    map.bakedLightmap.sourceHash = "pre-alpha-occlusion-source-hash";
+    Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Stale,
+          "old bake version source hash is stale after alpha-tested occlusion change");
+}
+
 void TestLogicalSelfComparison()
 {
     game::SectorGeneratedSurfaceRef floorA;
@@ -684,12 +821,259 @@ void TestMiddleSurfacesReceiveLightmapsWithoutOccluding()
     }
 
     game::SectorLightmapBakeResult result;
-    Check(game::BakeSectorLightmap(map, layout, "/tmp/sector_middle_lightmap_test.png", result, error),
+    const std::filesystem::path outputPath = Phase01bSandboxDir() / "sector_middle_lightmap_test.png";
+    std::filesystem::create_directories(outputPath.parent_path());
+    Check(game::BakeSectorLightmap(map, layout, outputPath.string().c_str(), result, error),
           "middle lightmap bake succeeds with middle receivers");
     Check(result.staticGeometryTriangles == CountGeneratedTrianglesExceptMiddle(geometry),
           "bake triangle/BVH input ignores middle surfaces");
     Check(result.validChartTexels > 0,
           "middle receiver charts contribute to baked lightmap texels");
+}
+
+void TestAlphaTestMiddleOccluderCollection()
+{
+    game::SectorTopologyMap opaqueMap = MakeSquare();
+    game::SectorGeneratedGeometry opaqueGeometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(opaqueMap, opaqueGeometry, &error),
+          "alpha occluder opaque geometry builds");
+    const std::vector<game::SectorLightmapAlphaOccluderTriangle> opaqueOccluders =
+            game::CollectSectorLightmapAlphaOccluders(opaqueGeometry);
+    Check(opaqueOccluders.empty(),
+          "opaque wall floor and ceiling surfaces do not become alpha-test occluders");
+
+    game::SectorTopologyMap skyMap = MakeSquare();
+    skyMap.sectors[0].ceilingSky = true;
+    game::SectorGeneratedGeometry skyGeometry;
+    Check(game::BuildSectorGeneratedGeometry(skyMap, skyGeometry, &error),
+          "alpha occluder sky geometry builds");
+    const std::vector<game::SectorLightmapAlphaOccluderTriangle> skyOccluders =
+            game::CollectSectorLightmapAlphaOccluders(skyGeometry);
+    Check(skyOccluders.empty(), "sky surfaces do not become alpha-test occluders");
+
+    game::SectorTopologyMap middleMap = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    middleMap.texturesById.emplace("bars", Texture("bars"));
+    game::SectorTopologySideDef* middleSide = game::FindSectorTopologySideDef(middleMap, 2);
+    Check(middleSide != nullptr, "alpha occluder middle sidedef exists");
+    if (middleSide != nullptr) {
+        middleSide->middle = Part("bars");
+        middleSide->middle.uv.scale = Vector2{2.0f, 3.0f};
+        middleSide->middle.uv.offset = Vector2{0.25f, 0.5f};
+    }
+
+    game::SectorGeneratedGeometry middleGeometry;
+    Check(game::BuildSectorGeneratedGeometry(middleMap, middleGeometry, &error),
+          "alpha occluder middle geometry builds");
+    const int middleSurfaceCount = CountGeneratedSurfaces(middleGeometry, game::SectorGeneratedSurfaceKind::Middle);
+    const std::vector<game::SectorLightmapAlphaOccluderTriangle> middleOccluders =
+            game::CollectSectorLightmapAlphaOccluders(middleGeometry);
+    Check(middleSurfaceCount == 2, "alpha occluder test generated middle surfaces");
+    Check(static_cast<int>(middleOccluders.size()) == middleSurfaceCount * 2,
+          "alpha-tested middle surfaces produce alpha occluder triangles");
+    Check(CountAlphaOccluderTrianglesForKind(middleOccluders, game::SectorGeneratedSurfaceKind::Middle)
+                  == static_cast<int>(middleOccluders.size()),
+          "only middle surfaces produce alpha occluder triangles");
+
+    if (!middleOccluders.empty()) {
+        const game::SectorLightmapAlphaOccluderTriangle& occluder = middleOccluders.front();
+        Check(occluder.textureId == "bars", "alpha occluder preserves texture id");
+        Check(std::fabs(occluder.alphaCutoff - 0.5f) < 0.0001f, "alpha occluder preserves alpha cutoff");
+        Check(occluder.sourceSurfaceIndex >= 0, "alpha occluder preserves source surface index");
+        Check(occluder.triangleIndex >= 0, "alpha occluder preserves triangle index");
+        Check(occluder.uv0.x != 0.0f || occluder.uv0.y != 0.0f,
+              "alpha occluder preserves visible texture UVs");
+        Check(Vector3LengthSqr(occluder.normal) > 0.9f, "alpha occluder preserves usable normal");
+    }
+
+    game::SectorGeneratedGeometry decalGeometry = opaqueGeometry;
+    if (!decalGeometry.surfaces.empty()) {
+        decalGeometry.surfaces.front().decalTextureId = "bars";
+        decalGeometry.surfaces.front().alphaTest = true;
+        decalGeometry.surfaces.front().textureId = "wall";
+    }
+    const std::vector<game::SectorLightmapAlphaOccluderTriangle> decalOccluders =
+            game::CollectSectorLightmapAlphaOccluders(decalGeometry);
+    Check(decalOccluders.empty(), "decals are not collected as alpha-test occluders");
+}
+
+void TestAlphaMaskCacheSampling()
+{
+    const std::filesystem::path texturePath = Phase01bSandboxDir() / "alpha_mask.png";
+    WriteAlphaMaskTestTexture(texturePath);
+
+    game::SectorTopologyMap map;
+    game::SectorTextureDefinition texture;
+    texture.id = "mask";
+    texture.path = texturePath.string();
+    map.texturesById.emplace("mask", texture);
+
+    game::SectorLightmapAlphaMaskCache cache;
+    const game::SectorLightmapAlphaSample transparent =
+            cache.Sample(map, "mask", Vector2{0.25f, 0.25f}, 0.5f);
+    Check(transparent.valid, "alpha mask transparent sample is valid");
+    Check(transparent.width == 2 && transparent.height == 2, "alpha mask preserves dimensions");
+    Check(transparent.alpha == 0 && !transparent.opaque, "alpha sample below cutoff is transparent");
+
+    const game::SectorLightmapAlphaSample opaque =
+            cache.Sample(map, "mask", Vector2{0.75f, 0.25f}, 0.5f);
+    Check(opaque.valid, "alpha mask opaque sample is valid");
+    Check(opaque.alpha == 255 && opaque.opaque, "alpha sample above cutoff is opaque");
+
+    const game::SectorLightmapAlphaSample tiled =
+            cache.Sample(map, "mask", Vector2{1.25f, -0.75f}, 0.5f);
+    Check(tiled.valid && tiled.alpha == transparent.alpha && !tiled.opaque,
+          "alpha mask tiled UVs repeat consistently");
+
+    const game::SectorLightmapAlphaSample cutoffBelow =
+            cache.Sample(map, "mask", Vector2{0.25f, 0.75f}, 0.5f);
+    const game::SectorLightmapAlphaSample cutoffAbove =
+            cache.Sample(map, "mask", Vector2{0.75f, 0.75f}, 0.5f);
+    Check(!cutoffBelow.opaque && cutoffAbove.opaque, "alpha cutoff comparison matches alpha-test semantics");
+    Check(cache.LoadAttemptCount(map, "mask") == 1, "alpha mask cache loads each texture once");
+    Check(cache.CachedTextureCount() == 1, "alpha mask cache stores one loaded texture entry");
+
+    game::SectorTopologyMap missingMap;
+    game::SectorTextureDefinition missingTexture;
+    missingTexture.id = "missing";
+    missingTexture.path = (Phase01bSandboxDir() / "missing.png").string();
+    missingMap.texturesById.emplace("missing", missingTexture);
+
+    game::SectorLightmapAlphaMaskCache missingCache;
+    const game::SectorLightmapAlphaSample missing =
+            missingCache.Sample(missingMap, "missing", Vector2{0.25f, 0.25f}, 0.5f);
+    const game::SectorLightmapAlphaSample missingAgain =
+            missingCache.Sample(missingMap, "missing", Vector2{0.75f, 0.75f}, 0.5f);
+    Check(!missing.valid && missing.opaque && missing.alpha == 255,
+          "missing alpha texture behaves conservatively as opaque");
+    Check(!missingAgain.valid && missingAgain.opaque,
+          "cached missing alpha texture remains conservative");
+    Check(missingCache.LoadAttemptCount(missingMap, "missing") == 1,
+          "alpha mask cache does not repeatedly reload missing textures");
+}
+
+void TestAlphaAwareStaticRayOcclusion()
+{
+    const std::filesystem::path transparentPath = Phase01bSandboxDir() / "phase02a_transparent.png";
+    const std::filesystem::path opaquePath = Phase01bSandboxDir() / "phase02a_opaque.png";
+    WriteSolidAlphaTestTexture(transparentPath, 0);
+    WriteSolidAlphaTestTexture(opaquePath, 255);
+
+    auto makeMap = [](const std::filesystem::path& texturePath) {
+        game::SectorTopologyMap map;
+        game::SectorTextureDefinition texture;
+        texture.id = "bars";
+        texture.path = texturePath.string();
+        map.texturesById["bars"] = texture;
+        map.texturesById.emplace("wall", Texture("wall"));
+        return map;
+    };
+
+    auto makeTriangleSurface = [](game::SectorGeneratedSurfaceKind kind, const char* textureId, float x) {
+        game::SectorGeneratedSurface surface;
+        surface.ref.kind = kind;
+        surface.textureId = textureId;
+        surface.alphaTest = kind == game::SectorGeneratedSurfaceKind::Middle;
+        surface.alphaCutoff = 0.5f;
+        surface.normal = Vector3{-1.0f, 0.0f, 0.0f};
+        surface.vertices = {
+                game::SectorGeneratedVertex{Vector3{x, 0.0f, 0.0f}, surface.normal, Vector2{0.0f, 0.0f}},
+                game::SectorGeneratedVertex{Vector3{x, 1.0f, 0.0f}, surface.normal, Vector2{1.0f, 0.0f}},
+                game::SectorGeneratedVertex{Vector3{x, 0.0f, 1.0f}, surface.normal, Vector2{0.0f, 1.0f}}
+        };
+        return surface;
+    };
+
+    auto makeLayout = [](const game::SectorGeneratedGeometry& geometry) {
+        game::SectorLightmapLayout layout;
+        layout.charts.resize(geometry.surfaces.size());
+        for (size_t i = 0; i < geometry.surfaces.size(); ++i) {
+            game::SectorLightmapChart chart;
+            chart.surfaceIndex = static_cast<int>(i);
+            chart.vertexUvs.resize(geometry.surfaces[i].vertices.size(), Vector2{});
+            layout.charts[i] = chart;
+        }
+        return layout;
+    };
+
+    game::SectorTopologyMap transparentMap = makeMap(transparentPath);
+    game::SectorGeneratedGeometry transparentGeometry;
+    transparentGeometry.surfaces.push_back(makeTriangleSurface(game::SectorGeneratedSurfaceKind::Middle, "bars", 0.0f));
+    transparentGeometry.surfaces.push_back(makeTriangleSurface(game::SectorGeneratedSurfaceKind::Middle, "bars", 0.01f));
+    const game::SectorLightmapLayout transparentLayout = makeLayout(transparentGeometry);
+    const Ray transparentRay{Vector3{-1.0f, 0.25f, 0.25f}, Vector3{1.0f, 0.0f, 0.0f}};
+    Check(!game::IsSectorLightmapStaticRayOccludedForTests(
+                  transparentMap,
+                  transparentGeometry,
+                  transparentLayout,
+                  transparentRay,
+                  2.0f),
+          "static ray through transparent alpha texels reaches endpoint");
+
+    transparentGeometry.surfaces.push_back(makeTriangleSurface(game::SectorGeneratedSurfaceKind::Wall, "wall", 1.0f));
+    const game::SectorLightmapLayout transparentWithWallLayout = makeLayout(transparentGeometry);
+    Check(game::IsSectorLightmapStaticRayOccludedForTests(
+                  transparentMap,
+                  transparentGeometry,
+                  transparentWithWallLayout,
+                  transparentRay,
+                  8.0f),
+          "static ray through transparent alpha texels can still hit farther opaque wall");
+
+    game::SectorTopologyMap opaqueMap = makeMap(opaquePath);
+    game::SectorGeneratedGeometry opaqueGeometry;
+    opaqueGeometry.surfaces.push_back(makeTriangleSurface(game::SectorGeneratedSurfaceKind::Middle, "bars", 0.0f));
+    const game::SectorLightmapLayout opaqueLayout = makeLayout(opaqueGeometry);
+    Check(game::IsSectorLightmapStaticRayOccludedForTests(
+                  opaqueMap,
+                  opaqueGeometry,
+                  opaqueLayout,
+                  transparentRay,
+                  2.0f),
+          "static ray through opaque alpha texels is blocked");
+
+    game::SectorTopologyMap wallMap = makeMap(transparentPath);
+    game::SectorGeneratedGeometry wallGeometry;
+    wallGeometry.surfaces.push_back(makeTriangleSurface(game::SectorGeneratedSurfaceKind::Wall, "wall", 0.0f));
+    const game::SectorLightmapLayout wallLayout = makeLayout(wallGeometry);
+    Check(game::IsSectorLightmapStaticRayOccludedForTests(
+                  wallMap,
+                  wallGeometry,
+                  wallLayout,
+                  transparentRay,
+                  2.0f),
+          "opaque geometry static ray behavior remains blocked");
+}
+
+void TestAlphaAwareStaticLightBakePaths()
+{
+    const std::filesystem::path transparentPath = Phase01bSandboxDir() / "phase02b_transparent.png";
+    const std::filesystem::path opaquePath = Phase01bSandboxDir() / "phase02b_opaque.png";
+    WriteSolidAlphaTestTexture(transparentPath, 0);
+    WriteSolidAlphaTestTexture(opaquePath, 255);
+
+    const LightmapImageMetrics pointTransparent =
+            BakeAlphaMiddlePointLight(transparentPath, "phase02b_point_transparent.png");
+    const LightmapImageMetrics pointOpaque =
+            BakeAlphaMiddlePointLight(opaquePath, "phase02b_point_opaque.png");
+    Check(pointTransparent.floorCenterRgb > pointOpaque.floorCenterRgb + 100,
+          "static point light direct bake passes through transparent alpha middle texels");
+    Check(pointOpaque.directShadowRays > 0,
+          "static point light direct bake tests alpha-aware occlusion rays");
+
+    const LightmapImageMetrics spotTransparent =
+            BakeAlphaMiddleSpotLight(transparentPath, "phase02b_spot_transparent.png");
+    const LightmapImageMetrics spotOpaque =
+            BakeAlphaMiddleSpotLight(opaquePath, "phase02b_spot_opaque.png");
+    Check(spotTransparent.floorCenterRgb > spotOpaque.floorCenterRgb + 100,
+          "static spotlight direct bake passes through transparent alpha middle texels");
+    Check(spotOpaque.directShadowRays > 0,
+          "static spotlight direct bake tests alpha-aware occlusion rays");
+
+    const LightmapImageMetrics directionalOpaque =
+            BakeAlphaMiddleDirectionalLight(opaquePath, "phase02b_directional_opaque.png");
+    Check(directionalOpaque.directShadowRays > 0,
+          "static directional light direct bake tests alpha-aware occlusion rays");
 }
 
 void TestDirectionalLightBakeBehavior()
@@ -777,7 +1161,7 @@ game::SectorTopologyStaticSpotLight MakeStaticSpotlight(
         Vector3 target,
         float innerConeDegrees,
         float outerConeDegrees,
-        float sourceRadius = 0.0f)
+        float sourceRadius)
 {
     return game::SectorTopologyStaticSpotLight{
             100,
@@ -874,9 +1258,14 @@ int main()
     TestSourceHashChanges();
     TestSourceHashIncludesMiddleTextureData();
     TestSourceHashStableWhenVectorsReordered();
+    TestBakeVersionInvalidatesOldLightmaps();
     TestLogicalSelfComparison();
     TestLayoutSmoke();
     TestMiddleSurfacesReceiveLightmapsWithoutOccluding();
+    TestAlphaTestMiddleOccluderCollection();
+    TestAlphaMaskCacheSampling();
+    TestAlphaAwareStaticRayOcclusion();
+    TestAlphaAwareStaticLightBakePaths();
     TestDirectionalLightBakeBehavior();
     TestStaticSpotlightBakeBehavior();
 
