@@ -28,9 +28,11 @@ Current implementation notes:
   source hash, count, spacing, height, and format.
 - `LoadSectorBakedObjectLightProbeRuntimeData()` loads valid sidecars and builds
   sorted per-sector probe ranges for allocation-free sampling.
-- `SampleBakedObjectLighting()` prefers the caller's sector, blends up to four
-  nearest probes by inverse distance, falls back to any loaded probe, then
-  sector ambient, then neutral RGB `0.15` on all cube faces.
+- `SampleBakedObjectLighting()` prefers the caller's sector, includes unique
+  adjacent-sector probe ranges near open two-sided portals, blends up to four
+  nearest probes by inverse distance, falls back to any loaded probe when the
+  preferred sector has no probes, then sector ambient, then neutral RGB `0.15`
+  on all cube faces.
 - The 3D preview overlay has a read-only `Show Object Probes` toggle. It draws
   small markers at loaded probe positions, colored by average ambient-cube RGB,
   and reports absent/stale/unavailable probe data in the overlay text.
@@ -445,8 +447,21 @@ fixed local arrays and performs no heap allocation.
 
 Sampling behavior:
 
-- If probes are loaded and `preferredSectorId` has a range, sample that range.
-- Otherwise, sample all loaded probes as a cross-sector fallback.
+- If probes are loaded and `preferredSectorId` has a range, stream that range
+  once.
+- If a topology map is supplied and the sample point is within
+  `kObjectProbeAdjacentPortalBlendDistanceWorld` (`1.0` world unit) of an open
+  two-sided portal segment from the preferred sector, also stream each adjacent
+  sector's probe range once.
+- Adjacent sector discovery is capped by
+  `kObjectProbeMaxAdjacentBlendSectors` (`8`) and uses a fixed local array.
+  Duplicate adjacent sector IDs and accidental `preferredSectorId` matches are
+  skipped, so a sector sharing multiple portal edges is not overweighted.
+- If the preferred sector has probes but adjacency is unavailable, missing,
+  capped, malformed, or has no probe ranges, the query still samples preferred
+  sector probes only.
+- If the preferred sector has no probes, sample all loaded probes as a
+  cross-sector fallback.
 - The sampler selects up to four nearest probes.
 - If the closest probe is effectively exact, return that cube directly with
   `valid = true`.
@@ -456,16 +471,28 @@ Sampling behavior:
   sector, return sector ambient on all six faces with `valid = false`.
 - Otherwise, return neutral RGB `0.15` on all six faces with `valid = false`.
 
+Adjacent portal filtering:
+
+- Only valid two-sided linedefs can add adjacent probe sectors.
+- The point-to-portal test measures distance from world-position XZ to the
+  actual portal segment XZ using closest-point-on-segment distance.
+- Vertical openness matches runtime portal visibility:
+  `openBottom = max(floorA, floorB)`, `openTop = min(ceilingA, ceilingB)`, and
+  the portal is open only when `openBottom < openTop`.
+- One-sided walls, void boundaries, malformed linedefs/sidedefs, vertically
+  closed portals, and merely nearby non-neighbor sectors do not blend.
+
 Current fallback order:
 
 ```text
-1. up to four nearest probes in preferred sector
-2. up to four nearest probes from all loaded probes
-3. preferred-sector ambient, if a fallback map is supplied
-4. neutral RGB 0.15 cube
+1. up to four nearest probes from preferred sector plus unique near-portal
+   adjacent sectors
+2. preferred sector only, when adjacency is unavailable or adds no usable probes
+3. up to four nearest probes from all loaded probes, when preferred sector has
+   no probes
+4. preferred-sector ambient, if a fallback map is supplied
+5. neutral RGB 0.15 cube
 ```
-
-Adjacent-sector interpolation is not implemented.
 
 ## Future Billboard Usage
 
@@ -612,7 +639,6 @@ Deferred:
 - Future 3D model renderer, billboard sprite renderer, actor/entity consumers,
   and their shaders.
 - Multiple vertical probe layers.
-- Adjacent-sector interpolation near portals.
 - Spatial acceleration for very high probe counts.
 - Probe-specific indirect bounce and per-face AO.
 - Probe placement exclusion bands for middle blockers.
@@ -646,8 +672,6 @@ Covered behaviors include:
 ## Known Gaps / Follow-Ups
 
 - No current consumer renderer samples probes yet.
-- No adjacent-sector interpolation, so portal boundaries can still show lighting
-  discontinuities on movable objects.
 - No multiple-height probe layers for tall spaces, flying actors, or very short
   pickups.
 - No probe-specific indirect bounce or per-face AO.
@@ -663,7 +687,6 @@ Covered behaviors include:
 - Skeletal animation.
 - Dynamic object shadows.
 - Multiple vertical probe layers.
-- Adjacent-sector interpolation.
 - Runtime GI.
 - Spherical harmonics except as a future alternative.
 - Reflection cubemaps.

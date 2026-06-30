@@ -1679,14 +1679,9 @@ const SectorBakedObjectLightProbeSectorRange* FindProbeSectorRange(
     return nullptr;
 }
 
-BakedObjectLightingSample SampleNearestObjectLightProbes(
-        const SectorBakedObjectLightProbeRuntimeData& probes,
-        Vector3 worldPosition,
-        int begin,
-        int count)
-{
-    constexpr int kMaxSampleProbes = 4;
-    constexpr float kExactProbeDistanceSquared = 0.000001f;
+struct ObjectProbeSelection {
+    static constexpr int kMaxSampleProbes = 4;
+    static constexpr float kExactProbeDistanceSquared = 0.000001f;
     int selectedIndices[kMaxSampleProbes] = {-1, -1, -1, -1};
     float selectedDistanceSquared[kMaxSampleProbes] = {
             std::numeric_limits<float>::max(),
@@ -1694,7 +1689,15 @@ BakedObjectLightingSample SampleNearestObjectLightProbes(
             std::numeric_limits<float>::max(),
             std::numeric_limits<float>::max()};
     int selectedCount = 0;
+};
 
+void StreamObjectLightProbeRange(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        Vector3 worldPosition,
+        int begin,
+        int count,
+        ObjectProbeSelection& selection)
+{
     for (int offset = 0; offset < count; ++offset) {
         const int probeIndex = begin + offset;
         if (probeIndex < 0 || probeIndex >= static_cast<int>(probes.probes.size())) {
@@ -1707,43 +1710,59 @@ BakedObjectLightingSample SampleNearestObjectLightProbes(
             continue;
         }
 
-        int insertAt = selectedCount < kMaxSampleProbes ? selectedCount : -1;
-        for (int selected = 0; selected < selectedCount; ++selected) {
-            if (distanceSquared < selectedDistanceSquared[selected]) {
+        int insertAt = selection.selectedCount < ObjectProbeSelection::kMaxSampleProbes
+                ? selection.selectedCount
+                : -1;
+        for (int selected = 0; selected < selection.selectedCount; ++selected) {
+            if (distanceSquared < selection.selectedDistanceSquared[selected]) {
                 insertAt = selected;
                 break;
             }
         }
-        if (insertAt < 0 || insertAt >= kMaxSampleProbes) {
+        if (insertAt < 0 || insertAt >= ObjectProbeSelection::kMaxSampleProbes) {
             continue;
         }
 
-        const int shiftEnd = std::min(selectedCount, kMaxSampleProbes - 1);
+        const int shiftEnd = std::min(selection.selectedCount, ObjectProbeSelection::kMaxSampleProbes - 1);
         for (int shift = shiftEnd; shift > insertAt; --shift) {
-            selectedIndices[shift] = selectedIndices[shift - 1];
-            selectedDistanceSquared[shift] = selectedDistanceSquared[shift - 1];
+            selection.selectedIndices[shift] = selection.selectedIndices[shift - 1];
+            selection.selectedDistanceSquared[shift] = selection.selectedDistanceSquared[shift - 1];
         }
-        selectedIndices[insertAt] = probeIndex;
-        selectedDistanceSquared[insertAt] = distanceSquared;
-        selectedCount = std::min(selectedCount + 1, kMaxSampleProbes);
+        selection.selectedIndices[insertAt] = probeIndex;
+        selection.selectedDistanceSquared[insertAt] = distanceSquared;
+        selection.selectedCount =
+                std::min(selection.selectedCount + 1, ObjectProbeSelection::kMaxSampleProbes);
     }
+}
 
-    if (selectedCount == 0) {
+bool HasSelectedObjectLightProbes(const ObjectProbeSelection& selection)
+{
+    return selection.selectedCount > 0;
+}
+
+BakedObjectLightingSample SampleSelectedObjectLightProbes(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        const ObjectProbeSelection& selection)
+{
+    if (selection.selectedCount == 0) {
         return MakeNeutralObjectLightingSample();
     }
 
-    if (selectedDistanceSquared[0] <= kExactProbeDistanceSquared) {
-        return MakeObjectLightingSampleFromCube(probes.probes[static_cast<size_t>(selectedIndices[0])].ambientCube, true);
+    if (selection.selectedDistanceSquared[0] <= ObjectProbeSelection::kExactProbeDistanceSquared) {
+        return MakeObjectLightingSampleFromCube(
+                probes.probes[static_cast<size_t>(selection.selectedIndices[0])].ambientCube,
+                true);
     }
 
     BakedObjectLightingSample sample;
     sample.valid = true;
     float totalWeight = 0.0f;
-    for (int selected = 0; selected < selectedCount; ++selected) {
-        const float distance = std::sqrt(selectedDistanceSquared[selected]);
+    for (int selected = 0; selected < selection.selectedCount; ++selected) {
+        const float distance = std::sqrt(selection.selectedDistanceSquared[selected]);
         const float weight = 1.0f / std::max(distance, 0.001f);
         totalWeight += weight;
-        const SectorBakedObjectLightProbe& probe = probes.probes[static_cast<size_t>(selectedIndices[selected])];
+        const SectorBakedObjectLightProbe& probe =
+                probes.probes[static_cast<size_t>(selection.selectedIndices[selected])];
         for (int face = 0; face < 6; ++face) {
             sample.ambientCube[face] = Vector3Add(
                     sample.ambientCube[face],
@@ -1759,6 +1778,135 @@ BakedObjectLightingSample SampleNearestObjectLightProbes(
         face = ClampRgb01(Vector3Scale(face, 1.0f / totalWeight));
     }
     return sample;
+}
+
+BakedObjectLightingSample SampleNearestObjectLightProbes(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        Vector3 worldPosition,
+        int begin,
+        int count)
+{
+    ObjectProbeSelection selection;
+    StreamObjectLightProbeRange(probes, worldPosition, begin, count, selection);
+    return SampleSelectedObjectLightProbes(probes, selection);
+}
+
+float DistanceSquaredPointToSegment2(Vector2 point, Vector2 a, Vector2 b)
+{
+    const Vector2 segment = Vector2Subtract(b, a);
+    const float lengthSquared = Vector2LengthSqr(segment);
+    if (lengthSquared <= 0.0f || !std::isfinite(lengthSquared)) {
+        return Vector2DistanceSqr(point, a);
+    }
+
+    const float t = std::clamp(Vector2DotProduct(Vector2Subtract(point, a), segment) / lengthSquared, 0.0f, 1.0f);
+    const Vector2 closest = Vector2Add(a, Vector2Scale(segment, t));
+    return Vector2DistanceSqr(point, closest);
+}
+
+bool AddAdjacentObjectProbeSectorId(
+        int sectorId,
+        int preferredSectorId,
+        int (&adjacentSectorIds)[kObjectProbeMaxAdjacentBlendSectors],
+        int& adjacentSectorCount)
+{
+    if (sectorId == preferredSectorId) {
+        return false;
+    }
+    for (int index = 0; index < adjacentSectorCount; ++index) {
+        if (adjacentSectorIds[index] == sectorId) {
+            return false;
+        }
+    }
+    if (adjacentSectorCount >= kObjectProbeMaxAdjacentBlendSectors) {
+        return false;
+    }
+
+    adjacentSectorIds[adjacentSectorCount] = sectorId;
+    ++adjacentSectorCount;
+    return true;
+}
+
+void CollectAdjacentObjectProbeSectorIdsNearPortals(
+        const SectorTopologyMap& map,
+        Vector3 worldPosition,
+        int preferredSectorId,
+        int (&adjacentSectorIds)[kObjectProbeMaxAdjacentBlendSectors],
+        int& adjacentSectorCount)
+{
+    adjacentSectorCount = 0;
+    const Vector2 samplePosition = Vector2{worldPosition.x, worldPosition.z};
+    const float blendDistanceSquared =
+            kObjectProbeAdjacentPortalBlendDistanceWorld * kObjectProbeAdjacentPortalBlendDistanceWorld;
+
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        if (adjacentSectorCount >= kObjectProbeMaxAdjacentBlendSectors) {
+            break;
+        }
+        if (!IsValidSectorTopologyId(lineDef.frontSideDefId)
+                || !IsValidSectorTopologyId(lineDef.backSideDefId)) {
+            continue;
+        }
+
+        const SectorTopologySideDef* frontSide = FindSectorTopologySideDef(map, lineDef.frontSideDefId);
+        const SectorTopologySideDef* backSide = FindSectorTopologySideDef(map, lineDef.backSideDefId);
+        if (frontSide == nullptr
+                || backSide == nullptr
+                || frontSide->lineDefId != lineDef.id
+                || backSide->lineDefId != lineDef.id) {
+            continue;
+        }
+
+        const SectorTopologySideDef* fromSide = nullptr;
+        const SectorTopologySideDef* toSide = nullptr;
+        if (frontSide->sectorId == preferredSectorId) {
+            fromSide = frontSide;
+            toSide = backSide;
+        } else if (backSide->sectorId == preferredSectorId) {
+            fromSide = backSide;
+            toSide = frontSide;
+        } else {
+            continue;
+        }
+        if (toSide == nullptr || fromSide == nullptr || toSide->sectorId == preferredSectorId) {
+            continue;
+        }
+
+        const SectorTopologySector* fromSector = FindSectorTopologySector(map, fromSide->sectorId);
+        const SectorTopologySector* toSector = FindSectorTopologySector(map, toSide->sectorId);
+        if (fromSector == nullptr || toSector == nullptr) {
+            continue;
+        }
+
+        const float openBottom = std::max(
+                SectorAuthoringToWorldDistance(fromSector->floorZ),
+                SectorAuthoringToWorldDistance(toSector->floorZ));
+        const float openTop = std::min(
+                SectorAuthoringToWorldDistance(fromSector->ceilingZ),
+                SectorAuthoringToWorldDistance(toSector->ceilingZ));
+        if (!(openBottom < openTop)) {
+            continue;
+        }
+
+        const SectorTopologyVertex* start = FindSectorTopologyVertex(map, lineDef.startVertexId);
+        const SectorTopologyVertex* end = FindSectorTopologyVertex(map, lineDef.endVertexId);
+        if (start == nullptr || end == nullptr) {
+            continue;
+        }
+
+        const Vector2 a = SectorCoordToWorldPosition2(start->x, start->y);
+        const Vector2 b = SectorCoordToWorldPosition2(end->x, end->y);
+        const float distanceSquared = DistanceSquaredPointToSegment2(samplePosition, a, b);
+        if (!std::isfinite(distanceSquared) || distanceSquared > blendDistanceSquared) {
+            continue;
+        }
+
+        AddAdjacentObjectProbeSectorId(
+                toSide->sectorId,
+                preferredSectorId,
+                adjacentSectorIds,
+                adjacentSectorCount);
+    }
 }
 
 Vector3 EvaluateProbePointLight(
@@ -3102,6 +3250,36 @@ BakedObjectLightingSample SampleBakedObjectLighting(
     if (!probes.probes.empty()) {
         if (const SectorBakedObjectLightProbeSectorRange* range = FindProbeSectorRange(probes, preferredSectorId)) {
             if (range->count > 0) {
+                ObjectProbeSelection selection;
+                StreamObjectLightProbeRange(probes, worldPosition, range->begin, range->count, selection);
+
+                if (mapForFallback != nullptr) {
+                    int adjacentSectorIds[kObjectProbeMaxAdjacentBlendSectors] = {};
+                    int adjacentSectorCount = 0;
+                    CollectAdjacentObjectProbeSectorIdsNearPortals(
+                            *mapForFallback,
+                            worldPosition,
+                            preferredSectorId,
+                            adjacentSectorIds,
+                            adjacentSectorCount);
+                    for (int index = 0; index < adjacentSectorCount; ++index) {
+                        const SectorBakedObjectLightProbeSectorRange* adjacentRange =
+                                FindProbeSectorRange(probes, adjacentSectorIds[index]);
+                        if (adjacentRange != nullptr && adjacentRange->count > 0) {
+                            StreamObjectLightProbeRange(
+                                    probes,
+                                    worldPosition,
+                                    adjacentRange->begin,
+                                    adjacentRange->count,
+                                    selection);
+                        }
+                    }
+                }
+
+                if (HasSelectedObjectLightProbes(selection)) {
+                    return SampleSelectedObjectLightProbes(probes, selection);
+                }
+
                 return SampleNearestObjectLightProbes(probes, worldPosition, range->begin, range->count);
             }
         }

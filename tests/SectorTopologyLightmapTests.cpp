@@ -204,6 +204,60 @@ game::SectorTopologyMap MakeAdjacent(float leftFloor, float leftCeiling, float r
     return map;
 }
 
+game::SectorTopologyMap MakeAdjacentWithSplitPortal()
+{
+    game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    map.vertices.push_back({7, 64, 32});
+    game::SectorTopologyLineDef* shared = game::FindSectorTopologyLineDef(map, 2);
+    Check(shared != nullptr, "split portal fixture shared linedef exists");
+    if (shared != nullptr) {
+        shared->endVertexId = 7;
+    }
+    map.lineDefs.push_back({8, 7, 3, 9, 10});
+    AddSide(map, 9, 8, game::SectorTopologySideKind::Front, 10);
+    AddSide(map, 10, 8, game::SectorTopologySideKind::Back, 20);
+    return map;
+}
+
+game::SectorTopologyMap MakeObjectProbeAdjacentCapMap()
+{
+    game::SectorTopologyMap map;
+    AddTextureDefaults(map);
+    map.vertices = {
+            {1, 0, 0},
+            {2, 1, 0},
+            {3, 2, 0},
+            {4, 3, 0},
+            {5, 4, 0},
+            {6, 5, 0},
+            {7, 6, 0},
+            {8, 7, 0},
+            {9, 8, 0},
+            {10, 9, 0},
+            {11, 10, 0},
+            {12, 11, 0},
+            {13, 12, 0},
+            {14, 13, 0},
+            {15, 14, 0},
+            {16, 15, 0},
+            {17, 16, 0},
+            {18, 17, 0}
+    };
+
+    for (int index = 0; index < 9; ++index) {
+        const int lineId = index + 1;
+        const int frontSideId = 100 + index;
+        const int backSideId = 200 + index;
+        const int adjacentSectorId = 20 + index;
+        map.lineDefs.push_back({lineId, index * 2 + 1, index * 2 + 2, frontSideId, backSideId});
+        AddSide(map, frontSideId, lineId, game::SectorTopologySideKind::Front, 10);
+        AddSide(map, backSideId, lineId, game::SectorTopologySideKind::Back, adjacentSectorId);
+        map.sectors.push_back(Sector(adjacentSectorId));
+    }
+    map.sectors.push_back(Sector(10));
+    return map;
+}
+
 game::SectorTopologyMap MakePlatform()
 {
     game::SectorTopologyMap map = MakeSquare();
@@ -1672,6 +1726,131 @@ void TestObjectLightProbeSamplingInterpolatesAndPrefersSector()
           "object light probe sampling any-probe fallback is deterministic nearest-probe lighting");
 }
 
+void TestObjectLightProbeSamplingAdjacentPortalBlending()
+{
+    const game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::SectorBakedObjectLightProbeRuntimeData data = MakeSamplingRuntimeData({
+            SamplingProbe(10, Vector3{-0.25f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}),
+            SamplingProbe(20, Vector3{0.75f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}),
+    });
+
+    const game::BakedObjectLightingSample far =
+            game::SampleBakedObjectLighting(data, Vector3{-2.0f, 0.0f, 0.0f}, 10, &map);
+    Check(far.valid, "object light probe far portal sample remains valid");
+    Check(SameVector(far.ambientCube[0], Vector3{1.0f, 0.0f, 0.0f}),
+          "object light probe sampling far from portal uses preferred sector only");
+
+    const game::BakedObjectLightingSample near =
+            game::SampleBakedObjectLighting(data, Vector3{0.25f, 0.0f, 0.0f}, 10, &map);
+    Check(near.valid, "object light probe near portal sample remains valid");
+    Check(Near(near.ambientCube[0].x, 0.5f) && Near(near.ambientCube[0].z, 0.5f),
+          "object light probe sampling near open portal blends preferred and adjacent sectors");
+}
+
+void TestObjectLightProbeSamplingAdjacentSectorDeduplicatesSplitPortal()
+{
+    const game::SectorTopologyMap map = MakeAdjacentWithSplitPortal();
+    game::SectorBakedObjectLightProbeRuntimeData data = MakeSamplingRuntimeData({
+            SamplingProbe(10, Vector3{-0.25f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}),
+            SamplingProbe(20, Vector3{0.75f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}),
+    });
+
+    const game::BakedObjectLightingSample sample =
+            game::SampleBakedObjectLighting(data, Vector3{0.25f, 0.0f, 0.125f}, 10, &map);
+    Check(sample.valid, "object light probe split portal sample remains valid");
+    Check(Near(sample.ambientCube[0].x, 0.5f) && Near(sample.ambientCube[0].z, 0.5f),
+          "object light probe split portal streams adjacent sector only once");
+}
+
+void TestObjectLightProbeSamplingAdjacentSectorCapAndPreferredDeduplication()
+{
+    const game::SectorTopologyMap capMap = MakeObjectProbeAdjacentCapMap();
+    std::vector<game::SectorBakedObjectLightProbe> capProbes;
+    capProbes.push_back(SamplingProbe(10, Vector3{4.0f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 0.0f}));
+    for (int index = 0; index < 9; ++index) {
+        const float red = index == game::kObjectProbeMaxAdjacentBlendSectors ? 1.0f : 0.0f;
+        const float x = index == game::kObjectProbeMaxAdjacentBlendSectors ? 1.0f : 0.0f;
+        capProbes.push_back(SamplingProbe(20 + index, Vector3{x, 0.0f, 0.0f}, Vector3{red, 0.0f, 0.0f}));
+    }
+    game::SectorBakedObjectLightProbeRuntimeData capData = MakeSamplingRuntimeData(std::move(capProbes));
+
+    const game::BakedObjectLightingSample capped =
+            game::SampleBakedObjectLighting(capData, Vector3{2.0f, 0.0f, 0.0f}, 10, &capMap);
+    Check(capped.valid, "object light probe adjacent cap sample remains valid");
+    Check(SameVector(capped.ambientCube[0], Vector3{0.0f, 0.0f, 0.0f}),
+          "object light probe adjacent sector cap deterministically excludes the ninth adjacent sector");
+
+    game::SectorTopologyMap preferredLoopMap = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::SectorTopologySideDef* loopBackSide = game::FindSectorTopologySideDef(preferredLoopMap, 8);
+    Check(loopBackSide != nullptr, "object light probe preferred self-portal fixture sidedef exists");
+    if (loopBackSide != nullptr) {
+        loopBackSide->sectorId = 10;
+    }
+    game::SectorBakedObjectLightProbeRuntimeData preferredLoopData = MakeSamplingRuntimeData({
+            SamplingProbe(10, Vector3{-0.25f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}),
+            SamplingProbe(10, Vector3{0.85f, 0.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}),
+            SamplingProbe(10, Vector3{0.95f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}),
+    });
+
+    const game::BakedObjectLightingSample preferredBaseline =
+            game::SampleBakedObjectLighting(preferredLoopData, Vector3{0.25f, 0.0f, 0.0f}, 10, nullptr);
+    const game::BakedObjectLightingSample preferredOnly =
+            game::SampleBakedObjectLighting(preferredLoopData, Vector3{0.25f, 0.0f, 0.0f}, 10, &preferredLoopMap);
+    Check(preferredBaseline.valid && preferredOnly.valid,
+          "object light probe preferred self-portal sample remains valid");
+    Check(SameVector(preferredOnly.ambientCube[0], preferredBaseline.ambientCube[0]),
+          "object light probe sampling does not duplicate preferred sector through a self-resolving portal");
+}
+
+void TestObjectLightProbeSamplingDoesNotBlendThroughClosedOrUnavailableAdjacency()
+{
+    const game::SectorTopologyMap closedPortalMap = MakeAdjacent(0.0f, 8.0f, 8.0f, 16.0f);
+    game::SectorBakedObjectLightProbeRuntimeData data = MakeSamplingRuntimeData({
+            SamplingProbe(10, Vector3{-0.25f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}),
+            SamplingProbe(20, Vector3{0.75f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}),
+    });
+
+    const game::BakedObjectLightingSample closed =
+            game::SampleBakedObjectLighting(data, Vector3{0.25f, 0.0f, 0.0f}, 10, &closedPortalMap);
+    Check(closed.valid, "object light probe closed portal sample remains valid");
+    Check(SameVector(closed.ambientCube[0], Vector3{1.0f, 0.0f, 0.0f}),
+          "object light probe sampling does not blend through vertically closed portals");
+
+    game::SectorTopologyMap oneSidedMap = MakeProbeRectangle(64, 64);
+    oneSidedMap.sectors.push_back(Sector(20));
+    const game::BakedObjectLightingSample oneSided =
+            game::SampleBakedObjectLighting(data, Vector3{0.25f, 0.0f, 0.0f}, 10, &oneSidedMap);
+    Check(oneSided.valid, "object light probe one-sided wall sample remains valid");
+    Check(SameVector(oneSided.ambientCube[0], Vector3{1.0f, 0.0f, 0.0f}),
+          "object light probe sampling does not blend through one-sided or non-neighbor boundaries");
+
+    const game::BakedObjectLightingSample nullMap =
+            game::SampleBakedObjectLighting(data, Vector3{0.25f, 0.0f, 0.0f}, 10, nullptr);
+    Check(nullMap.valid, "object light probe null map sample remains valid");
+    Check(SameVector(nullMap.ambientCube[0], Vector3{1.0f, 0.0f, 0.0f}),
+          "object light probe sampling with null map preserves preferred-sector-only behavior");
+
+    const game::BakedObjectLightingSample missingSectorMap =
+            game::SampleBakedObjectLighting(data, Vector3{0.25f, 0.0f, 0.0f}, 10, &oneSidedMap);
+    Check(missingSectorMap.valid, "object light probe unavailable adjacency sample remains valid");
+    Check(SameVector(missingSectorMap.ambientCube[0], Vector3{1.0f, 0.0f, 0.0f}),
+          "object light probe preferred sector with probes does not fall back to all probes when adjacency is unavailable");
+}
+
+void TestObjectLightProbeSamplingKeepsAllProbeFallbackWithoutPreferredProbes()
+{
+    const game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::SectorBakedObjectLightProbeRuntimeData data = MakeSamplingRuntimeData({
+            SamplingProbe(20, Vector3{0.75f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}),
+    });
+
+    const game::BakedObjectLightingSample sample =
+            game::SampleBakedObjectLighting(data, Vector3{0.75f, 0.0f, 0.0f}, 10, &map);
+    Check(sample.valid, "object light probe missing preferred sector probes fallback remains valid");
+    Check(SameVector(sample.ambientCube[0], Vector3{0.0f, 0.0f, 1.0f}),
+          "object light probe missing preferred sector probes still falls back to all loaded probes");
+}
+
 void TestObjectLightProbeSamplingFallbacksAndFiniteOutput()
 {
     const game::SectorBakedObjectLightProbeRuntimeData emptyData;
@@ -2099,6 +2278,11 @@ int main()
     TestObjectLightProbeRuntimeDataLoadsAndBuildsSectorRanges();
     TestObjectLightProbeRuntimeDataRejectsUnavailableInputs();
     TestObjectLightProbeSamplingInterpolatesAndPrefersSector();
+    TestObjectLightProbeSamplingAdjacentPortalBlending();
+    TestObjectLightProbeSamplingAdjacentSectorDeduplicatesSplitPortal();
+    TestObjectLightProbeSamplingAdjacentSectorCapAndPreferredDeduplication();
+    TestObjectLightProbeSamplingDoesNotBlendThroughClosedOrUnavailableAdjacency();
+    TestObjectLightProbeSamplingKeepsAllProbeFallbackWithoutPreferredProbes();
     TestObjectLightProbeSamplingFallbacksAndFiniteOutput();
     TestObjectLightProbeBakeWritesSidecarAndStats();
     TestObjectLightProbeBakeCancellationDoesNotMarkValid();
