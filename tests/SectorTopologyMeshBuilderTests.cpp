@@ -1320,7 +1320,8 @@ void TestDynamicSpotLightRuntimeSourcePacking()
                     true,
                     7,
                     0.01f,
-                    0.75f},
+                    0.75f,
+                    2.0f},
             game::SectorTopologyDynamicSpotLight{
                     31,
                     Vector3{6.0f, 8.0f, 2.0f},
@@ -1378,7 +1379,8 @@ void TestDynamicSpotLightRuntimeSourcePacking()
                   && spot->light.castsShadow
                   && spot->light.shadowPriority == 7
                   && Near(spot->light.shadowBias, 0.01f)
-                  && Near(spot->light.shadowStrength, 0.75f),
+                  && Near(spot->light.shadowStrength, 0.75f)
+                  && Near(spot->light.shadowSoftness, 2.0f),
           "dynamic spotlight source packing preserves shadow selection settings");
 
     const game::SectorPreviewDynamicPointLightSource* flickerSpot = FindCandidateLightId(sources, 31);
@@ -1571,6 +1573,11 @@ void TestDynamicSpotLightShadowCasterSelection()
             2,
             selected,
             &selectedIds);
+    for (game::SectorPreviewDynamicPointLightUniform& light : selected) {
+        if (light.lightId == 10) {
+            light.shadowSoftness = 2.5f;
+        }
+    }
 
     std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> shadowCasters;
     game::SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
@@ -1592,6 +1599,10 @@ void TestDynamicSpotLightShadowCasterSelection()
                   && shadowCasters[1].dynamicLightIndex == 1
                   && shadowCasters[1].shadowSlot == 1,
           "dynamic spotlight shadow selection records dynamic light index and sequential shadow slot");
+    Check(!shadowCasters.empty()
+                  && shadowCasters[0].lightId == 10
+                  && Near(shadowCasters[0].shadowSoftness, 2.5f),
+          "dynamic spotlight shadow selection carries softness into the shadow caster slot");
 
     selected = {
             LightSource(20, 10, Vector3{0.5f, 0.5f, 0.5f}, 8.0f, 10.0f).light,
@@ -1692,9 +1703,9 @@ void TestDynamicSpotLightShadowMatrices()
     selected[0].radius = 8.0f;
 
     std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> shadowCasters = {
-            game::SectorPreviewDynamicSpotLightShadowCaster{40, 0, 0, 0, 1.0f, 0.002f, 1.0f},
-            game::SectorPreviewDynamicSpotLightShadowCaster{41, 1, 1, 0, 1.0f, 0.002f, 1.0f},
-            game::SectorPreviewDynamicSpotLightShadowCaster{99, 99, 2, 0, 1.0f, 0.002f, 1.0f}};
+            game::SectorPreviewDynamicSpotLightShadowCaster{40, 0, 0, 0, 1.0f, 0.002f, 1.0f, 1.0f},
+            game::SectorPreviewDynamicSpotLightShadowCaster{41, 1, 1, 0, 1.0f, 0.002f, 1.0f, 1.0f},
+            game::SectorPreviewDynamicSpotLightShadowCaster{99, 99, 2, 0, 1.0f, 0.002f, 1.0f, 1.0f}};
     std::vector<game::SectorPreviewDynamicSpotLightShadowMatrix> matrices;
     game::BuildSectorPreviewDynamicSpotLightShadowMatrices(selected, shadowCasters, matrices);
     Check(matrices.size() == game::MaxDynamicSpotLightShadowCasters
@@ -1714,15 +1725,17 @@ void TestDynamicSpotLightShadowUniformPacking()
     selected[0].lightId = 50;
     selected[0].shadowBias = 0.004f;
     selected[0].shadowStrength = 0.75f;
+    selected[0].shadowSoftness = 2.0f;
     selected[1].lightId = 51;
     selected[1].castsShadow = true;
     selected[2].lightId = 52;
     selected[2].shadowBias = 0.006f;
     selected[2].shadowStrength = 0.5f;
+    selected[2].shadowSoftness = 4.0f;
 
     std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> shadowCasters = {
-            game::SectorPreviewDynamicSpotLightShadowCaster{50, 0, 0, 0, 1.0f, 0.004f, 0.75f},
-            game::SectorPreviewDynamicSpotLightShadowCaster{52, 2, 1, 0, 1.0f, 0.006f, 0.5f}};
+            game::SectorPreviewDynamicSpotLightShadowCaster{50, 0, 0, 0, 1.0f, 0.004f, 0.75f, 2.0f},
+            game::SectorPreviewDynamicSpotLightShadowCaster{52, 2, 1, 0, 1.0f, 0.006f, 0.5f, 4.0f}};
     std::vector<game::SectorPreviewDynamicSpotLightShadowMatrix> matrices;
     game::BuildSectorPreviewDynamicSpotLightShadowMatrices(selected, shadowCasters, matrices);
 
@@ -1734,9 +1747,11 @@ void TestDynamicSpotLightShadowUniformPacking()
           "dynamic spotlight shadow uniform packing assigns slots only to shadowed spotlights");
     Check(Near(uniforms.shadowBias[0], 0.004f)
                   && Near(uniforms.shadowStrength[0], 0.75f)
+                  && Near(uniforms.shadowSoftness[0], 2.0f)
                   && Near(uniforms.shadowBias[1], 0.006f)
-                  && Near(uniforms.shadowStrength[1], 0.5f),
-          "dynamic spotlight shadow uniform packing carries per-slot bias and strength");
+                  && Near(uniforms.shadowStrength[1], 0.5f)
+                  && Near(uniforms.shadowSoftness[1], 4.0f),
+          "dynamic spotlight shadow uniform packing carries per-slot bias strength and softness");
     Check(FiniteMatrix(uniforms.shadowLightMatrices[0]) && FiniteMatrix(uniforms.shadowLightMatrices[1]),
           "dynamic spotlight shadow uniform packing carries finite light-space matrices");
 
@@ -1748,7 +1763,8 @@ void TestDynamicSpotLightShadowUniformPacking()
     }
     Check(allSlotsEmpty
                   && Near(emptyUniforms.shadowBias[0], game::DynamicSpotLightDefaultShadowBias)
-                  && Near(emptyUniforms.shadowStrength[0], 0.0f),
+                  && Near(emptyUniforms.shadowStrength[0], 0.0f)
+                  && Near(emptyUniforms.shadowSoftness[0], game::DynamicSpotLightDefaultShadowSoftness),
           "dynamic spotlight shadow uniform packing is safe when zero shadow casters are active");
 }
 

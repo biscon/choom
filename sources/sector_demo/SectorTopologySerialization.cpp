@@ -843,6 +843,7 @@ Json WriteDynamicSpotLight(const SectorTopologyDynamicSpotLight& light, const st
     RequireFinite(light.outerConeDegrees, context + ".outerConeDegrees");
     RequireFinite(light.shadowBias, context + ".shadowBias");
     RequireFinite(light.shadowStrength, context + ".shadowStrength");
+    RequireFinite(light.shadowSoftness, context + ".shadowSoftness");
     const float innerConeDegrees = ClampDynamicSpotLightConeDegrees(light.innerConeDegrees);
     const float outerConeDegrees = std::max(
             ClampDynamicSpotLightConeDegrees(light.outerConeDegrees),
@@ -850,6 +851,7 @@ Json WriteDynamicSpotLight(const SectorTopologyDynamicSpotLight& light, const st
     const int shadowPriority = ClampDynamicSpotLightShadowPriority(light.shadowPriority);
     const float shadowBias = ClampDynamicSpotLightShadowBias(light.shadowBias);
     const float shadowStrength = ClampDynamicSpotLightShadowStrength(light.shadowStrength);
+    const float shadowSoftness = ClampDynamicSpotLightShadowSoftness(light.shadowSoftness);
     Json lightJson{
             {"id", light.id},
             {"position", WriteVector3(light.position, context + ".position")},
@@ -879,6 +881,9 @@ Json WriteDynamicSpotLight(const SectorTopologyDynamicSpotLight& light, const st
     }
     if (shadowStrength != DynamicSpotLightDefaultShadowStrength) {
         lightJson["shadowStrength"] = shadowStrength;
+    }
+    if (shadowSoftness != DynamicSpotLightDefaultShadowSoftness) {
+        lightJson["shadowSoftness"] = shadowSoftness;
     }
     return lightJson;
 }
@@ -1213,6 +1218,13 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
                     DynamicSpotLightDefaultShadowStrength,
                     DynamicSpotLightMinShadowStrength,
                     DynamicSpotLightMaxShadowStrength);
+            light.shadowSoftness = ReadOptionalClampedFloat(
+                    value,
+                    "shadowSoftness",
+                    context,
+                    DynamicSpotLightDefaultShadowSoftness,
+                    DynamicSpotLightMinShadowSoftness,
+                    DynamicSpotLightMaxShadowSoftness);
             map.dynamicSpotLights.push_back(light);
         }
     }

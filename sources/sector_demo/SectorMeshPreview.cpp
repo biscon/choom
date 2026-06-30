@@ -118,11 +118,27 @@ uniform int dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS];
 uniform mat4 shadowLightMatrices[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowBias[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform sampler2D shadowMap0;
 uniform sampler2D shadowMap1;
 uniform float dynamicLightingClamp;
 
 out vec4 finalColor;
+
+const vec2 kPoissonDisk[12] = vec2[12](
+    vec2(-0.326, -0.406),
+    vec2(-0.840, -0.074),
+    vec2(-0.696,  0.457),
+    vec2(-0.203,  0.621),
+    vec2( 0.962, -0.195),
+    vec2( 0.473, -0.480),
+    vec2( 0.519,  0.767),
+    vec2( 0.185, -0.893),
+    vec2( 0.507,  0.064),
+    vec2( 0.896,  0.412),
+    vec2(-0.322, -0.933),
+    vec2(-0.792, -0.598)
+);
 
 vec3 SafeNormalize(vec3 value, vec3 fallback)
 {
@@ -164,15 +180,20 @@ float DynamicSpotLightShadowVisibility(
             SafeNormalize(surfaceToLightDirection, vec3(0.0, 1.0, 0.0))), 0.0);
     float effectiveBias = min(shadowBias[shadowSlot] * (1.0 + (1.0 - normalLightDot) * 2.0), 0.02);
     float compareDepth = shadowCoord.z - effectiveBias;
-    float visible = 0.0;
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            vec2 sampleUv = clamp(shadowCoord.xy + vec2(x, y) * texelSize, vec2(0.0), vec2(1.0));
-            float shadowDepth = SampleShadowMap(shadowSlot, sampleUv);
-            visible += compareDepth <= shadowDepth ? 1.0 : 0.0;
-        }
+    float softness = clamp(shadowSoftness[shadowSlot], 0.0, 8.0);
+    if (softness <= 0.0) {
+        float shadowDepth = SampleShadowMap(shadowSlot, shadowCoord.xy);
+        return compareDepth <= shadowDepth ? 1.0 : 0.0;
     }
-    return visible / 9.0;
+
+    vec2 radius = max(0.25, softness) * texelSize;
+    float visible = 0.0;
+    for (int i = 0; i < 12; ++i) {
+        vec2 sampleUv = clamp(shadowCoord.xy + kPoissonDisk[i] * radius, vec2(0.0), vec2(1.0));
+        float shadowDepth = SampleShadowMap(shadowSlot, sampleUv);
+        visible += compareDepth <= shadowDepth ? 1.0 : 0.0;
+    }
+    return visible / 12.0;
 }
 
 void main()
@@ -525,6 +546,7 @@ void UploadDynamicSpotLightShadowUniforms(
         const std::array<int, MaxDynamicSpotLightShadowCasters>& shadowLightMatrixLocs,
         int shadowBiasLoc,
         int shadowStrengthLoc,
+        int shadowSoftnessLoc,
         const SectorPreviewDynamicSpotLightShadowUniforms& uniforms)
 {
     if (dynamicLightShadowSlotsLoc >= 0) {
@@ -553,6 +575,14 @@ void UploadDynamicSpotLightShadowUniforms(
                 shader,
                 shadowStrengthLoc,
                 uniforms.shadowStrength.data(),
+                SHADER_UNIFORM_FLOAT,
+                static_cast<int>(MaxDynamicSpotLightShadowCasters));
+    }
+    if (shadowSoftnessLoc >= 0) {
+        SetShaderValueV(
+                shader,
+                shadowSoftnessLoc,
+                uniforms.shadowSoftness.data(),
                 SHADER_UNIFORM_FLOAT,
                 static_cast<int>(MaxDynamicSpotLightShadowCasters));
     }
@@ -660,6 +690,7 @@ bool LoadPreviewMaterial(
         std::array<int, MaxDynamicSpotLightShadowCasters>& shadowLightMatrixLocs,
         int& shadowBiasLoc,
         int& shadowStrengthLoc,
+        int& shadowSoftnessLoc,
         int& dynamicLightingClampLoc,
         std::string& error)
 {
@@ -703,6 +734,7 @@ bool LoadPreviewMaterial(
     }
     shadowBiasLoc = GetShaderLocationArrayBase(material.shader, "shadowBias");
     shadowStrengthLoc = GetShaderLocationArrayBase(material.shader, "shadowStrength");
+    shadowSoftnessLoc = GetShaderLocationArrayBase(material.shader, "shadowSoftness");
     dynamicLightingClampLoc = GetShaderLocation(material.shader, "dynamicLightingClamp");
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
@@ -1031,6 +1063,7 @@ bool SectorMeshPreview::RebuildRendererResources(
                 shadowLightMatrixLocs,
                 shadowBiasLoc,
                 shadowStrengthLoc,
+                shadowSoftnessLoc,
                 dynamicLightingClampLoc,
                 error)) {
         Shutdown(assets);
@@ -1117,6 +1150,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
         shadowLightMatrixLocs.fill(-1);
         shadowBiasLoc = -1;
         shadowStrengthLoc = -1;
+        shadowSoftnessLoc = -1;
     }
 
     if (dynamicSpotLightShadowMaterialLoaded) {
@@ -1206,6 +1240,7 @@ void SectorMeshPreview::DrawScene(engine::AssetManager& assets, bool useBakedAmb
             shadowLightMatrixLocs,
             shadowBiasLoc,
             shadowStrengthLoc,
+            shadowSoftnessLoc,
             shadowUniforms);
     for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
         if (!ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)) {

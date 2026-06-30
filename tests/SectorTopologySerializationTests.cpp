@@ -668,7 +668,8 @@ void TestDynamicSpotLightRoundTrip()
             true,
             17,
             0.015f,
-            0.75f
+            0.75f,
+            2.5f
     });
 
     const std::string text = SaveText(original);
@@ -698,12 +699,14 @@ void TestDynamicSpotLightRoundTrip()
     Check(saved["dynamicSpotLights"][0]["castsShadow"] == true
                   && saved["dynamicSpotLights"][0]["shadowPriority"] == 17
                   && Near(saved["dynamicSpotLights"][0]["shadowBias"].get<float>(), 0.015f)
-                  && Near(saved["dynamicSpotLights"][0]["shadowStrength"].get<float>(), 0.75f),
+                  && Near(saved["dynamicSpotLights"][0]["shadowStrength"].get<float>(), 0.75f)
+                  && Near(saved["dynamicSpotLights"][0]["shadowSoftness"].get<float>(), 2.5f),
           "non-default dynamic spot light shadow fields are written");
     Check(!saved["dynamicSpotLights"][1].contains("castsShadow")
                   && !saved["dynamicSpotLights"][1].contains("shadowPriority")
                   && !saved["dynamicSpotLights"][1].contains("shadowBias")
-                  && !saved["dynamicSpotLights"][1].contains("shadowStrength"),
+                  && !saved["dynamicSpotLights"][1].contains("shadowStrength")
+                  && !saved["dynamicSpotLights"][1].contains("shadowSoftness"),
           "default dynamic spot light shadow fields are omitted");
 
     SectorTopologyMap defaultMap = MakeSquare();
@@ -728,7 +731,8 @@ void TestDynamicSpotLightRoundTrip()
                   && !savedDefaults["dynamicSpotLights"][0].contains("castsShadow")
                   && !savedDefaults["dynamicSpotLights"][0].contains("shadowPriority")
                   && !savedDefaults["dynamicSpotLights"][0].contains("shadowBias")
-                  && !savedDefaults["dynamicSpotLights"][0].contains("shadowStrength"),
+                  && !savedDefaults["dynamicSpotLights"][0].contains("shadowStrength")
+                  && !savedDefaults["dynamicSpotLights"][0].contains("shadowSoftness"),
           "default dynamic spot light optional fields remain omitted");
 
     SectorTopologyMap loaded;
@@ -754,7 +758,8 @@ void TestDynamicSpotLightRoundTrip()
                       && !light->castsShadow
                       && light->shadowPriority == game::DynamicSpotLightDefaultShadowPriority
                       && Near(light->shadowBias, game::DynamicSpotLightDefaultShadowBias)
-                      && Near(light->shadowStrength, game::DynamicSpotLightDefaultShadowStrength),
+                      && Near(light->shadowStrength, game::DynamicSpotLightDefaultShadowStrength)
+                      && Near(light->shadowSoftness, game::DynamicSpotLightDefaultShadowSoftness),
               "round-tripped dynamic spot light preserves properties and missing optional defaults");
     }
     const SectorTopologyDynamicSpotLight* flickerLight =
@@ -767,7 +772,8 @@ void TestDynamicSpotLightRoundTrip()
                   && flickerLight->castsShadow
                   && flickerLight->shadowPriority == 17
                   && Near(flickerLight->shadowBias, 0.015f)
-                  && Near(flickerLight->shadowStrength, 0.75f),
+                  && Near(flickerLight->shadowStrength, 0.75f)
+                  && Near(flickerLight->shadowSoftness, 2.5f),
           "round-tripped dynamic spot light preserves flicker shadow settings and coincident target");
     Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(loaded)),
           "topology with dynamic spot lights validates");
@@ -787,6 +793,7 @@ void TestDynamicSpotLightRoundTrip()
     clamped["dynamicSpotLights"][0]["shadowPriority"] = 5000;
     clamped["dynamicSpotLights"][0]["shadowBias"] = 1.0f;
     clamped["dynamicSpotLights"][0]["shadowStrength"] = -1.0f;
+    clamped["dynamicSpotLights"][0]["shadowSoftness"] = 100.0f;
     Check(LoadText(clamped.dump(), loaded, error), "out-of-range dynamic spot light fields load");
     const SectorTopologyDynamicSpotLight* clampedLight =
             game::FindSectorTopologyDynamicSpotLight(loaded, 7);
@@ -797,8 +804,16 @@ void TestDynamicSpotLightRoundTrip()
                   && Near(clampedLight->flickerAmount, game::DynamicLightFlickerMinAmount)
                   && clampedLight->shadowPriority == game::DynamicSpotLightMaxShadowPriority
                   && Near(clampedLight->shadowBias, game::DynamicSpotLightMaxShadowBias)
-                  && Near(clampedLight->shadowStrength, game::DynamicSpotLightMinShadowStrength),
+                  && Near(clampedLight->shadowStrength, game::DynamicSpotLightMinShadowStrength)
+                  && Near(clampedLight->shadowSoftness, game::DynamicSpotLightMaxShadowSoftness),
           "out-of-range dynamic spot light fields clamp on load");
+
+    clamped["dynamicSpotLights"][0]["shadowSoftness"] = -5.0f;
+    Check(LoadText(clamped.dump(), loaded, error), "negative dynamic spot light shadow softness loads");
+    clampedLight = game::FindSectorTopologyDynamicSpotLight(loaded, 7);
+    Check(clampedLight != nullptr
+                  && Near(clampedLight->shadowSoftness, game::DynamicSpotLightMinShadowSoftness),
+          "negative dynamic spot light shadow softness clamps on load");
 
     Json widened = saved;
     widened["dynamicSpotLights"][0]["innerConeDegrees"] = 80.0f;
@@ -1987,6 +2002,9 @@ void TestStrictValuesAndValidation()
     changed["dynamicSpotLights"][0]["shadowStrength"] = "strong";
     ExpectRejected(changed, "non-number dynamic spot light shadow strength is rejected");
     changed["dynamicSpotLights"][0]["shadowStrength"] = 0.5f;
+    changed["dynamicSpotLights"][0]["shadowSoftness"] = "soft";
+    ExpectRejected(changed, "non-number dynamic spot light shadow softness is rejected");
+    changed["dynamicSpotLights"][0]["shadowSoftness"] = 1.5f;
     changed["dynamicSpotLights"][0]["innerConeDegrees"] = "wide";
     ExpectRejected(changed, "non-number dynamic spot light inner cone is rejected");
     changed["dynamicSpotLights"][0]["innerConeDegrees"] = 20.0f;
@@ -2462,7 +2480,8 @@ void TestGraphNativeMapLevelRoundTrip()
             true,
             23,
             0.02f,
-            0.8f
+            0.8f,
+            3.0f
     });
     source.previewSettings.walkSpeed = 9.0f;
     source.skySettings.textureId = "sky";
@@ -2499,7 +2518,8 @@ void TestGraphNativeMapLevelRoundTrip()
                   && saved["dynamicSpotLights"][0]["castsShadow"] == true
                   && saved["dynamicSpotLights"][0]["shadowPriority"] == 23
                   && Near(saved["dynamicSpotLights"][0]["shadowBias"].get<float>(), 0.02f)
-                  && Near(saved["dynamicSpotLights"][0]["shadowStrength"].get<float>(), 0.8f),
+                  && Near(saved["dynamicSpotLights"][0]["shadowStrength"].get<float>(), 0.8f)
+                  && Near(saved["dynamicSpotLights"][0]["shadowSoftness"].get<float>(), 3.0f),
           "graph-native dynamic spot lights are persisted");
     Check(saved["previewSettings"]["walkSpeed"] == 9.0f, "graph-native preview settings are persisted");
     Check(saved["skySettings"]["textureId"] == "sky", "graph-native sky settings are persisted");
@@ -2540,6 +2560,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.mapData.dynamicSpotLights[0].shadowPriority == 23
                   && Near(loaded.mapData.dynamicSpotLights[0].shadowBias, 0.02f)
                   && Near(loaded.mapData.dynamicSpotLights[0].shadowStrength, 0.8f)
+                  && Near(loaded.mapData.dynamicSpotLights[0].shadowSoftness, 3.0f)
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
                   && loaded.mapData.skySettings.textureId == "sky"
                   && loaded.mapData.directionalLight.enabled
@@ -2565,6 +2586,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.derivation.topology.dynamicSpotLights[0].shadowPriority == 23
                   && Near(loaded.derivation.topology.dynamicSpotLights[0].shadowBias, 0.02f)
                   && Near(loaded.derivation.topology.dynamicSpotLights[0].shadowStrength, 0.8f)
+                  && Near(loaded.derivation.topology.dynamicSpotLights[0].shadowSoftness, 3.0f)
                   && loaded.derivation.topology.skySettings.textureId == "sky"
                   && loaded.derivation.topology.bakedLightmap.path == "assets/levels/test/test.lightmap.png"
                   && loaded.derivation.topology.bakedLightmap.sourceHash == "abc123",

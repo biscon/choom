@@ -29,6 +29,9 @@ constexpr float DynamicSpotLightDefaultShadowBias = 0.00015f;
 constexpr float DynamicSpotLightMinShadowStrength = 0.0f;
 constexpr float DynamicSpotLightMaxShadowStrength = 1.0f;
 constexpr float DynamicSpotLightDefaultShadowStrength = 1.0f;
+constexpr float DynamicSpotLightMinShadowSoftness = 0.0f;
+constexpr float DynamicSpotLightMaxShadowSoftness = 8.0f;
+constexpr float DynamicSpotLightDefaultShadowSoftness = 1.0f;
 
 inline float ClampDynamicLightFlickerSpeed(float value)
 {
@@ -53,6 +56,11 @@ inline float ClampDynamicSpotLightShadowBias(float value)
 inline float ClampDynamicSpotLightShadowStrength(float value)
 {
     return std::clamp(value, DynamicSpotLightMinShadowStrength, DynamicSpotLightMaxShadowStrength);
+}
+
+inline float ClampDynamicSpotLightShadowSoftness(float value)
+{
+    return std::clamp(value, DynamicSpotLightMinShadowSoftness, DynamicSpotLightMaxShadowSoftness);
 }
 
 struct SectorTopologyVertex {
@@ -190,6 +198,7 @@ struct SectorTopologyDynamicSpotLight {
     int shadowPriority = DynamicSpotLightDefaultShadowPriority;
     float shadowBias = DynamicSpotLightDefaultShadowBias;
     float shadowStrength = DynamicSpotLightDefaultShadowStrength;
+    float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
 };
 
 enum class SectorTopologyValidationSeverity {

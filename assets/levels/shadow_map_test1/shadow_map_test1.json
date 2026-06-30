@@ -11,6 +11,10 @@
       "path": "assets/images/floor.png",
       "filter": "anisotropic8x"
     },
+    "metal_bars_01": {
+      "path": "assets/images/middle/metal_bars_01.png",
+      "filter": "anisotropic8x"
+    },
     "step_wall": {
       "path": "assets/images/wall.png",
       "filter": "anisotropic8x"
@@ -73,7 +77,32 @@
         "a": 255
       },
       "outerConeDegrees": 45.0,
-      "castsShadow": true
+      "castsShadow": true,
+      "shadowSoftness": 4.0
+    },
+    {
+      "id": 2,
+      "position": [
+        76.0,
+        14.399999618530273,
+        152.0
+      ],
+      "target": [
+        76.0,
+        8.0,
+        196.0
+      ],
+      "range": 80.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "outerConeDegrees": 45.0,
+      "castsShadow": true,
+      "shadowSoftness": 2.0
     }
   ],
   "lightmapSettings": {
@@ -114,7 +143,7 @@
     "path": "assets/levels/shadow_map_test1/shadow_map_test1.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "979d9c109ec6593c"
+    "sourceHash": "4618301d85196f88"
   },
   "authoringGraph": {
     "vertices": [
@@ -177,6 +206,46 @@
         "id": 12,
         "x": 2496,
         "y": 576
+      },
+      {
+        "id": 13,
+        "x": 1024,
+        "y": 2688
+      },
+      {
+        "id": 14,
+        "x": 1024,
+        "y": 3712
+      },
+      {
+        "id": 15,
+        "x": 1408,
+        "y": 3712
+      },
+      {
+        "id": 16,
+        "x": 1408,
+        "y": 2688
+      },
+      {
+        "id": 17,
+        "x": 1088,
+        "y": 2816
+      },
+      {
+        "id": 18,
+        "x": 1344,
+        "y": 2816
+      },
+      {
+        "id": 19,
+        "x": 1344,
+        "y": 2880
+      },
+      {
+        "id": 20,
+        "x": 1088,
+        "y": 2880
       }
     ],
     "lines": [
@@ -239,9 +308,101 @@
         "id": 12,
         "startVertexId": 12,
         "endVertexId": 9
+      },
+      {
+        "id": 13,
+        "startVertexId": 13,
+        "endVertexId": 14
+      },
+      {
+        "id": 14,
+        "startVertexId": 14,
+        "endVertexId": 15
+      },
+      {
+        "id": 15,
+        "startVertexId": 15,
+        "endVertexId": 16
+      },
+      {
+        "id": 16,
+        "startVertexId": 17,
+        "endVertexId": 18
+      },
+      {
+        "id": 17,
+        "startVertexId": 18,
+        "endVertexId": 19
+      },
+      {
+        "id": 18,
+        "startVertexId": 19,
+        "endVertexId": 20
+      },
+      {
+        "id": 19,
+        "startVertexId": 20,
+        "endVertexId": 17
       }
     ],
-    "lineSides": [],
+    "lineSides": [
+      {
+        "lineId": 16,
+        "side": "front",
+        "wall": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "middle": {
+          "textureId": "metal_bars_01",
+          "uv": {
+            "scale": [
+              1.0,
+              0.6666666865348816
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      }
+    ],
     "faceAnchors": [
       {
         "id": 1,
@@ -431,6 +592,158 @@
           "a": 255
         },
         "ambientIntensity": 1.0,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 4,
+        "name": "Sector 4",
+        "x": 1192,
+        "y": 2720,
+        "floorZ": 0.0,
+        "ceilingZ": 24.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.20000000298023224,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 5,
+        "name": "Sector 5",
+        "x": 1208,
+        "y": 2820,
+        "floorZ": 1.0,
+        "ceilingZ": 24.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.20000000298023224,
         "defaultWall": {
           "textureId": "wall",
           "uv": {

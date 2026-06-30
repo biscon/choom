@@ -354,6 +354,7 @@ bool MakeSectorPreviewDynamicPointLightUniform(
     outLight.shadowPriority = DynamicSpotLightDefaultShadowPriority;
     outLight.shadowBias = DynamicSpotLightDefaultShadowBias;
     outLight.shadowStrength = DynamicSpotLightDefaultShadowStrength;
+    outLight.shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
     return std::isfinite(outLight.radius)
             && outLight.radius > 0.0f
             && std::isfinite(outLight.intensity)
@@ -405,6 +406,7 @@ bool MakeSectorPreviewDynamicSpotLightUniform(
     outLight.shadowPriority = ClampDynamicSpotLightShadowPriority(light.shadowPriority);
     outLight.shadowBias = ClampDynamicSpotLightShadowBias(light.shadowBias);
     outLight.shadowStrength = ClampDynamicSpotLightShadowStrength(light.shadowStrength);
+    outLight.shadowSoftness = ClampDynamicSpotLightShadowSoftness(light.shadowSoftness);
     return std::isfinite(outLight.radius)
             && outLight.radius > 0.0f
             && std::isfinite(outLight.intensity)
@@ -648,7 +650,8 @@ void SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
                 candidate.light->shadowPriority,
                 candidate.score,
                 candidate.light->shadowBias,
-                candidate.light->shadowStrength});
+                candidate.light->shadowStrength,
+                candidate.light->shadowSoftness});
     }
 }
 
@@ -727,6 +730,7 @@ SectorPreviewDynamicSpotLightShadowUniforms PackSectorPreviewDynamicSpotLightSha
     uniforms.shadowLightMatrices.fill(MatrixIdentity());
     uniforms.shadowBias.fill(DynamicSpotLightDefaultShadowBias);
     uniforms.shadowStrength.fill(0.0f);
+    uniforms.shadowSoftness.fill(DynamicSpotLightDefaultShadowSoftness);
 
     for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : shadowMatrices) {
         if (matrix.shadowSlot < 0
@@ -760,8 +764,9 @@ SectorPreviewDynamicSpotLightShadowUniforms PackSectorPreviewDynamicSpotLightSha
         const std::size_t shadowSlot = static_cast<std::size_t>(matrix.shadowSlot);
         uniforms.dynamicLightShadowSlots[static_cast<std::size_t>(matrix.dynamicLightIndex)] = matrix.shadowSlot;
         uniforms.shadowLightMatrices[shadowSlot] = matrix.lightViewProjection;
-        uniforms.shadowBias[shadowSlot] = caster->shadowBias;
-        uniforms.shadowStrength[shadowSlot] = caster->shadowStrength;
+        uniforms.shadowBias[shadowSlot] = ClampDynamicSpotLightShadowBias(caster->shadowBias);
+        uniforms.shadowStrength[shadowSlot] = ClampDynamicSpotLightShadowStrength(caster->shadowStrength);
+        uniforms.shadowSoftness[shadowSlot] = ClampDynamicSpotLightShadowSoftness(caster->shadowSoftness);
     }
 
     return uniforms;

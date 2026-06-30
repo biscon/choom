@@ -44,6 +44,7 @@ struct SectorPreviewDynamicPointLightUniform {
     int shadowPriority = DynamicSpotLightDefaultShadowPriority;
     float shadowBias = DynamicSpotLightDefaultShadowBias;
     float shadowStrength = DynamicSpotLightDefaultShadowStrength;
+    float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
 };
 
 struct SectorPreviewDynamicPointLightSource {
@@ -60,6 +61,7 @@ struct SectorPreviewDynamicSpotLightShadowCaster {
     float selectionScore = 0.0f;
     float shadowBias = DynamicSpotLightDefaultShadowBias;
     float shadowStrength = DynamicSpotLightDefaultShadowStrength;
+    float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
 };
 
 struct SectorPreviewDynamicSpotLightShadowMatrix {
@@ -76,6 +78,7 @@ struct SectorPreviewDynamicSpotLightShadowUniforms {
     std::array<Matrix, MaxDynamicSpotLightShadowCasters> shadowLightMatrices{};
     std::array<float, MaxDynamicSpotLightShadowCasters> shadowBias{};
     std::array<float, MaxDynamicSpotLightShadowCasters> shadowStrength{};
+    std::array<float, MaxDynamicSpotLightShadowCasters> shadowSoftness{};
 };
 
 bool MakeSectorPreviewDynamicPointLightUniform(

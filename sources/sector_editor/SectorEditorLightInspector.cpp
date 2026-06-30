@@ -65,7 +65,7 @@ float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdEr
     height += rowH + gap; // Delete.
     height += rowH + gap; // Enabled.
     height += 3.0f * (rowH + gap); // Flicker controls.
-    height += 4.0f * (rowH + gap); // Shadow controls.
+    height += 5.0f * (rowH + gap); // Shadow controls.
     height += 38.0f + gap; // Shadow budget note.
     height += 11.0f * (rowH + gap); // Position/target/intensity/range/cones.
     height += 3.0f * (rowH + gap); // RGB.
@@ -679,6 +679,30 @@ bool DrawSelectedDynamicSpotLightInspector(
         if (result.changed && edited != light.shadowStrength) {
             light.shadowStrength = edited;
             callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d shadow strength", light.id));
+        }
+        y += rowH + gap;
+    }
+    {
+        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                "sector_editor_dynamic_spot_light_shadow_softness",
+                "Softness",
+                Rectangle{0.0f, y, numberLabelW, rowH},
+                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                engine::UITextJustify::Right,
+                light.shadowSoftness,
+                uiState.lightShadowSoftnessInput,
+                DynamicSpotLightMinShadowSoftness,
+                DynamicSpotLightMaxShadowSoftness,
+                3);
+        const float edited = ClampDynamicSpotLightShadowSoftness(result.value);
+        if (result.changed && edited != light.shadowSoftness) {
+            light.shadowSoftness = edited;
+            callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d shadow softness", light.id));
         }
         y += rowH + gap;
     }

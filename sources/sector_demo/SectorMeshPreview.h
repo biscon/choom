@@ -134,6 +134,7 @@ private:
     }();
     int shadowBiasLoc = -1;
     int shadowStrengthLoc = -1;
+    int shadowSoftnessLoc = -1;
     int dynamicLightingClampLoc = -1;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightSources;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;
