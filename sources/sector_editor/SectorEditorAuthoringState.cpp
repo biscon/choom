@@ -848,6 +848,81 @@ bool FindSectorAuthoringVertexAtPoint(
     return false;
 }
 
+bool SectorAuthoringPointOnLineInterior(
+        const SectorAuthoringGraph& graph,
+        const SectorAuthoringLine& line,
+        SectorTopologyCoordPoint point)
+{
+    const SectorAuthoringVertex* start =
+            FindSectorAuthoringVertex(graph, line.startVertexId);
+    const SectorAuthoringVertex* end =
+            FindSectorAuthoringVertex(graph, line.endVertexId);
+    if (start == nullptr || end == nullptr) {
+        return false;
+    }
+    if ((point.x == start->x && point.y == start->y)
+            || (point.x == end->x && point.y == end->y)) {
+        return false;
+    }
+
+    const int64_t ax = static_cast<int64_t>(end->x) - start->x;
+    const int64_t ay = static_cast<int64_t>(end->y) - start->y;
+    const int64_t px = static_cast<int64_t>(point.x) - start->x;
+    const int64_t py = static_cast<int64_t>(point.y) - start->y;
+    if (ax * py - ay * px != 0) {
+        return false;
+    }
+
+    const SectorCoord minX = std::min(start->x, end->x);
+    const SectorCoord maxX = std::max(start->x, end->x);
+    const SectorCoord minY = std::min(start->y, end->y);
+    const SectorCoord maxY = std::max(start->y, end->y);
+    return point.x >= minX && point.x <= maxX
+            && point.y >= minY && point.y <= maxY;
+}
+
+bool MaterializeSectorAuthoringLineEndpoint(
+        SectorAuthoringGraph& graph,
+        SectorTopologyCoordPoint point,
+        int& outVertexId)
+{
+    outVertexId = -1;
+    if (FindSectorAuthoringVertexAtPoint(graph, point, &outVertexId)) {
+        return true;
+    }
+
+    bool splitAny = false;
+    bool keepScanning = true;
+    while (keepScanning) {
+        keepScanning = false;
+        int lineToSplit = -1;
+        for (const SectorAuthoringLine& line : graph.lines) {
+            if (SectorAuthoringPointOnLineInterior(graph, line, point)) {
+                lineToSplit = line.id;
+                break;
+            }
+        }
+
+        if (!IsValidSectorAuthoringId(lineToSplit)) {
+            continue;
+        }
+
+        SectorAuthoringInsertVertexResult splitResult;
+        if (!InsertSectorAuthoringVertexOnLine(graph, lineToSplit, point, &splitResult)) {
+            return false;
+        }
+        outVertexId = splitResult.vertexId;
+        splitAny = true;
+        keepScanning = true;
+    }
+
+    if (splitAny) {
+        return FindSectorAuthoringVertexAtPoint(graph, point, &outVertexId);
+    }
+
+    return AddSectorAuthoringVertex(graph, point.x, point.y, &outVertexId);
+}
+
 bool FindSectorEditorAuthoringLineNearMapPoint(
         const SectorAuthoringGraph& graph,
         Vector2 mapPoint,
@@ -1153,47 +1228,21 @@ bool AddSectorEditorAuthoringLineSegment(
         return false;
     }
 
-    const auto eraseVertex = [](SectorAuthoringGraph& graph, int vertexId) {
-        graph.vertices.erase(
-                std::remove_if(
-                        graph.vertices.begin(),
-                        graph.vertices.end(),
-                        [vertexId](const SectorAuthoringVertex& vertex) {
-                            return vertex.id == vertexId;
-                        }),
-                graph.vertices.end());
-    };
-
+    SectorAuthoringGraph candidate = state.authoringGraph;
     int startVertexId = -1;
     int endVertexId = -1;
-    bool addedStart = false;
-    bool addedEnd = false;
-    if (!FindSectorAuthoringVertexAtPoint(state.authoringGraph, start, &startVertexId)) {
-        if (!AddSectorAuthoringVertex(state.authoringGraph, start.x, start.y, &startVertexId)) {
-            return false;
-        }
-        addedStart = true;
-    }
-    if (!FindSectorAuthoringVertexAtPoint(state.authoringGraph, end, &endVertexId)) {
-        if (!AddSectorAuthoringVertex(state.authoringGraph, end.x, end.y, &endVertexId)) {
-            if (addedStart) {
-                eraseVertex(state.authoringGraph, startVertexId);
-            }
-            return false;
-        }
-        addedEnd = true;
+    if (!MaterializeSectorAuthoringLineEndpoint(candidate, start, startVertexId)
+            || !MaterializeSectorAuthoringLineEndpoint(candidate, end, endVertexId)) {
+        return false;
     }
 
     int lineId = -1;
-    if (!AddSectorAuthoringLine(state.authoringGraph, startVertexId, endVertexId, &lineId)) {
-        if (addedEnd) {
-            eraseVertex(state.authoringGraph, endVertexId);
-        }
-        if (addedStart) {
-            eraseVertex(state.authoringGraph, startVertexId);
-        }
+    if (!AddSectorAuthoringLine(candidate, startVertexId, endVertexId, &lineId)) {
         return false;
     }
+
+    state.authoringGraph = std::move(candidate);
+    PruneSectorEditorAuthoringSelectionToGraph(state);
 
     if (outLineId != nullptr) {
         *outLineId = lineId;

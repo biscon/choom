@@ -5326,6 +5326,132 @@ int FindAuthoringVertexIdAt(
         game::SectorCoord x,
         game::SectorCoord y);
 
+void TestEditorAuthoringLineDrawHelperAutoSplitsEndpointOnLine()
+{
+    game::SectorEditorState state;
+    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(state.authoringGraph, 2, 96, 0);
+    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+    game::SectorAuthoringLine* originalLine =
+            game::FindSectorAuthoringLine(state.authoringGraph, 10);
+    Check(originalLine != nullptr, "auto-split line draw setup has original line");
+    originalLine->flags.blocksPlayer = true;
+    originalLine->special.type = 7;
+    originalLine->special.tag = "split-source";
+
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.middle = WallPart("split_middle", 1.0f, 2.0f, 3.0f, 4.0f);
+    state.authoringGraph.lineSides.push_back(side);
+
+    int lineId = -1;
+    game::SectorEditorAuthoringLineSegmentResult result;
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{32, 0},
+                  game::SectorTopologyCoordPoint{32, 64},
+                  &lineId,
+                  &result),
+          "authoring line draw helper auto-splits an existing line endpoint");
+
+    const int splitVertexId = FindAuthoringVertexIdAt(state.authoringGraph, 32, 0);
+    const int newVertexId = FindAuthoringVertexIdAt(state.authoringGraph, 32, 64);
+    Check(splitVertexId > 0 && newVertexId > 0,
+          "auto-split line draw creates/reuses expected endpoint vertices");
+    Check(result.startVertexId == splitVertexId && result.endVertexId == newVertexId,
+          "auto-split line draw returns materialized endpoint IDs");
+    Check(game::FindSectorAuthoringLine(state.authoringGraph, 10) == nullptr,
+          "auto-split line draw removes the original containing line");
+    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, 1, splitVertexId) != nullptr
+                  && FindAuthoringLineWithEndpoints(state.authoringGraph, splitVertexId, 2) != nullptr,
+          "auto-split line draw creates child source-line segments");
+    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, splitVertexId, newVertexId) != nullptr,
+          "auto-split line draw creates the requested new line from the split vertex");
+
+    for (const game::SectorAuthoringLine& line : state.authoringGraph.lines) {
+        if (line.id == lineId) {
+            continue;
+        }
+        Check(line.flags.blocksPlayer
+                      && line.special.type == 7
+                      && line.special.tag == "split-source",
+              "auto-split source child line preserves source metadata");
+        const game::SectorAuthoringLineSide* childSide =
+                game::FindSectorAuthoringLineSide(
+                        state.authoringGraph,
+                        game::SectorAuthoringSideId{line.id, game::SectorTopologySideKind::Front});
+        Check(childSide != nullptr
+                      && childSide->middle.textureId == "split_middle",
+              "auto-split source child line preserves side material metadata");
+    }
+    Check(state.topologyDocumentDirty && state.hasUnsavedChanges,
+          "auto-split line draw marks document dirty and unsaved");
+    Check(!state.topologyRenderCache.valid,
+          "auto-split line draw invalidates topology render cache");
+}
+
+void TestEditorAuthoringLineDrawHelperAutoSplitsTwoEndpointsOnSameBoundary()
+{
+    game::SectorEditorState state;
+    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(state.authoringGraph, 2, 128, 0);
+    AddAuthoringVertexWithId(state.authoringGraph, 3, 128, 128);
+    AddAuthoringVertexWithId(state.authoringGraph, 4, 0, 128);
+    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+    AddAuthoringLineWithId(state.authoringGraph, 11, 2, 3);
+    AddAuthoringLineWithId(state.authoringGraph, 12, 3, 4);
+    AddAuthoringLineWithId(state.authoringGraph, 13, 4, 1);
+
+    int lineId = -1;
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{32, 0},
+                  game::SectorTopologyCoordPoint{32, 64},
+                  &lineId),
+          "authoring line draw helper auto-splits first room endpoint on boundary");
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{32, 64},
+                  game::SectorTopologyCoordPoint{96, 64},
+                  &lineId),
+          "authoring line draw helper creates room side away from boundary");
+    Check(game::AddSectorEditorAuthoringLineSegment(
+                  state,
+                  game::SectorTopologyCoordPoint{96, 64},
+                  game::SectorTopologyCoordPoint{96, 0},
+                  &lineId),
+          "authoring line draw helper auto-splits second room endpoint on boundary");
+
+    const int firstVertexId = FindAuthoringVertexIdAt(state.authoringGraph, 32, 0);
+    const int secondVertexId = FindAuthoringVertexIdAt(state.authoringGraph, 96, 0);
+    Check(firstVertexId > 0 && secondVertexId > 0,
+          "two-endpoint auto-split creates both boundary vertices");
+    Check(game::FindSectorAuthoringLine(state.authoringGraph, 10) == nullptr,
+          "two-endpoint auto-split removes original boundary line");
+    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, 1, firstVertexId) != nullptr,
+          "two-endpoint auto-split keeps first boundary child");
+    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, firstVertexId, secondVertexId) != nullptr,
+          "two-endpoint auto-split materializes selectable middle boundary child");
+    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, secondVertexId, 2) != nullptr,
+          "two-endpoint auto-split keeps final boundary child");
+    const game::SectorAuthoringLine* middleBoundary =
+            FindAuthoringLineWithEndpoints(state.authoringGraph, firstVertexId, secondVertexId);
+    Check(middleBoundary != nullptr && middleBoundary->id != lineId,
+          "two-endpoint auto-split middle boundary child is distinct from final drawn room side");
+    Check(state.authoringDerivation.success,
+          "two-endpoint auto-split room workflow derives valid topology");
+}
+
+const game::SectorAuthoringLine* FindAuthoringLineWithEndpoints(
+        const game::SectorAuthoringGraph& graph,
+        int startVertexId,
+        int endVertexId);
+
+int FindAuthoringVertexIdAt(
+        const game::SectorAuthoringGraph& graph,
+        game::SectorCoord x,
+        game::SectorCoord y);
+
 void TestEditorAuthoringLineToolChainCommitsConnectedSegments()
 {
     game::SectorEditorState state;
@@ -7099,6 +7225,8 @@ int main()
     TestEditorAuthoringHoverAndPruneUseGraphValidity();
     TestEditorAuthoringLineDrawHelperCreatesLooseLineAndMarksDirty();
     TestEditorAuthoringLineDrawHelperReusesVerticesAndRejectsZeroLength();
+    TestEditorAuthoringLineDrawHelperAutoSplitsEndpointOnLine();
+    TestEditorAuthoringLineDrawHelperAutoSplitsTwoEndpointsOnSameBoundary();
     TestEditorAuthoringLineToolChainCommitsConnectedSegments();
     TestEditorAuthoringLineToolCancelStartsNewChain();
     TestEditorAuthoringLineToolRejectsZeroLengthWithoutEndingChain();
