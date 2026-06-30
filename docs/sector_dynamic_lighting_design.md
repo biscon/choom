@@ -48,7 +48,7 @@ lighting is future work.
   Dynamic points never cast shadows, static point/spot lights remain baked-only,
   and dynamic spotlights without a shadow slot still illuminate unshadowed.
 - Shadow maps use a fixed `1024` resolution, fixed `3x3` PCF, default bias
-  `0.002`, and default strength `1.0`.
+  `0.00015`, and default strength `1.0`.
 - Sector floors, ceilings, walls, and middle textures cast into dynamic
   spotlight shadow maps. Alpha-tested middle textures discard by base texture
   alpha in the shadow pass.

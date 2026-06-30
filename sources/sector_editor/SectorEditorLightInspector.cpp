@@ -650,7 +650,7 @@ bool DrawSelectedDynamicSpotLightInspector(
                 uiState.lightShadowBiasInput,
                 DynamicSpotLightMinShadowBias,
                 DynamicSpotLightMaxShadowBias,
-                4);
+                5);
         const float edited = ClampDynamicSpotLightShadowBias(result.value);
         if (result.changed && edited != light.shadowBias) {
             light.shadowBias = edited;
