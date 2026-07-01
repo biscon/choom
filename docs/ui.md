@@ -100,6 +100,10 @@ engine::Text(
 );
 ```
 
+Pass `wordWrap = true` as the final argument to wrap static text within the
+widget bounds. Word wrap defaults to `false`. Wrapped text is top-aligned within
+the bounds; non-wrapped text keeps the existing vertical centering behavior.
+
 ## Text Input
 
 `TextInput()` edits a caller-owned UTF-8 buffer. The buffer capacity is in

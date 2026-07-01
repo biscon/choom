@@ -8555,10 +8555,12 @@ void SectorEditor::DrawStatusPanel(
     engine::Text(
             config,
             assets,
-            Rectangle{panel.x + 18.0f, panel.y + 17.0f, panel.width - 36.0f, 44.0f},
+            Rectangle{panel.x + 18.0f, panel.y, panel.width - 36.0f, panel.height},
             font,
             text,
-            engine::UITextJustify::Left
+            engine::UITextJustify::Left,
+            config.textColor,
+            true
     );
 }
 

@@ -158,7 +158,8 @@ void Text(
         FontHandle font,
         const char* text,
         UITextJustify justify = UITextJustify::Left,
-        Color tint = BLANK);
+        Color tint = BLANK,
+        bool wordWrap = false);
 
 void Text(
         const UIContext& ui,
@@ -168,7 +169,8 @@ void Text(
         FontHandle font,
         const char* text,
         UITextJustify justify = UITextJustify::Left,
-        Color tint = BLANK);
+        Color tint = BLANK,
+        bool wordWrap = false);
 
 UITextInputResult TextInput(
         UIContext& ui,

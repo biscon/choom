@@ -334,6 +334,168 @@ Vector2 TextPosition(
     return TextPositionRaw(config, assets, TransformBounds(ui, bounds), font, text, justify);
 }
 
+void DrawWrappedTextLine(
+        AssetManager& assets,
+        FontHandle font,
+        const char* text,
+        size_t start,
+        size_t length,
+        Vector2 position,
+        float fontSize,
+        float spacing,
+        Color tint)
+{
+    char line[2048] = {};
+    const size_t copyLength = std::min(length, sizeof(line) - 1);
+    std::memcpy(line, text + start, copyLength);
+    line[copyLength] = '\0';
+    DrawTextWithFont(assets, font, line, position, fontSize, spacing, tint);
+}
+
+float MeasureTextRangeWidth(
+        AssetManager& assets,
+        FontHandle font,
+        const char* text,
+        size_t start,
+        size_t length,
+        float fontSize,
+        float spacing)
+{
+    char line[2048] = {};
+    const size_t copyLength = std::min(length, sizeof(line) - 1);
+    std::memcpy(line, text + start, copyLength);
+    line[copyLength] = '\0';
+    return MeasureTextWithFont(assets, font, line, fontSize, spacing).x;
+}
+
+void DrawTextWrappedRaw(
+        const UIConfig& config,
+        AssetManager& assets,
+        Rectangle bounds,
+        FontHandle font,
+        const char* text,
+        UITextJustify justify,
+        Color tint)
+{
+    const char* safeText = text == nullptr ? "" : text;
+    const size_t byteCount = TextByteLength(safeText);
+    const float contentX = bounds.x + config.paddingX;
+    const float contentY = bounds.y + config.paddingY;
+    const float contentWidth = std::max(0.0f, bounds.width - config.paddingX * 2.0f);
+    const float contentBottom = bounds.y + bounds.height - config.paddingY;
+    const float lineHeight = config.fontSize;
+    const float lineAdvance = config.fontSize + config.textSpacing;
+    const Color textColor = ResolveTint(tint, config.textColor);
+
+    if (byteCount == 0 || contentWidth <= 0.0f || lineHeight <= 0.0f) {
+        return;
+    }
+
+    size_t lineStart = 0;
+    size_t lineEnd = 0;
+    size_t lastBreak = 0;
+    bool hasBreak = false;
+    float y = contentY;
+
+    auto drawLine = [&](size_t start, size_t end) {
+        while (start < end && (safeText[start] == ' ' || safeText[start] == '\t')) {
+            ++start;
+        }
+        while (end > start && (safeText[end - 1] == ' ' || safeText[end - 1] == '\t')) {
+            --end;
+        }
+        if (y + lineHeight > contentBottom) {
+            return false;
+        }
+        if (start >= end) {
+            y += lineAdvance;
+            return true;
+        }
+
+        const float lineWidth = MeasureTextRangeWidth(
+                assets,
+                font,
+                safeText,
+                start,
+                end - start,
+                config.fontSize,
+                config.textSpacing
+        );
+        float x = contentX;
+        if (justify == UITextJustify::Center) {
+            x = bounds.x + (bounds.width - lineWidth) * 0.5f;
+        } else if (justify == UITextJustify::Right) {
+            x = bounds.x + bounds.width - config.paddingX - lineWidth;
+        }
+
+        DrawWrappedTextLine(
+                assets,
+                font,
+                safeText,
+                start,
+                end - start,
+                Vector2{std::round(x), std::round(y)},
+                config.fontSize,
+                config.textSpacing,
+                textColor
+        );
+        y += lineAdvance;
+        return true;
+    };
+
+    for (size_t cursor = 0; cursor < byteCount;) {
+        const size_t next = NextUtf8Boundary(safeText, cursor);
+        const char ch = safeText[cursor];
+
+        if (ch == '\n') {
+            if (!drawLine(lineStart, cursor)) {
+                return;
+            }
+            lineStart = next;
+            lineEnd = next;
+            lastBreak = next;
+            hasBreak = false;
+            cursor = next;
+            continue;
+        }
+
+        const float measuredWidth = MeasureTextRangeWidth(
+                assets,
+                font,
+                safeText,
+                lineStart,
+                next - lineStart,
+                config.fontSize,
+                config.textSpacing
+        );
+
+        if (measuredWidth > contentWidth && lineEnd > lineStart) {
+            const size_t breakEnd = hasBreak && lastBreak > lineStart ? lastBreak : lineEnd;
+            if (!drawLine(lineStart, breakEnd)) {
+                return;
+            }
+            lineStart = breakEnd;
+            while (lineStart < byteCount && (safeText[lineStart] == ' ' || safeText[lineStart] == '\t')) {
+                lineStart = NextUtf8Boundary(safeText, lineStart);
+            }
+            cursor = lineStart;
+            lineEnd = lineStart;
+            lastBreak = lineStart;
+            hasBreak = false;
+            continue;
+        }
+
+        lineEnd = next;
+        if (ch == ' ' || ch == '\t') {
+            lastBreak = next;
+            hasBreak = true;
+        }
+        cursor = next;
+    }
+
+    (void)drawLine(lineStart, byteCount);
+}
+
 void DrawWidgetBackgroundRaw(const UIConfig& config, Rectangle bounds, Color fill, Color border)
 {
     DrawRectangleRec(bounds, fill);
@@ -1093,8 +1255,14 @@ void Text(
         FontHandle font,
         const char* text,
         UITextJustify justify,
-        Color tint)
+        Color tint,
+        bool wordWrap)
 {
+    if (wordWrap) {
+        DrawTextWrappedRaw(config, assets, bounds, font, text, justify, tint);
+        return;
+    }
+
     DrawTextWithFont(
             assets,
             font,
@@ -1114,8 +1282,14 @@ void Text(
         FontHandle font,
         const char* text,
         UITextJustify justify,
-        Color tint)
+        Color tint,
+        bool wordWrap)
 {
+    if (wordWrap) {
+        DrawTextWrappedRaw(config, assets, TransformBounds(ui, bounds), font, text, justify, tint);
+        return;
+    }
+
     DrawTextWithFont(
             assets,
             font,
