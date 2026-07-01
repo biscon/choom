@@ -28,6 +28,78 @@
       "filter": "anisotropic8x"
     }
   },
+  "runtimeObjects": [
+    {
+      "id": 1,
+      "definitionId": "goblin",
+      "position": [
+        64.0,
+        0.0,
+        112.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 2,
+      "definitionId": "goblin",
+      "position": [
+        72.0,
+        0.0,
+        40.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 3,
+      "definitionId": "goblin",
+      "position": [
+        72.0,
+        0.0,
+        188.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 4,
+      "definitionId": "goblin",
+      "position": [
+        164.0,
+        0.0,
+        172.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 5,
+      "definitionId": "goblin",
+      "position": [
+        204.0,
+        0.0,
+        92.0
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 6,
+      "definitionId": "goblin",
+      "position": [
+        72.0,
+        0.0,
+        20.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 7,
+      "definitionId": "goblin",
+      "position": [
+        152.0,
+        0.0,
+        92.0
+      ],
+      "yawDegrees": 189.99998474121094
+    }
+  ],
   "staticLights": [
     {
       "id": 1,

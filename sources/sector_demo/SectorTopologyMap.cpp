@@ -310,6 +310,11 @@ int AllocateSectorTopologyDynamicSpotLightId(const SectorTopologyMap& map)
     return AllocateNextId(map.dynamicSpotLights);
 }
 
+int AllocateSectorPlacedRuntimeObjectId(const SectorTopologyMap& map)
+{
+    return AllocateNextId(map.runtimeObjects);
+}
+
 const SectorTopologyVertex* FindSectorTopologyVertex(const SectorTopologyMap& map, int id)
 {
     return FindById(map.vertices, id);
@@ -459,6 +464,34 @@ bool RemoveSectorTopologyDynamicSpotLight(SectorTopologyMap& map, int id)
     }
 
     map.dynamicSpotLights.erase(found);
+    return true;
+}
+
+const SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(const SectorTopologyMap& map, int id)
+{
+    return FindById(map.runtimeObjects, id);
+}
+
+SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(SectorTopologyMap& map, int id)
+{
+    return FindById(map.runtimeObjects, id);
+}
+
+bool RemoveSectorPlacedRuntimeObject(SectorTopologyMap& map, int id)
+{
+    if (!IsValidSectorTopologyId(id)) {
+        return false;
+    }
+
+    const auto found = std::find_if(
+            map.runtimeObjects.begin(),
+            map.runtimeObjects.end(),
+            [id](const SectorPlacedRuntimeObject& object) { return object.id == id; });
+    if (found == map.runtimeObjects.end()) {
+        return false;
+    }
+
+    map.runtimeObjects.erase(found);
     return true;
 }
 

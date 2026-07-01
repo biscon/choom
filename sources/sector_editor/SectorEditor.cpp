@@ -124,6 +124,23 @@ Color ColorFromObjectProbeAmbientCube(const SectorBakedObjectLightProbe& probe)
             235};
 }
 
+void UpdateCachedRuntimeObjectDraw(
+        SectorEditorTopologyRenderCache& cache,
+        const SectorPlacedRuntimeObject& object)
+{
+    for (CachedRuntimeObjectDraw& cached : cache.runtimeObjects) {
+        if (cached.objectId != object.id) {
+            continue;
+        }
+
+        cached.definitionId = object.definitionId;
+        cached.map = Vector2{object.position.x, object.position.z};
+        cached.yawRadians = object.yawRadians;
+        cached.definitionKnown = FindSectorRuntimeObjectDefinition(object.definitionId) != nullptr;
+        return;
+    }
+}
+
 int64_t CoordinateSequencePeriod(SectorCoord stepDelta, int64_t snapStep)
 {
     if (snapStep <= 1) {
@@ -313,8 +330,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     ShutdownLightmapBake();
     if (initialized
             || state.runtimeObjects.worldReserved
-            || !engine::IsNull(state.runtimeObjects.runtimeObjectAssetScope)
-            || !engine::IsNull(state.runtimeObjects.temporaryGoblinDebugSpawnEntity)) {
+            || !engine::IsNull(state.runtimeObjects.runtimeObjectAssetScope)) {
         ClearSectorRuntimeObjects(context.world, assets, state.runtimeObjects);
     }
     preview.ShutdownRendererResources(assets);
@@ -745,6 +761,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         CancelAuthoringVertexDrag("Cancelled authoring vertex move");
                     } else if (state.lightDrag.active) {
                         CancelLightDrag("Cancelled light move");
+                    } else if (state.runtimeObjectDrag.active) {
+                        CancelRuntimeObjectDrag("Cancelled object move");
                     } else if (state.pendingAuthoringLine.active) {
                         CancelPendingAuthoringLine("Line chain stopped");
                     } else if (state.pendingAuthoringRectangle.active) {
@@ -756,6 +774,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                             || state.selectedTopologyStaticSpotLightId >= 0
                             || state.selectedTopologyDynamicLightId >= 0
                             || state.selectedTopologyDynamicSpotLightId >= 0
+                            || state.selectedRuntimeObjectId >= 0
                             || state.topologySelectionKind != TopologySelectionKind::None
                             || state.selectedAuthoring.kind != SectorAuthoringSelectionKind::None) {
                         ClearSelection();
@@ -791,6 +810,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     } else if (state.topologySelectionKind == TopologySelectionKind::DynamicSpotLight
                             && state.selectedTopologyDynamicSpotLightId >= 0) {
                         DeleteSelectedLight();
+                    } else if (state.selectedRuntimeObjectId >= 0) {
+                        DeleteSelectedRuntimeObject();
                     } else if (state.topologySelectionKind == TopologySelectionKind::Sector
                             && state.selectedTopologySectorId >= 0) {
                         statusText = LegacyTopologyMutationUnavailableMessage();
@@ -809,12 +830,15 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
             }
     );
 
-    if (state.authoringVertexDrag.active || state.lightDrag.active) {
+    if (state.authoringVertexDrag.active || state.lightDrag.active || state.runtimeObjectDrag.active) {
         if (state.authoringVertexDrag.active) {
             UpdateAuthoringVertexDrag(input);
         }
         if (state.lightDrag.active) {
             UpdateLightDrag(input);
+        }
+        if (state.runtimeObjectDrag.active) {
+            UpdateRuntimeObjectDrag(input);
         }
 
         input.ForEachEvent(
@@ -827,6 +851,9 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         }
                         if (state.lightDrag.active) {
                             CancelLightDrag("Cancelled light move");
+                        }
+                        if (state.runtimeObjectDrag.active) {
+                            CancelRuntimeObjectDrag("Cancelled object move");
                         }
                         engine::ConsumeEvent(event);
                     }
@@ -843,6 +870,9 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         }
                         if (state.lightDrag.active) {
                             FinishLightDrag();
+                        }
+                        if (state.runtimeObjectDrag.active) {
+                            FinishRuntimeObjectDrag();
                         }
                         engine::ConsumeEvent(event);
                     }
@@ -978,6 +1008,17 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
+                if (state.currentTool == SectorEditorTool::RuntimeObject
+                        && event.mouseButton.button == MOUSE_LEFT_BUTTON
+                        && Contains(canvasRect, event.mouseButton.position)) {
+                    const int objectId = FindRuntimeObjectNearScreenPoint(event.mouseButton.position);
+                    if (objectId >= 0) {
+                        StartRuntimeObjectDrag(objectId);
+                        engine::ConsumeEvent(event);
+                    }
+                    return;
+                }
+
                 if (state.currentTool != SectorEditorTool::Move
                         || event.mouseButton.button != MOUSE_LEFT_BUTTON
                         || !Contains(canvasRect, event.mouseButton.position)) {
@@ -1049,6 +1090,14 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::Select) {
+                    const int objectId = FindRuntimeObjectNearScreenPoint(event.mouseClick.releasePosition);
+                    if (objectId >= 0) {
+                        SelectRuntimeObject(objectId);
+                        statusText = TextFormat("Selected object %d", objectId);
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+
                     SectorAuthoringSelectionTarget target;
                     SectorTopologyCoordPoint authoringVertexPoint{};
                     if (FindAuthoringSelectionNearScreenPoint(
@@ -1113,6 +1162,18 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
 
                 if (state.currentTool == SectorEditorTool::DynamicSpotLight) {
                     AddDynamicSpotLightAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
+                if (state.currentTool == SectorEditorTool::RuntimeObject) {
+                    const int objectId = FindRuntimeObjectNearScreenPoint(event.mouseClick.releasePosition);
+                    if (objectId >= 0) {
+                        SelectRuntimeObject(objectId);
+                        statusText = TextFormat("Selected object %d", objectId);
+                    } else {
+                        AddRuntimeObjectAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    }
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -1521,6 +1582,93 @@ void SectorEditor::CancelLightDrag(const char* message)
     }
 }
 
+void SectorEditor::StartRuntimeObjectDrag(int objectId)
+{
+    const SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(state.topologyMap, objectId);
+    if (object == nullptr) {
+        return;
+    }
+
+    SelectRuntimeObject(objectId);
+    state.runtimeObjectDrag.active = true;
+    state.runtimeObjectDrag.objectId = objectId;
+    state.runtimeObjectDrag.originalPosition = object->position;
+    state.runtimeObjectDrag.snappedPosition = object->position;
+    statusText = TextFormat("Moving object %d", objectId);
+}
+
+void SectorEditor::UpdateRuntimeObjectDrag(engine::Input& input)
+{
+    if (!state.runtimeObjectDrag.active) {
+        return;
+    }
+
+    SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
+            state.topologyMap,
+            state.runtimeObjectDrag.objectId);
+    if (object == nullptr) {
+        state.runtimeObjectDrag = RuntimeObjectDragState{};
+        return;
+    }
+
+    const Vector2 snapped = SnapMapPoint(ScreenToMap(input.MousePosition()));
+    state.runtimeObjectDrag.snappedPosition = Vector3{
+            snapped.x,
+            state.runtimeObjectDrag.originalPosition.y,
+            snapped.y};
+    object->position = state.runtimeObjectDrag.snappedPosition;
+    UpdateCachedRuntimeObjectDraw(state.topologyRenderCache, *object);
+    statusText = TextFormat("Moving object %d", object->id);
+}
+
+void SectorEditor::FinishRuntimeObjectDrag()
+{
+    if (!state.runtimeObjectDrag.active) {
+        return;
+    }
+
+    const int objectId = state.runtimeObjectDrag.objectId;
+    const Vector3 original = state.runtimeObjectDrag.originalPosition;
+    state.runtimeObjectDrag = RuntimeObjectDragState{};
+
+    SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(state.topologyMap, objectId);
+    if (object == nullptr) {
+        return;
+    }
+
+    SelectRuntimeObject(objectId);
+    const bool moved = std::fabs(object->position.x - original.x) > GeometryEpsilon
+            || std::fabs(object->position.z - original.z) > GeometryEpsilon;
+    if (!moved) {
+        object->position = original;
+        UpdateCachedRuntimeObjectDraw(state.topologyRenderCache, *object);
+        statusText = TextFormat("Object %d unchanged", objectId);
+        return;
+    }
+
+    MarkTopologyDocumentEdited(TextFormat("Moved object %d", objectId));
+    RefreshRuntimeObjectsAfterAuthoringEdit();
+}
+
+void SectorEditor::CancelRuntimeObjectDrag(const char* message)
+{
+    if (state.runtimeObjectDrag.active) {
+        SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
+                state.topologyMap,
+                state.runtimeObjectDrag.objectId);
+        if (object != nullptr) {
+            object->position = state.runtimeObjectDrag.originalPosition;
+            UpdateCachedRuntimeObjectDraw(state.topologyRenderCache, *object);
+            SelectRuntimeObject(object->id);
+        }
+    }
+
+    state.runtimeObjectDrag = RuntimeObjectDragState{};
+    if (message != nullptr && message[0] != '\0') {
+        statusText = message;
+    }
+}
+
 void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt)
 {
     bool controlModeToggled = false;
@@ -1566,21 +1714,6 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     statusText = preview.DynamicLightingEnabled()
                             ? "Dynamic lighting enabled"
                             : "Dynamic lighting disabled";
-                    engine::ConsumeEvent(event);
-                    return;
-                }
-
-                if (event.key.key == KEY_F5) {
-                    const bool spawned = engineContext != nullptr
-                            && ToggleTemporaryGoblinDebugSpawn(
-                                    engineContext->world,
-                                    engineContext->assets,
-                                    state.runtimeObjects,
-                                    preview.RenderCamera(),
-                                    state.topologyMap);
-                    statusText = spawned
-                            ? "Temporary goblin billboard spawned"
-                            : "Temporary goblin billboard removed";
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -2160,6 +2293,16 @@ const SectorTopologyDynamicSpotLight* SectorEditor::SelectedTopologyDynamicSpotL
     return FindSectorTopologyDynamicSpotLight(state.topologyMap, state.selectedTopologyDynamicSpotLightId);
 }
 
+SectorPlacedRuntimeObject* SectorEditor::SelectedRuntimeObject()
+{
+    return FindSectorPlacedRuntimeObject(state.topologyMap, state.selectedRuntimeObjectId);
+}
+
+const SectorPlacedRuntimeObject* SectorEditor::SelectedRuntimeObject() const
+{
+    return FindSectorPlacedRuntimeObject(state.topologyMap, state.selectedRuntimeObjectId);
+}
+
 void SectorEditor::ClearStaleTopologySelection()
 {
     bool stale = false;
@@ -2207,6 +2350,10 @@ void SectorEditor::ClearStaleTopologySelection()
                 || FindSectorTopologyDynamicSpotLight(
                         state.topologyMap,
                         state.selectedTopologyDynamicSpotLightId) == nullptr;
+    }
+    if (state.selectedRuntimeObjectId >= 0
+            && FindSectorPlacedRuntimeObject(state.topologyMap, state.selectedRuntimeObjectId) == nullptr) {
+        state.selectedRuntimeObjectId = -1;
     }
 
     if (stale) {
@@ -2725,6 +2872,92 @@ void SectorEditor::AddDynamicSpotLightAt(Vector2 mapPoint)
     finish.changed = true;
     finish.status = result.status;
     FinishTopologyActionResult(finish);
+}
+
+void SectorEditor::AddRuntimeObjectAt(Vector2 mapPoint)
+{
+    const int sectorId = FindTopologySectorAt(mapPoint);
+    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sectorId);
+    if (sector == nullptr) {
+        statusText = "Object: click inside a sector";
+        return;
+    }
+
+    SectorPlacedRuntimeObject object;
+    object.id = AllocateSectorPlacedRuntimeObjectId(state.topologyMap);
+    object.definitionId = "goblin";
+    object.position = Vector3{mapPoint.x, sector->floorZ, mapPoint.y};
+    object.yawRadians = 0.0f;
+    state.topologyMap.runtimeObjects.push_back(object);
+
+    SelectRuntimeObject(object.id);
+    MarkTopologyDocumentEdited(TextFormat("Placed goblin object %d", object.id));
+    RefreshRuntimeObjectsAfterAuthoringEdit();
+}
+
+bool SectorEditor::DeleteSelectedRuntimeObject()
+{
+    const SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
+    if (object == nullptr) {
+        return false;
+    }
+
+    const int objectId = object->id;
+    OpenConfirmation(
+            "Delete Object",
+            TextFormat("Delete object %d?", objectId),
+            [this, objectId]() {
+                DeleteRuntimeObjectById(objectId);
+            });
+    return true;
+}
+
+bool SectorEditor::DeleteRuntimeObjectById(int objectId)
+{
+    if (FindSectorPlacedRuntimeObject(state.topologyMap, objectId) == nullptr) {
+        ClearStaleTopologySelection();
+        return false;
+    }
+
+    if (!RemoveSectorPlacedRuntimeObject(state.topologyMap, objectId)) {
+        return false;
+    }
+    if (state.selectedRuntimeObjectId == objectId) {
+        ClearSelection();
+    }
+    if (state.runtimeObjectDrag.objectId == objectId) {
+        state.runtimeObjectDrag = RuntimeObjectDragState{};
+    }
+    MarkTopologyDocumentEdited(TextFormat("Deleted object %d", objectId));
+    RefreshRuntimeObjectsAfterAuthoringEdit();
+    return true;
+}
+
+bool SectorEditor::MutateSelectedRuntimeObject(
+        const char* status,
+        const std::function<bool(SectorPlacedRuntimeObject&)>& mutate)
+{
+    SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
+    if (object == nullptr || !mutate || !mutate(*object)) {
+        return false;
+    }
+
+    MarkTopologyDocumentEdited(status);
+    RefreshRuntimeObjectsAfterAuthoringEdit();
+    return true;
+}
+
+void SectorEditor::RefreshRuntimeObjectsAfterAuthoringEdit()
+{
+    if (engineContext == nullptr) {
+        return;
+    }
+
+    SpawnPlacedRuntimeObjects(
+            engineContext->world,
+            engineContext->assets,
+            state.runtimeObjects,
+            state.topologyMap);
 }
 
 bool SectorEditor::BakeLightmaps()
@@ -3345,7 +3578,7 @@ void SectorEditor::DrawPreviewOverlay(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
-    const Rectangle panel{32.0f, 32.0f, EditorWidth - 64.0f, 292.0f};
+    const Rectangle panel{32.0f, 32.0f, EditorWidth - 64.0f, 356.0f};
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
@@ -3421,9 +3654,9 @@ void SectorEditor::DrawPreviewOverlay(
             ? (state.spotLightPilot.active
                     ? "Pilot Light | WASD move | Mouse look | Space/Ctrl up/down | Apply or Cancel"
                     : (state.previewControlMode == SectorPreviewControlMode::Gameplay
-                    ? "WASD move | Space jump | Shift run | Mouse look | F1 AO | F2 UI | F3 mode | F4 dyn lights | F5 goblin | F11 cursor | Tab/Esc"
-                    : "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F2 UI | F3 mode | F4 dyn lights | F5 goblin | F11 cursor | Tab/Esc"))
-            : "F1 AO | F2 UI | F3 mode | F4 dyn lights | F5 goblin | F11 cursor | click surface to select | Tab/Esc";
+                    ? "WASD move | Space jump | Shift run | Mouse look | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc"
+                    : "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc"))
+            : "F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | click surface to select | Tab/Esc";
     engine::Text(
             config,
             assets,
@@ -3552,6 +3785,33 @@ void SectorEditor::DrawPreviewOverlay(
             config,
             assets,
             Rectangle{panel.x + 18.0f, panel.y + 250.0f, panel.width - 36.0f, 30.0f},
+            font,
+            state.runtimeObjects.placedObjectStatus.empty()
+                    ? "Runtime objects: 0 placed / 0 spawned, 0 skipped"
+                    : state.runtimeObjects.placedObjectStatus.c_str(),
+            engine::UITextJustify::Left,
+            (state.runtimeObjects.skippedObjectCount > 0
+                    || state.runtimeObjects.spriteAnimationFailedCount > 0
+                    || (state.runtimeObjects.directionalClipMissingCount > 0
+                            && state.runtimeObjects.spriteAnimationPendingCount == 0))
+                    ? Color{236, 92, 92, 245}
+                    : config.mutedTextColor
+    );
+    if (!state.runtimeObjects.placedObjectWarning.empty()) {
+        engine::Text(
+                config,
+                assets,
+                Rectangle{panel.x + 18.0f, panel.y + 280.0f, panel.width - 36.0f, 30.0f},
+                font,
+                state.runtimeObjects.placedObjectWarning.c_str(),
+                engine::UITextJustify::Left,
+                Color{236, 92, 92, 245}
+        );
+    }
+    engine::Text(
+            config,
+            assets,
+            Rectangle{panel.x + 18.0f, panel.y + 310.0f, panel.width - 36.0f, 30.0f},
             font,
             state.previewControlMode == SectorPreviewControlMode::Gameplay
                     ? TextFormat(
@@ -4154,6 +4414,7 @@ void SectorEditor::DrawTopologyDocument()
             drawLegacyTopologySelection ? state.selectedTopologyStaticSpotLightId : -1,
             drawLegacyTopologySelection ? state.selectedTopologyDynamicLightId : -1,
             drawLegacyTopologySelection ? state.selectedTopologyDynamicSpotLightId : -1,
+            state.selectedRuntimeObjectId,
             state.hasHoveredVertex,
             state.hoveredTopologyVertexId,
             state.hoveredTopologyLightId,
@@ -4177,6 +4438,7 @@ void SectorEditor::DrawTopologyDocument()
     DrawCachedTopologyStaticSpotLights(state.topologyRenderCache, drawContext);
     DrawCachedTopologyDynamicLights(state.topologyRenderCache, drawContext);
     DrawCachedTopologyDynamicSpotLights(state.topologyRenderCache, drawContext);
+    DrawCachedRuntimeObjects(state.topologyRenderCache, drawContext);
     DrawLightMoveOverlay();
     DrawPendingAuthoringLine();
     DrawPendingAuthoringRectangle();
@@ -4721,7 +4983,7 @@ void SectorEditor::DrawToolsPanel(
     const float toolsContentH =
             sectionLabelH + rowsHeight(4)
             + separatorH + sectionLabelH + rowsHeight(2)
-            + separatorH + rowsHeight(4)
+            + separatorH + rowsHeight(5)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
             + separatorH + rowsHeight(1)
@@ -4824,6 +5086,8 @@ void SectorEditor::DrawToolsPanel(
             } else {
                 statusText = "Insert Vertex: select or click an authoring line";
             }
+        } else if (tool == SectorEditorTool::RuntimeObject) {
+            statusText = "Object: click inside a sector to place goblin";
         }
     };
 
@@ -4844,6 +5108,7 @@ void SectorEditor::DrawToolsPanel(
     separator();
     sectionLabel("Map objects");
     const SectorEditorTool mapTools[] = {
+            SectorEditorTool::RuntimeObject,
             SectorEditorTool::StaticLight,
             SectorEditorTool::StaticSpotLight,
             SectorEditorTool::DynamicLight,
@@ -5031,6 +5296,7 @@ void SectorEditor::DrawSectorsPanel(
     const bool hasSelectedStaticSpotLight = SelectedTopologyStaticSpotLight() != nullptr;
     const bool hasSelectedDynamicLight = SelectedTopologyDynamicLight() != nullptr;
     const bool hasSelectedDynamicSpotLight = SelectedTopologyDynamicSpotLight() != nullptr;
+    const bool hasSelectedRuntimeObject = SelectedRuntimeObject() != nullptr;
     const SectorEditorInspectorTarget inspectorTarget = ResolveSectorEditorInspectorTarget(state);
     const bool allowLegacyTopologyInspector =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::LegacyTopology
@@ -5067,6 +5333,9 @@ void SectorEditor::DrawSectorsPanel(
     const auto inspectorContentHeight = [&]() {
         if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
             return 120.0f;
+        }
+        if (hasSelectedRuntimeObject) {
+            return 408.0f;
         }
         if (hasSelectedLight) {
             return StaticLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
@@ -5143,6 +5412,205 @@ void SectorEditor::DrawSectorsPanel(
                         : inspectorTarget.status.c_str(),
                 engine::UITextJustify::Left,
                 config.invalidColor);
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return;
+    }
+
+    if (hasSelectedRuntimeObject) {
+        const SectorPlacedRuntimeObject* selectedObject = SelectedRuntimeObject();
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                TextFormat("Object ID: %d", selectedObject->id),
+                engine::UITextJustify::Left,
+                config.textColor);
+        y += 38.0f;
+
+        const bool definitionKnown = FindSectorRuntimeObjectDefinition(selectedObject->definitionId) != nullptr;
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 30.0f},
+                font,
+                TextFormat("Definition ID: %s", selectedObject->definitionId.c_str()),
+                engine::UITextJustify::Left,
+                definitionKnown ? config.mutedTextColor : config.invalidColor);
+        y += 34.0f;
+
+        if (selectedObject->definitionId == "goblin") {
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    Rectangle{0.0f, y, contentW, 30.0f},
+                    font,
+                    "Definition: goblin",
+                    engine::UITextJustify::Left,
+                    config.textColor);
+            y += 34.0f;
+        } else {
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_runtime_object_definition_goblin",
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font,
+                        "Set definition: goblin")) {
+                MutateSelectedRuntimeObject(
+                        "Updated object definition",
+                        [](SectorPlacedRuntimeObject& object) {
+                            if (object.definitionId == "goblin") {
+                                return false;
+                            }
+                            object.definitionId = "goblin";
+                            return true;
+                        });
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+            y += rowH + gap;
+        }
+
+        auto drawObjectFloat =
+                [&](const char* id,
+                    const char* label,
+                    float value,
+                    engine::UIFloatInputState& inputState,
+                    float minValue,
+                    float maxValue,
+                    int decimals,
+                    const std::function<bool(SectorPlacedRuntimeObject&, float)>& applyValue) {
+                    const float labelW = 92.0f;
+                    const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                            ui,
+                            config,
+                            input,
+                            assets,
+                            font,
+                            id,
+                            label,
+                            Rectangle{0.0f, y, labelW, rowH},
+                            Rectangle{labelW + gap, y, std::max(0.0f, contentW - labelW - gap), rowH},
+                            engine::UITextJustify::Left,
+                            value,
+                            inputState,
+                            minValue,
+                            maxValue,
+                            decimals);
+                    if (result.changed && result.finite && result.value != value) {
+                        MutateSelectedRuntimeObject("Updated object transform", [applyValue, value = result.value](SectorPlacedRuntimeObject& object) {
+                            return applyValue(object, value);
+                        });
+                    }
+                    y += rowH + gap;
+                };
+
+        drawObjectFloat(
+                "sector_editor_runtime_object_x",
+                "Position X",
+                selectedObject->position.x,
+                uiState.runtimeObjectXInput,
+                -100000.0f,
+                100000.0f,
+                3,
+                [](SectorPlacedRuntimeObject& object, float value) {
+                    if (object.position.x == value) {
+                        return false;
+                    }
+                    object.position.x = value;
+                    return true;
+                });
+        selectedObject = SelectedRuntimeObject();
+        if (selectedObject == nullptr) {
+            engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+            engine::EndPanel(ui, config, panel);
+            return;
+        }
+        drawObjectFloat(
+                "sector_editor_runtime_object_y",
+                "Position Y",
+                selectedObject->position.y,
+                uiState.runtimeObjectYInput,
+                -100000.0f,
+                100000.0f,
+                3,
+                [](SectorPlacedRuntimeObject& object, float value) {
+                    if (object.position.y == value) {
+                        return false;
+                    }
+                    object.position.y = value;
+                    return true;
+                });
+        selectedObject = SelectedRuntimeObject();
+        if (selectedObject == nullptr) {
+            engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+            engine::EndPanel(ui, config, panel);
+            return;
+        }
+        drawObjectFloat(
+                "sector_editor_runtime_object_z",
+                "Position Z",
+                selectedObject->position.z,
+                uiState.runtimeObjectZInput,
+                -100000.0f,
+                100000.0f,
+                3,
+                [](SectorPlacedRuntimeObject& object, float value) {
+                    if (object.position.z == value) {
+                        return false;
+                    }
+                    object.position.z = value;
+                    return true;
+                });
+        selectedObject = SelectedRuntimeObject();
+        if (selectedObject == nullptr) {
+            engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+            engine::EndPanel(ui, config, panel);
+            return;
+        }
+        constexpr float radiansToDegrees = 180.0f / PI;
+        constexpr float degreesToRadians = PI / 180.0f;
+        drawObjectFloat(
+                "sector_editor_runtime_object_yaw",
+                "Yaw",
+                selectedObject->yawRadians * radiansToDegrees,
+                uiState.runtimeObjectYawInput,
+                -3600.0f,
+                3600.0f,
+                2,
+                [degreesToRadians](SectorPlacedRuntimeObject& object, float value) {
+                    const float radians = value * degreesToRadians;
+                    if (object.yawRadians == radians) {
+                        return false;
+                    }
+                    object.yawRadians = radians;
+                    return true;
+                });
+
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_delete_runtime_object",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font,
+                    "Delete")) {
+            DeleteSelectedRuntimeObject();
+            engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+            engine::EndPanel(ui, config, panel);
+            return;
+        }
+        y += rowH + gap;
+
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return;
@@ -7957,8 +8425,8 @@ bool SectorEditor::LoadLevel(
         return false;
     }
 
-    preview.ShutdownRendererResources(assets);
     ClearSectorRuntimeObjects(context.world, assets, state.runtimeObjects);
+    preview.ShutdownRendererResources(assets);
     CancelAuthoringVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     bool loadedAuthoringGraph = false;
@@ -8027,6 +8495,7 @@ bool SectorEditor::LoadLevel(
     state.lightDrag = LightDragState{};
     RefreshDefaultTextures();
     RefreshEditorTextureAssets(assets);
+    ResetSectorRuntimeObjectsForMap(context.world, assets, state.runtimeObjects, state.topologyMap);
     if (loadedAuthoringGraph) {
         const char* loadedText = authoringDerivationCurrent
                 ? "Loaded authoring graph"
@@ -8200,6 +8669,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     }
     RefreshPreviewObjectProbeDebugData();
     EnsureSectorRuntimeObjectWorldReserved(context.world, state.runtimeObjects);
+    SpawnPlacedRuntimeObjects(context.world, assets, state.runtimeObjects, state.topologyMap);
 
     if (state.hasPreviewPose) {
         preview.ApplyRendererPose(state.lastPreviewPose);
@@ -8817,6 +9287,25 @@ bool SectorEditor::FindTopologyDynamicSpotLightHandleNearScreenPoint(
     return outLightId >= 0;
 }
 
+int SectorEditor::FindRuntimeObjectNearScreenPoint(Vector2 screenPoint) const
+{
+    float bestDistance2 = ScreenLightPickPixels * ScreenLightPickPixels;
+    int bestId = -1;
+    for (const SectorPlacedRuntimeObject& object : state.topologyMap.runtimeObjects) {
+        const Vector2 center = MapToScreen(Vector2{object.position.x, object.position.z});
+        const float dx = center.x - screenPoint.x;
+        const float dy = center.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 < bestDistance2 - 0.001f
+                || (std::fabs(distance2 - bestDistance2) <= 0.001f
+                        && (bestId < 0 || object.id < bestId))) {
+            bestDistance2 = distance2;
+            bestId = object.id;
+        }
+    }
+    return bestId;
+}
+
 bool SectorEditor::FindTopologyLineNearScreenPoint(
         Vector2 screenPoint,
         Vector2 mapPoint,
@@ -8993,6 +9482,8 @@ void SectorEditor::SelectTopologySector(int sectorId)
     state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
+    state.runtimeObjectDrag = RuntimeObjectDragState{};
+    state.selectedRuntimeObjectId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
@@ -9032,6 +9523,7 @@ void SectorEditor::SelectTopologyVertex(int vertexId)
     state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
+    state.selectedRuntimeObjectId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.inspectedTopologyVertexId = vertex->id;
     state.selectedSurface3D = SectorSurfaceRef{};
@@ -9067,6 +9559,7 @@ void SectorEditor::SelectTopologySideDef(int sideDefId, TopologyWallPart wallPar
     state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
+    state.selectedRuntimeObjectId = -1;
     state.selectedTopologySideKind = sideDef->side;
     state.selectedTopologyWallPart = ValidTopologyWallPartForSideDef(
             state.topologyMap,
@@ -9106,6 +9599,7 @@ void SectorEditor::SelectTopologyLineDef(
     state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
+    state.selectedRuntimeObjectId = -1;
     state.selectedTopologySideKind = side;
     state.selectedTopologyWallPart = wallPart == TopologyWallPart::Middle
             ? TopologyWallPart::Wall
@@ -9141,6 +9635,7 @@ void SectorEditor::SelectTopologyLight(int topologyLightId)
     state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
+    state.selectedRuntimeObjectId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
@@ -9187,6 +9682,7 @@ void SectorEditor::SelectTopologyStaticSpotLight(int topologyLightId)
     state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
+    state.selectedRuntimeObjectId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
@@ -9229,6 +9725,7 @@ void SectorEditor::SelectTopologyDynamicLight(int topologyLightId)
     state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
+    state.selectedRuntimeObjectId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
@@ -9275,6 +9772,7 @@ void SectorEditor::SelectTopologyDynamicSpotLight(int topologyLightId)
     state.selectedTopologyVertexId = -1;
     state.selectedTopologySideDefId = -1;
     state.selectedTopologyLineDefId = -1;
+    state.selectedRuntimeObjectId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
@@ -9300,6 +9798,23 @@ void SectorEditor::SelectTopologyDynamicSpotLight(int topologyLightId)
     uiState.lightBlueInput = engine::UIIntInputState{};
     SyncSelectedLightIdBuffer();
     SyncSelectedSectorIdBuffer();
+}
+
+void SectorEditor::SelectRuntimeObject(int objectId)
+{
+    if (FindSectorPlacedRuntimeObject(state.topologyMap, objectId) == nullptr) {
+        ClearSelection();
+        return;
+    }
+
+    ClearSelection();
+    state.selectedRuntimeObjectId = objectId;
+    ResetSurface3DUiState();
+    uiState.runtimeObjectXInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectYInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectZInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectYawInput = engine::UIFloatInputState{};
+    uiState.inspectorScroll.offset = Vector2{};
 }
 
 void SectorEditor::SelectSurface3D(SectorSurfaceRef surface)
@@ -9410,6 +9925,7 @@ void SectorEditor::ClearTopologySelectionOnly()
 {
     CancelSpotLightPilot(nullptr);
     state.lightDrag = LightDragState{};
+    state.runtimeObjectDrag = RuntimeObjectDragState{};
     state.topologySelectionKind = TopologySelectionKind::None;
     state.selectedTopologySectorId = -1;
     state.selectedTopologyVertexId = -1;
@@ -9419,11 +9935,16 @@ void SectorEditor::ClearTopologySelectionOnly()
     state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
+    state.selectedRuntimeObjectId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
+    uiState.runtimeObjectXInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectYInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectZInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectYawInput = engine::UIFloatInputState{};
     uiState.idBufferSectorIndex = -1;
     uiState.idBufferLightIndex = -1;
     SyncSelectedSectorIdBuffer();
@@ -9443,6 +9964,8 @@ void SectorEditor::ClearSelection()
     state.selectedTopologyStaticSpotLightId = -1;
     state.selectedTopologyDynamicLightId = -1;
     state.selectedTopologyDynamicSpotLightId = -1;
+    state.runtimeObjectDrag = RuntimeObjectDragState{};
+    state.selectedRuntimeObjectId = -1;
     state.selectedTopologySideKind = SectorTopologySideKind::Front;
     state.inspectedTopologyVertexId = -1;
     state.selectedSurface3D = SectorSurfaceRef{};
@@ -9453,6 +9976,10 @@ void SectorEditor::ClearSelection()
     uiState.ambientRedInput = engine::UIIntInputState{};
     uiState.ambientGreenInput = engine::UIIntInputState{};
     uiState.ambientBlueInput = engine::UIIntInputState{};
+    uiState.runtimeObjectXInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectYInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectZInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectYawInput = engine::UIFloatInputState{};
     uiState.inspectorScroll.offset = Vector2{};
     SyncSelectedSectorIdBuffer();
     SyncSelectedLightIdBuffer();
@@ -10170,6 +10697,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
     }
     RefreshPreviewObjectProbeDebugData();
     EnsureSectorRuntimeObjectWorldReserved(context.world, state.runtimeObjects);
+    SpawnPlacedRuntimeObjects(context.world, assets, state.runtimeObjects, state.topologyMap);
 
     preview.ApplyRendererPose(pose);
     ResetSectorFreeflyController(state.freeflyController, pose);

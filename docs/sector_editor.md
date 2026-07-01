@@ -471,7 +471,6 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 - `F11`: toggle mouse-look/captured cursor mode.
 - `F3`: toggle `FreeFly` / `Gameplay` preview controls.
 - `F1`: toggle baked ambient-occlusion display.
-- `F5`: toggle the temporary goblin billboard test spawn.
 - `Tab` or `Escape`: return to 2D mode.
 - In `FreeFly` mouse-look mode: `WASD` move, mouse looks, `Space` moves up,
   `Ctrl` moves down.
@@ -603,22 +602,35 @@ visible and is not darkened by runtime shadow maps. Dynamic point lights and
 dynamic spotlights without a shadow slot remain unshadowed. Billboards still do
 not cast dynamic shadows.
 
-The current goblin spawn is a temporary preview test path marked in code with
-`TODO_REMOVE_BILLBOARD_TEST_SPAWN`. In 3D preview, `F5` toggles one non-serialized
-goblin entity spawned in front of the camera using `EngineContext::world`.
-Temporary spawn state, object probe data, object sector lookup data, and the
-runtime object asset scope live in higher-level runtime object state, not in
-`SectorMeshPreview`. The goblin Aseprite asset is requested through
+Runtime object authoring is persistent v1 level data. The `Object` 2D tool
+places the current built-in `goblin` object definition inside a sector, saves it
+as a placed runtime object with a stable positive ID, position, definition ID,
+and yaw, and draws a 2D marker with a yaw tick. Selecting an object exposes a
+basic inspector for Object ID, Definition ID, Position X/Y/Z, Yaw, and Delete.
+Moving, editing, or deleting an object mutates the authored placed-object list,
+marks the topology document edited, invalidates the 2D topology render cache,
+and refreshes the spawned ECS object when a preview runtime is available.
+
+Object definitions are reusable content descriptions. The current v1 registry
+contains the `goblin` billboard definition, which points at the Aseprite sprite
+animation asset and stores world size, origin, and named directional clips
+`Front`, `Back`, `Left`, and `Right`. Placed objects are authored level data.
+Runtime ECS entities are spawned from placed objects into `EngineContext::world`
+during explicit map load/reset or preview refresh. The runtime object asset
+scope, object probe data, object sector lookup data, and placed-ID-to-entity
+mapping live in higher-level runtime object state, not in `SectorMeshPreview`.
+Runtime cleanup destroys entities identified by the `SectorObject` component
+and leaves unrelated ECS entities alone.
+
+Runtime object spawning requests the goblin Aseprite animation through
 `AssetManager::RequestSpriteAnimation()` with point-filtered texture loading
-from the runtime object asset scope; F5 despawn destroys only the ECS entity and
-does not unload/reload that scope. The scope unloads only on explicit runtime
+from the runtime object asset scope. The scope unloads only on explicit runtime
 object reset, new/load level reset, editor/demo shutdown, or equivalent
-high-level lifecycle. Runtime cleanup destroys entities identified by the
-`SectorObject` component and leaves unrelated ECS entities alone. Remove that
-path when real object placement, object inspection, or NPC spawning exists.
-Persistent object serialization, placement editing, object inspectors, NPC
-AI/state machines, actor collision/physics, and 3D model rendering are still
-deferred.
+high-level lifecycle, not on preview renderer resource rebuild. The old F5
+temporary non-serialized goblin spawn path has been removed; placed objects are
+the runtime-object authoring path. NPC AI/state machines, actor
+collision/physics, doors, object scripting, object asset browsing, attached
+lights, and 3D model rendering are still deferred.
 
 ## Baked Lightmaps
 

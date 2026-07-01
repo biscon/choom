@@ -647,6 +647,17 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         cache.dynamicSpotLights.push_back(cached);
     }
 
+    cache.runtimeObjects.reserve(map.runtimeObjects.size());
+    for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
+        CachedRuntimeObjectDraw cached;
+        cached.objectId = object.id;
+        cached.definitionId = object.definitionId;
+        cached.map = Vector2{object.position.x, object.position.z};
+        cached.yawRadians = object.yawRadians;
+        cached.definitionKnown = object.definitionId == "goblin";
+        cache.runtimeObjects.push_back(cached);
+    }
+
     cache.valid = true;
     return cache;
 }
@@ -1203,6 +1214,51 @@ void DrawCachedTopologyDynamicSpotLights(
                 selected ? 9.0f : 7.0f,
                 outline);
         DrawTopologyLightTypeLabel(origin, "DS");
+    }
+}
+
+void DrawCachedRuntimeObjects(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context)
+{
+    const Color outline = Color{20, 24, 32, 255};
+    const Color objectFill = Color{238, 204, 96, 235};
+    const Color selectedFill = Color{122, 220, 244, 255};
+    const Color missingFill = Color{236, 92, 92, 245};
+    for (const CachedRuntimeObjectDraw& object : cache.runtimeObjects) {
+        const Vector2 center = CachedMapToScreen(context, object.map);
+        const bool selected = object.objectId == context.selectedRuntimeObjectId;
+        const Color fill = !object.definitionKnown
+                ? missingFill
+                : selected ? selectedFill : objectFill;
+
+        const float radius = selected ? 8.0f : 6.0f;
+        DrawCircleV(center, radius + 3.0f, outline);
+        DrawCircleV(center, radius, fill);
+
+        const Vector2 direction{
+                std::cos(object.yawRadians),
+                std::sin(object.yawRadians)
+        };
+        const Vector2 tip{
+                center.x + direction.x * 18.0f,
+                center.y + direction.y * 18.0f
+        };
+        DrawLineEx(center, tip, selected ? 3.0f : 2.0f, fill);
+        DrawCircleV(tip, selected ? 3.5f : 3.0f, fill);
+
+        if (!object.definitionKnown) {
+            DrawLineEx(
+                    Vector2{center.x - 5.0f, center.y - 5.0f},
+                    Vector2{center.x + 5.0f, center.y + 5.0f},
+                    2.0f,
+                    outline);
+            DrawLineEx(
+                    Vector2{center.x + 5.0f, center.y - 5.0f},
+                    Vector2{center.x - 5.0f, center.y + 5.0f},
+                    2.0f,
+                    outline);
+        }
     }
 }
 

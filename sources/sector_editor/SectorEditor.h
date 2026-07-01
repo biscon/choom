@@ -60,6 +60,10 @@ private:
     void UpdateLightDrag(engine::Input& input);
     void FinishLightDrag();
     void CancelLightDrag(const char* message);
+    void StartRuntimeObjectDrag(int objectId);
+    void UpdateRuntimeObjectDrag(engine::Input& input);
+    void FinishRuntimeObjectDrag();
+    void CancelRuntimeObjectDrag(const char* message);
     void UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt);
     void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingAuthoringLine(const char* message);
@@ -209,6 +213,7 @@ private:
     int FindTopologyStaticSpotLightNearScreenPoint(Vector2 screenPoint) const;
     int FindTopologyDynamicLightNearScreenPoint(Vector2 screenPoint) const;
     int FindTopologyDynamicSpotLightNearScreenPoint(Vector2 screenPoint) const;
+    int FindRuntimeObjectNearScreenPoint(Vector2 screenPoint) const;
     bool FindTopologyStaticSpotLightHandleNearScreenPoint(
             Vector2 screenPoint,
             int& outLightId,
@@ -286,6 +291,9 @@ private:
     void SelectTopologyStaticSpotLight(int topologyLightId);
     void SelectTopologyDynamicLight(int topologyLightId);
     void SelectTopologyDynamicSpotLight(int topologyLightId);
+    void SelectRuntimeObject(int objectId);
+    SectorPlacedRuntimeObject* SelectedRuntimeObject();
+    const SectorPlacedRuntimeObject* SelectedRuntimeObject() const;
     void SelectAuthoringLine(int lineId);
     bool DeleteSelectedAuthoringLine();
     void SelectAuthoringVertex(int vertexId);
@@ -361,6 +369,13 @@ private:
     void AddDynamicLightAt(Vector2 mapPoint);
     bool DeleteDynamicSpotLightById(int topologyLightId);
     void AddDynamicSpotLightAt(Vector2 mapPoint);
+    void AddRuntimeObjectAt(Vector2 mapPoint);
+    bool DeleteSelectedRuntimeObject();
+    bool DeleteRuntimeObjectById(int objectId);
+    bool MutateSelectedRuntimeObject(
+            const char* status,
+            const std::function<bool(SectorPlacedRuntimeObject&)>& mutate);
+    void RefreshRuntimeObjectsAfterAuthoringEdit();
     bool BakeLightmaps();
     bool StartLightmapBake();
     void PollLightmapBakeResult(engine::AssetManager& assets);

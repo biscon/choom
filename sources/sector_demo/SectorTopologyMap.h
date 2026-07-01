@@ -40,6 +40,13 @@ struct SectorTopologyDirectionalLightSettings {
     float intensity = 1.0f;
 };
 
+struct SectorPlacedRuntimeObject {
+    int id = 0;
+    std::string definitionId;
+    Vector3 position = {};
+    float yawRadians = 0.0f;
+};
+
 struct SectorTopologyMap {
     std::unordered_map<std::string, SectorTextureDefinition> texturesById;
     std::vector<SectorTopologyVertex> vertices;
@@ -50,6 +57,7 @@ struct SectorTopologyMap {
     std::vector<SectorTopologyStaticSpotLight> staticSpotLights;
     std::vector<SectorTopologyDynamicPointLight> dynamicPointLights;
     std::vector<SectorTopologyDynamicSpotLight> dynamicSpotLights;
+    std::vector<SectorPlacedRuntimeObject> runtimeObjects;
     SectorPreviewSettings previewSettings;
     SectorTopologySkySettings skySettings;
     SectorTopologyDirectionalLightSettings directionalLight;
@@ -92,6 +100,7 @@ int AllocateSectorTopologyStaticLightId(const SectorTopologyMap& map);
 int AllocateSectorTopologyStaticSpotLightId(const SectorTopologyMap& map);
 int AllocateSectorTopologyDynamicLightId(const SectorTopologyMap& map);
 int AllocateSectorTopologyDynamicSpotLightId(const SectorTopologyMap& map);
+int AllocateSectorPlacedRuntimeObjectId(const SectorTopologyMap& map);
 
 const SectorTopologyVertex* FindSectorTopologyVertex(const SectorTopologyMap& map, int id);
 SectorTopologyVertex* FindSectorTopologyVertex(SectorTopologyMap& map, int id);
@@ -124,6 +133,11 @@ const SectorTopologyDynamicSpotLight* FindSectorTopologyDynamicSpotLight(const S
 SectorTopologyDynamicSpotLight* FindSectorTopologyDynamicSpotLight(SectorTopologyMap& map, int id);
 
 bool RemoveSectorTopologyDynamicSpotLight(SectorTopologyMap& map, int id);
+
+const SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(const SectorTopologyMap& map, int id);
+SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
+
+bool RemoveSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
 
 const SectorTopologySideDef* FindOppositeSectorTopologySideDef(
         const SectorTopologyMap& map,

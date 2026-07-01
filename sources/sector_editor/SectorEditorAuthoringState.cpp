@@ -48,6 +48,7 @@ void CopyEditorMapLevelFields(SectorTopologyMap& target, const SectorTopologyMap
     target.staticSpotLights = source.staticSpotLights;
     target.dynamicPointLights = source.dynamicPointLights;
     target.dynamicSpotLights = source.dynamicSpotLights;
+    target.runtimeObjects = source.runtimeObjects;
     target.previewSettings = source.previewSettings;
     target.skySettings = source.skySettings;
     target.directionalLight = source.directionalLight;
