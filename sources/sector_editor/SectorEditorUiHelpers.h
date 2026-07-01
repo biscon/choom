@@ -11,7 +11,7 @@
 namespace game {
 
 inline constexpr float SectorEditorInspectorTextureActionHeight = 36.0f;
-inline constexpr float SectorEditorInspectorTextureValueHeight = 30.0f;
+inline constexpr float SectorEditorInspectorTextureValueHeight = 22.0f;
 inline constexpr float SectorEditorInspectorTextureValueIndent = 12.0f;
 inline constexpr float SectorEditorInspectorCompactInputLabelWidth = 82.0f;
 inline constexpr float SectorEditorInspectorCompactInputWidth = 104.0f;
@@ -175,5 +175,18 @@ void DrawColorSwatch(
         Rectangle bounds,
         Color color,
         float borderThickness);
+
+engine::UIConfig SectorEditorSmallFontConfig(
+        const engine::UIConfig& config,
+        engine::AssetManager& assets,
+        engine::FontHandle smallFont);
+
+float MeasureSectorEditorWrappedTextHeight(
+        const engine::UIConfig& config,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        const char* text,
+        float boundsWidth,
+        int minimumLines = 1);
 
 } // namespace game

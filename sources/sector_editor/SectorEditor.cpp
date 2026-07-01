@@ -252,11 +252,12 @@ float AuthoringLineInspectorContentHeight(
         const SectorAuthoringLine& line,
         const SectorAuthoringGraph& graph,
         float rowH,
-        float gap)
+        float gap,
+        float endpointSummaryHeight)
 {
     float height = 0.0f;
     height += 38.0f;
-    height += 32.0f;
+    height += endpointSummaryHeight;
     height += 36.0f + gap;
 
     const auto addSideSection = [&](SectorTopologySideKind sideKind) {
@@ -288,11 +289,12 @@ float AuthoringLineInspectorContentHeight(
 float AuthoringFaceInspectorContentHeight(
         const SectorAuthoringFaceAnchor& anchor,
         float rowH,
-        float gap)
+        float gap,
+        float anchorSummaryHeight)
 {
     float height = 0.0f;
     height += 38.0f;
-    height += 32.0f;
+    height += anchorSummaryHeight;
     height += (rowH + gap) * 2.0f;
     height += rowH + gap;
 
@@ -410,7 +412,7 @@ void SectorEditor::RenderUI(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
-        engine::FontHandle statusFont)
+        engine::FontHandle smallFont)
 {
     PollLightmapBakeResult(assets);
 
@@ -503,8 +505,8 @@ void SectorEditor::RenderUI(
     }
 
     DrawToolsPanel(ui, config, input, assets, font);
-    DrawSectorsPanel(ui, config, input, assets, font);
-    DrawStatusPanel(ui, config, assets, statusFont);
+    DrawSectorsPanel(ui, config, input, assets, font, smallFont);
+    DrawStatusPanel(ui, config, assets, smallFont);
     DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawTexturePickerModal(ui, config, input, assets, font);
     uiState.keyboardCaptured = ui.focusedId != 0;
@@ -5446,7 +5448,8 @@ void SectorEditor::DrawSectorsPanel(
         const engine::UIConfig& config,
         engine::Input& input,
         engine::AssetManager& assets,
-        engine::FontHandle font)
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
 {
     const engine::UIPanelResult panel = engine::BeginPanel(
             ui,
@@ -5505,6 +5508,7 @@ void SectorEditor::DrawSectorsPanel(
     const float rowH = 40.0f;
     const float gap = 8.0f;
     const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
+    const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     const auto inspectorContentHeight = [&]() {
         if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
             return 120.0f;
@@ -5522,7 +5526,16 @@ void SectorEditor::DrawSectorsPanel(
             return DynamicLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
         }
         if (hasSelectedDynamicSpotLight) {
-            return DynamicSpotLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
+            const float shadowNoteHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    TextFormat(
+                            "Requests one of %zu shadow slots. Priority decides budget; over-budget spots still light.",
+                            MaxDynamicSpotLightShadowCasters),
+                    scrollContentW,
+                    2);
+            return DynamicSpotLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty(), shadowNoteHeight);
         }
         if (hasSelectedTopologySector && allowLegacyTopologyInspector) {
             return SectorInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
@@ -5540,10 +5553,41 @@ void SectorEditor::DrawSectorsPanel(
             return InspectedVertexInspectorContentHeight();
         }
         if (selectedAuthoringLine != nullptr) {
-            return AuthoringLineInspectorContentHeight(*selectedAuthoringLine, state.authoringGraph, rowH, gap);
+            const SectorAuthoringVertex* start =
+                    FindSectorAuthoringVertex(state.authoringGraph, selectedAuthoringLine->startVertexId);
+            const SectorAuthoringVertex* end =
+                    FindSectorAuthoringVertex(state.authoringGraph, selectedAuthoringLine->endVertexId);
+            const float endpointSummaryHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    start != nullptr && end != nullptr
+                            ? TextFormat(
+                                    "From %.2f, %.2f  To %.2f, %.2f",
+                                    SectorCoordToVisibleAuthoring(start->x),
+                                    SectorCoordToVisibleAuthoring(start->y),
+                                    SectorCoordToVisibleAuthoring(end->x),
+                                    SectorCoordToVisibleAuthoring(end->y))
+                            : "Line endpoints are invalid",
+                    scrollContentW);
+            return AuthoringLineInspectorContentHeight(
+                    *selectedAuthoringLine,
+                    state.authoringGraph,
+                    rowH,
+                    gap,
+                    endpointSummaryHeight);
         }
         if (selectedAuthoringFaceAnchor != nullptr) {
-            return AuthoringFaceInspectorContentHeight(*selectedAuthoringFaceAnchor, rowH, gap);
+            const float anchorSummaryHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    TextFormat(
+                            "Anchor %.2f, %.2f",
+                            SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->x),
+                            SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->y)),
+                    scrollContentW);
+            return AuthoringFaceInspectorContentHeight(*selectedAuthoringFaceAnchor, rowH, gap, anchorSummaryHeight);
         }
         if (selectedAuthoringVertex != nullptr) {
             return 120.0f;
@@ -6077,6 +6121,7 @@ void SectorEditor::DrawSectorsPanel(
                     input,
                     assets,
                     font,
+                    smallFont,
                     scroll,
                     contentW,
                     rowH,
@@ -6092,7 +6137,7 @@ void SectorEditor::DrawSectorsPanel(
     }
 
     if (allowLegacyTopologyInspector && (hasSelectedTopologySideDef || hasSelectedTopologyLineDef)) {
-        if (DrawTopologySideDefInspector(ui, config, input, assets, font, scroll, contentW, rowH, gap)) {
+        if (DrawTopologySideDefInspector(ui, config, input, assets, font, smallFont, scroll, contentW, rowH, gap)) {
             engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
             engine::EndPanel(ui, config, panel);
             return;
@@ -6203,6 +6248,7 @@ void SectorEditor::DrawSectorsPanel(
                 input,
                 assets,
                 font,
+                smallFont,
                 scroll,
                 contentW,
                 rowH,
@@ -6255,24 +6301,38 @@ void SectorEditor::DrawSectorsPanel(
         y += 38.0f;
 
         if (start != nullptr && end != nullptr) {
+            const char* endpointText = TextFormat(
+                    "From %.2f, %.2f  To %.2f, %.2f",
+                    SectorCoordToVisibleAuthoring(start->x),
+                    SectorCoordToVisibleAuthoring(start->y),
+                    SectorCoordToVisibleAuthoring(end->x),
+                    SectorCoordToVisibleAuthoring(end->y));
+            const float endpointHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    endpointText,
+                    contentW);
             engine::Text(
                     ui,
-                    config,
+                    smallConfig,
                     assets,
-                    Rectangle{0.0f, y, contentW, 30.0f},
-                    font,
-                    TextFormat(
-                            "From %.2f, %.2f  To %.2f, %.2f",
-                            SectorCoordToVisibleAuthoring(start->x),
-                            SectorCoordToVisibleAuthoring(start->y),
-                            SectorCoordToVisibleAuthoring(end->x),
-                            SectorCoordToVisibleAuthoring(end->y)),
+                    Rectangle{0.0f, y, contentW, endpointHeight},
+                    smallFont,
+                    endpointText,
                     engine::UITextJustify::Left,
-                    config.mutedTextColor);
-            y += 32.0f;
+                    smallConfig.mutedTextColor,
+                    true);
+            y += endpointHeight;
         } else {
-            engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Line endpoints are invalid", engine::UITextJustify::Left, config.invalidColor);
-            y += 32.0f;
+            const float endpointHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    "Line endpoints are invalid",
+                    contentW);
+            engine::Text(ui, smallConfig, assets, Rectangle{0.0f, y, contentW, endpointHeight}, smallFont, "Line endpoints are invalid", engine::UITextJustify::Left, config.invalidColor, true);
+            y += endpointHeight;
         }
 
         if (engine::Button(
@@ -6382,10 +6442,10 @@ void SectorEditor::DrawSectorsPanel(
                                 engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                                 engine::Text(
                                         ui,
-                                        config,
+                                        smallConfig,
                                         assets,
                                         row.valueRect,
-                                        font,
+                                        smallFont,
                                         textureId.empty() ? "<none>" : textureId.c_str(),
                                         engine::UITextJustify::Left,
                                         missing ? config.invalidColor : config.mutedTextColor);
@@ -6442,10 +6502,10 @@ void SectorEditor::DrawSectorsPanel(
                                 engine::Text(ui, config, assets, row.labelRect, font, title, engine::UITextJustify::Left, config.mutedTextColor);
                                 engine::Text(
                                         ui,
-                                        config,
+                                        smallConfig,
                                         assets,
                                         row.valueRect,
-                                        font,
+                                        smallFont,
                                         decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
                                         engine::UITextJustify::Left,
                                         missing ? config.invalidColor : config.mutedTextColor);
@@ -6654,19 +6714,27 @@ void SectorEditor::DrawSectorsPanel(
                 engine::UITextJustify::Left,
                 config.textColor);
         y += 38.0f;
+        const char* anchorText = TextFormat(
+                "Anchor %.2f, %.2f",
+                SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->x),
+                SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->y));
+        const float anchorHeight = MeasureSectorEditorWrappedTextHeight(
+                smallConfig,
+                assets,
+                smallFont,
+                anchorText,
+                contentW);
         engine::Text(
                 ui,
-                config,
+                smallConfig,
                 assets,
-                Rectangle{0.0f, y, contentW, 30.0f},
-                font,
-                TextFormat(
-                        "Anchor %.2f, %.2f",
-                        SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->x),
-                        SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->y)),
+                Rectangle{0.0f, y, contentW, anchorHeight},
+                smallFont,
+                anchorText,
                 engine::UITextJustify::Left,
-                config.mutedTextColor);
-        y += 32.0f;
+                smallConfig.mutedTextColor,
+                true);
+        y += anchorHeight;
 
         const float labelW = 92.0f;
         const float numberFieldW = 112.0f;
@@ -6848,10 +6916,10 @@ void SectorEditor::DrawSectorsPanel(
             engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
             engine::Text(
                     ui,
-                    config,
+                    smallConfig,
                     assets,
                     row.valueRect,
-                    font,
+                    smallFont,
                     textureId.empty() ? "<none>" : textureId.c_str(),
                     engine::UITextJustify::Left,
                     missing ? config.invalidColor : config.mutedTextColor);
@@ -6902,10 +6970,10 @@ void SectorEditor::DrawSectorsPanel(
                     engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                     engine::Text(
                             ui,
-                            config,
+                            smallConfig,
                             assets,
                             row.valueRect,
-                            font,
+                            smallFont,
                             decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
                             engine::UITextJustify::Left,
                             missing ? config.invalidColor : config.mutedTextColor);
@@ -7105,10 +7173,10 @@ void SectorEditor::DrawSectorsPanel(
                     engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                     engine::Text(
                             ui,
-                            config,
+                            smallConfig,
                             assets,
                             row.valueRect,
-                            font,
+                            smallFont,
                             decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
                             engine::UITextJustify::Left,
                             missing ? config.invalidColor : config.mutedTextColor);
@@ -7321,11 +7389,13 @@ bool SectorEditor::DrawTopologySideDefInspector(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
+        engine::FontHandle smallFont,
         engine::UIScrollAreaResult scroll,
         float contentW,
         float rowH,
         float gap)
 {
+    const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
     if (lineDef == nullptr) {
         return false;
@@ -7362,19 +7432,33 @@ bool SectorEditor::DrawTopologySideDefInspector(
     if (hasEndpoints) {
         const Vector2 from = SectorTopologyVertexToMap(*start);
         const Vector2 to = SectorTopologyVertexToMap(*end);
+        const char* endpointText = TextFormat("Line %d  From %.2f, %.2f  To %.2f, %.2f", lineDef->id, from.x, from.y, to.x, to.y);
+        const float endpointHeight = MeasureSectorEditorWrappedTextHeight(
+                smallConfig,
+                assets,
+                smallFont,
+                endpointText,
+                contentW);
         engine::Text(
                 ui,
-                config,
+                smallConfig,
                 assets,
-                Rectangle{0.0f, y, contentW, 30.0f},
-                font,
-                TextFormat("Line %d  From %.2f, %.2f  To %.2f, %.2f", lineDef->id, from.x, from.y, to.x, to.y),
+                Rectangle{0.0f, y, contentW, endpointHeight},
+                smallFont,
+                endpointText,
                 engine::UITextJustify::Left,
-                config.mutedTextColor);
-        y += 32.0f;
+                smallConfig.mutedTextColor,
+                true);
+        y += endpointHeight;
     } else {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Line endpoints are invalid", engine::UITextJustify::Left, config.invalidColor);
-        y += 32.0f;
+        const float endpointHeight = MeasureSectorEditorWrappedTextHeight(
+                smallConfig,
+                assets,
+                smallFont,
+                "Line endpoints are invalid",
+                contentW);
+        engine::Text(ui, smallConfig, assets, Rectangle{0.0f, y, contentW, endpointHeight}, smallFont, "Line endpoints are invalid", engine::UITextJustify::Left, config.invalidColor, true);
+        y += endpointHeight;
     }
 
     engine::Text(
@@ -7536,10 +7620,10 @@ bool SectorEditor::DrawTopologySideDefInspector(
         engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
         engine::Text(
                 ui,
-                config,
+                smallConfig,
                 assets,
                 Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
-                font,
+                smallFont,
                 textureId.empty() ? "<none>" : textureId.c_str(),
                 engine::UITextJustify::Left,
                 missing ? config.invalidColor : config.mutedTextColor);
@@ -8493,7 +8577,7 @@ void SectorEditor::DrawStatusPanel(
         engine::UIContext& ui,
         const engine::UIConfig& config,
         engine::AssetManager& assets,
-        engine::FontHandle statusFont)
+        engine::FontHandle smallFont)
 {
     (void)ui;
     const Rectangle panel = BuildBottomPanelRect();
@@ -8553,16 +8637,13 @@ void SectorEditor::DrawStatusPanel(
             selectedLabel.c_str()
     );
 
-    engine::UIConfig statusConfig = config;
-    if (const engine::FontAsset* statusFontAsset = assets.GetFont(statusFont)) {
-        statusConfig.fontSize = static_cast<float>(statusFontAsset->pixelSize);
-    }
+    engine::UIConfig statusConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
 
     engine::Text(
             statusConfig,
             assets,
             Rectangle{panel.x + 18.0f, panel.y, panel.width - 36.0f, panel.height},
-            statusFont,
+            smallFont,
             text,
             engine::UITextJustify::Left,
             statusConfig.textColor,

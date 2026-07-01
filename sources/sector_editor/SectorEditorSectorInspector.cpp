@@ -47,6 +47,7 @@ bool DrawTopologySectorInspector(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
+        engine::FontHandle smallFont,
         engine::UIScrollAreaResult scroll,
         float contentW,
         float rowH,
@@ -56,6 +57,7 @@ bool DrawTopologySectorInspector(
         SectorEditorUiState& uiState,
         const SectorEditorSectorInspectorCallbacks& callbacks)
 {
+    const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     float y = 0.0f;
     engine::Text(
             ui,
@@ -248,10 +250,10 @@ bool DrawTopologySectorInspector(
         engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
         engine::Text(
                 ui,
-                config,
+                smallConfig,
                 assets,
                 Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
-                font,
+                smallFont,
                 textureId.empty() ? "<none>" : textureId.c_str(),
                 engine::UITextJustify::Left,
                 missing ? config.invalidColor : config.mutedTextColor);

@@ -70,7 +70,7 @@ void TestCompactNumericRow()
 
 void TestTextureRowHeight()
 {
-    Check(Near(game::SectorEditorInspectorTextureRowHeight(), 68.0f),
+    Check(Near(game::SectorEditorInspectorTextureRowHeight(), 60.0f),
           "texture row height accounts for action and value lines");
 }
 

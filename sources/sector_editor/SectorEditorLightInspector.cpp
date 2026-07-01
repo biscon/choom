@@ -55,7 +55,7 @@ float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError)
     return height;
 }
 
-float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError)
+float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError, float shadowNoteHeight)
 {
     float height = 38.0f; // Light title.
     height += rowH + gap; // Id.
@@ -66,7 +66,7 @@ float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdEr
     height += rowH + gap; // Enabled.
     height += 3.0f * (rowH + gap); // Flicker controls.
     height += 5.0f * (rowH + gap); // Shadow controls.
-    height += 38.0f + gap; // Shadow budget note.
+    height += shadowNoteHeight + gap; // Shadow budget note.
     height += 11.0f * (rowH + gap); // Position/target/intensity/range/cones.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
@@ -493,6 +493,7 @@ bool DrawSelectedDynamicSpotLightInspector(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
+        engine::FontHandle smallFont,
         engine::UIScrollAreaResult scroll,
         float contentW,
         float rowH,
@@ -501,6 +502,7 @@ bool DrawSelectedDynamicSpotLightInspector(
         SectorEditorUiState& uiState,
         const SectorEditorLightInspectorCallbacks& callbacks)
 {
+    const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     float y = 0.0f;
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Dynamic Spot: %d", light.id), engine::UITextJustify::Left, config.textColor);
     y += 38.0f;
@@ -589,26 +591,27 @@ bool DrawSelectedDynamicSpotLightInspector(
         callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d shadow request", light.id));
     }
     y += rowH + gap;
+    const char* shadowNote = TextFormat(
+            "Requests one of %zu shadow slots. Priority decides budget; over-budget spots still light.",
+            MaxDynamicSpotLightShadowCasters);
+    const float shadowNoteHeight = MeasureSectorEditorWrappedTextHeight(
+            smallConfig,
+            assets,
+            smallFont,
+            shadowNote,
+            contentW,
+            2);
     engine::Text(
             ui,
-            config,
+            smallConfig,
             assets,
-            Rectangle{0.0f, y, contentW, 18.0f},
-            font,
-            TextFormat("Requests one of %zu shadow slots.", MaxDynamicSpotLightShadowCasters),
+            Rectangle{0.0f, y, contentW, shadowNoteHeight},
+            smallFont,
+            shadowNote,
             engine::UITextJustify::Left,
-            config.mutedTextColor);
-    y += 18.0f;
-    engine::Text(
-            ui,
-            config,
-            assets,
-            Rectangle{0.0f, y, contentW, 18.0f},
-            font,
-            "Priority decides budget; over-budget spots still light.",
-            engine::UITextJustify::Left,
-            config.mutedTextColor);
-    y += 20.0f + gap;
+            smallConfig.mutedTextColor,
+            true);
+    y += shadowNoteHeight + gap;
 
     {
         const SectorEditorIntInputResult result = DrawLabeledIntInput(
