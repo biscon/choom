@@ -49,6 +49,20 @@ namespace game {
 
 namespace {
 
+constexpr float SectorEditorPanelScrollPaddingPx = 8.0f;
+
+float ScrollAreaContentWidthForVerticalScrollbar(
+        float boundsWidth,
+        const engine::UIConfig& config,
+        float paddingPx,
+        bool drawFrame)
+{
+    const float clientWidth = std::max(
+            0.0f,
+            boundsWidth - (drawFrame ? config.borderThickness * 2.0f : 0.0f));
+    return std::max(0.0f, clientWidth - config.scrollbarSize - paddingPx * 2.0f);
+}
+
 bool IsFlatTopologySurfaceTarget(TopologySurfaceEditTarget target)
 {
     return target.kind == TopologySurfaceEditTargetKind::SectorFloor
@@ -5163,7 +5177,11 @@ void SectorEditor::DrawToolsPanel(
             + separatorH + rowsHeight(4)
             + separatorH + rowsHeight(1)
             + bottomPadding;
-    const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
+    const float scrollContentW = ScrollAreaContentWidthForVerticalScrollbar(
+            panel.contentRect.width,
+            config,
+            SectorEditorPanelScrollPaddingPx,
+            false);
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
             ui,
             config,
@@ -5172,7 +5190,8 @@ void SectorEditor::DrawToolsPanel(
             panel.contentRect,
             Vector2{scrollContentW, toolsContentH},
             uiState.toolsScroll,
-            false
+            false,
+            SectorEditorPanelScrollPaddingPx
     );
 
     const float contentW = scroll.viewport.width;
@@ -5507,7 +5526,11 @@ void SectorEditor::DrawSectorsPanel(
 
     const float rowH = 40.0f;
     const float gap = 8.0f;
-    const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
+    const float scrollContentW = ScrollAreaContentWidthForVerticalScrollbar(
+            panel.contentRect.width,
+            config,
+            SectorEditorPanelScrollPaddingPx,
+            false);
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     const auto inspectorContentHeight = [&]() {
         if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
@@ -5603,7 +5626,8 @@ void SectorEditor::DrawSectorsPanel(
             panel.contentRect,
             Vector2{scrollContentW, contentH},
             uiState.inspectorScroll,
-            false
+            false,
+            SectorEditorPanelScrollPaddingPx
     );
 
     const float contentW = scroll.viewport.width;
@@ -8269,8 +8293,13 @@ void SectorEditor::DrawLoadLevelModal(
     engine::Text(config, assets, Rectangle{modal.x + 24.0f, modal.y + 20.0f, modal.width - 48.0f, 40.0f}, font, "Load Level");
 
     const Rectangle listBounds{modal.x + 24.0f, modal.y + 74.0f, modal.width - 48.0f, 450.0f};
-    const Vector2 contentSize{
+    const float listContentW = ScrollAreaContentWidthForVerticalScrollbar(
             listBounds.width,
+            config,
+            engine::DefaultScrollAreaPaddingPx,
+            true);
+    const Vector2 contentSize{
+            listContentW,
             std::max(listBounds.height, config.listItemHeight * static_cast<float>(modalState.optionLabels.size()))
     };
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
@@ -8289,7 +8318,7 @@ void SectorEditor::DrawLoadLevelModal(
                 input,
                 assets,
                 "sector_editor_load_level_list",
-                Rectangle{0.0f, 0.0f, listBounds.width - (scroll.scrollY ? config.scrollbarSize : 0.0f), contentSize.y},
+                Rectangle{0.0f, 0.0f, scroll.viewport.width, contentSize.y},
                 font,
                 modalState.optionLabels.data(),
                 modalState.optionLabels.size(),

@@ -880,10 +880,22 @@ float ClampScrollOffset(float value, float contentExtent, float viewportExtent)
     return std::clamp(value, 0.0f, std::max(0.0f, contentExtent - viewportExtent));
 }
 
+Rectangle ScrollClientBounds(const UIConfig& config, Rectangle bounds)
+{
+    const float inset = std::max(0.0f, config.borderThickness);
+    return Rectangle{
+            bounds.x + inset,
+            bounds.y + inset,
+            std::max(0.0f, bounds.width - inset * 2.0f),
+            std::max(0.0f, bounds.height - inset * 2.0f)
+    };
+}
+
 Rectangle VerticalScrollTrack(const UIConfig& config, const UIScrollAreaResult& area)
 {
+    const Rectangle client = area.drawFrame ? ScrollClientBounds(config, area.bounds) : area.bounds;
     return Rectangle{
-            area.viewport.x + area.viewport.width,
+            client.x + std::max(0.0f, client.width - config.scrollbarSize),
             area.viewport.y,
             config.scrollbarSize,
             area.viewport.height
@@ -892,9 +904,10 @@ Rectangle VerticalScrollTrack(const UIConfig& config, const UIScrollAreaResult& 
 
 Rectangle HorizontalScrollTrack(const UIConfig& config, const UIScrollAreaResult& area)
 {
+    const Rectangle client = area.drawFrame ? ScrollClientBounds(config, area.bounds) : area.bounds;
     return Rectangle{
             area.viewport.x,
-            area.viewport.y + area.viewport.height,
+            client.y + std::max(0.0f, client.height - config.scrollbarSize),
             area.viewport.width,
             config.scrollbarSize
     };
@@ -926,17 +939,6 @@ Rectangle ScrollThumb(float offset, float contentExtent, float viewportExtent, R
 uint32_t ScrollAxisId(uint32_t baseId, int axis)
 {
     return baseId ^ (axis == 1 ? 0x9E3779B9u : 0x85EBCA6Bu);
-}
-
-Rectangle ScrollClientBounds(const UIConfig& config, Rectangle bounds)
-{
-    const float inset = std::max(0.0f, config.borderThickness);
-    return Rectangle{
-            bounds.x + inset,
-            bounds.y + inset,
-            std::max(0.0f, bounds.width - inset * 2.0f),
-            std::max(0.0f, bounds.height - inset * 2.0f)
-    };
 }
 
 } // namespace
@@ -1006,13 +1008,15 @@ UIScrollAreaResult BeginScrollArea(
         Rectangle bounds,
         Vector2 contentSize,
         UIScrollState& state,
-        bool drawFrame)
+        bool drawFrame,
+        float paddingPx)
 {
     assert(!ui.inScrollArea && "Nested scroll areas are not supported.");
     UIScrollAreaResult result;
     result.bounds = bounds;
     result.contentSize = contentSize;
     result.drawFrame = drawFrame;
+    result.paddingPx = std::max(0.0f, paddingPx);
 
     if (ui.inScrollArea) {
         return result;
@@ -1020,22 +1024,29 @@ UIScrollAreaResult BeginScrollArea(
 
     const uint32_t scrollId = HashId(id);
 
-    Rectangle viewport = drawFrame ? ScrollClientBounds(config, bounds) : bounds;
+    const Rectangle client = drawFrame ? ScrollClientBounds(config, bounds) : bounds;
+    const auto buildViewport = [client, padding = result.paddingPx, scrollbarSize = config.scrollbarSize](bool scrollX, bool scrollY) {
+        const float rightInset = scrollY ? padding + scrollbarSize : padding;
+        const float bottomInset = scrollX ? padding + scrollbarSize : padding;
+        return Rectangle{
+                client.x + padding,
+                client.y + padding,
+                std::max(0.0f, client.width - padding - rightInset),
+                std::max(0.0f, client.height - padding - bottomInset)
+        };
+    };
+
+    Rectangle viewport = buildViewport(false, false);
     bool scrollX = contentSize.x > viewport.width;
     bool scrollY = contentSize.y > viewport.height;
-    if (scrollY) {
-        viewport.width = std::max(0.0f, viewport.width - config.scrollbarSize);
-    }
-    if (scrollX) {
-        viewport.height = std::max(0.0f, viewport.height - config.scrollbarSize);
-    }
+    viewport = buildViewport(scrollX, scrollY);
     if (!scrollX && contentSize.x > viewport.width) {
         scrollX = true;
-        viewport.height = std::max(0.0f, viewport.height - config.scrollbarSize);
+        viewport = buildViewport(scrollX, scrollY);
     }
     if (!scrollY && contentSize.y > viewport.height) {
         scrollY = true;
-        viewport.width = std::max(0.0f, viewport.width - config.scrollbarSize);
+        viewport = buildViewport(scrollX, scrollY);
     }
 
     result.viewport = viewport;
@@ -1235,8 +1246,8 @@ void EndScrollArea(
                 Rectangle{
                         scrollArea.viewport.x + scrollArea.viewport.width,
                         scrollArea.viewport.y + scrollArea.viewport.height,
-                        config.scrollbarSize,
-                        config.scrollbarSize
+                        scrollArea.paddingPx + config.scrollbarSize,
+                        scrollArea.paddingPx + config.scrollbarSize
                 },
                 config.panelColor
         );

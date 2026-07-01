@@ -369,6 +369,10 @@ size each frame. Widgets issued between begin/end use local content coordinates.
 Use the `Text(ui, ...)` and `Image(ui, ...)` overloads for those widgets inside
 a scroll area.
 
+Scroll areas apply `engine::DefaultScrollAreaPaddingPx` of internal client
+padding by default. Pass the optional `paddingPx` argument to use a different
+inset for a specific scroll area.
+
 ```cpp
 engine::UIScrollState inventoryScroll;
 
