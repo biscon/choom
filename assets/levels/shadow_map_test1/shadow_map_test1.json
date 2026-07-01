@@ -45,6 +45,23 @@
         "b": 135,
         "a": 255
       }
+    },
+    {
+      "id": 2,
+      "position": [
+        152.0,
+        14.399999618530273,
+        88.0
+      ],
+      "radius": 64.0,
+      "sourceRadius": 2.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
     }
   ],
   "staticSpotLights": [
@@ -95,7 +112,24 @@
       "outerConeDegrees": 45.0
     }
   ],
-  "dynamicPointLights": [],
+  "dynamicPointLights": [
+    {
+      "id": 1,
+      "position": [
+        64.0,
+        14.399999618530273,
+        104.0
+      ],
+      "radius": 32.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    }
+  ],
   "dynamicSpotLights": [
     {
       "id": 1,
@@ -189,11 +223,11 @@
     "path": "assets/levels/shadow_map_test1/shadow_map_test1.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "1f7f3764f9bf920a",
+    "sourceHash": "d03f8c3eadd8ae99",
     "objectProbes": {
       "path": "assets/levels/shadow_map_test1/shadow_map_test1.lightmap.object_probes.bin",
       "version": 1,
-      "sourceHash": "1f7f3764f9bf920a",
+      "sourceHash": "d03f8c3eadd8ae99",
       "count": 38,
       "probeSpacingWorld": 4.0,
       "probeHeightWorld": 1.2000000476837158,
