@@ -3,14 +3,19 @@
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
+#include "sector_demo/SectorUnits.h"
+#include "util/json.hpp"
 
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace {
+
+using Json = nlohmann::ordered_json;
 
 int failures = 0;
 
@@ -32,6 +37,17 @@ bool Near(Vector3 actual, Vector3 expected, float epsilon = 0.00001f)
     return Near(actual.x, expected.x, epsilon)
             && Near(actual.y, expected.y, epsilon)
             && Near(actual.z, expected.z, epsilon);
+}
+
+bool LoadJsonFile(const char* path, Json& outJson)
+{
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        return false;
+    }
+
+    file >> outJson;
+    return !file.fail();
 }
 
 void AddSide(
@@ -269,7 +285,6 @@ void TestClearSectorRuntimeObjectsOnlyDestroysSectorObjects()
     engine::AssetManager assets;
     game::SectorRuntimeObjectState state;
     state.worldReserved = true;
-    state.temporaryGoblinDebugSpawnEntity = engine::NullEntity();
 
     const engine::Entity sectorObject = world.CreateEntity();
     world.Add(sectorObject, game::SectorObject{});
@@ -286,8 +301,247 @@ void TestClearSectorRuntimeObjectsOnlyDestroysSectorObjects()
             "sector runtime cleanup leaves unrelated ECS entities alive");
     Check(state.worldReserved,
             "sector runtime cleanup preserves world reservation bookkeeping");
-    Check(engine::IsNull(state.temporaryGoblinDebugSpawnEntity),
-            "sector runtime cleanup clears temporary goblin entity handle");
+    Check(state.placedObjectEntities.empty(),
+            "sector runtime cleanup clears placed object entity mappings");
+}
+
+int CountSectorObjects(engine::World& world)
+{
+    int count = 0;
+    world.ForEach<game::SectorObject>(
+            [&count](engine::Entity, game::SectorObject&) {
+                ++count;
+            });
+    return count;
+}
+
+void TestSpawnPlacedRuntimeObjectCreatesBillboardEntity()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    map.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+            1,
+            "goblin",
+            Vector3{1.0f, 0.5f, 1.0f},
+            0.75f});
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(CountSectorObjects(world) == 1, "placed goblin spawns one sector object entity");
+    Check(state.placedObjectEntities.size() == 1,
+            "placed goblin stores placed object ID to entity mapping");
+    Check(!engine::IsNull(state.runtimeObjectAssetScope),
+            "placed goblin spawn creates sector runtime object asset scope");
+    Check(state.placedObjectCount == 1 && state.spawnedObjectCount == 1 && state.skippedObjectCount == 0,
+            "placed goblin spawn records debug counts");
+    Check(state.spriteAnimationRequestedCount == 1
+                  && state.spriteAnimationPendingCount == 1
+                  && state.spriteAnimationReadyCount == 0
+                  && state.spriteAnimationFailedCount == 0,
+            "placed goblin spawn records pending sprite animation diagnostics");
+    Check(state.directionalClipResolvedCount == 0 && state.directionalClipMissingCount == 1,
+            "placed goblin spawn records unresolved directional clip diagnostics before asset readiness");
+    Check(state.placedObjectStatus.find("Runtime objects: 1 placed / 1 spawned, 0 skipped")
+                  != std::string::npos,
+            "placed goblin spawn records successful debug status");
+    Check(state.placedObjectStatus.find("sprites 0 ready, 1 pending, 0 failed")
+                  != std::string::npos,
+            "placed goblin spawn status surfaces pending sprite asset");
+    Check(state.placedObjectWarning.empty(),
+            "placed goblin spawn records no warning");
+    if (state.placedObjectEntities.empty()) {
+        return;
+    }
+
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(state.placedObjectEntities[0].placedObjectId == 1,
+            "placed goblin mapping stores stable placed object ID");
+    Check(world.IsAlive(entity), "placed goblin mapped entity is alive");
+
+    const game::SectorObjectTransform& transform = world.Get<game::SectorObjectTransform>(entity);
+    Check(Near(transform.position, Vector3{
+                        game::SectorAuthoringToWorldDistance(1.0f),
+                        game::SectorAuthoringToWorldDistance(0.5f),
+                        game::SectorAuthoringToWorldDistance(1.0f)})
+                  && Near(transform.yawRadians, 0.75f),
+            "placed goblin entity receives runtime world-space transform");
+
+    const game::SectorObject& object = world.Get<game::SectorObject>(entity);
+    Check(object.currentSectorId == 10,
+            "placed goblin current sector lookup uses world-space X/Z");
+
+    const game::SectorBillboardSprite& sprite = world.Get<game::SectorBillboardSprite>(entity);
+    Check(!engine::IsNull(sprite.animation),
+            "placed goblin requests billboard sprite animation");
+    Check(Near(sprite.sizeWorld.x, 0.8f) && Near(sprite.sizeWorld.y, 1.2f),
+            "placed goblin uses billboard definition size");
+    Check(Near(sprite.originNormalized.x, 0.5f) && Near(sprite.originNormalized.y, 1.0f),
+            "placed goblin uses billboard definition origin");
+
+    const game::SectorBillboardAnimator& animator = world.Get<game::SectorBillboardAnimator>(entity);
+    Check(animator.animationId == "goblin",
+            "placed goblin animator uses definition ID as animation request key");
+
+    const game::SectorBillboardDirectionalClips& directionalClips =
+            world.Get<game::SectorBillboardDirectionalClips>(entity);
+    Check(directionalClips.frontName == "Front"
+                  && directionalClips.backName == "Back"
+                  && directionalClips.leftName == "Left"
+                  && directionalClips.rightName == "Right",
+            "placed goblin stores definition directional clip names on spawned billboard");
+
+    game::UpdateSectorRuntimeObjects(world, assets, state, map, 0.0f);
+    Check(state.spriteAnimationPendingCount == 1 && state.directionalClipMissingCount == 1,
+            "runtime object update keeps pending async asset diagnostics live");
+}
+
+void TestSpawnPlacedRuntimeObjectSkipsMissingDefinition()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    map.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+            2,
+            "missing_definition",
+            Vector3{1.0f, 0.5f, 1.0f},
+            0.0f});
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(CountSectorObjects(world) == 0,
+            "placed runtime object with missing definition is skipped");
+    Check(state.placedObjectEntities.empty(),
+            "missing definition does not store placed object entity mapping");
+    Check(engine::IsNull(state.runtimeObjectAssetScope),
+            "missing definition does not create runtime object asset scope");
+    Check(state.placedObjectCount == 1 && state.spawnedObjectCount == 0 && state.skippedObjectCount == 1,
+            "missing definition skip records debug counts");
+    Check(state.placedObjectStatus.find("Runtime objects: 1 placed / 0 spawned, 1 skipped")
+                  != std::string::npos,
+            "missing definition skip records debug status");
+    Check(state.placedObjectWarning.find("missing definition 'missing_definition' for placed object 2")
+                  != std::string::npos,
+            "missing definition skip records debug warning");
+}
+
+void TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    map.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+            3,
+            "goblin",
+            Vector3{1.0f, 0.5f, 1.0f},
+            0.0f});
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    const engine::Entity firstEntity = state.placedObjectEntities.empty()
+            ? engine::NullEntity()
+            : state.placedObjectEntities[0].entity;
+    map.runtimeObjects[0].position = Vector3{2.0f, 0.5f, 2.0f};
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(CountSectorObjects(world) == 1,
+            "repeated placed runtime object spawn refresh does not duplicate entities");
+    Check(state.placedObjectEntities.size() == 1,
+            "repeated placed runtime object spawn refresh keeps one mapping");
+    if (!state.placedObjectEntities.empty()) {
+        const engine::Entity refreshedEntity = state.placedObjectEntities[0].entity;
+        Check(refreshedEntity != firstEntity,
+                "placed runtime object refresh replaces previous mapped entity");
+        Check(Near(world.Get<game::SectorObjectTransform>(refreshedEntity).position,
+                      Vector3{
+                              game::SectorAuthoringToWorldDistance(2.0f),
+                              game::SectorAuthoringToWorldDistance(0.5f),
+                              game::SectorAuthoringToWorldDistance(2.0f)}),
+                "placed runtime object refresh applies latest authored position in world space");
+    }
+
+    game::ClearSectorRuntimeObjects(world, assets, state);
+    Check(CountSectorObjects(world) == 0,
+            "explicit runtime reset clears placed runtime object entities");
+    Check(state.placedObjectEntities.empty(),
+            "explicit runtime reset clears placed runtime object mappings");
+}
+
+void TestPreviewRuntimeObjectRefreshKeepsAssetScope()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    map.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+            4,
+            "goblin",
+            Vector3{1.0f, 0.5f, 1.0f},
+            0.0f});
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    const engine::AssetScopeHandle firstScope = state.runtimeObjectAssetScope;
+    const engine::Entity firstEntity = state.placedObjectEntities.empty()
+            ? engine::NullEntity()
+            : state.placedObjectEntities[0].entity;
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(CountSectorObjects(world) == 1,
+            "preview runtime object refresh keeps one spawned sector object");
+    Check(state.runtimeObjectAssetScope == firstScope,
+            "preview runtime object refresh keeps the runtime object asset scope alive");
+    if (!state.placedObjectEntities.empty()) {
+        Check(state.placedObjectEntities[0].entity != firstEntity,
+                "preview runtime object refresh replaces mapped entity without duplicating it");
+    }
+}
+
+void TestResetSectorRuntimeObjectsForMapReloadsWithoutDuplicates()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    map.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+            5,
+            "goblin",
+            Vector3{1.0f, 0.5f, 1.0f},
+            0.0f});
+
+    game::ResetSectorRuntimeObjectsForMap(world, assets, state, map);
+    const engine::AssetScopeHandle firstScope = state.runtimeObjectAssetScope;
+    const engine::Entity firstEntity = state.placedObjectEntities.empty()
+            ? engine::NullEntity()
+            : state.placedObjectEntities[0].entity;
+
+    map.runtimeObjects[0].position = Vector3{2.0f, 0.5f, 2.0f};
+    game::ResetSectorRuntimeObjectsForMap(world, assets, state, map);
+
+    Check(CountSectorObjects(world) == 1,
+            "explicit map runtime reset reloads placed objects without duplicates");
+    Check(!world.IsAlive(firstEntity),
+            "explicit map runtime reset destroys the previous runtime object entity");
+    Check(firstScope != state.runtimeObjectAssetScope,
+            "explicit map runtime reset unloads the previous runtime object asset scope");
+    Check(state.placedObjectEntities.size() == 1,
+            "explicit map runtime reset recreates one placed object mapping");
+    if (!state.placedObjectEntities.empty()) {
+        const engine::Entity reloadedEntity = state.placedObjectEntities[0].entity;
+        Check(Near(world.Get<game::SectorObjectTransform>(reloadedEntity).position,
+                      Vector3{
+                              game::SectorAuthoringToWorldDistance(2.0f),
+                              game::SectorAuthoringToWorldDistance(0.5f),
+                              game::SectorAuthoringToWorldDistance(2.0f)}),
+                "explicit map runtime reset spawns from the latest loaded map data in world space");
+    }
 }
 
 void TestSectorBillboardSpriteAnimationRequestRejectsMissingInput()
@@ -348,6 +602,79 @@ void TestSectorBillboardSpriteAnimationRequestRejectsMissingInput()
     Check(animator.animationId.empty(), "billboard sprite request clears animation id on missing path");
     Check(animator.timeSeconds == 0.0f, "billboard sprite request resets time on missing path");
     Check(!animator.finished, "billboard sprite request clears finished flag on missing path");
+}
+
+void TestSectorRuntimeObjectGoblinDefinitionExists()
+{
+    const game::SectorRuntimeObjectDefinition* definition =
+            game::FindSectorRuntimeObjectDefinition("goblin");
+
+    Check(definition != nullptr, "goblin runtime object definition resolves");
+    if (definition == nullptr) {
+        return;
+    }
+
+    Check(definition->id == "goblin", "goblin runtime object definition stores string id");
+    Check(definition->kind == "billboard", "goblin runtime object definition stores billboard kind");
+    Check(definition->billboard.spriteAnimationAssetPath == "assets/sprites/goblin.json",
+            "goblin runtime object definition uses checked-in Aseprite JSON asset path");
+    Check(Near(definition->billboard.sizeWorld.x, 0.8f)
+                  && Near(definition->billboard.sizeWorld.y, 1.2f),
+            "goblin runtime object definition stores billboard world size");
+    Check(Near(definition->billboard.originNormalized.x, 0.5f)
+                  && Near(definition->billboard.originNormalized.y, 1.0f),
+            "goblin runtime object definition stores normalized origin");
+
+    const char* goblinJsonPath = ASSETS_PATH "sprites/goblin.json";
+    FILE* goblinJson = std::fopen(goblinJsonPath, "rb");
+    Check(goblinJson != nullptr, "goblin runtime object definition asset exists at assets/sprites/goblin.json");
+    if (goblinJson != nullptr) {
+        std::fclose(goblinJson);
+    }
+
+    Json goblinDocument;
+    Check(LoadJsonFile(goblinJsonPath, goblinDocument),
+            "goblin runtime object definition asset JSON loads");
+    if (!goblinDocument.is_null()) {
+        Check(goblinDocument.contains("meta")
+                      && goblinDocument["meta"].contains("image")
+                      && goblinDocument["meta"]["image"].get<std::string>() == "goblin.png",
+                "goblin Aseprite JSON references relative goblin.png image");
+        const char* goblinPngPath = ASSETS_PATH "sprites/goblin.png";
+        FILE* goblinPng = std::fopen(goblinPngPath, "rb");
+        Check(goblinPng != nullptr,
+                "goblin Aseprite relative image resolves to checked-in assets/sprites/goblin.png");
+        if (goblinPng != nullptr) {
+            std::fclose(goblinPng);
+        }
+    }
+}
+
+void TestSectorRuntimeObjectDefinitionLookupFailsSafely()
+{
+    Check(game::FindSectorRuntimeObjectDefinition("") == nullptr,
+            "runtime object definition lookup rejects empty id");
+    Check(game::FindSectorRuntimeObjectDefinition("missing_definition") == nullptr,
+            "runtime object definition lookup returns null for missing id");
+}
+
+void TestSectorRuntimeObjectDefinitionStoresClipNamesAsStrings()
+{
+    const game::SectorRuntimeObjectDefinition* definition =
+            game::FindSectorRuntimeObjectDefinition("goblin");
+    Check(definition != nullptr, "clip-name test fixture resolves goblin definition");
+    if (definition == nullptr) {
+        return;
+    }
+
+    Check(definition->billboard.frontClipName == std::string("Front"),
+            "runtime object definition stores Front clip name as string");
+    Check(definition->billboard.backClipName == std::string("Back"),
+            "runtime object definition stores Back clip name as string");
+    Check(definition->billboard.leftClipName == std::string("Left"),
+            "runtime object definition stores Left clip name as string");
+    Check(definition->billboard.rightClipName == std::string("Right"),
+            "runtime object definition stores Right clip name as string");
 }
 
 void TestSectorBillboardAnimatorAdvances()
@@ -432,6 +759,23 @@ void TestSectorBillboardDirectionalClipsFallback()
     Check(clips.right == 2, "billboard directional clip fallback keeps Right clip index");
 }
 
+void TestSectorBillboardDirectionalClipsMissingWithoutFallback()
+{
+    const engine::SpriteAnimationAsset asset = MakeDirectionalClipAsset(false, false);
+
+    game::SectorBillboardDirectionalClips clips;
+    const bool resolved = game::ResolveSectorBillboardDirectionalClipsFromAsset(
+            asset,
+            game::SectorBillboardDirectionalClipNames{},
+            clips);
+
+    Check(!resolved, "billboard directional clip resolver reports missing clips without fallback");
+    Check(!clips.resolved && !clips.usedFallback,
+            "billboard directional clip resolver leaves unresolved state when required clip is missing");
+    Check(clips.left == engine::InvalidSpriteClipIndex,
+            "billboard directional clip resolver leaves missing direction invalid without fallback");
+}
+
 void TestSectorBillboardDirectionalClipsRejectUnavailableAsset()
 {
     engine::AssetManager assets;
@@ -454,6 +798,11 @@ void TestSectorBillboardDirectionalClipsRejectUnavailableAsset()
             "billboard directional clip resolver clears indices when asset is unavailable");
     Check(!clips.resolved && !clips.usedFallback,
             "billboard directional clip resolver clears state when asset is unavailable");
+    Check(clips.frontName == "Front"
+                  && clips.backName == "Back"
+                  && clips.leftName == "Left"
+                  && clips.rightName == "Right",
+            "billboard directional clip resolver preserves stored names when asset is unavailable");
 }
 
 game::SectorBillboardDirectionalClips MakeResolvedDirectionalClips()
@@ -601,10 +950,19 @@ int main()
     TestSectorBillboardFrameUvsPreserveFlippedSourceSigns();
     TestSectorBillboardQuadWorldPositions();
     TestClearSectorRuntimeObjectsOnlyDestroysSectorObjects();
+    TestSpawnPlacedRuntimeObjectCreatesBillboardEntity();
+    TestSpawnPlacedRuntimeObjectSkipsMissingDefinition();
+    TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate();
+    TestPreviewRuntimeObjectRefreshKeepsAssetScope();
+    TestResetSectorRuntimeObjectsForMapReloadsWithoutDuplicates();
     TestSectorBillboardSpriteAnimationRequestRejectsMissingInput();
+    TestSectorRuntimeObjectGoblinDefinitionExists();
+    TestSectorRuntimeObjectDefinitionLookupFailsSafely();
+    TestSectorRuntimeObjectDefinitionStoresClipNamesAsStrings();
     TestSectorBillboardAnimatorAdvances();
     TestSectorBillboardDirectionalClipsResolve();
     TestSectorBillboardDirectionalClipsFallback();
+    TestSectorBillboardDirectionalClipsMissingWithoutFallback();
     TestSectorBillboardDirectionalClipsRejectUnavailableAsset();
     TestSectorBillboardDirectionalClipSelection();
     TestSectorBillboardDirectionalClipSelectionWraparound();

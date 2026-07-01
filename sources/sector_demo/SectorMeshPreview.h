@@ -103,6 +103,7 @@ private:
     std::string portalVisibilityDebugText;
     std::string visibilityDebugText;
     std::string renderDebugText;
+    std::string billboardRenderDebugText;
     SectorCollisionWorld visibilityLookupWorld;
     bool visibilityGraphValid = false;
     bool visibilityLookupWorldValid = false;
@@ -190,6 +191,9 @@ private:
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
     bool billboardRenderWarningPrinted = false;
+    size_t billboardConsideredCount = 0;
+    size_t billboardDrawnCount = 0;
+    size_t billboardSkippedCount = 0;
     Material bloomSourceMaterial = {};
     Texture2D bloomDefaultMaterialTexture = {};
     bool bloomSourceMaterialLoaded = false;

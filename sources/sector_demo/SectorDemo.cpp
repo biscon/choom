@@ -21,10 +21,10 @@ bool SectorDemo::Init(engine::EngineContext& context, const char* mapPath)
         return false;
     }
 
-    EnsureSectorRuntimeObjectWorldReserved(context.world, runtimeObjects);
-    RefreshSectorRuntimeObjectMapData(runtimeObjects, topologyMap);
+    ResetSectorRuntimeObjectsForMap(context.world, assets, runtimeObjects, topologyMap);
 
     if (!preview.RebuildRendererResources(assets, topologyMap, "sector_demo", error)) {
+        ClearSectorRuntimeObjects(context.world, assets, runtimeObjects);
         std::fprintf(stderr, "[SectorDemo ERROR] %s\n", error.c_str());
         return false;
     }
@@ -44,8 +44,7 @@ void SectorDemo::Shutdown(engine::EngineContext& context)
     engine::AssetManager& assets = context.assets;
     if (initialized
             || runtimeObjects.worldReserved
-            || !engine::IsNull(runtimeObjects.runtimeObjectAssetScope)
-            || !engine::IsNull(runtimeObjects.temporaryGoblinDebugSpawnEntity)) {
+            || !engine::IsNull(runtimeObjects.runtimeObjectAssetScope)) {
         ClearSectorRuntimeObjects(context.world, assets, runtimeObjects);
     }
     preview.ShutdownRendererResources(assets);

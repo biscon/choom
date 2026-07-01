@@ -384,6 +384,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::AuthoringRectangle: return "Rectangle";
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex";
         case SectorEditorTool::AuthoringMove: return "Move Vertex";
+        case SectorEditorTool::RuntimeObject: return "Object";
         case SectorEditorTool::StaticLight: return "Static Light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot";
         case SectorEditorTool::DynamicLight: return "Dynamic Light";
@@ -731,6 +732,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::AuthoringRectangle: return "Rectangle: click first corner, then opposite corner, right click/Esc cancels";
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex: click an authoring line to split it, right click/Esc cancels";
         case SectorEditorTool::AuthoringMove: return "Move Vertex: drag authoring vertices";
+        case SectorEditorTool::RuntimeObject: return "Object: click inside a sector to place a goblin runtime object";
         case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place, or drag an existing baked point light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place, or drag an existing baked spot origin/target";
         case SectorEditorTool::DynamicLight: return "Dynamic Light: click inside a sector to place, or drag an existing runtime point light";

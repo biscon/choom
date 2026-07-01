@@ -18,6 +18,8 @@ namespace {
 
 using Json = nlohmann::ordered_json;
 
+constexpr float Pi = 3.14159265358979323846f;
+
 [[noreturn]] void Fail(const std::string& message)
 {
     throw std::runtime_error(message);
@@ -229,6 +231,36 @@ Vector3 ReadVector3(const Json& value, const std::string& context)
         Fail(context + " values must be finite floats");
     }
     return Vector3{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)};
+}
+
+float DegreesToRadians(float degrees)
+{
+    return degrees * Pi / 180.0f;
+}
+
+float RadiansToDegrees(float radians)
+{
+    return radians * 180.0f / Pi;
+}
+
+SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorPlacedRuntimeObject object;
+    object.id = ReadInt(value, "id", context);
+    if (!IsValidSectorTopologyId(object.id)) {
+        Fail(context + ".id must be a positive integer");
+    }
+    object.definitionId = ReadString(value, "definitionId", context);
+    if (object.definitionId.empty()) {
+        Fail(context + ".definitionId must not be empty");
+    }
+    object.position = ReadVector3(RequireField(value, "position", context), context + ".position");
+    object.yawRadians = DegreesToRadians(ReadFloat(value, "yawDegrees", context));
+    return object;
 }
 
 Vector3 ReadUnitVector3(const Json& value, const std::string& context)
@@ -717,6 +749,27 @@ Json WriteVector3(Vector3 value, const std::string& context)
     return Json::array({value.x, value.y, value.z});
 }
 
+void RequireFinite(float value, const std::string& context);
+
+Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::string& context)
+{
+    if (!IsValidSectorTopologyId(object.id)) {
+        Fail(context + ".id must be a positive integer");
+    }
+    if (object.definitionId.empty()) {
+        Fail(context + ".definitionId must not be empty");
+    }
+    RequireFinite(object.yawRadians, context + ".yawRadians");
+    const float yawDegrees = RadiansToDegrees(object.yawRadians);
+    RequireFinite(yawDegrees, context + ".yawDegrees");
+    return Json{
+            {"id", object.id},
+            {"definitionId", object.definitionId},
+            {"position", WriteVector3(object.position, context + ".position")},
+            {"yawDegrees", yawDegrees}
+    };
+}
+
 Json WriteUv(const SectorTopologyUvSettings& uv, const std::string& context)
 {
     return Json{
@@ -1097,6 +1150,33 @@ void ValidateAuthoringMapData(const SectorTopologyMap& map)
     }
 }
 
+void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& context)
+{
+    std::vector<int> objectIds;
+    objectIds.reserve(map.runtimeObjects.size());
+    for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
+        const std::string objectContext = context + ".runtimeObjects[" + std::to_string(object.id) + "]";
+        if (!IsValidSectorTopologyId(object.id)) {
+            Fail(objectContext + ".id must be a positive integer");
+        }
+        if (object.definitionId.empty()) {
+            Fail(objectContext + ".definitionId must not be empty");
+        }
+        if (!std::isfinite(object.position.x)
+                || !std::isfinite(object.position.y)
+                || !std::isfinite(object.position.z)) {
+            Fail(objectContext + ".position values must be finite floats");
+        }
+        if (!std::isfinite(object.yawRadians)) {
+            Fail(objectContext + ".yawRadians must be finite");
+        }
+        if (std::find(objectIds.begin(), objectIds.end(), object.id) != objectIds.end()) {
+            Fail(objectContext + ".id duplicates another runtime object ID");
+        }
+        objectIds.push_back(object.id);
+    }
+}
+
 void ReadTextures(const Json& root, SectorTopologyMap& map)
 {
     const Json& textures = RequireObjectField(root, "textures", "root");
@@ -1121,6 +1201,18 @@ void ReadTextures(const Json& root, SectorTopologyMap& map)
 
 void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBakedLightmap)
 {
+    const auto runtimeObjectsIt = root.find("runtimeObjects");
+    if (runtimeObjectsIt != root.end()) {
+        if (!runtimeObjectsIt->is_array()) {
+            Fail("root.runtimeObjects must be an array");
+        }
+        const Json& runtimeObjects = *runtimeObjectsIt;
+        for (size_t i = 0; i < runtimeObjects.size(); ++i) {
+            const std::string context = "root.runtimeObjects[" + std::to_string(i) + "]";
+            map.runtimeObjects.push_back(ReadRuntimeObject(runtimeObjects[i], context));
+        }
+    }
+
     const auto staticLightsIt = root.find("staticLights");
     if (staticLightsIt != root.end()) {
         if (!staticLightsIt->is_array()) {
@@ -1336,6 +1428,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
     map.previewSettings = NormalizeSectorPreviewSettings(map.previewSettings);
     map.skySettings = NormalizeSectorTopologySkySettings(map.skySettings);
     map.directionalLight = NormalizeSectorTopologyDirectionalLightSettings(map.directionalLight);
+    ValidateRuntimeObjects(map, "root");
 }
 
 SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
@@ -1443,6 +1536,7 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
     document.derivation.topology.staticSpotLights = document.mapData.staticSpotLights;
     document.derivation.topology.dynamicPointLights = document.mapData.dynamicPointLights;
     document.derivation.topology.dynamicSpotLights = document.mapData.dynamicSpotLights;
+    document.derivation.topology.runtimeObjects = document.mapData.runtimeObjects;
     document.derivation.topology.previewSettings = document.mapData.previewSettings;
     document.derivation.topology.skySettings = document.mapData.skySettings;
     document.derivation.topology.directionalLight = document.mapData.directionalLight;
@@ -1500,6 +1594,16 @@ void WriteTextureFields(Json& root, const SectorTopologyMap& map)
 
 void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeBakedLightmap)
 {
+    ValidateRuntimeObjects(map, "root");
+
+    if (!map.runtimeObjects.empty()) {
+        root["runtimeObjects"] = Json::array();
+        for (const SectorPlacedRuntimeObject* object : SortedById(map.runtimeObjects)) {
+            const std::string context = "runtime object " + std::to_string(object->id);
+            root["runtimeObjects"].push_back(WriteRuntimeObject(*object, context));
+        }
+    }
+
     root["staticLights"] = Json::array();
     for (const SectorTopologyStaticPointLight* light : SortedById(map.staticLights)) {
         const std::string context = "static light " + std::to_string(light->id);
@@ -1781,6 +1885,7 @@ SectorTopologyMap ParseMap(const Json& root)
 Json SerializeMap(const SectorTopologyMap& map)
 {
     ValidateForSerialization(map);
+    ValidateRuntimeObjects(map, "root");
 
     Json root;
     root["formatVersion"] = 2;
@@ -1885,6 +1990,14 @@ Json SerializeMap(const SectorTopologyMap& map)
             sectorJson["ceilingSky"] = true;
         }
         root["sectors"].push_back(std::move(sectorJson));
+    }
+
+    if (!map.runtimeObjects.empty()) {
+        root["runtimeObjects"] = Json::array();
+        for (const SectorPlacedRuntimeObject* object : SortedById(map.runtimeObjects)) {
+            const std::string context = "runtime object " + std::to_string(object->id);
+            root["runtimeObjects"].push_back(WriteRuntimeObject(*object, context));
+        }
     }
 
     root["staticLights"] = Json::array();

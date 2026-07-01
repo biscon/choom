@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <string>
+#include <vector>
 
 namespace game {
 
@@ -20,9 +21,26 @@ struct SectorTopologyMap;
 constexpr size_t kSectorRuntimeObjectInitialCapacity = 128;
 constexpr float kSectorBillboardDefaultAlphaCutoff = 0.5f;
 
+struct SectorPlacedRuntimeObjectEntity {
+    int placedObjectId = 0;
+    engine::Entity entity = engine::NullEntity();
+};
+
 struct SectorRuntimeObjectState {
-    engine::Entity temporaryGoblinDebugSpawnEntity = engine::NullEntity();
     engine::AssetScopeHandle runtimeObjectAssetScope = engine::NullAssetScopeHandle();
+    std::vector<SectorPlacedRuntimeObjectEntity> placedObjectEntities;
+    size_t placedObjectCount = 0;
+    size_t spawnedObjectCount = 0;
+    size_t skippedObjectCount = 0;
+    size_t spriteAnimationRequestedCount = 0;
+    size_t spriteAnimationReadyCount = 0;
+    size_t spriteAnimationPendingCount = 0;
+    size_t spriteAnimationFailedCount = 0;
+    size_t directionalClipResolvedCount = 0;
+    size_t directionalClipMissingCount = 0;
+    size_t directionalClipFallbackCount = 0;
+    std::string placedObjectStatus;
+    std::string placedObjectWarning;
     SectorBakedObjectLightProbeRuntimeData objectLightProbes;
     std::string objectProbeStatus;
     SectorCollisionWorld objectSectorLookupWorld;
@@ -73,7 +91,27 @@ struct SectorBillboardDirectionalClipNames {
     const char* right = "Right";
 };
 
+struct SectorRuntimeObjectBillboardDefinition {
+    std::string spriteAnimationAssetPath;
+    Vector2 sizeWorld = {1.0f, 1.0f};
+    Vector2 originNormalized = {0.5f, 1.0f};
+    std::string frontClipName = "Front";
+    std::string backClipName = "Back";
+    std::string leftClipName = "Left";
+    std::string rightClipName = "Right";
+};
+
+struct SectorRuntimeObjectDefinition {
+    std::string id;
+    std::string kind;
+    SectorRuntimeObjectBillboardDefinition billboard;
+};
+
 struct SectorBillboardDirectionalClips {
+    std::string frontName = "Front";
+    std::string backName = "Back";
+    std::string leftName = "Left";
+    std::string rightName = "Right";
     uint32_t front = engine::InvalidSpriteClipIndex;
     uint32_t back = engine::InvalidSpriteClipIndex;
     uint32_t left = engine::InvalidSpriteClipIndex;
@@ -158,6 +196,18 @@ void RefreshSectorRuntimeObjectMapData(
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map);
 
+void ResetSectorRuntimeObjectsForMap(
+        engine::World& world,
+        engine::AssetManager& assets,
+        SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map);
+
+void SpawnPlacedRuntimeObjects(
+        engine::World& world,
+        engine::AssetManager& assets,
+        SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map);
+
 void UpdateSectorRuntimeObjects(
         engine::World& world,
         engine::AssetManager& assets,
@@ -165,16 +215,9 @@ void UpdateSectorRuntimeObjects(
         const SectorTopologyMap& map,
         float dt);
 
-bool ToggleTemporaryGoblinDebugSpawn(
-        engine::World& world,
-        engine::AssetManager& assets,
-        SectorRuntimeObjectState& state,
-        const Camera3D& camera,
-        const SectorTopologyMap& map);
+const std::vector<SectorRuntimeObjectDefinition>& GetSectorRuntimeObjectDefinitions();
 
-bool HasTemporaryGoblinDebugSpawn(
-        const engine::World& world,
-        const SectorRuntimeObjectState& state);
+const SectorRuntimeObjectDefinition* FindSectorRuntimeObjectDefinition(const std::string& definitionId);
 
 bool ResolveSectorBillboardDirectionalClipsFromAsset(
         const engine::SpriteAnimationAsset& asset,

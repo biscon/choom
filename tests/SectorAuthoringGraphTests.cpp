@@ -6675,6 +6675,12 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "rectangle remains available in graph-authoritative mode");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::AuthoringMove),
           "authoring move remains available in graph-authoritative mode");
+    Check(TextContains(game::ToolName(game::SectorEditorTool::RuntimeObject), "Object"),
+          "runtime object tool label is exposed as a map object tool");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::RuntimeObject), "goblin"),
+          "runtime object tool help describes the v1 goblin placement target");
+    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::RuntimeObject),
+          "runtime object placement remains available in graph-authoritative mode");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::StaticLight),
           "static light placement remains available in graph-authoritative mode");
     Check(TextContains(game::ToolHelpText(game::SectorEditorTool::StaticLight), "drag"),
@@ -7018,6 +7024,11 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     state.topologyMap.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
     state.topologyMap.directionalLight.intensity = 1.5f;
     state.topologyMap.lightmapSettings.ambientOcclusionStrength = 0.25f;
+    state.topologyMap.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+            44,
+            "goblin",
+            Vector3{12.0f, 0.0f, 20.0f},
+            1.57079632679f});
     const std::filesystem::path lightmapPath =
             TempJsonPath("sector_editor_map_level_graph_native.lightmap.png");
     WriteTextFile(lightmapPath, "fake-lightmap");
@@ -7043,6 +7054,9 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
           "editor graph-native save persists lightmap settings");
     Check(saved["bakedLightmap"]["path"] == lightmapPath.string(),
           "editor graph-native save persists baked lightmap path");
+    Check(saved["runtimeObjects"][0]["id"] == 44
+                  && saved["runtimeObjects"][0]["definitionId"] == "goblin",
+          "editor graph-native save persists runtime objects");
     Check(saved["bakedLightmap"]["width"] == 2048
                   && saved["bakedLightmap"]["height"] == 2048,
           "editor graph-native save persists baked lightmap dimensions");
@@ -7067,7 +7081,9 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && loaded.mapData.bakedLightmap.path == lightmapPath.string()
                   && loaded.mapData.bakedLightmap.width == 2048
                   && loaded.mapData.bakedLightmap.height == 2048
-                  && loaded.mapData.bakedLightmap.sourceHash == state.topologyMap.bakedLightmap.sourceHash,
+                  && loaded.mapData.bakedLightmap.sourceHash == state.topologyMap.bakedLightmap.sourceHash
+                  && loaded.mapData.runtimeObjects.size() == 1
+                  && loaded.mapData.runtimeObjects[0].id == 44,
           "editor graph-native load preserves map-level fields");
     bool current = false;
     const game::SectorEditorState loadedState =
@@ -7076,7 +7092,9 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && loadedState.topologyMap.texturesById.count("sky") == 1
                   && loadedState.topologyMap.staticLights.size() == 1
                   && loadedState.topologyMap.skySettings.textureId == "sky"
-                  && loadedState.topologyMap.bakedLightmap.path == lightmapPath.string(),
+                  && loadedState.topologyMap.bakedLightmap.path == lightmapPath.string()
+                  && loadedState.topologyMap.runtimeObjects.size() == 1
+                  && loadedState.topologyMap.runtimeObjects[0].id == 44,
           "editor graph-native derivation receives map-level fields after load");
     Check(game::GetSectorLightmapStatus(loadedState.topologyMap) == game::SectorLightmapStatus::Valid,
           "editor graph-native reload reports matching baked lightmap metadata as valid");
@@ -7099,6 +7117,8 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && resaved["bakedLightmap"]["height"] == saved["bakedLightmap"]["height"]
                   && resaved["bakedLightmap"]["sourceHash"] == saved["bakedLightmap"]["sourceHash"],
           "editor graph-native save/load/save preserves baked lightmap metadata");
+    Check(resaved["runtimeObjects"] == saved["runtimeObjects"],
+          "editor graph-native save/load/save preserves runtime objects");
 
     game::SectorEditorState probeState = loadedState;
     const std::filesystem::path probePath =
@@ -7164,6 +7184,35 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     std::filesystem::remove(path, removeError);
     std::filesystem::remove(lightmapPath, removeError);
     std::filesystem::remove(probeDocumentPath, removeError);
+}
+
+void TestEditorGraphNativeShadowMapRuntimeObjectsSurviveLoadDerivation()
+{
+    game::SectorEditorLoadedDocument loaded;
+    std::string error;
+    Check(game::LoadSectorEditorDocumentFromAsset(
+                  "assets/levels/shadow_map_test1/shadow_map_test1.json",
+                  loaded,
+                  error),
+          "shadow_map_test1 graph-native document loads");
+    Check(loaded.format == game::SectorEditorDocumentFormat::AuthoringGraph,
+          "shadow_map_test1 uses graph-native load path");
+    Check(loaded.mapData.runtimeObjects.size() == 7,
+          "shadow_map_test1 loaded map data includes saved runtime objects");
+
+    bool current = false;
+    const game::SectorEditorState loadedState =
+            MakeEditorStateFromLoadedDocument(loaded, &current);
+    Check(current, "shadow_map_test1 rederives as current after editor load");
+    Check(loadedState.topologyMap.runtimeObjects.size() == loaded.mapData.runtimeObjects.size(),
+          "shadow_map_test1 runtime objects survive editor authoring rederivation");
+    if (!loadedState.topologyMap.runtimeObjects.empty()) {
+        const game::SectorPlacedRuntimeObject& object = loadedState.topologyMap.runtimeObjects.front();
+        Check(object.id == 1
+                      && object.definitionId == "goblin"
+                      && Near(object.position, Vector3{64.0f, 0.0f, 108.0f}),
+              "shadow_map_test1 first placed goblin survives load with stable authored data");
+    }
 }
 
 } // namespace
@@ -7346,6 +7395,7 @@ int main()
     TestEditorGraphNativeNestedRoundTripPreservesAnchorsMaterialsAndSelection();
     TestEditorGraphNativeSiblingHolesRoundTripPreservesSelection();
     TestEditorGraphNativeMapLevelDataRoundTrip();
+    TestEditorGraphNativeShadowMapRuntimeObjectsSurviveLoadDerivation();
 
     if (failures != 0) {
         std::cerr << failures << " authoring graph test(s) failed\n";

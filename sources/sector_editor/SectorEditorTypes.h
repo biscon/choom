@@ -34,6 +34,7 @@ enum class SectorEditorTool {
     AuthoringRectangle,
     AuthoringInsertVertex,
     AuthoringMove,
+    RuntimeObject,
     StaticLight,
     StaticSpotLight,
     DynamicLight,
@@ -341,6 +342,13 @@ struct LightDragState {
     Vector3 snappedPosition = {};
 };
 
+struct RuntimeObjectDragState {
+    bool active = false;
+    int objectId = -1;
+    Vector3 originalPosition = {};
+    Vector3 snappedPosition = {};
+};
+
 struct SpotLightPilotState {
     bool active = false;
     SpotLightPilotKind kind = SpotLightPilotKind::None;
@@ -403,6 +411,14 @@ struct CachedTopologySpotLightDraw {
     float outerConeDegrees = 0.0f;
 };
 
+struct CachedRuntimeObjectDraw {
+    int objectId = -1;
+    std::string definitionId;
+    Vector2 map = {};
+    float yawRadians = 0.0f;
+    bool definitionKnown = false;
+};
+
 struct CachedAuthoringVertexDraw {
     int vertexId = -1;
     SectorTopologyCoordPoint point = {};
@@ -447,6 +463,7 @@ struct SectorEditorTopologyRenderCache {
     std::vector<CachedTopologySpotLightDraw> staticSpotLights;
     std::vector<CachedTopologyLightDraw> dynamicLights;
     std::vector<CachedTopologySpotLightDraw> dynamicSpotLights;
+    std::vector<CachedRuntimeObjectDraw> runtimeObjects;
     std::vector<CachedAuthoringLineDraw> authoringLines;
     std::vector<CachedAuthoringVertexDraw> authoringVertices;
     std::vector<CachedAuthoringFaceHighlightDraw> authoringFaceHighlights;
@@ -488,6 +505,7 @@ struct SectorEditorState {
     int selectedTopologyStaticSpotLightId = -1;
     int selectedTopologyDynamicLightId = -1;
     int selectedTopologyDynamicSpotLightId = -1;
+    int selectedRuntimeObjectId = -1;
     int hoveredTopologyLightId = -1;
     int hoveredTopologyStaticSpotLightId = -1;
     int hoveredTopologyDynamicLightId = -1;
@@ -507,6 +525,7 @@ struct SectorEditorState {
     PendingAuthoringInsertVertex pendingAuthoringInsertVertex;
     AuthoringVertexDragState authoringVertexDrag;
     LightDragState lightDrag;
+    RuntimeObjectDragState runtimeObjectDrag;
     float defaultSectorFloorZ = 0.0f;
     float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);
     std::string defaultFloorTextureId;
@@ -592,6 +611,10 @@ struct SectorEditorUiState {
     engine::UIIntInputState lightRedInput;
     engine::UIIntInputState lightGreenInput;
     engine::UIIntInputState lightBlueInput;
+    engine::UIFloatInputState runtimeObjectXInput;
+    engine::UIFloatInputState runtimeObjectYInput;
+    engine::UIFloatInputState runtimeObjectZInput;
+    engine::UIFloatInputState runtimeObjectYawInput;
     engine::UIFloatInputState surface3DUvScaleUInput;
     engine::UIFloatInputState surface3DUvScaleVInput;
     engine::UIFloatInputState surface3DUvOffsetUInput;

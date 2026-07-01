@@ -35,94 +35,94 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_01",
       "title": "Placed Runtime Object Data And Serialization",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01a",
       "title": "Add Placed Runtime Object Data Model And JSON Round Trip",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01b",
       "title": "Add Object Definition Data And Goblin Definition",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02",
       "title": "Spawn Placed Objects Into ECS Runtime",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02a",
       "title": "Instantiate Placed Billboard Objects Into EngineContext World",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02b",
       "title": "Replace Temporary Goblin Spawn With Placed Object Spawn Path",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03",
       "title": "Editor Placement Selection And Inspector",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03a",
       "title": "Add Object Placement Tool And 2D Overlay",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03b",
       "title": "Add Object Selection Move Delete And Inspector",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04",
       "title": "Preview Lifecycle And Runtime Reset Polish",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04a",
       "title": "Make Placed Object Runtime Lifecycle Explicit",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04b",
       "title": "Add Runtime Object Debug Status And Spawn Diagnostics",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05",
       "title": "Tests Documentation And Completion",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05a",
       "title": "Strengthen Tests Update Docs And Close Plan",
       "type": "pass",
       "parent": "phase_05",
-      "status": "Not Started"
+      "status": "Completed"
     }
   ]
 }
@@ -132,20 +132,20 @@ When an agent is asked to execute this plan, it must:
 
 | Phase / Pass                                                            | Status      | Date | Notes                                                             |
 | ----------------------------------------------------------------------- | ----------- | ---- | ----------------------------------------------------------------- |
-| Phase 1: Placed Runtime Object Data And Serialization                   | Not Started |      | Parent phase.                                                     |
-| Phase 1A: Add Placed Runtime Object Data Model And JSON Round Trip      | Not Started |      | First executable pass. Persistent placed object data only.        |
-| Phase 1B: Add Object Definition Data And Goblin Definition              | Not Started |      | Adds definition metadata for the current goblin billboard object. |
-| Phase 2: Spawn Placed Objects Into ECS Runtime                          | Not Started |      | Parent phase.                                                     |
-| Phase 2A: Instantiate Placed Billboard Objects Into EngineContext World | Not Started |      | Converts saved placed object data into ECS entities.              |
-| Phase 2B: Replace Temporary Goblin Spawn With Placed Object Spawn Path  | Not Started |      | Demotes or removes F5 temporary spawn path.                       |
-| Phase 3: Editor Placement Selection And Inspector                       | Not Started |      | Parent phase.                                                     |
-| Phase 3A: Add Object Placement Tool And 2D Overlay                      | Not Started |      | Place persistent runtime objects in the 2D editor.                |
-| Phase 3B: Add Object Selection Move Delete And Inspector                | Not Started |      | Basic editing for definition, position, yaw, and delete.          |
-| Phase 4: Preview Lifecycle And Runtime Reset Polish                     | Not Started |      | Parent phase.                                                     |
-| Phase 4A: Make Placed Object Runtime Lifecycle Explicit                 | Not Started |      | New/load/reload/preview rebuild reset rules.                      |
-| Phase 4B: Add Runtime Object Debug Status And Spawn Diagnostics         | Not Started |      | Debug counts/status for placed/spawned objects.                   |
-| Phase 5: Tests Documentation And Completion                             | Not Started |      | Parent phase.                                                     |
-| Phase 5A: Strengthen Tests Update Docs And Close Plan                   | Not Started |      | Final docs/tests/cleanup.                                         |
+| Phase 1: Placed Runtime Object Data And Serialization                   | Completed   | 2026-07-01 | Phase 1A and Phase 1B complete.                                   |
+| Phase 1A: Add Placed Runtime Object Data Model And JSON Round Trip      | Completed   | 2026-07-01 | Added `SectorPlacedRuntimeObject`, optional `runtimeObjects` JSON, topology-v2 and graph-native round-trip tests. Verification: `cmake --build cmake-build-debug -j2`, `ctest --test-dir cmake-build-debug --output-on-failure`. Behavior notes: missing `runtimeObjects` loads empty; empty lists are omitted on save; invalid IDs, duplicate IDs, empty `definitionId`, non-finite position, and non-finite yaw are rejected; renderer/ECS/editor behavior unchanged. |
+| Phase 1B: Add Object Definition Data And Goblin Definition              | Completed   | 2026-07-01 | Added minimal `SectorRuntimeObjectDefinition` / billboard definition metadata and a built-in `goblin` definition for `assets/sprites/goblin.json`. Tests cover definition lookup, missing lookup, string clip names, and asset path existence. Verification: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_runtime_object|sector_topology_serialization"`; `git diff --check`; `git diff --stat`; `git status --short`. Behavior notes: data-only registry; no serialization, renderer, ECS spawn, asset request, editor, topology cache, lightmap source-hash, collision, sector lookup, or physics behavior changed. |
+| Phase 2: Spawn Placed Objects Into ECS Runtime                          | Completed   | 2026-07-01 | Phase 2A and Phase 2B complete.                                   |
+| Phase 2A: Instantiate Placed Billboard Objects Into EngineContext World | Completed   | 2026-07-01 | Added `SpawnPlacedRuntimeObjects()` for explicit demo/editor preview setup, placed-ID to ECS entity mapping, billboard definition lookup, runtime asset-scope sprite animation requests, missing-definition skip warnings, and idempotent refresh without unloading the runtime object asset scope. Tests cover placed goblin spawn, missing definition skip, repeated refresh without duplicates, and explicit reset cleanup. Verification: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object`; `ctest --test-dir cmake-build-debug --output-on-failure`. Behavior notes: ECS runtime ownership now includes placed object entities in `EngineContext::world`; asset requests happen during explicit spawn/setup, not render/update; editor preview setup/rebuild now spawns placed objects; preview renderer rebuilds do not unload the runtime object asset scope; temporary F5 goblin path remains unchanged for Phase 2B; topology serialization, topology cache invalidation, lightmap source hash, collision, sector lookup logic, physics, and camera behavior unchanged; no manual GUI verification performed. |
+| Phase 2B: Replace Temporary Goblin Spawn With Placed Object Spawn Path  | Completed   | 2026-07-01 | Removed the F5 temporary goblin construction path, runtime state handle, editor shortcut/status text, and cleanup test expectation. Persistent placed objects now remain the only runtime object spawn path. Verification: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object`; `git diff --check`; `git diff --stat`; `git status --short`. Behavior notes: source code changed; ECS runtime ownership remains through `EngineContext::world`; asset requests remain in explicit placed-object spawn/setup; no separate debug goblin asset key/path remains; preview lifecycle still spawns placed objects on 3D entry/rebuild without unloading the runtime object asset scope; topology serialization, topology cache invalidation, lightmap source hash, collision, sector lookup logic, physics, and camera behavior unchanged; no manual GUI verification performed. |
+| Phase 3: Editor Placement Selection And Inspector                       | Completed   | 2026-07-01 | Phase 3A and Phase 3B complete.                                   |
+| Phase 3A: Add Object Placement Tool And 2D Overlay                      | Completed   | 2026-07-01 | Added an `Object` map-object tool that places the v1 `goblin` definition at snapped X/Z inside a sector, using the containing sector `floorZ` for Y and yaw `0`; placement allocates a stable placed-object ID, marks the topology document dirty, invalidates the 2D topology render cache, selects/highlights the newly placed object marker, and respawns placed runtime objects through the existing ECS path when an engine context is available. Added cached 2D runtime-object markers with yaw ticks and warning styling for non-v1 definition IDs. Verification: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_authoring_graph|sector_topology_serialization"`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`. Behavior notes: source code changed; editor behavior now supports placement and overlay only; click-select/move/delete/inspector fields remain deferred to Phase 3B; placement is saved through existing `runtimeObjects` serialization; topology cache invalidation uses `MarkTopologyDocumentEdited()`; runtime object asset requests remain in explicit spawn/refresh, not render/update; topology schema, graph-native save/load format beyond existing `runtimeObjects`, lightmap source hash, collision, sector lookup logic, physics, and camera behavior unchanged; no manual GUI verification performed. |
+| Phase 3B: Add Object Selection Move Delete And Inspector                | Completed   | 2026-07-01 | Added click selection for runtime object markers, 2D object dragging that preserves Y and yaw, Delete-key/delete-button removal with existing UI focus handling, and a basic inspector showing Object ID, Definition ID, fixed v1 goblin selector, Position X/Y/Z, Yaw in degrees, and Delete. Verification: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_authoring_graph|sector_topology_serialization"`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`. Behavior notes: source code changed; object edits mutate authored `runtimeObjects`, mark the topology document dirty, invalidate the 2D topology render cache through `MarkTopologyDocumentEdited()`, and respawn placed runtime objects through the existing ECS path when an engine context is available; save/reload uses existing runtime-object serialization; topology schema, graph-native save/load format beyond existing `runtimeObjects`, lightmap source hash, collision, sector lookup logic, physics, and camera behavior unchanged; no manual GUI verification performed. |
+| Phase 4: Preview Lifecycle And Runtime Reset Polish                     | Completed   | 2026-07-01 | Phase 4A and Phase 4B complete.                                   |
+| Phase 4A: Make Placed Object Runtime Lifecycle Explicit                 | Completed   | 2026-07-01 | Added `ResetSectorRuntimeObjectsForMap()` as the explicit map load/reload lifecycle helper, used it from demo init and editor level load, and kept preview enter/rebuild on refresh/spawn without unloading the runtime object asset scope. Demo init now clears spawned runtime objects if preview renderer setup fails. Tests cover preview refresh without duplicates or asset-scope churn, explicit map reset/reload without duplicates, clearing only `SectorObject` entities, and latest map data spawning after reset. Verification: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`. Behavior notes: source code changed; new/load/reload runtime reset now clears `SectorObject` entities and unloads the runtime object asset scope before spawning current placements; preview resource rebuild does not clear `context.world`, does not duplicate placed objects, and keeps the runtime object asset scope; authored object serialization/save data, topology cache invalidation, lightmap source hash, collision, sector lookup logic, physics, and camera behavior unchanged; no manual GUI verification performed. |
+| Phase 4B: Add Runtime Object Debug Status And Spawn Diagnostics         | Completed   | 2026-07-01 | Added runtime object debug counts for placed/spawned/skipped objects, retained first spawn warning text for missing definitions/unsupported kinds/asset-scope failures, and surfaced status/warnings in the 3D preview status panel. Tests cover successful placed-object counts/status and missing-definition warning diagnostics. Verification: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`. Behavior notes: source code changed; editor debug/status display changed; ECS runtime ownership, asset loading lifecycle, authored object serialization/save data, topology cache invalidation, lightmap source hash, collision, sector lookup logic, physics, and camera behavior unchanged; no manual GUI verification performed. |
+| Phase 5: Tests Documentation And Completion                             | Completed   | 2026-07-01 | Phase 5A complete; persistent runtime object authoring v1 is closed. |
+| Phase 5A: Strengthen Tests Update Docs And Close Plan                   | Completed   | 2026-07-01 | Added placed runtime object edit/delete helper coverage and updated `docs/sector_editor.md` to document persistent Object-tool authoring, object definitions vs placed objects vs runtime ECS entities, the `EngineContext::world` ownership boundary, Aseprite cutout billboard lighting behavior, removed F5 temporary spawn status, and deferred NPC/collision/doors/model work. Verification: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_runtime_object|sector_topology_serialization|sector_authoring_graph"`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`. Behavior notes: source code changed only in tests; docs and active plan updated; runtime/editor behavior unchanged; topology serialization schema and graph-native save/load behavior unchanged beyond existing `runtimeObjects`; topology cache invalidation behavior unchanged and remains through `MarkTopologyDocumentEdited()` for object edits; lightmap source hash, ECS runtime ownership, asset loading lifecycle, preview lifecycle, collision, sector lookup logic, physics, and camera behavior unchanged; no manual GUI verification performed. |
 
 ## Execution Tracking Rules
 

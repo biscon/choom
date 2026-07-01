@@ -23,6 +23,7 @@ using game::SectorTopologySideDef;
 using game::SectorTopologySideKind;
 using game::SectorTopologyDynamicPointLight;
 using game::SectorTopologyDynamicSpotLight;
+using game::SectorPlacedRuntimeObject;
 using game::SectorTopologyStaticPointLight;
 using game::SectorTopologyStaticSpotLight;
 using game::SectorTopologyVertex;
@@ -252,6 +253,7 @@ game::SectorAuthoringDocument MakeAuthoringDocumentFromMap(const SectorTopologyM
     document.mapData.staticSpotLights = map.staticSpotLights;
     document.mapData.dynamicPointLights = map.dynamicPointLights;
     document.mapData.dynamicSpotLights = map.dynamicSpotLights;
+    document.mapData.runtimeObjects = map.runtimeObjects;
     document.mapData.previewSettings = map.previewSettings;
     document.mapData.skySettings = map.skySettings;
     document.mapData.directionalLight = map.directionalLight;
@@ -275,6 +277,14 @@ void ExpectRejectedText(const std::string& text, const char* description)
     std::string error;
     Check(!LoadText(text, output, error), description);
     Check(!error.empty(), "rejected JSON text reports an error");
+}
+
+void ExpectSaveRejected(const SectorTopologyMap& map, const char* description)
+{
+    std::string text;
+    std::string error;
+    Check(!game::SaveSectorTopologyMapToJsonString(map, text, &error), description);
+    Check(!error.empty(), "rejected save reports an error");
 }
 
 void TestRoundTrip()
@@ -825,6 +835,148 @@ void TestDynamicSpotLightRoundTrip()
                   && Near(widenedLight->innerConeDegrees, 80.0f)
                   && Near(widenedLight->outerConeDegrees, 80.0f),
           "outer cone widens to inner cone on load");
+}
+
+void TestRuntimeObjectsRoundTripAndValidation()
+{
+    SectorTopologyMap empty = MakeSquare();
+    const Json emptySaved = Json::parse(SaveText(empty));
+    Check(!emptySaved.contains("runtimeObjects"), "empty runtime object list is omitted");
+
+    SectorTopologyMap missingLoaded;
+    std::string error;
+    Check(LoadText(emptySaved.dump(), missingLoaded, error), "missing runtimeObjects field loads");
+    Check(missingLoaded.runtimeObjects.empty(), "missing runtimeObjects loads empty");
+
+    SectorTopologyMap original = MakeSquare();
+    original.runtimeObjects.push_back(SectorPlacedRuntimeObject{
+            12,
+            "goblin",
+            Vector3{4.5f, 1.25f, -8.0f},
+            1.57079632679f
+    });
+    original.runtimeObjects.push_back(SectorPlacedRuntimeObject{
+            3,
+            "barrel",
+            Vector3{-2.0f, 0.0f, 5.5f},
+            -0.78539816339f
+    });
+
+    const Json saved = Json::parse(SaveText(original));
+    Check(saved["runtimeObjects"].is_array(), "runtime object array is written");
+    Check(saved["runtimeObjects"][0]["id"].get<int>() == 3
+                  && saved["runtimeObjects"][1]["id"].get<int>() == 12,
+          "runtime objects serialize sorted by stable ID");
+    Check(saved["runtimeObjects"][1]["definitionId"].get<std::string>() == "goblin"
+                  && Near(saved["runtimeObjects"][1]["position"][0].get<float>(), 4.5f)
+                  && Near(saved["runtimeObjects"][1]["position"][1].get<float>(), 1.25f)
+                  && Near(saved["runtimeObjects"][1]["position"][2].get<float>(), -8.0f)
+                  && Near(saved["runtimeObjects"][1]["yawDegrees"].get<float>(), 90.0f),
+          "runtime object fields are serialized");
+
+    SectorTopologyMap loaded;
+    Check(LoadText(saved.dump(), loaded, error), "runtime object JSON loads");
+    Check(loaded.runtimeObjects.size() == 2, "runtime objects round-trip");
+    const SectorPlacedRuntimeObject* goblin = game::FindSectorPlacedRuntimeObject(loaded, 12);
+    Check(goblin != nullptr, "round-tripped runtime object can be found by stable ID");
+    if (goblin != nullptr) {
+        Check(goblin->definitionId == "goblin"
+                      && Near(goblin->position, Vector3{4.5f, 1.25f, -8.0f})
+                      && Near(goblin->yawRadians, 1.57079632679f),
+              "round-tripped runtime object preserves definition position and yaw");
+    }
+    Check(game::AllocateSectorPlacedRuntimeObjectId(loaded) == 13,
+          "runtime object allocator returns next stable ID");
+
+    SectorTopologyMap authoringSource = original;
+    game::SectorAuthoringDocument document = MakeAuthoringDocumentFromMap(authoringSource);
+    const Json graphSaved = Json::parse(SaveAuthoringText(document));
+    Check(graphSaved["runtimeObjects"].is_array(), "graph-native save writes runtime objects");
+    game::SectorAuthoringDocument graphLoaded;
+    Check(LoadAuthoringText(graphSaved.dump(), graphLoaded, error), "graph-native runtime object JSON loads");
+    Check(graphLoaded.mapData.runtimeObjects.size() == 2
+                  && graphLoaded.mapData.runtimeObjects[0].id == 3
+                  && graphLoaded.derivation.success
+                  && graphLoaded.derivation.topology.runtimeObjects.size() == 2
+                  && graphLoaded.derivation.topology.runtimeObjects[1].id == 12,
+          "graph-native save/load preserves runtime objects in map data and derived topology");
+
+    Json invalid = saved;
+    invalid["runtimeObjects"] = 7;
+    ExpectRejected(invalid, "non-array runtimeObjects is rejected");
+
+    invalid = saved;
+    invalid["runtimeObjects"][0]["id"] = 0;
+    ExpectRejected(invalid, "non-positive runtime object ID is rejected");
+
+    invalid = saved;
+    invalid["runtimeObjects"][1]["id"] = 3;
+    ExpectRejected(invalid, "duplicate runtime object ID is rejected");
+
+    invalid = saved;
+    invalid["runtimeObjects"][0]["definitionId"] = "";
+    ExpectRejected(invalid, "empty runtime object definition ID is rejected");
+
+    invalid = saved;
+    invalid["runtimeObjects"][0]["position"] = Json::array({1.0f, 2.0f});
+    ExpectRejected(invalid, "wrong-size runtime object position is rejected");
+
+    invalid = saved;
+    invalid["runtimeObjects"][0].erase("yawDegrees");
+    ExpectRejected(invalid, "missing runtime object yaw is rejected");
+
+    invalid = saved;
+    invalid["runtimeObjects"][0]["yawDegrees"] = "__NONFINITE__";
+    std::string nonFiniteText = invalid.dump();
+    const std::string marker = "\"__NONFINITE__\"";
+    const size_t markerPos = nonFiniteText.find(marker);
+    Check(markerPos != std::string::npos, "non-finite runtime object yaw marker exists");
+    if (markerPos != std::string::npos) {
+        nonFiniteText.replace(markerPos, marker.size(), "1e999");
+        ExpectRejectedText(nonFiniteText, "non-finite runtime object yaw is rejected");
+    }
+
+    SectorTopologyMap largeYaw = original;
+    largeYaw.runtimeObjects[0].yawRadians = std::numeric_limits<float>::max();
+    ExpectSaveRejected(largeYaw, "finite runtime object yaw that overflows degrees is rejected on save");
+}
+
+void TestRuntimeObjectEditAndDeleteHelpers()
+{
+    SectorTopologyMap map = MakeSquare();
+    map.runtimeObjects.push_back(SectorPlacedRuntimeObject{
+            4,
+            "goblin",
+            Vector3{1.0f, 0.5f, 1.0f},
+            0.0f
+    });
+    map.runtimeObjects.push_back(SectorPlacedRuntimeObject{
+            9,
+            "goblin",
+            Vector3{2.0f, 0.5f, 2.0f},
+            0.25f
+    });
+
+    SectorPlacedRuntimeObject* edited = game::FindSectorPlacedRuntimeObject(map, 4);
+    Check(edited != nullptr, "runtime object edit target can be found by stable ID");
+    if (edited != nullptr) {
+        edited->position = Vector3{3.0f, 1.0f, 5.0f};
+        edited->yawRadians = 1.0f;
+    }
+
+    const SectorPlacedRuntimeObject* preserved = game::FindSectorPlacedRuntimeObject(map, 4);
+    Check(preserved != nullptr
+                  && Near(preserved->position, Vector3{3.0f, 1.0f, 5.0f})
+                  && Near(preserved->yawRadians, 1.0f),
+          "runtime object edit mutates authored placement data");
+    Check(game::RemoveSectorPlacedRuntimeObject(map, 9),
+          "runtime object delete removes authored placement data");
+    Check(game::FindSectorPlacedRuntimeObject(map, 9) == nullptr,
+          "runtime object delete clears removed stable ID lookup");
+    Check(!game::RemoveSectorPlacedRuntimeObject(map, 9),
+          "runtime object delete reports missing object safely");
+    Check(game::AllocateSectorPlacedRuntimeObjectId(map) == 5,
+          "runtime object ID allocation reuses the next stable positive ID after delete");
 }
 
 void TestLightmapMetadataRoundTrip()
@@ -2684,6 +2836,8 @@ int main()
     TestStaticSpotLightRoundTrip();
     TestDynamicPointLightRoundTrip();
     TestDynamicSpotLightRoundTrip();
+    TestRuntimeObjectsRoundTripAndValidation();
+    TestRuntimeObjectEditAndDeleteHelpers();
     TestLightmapMetadataRoundTrip();
     TestPreviewSettingsRoundTripAndValidation();
     TestSkySettingsRoundTripAndValidation();

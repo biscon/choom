@@ -173,6 +173,17 @@ Vector3 BakedBillboardLighting(const SectorObjectLighting* lighting)
             1.0f / 5.0f);
 }
 
+void AppendBillboardRenderDebugText(std::string& renderDebugText, const std::string& billboardText)
+{
+    const size_t existing = renderDebugText.find(" | billboards:");
+    if (existing != std::string::npos) {
+        renderDebugText.erase(existing);
+    }
+    if (!billboardText.empty() && !renderDebugText.empty()) {
+        renderDebugText += " | " + billboardText;
+    }
+}
+
 Vector2 PreviewYawForwardXZ(float yawRadians)
 {
     return Vector2{std::cos(yawRadians), std::sin(yawRadians)};
@@ -1530,6 +1541,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     portalVisibilityDebugText.clear();
     visibilityDebugText.clear();
     renderDebugText.clear();
+    billboardRenderDebugText.clear();
     visibilityLookupWorld = SectorCollisionWorld{};
     visibilityGraphValid = false;
     visibilityLookupWorldValid = false;
@@ -1759,8 +1771,17 @@ void SectorMeshPreview::DrawScene(
 void SectorMeshPreview::DrawRuntimeBillboards(engine::AssetManager& assets, engine::World& runtimeObjectWorld)
 {
     if (!billboardCutoutShaderLoaded || billboardCutoutShader.id == 0) {
+        billboardConsideredCount = 0;
+        billboardDrawnCount = 0;
+        billboardSkippedCount = 0;
+        billboardRenderDebugText = "billboards: shader unavailable";
+        AppendBillboardRenderDebugText(renderDebugText, billboardRenderDebugText);
         return;
     }
+
+    size_t consideredCount = 0;
+    size_t drawnCount = 0;
+    size_t skippedCount = 0;
 
     rlDisableColorBlend();
     rlDisableBackfaceCulling();
@@ -1810,13 +1831,15 @@ void SectorMeshPreview::DrawRuntimeBillboards(engine::AssetManager& assets, engi
     }
 
     runtimeObjectWorld.ForEach<SectorObjectTransform, SectorObject, SectorBillboardSprite, SectorBillboardAnimator>(
-            [this, &assets, &runtimeObjectWorld](
+            [this, &assets, &runtimeObjectWorld, &consideredCount, &drawnCount, &skippedCount](
                     engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorObject& object,
                     SectorBillboardSprite& sprite,
                     SectorBillboardAnimator& animator) {
+                ++consideredCount;
                 if (!object.visible || !sprite.visible) {
+                    ++skippedCount;
                     return;
                 }
 
@@ -1836,6 +1859,7 @@ void SectorMeshPreview::DrawRuntimeBillboards(engine::AssetManager& assets, engi
                 const engine::SpriteFrame* frame = nullptr;
                 const Texture2D* texture = nullptr;
                 if (!ResolveBillboardFrameForDraw(assets, sprite, drawClipIndex, animator, frame, texture)) {
+                    ++skippedCount;
                     if (!billboardRenderWarningPrinted && (engine::IsNull(sprite.animation)
                                 || assets.HasFailed(sprite.animation))) {
                         std::fprintf(stderr,
@@ -1908,6 +1932,7 @@ void SectorMeshPreview::DrawRuntimeBillboards(engine::AssetManager& assets, engi
                     rlVertex3f(quad.topLeft.x, quad.topLeft.y, quad.topLeft.z);
                 rlEnd();
                 rlSetTexture(0);
+                ++drawnCount;
             });
 
     EndShaderMode();
@@ -1918,6 +1943,18 @@ void SectorMeshPreview::DrawRuntimeBillboards(engine::AssetManager& assets, engi
     rlEnableDepthTest();
     rlEnableDepthMask();
     rlEnableBackfaceCulling();
+
+    billboardConsideredCount = consideredCount;
+    billboardDrawnCount = drawnCount;
+    billboardSkippedCount = skippedCount;
+    billboardRenderDebugText = "billboards: "
+            + std::to_string(drawnCount)
+            + " drawn / "
+            + std::to_string(consideredCount)
+            + " considered, "
+            + std::to_string(skippedCount)
+            + " skipped";
+    AppendBillboardRenderDebugText(renderDebugText, billboardRenderDebugText);
 }
 
 bool SectorMeshPreview::EnsureBloomResources(int sceneWidth, int sceneHeight)
@@ -2404,6 +2441,7 @@ void SectorMeshPreview::UpdateVisibilityDebug(
                     CountDynamicSpotLightShadowCandidates(dynamicPointLights),
                     MaxDynamicSpotLightShadowCasters,
                     dynamicSpotLightShadowCasters);
+    AppendBillboardRenderDebugText(renderDebugText, billboardRenderDebugText);
     visibilityDebugText += " | " + renderDebugText;
 }
 
