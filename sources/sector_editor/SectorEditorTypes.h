@@ -8,6 +8,7 @@
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshPreview.h"
 #include "sector_demo/SectorPointTypes.h"
+#include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyCreation.h"
 #include "sector_demo/SectorTopologyEdit.h"
@@ -523,8 +524,7 @@ struct SectorEditorState {
     bool hasUnsavedChanges = false;
     bool useBakedAmbientOcclusion = true;
     bool showObjectProbeDebugOverlay = false;
-    SectorBakedObjectLightProbeRuntimeData objectProbeDebugData;
-    std::string objectProbeDebugStatus;
+    SectorRuntimeObjectState runtimeObjects;
     bool previewUiHidden = false;
     SectorPreviewControlMode previewControlMode = SectorPreviewControlMode::FreeFly;
     SectorFreeflyControllerState freeflyController;

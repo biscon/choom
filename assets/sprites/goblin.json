@@ -1,5 +1,5 @@
 { "frames": {
-   "goblin #Front 0": {
+   "goblin (base) #Front 0": {
     "frame": { "x": 0, "y": 0, "w": 50, "h": 64 },
     "rotated": false,
     "trimmed": false,
@@ -7,7 +7,7 @@
     "sourceSize": { "w": 50, "h": 64 },
     "duration": 100
    },
-   "goblin #Back 0": {
+   "goblin (base) #Back 0": {
     "frame": { "x": 50, "y": 0, "w": 50, "h": 64 },
     "rotated": false,
     "trimmed": false,
@@ -15,7 +15,7 @@
     "sourceSize": { "w": 50, "h": 64 },
     "duration": 100
    },
-   "goblin #Left 0": {
+   "goblin (base) #Left 0": {
     "frame": { "x": 0, "y": 64, "w": 50, "h": 64 },
     "rotated": false,
     "trimmed": false,
@@ -23,7 +23,7 @@
     "sourceSize": { "w": 50, "h": 64 },
     "duration": 100
    },
-   "goblin #Right 0": {
+   "goblin (base) #Right 0": {
     "frame": { "x": 50, "y": 64, "w": 50, "h": 64 },
     "rotated": false,
     "trimmed": false,
@@ -46,7 +46,7 @@
    { "name": "Right", "from": 3, "to": 3, "direction": "forward", "color": "#000000ff" }
   ],
   "layers": [
-   { "name": "Layer", "opacity": 255, "blendMode": "normal" }
+   { "name": "Base", "opacity": 255, "blendMode": "normal" }
   ],
   "slices": [
   ]

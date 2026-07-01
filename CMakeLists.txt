@@ -244,6 +244,27 @@ if(BUILD_TESTING)
     target_link_libraries(sector_fps_controller_tests PRIVATE raylib)
     add_test(NAME sector_fps_controller COMMAND sector_fps_controller_tests)
 
+    add_executable(sector_runtime_object_tests
+            tests/SectorRuntimeObjectTests.cpp
+            sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
+            sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorRuntimeObjects.cpp
+            sources/sector_demo/SectorTextureTypes.cpp
+            sources/sector_demo/SectorTopologyGeometry.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_runtime_object_tests PRIVATE sources)
+    target_compile_definitions(sector_runtime_object_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+    target_link_libraries(sector_runtime_object_tests PRIVATE raylib)
+    add_test(NAME sector_runtime_object COMMAND sector_runtime_object_tests)
+
     add_executable(sector_sky_cylinder_tests
             tests/SectorSkyCylinderTests.cpp
             sources/sector_demo/SectorSkyCylinder.cpp

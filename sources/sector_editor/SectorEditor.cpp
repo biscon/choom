@@ -298,16 +298,25 @@ float AuthoringFaceInspectorContentHeight(
 
 } // namespace
 
-bool SectorEditor::Init(engine::AssetManager& assets)
+bool SectorEditor::Init(engine::EngineContext& context)
 {
-    Shutdown(assets);
-    ResetToBlankMap(assets);
+    engineContext = &context;
+    Shutdown(context);
+    engineContext = &context;
+    ResetToBlankMap(context);
     return true;
 }
 
-void SectorEditor::Shutdown(engine::AssetManager& assets)
+void SectorEditor::Shutdown(engine::EngineContext& context)
 {
+    engine::AssetManager& assets = context.assets;
     ShutdownLightmapBake();
+    if (initialized
+            || state.runtimeObjects.worldReserved
+            || !engine::IsNull(state.runtimeObjects.runtimeObjectAssetScope)
+            || !engine::IsNull(state.runtimeObjects.temporaryGoblinDebugSpawnEntity)) {
+        ClearSectorRuntimeObjects(context.world, assets, state.runtimeObjects);
+    }
     preview.ShutdownRendererResources(assets);
     if (!engine::IsNull(state.editorTextureScope)) {
         assets.UnloadScope(state.editorTextureScope);
@@ -319,11 +328,14 @@ void SectorEditor::Shutdown(engine::AssetManager& assets)
     uiState = SectorEditorUiState{};
     canvasRect = {};
     statusText.clear();
+    engineContext = nullptr;
     initialized = false;
 }
 
-void SectorEditor::Update(engine::Input& input, float dt)
+void SectorEditor::Update(engine::EngineContext& context, float dt)
 {
+    engine::Input& input = context.input;
+    engine::AssetManager& assets = context.assets;
     if (IsLightmapBakeBlocking()) {
         CancelAuthoringVertexDrag(nullptr);
         CancelLightDrag(nullptr);
@@ -333,11 +345,12 @@ void SectorEditor::Update(engine::Input& input, float dt)
     }
 
     if (state.mode == SectorEditorMode::Preview3D) {
+        UpdateSectorRuntimeObjects(context.world, assets, state.runtimeObjects, state.topologyMap, dt);
         preview.AdvanceRuntime(dt);
         if (state.texturePicker.open || HasDocumentModalOpen()) {
             return;
         }
-        UpdatePreview3D(input, dt);
+        UpdatePreview3D(input, assets, dt);
         return;
     }
 
@@ -1508,13 +1521,13 @@ void SectorEditor::CancelLightDrag(const char* message)
     }
 }
 
-void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
+void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt)
 {
     bool controlModeToggled = false;
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
-            [this, &controlModeToggled](engine::InputEvent& event) {
+            [this, &assets, &controlModeToggled](engine::InputEvent& event) {
                 if (event.key.key == KEY_F1) {
                     state.useBakedAmbientOcclusion = !state.useBakedAmbientOcclusion;
                     statusText = state.useBakedAmbientOcclusion
@@ -1553,6 +1566,21 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, float dt)
                     statusText = preview.DynamicLightingEnabled()
                             ? "Dynamic lighting enabled"
                             : "Dynamic lighting disabled";
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
+                if (event.key.key == KEY_F5) {
+                    const bool spawned = engineContext != nullptr
+                            && ToggleTemporaryGoblinDebugSpawn(
+                                    engineContext->world,
+                                    engineContext->assets,
+                                    state.runtimeObjects,
+                                    preview.RenderCamera(),
+                                    state.topologyMap);
+                    statusText = spawned
+                            ? "Temporary goblin billboard spawned"
+                            : "Temporary goblin billboard removed";
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -2214,8 +2242,11 @@ bool SectorEditor::FinishTopologyMaterialMutation(const char* status, engine::As
 {
     state.topologyRenderWarning.clear();
     MarkTopologyDocumentEdited(status);
-    if (assets != nullptr && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
-        return RebuildPreviewMeshesPreservingView(*assets);
+    if (assets != nullptr
+            && engineContext != nullptr
+            && state.mode == SectorEditorMode::Preview3D
+            && preview.IsRendererReady()) {
+        return RebuildPreviewMeshesPreservingView(*engineContext);
     }
     return true;
 }
@@ -3013,7 +3044,9 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
     TraceLog(LOG_INFO, "INFO: Lightmap bake completed asynchronously in %.2fs", result.bakeResult.totalBakeSeconds);
 
     if (state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
-        RebuildPreviewMeshesPreservingView(assets);
+        if (engineContext != nullptr) {
+            RebuildPreviewMeshesPreservingView(*engineContext);
+        }
     }
 
     statusText = TextFormat("Baked lightmap in %.1fs", result.bakeResult.totalBakeSeconds);
@@ -3086,7 +3119,9 @@ bool SectorEditor::SnapAuthoringVertexMoveTarget(
 void SectorEditor::RenderPreview3D(engine::AssetManager& assets)
 {
     RenderPreview3DShadowMaps(assets);
-    RenderPreview3DScene(assets);
+    if (engineContext != nullptr) {
+        RenderPreview3DScene(*engineContext);
+    }
     RenderPreview3DOverlays();
 }
 
@@ -3098,9 +3133,9 @@ void SectorEditor::RenderPreview3DShadowMaps(engine::AssetManager& assets)
     preview.RenderDynamicSpotLightShadowMaps(assets);
 }
 
-void SectorEditor::RenderPreview3DScene(engine::AssetManager& assets)
+void SectorEditor::RenderPreview3DScene(engine::EngineContext& context)
 {
-    preview.DrawScene(assets, state.useBakedAmbientOcclusion);
+    preview.DrawScene(context.assets, state.useBakedAmbientOcclusion, &context.world);
 }
 
 void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
@@ -3284,13 +3319,13 @@ void SectorEditor::DrawPreviewObjectProbeOverlay() const
     if (!preview.IsRendererReady()
             || state.freeflyController.mouseLookEnabled
             || !state.showObjectProbeDebugOverlay
-            || state.objectProbeDebugData.probes.empty()) {
+            || state.runtimeObjects.objectLightProbes.probes.empty()) {
         return;
     }
 
     constexpr float MarkerRadius = 0.08f;
     BeginMode3D(preview.RenderCamera());
-    for (const SectorBakedObjectLightProbe& probe : state.objectProbeDebugData.probes) {
+    for (const SectorBakedObjectLightProbe& probe : state.runtimeObjects.objectLightProbes.probes) {
         const Color color = ColorFromObjectProbeAmbientCube(probe);
         DrawSphere(probe.position, MarkerRadius, color);
         DrawSphereWires(probe.position, MarkerRadius * 1.65f, 8, 8, Color{255, 255, 255, 155});
@@ -3300,27 +3335,7 @@ void SectorEditor::DrawPreviewObjectProbeOverlay() const
 
 void SectorEditor::RefreshPreviewObjectProbeDebugData()
 {
-    state.objectProbeDebugData = SectorBakedObjectLightProbeRuntimeData{};
-    state.objectProbeDebugStatus.clear();
-
-    if (state.topologyMap.bakedLightmap.objectProbes.path.empty()) {
-        state.objectProbeDebugStatus = "Object probes: none";
-        return;
-    }
-
-    std::string error;
-    if (!LoadSectorBakedObjectLightProbeRuntimeData(
-                state.topologyMap,
-                state.objectProbeDebugData,
-                error)) {
-        state.objectProbeDebugData = SectorBakedObjectLightProbeRuntimeData{};
-        state.objectProbeDebugStatus = error.empty() ? "Object probes: unavailable" : error;
-        return;
-    }
-
-    state.objectProbeDebugStatus = TextFormat(
-            "Object probes: %zu loaded",
-            state.objectProbeDebugData.probes.size());
+    RefreshSectorRuntimeObjectMapData(state.runtimeObjects, state.topologyMap);
 }
 
 void SectorEditor::DrawPreviewOverlay(
@@ -3406,9 +3421,9 @@ void SectorEditor::DrawPreviewOverlay(
             ? (state.spotLightPilot.active
                     ? "Pilot Light | WASD move | Mouse look | Space/Ctrl up/down | Apply or Cancel"
                     : (state.previewControlMode == SectorPreviewControlMode::Gameplay
-                    ? "WASD move | Space jump | Shift run | Mouse look | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc"
-                    : "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc"))
-            : "F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | click surface to select | Tab/Esc";
+                    ? "WASD move | Space jump | Shift run | Mouse look | F1 AO | F2 UI | F3 mode | F4 dyn lights | F5 goblin | F11 cursor | Tab/Esc"
+                    : "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F2 UI | F3 mode | F4 dyn lights | F5 goblin | F11 cursor | Tab/Esc"))
+            : "F1 AO | F2 UI | F3 mode | F4 dyn lights | F5 goblin | F11 cursor | click surface to select | Tab/Esc";
     engine::Text(
             config,
             assets,
@@ -3517,9 +3532,9 @@ void SectorEditor::DrawPreviewOverlay(
             font,
             "Show Object Probes",
             state.showObjectProbeDebugOverlay);
-    const char* objectProbeStatus = state.objectProbeDebugStatus.empty()
+    const char* objectProbeStatus = state.runtimeObjects.objectProbeStatus.empty()
             ? "Object probes: none"
-            : state.objectProbeDebugStatus.c_str();
+            : state.runtimeObjects.objectProbeStatus.c_str();
     engine::Text(
             config,
             assets,
@@ -4977,7 +4992,9 @@ void SectorEditor::DrawToolsPanel(
     separator();
 
     if (engine::Button(ui, config, input, assets, "sector_editor_preview_3d", Rectangle{0.0f, y, contentW, rowH}, font, "3D Mode")) {
-        TryEnterPreview3D(assets, ui);
+        if (engineContext != nullptr) {
+            TryEnterPreview3D(*engineContext, ui);
+        }
     }
 
     engine::EndScrollArea(ui, config, input, scroll, uiState.toolsScroll);
@@ -7483,10 +7500,16 @@ void SectorEditor::DrawLoadLevelModal(
             OpenConfirmation(
                     "Load Level",
                     "Discard unsaved changes and load selected level?",
-                    [this, &assets, selected]() { LoadLevel(assets, selected.name, selected.jsonAssetPath); }
+                    [this, selected]() {
+                        if (engineContext != nullptr) {
+                            LoadLevel(*engineContext, selected.name, selected.jsonAssetPath);
+                        }
+                    }
             );
         } else {
-            LoadLevel(assets, selected.name, selected.jsonAssetPath);
+            if (engineContext != nullptr) {
+                LoadLevel(*engineContext, selected.name, selected.jsonAssetPath);
+            }
         }
     };
 
@@ -7897,9 +7920,11 @@ void SectorEditor::DrawStatusPanel(
     );
 }
 
-void SectorEditor::ResetToBlankMap(engine::AssetManager& assets)
+void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
 {
+    engine::AssetManager& assets = context.assets;
     ShutdownLightmapBake();
+    ClearSectorRuntimeObjects(context.world, assets, state.runtimeObjects);
     preview.ShutdownRendererResources(assets);
     if (!engine::IsNull(state.editorTextureScope)) {
         assets.UnloadScope(state.editorTextureScope);
@@ -7921,10 +7946,11 @@ void SectorEditor::ResetToBlankMap(engine::AssetManager& assets)
 }
 
 bool SectorEditor::LoadLevel(
-        engine::AssetManager& assets,
+        engine::EngineContext& context,
         const std::string& levelName,
         const std::string& jsonAssetPath)
 {
+    engine::AssetManager& assets = context.assets;
     SectorEditorLoadedDocument loaded;
     if (!LoadSectorEditorDocumentFromAsset(jsonAssetPath, loaded, state.loadLevelModal.errorMessage)) {
         statusText = state.loadLevelModal.errorMessage;
@@ -7932,6 +7958,7 @@ bool SectorEditor::LoadLevel(
     }
 
     preview.ShutdownRendererResources(assets);
+    ClearSectorRuntimeObjects(context.world, assets, state.runtimeObjects);
     CancelAuthoringVertexDrag(nullptr);
     CancelLightDrag(nullptr);
     bool loadedAuthoringGraph = false;
@@ -8018,15 +8045,21 @@ void SectorEditor::OpenConfirmation(const char* title, const char* message, std:
 
 void SectorEditor::OpenNewConfirmation(engine::AssetManager& assets)
 {
+    (void)assets;
     OpenConfirmation(
             "New Level",
             "Discard current level and create a new blank map?",
-            [this, &assets]() { ResetToBlankMap(assets); }
+            [this]() {
+                if (engineContext != nullptr) {
+                    ResetToBlankMap(*engineContext);
+                }
+            }
     );
 }
 
 void SectorEditor::OpenReloadConfirmation(engine::AssetManager& assets)
 {
+    (void)assets;
     if (!state.hasCurrentLevelPath) {
         statusText = "No saved level to reload.";
         return;
@@ -8036,7 +8069,11 @@ void SectorEditor::OpenReloadConfirmation(engine::AssetManager& assets)
     OpenConfirmation(
             "Reload Level",
             "Reload current level from disk and discard unsaved changes?",
-            [this, &assets, name, path]() { LoadLevel(assets, name, path); }
+            [this, name, path]() {
+                if (engineContext != nullptr) {
+                    LoadLevel(*engineContext, name, path);
+                }
+            }
     );
 }
 
@@ -8114,8 +8151,9 @@ bool SectorEditor::HasDocumentModalOpen() const
             || state.previewSettingsModal.open;
 }
 
-bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UIContext& ui)
+bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIContext& ui)
 {
+    engine::AssetManager& assets = context.assets;
     if (!initialized) {
         statusText = "3D mode failed: no map loaded";
         return false;
@@ -8137,8 +8175,11 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
 
     std::string error;
     if (!preview.RebuildRendererResources(assets, state.topologyMap, "sector_editor_preview", error)) {
-        state.objectProbeDebugData = SectorBakedObjectLightProbeRuntimeData{};
-        state.objectProbeDebugStatus.clear();
+        state.runtimeObjects.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
+        state.runtimeObjects.objectProbeStatus.clear();
+        state.runtimeObjects.objectSectorLookupWorld = SectorCollisionWorld{};
+        state.runtimeObjects.objectSectorLookupWorldValid = false;
+        state.runtimeObjects.objectSectorLookupWarning.clear();
         state.sectorCollisionWorldValid = false;
         state.sectorCollisionWorldWarning.clear();
         state.previewCollisionSectorId = 0;
@@ -8158,6 +8199,7 @@ bool SectorEditor::TryEnterPreview3D(engine::AssetManager& assets, engine::UICon
         return false;
     }
     RefreshPreviewObjectProbeDebugData();
+    EnsureSectorRuntimeObjectWorldReserved(context.world, state.runtimeObjects);
 
     if (state.hasPreviewPose) {
         preview.ApplyRendererPose(state.lastPreviewPose);
@@ -8420,7 +8462,9 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     MarkTopologyDocumentEdited("Preview settings updated");
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
     if (skyChanged && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
-        RebuildPreviewMeshesPreservingView(assets);
+        if (engineContext != nullptr) {
+            RebuildPreviewMeshesPreservingView(*engineContext);
+        }
     }
     if (state.mode == SectorEditorMode::Preview3D
             && state.previewControlMode == SectorPreviewControlMode::Gameplay
@@ -9583,8 +9627,12 @@ bool SectorEditor::FinishAuthoringSideMaterialActionResult(
     if (!refreshed) {
         statusText = "Wall material edit unavailable: selected sidedef has no authoring side mapping";
     }
-    if (assets != nullptr && refreshed && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
-        return RebuildPreviewMeshesPreservingView(*assets);
+    if (assets != nullptr
+            && engineContext != nullptr
+            && refreshed
+            && state.mode == SectorEditorMode::Preview3D
+            && preview.IsRendererReady()) {
+        return RebuildPreviewMeshesPreservingView(*engineContext);
     }
     return refreshed;
 }
@@ -9674,8 +9722,12 @@ bool SectorEditor::ApplyAuthoringFaceAnchorFlatMaterialAction(
     if (!result.status.empty()) {
         statusText = result.status;
     }
-    if (assets != nullptr && result.changed && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
-        RebuildPreviewMeshesPreservingView(*assets);
+    if (assets != nullptr
+            && engineContext != nullptr
+            && result.changed
+            && state.mode == SectorEditorMode::Preview3D
+            && preview.IsRendererReady()) {
+        RebuildPreviewMeshesPreservingView(*engineContext);
     }
     return true;
 }
@@ -10070,8 +10122,9 @@ bool SectorEditor::AlignSelectedWallMaterialU(
             assets);
 }
 
-bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& assets)
+bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& context)
 {
+    engine::AssetManager& assets = context.assets;
     if (!preview.IsRendererReady()) {
         return false;
     }
@@ -10093,8 +10146,11 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
 
     std::string error;
     if (!preview.RebuildRendererResources(assets, state.topologyMap, "sector_editor_preview", error)) {
-        state.objectProbeDebugData = SectorBakedObjectLightProbeRuntimeData{};
-        state.objectProbeDebugStatus.clear();
+        state.runtimeObjects.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
+        state.runtimeObjects.objectProbeStatus.clear();
+        state.runtimeObjects.objectSectorLookupWorld = SectorCollisionWorld{};
+        state.runtimeObjects.objectSectorLookupWorldValid = false;
+        state.runtimeObjects.objectSectorLookupWarning.clear();
         state.sectorCollisionWorldValid = false;
         state.sectorCollisionWorldWarning.clear();
         state.previewCollisionSectorId = 0;
@@ -10113,6 +10169,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::AssetManager& asse
         return false;
     }
     RefreshPreviewObjectProbeDebugData();
+    EnsureSectorRuntimeObjectWorldReserved(context.world, state.runtimeObjects);
 
     preview.ApplyRendererPose(pose);
     ResetSectorFreeflyController(state.freeflyController, pose);
@@ -10173,11 +10230,13 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
         if (!result.status.empty()) {
             statusText = result.status;
         }
-        if (result.changed
-                && result.rebuildPreviewOnApply
-                && state.mode == SectorEditorMode::Preview3D
-                && preview.IsRendererReady()) {
-            RebuildPreviewMeshesPreservingView(assets);
+            if (result.changed
+                    && result.rebuildPreviewOnApply
+                    && state.mode == SectorEditorMode::Preview3D
+                    && preview.IsRendererReady()) {
+            if (engineContext != nullptr) {
+                RebuildPreviewMeshesPreservingView(*engineContext);
+            }
         }
         return;
     }
@@ -10321,7 +10380,9 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
             state.topologyRenderWarning.clear();
             MarkTopologyDocumentEdited(result.status.c_str());
             if (result.rebuildPreviewOnApply && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
-                RebuildPreviewMeshesPreservingView(assets);
+                if (engineContext != nullptr) {
+                    RebuildPreviewMeshesPreservingView(*engineContext);
+                }
             }
         }
     }

@@ -6,6 +6,7 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
+#include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
 
 #include <raylib.h>
@@ -14,6 +15,10 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+namespace engine {
+class World;
+}
 
 namespace game {
 
@@ -35,9 +40,15 @@ public:
     void ShutdownRendererResources(engine::AssetManager& assets);
 
     void AdvanceRuntime(float dt);
-    void Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
+    void Render(
+            engine::AssetManager& assets,
+            bool useBakedAmbientOcclusion = true,
+            engine::World* runtimeObjectWorld = nullptr);
     void RenderDynamicSpotLightShadowMaps(engine::AssetManager& assets);
-    void DrawScene(engine::AssetManager& assets, bool useBakedAmbientOcclusion = true);
+    void DrawScene(
+            engine::AssetManager& assets,
+            bool useBakedAmbientOcclusion = true,
+            engine::World* runtimeObjectWorld = nullptr);
     void ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
     void ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
 
@@ -81,6 +92,7 @@ private:
     void RenderBloomSource(engine::AssetManager& assets);
     void UnloadSkyCylinderMesh();
     void DrawSkyCylinder(const Texture2D& texture);
+    void DrawRuntimeBillboards(engine::AssetManager& assets, engine::World& runtimeObjectWorld);
     bool EnsureDynamicSpotLightShadowMapResources();
     void UnloadDynamicSpotLightShadowMapResources();
 
@@ -136,6 +148,32 @@ private:
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
     int dynamicLightingClampLoc = -1;
+    Shader billboardCutoutShader = {};
+    int billboardCutoutTextureLoc = -1;
+    int billboardCutoutAlphaCutoffLoc = -1;
+    int billboardCutoutBakedLightingLoc = -1;
+    int billboardCutoutDynamicLightCountLoc = -1;
+    int billboardCutoutDynamicLightPositionsLoc = -1;
+    int billboardCutoutDynamicLightColorsLoc = -1;
+    int billboardCutoutDynamicLightRadiiLoc = -1;
+    int billboardCutoutDynamicLightIntensitiesLoc = -1;
+    int billboardCutoutDynamicLightTypesLoc = -1;
+    int billboardCutoutDynamicLightDirectionsLoc = -1;
+    int billboardCutoutDynamicLightInnerConeCosLoc = -1;
+    int billboardCutoutDynamicLightOuterConeCosLoc = -1;
+    int billboardCutoutDynamicLightShadowSlotsLoc = -1;
+    std::array<int, MaxDynamicSpotLightShadowCasters> billboardCutoutShadowLightMatrixLocs = [] {
+        std::array<int, MaxDynamicSpotLightShadowCasters> locs{};
+        locs.fill(-1);
+        return locs;
+    }();
+    int billboardCutoutShadowBiasLoc = -1;
+    int billboardCutoutShadowStrengthLoc = -1;
+    int billboardCutoutShadowSoftnessLoc = -1;
+    int billboardCutoutShadowMap0Loc = -1;
+    int billboardCutoutShadowMap1Loc = -1;
+    int billboardCutoutDynamicLightingClampLoc = -1;
+    bool billboardCutoutShaderLoaded = false;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightSources;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;
     std::vector<SectorPreviewDynamicPointLightUniform> dynamicPointLights;
@@ -151,6 +189,7 @@ private:
     int dynamicSpotLightShadowAlphaCutoffLoc = -1;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
+    bool billboardRenderWarningPrinted = false;
     Material bloomSourceMaterial = {};
     Texture2D bloomDefaultMaterialTexture = {};
     bool bloomSourceMaterialLoaded = false;

@@ -4,9 +4,10 @@
 
 This document describes the implemented v1 baked object-lighting probe system
 for movable 3D models, billboard sprites, pickups, NPCs, particles, and other
-dynamic objects. It also records the future consumer contract. The probe bake,
-storage, load, sample, and debug paths exist; model, billboard, actor/entity,
-dynamic object shadow, and runtime GI consumers remain deferred.
+dynamic objects. It also records the consumer contract. The probe bake, storage,
+load, sample, and debug paths exist, and the sector 3D preview billboard path is
+the first runtime object consumer. Model rendering, persistent actor/object
+authoring, dynamic object shadows, and runtime GI remain deferred.
 
 Future consumer contract:
 
@@ -15,9 +16,15 @@ Future consumer contract:
 - 3D model renderers call `SampleBakedObjectLighting()` per object or draw and
   evaluate the returned low-frequency lighting by model normals.
 - Billboard renderers call `SampleBakedObjectLighting()` per sprite or actor and
-  use stable probe-derived lighting, not the camera-facing quad normal.
-- Runtime dynamic point/spot lights and supported dynamic spotlight shadow maps
-  are added on top of baked object lighting.
+  use stable probe-derived lighting, not the camera-facing quad normal. The
+  sector 3D preview billboard path currently uses an upper-hemisphere ambient
+  average from the object's sampled ambient cube.
+- Runtime dynamic point/spot lights are added on top of baked object lighting
+  for preview billboards in the billboard cutout shader. Dynamic light
+  attenuation uses each billboard fragment's world position. Supported dynamic
+  spotlight shadow maps attenuate only the owning dynamic spotlight
+  contribution; baked object-probe lighting is not shadowed by runtime shadow
+  maps.
 
 Current implementation notes:
 
@@ -500,14 +507,16 @@ Billboard sprites should not use their camera-facing quad normal for baked
 lighting. That makes brightness change as the camera rotates, which is visibly
 wrong for static baked light.
 
-Recommended first billboard lighting:
+Implemented first billboard lighting:
 
-- Sample baked object lighting at sprite/actor center or torso height.
-- Use average ambient cube color, upper-hemisphere average, or an
-  artist-selected stable component.
-- Add dynamic point/spot lights by center-point attenuation.
-- For first pass, dynamic billboard lighting may omit `NdotL` entirely or use a
-  stable fake normal. It should not use camera-facing normal.
+- Sample baked object lighting at the ECS object's world position and current
+  sector.
+- Use an upper-hemisphere ambient cube average for stable baked brightness.
+- Add selected dynamic point/spot lights in the cutout shader using
+  per-fragment world position.
+- Shadow only dynamic spotlight contribution when the selected spotlight has an
+  existing runtime shadow-map slot. Dynamic point lights remain unshadowed.
+- Do not use the camera-facing quad normal for baked lighting.
 
 Later options:
 
@@ -532,8 +541,9 @@ sampling can come later if needed, but per-object sampling is a useful first
 contract.
 
 Dynamic spotlight shadow maps can later shadow model dynamic-light contribution.
-That should not change the baked probe data. Dynamic shadow receiving for models
-is a renderer feature layered on top of probe lighting.
+That should not change the baked probe data. Billboard dynamic shadow receiving
+is already layered on top of probe lighting and does not modify object probe
+sidecars, bake output, or the lightmap source hash.
 
 ## Debug and Editor Visualization
 
@@ -633,11 +643,12 @@ Implemented:
 - Runtime sidecar loading, source-hash validation, sector-range construction, and
   allocation-free sampling.
 - 3D preview debug toggle, marker drawing, and load/status text.
+- Sector 3D preview billboard consumption through ECS runtime object lighting.
 
 Deferred:
 
-- Future 3D model renderer, billboard sprite renderer, actor/entity consumers,
-  and their shaders.
+- Future 3D model renderer, persistent actor/object authoring, and production
+  object shaders.
 - Multiple vertical probe layers.
 - Spatial acceleration for very high probe counts.
 - Probe-specific indirect bounce and per-face AO.
@@ -671,7 +682,7 @@ Covered behaviors include:
 
 ## Known Gaps / Follow-Ups
 
-- No current consumer renderer samples probes yet.
+- The current consumer is the prototype sector 3D preview billboard path only.
 - No multiple-height probe layers for tall spaces, flying actors, or very short
   pickups.
 - No probe-specific indirect bounce or per-face AO.

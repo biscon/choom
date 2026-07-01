@@ -5100,25 +5100,43 @@ void TestEditorAuthoringPreviewAndBakeGateRejectsFailedDerivation()
           "bake gate reports failed derivation");
 }
 
-void TestEditorAuthoringSuccessfulDerivationClearsBakedLightmapMetadata()
+void TestEditorAuthoringSuccessfulDerivationPreservesBakedLightmapMetadata()
 {
     game::SectorEditorState state;
     state.topologyMap.bakedLightmap.path = "assets/levels/test/lightmap.png";
     state.topologyMap.bakedLightmap.width = 128;
     state.topologyMap.bakedLightmap.height = 128;
     state.topologyMap.bakedLightmap.sourceHash = "old-hash";
+    state.topologyMap.bakedLightmap.objectProbes.path =
+            "assets/levels/test/lightmap.object_probes.bin";
+    state.topologyMap.bakedLightmap.objectProbes.version =
+            game::kSectorBakedObjectLightProbeSidecarVersion;
+    state.topologyMap.bakedLightmap.objectProbes.sourceHash = "old-hash";
+    state.topologyMap.bakedLightmap.objectProbes.count = 5;
+    state.topologyMap.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
+    state.topologyMap.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
+    state.topologyMap.bakedLightmap.objectProbes.format =
+            game::kSectorBakedObjectLightProbeSidecarFormat;
     state.authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
 
     Check(game::RefreshSectorEditorAuthoringDerivation(state),
           "lightmap stale setup derives valid topology");
-    Check(state.topologyMap.bakedLightmap.path.empty(),
-          "successful derivation clears baked lightmap path");
-    Check(state.topologyMap.bakedLightmap.width == 0 && state.topologyMap.bakedLightmap.height == 0,
-          "successful derivation clears baked lightmap dimensions");
-    Check(state.topologyMap.bakedLightmap.sourceHash.empty(),
-          "successful derivation clears baked lightmap source hash");
+    Check(state.topologyMap.bakedLightmap.path == "assets/levels/test/lightmap.png",
+          "successful derivation preserves baked lightmap path");
+    Check(state.topologyMap.bakedLightmap.width == 128 && state.topologyMap.bakedLightmap.height == 128,
+          "successful derivation preserves baked lightmap dimensions");
+    Check(state.topologyMap.bakedLightmap.sourceHash == "old-hash",
+          "successful derivation preserves baked lightmap source hash");
+    Check(state.topologyMap.bakedLightmap.objectProbes.path
+                  == "assets/levels/test/lightmap.object_probes.bin"
+                  && state.topologyMap.bakedLightmap.objectProbes.count == 5,
+          "successful derivation preserves baked object probe metadata");
+    Check(game::GetSectorLightmapStatus(state.topologyMap) == game::SectorLightmapStatus::Stale,
+          "preserved baked lightmap metadata becomes stale when source hash no longer matches");
+    Check(game::GetSectorBakedObjectLightProbeStatus(state.topologyMap) == game::SectorLightmapStatus::Stale,
+          "preserved object probe metadata becomes stale when source hash no longer matches");
 }
 
 void TestEditorAuthoringSelectionTargetsRepresentLineAndVertex()
@@ -7286,7 +7304,7 @@ int main()
     TestEditorAuthoringPreviewAndBakeGateRejectsInvalidNoDerived();
     TestEditorAuthoringPreviewAndBakeGateRejectsStaleDerivedTopology();
     TestEditorAuthoringPreviewAndBakeGateRejectsFailedDerivation();
-    TestEditorAuthoringSuccessfulDerivationClearsBakedLightmapMetadata();
+    TestEditorAuthoringSuccessfulDerivationPreservesBakedLightmapMetadata();
     TestEditorAuthoringSelectionTargetsRepresentLineAndVertex();
     TestEditorAuthoringSelectionHelpersSetClearAndRejectMissingTargets();
     TestEditorAuthoringHoverAndPruneUseGraphValidity();

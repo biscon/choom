@@ -1755,6 +1755,16 @@ void TestDynamicSpotLightShadowUniformPacking()
     Check(FiniteMatrix(uniforms.shadowLightMatrices[0]) && FiniteMatrix(uniforms.shadowLightMatrices[1]),
           "dynamic spotlight shadow uniform packing carries finite light-space matrices");
 
+    const std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> oneShadowCaster = {
+            game::SectorPreviewDynamicSpotLightShadowCaster{50, 0, 0, 0, 1.0f, 0.004f, 0.75f, 2.0f}};
+    game::BuildSectorPreviewDynamicSpotLightShadowMatrices(selected, oneShadowCaster, matrices);
+    const game::SectorPreviewDynamicSpotLightShadowUniforms oneCasterUniforms =
+            game::PackSectorPreviewDynamicSpotLightShadowUniforms(selected, oneShadowCaster, matrices);
+    Check(oneCasterUniforms.dynamicLightShadowSlots[0] == 0
+                  && oneCasterUniforms.dynamicLightShadowSlots[1] == -1
+                  && oneCasterUniforms.dynamicLightShadowSlots[2] == -1,
+          "dynamic spotlight shadow uniform packing assigns one active shadow slot safely");
+
     const game::SectorPreviewDynamicSpotLightShadowUniforms emptyUniforms =
             game::PackSectorPreviewDynamicSpotLightShadowUniforms(selected, {}, {});
     bool allSlotsEmpty = true;
