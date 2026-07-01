@@ -471,6 +471,7 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 - `F11`: toggle mouse-look/captured cursor mode.
 - `F3`: toggle `FreeFly` / `Gameplay` preview controls.
 - `F1`: toggle baked ambient-occlusion display.
+- `F5`: toggle the temporary goblin billboard test spawn.
 - `Tab` or `Escape`: return to 2D mode.
 - In `FreeFly` mouse-look mode: `WASD` move, mouse looks, `Space` moves up,
   `Ctrl` moves down.
@@ -565,6 +566,54 @@ data have no generated 3D wall surface, so edit their sidedefs from the 2D
 linedef/sidedef inspector. `Blocks Player` is available in the selected
 sidedef/linedef inspector for two-sided portals even when no middle texture is
 assigned.
+
+## Runtime ECS Objects And Billboards
+
+Sector topology remains purpose-built non-ECS data. Vertices, linedefs,
+sidedefs, sectors, generated geometry, lightmap atlas data, static draw records,
+and portal visibility data are map/world structures, not entities.
+
+Movable and high-level runtime objects use the small ECS. `EngineContext::world`
+is the authoritative ECS world; `SectorMeshPreview` only observes it for
+rendering and never owns, resets, spawns, or destroys runtime ECS entities. The
+first sector-world consumer is the 3D preview billboard sprite path for future
+props, NPCs, pickups, projectiles, effects, attached lights, and models.
+Billboard sprites store asset handles and playback state, including
+`SpriteAnimationHandle` for Aseprite animations. They do not use the older 2D
+`SpriteRenderSystem` or the old rectangle sample renderer; those remain
+legacy/test examples, not the sector-world billboard renderer.
+
+Billboards render as alpha-tested cutout camera-facing quads in the 3D preview
+after static sector geometry has populated world depth. The cutout shader
+samples the current Aseprite atlas texture using the frame source rectangle UVs,
+discards pixels below the sprite alpha cutoff, and writes surviving pixels as
+opaque depth-writing pixels. Transparent particles, smoke, glass, spell effects,
+and sorting remain deferred to a later transparent render pass. Missing,
+failed, or not-ready assets are skipped safely.
+
+Billboard baked lighting samples the baked object-probe payload through the
+runtime object lighting component. The renderer uses a stable probe-derived
+ambient value and does not use the camera-facing quad normal for baked lighting,
+so rotating the camera should not pulse baked brightness. Selected runtime
+dynamic point and spot light contribution is added on top as a simple
+center-point term; billboard dynamic shadow receiving remains deferred.
+
+The current goblin spawn is a temporary preview test path marked in code with
+`TODO_REMOVE_BILLBOARD_TEST_SPAWN`. In 3D preview, `F5` toggles one non-serialized
+goblin entity spawned in front of the camera using `EngineContext::world`.
+Temporary spawn state, object probe data, object sector lookup data, and the
+runtime object asset scope live in higher-level runtime object state, not in
+`SectorMeshPreview`. The goblin Aseprite asset is requested through
+`AssetManager::RequestSpriteAnimation()` with point-filtered texture loading
+from the runtime object asset scope; F5 despawn destroys only the ECS entity and
+does not unload/reload that scope. The scope unloads only on explicit runtime
+object reset, new/load level reset, editor/demo shutdown, or equivalent
+high-level lifecycle. Runtime cleanup destroys entities identified by the
+`SectorObject` component and leaves unrelated ECS entities alone. Remove that
+path when real object placement, object inspection, or NPC spawning exists.
+Persistent object serialization, placement editing, object inspectors, NPC
+AI/state machines, actor collision/physics, and 3D model rendering are still
+deferred.
 
 ## Baked Lightmaps
 

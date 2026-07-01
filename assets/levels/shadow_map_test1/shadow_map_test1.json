@@ -153,7 +153,9 @@
     "ambientOcclusionRadius": 10.0,
     "ambientOcclusionStrength": 0.550000011920929,
     "indirectBounceRadius": 32.0,
-    "indirectBounceStrength": 0.20000000298023224
+    "indirectBounceStrength": 0.20000000298023224,
+    "objectProbeSpacingWorld": 4.0,
+    "objectProbeHeightWorld": 1.2000000476837158
   },
   "previewSettings": {
     "walkSpeed": 6.0,
@@ -187,7 +189,16 @@
     "path": "assets/levels/shadow_map_test1/shadow_map_test1.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "4fd3e0908d3489c1"
+    "sourceHash": "1f7f3764f9bf920a",
+    "objectProbes": {
+      "path": "assets/levels/shadow_map_test1/shadow_map_test1.lightmap.object_probes.bin",
+      "version": 1,
+      "sourceHash": "1f7f3764f9bf920a",
+      "count": 38,
+      "probeSpacingWorld": 4.0,
+      "probeHeightWorld": 1.2000000476837158,
+      "format": "ambientCubeF32LE"
+    }
   },
   "authoringGraph": {
     "vertices": [

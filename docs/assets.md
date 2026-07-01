@@ -315,6 +315,16 @@ if (!assets.HasFailed(zombieAnimation)) {
 playback, and writes the current atlas texture and source rectangle into
 `SpriteRenderer`. `SpriteRenderSystem` then draws `SpriteRenderer`.
 
+This `SpriteRenderer` path is the 2D ECS sprite example path. Sector-world
+billboard sprites use separate sector runtime-object components and the 3D
+preview billboard renderer instead; they still store `SpriteAnimationHandle`
+asset handles and resolved clip indices rather than raw texture or animation
+pointers. Sector-world billboards request Aseprite animations through
+`AssetManager::RequestSpriteAnimation()` and keep pixel-art filtering controlled
+by the texture load flags chosen by the asset system; the cutout billboard shader
+only samples, discards by alpha cutoff, and outputs color. It does not load a
+separate atlas texture or change filtering.
+
 Systems should skip or hide sprites when the animation is not ready:
 
 ```cpp

@@ -52,7 +52,7 @@ void CopyEditorMapLevelFields(SectorTopologyMap& target, const SectorTopologyMap
     target.skySettings = source.skySettings;
     target.directionalLight = source.directionalLight;
     target.lightmapSettings = source.lightmapSettings;
-    target.bakedLightmap = {};
+    target.bakedLightmap = source.bakedLightmap;
 }
 
 void InvalidateEditorTopologyRenderCache(SectorEditorState& state)

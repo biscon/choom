@@ -132,7 +132,7 @@ int main()
     engine::UIContext ui;
     engine::UIConfig uiConfig;
     game::SectorEditor sectorEditor;
-    sectorEditor.Init(assets);
+    sectorEditor.Init(context);
 
     while (!WindowShouldClose())
     {
@@ -172,7 +172,7 @@ int main()
         );
         EndTextureMode();
 
-        sectorEditor.Update(context.input, dt);
+        sectorEditor.Update(context, dt);
 
         const bool renderPreview3D = sectorEditor.IsPreview3DActive();
         if (renderPreview3D) {
@@ -180,7 +180,7 @@ int main()
 
             BeginTextureMode(worldTarget);
             ClearBackground(Color{8, 10, 14, 255});
-            sectorEditor.RenderPreview3DScene(assets);
+            sectorEditor.RenderPreview3DScene(context);
             EndTextureMode();
 
             sectorEditor.ApplyPreview3DBloom(assets, worldTarget);
@@ -224,7 +224,7 @@ int main()
         EndDrawing();
     }
 
-    sectorEditor.Shutdown(assets);
+    sectorEditor.Shutdown(context);
     unloadRenderResources();
     context.assets.Shutdown();
     //ShowCursor();

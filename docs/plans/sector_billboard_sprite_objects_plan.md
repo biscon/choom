@@ -35,100 +35,100 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_01",
       "title": "ECS Runtime Object Foundation",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01a",
       "title": "Add Sector Runtime Object Components And World Integration",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01b",
       "title": "Add Current Sector And Baked Probe Lighting Systems",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02",
       "title": "Aseprite Billboard Sprite Components",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02a",
       "title": "Add Billboard Sprite Animation Component And Asset Requests",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02b",
       "title": "Resolve Goblin Test Animation Clips",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03",
       "title": "3D Billboard Rendering And Lighting",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03a",
       "title": "Render Camera-Facing Billboard Quads In Sector 3D Preview",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03b",
       "title": "Apply Baked Probe Lighting And Basic Dynamic Light Contribution",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04",
       "title": "Directional Billboard Animation Selection",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04a",
       "title": "Select Front Back Left Right Clips By Camera Relative Facing",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05",
       "title": "Temporary Goblin Test Spawn",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05a",
       "title": "Add Removable Goblin Debug Spawn Path",
       "type": "pass",
       "parent": "phase_05",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_06",
       "title": "Polish Tests Documentation And Completion",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_06a",
       "title": "Document ECS Object Split And Close Plan",
       "type": "pass",
       "parent": "phase_06",
-      "status": "Not Started"
+      "status": "Completed"
     }
   ]
 }
@@ -138,21 +138,22 @@ When an agent is asked to execute this plan, it must:
 
 | Phase / Pass                                                              | Status      | Date | Notes                                                                |
 | ------------------------------------------------------------------------- | ----------- | ---- | -------------------------------------------------------------------- |
-| Phase 1: ECS Runtime Object Foundation                                    | Not Started |      | Parent phase.                                                        |
-| Phase 1A: Add Sector Runtime Object Components And World Integration      | Not Started |      | First executable pass. ECS object foundation only, no rendering yet. |
-| Phase 1B: Add Current Sector And Baked Probe Lighting Systems             | Not Started |      | Sector lookup and object probe sampling for ECS objects.             |
-| Phase 2: Aseprite Billboard Sprite Components                             | Not Started |      | Parent phase.                                                        |
-| Phase 2A: Add Billboard Sprite Animation Component And Asset Requests     | Not Started |      | Use existing Aseprite `SpriteAnimationHandle` asset path.            |
-| Phase 2B: Resolve Goblin Test Animation Clips                             | Not Started |      | Resolve Front/Back/Left/Right clips for the test goblin asset.       |
-| Phase 3: 3D Billboard Rendering And Lighting                              | Not Started |      | Parent phase.                                                        |
-| Phase 3A: Render Camera-Facing Billboard Quads In Sector 3D Preview       | Not Started |      | First visual billboard rendering.                                    |
-| Phase 3B: Apply Baked Probe Lighting And Basic Dynamic Light Contribution | Not Started |      | Use object probes and simple dynamic light contribution.             |
-| Phase 4: Directional Billboard Animation Selection                        | Not Started |      | Parent phase.                                                        |
-| Phase 4A: Select Front Back Left Right Clips By Camera Relative Facing    | Not Started |      | 4-direction Doom-style directional clip selection.                   |
-| Phase 5: Temporary Goblin Test Spawn                                      | Not Started |      | Parent phase.                                                        |
-| Phase 5A: Add Removable Goblin Debug Spawn Path                           | Not Started |      | Temporary test code, clearly marked for removal.                     |
-| Phase 6: Polish Tests Documentation And Completion                        | Not Started |      | Parent phase.                                                        |
-| Phase 6A: Document ECS Object Split And Close Plan                        | Not Started |      | Final cleanup and docs.                                              |
+| Phase 1: ECS Runtime Object Foundation                                    | Completed   | 2026-07-01 | Phase 1A and Phase 1B complete.                                      |
+| Phase 1A: Add Sector Runtime Object Components And World Integration      | Completed   | 2026-07-01 | Added core sector runtime object ECS components, preview-owned object world, and ECS lifecycle test. |
+| Phase 1B: Add Current Sector And Baked Probe Lighting Systems             | Completed   | 2026-07-01 | Added current-sector and baked object lighting ECS systems with tests. |
+| Phase 2: Aseprite Billboard Sprite Components                             | Completed   | 2026-07-01 | Phase 2A and Phase 2B complete.                                      |
+| Phase 2A: Add Billboard Sprite Animation Component And Asset Requests     | Completed   | 2026-07-01 | Added billboard sprite/animator components and setup-time Aseprite animation request helper. |
+| Phase 2B: Resolve Goblin Test Animation Clips                             | Completed   | 2026-07-01 | Added prototype Front/Back/Left/Right clip-index resolution with fallback tests. |
+| Phase 3: 3D Billboard Rendering And Lighting                              | Completed   | 2026-07-01 | Phase 3A and Phase 3B complete.                                      |
+| Phase 3A: Render Camera-Facing Billboard Quads In Sector 3D Preview       | Completed   | 2026-07-01 | Added first visual billboard rendering in the 3D preview.            |
+| Phase 3B: Apply Baked Probe Lighting And Basic Dynamic Light Contribution | Completed   | 2026-07-01 | Billboard tint now uses object probe lighting plus simple selected dynamic light contribution. |
+| Phase 4: Directional Billboard Animation Selection                        | Completed   | 2026-07-01 | Phase 4A complete.                                                   |
+| Phase 4A: Select Front Back Left Right Clips By Camera Relative Facing    | Completed   | 2026-07-01 | Added 4-direction camera-relative billboard clip selection.          |
+| Phase 5: Temporary Goblin Test Spawn                                      | Completed   | 2026-07-01 | Phase 5A complete.                                                   |
+| Phase 5A: Add Removable Goblin Debug Spawn Path                           | Completed   | 2026-07-01 | Added F5 temporary goblin debug spawn/despawn path.                  |
+| Phase 6: Polish Tests Documentation And Completion                        | Completed   | 2026-07-01 | Phase 6A complete.                                                   |
+| Phase 6A: Document ECS Object Split And Close Plan                        | Completed   | 2026-07-01 | Documented the ECS object split and closed the plan.                 |
+| Phase 7: Ownership And Cutout Rendering Correction                        | Completed   | 2026-07-01 | Moved sector objects to `EngineContext::world` and converted billboards to cutout rendering. |
 
 ## Execution Tracking Rules
 
@@ -165,6 +166,34 @@ When an agent is asked to execute this plan, it must:
 * If a pass changes runtime rendering, ECS components, asset loading, probe lighting, dynamic light sampling, serialization, editor behavior, or build/test behavior, clearly say so.
 * Do not claim manual GUI verification unless it was actually performed.
 * If a pass is too broad, split it into smaller child passes and stop without source changes.
+
+## Post-Review Correction Notes, 2026-07-01
+
+Phase 7 corrected two prototype mistakes from the initial billboard branch.
+
+* ECS ownership: `EngineContext::world` is the authoritative ECS world for
+  sector runtime objects. `SectorMeshPreview` no longer owns or exposes an
+  `engine::World`, no longer owns temporary goblin spawn state, and no longer
+  runs ECS object systems. Editor/demo runtime object state stores only handles,
+  object probes, object sector lookup data, and asset-scope bookkeeping.
+* Runtime object cleanup: `ClearSectorRuntimeObjects()` destroys only entities
+  marked with `SectorObject`; it does not clear arbitrary ECS entities or run
+  from preview renderer rebuilds. New/load level, editor/demo shutdown, and
+  explicit runtime reset are the intended cleanup points.
+* Runtime object asset scope: the temporary goblin Aseprite animation is
+  requested from the higher-level runtime object spawn/setup path through
+  `AssetManager::RequestSpriteAnimation()` with point-filtered texture loading.
+  The runtime object asset scope is not created/unloaded by
+  `SectorMeshPreview`, is not thrashed by F5 despawn, and unloads only during
+  explicit runtime object cleanup or high-level document/lifecycle reset.
+* Rendering: billboards now draw after static sector meshes have populated
+  world depth. They use a cutout shader with alpha cutoff `0.5`, depth testing
+  and depth writes, no true alpha blending, no transparent sorting, and explicit
+  render-state restoration before overlays/bloom/debug drawing.
+* UVs/filtering: manual billboard quads compute atlas UVs from the current
+  Aseprite frame source rectangle, preserving source rectangle sign/flip
+  behavior. Pixel-art filtering remains controlled by the asset system; the
+  cutout shader only samples, discards, and outputs color.
 
 ## Goal And Desired End State
 
@@ -350,6 +379,18 @@ Tests if practical:
 * update/iterate without structural modification during `ForEach`
 * destruction flush works if used
 
+Completion notes, 2026-07-01:
+
+* Source code changed: yes.
+* Added `SectorObjectTransform` with world `Vector3` position and yaw, and `SectorObject` with current sector ID and visibility.
+* Added `ReserveSectorRuntimeObjectWorld()` to pre-reserve entity/component capacity, register both component pools, and lock component registration for the preview runtime object world.
+* `SectorMeshPreview` now owns an `engine::World` for sector runtime objects, reserves it during renderer resource rebuild, exposes it for later object systems, and resets it during preview resource shutdown.
+* Behavior unchanged: no object rendering, asset loading, topology editing, static sector rendering, dynamic lights, lightmaps, serialization, placement UI, inspector, gameplay collision, sector lookup, or physics changed.
+* Cache invalidation behavior: no topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* Lightmap source-hash behavior: unchanged; this pass did not touch lightmap inputs or hashing.
+* Generated artifacts: no new generated artifact path was added; the plan-state JSON has no `sandbox_dir` field.
+* Verification: `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed 14/14 including new `sector_runtime_object`; `git diff --check` passed.
+
 #### Phase 1B: Add Current Sector And Baked Probe Lighting Systems
 
 Goal:
@@ -394,6 +435,19 @@ Tests:
 * object in sector receives current sector ID
 * object lighting system gets valid/fallback sample without crashing
 * missing probes fallback safely
+
+Completion notes, 2026-07-01:
+
+* Source code changed: yes.
+* Added `SectorObjectLighting` with a baked `BakedObjectLightingSample`.
+* Added `UpdateSectorObjectCurrentSectorSystem()` using `SectorCollisionWorld::FindSectorContainingPointPreferCurrent()` and writing `-1` when no sector contains the object.
+* Added `UpdateSectorObjectBakedLightingSystem()` using `SampleBakedObjectLighting()` with the object's current sector as the preferred sector and neutral/ambient fallback behavior supplied by the existing sampler.
+* `ReserveSectorRuntimeObjectWorld()` now pre-reserves/registers the lighting component pool before locking component registration.
+* Behavior unchanged: no object rendering, asset loading, topology editing, static sector rendering, dynamic lights, serialization, placement UI, inspector, gameplay collision resolution, sector collision world behavior, or physics changed.
+* Cache invalidation behavior: no topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* Lightmap source-hash behavior: unchanged; this pass samples existing baked object probes but did not change bake inputs, probe generation, or source hashing.
+* Generated artifacts: none; the plan-state JSON has no `sandbox_dir` field.
+* Verification: `cmake --build cmake-build-debug --target sector_runtime_object_tests -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed 14/14; `git diff --check` passed.
 
 ### Phase 2: Aseprite Billboard Sprite Components
 
@@ -494,6 +548,22 @@ Important:
 
 No rendering yet.
 
+Completion notes, 2026-07-01:
+
+* Source code changed: yes.
+* Added `SectorBillboardSprite` with `SpriteAnimationHandle`, clip index, current source rectangle, texture handle, world size, normalized origin, tint, and visibility state.
+* Added `SectorBillboardAnimator` with a string animation ID and simple playback state.
+* Added `RequestSectorBillboardSpriteAnimation()` as an explicit setup/load helper using `AssetManager::RequestSpriteAnimation()` with point filtering; it stores only handles/state in components and rejects missing IDs/paths with a null animation handle.
+* Asset request path/key behavior: the helper uses the caller-provided animation ID as the asset request key and the caller-provided Aseprite JSON path as the load path. The actual test asset in this checkout is `assets/sprites/goblin.json`; wiring that asset into a test spawn remains deferred.
+* `ReserveSectorRuntimeObjectWorld()` now pre-reserves/registers billboard sprite and animator component pools before locking component registration.
+* Clip resolution behavior: unchanged/deferred to Phase 2B; new billboard sprites start with `InvalidSpriteClipIndex`.
+* Fallback behavior when the asset is not ready: components keep null texture/source state until later systems resolve ready animation frames; missing request input returns a null animation handle and clears the animation ID.
+* Behavior unchanged: no 3D rendering, topology editing, static sector rendering, dynamic lights, lightmaps, serialization, placement UI, inspector, gameplay collision, sector lookup, or physics changed.
+* Cache invalidation behavior: no topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* Lightmap source-hash behavior: unchanged; this pass did not touch bake inputs, probe generation, or source hashing.
+* Generated artifacts: none; the plan-state JSON has no `sandbox_dir` field.
+* Verification: `cmake --build cmake-build-debug --target sector_runtime_object_tests -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed 14/14; `git diff --check` passed; `git diff --stat` and `git status --short` were run.
+
 #### Phase 2B: Resolve Goblin Test Animation Clips
 
 Goal:
@@ -540,6 +610,21 @@ Right -> clip index
 ```
 
 but mark it as test/prototype data, not final NPC animation architecture.
+
+Completion notes, 2026-07-01:
+
+* Source code changed: yes.
+* Added prototype `SectorBillboardDirectionalClipNames` and `SectorBillboardDirectionalClips` data for Front/Back/Left/Right clip-index mapping; this is test/prototype billboard data, not final NPC animation architecture.
+* Added `ResolveSectorBillboardDirectionalClips()` for ready `SpriteAnimationHandle` assets and `ResolveSectorBillboardDirectionalClipsFromAsset()` for focused tests. Missing clips warn and fall back to `Default` or clip 0; unavailable/null/not-ready assets clear the mapping and do not crash.
+* Asset path behavior: the actual test asset in this checkout is `assets/sprites/goblin.json`, with atlas `assets/sprites/goblin.png`; no separate sprite-sheet loader was added and no direct texture loading was introduced.
+* Clip resolution behavior: Front/Back/Left/Right are resolved by string clip names and stored as clip indices. The resolver keeps animation IDs/data-driven names as strings and does not introduce gameplay animation enums.
+* Runtime rendering behavior: unchanged; no billboard rendering or test spawn was added.
+* Asset loading behavior: unchanged; this pass only reads ready sprite animation asset metadata through the existing asset path.
+* Behavior unchanged: no topology editing, static sector rendering, dynamic lights, lightmaps, serialization, placement UI, inspector, gameplay collision, sector lookup, or physics changed.
+* Cache invalidation behavior: no topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* Lightmap source-hash behavior: unchanged; this pass did not touch bake inputs, probe generation, or source hashing.
+* Generated artifacts: none; the plan-state JSON has no `sandbox_dir` field.
+* Verification: `cmake --build cmake-build-debug --target sector_runtime_object_tests -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed 14/14; `git diff --check` passed; `git diff --stat` and `git status --short` were run.
 
 ### Phase 3: 3D Billboard Rendering And Lighting
 
@@ -635,6 +720,23 @@ Use the existing Aseprite animation asset data to get current frame source recta
 
 Do not use the old 2D `SpriteRenderSystem` directly.
 
+Completion notes, 2026-07-01:
+
+* Source code changed: yes.
+* Render path: `SectorMeshPreview::DrawScene()` now draws ECS billboard sprites after static sector meshes and before leaving `BeginMode3D()`. The renderer iterates `SectorObjectTransform`, `SectorObject`, `SectorBillboardSprite`, and `SectorBillboardAnimator`, resolves the current Aseprite frame from the ready sprite animation asset, and draws it with `DrawBillboardPro()`.
+* Billboard facing/origin behavior: first pass uses a Y-up camera-facing raylib billboard. The component's normalized origin is mapped so the default `{0.5, 1.0}` behaves as bottom-center anchoring at the object's world position.
+* Alpha/depth behavior: billboards draw with alpha blending, depth testing enabled, and temporary backface culling disabled so the quad can be seen from either side. No sorting pass was added.
+* Missing/not-ready fallback behavior: not-ready assets are skipped safely. Missing or failed animation assets produce a throttled preview warning and are skipped; no direct texture loading or fallback marker asset was added.
+* Animation behavior: added `AdvanceSectorBillboardAnimatorSystem()` and call it from preview runtime advancement so billboard animation time advances without using the old 2D `SpriteRenderSystem`.
+* Baked probe lighting behavior: unchanged/deferred to Phase 3B; this pass does not apply baked object probe lighting to billboard tint.
+* Dynamic light behavior: unchanged/deferred to Phase 3B; this pass does not apply point/spot light contribution to billboards.
+* Behavior unchanged: topology editing, static sector mesh rendering, portal visibility for world geometry, dynamic light selection/shadow maps, lightmap baking/loading, serialization, placement UI, inspector, gameplay collision, sector lookup, and physics were not changed.
+* Cache invalidation behavior: no topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* Lightmap source-hash behavior: unchanged; this pass did not touch bake inputs, generated baked geometry, object probe generation, or source hashing.
+* Generated artifacts: none; the plan-state JSON has no `sandbox_dir` field.
+* Manual GUI smoke status: not performed.
+* Verification: `cmake --build cmake-build-debug --target sector_runtime_object_tests -j2` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed 14/14; `git diff --check` passed; `git diff --stat` and `git status --short` were run.
+
 #### Phase 3B: Apply Baked Probe Lighting And Basic Dynamic Light Contribution
 
 Goal:
@@ -662,6 +764,21 @@ Manual smoke:
 * moving goblin/test spawn between bright/dark probe areas changes lighting
 * rotating camera does not pulse baked brightness
 * dynamic light near goblin brightens it
+
+Completion notes, 2026-07-01:
+
+* Source code changed: yes.
+* Render path: unchanged from Phase 3A; ECS billboard sprites are still drawn by `SectorMeshPreview::DrawRuntimeBillboards()` after static sector meshes inside the 3D preview.
+* Alpha/depth behavior: unchanged; billboards still use alpha blending, depth testing, temporary disabled backface culling, and no sorting pass.
+* Baked probe lighting behavior: billboard draw tint now uses `SectorObjectLighting` when present. The baked contribution is a stable upper-hemisphere average of the object ambient cube and does not use the camera-facing quad normal, so camera rotation should not change baked brightness.
+* Dynamic light behavior: billboard draw tint now adds simple center-point contribution from the already selected preview dynamic point/spot lights. It uses distance attenuation, spot cone attenuation, flicker-adjusted intensity, and the existing dynamic-light enable flag; it does not receive dynamic shadows and does not change the world dynamic light shader path.
+* Fallback behavior: billboards without `SectorObjectLighting` still render with neutral white baked lighting, and missing/not-ready animation assets remain skipped safely as in Phase 3A.
+* Behavior unchanged: topology editing, static sector mesh rendering, portal visibility for world geometry, dynamic light selection/shadow maps for world geometry, lightmap baking/loading, serialization, placement UI, inspector, gameplay collision, sector lookup, and physics were not changed.
+* Cache invalidation behavior: no topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* Lightmap source-hash behavior: unchanged; this pass consumes existing object probe samples and selected dynamic lights at preview render time but did not change bake inputs, generated baked geometry, object probe generation, or source hashing.
+* Generated artifacts: none; the plan-state JSON has no `sandbox_dir` field.
+* Manual GUI smoke status: not performed.
+* Verification: `cmake --build cmake-build-debug --target sector_runtime_object_tests -j2` passed/no work; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed 14/14; `git diff --check` passed; `git diff --stat` and `git status --short` were run.
 
 ### Phase 4: Directional Billboard Animation Selection
 
@@ -759,6 +876,21 @@ Add pure math tests for:
 * wraparound at ±pi works
 
 Document the convention.
+
+Completion notes, 2026-07-01:
+
+* Source code changed: yes.
+* Direction convention: sector object yaw follows existing preview convention where yaw `0` faces +X. `Front` is selected when the camera is in front of the object along that facing direction, `Back` when behind, `Left` for negative relative XZ angle from facing, and `Right` for positive relative XZ angle from facing. Angle wraparound at +/-pi is normalized before selection.
+* Clip mapping behavior: `SelectSectorBillboardDirectionalClip()` chooses from the resolved `SectorBillboardDirectionalClips` indices. `SectorMeshPreview::DrawRuntimeBillboards()` applies the selected clip only when the entity has a directional mapping component and the selection is valid.
+* Missing-clip fallback: unchanged from Phase 2B; missing named clips are resolved through the existing `Default`/clip-0 fallback path, unresolved mappings return `InvalidSpriteClipIndex`, and the render path leaves the current sprite clip unchanged in that case.
+* Render behavior: directional billboards now change their Aseprite clip based on camera-relative facing before resolving the current frame. Non-directional billboard rendering still works because entities without `SectorBillboardDirectionalClips` keep their existing `SectorBillboardSprite::clipIndex` behavior.
+* Asset loading behavior: unchanged; this pass does not request or load assets and does not hardcode gameplay animation enums.
+* Behavior unchanged: topology editing, static sector mesh rendering, portal visibility for world geometry, baked probe lighting, dynamic light contribution, lightmap baking/loading, serialization, placement UI, inspector, gameplay collision, sector lookup, and physics were not changed.
+* Cache invalidation behavior: no topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* Lightmap source-hash behavior: unchanged; this pass did not touch bake inputs, generated baked geometry, object probe generation, or source hashing.
+* Generated artifacts: none; the plan-state JSON has no `sandbox_dir` field.
+* Manual GUI smoke status: not performed.
+* Verification: `cmake --build cmake-build-debug --target sector_runtime_object_tests -j2` passed; `./cmake-build-debug/sector_runtime_object_tests` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed 14/14; `git diff --check` passed; `git diff --stat` and `git status --short` were run.
 
 ### Phase 5: Temporary Goblin Test Spawn
 
@@ -858,6 +990,25 @@ Manual smoke:
 * dynamic lights affect goblin
 * missing asset failure is handled safely
 
+Completion notes, 2026-07-01:
+
+* Source code changed: yes.
+* Test spawn trigger/UI: in 3D preview, `F5` toggles the temporary goblin billboard spawn/despawn; the 3D preview shortcut text now lists `F5 goblin`.
+* Temporary code marker: the spawn path is marked with `TODO_REMOVE_BILLBOARD_TEST_SPAWN` and logs that it is a temporary goblin billboard test spawn.
+* Spawn behavior: pressing `F5` creates one ECS entity in the preview-owned runtime object world with `SectorObjectTransform`, `SectorObject`, `SectorObjectLighting`, `SectorBillboardSprite`, `SectorBillboardAnimator`, and `SectorBillboardDirectionalClips`; pressing `F5` again destroys and flushes that entity. The goblin is spawned in front of the current 3D camera and is not serialized.
+* Asset loading behavior: the goblin Aseprite animation is requested only from the explicit `F5` spawn path through `AssetManager::RequestSpriteAnimation()` using `assets/sprites/goblin.json`; no direct texture loading or separate sprite-sheet loader was added. Directional clip resolution happens lazily after the requested asset is ready.
+* Rendering behavior: the spawned entity uses the existing ECS billboard render path, so it remains alpha blended/depth tested and uses the existing camera-relative Front/Back/Left/Right clip selection.
+* Baked probe lighting behavior: preview rebuild now loads baked object probe runtime data when present, and preview runtime advancement updates ECS object current-sector and baked-lighting components through the existing systems.
+* Dynamic light behavior: unchanged from Phase 3B; the spawned goblin receives the existing billboard dynamic light contribution.
+* Serialization/editor behavior: no authored object placement data, object inspector, persistent object serialization, or topology schema change was added.
+* Cache invalidation behavior: no topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* Lightmap source-hash behavior: unchanged; this pass loads/samples existing object probe sidecars at preview runtime but did not change bake inputs, generated baked geometry, object probe generation, or source hashing.
+* Gameplay/collision/camera behavior: collision, sector lookup implementation, physics, and visual camera effects were not changed; the debug object only queries the existing sector lookup to populate its current sector.
+* Cleanup/removal notes: remove `ToggleTemporaryGoblinDebugSpawn()`, `temporaryGoblinDebugSpawnEntity`, the `F5` editor input/shortcut text, and the `TODO_REMOVE_BILLBOARD_TEST_SPAWN` block when real object placement or NPC spawning is implemented.
+* Generated artifacts: none; the plan-state JSON has no `sandbox_dir` field.
+* Manual GUI smoke status: not performed.
+* Verification: `cmake --build cmake-build-debug --target sector_runtime_object_tests -j2` passed/no work; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed 14/14; `git diff --check` passed; `git diff --stat` and `git status --short` were run.
+
 ### Phase 6: Polish Tests Documentation And Completion
 
 Goal:
@@ -934,6 +1085,21 @@ Documentation should state:
 * dynamic lights are added on top
 * placement editor/inspector is deferred until real prop/NPC object authoring
 * temporary goblin spawn code is marked for later removal
+
+Completion notes, 2026-07-01:
+
+* Source code changed: no.
+* Docs updated: `docs/sector_editor.md` now documents the non-ECS sector topology boundary, ECS runtime object scope, Aseprite billboard asset-handle path, legacy/test status of the 2D sprite and rectangle renderers, billboard baked/dynamic lighting behavior, deferred placement/inspector/NPC/model scope, and the temporary `TODO_REMOVE_BILLBOARD_TEST_SPAWN` / `F5` goblin spawn.
+* Docs updated: `docs/sector_baked_object_lighting_probes_design.md` now records sector 3D preview billboards as the first object-probe consumer and clarifies stable upper-hemisphere billboard baked lighting plus simple dynamic point/spot light contribution.
+* Docs updated: `docs/assets.md` now clarifies that the 2D `SpriteRenderer` / `SpriteRenderSystem` path is not the sector-world billboard renderer.
+* Temporary debug spawn status: still present, non-serialized, and documented as temporary removal work for the later real placement/NPC path.
+* Deferred follow-ups: placement editor, object inspector, persistent object serialization, NPC definitions/AI, actor collision/physics, 3D model rendering, billboard dynamic shadow receiving, production directional art, and cleanup/removal of old 2D sample render systems remain out of scope.
+* Behavior unchanged: no runtime rendering, ECS components, asset loading, probe lighting, dynamic light sampling, serialization, editor behavior, build/test behavior, topology editing, gameplay collision, sector lookup, physics, or camera behavior changed.
+* Cache invalidation behavior: no topology mutation paths were touched, so 2D topology render-cache invalidation behavior is unchanged.
+* Lightmap source-hash behavior: unchanged; this pass only updated documentation and did not change bake inputs, generated baked geometry, object probe generation, or source hashing.
+* Generated artifacts: none; the plan-state JSON has no `sandbox_dir` field.
+* Manual GUI smoke status: not performed.
+* Verification: `cmake --build cmake-build-debug -j2` passed/no work; `ctest --test-dir cmake-build-debug --output-on-failure` passed 14/14; `git diff --check` passed; `git diff --stat` and `git status --short` were run.
 
 ## Deferred Decisions For Later Plans
 

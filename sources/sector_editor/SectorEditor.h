@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/assets/AssetManager.h"
+#include "engine/EngineContext.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
@@ -17,13 +18,13 @@ namespace game {
 
 class SectorEditor {
 public:
-    bool Init(engine::AssetManager& assets);
-    void Shutdown(engine::AssetManager& assets);
+    bool Init(engine::EngineContext& context);
+    void Shutdown(engine::EngineContext& context);
 
-    void Update(engine::Input& input, float dt);
+    void Update(engine::EngineContext& context, float dt);
     void Render(engine::AssetManager& assets);
     void RenderPreview3DShadowMaps(engine::AssetManager& assets);
-    void RenderPreview3DScene(engine::AssetManager& assets);
+    void RenderPreview3DScene(engine::EngineContext& context);
     void RenderPreview3DOverlays();
     void ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
     void RenderUI(
@@ -59,7 +60,7 @@ private:
     void UpdateLightDrag(engine::Input& input);
     void FinishLightDrag();
     void CancelLightDrag(const char* message);
-    void UpdatePreview3D(engine::Input& input, float dt);
+    void UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt);
     void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingAuthoringLine(const char* message);
     void CancelPendingAuthoringRectangle(const char* message);
@@ -224,8 +225,8 @@ private:
             Vector2 mapPoint,
             SectorTopologyCoordPoint& outPoint,
             std::string& error) const;
-    void ResetToBlankMap(engine::AssetManager& assets);
-    bool LoadLevel(engine::AssetManager& assets, const std::string& levelName, const std::string& jsonAssetPath);
+    void ResetToBlankMap(engine::EngineContext& context);
+    bool LoadLevel(engine::EngineContext& context, const std::string& levelName, const std::string& jsonAssetPath);
     void OpenNewConfirmation(engine::AssetManager& assets);
     void OpenReloadConfirmation(engine::AssetManager& assets);
     void OpenSaveLevelModal();
@@ -234,7 +235,7 @@ private:
     bool SaveLevelFromModal(bool overwriteConfirmed = false);
     void RefreshLevelList();
     bool HasDocumentModalOpen() const;
-    bool TryEnterPreview3D(engine::AssetManager& assets, engine::UIContext& ui);
+    bool TryEnterPreview3D(engine::EngineContext& context, engine::UIContext& ui);
     void LeavePreview3D();
     SectorViewPose ActivePreviewPose() const;
     void ApplyGameplayPoseToPreview();
@@ -339,7 +340,7 @@ private:
     bool FinishMaterialActionResult(const SectorEditorMaterialActionResult& result, engine::AssetManager* assets);
     bool FinishTopologyMaterialMutation(const char* status, engine::AssetManager* assets);
     bool FinishTopologyActionResult(const SectorEditorTopologyActionResult& result);
-    bool RebuildPreviewMeshesPreservingView(engine::AssetManager& assets);
+    bool RebuildPreviewMeshesPreservingView(engine::EngineContext& context);
     void ClearTransientTopologyEditStateAfterGeometryChange();
     void ClearTopologySelectionOnly();
     void ClearSelection();
@@ -375,6 +376,7 @@ private:
     Rectangle canvasRect = {};
     std::string statusText;
     SectorMeshPreview preview;
+    engine::EngineContext* engineContext = nullptr;
     bool initialized = false;
 };
 

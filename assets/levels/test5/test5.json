@@ -341,7 +341,9 @@
     "ambientOcclusionRadius": 10.0,
     "ambientOcclusionStrength": 0.550000011920929,
     "indirectBounceRadius": 32.0,
-    "indirectBounceStrength": 0.20000000298023224
+    "indirectBounceStrength": 0.20000000298023224,
+    "objectProbeSpacingWorld": 4.0,
+    "objectProbeHeightWorld": 1.2000000476837158
   },
   "previewSettings": {
     "walkSpeed": 4.5,
@@ -375,7 +377,16 @@
     "path": "assets/levels/test5/test5.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "51a05ada70c9656f"
+    "sourceHash": "e799b26c305ef69b",
+    "objectProbes": {
+      "path": "assets/levels/test5/test5.lightmap.object_probes.bin",
+      "version": 1,
+      "sourceHash": "e799b26c305ef69b",
+      "count": 47,
+      "probeSpacingWorld": 4.0,
+      "probeHeightWorld": 1.2000000476837158,
+      "format": "ambientCubeF32LE"
+    }
   },
   "authoringGraph": {
     "vertices": [

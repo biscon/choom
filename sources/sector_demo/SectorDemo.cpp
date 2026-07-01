@@ -10,18 +10,21 @@
 
 namespace game {
 
-bool SectorDemo::Init(engine::AssetManager& assets, const char* mapPath)
+bool SectorDemo::Init(engine::EngineContext& context, const char* mapPath)
 {
-    Shutdown(assets);
+    Shutdown(context);
 
-    SectorTopologyMap map;
+    engine::AssetManager& assets = context.assets;
     std::string error;
-    if (!LoadSectorTopologyMap(mapPath, map, &error)) {
+    if (!LoadSectorTopologyMap(mapPath, topologyMap, &error)) {
         std::fprintf(stderr, "[SectorDemo ERROR] %s\n", error.c_str());
         return false;
     }
 
-    if (!preview.RebuildRendererResources(assets, map, "sector_demo", error)) {
+    EnsureSectorRuntimeObjectWorldReserved(context.world, runtimeObjects);
+    RefreshSectorRuntimeObjectMapData(runtimeObjects, topologyMap);
+
+    if (!preview.RebuildRendererResources(assets, topologyMap, "sector_demo", error)) {
         std::fprintf(stderr, "[SectorDemo ERROR] %s\n", error.c_str());
         return false;
     }
@@ -33,21 +36,31 @@ bool SectorDemo::Init(engine::AssetManager& assets, const char* mapPath)
     return true;
 }
 
-void SectorDemo::Shutdown(engine::AssetManager& assets)
+void SectorDemo::Shutdown(engine::EngineContext& context)
 {
     if (initialized) {
         LeaveSectorFreeflyController();
     }
+    engine::AssetManager& assets = context.assets;
+    if (initialized
+            || runtimeObjects.worldReserved
+            || !engine::IsNull(runtimeObjects.runtimeObjectAssetScope)
+            || !engine::IsNull(runtimeObjects.temporaryGoblinDebugSpawnEntity)) {
+        ClearSectorRuntimeObjects(context.world, assets, runtimeObjects);
+    }
     preview.ShutdownRendererResources(assets);
+    topologyMap = SectorTopologyMap{};
     initialized = false;
 }
 
-void SectorDemo::Update(engine::Input& input, float dt)
+void SectorDemo::Update(engine::EngineContext& context, float dt)
 {
     if (!initialized) {
         return;
     }
 
+    engine::Input& input = context.input;
+    UpdateSectorRuntimeObjects(context.world, context.assets, runtimeObjects, topologyMap, dt);
     preview.AdvanceRuntime(dt);
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
@@ -64,9 +77,9 @@ void SectorDemo::Update(engine::Input& input, float dt)
     preview.ApplyRendererPose(freeflyController.pose);
 }
 
-void SectorDemo::Render(engine::AssetManager& assets)
+void SectorDemo::Render(engine::EngineContext& context)
 {
-    preview.DrawScene(assets);
+    preview.DrawScene(context.assets, true, &context.world);
 }
 
 void SectorDemo::RenderOverlay(engine::AssetManager& assets)

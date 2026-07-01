@@ -2507,6 +2507,13 @@ void TestGraphNativeMapLevelRoundTrip()
     source.bakedLightmap.width = 128;
     source.bakedLightmap.height = 128;
     source.bakedLightmap.sourceHash = "abc123";
+    source.bakedLightmap.objectProbes.path = "assets/levels/test/test.lightmap.object_probes.bin";
+    source.bakedLightmap.objectProbes.version = 1;
+    source.bakedLightmap.objectProbes.sourceHash = "abc123";
+    source.bakedLightmap.objectProbes.count = 7;
+    source.bakedLightmap.objectProbes.probeSpacingWorld = 5.5f;
+    source.bakedLightmap.objectProbes.probeHeightWorld = 1.4f;
+    source.bakedLightmap.objectProbes.format = "ambientCubeF32LE";
 
     const game::SectorAuthoringDocument original = MakeAuthoringDocumentFromMap(source);
     const Json saved = Json::parse(SaveAuthoringText(original));
@@ -2548,6 +2555,18 @@ void TestGraphNativeMapLevelRoundTrip()
           "graph-native baked lightmap dimensions are persisted");
     Check(saved["bakedLightmap"]["sourceHash"] == "abc123",
           "graph-native baked lightmap source hash is persisted");
+    Check(saved["bakedLightmap"]["objectProbes"].is_object(),
+          "graph-native baked object probe metadata is persisted");
+    Check(saved["bakedLightmap"]["objectProbes"]["path"]
+                  == "assets/levels/test/test.lightmap.object_probes.bin",
+          "graph-native baked object probe sidecar path is persisted");
+    Check(saved["bakedLightmap"]["objectProbes"]["version"] == 1
+                  && saved["bakedLightmap"]["objectProbes"]["sourceHash"] == "abc123"
+                  && saved["bakedLightmap"]["objectProbes"]["count"] == 7
+                  && Near(saved["bakedLightmap"]["objectProbes"]["probeSpacingWorld"].get<float>(), 5.5f)
+                  && Near(saved["bakedLightmap"]["objectProbes"]["probeHeightWorld"].get<float>(), 1.4f)
+                  && saved["bakedLightmap"]["objectProbes"]["format"] == "ambientCubeF32LE",
+          "graph-native baked object probe sidecar metadata is persisted");
 
     game::SectorAuthoringDocument loaded;
     std::string error;
@@ -2581,7 +2600,15 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.mapData.bakedLightmap.path == "assets/levels/test/test.lightmap.png"
                   && loaded.mapData.bakedLightmap.width == 128
                   && loaded.mapData.bakedLightmap.height == 128
-                  && loaded.mapData.bakedLightmap.sourceHash == "abc123",
+                  && loaded.mapData.bakedLightmap.sourceHash == "abc123"
+                  && loaded.mapData.bakedLightmap.objectProbes.path
+                          == "assets/levels/test/test.lightmap.object_probes.bin"
+                  && loaded.mapData.bakedLightmap.objectProbes.version == 1
+                  && loaded.mapData.bakedLightmap.objectProbes.sourceHash == "abc123"
+                  && loaded.mapData.bakedLightmap.objectProbes.count == 7
+                  && Near(loaded.mapData.bakedLightmap.objectProbes.probeSpacingWorld, 5.5f)
+                  && Near(loaded.mapData.bakedLightmap.objectProbes.probeHeightWorld, 1.4f)
+                  && loaded.mapData.bakedLightmap.objectProbes.format == "ambientCubeF32LE",
           "graph-native map-level fields round-trip");
     Check(loaded.derivation.success
                   && loaded.derivation.topology.texturesById.count("sky") == 1
@@ -2602,14 +2629,18 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.derivation.topology.dynamicSpotLights[0].shadowSoftness, 3.0f)
                   && loaded.derivation.topology.skySettings.textureId == "sky"
                   && loaded.derivation.topology.bakedLightmap.path == "assets/levels/test/test.lightmap.png"
-                  && loaded.derivation.topology.bakedLightmap.sourceHash == "abc123",
+                  && loaded.derivation.topology.bakedLightmap.sourceHash == "abc123"
+                  && loaded.derivation.topology.bakedLightmap.objectProbes.path
+                          == "assets/levels/test/test.lightmap.object_probes.bin"
+                  && loaded.derivation.topology.bakedLightmap.objectProbes.count == 7,
           "derived topology receives map-level fields after load");
 
     const Json resaved = Json::parse(SaveAuthoringText(loaded));
     Check(resaved["bakedLightmap"]["path"] == saved["bakedLightmap"]["path"]
                   && resaved["bakedLightmap"]["width"] == saved["bakedLightmap"]["width"]
                   && resaved["bakedLightmap"]["height"] == saved["bakedLightmap"]["height"]
-                  && resaved["bakedLightmap"]["sourceHash"] == saved["bakedLightmap"]["sourceHash"],
+                  && resaved["bakedLightmap"]["sourceHash"] == saved["bakedLightmap"]["sourceHash"]
+                  && resaved["bakedLightmap"]["objectProbes"] == saved["bakedLightmap"]["objectProbes"],
           "graph-native save/load/save preserves baked lightmap metadata");
 }
 

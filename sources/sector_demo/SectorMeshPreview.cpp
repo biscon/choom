@@ -17,6 +17,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -34,6 +35,236 @@ constexpr int BloomDownsample = 4;
 constexpr float DefaultVisibilityDebugAspect = 16.0f / 9.0f;
 constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
 constexpr float DynamicLightingClamp = 4.0f;
+
+uint32_t BillboardPlaybackFrameCount(const engine::SpriteClip& clip)
+{
+    if (clip.playback == engine::SpritePlaybackMode::PingPong && clip.frameCount > 1) {
+        return clip.frameCount * 2 - 2;
+    }
+
+    return clip.frameCount;
+}
+
+uint32_t BillboardPlaybackFrameOffset(const engine::SpriteClip& clip, uint32_t frameInClip)
+{
+    if (clip.frameCount == 0) {
+        return 0;
+    }
+
+    switch (clip.playback) {
+        case engine::SpritePlaybackMode::Reverse:
+            return clip.frameCount - 1 - std::min(frameInClip, clip.frameCount - 1);
+        case engine::SpritePlaybackMode::PingPong: {
+            if (clip.frameCount == 1) {
+                return 0;
+            }
+
+            const uint32_t period = BillboardPlaybackFrameCount(clip);
+            const uint32_t sequenceFrame = frameInClip % period;
+            if (sequenceFrame < clip.frameCount) {
+                return sequenceFrame;
+            }
+            return period - sequenceFrame;
+        }
+        case engine::SpritePlaybackMode::Once:
+        case engine::SpritePlaybackMode::Loop:
+            return std::min(frameInClip, clip.frameCount - 1);
+    }
+
+    return 0;
+}
+
+uint32_t ResolveBillboardFrameIndexAtTime(
+        const engine::SpriteAnimationAsset& asset,
+        const engine::SpriteClip& clip,
+        float timeSeconds,
+        bool loop)
+{
+    if (clip.frameCount == 0 || clip.firstFrame >= asset.frames.size()) {
+        return UINT32_MAX;
+    }
+
+    const uint32_t sequenceLength = BillboardPlaybackFrameCount(clip);
+    if (sequenceLength == 0) {
+        return UINT32_MAX;
+    }
+
+    float sequenceDuration = 0.0f;
+    for (uint32_t sequenceFrame = 0; sequenceFrame < sequenceLength; ++sequenceFrame) {
+        const uint32_t frameOffset = BillboardPlaybackFrameOffset(clip, sequenceFrame);
+        const uint32_t frameIndex = clip.firstFrame + frameOffset;
+        if (frameIndex >= asset.frames.size()) {
+            return UINT32_MAX;
+        }
+        sequenceDuration += std::max(asset.frames[frameIndex].durationSeconds, 0.001f);
+    }
+
+    float localTime = std::max(timeSeconds, 0.0f);
+    const bool shouldLoop = loop && clip.playback != engine::SpritePlaybackMode::Once;
+    if (shouldLoop && sequenceDuration > 0.0f) {
+        localTime = std::fmod(localTime, sequenceDuration);
+    } else {
+        localTime = std::min(localTime, std::max(sequenceDuration - 0.001f, 0.0f));
+    }
+
+    float elapsed = 0.0f;
+    for (uint32_t sequenceFrame = 0; sequenceFrame < sequenceLength; ++sequenceFrame) {
+        const uint32_t frameOffset = BillboardPlaybackFrameOffset(clip, sequenceFrame);
+        const uint32_t frameIndex = clip.firstFrame + frameOffset;
+        const float duration = std::max(asset.frames[frameIndex].durationSeconds, 0.001f);
+        if (localTime < elapsed + duration || sequenceFrame + 1 == sequenceLength) {
+            return frameIndex;
+        }
+        elapsed += duration;
+    }
+
+    return UINT32_MAX;
+}
+
+bool ResolveBillboardFrameForDraw(
+        engine::AssetManager& assets,
+        const SectorBillboardSprite& sprite,
+        uint32_t clipIndex,
+        const SectorBillboardAnimator& animator,
+        const engine::SpriteFrame*& frame,
+        const Texture2D*& texture)
+{
+    frame = nullptr;
+    texture = nullptr;
+    const engine::SpriteAnimationAsset* asset = assets.GetSpriteAnimation(sprite.animation);
+    if (asset == nullptr) {
+        return false;
+    }
+
+    if (clipIndex == engine::InvalidSpriteClipIndex && !asset->clips.empty()) {
+        clipIndex = 0;
+    }
+    if (clipIndex >= asset->clips.size()) {
+        return false;
+    }
+
+    const uint32_t frameIndex = ResolveBillboardFrameIndexAtTime(
+            *asset,
+            asset->clips[clipIndex],
+            animator.timeSeconds,
+            animator.loop);
+    if (frameIndex >= asset->frames.size()) {
+        return false;
+    }
+
+    frame = &asset->frames[frameIndex];
+    texture = assets.GetTexture(asset->atlasTexture);
+    return texture != nullptr;
+}
+
+float Clamp01(float value)
+{
+    return std::clamp(value, 0.0f, 1.0f);
+}
+
+float Smoothstep(float edge0, float edge1, float value)
+{
+    if (std::fabs(edge1 - edge0) <= 0.0001f) {
+        return value >= edge1 ? 1.0f : 0.0f;
+    }
+
+    const float t = Clamp01((value - edge0) / (edge1 - edge0));
+    return t * t * (3.0f - 2.0f * t);
+}
+
+Vector3 ClampRgb(Vector3 rgb, float maxValue)
+{
+    return Vector3{
+            std::clamp(rgb.x, 0.0f, maxValue),
+            std::clamp(rgb.y, 0.0f, maxValue),
+            std::clamp(rgb.z, 0.0f, maxValue)};
+}
+
+Vector3 BakedBillboardLighting(const SectorObjectLighting* lighting)
+{
+    if (lighting == nullptr) {
+        return Vector3{1.0f, 1.0f, 1.0f};
+    }
+
+    // Stable upper-hemisphere average. This intentionally ignores the camera-facing quad normal.
+    return Vector3Scale(
+            Vector3Add(
+                    Vector3Add(
+                            Vector3Add(lighting->baked.ambientCube[0], lighting->baked.ambientCube[1]),
+                            lighting->baked.ambientCube[2]),
+                    Vector3Add(lighting->baked.ambientCube[4], lighting->baked.ambientCube[5])),
+            1.0f / 5.0f);
+}
+
+float DynamicSpotConeAttenuation(const SectorPreviewDynamicPointLightUniform& light, Vector3 lightToBillboardDirection)
+{
+    if (light.kind != SectorPreviewDynamicLightKind::Spot) {
+        return 1.0f;
+    }
+
+    const float directionLengthSq = Vector3LengthSqr(light.direction);
+    const Vector3 spotDirection = directionLengthSq > 0.000001f
+            ? Vector3Scale(light.direction, 1.0f / std::sqrt(directionLengthSq))
+            : Vector3{0.0f, -1.0f, 0.0f};
+    const float coneDot = Vector3DotProduct(spotDirection, lightToBillboardDirection);
+    if (light.innerConeCos > light.outerConeCos) {
+        return Smoothstep(light.outerConeCos, light.innerConeCos, coneDot);
+    }
+
+    return coneDot >= light.outerConeCos ? 1.0f : 0.0f;
+}
+
+Vector3 DynamicBillboardLighting(
+        Vector3 position,
+        bool enabled,
+        float runtimeSeconds,
+        const std::vector<SectorPreviewDynamicPointLightUniform>& lights)
+{
+    if (!enabled) {
+        return Vector3{};
+    }
+
+    Vector3 result{};
+    const std::size_t lightCount = std::min(lights.size(), static_cast<std::size_t>(MaxDynamicLights));
+    for (std::size_t i = 0; i < lightCount; ++i) {
+        const SectorPreviewDynamicPointLightUniform& light = lights[i];
+        if (light.radius <= 0.0f) {
+            continue;
+        }
+
+        const Vector3 lightToBillboard = Vector3Subtract(position, light.position);
+        const float distanceSq = Vector3LengthSqr(lightToBillboard);
+        if (distanceSq > light.radius * light.radius) {
+            continue;
+        }
+
+        const float distance = std::sqrt(std::max(distanceSq, 0.0f));
+        const Vector3 lightToBillboardDirection = distance > 0.0001f
+                ? Vector3Scale(lightToBillboard, 1.0f / distance)
+                : Vector3{0.0f, -1.0f, 0.0f};
+        float attenuation = Clamp01(1.0f - distance / light.radius);
+        attenuation *= attenuation;
+        const float coneAttenuation = DynamicSpotConeAttenuation(light, lightToBillboardDirection);
+        const float intensity = DynamicLightEffectiveUploadIntensity(light, runtimeSeconds);
+        result = Vector3Add(result, Vector3Scale(light.color, intensity * attenuation * coneAttenuation));
+    }
+
+    return result;
+}
+
+Color ApplyBillboardLighting(Color baseTint, Vector3 baked, Vector3 dynamic)
+{
+    const Vector3 base = Vector3{
+            static_cast<float>(baseTint.r) / 255.0f,
+            static_cast<float>(baseTint.g) / 255.0f,
+            static_cast<float>(baseTint.b) / 255.0f};
+    const Vector3 lighting = ClampRgb(Vector3Add(baked, dynamic), DynamicLightingClamp);
+    return Color{
+            static_cast<unsigned char>(std::round(Clamp01(base.x * lighting.x) * 255.0f)),
+            static_cast<unsigned char>(std::round(Clamp01(base.y * lighting.y) * 255.0f)),
+            static_cast<unsigned char>(std::round(Clamp01(base.z * lighting.z) * 255.0f)),
+            baseTint.a};
+}
 
 Vector2 PreviewYawForwardXZ(float yawRadians)
 {
@@ -338,6 +569,45 @@ void main()
     if (alphaTest != 0 && texture(texture0, fragTexCoord).a < alphaCutoff) {
         discard;
     }
+}
+)";
+
+const char* SectorBillboardCutoutVs = R"(
+#version 330
+in vec3 vertexPosition;
+in vec2 vertexTexCoord;
+in vec4 vertexColor;
+
+uniform mat4 mvp;
+
+out vec2 fragTexCoord;
+out vec4 fragColor;
+
+void main()
+{
+    fragTexCoord = vertexTexCoord;
+    fragColor = vertexColor;
+    gl_Position = mvp * vec4(vertexPosition, 1.0);
+}
+)";
+
+const char* SectorBillboardCutoutFs = R"(
+#version 330
+in vec2 fragTexCoord;
+in vec4 fragColor;
+
+uniform sampler2D texture0;
+uniform float alphaCutoff;
+
+out vec4 finalColor;
+
+void main()
+{
+    vec4 sampled = texture(texture0, fragTexCoord) * fragColor;
+    if (sampled.a < alphaCutoff) {
+        discard;
+    }
+    finalColor = vec4(sampled.rgb, 1.0);
 }
 )";
 
@@ -801,6 +1071,32 @@ bool LoadDynamicSpotLightShadowMaterial(
     return true;
 }
 
+bool LoadBillboardCutoutShader(
+        Shader& shader,
+        int& textureLoc,
+        int& alphaCutoffLoc,
+        bool& shaderLoaded)
+{
+    shader = LoadShaderFromMemory(SectorBillboardCutoutVs, SectorBillboardCutoutFs);
+    if (shader.id == 0) {
+        shader = Shader{};
+        textureLoc = -1;
+        alphaCutoffLoc = -1;
+        shaderLoaded = false;
+        return false;
+    }
+
+    shader.locs[SHADER_LOC_VERTEX_POSITION] = GetShaderLocationAttrib(shader, "vertexPosition");
+    shader.locs[SHADER_LOC_VERTEX_TEXCOORD01] = GetShaderLocationAttrib(shader, "vertexTexCoord");
+    shader.locs[SHADER_LOC_VERTEX_COLOR] = GetShaderLocationAttrib(shader, "vertexColor");
+    shader.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(shader, "mvp");
+    shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(shader, "texture0");
+    textureLoc = shader.locs[SHADER_LOC_MAP_DIFFUSE];
+    alphaCutoffLoc = GetShaderLocation(shader, "alphaCutoff");
+    shaderLoaded = true;
+    return true;
+}
+
 bool ComputeGeometryBounds(const SectorGeneratedGeometry& geometry, Vector3& outMin, Vector3& outMax)
 {
     outMin = Vector3{
@@ -912,6 +1208,7 @@ bool SectorMeshPreview::RebuildRendererResources(
         generatedGeometry = {};
         return false;
     }
+    billboardRenderWarningPrinted = false;
 
     std::string visibilityError;
     visibilityGraphValid = BuildRuntimeSectorVisibilityGraph(map, visibilityGraph, &visibilityError);
@@ -1037,6 +1334,16 @@ bool SectorMeshPreview::RebuildRendererResources(
         return false;
     }
 
+    if (!LoadBillboardCutoutShader(
+                billboardCutoutShader,
+                billboardCutoutTextureLoc,
+                billboardCutoutAlphaCutoffLoc,
+                billboardCutoutShaderLoaded)) {
+        Shutdown(assets);
+        error = "Preview failed: could not load billboard cutout shader";
+        return false;
+    }
+
     if (!LoadPreviewMaterial(
                 material,
                 defaultMaterialTexture,
@@ -1115,11 +1422,13 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     dynamicSpotLightShadowCasters.clear();
     dynamicSpotLightShadowMatrices.clear();
     runtimeSeconds = 0.0f;
+    billboardRenderWarningPrinted = false;
     if (!initialized
             && engine::IsNull(assetScope)
             && meshes.batches.empty()
             && meshes.sectorDrawRecords.empty()
             && !materialLoaded
+            && !billboardCutoutShaderLoaded
             && !dynamicSpotLightShadowMaterialLoaded
             && skyCylinderMesh.vertexCount <= 0
             && skyTopCapMesh.vertexCount <= 0
@@ -1164,6 +1473,14 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
         dynamicSpotLightShadowAlphaCutoffLoc = -1;
     }
 
+    if (billboardCutoutShaderLoaded) {
+        UnloadShader(billboardCutoutShader);
+        billboardCutoutShader = Shader{};
+        billboardCutoutTextureLoc = -1;
+        billboardCutoutAlphaCutoffLoc = -1;
+        billboardCutoutShaderLoaded = false;
+    }
+
     if (!engine::IsNull(assetScope)) {
         assets.UnloadScope(assetScope);
         assetScope = engine::NullAssetScopeHandle();
@@ -1179,13 +1496,19 @@ void SectorMeshPreview::AdvanceRuntime(float dt)
     }
 }
 
-void SectorMeshPreview::Render(engine::AssetManager& assets, bool useBakedAmbientOcclusion)
+void SectorMeshPreview::Render(
+        engine::AssetManager& assets,
+        bool useBakedAmbientOcclusion,
+        engine::World* runtimeObjectWorld)
 {
     RenderDynamicSpotLightShadowMaps(assets);
-    DrawScene(assets, useBakedAmbientOcclusion);
+    DrawScene(assets, useBakedAmbientOcclusion, runtimeObjectWorld);
 }
 
-void SectorMeshPreview::DrawScene(engine::AssetManager& assets, bool useBakedAmbientOcclusion)
+void SectorMeshPreview::DrawScene(
+        engine::AssetManager& assets,
+        bool useBakedAmbientOcclusion,
+        engine::World* runtimeObjectWorld)
 {
     if (!initialized) {
         return;
@@ -1291,7 +1614,138 @@ void SectorMeshPreview::DrawScene(engine::AssetManager& assets, bool useBakedAmb
         }
         DrawMesh(batch.mesh, material, MatrixIdentity());
     }
+    if (runtimeObjectWorld != nullptr) {
+        DrawRuntimeBillboards(assets, *runtimeObjectWorld);
+    }
     EndMode3D();
+}
+
+void SectorMeshPreview::DrawRuntimeBillboards(engine::AssetManager& assets, engine::World& runtimeObjectWorld)
+{
+    if (!billboardCutoutShaderLoaded || billboardCutoutShader.id == 0) {
+        return;
+    }
+
+    rlDisableColorBlend();
+    rlDisableBackfaceCulling();
+    rlEnableDepthTest();
+    rlEnableDepthMask();
+    BeginShaderMode(billboardCutoutShader);
+
+    runtimeObjectWorld.ForEach<SectorObjectTransform, SectorObject, SectorBillboardSprite, SectorBillboardAnimator>(
+            [this, &assets, &runtimeObjectWorld](
+                    engine::Entity entity,
+                    SectorObjectTransform& transform,
+                    SectorObject& object,
+                    SectorBillboardSprite& sprite,
+                    SectorBillboardAnimator& animator) {
+                if (!object.visible || !sprite.visible) {
+                    return;
+                }
+
+                uint32_t drawClipIndex = sprite.clipIndex;
+                if (runtimeObjectWorld.Has<SectorBillboardDirectionalClips>(entity)) {
+                    const SectorBillboardDirectionalClips& directionalClips =
+                            runtimeObjectWorld.Get<SectorBillboardDirectionalClips>(entity);
+                    const uint32_t selectedClip = SelectSectorBillboardDirectionalClip(
+                            transform,
+                            camera.position,
+                            directionalClips);
+                    if (selectedClip != engine::InvalidSpriteClipIndex) {
+                        drawClipIndex = selectedClip;
+                    }
+                }
+
+                const engine::SpriteFrame* frame = nullptr;
+                const Texture2D* texture = nullptr;
+                if (!ResolveBillboardFrameForDraw(assets, sprite, drawClipIndex, animator, frame, texture)) {
+                    if (!billboardRenderWarningPrinted && (engine::IsNull(sprite.animation)
+                                || assets.HasFailed(sprite.animation))) {
+                        std::fprintf(stderr,
+                                "[SectorMeshPreview WARNING] Skipping billboard sprite with missing or failed animation asset\n");
+                        billboardRenderWarningPrinted = true;
+                    }
+                    return;
+                }
+
+                Vector2 size = sprite.sizeWorld;
+                if (size.x <= 0.0f || size.y <= 0.0f) {
+                    Vector2 frameSize = frame->sourceSize;
+                    if (frameSize.x <= 0.0f || frameSize.y <= 0.0f) {
+                        frameSize = Vector2{std::abs(frame->source.width), std::abs(frame->source.height)};
+                    }
+                    const float height = 1.0f;
+                    size = Vector2{height * frameSize.x / std::max(frameSize.y, 1.0f), height};
+                }
+
+                const Vector2 origin = {
+                    size.x * sprite.originNormalized.x,
+                    size.y * (1.0f - sprite.originNormalized.y)
+                };
+                const SectorObjectLighting* objectLighting = runtimeObjectWorld.Has<SectorObjectLighting>(entity)
+                        ? &runtimeObjectWorld.Get<SectorObjectLighting>(entity)
+                        : nullptr;
+                const Vector3 bakedLighting = BakedBillboardLighting(objectLighting);
+                const Vector3 dynamicLighting = DynamicBillboardLighting(
+                        transform.position,
+                        dynamicLightingEnabled,
+                        runtimeSeconds,
+                        dynamicPointLights);
+                const Color tint = ApplyBillboardLighting(sprite.tint, bakedLighting, dynamicLighting);
+                const SectorBillboardFrameUvs uvs = BuildSectorBillboardFrameUvs(
+                        frame->source,
+                        texture->width,
+                        texture->height);
+
+                const Matrix view = MatrixLookAt(camera.position, camera.target, camera.up);
+                Vector3 right = Vector3{view.m0, view.m4, view.m8};
+                if (Vector3LengthSqr(right) <= 0.000001f) {
+                    right = Vector3{1.0f, 0.0f, 0.0f};
+                }
+                const Vector3 up = Vector3{0.0f, 1.0f, 0.0f};
+                const Vector3 bottomLeft = Vector3Add(
+                        transform.position,
+                        Vector3Add(
+                                Vector3Scale(right, -origin.x),
+                                Vector3Scale(up, -origin.y)));
+                const Vector3 topLeft = Vector3Add(bottomLeft, Vector3Scale(up, size.y));
+                const Vector3 topRight = Vector3Add(topLeft, Vector3Scale(right, size.x));
+                const Vector3 bottomRight = Vector3Add(bottomLeft, Vector3Scale(right, size.x));
+
+                if (billboardCutoutAlphaCutoffLoc >= 0) {
+                    SetShaderValue(
+                            billboardCutoutShader,
+                            billboardCutoutAlphaCutoffLoc,
+                            &sprite.alphaCutoff,
+                            SHADER_UNIFORM_FLOAT);
+                }
+                if (billboardCutoutTextureLoc >= 0) {
+                    SetShaderValueTexture(billboardCutoutShader, billboardCutoutTextureLoc, *texture);
+                }
+
+                rlCheckRenderBatchLimit(4);
+                rlSetTexture(texture->id);
+                rlBegin(RL_QUADS);
+                    rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+                    rlTexCoord2f(uvs.bottomLeft.x, uvs.bottomLeft.y);
+                    rlVertex3f(bottomLeft.x, bottomLeft.y, bottomLeft.z);
+                    rlTexCoord2f(uvs.bottomRight.x, uvs.bottomRight.y);
+                    rlVertex3f(bottomRight.x, bottomRight.y, bottomRight.z);
+                    rlTexCoord2f(uvs.topRight.x, uvs.topRight.y);
+                    rlVertex3f(topRight.x, topRight.y, topRight.z);
+                    rlTexCoord2f(uvs.topLeft.x, uvs.topLeft.y);
+                    rlVertex3f(topLeft.x, topLeft.y, topLeft.z);
+                rlEnd();
+                rlSetTexture(0);
+            });
+
+    EndShaderMode();
+    rlSetTexture(0);
+    rlEnableColorBlend();
+    rlSetBlendMode(BLEND_ALPHA);
+    rlEnableDepthTest();
+    rlEnableDepthMask();
+    rlEnableBackfaceCulling();
 }
 
 bool SectorMeshPreview::EnsureBloomResources(int sceneWidth, int sceneHeight)
