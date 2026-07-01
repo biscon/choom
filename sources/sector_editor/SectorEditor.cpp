@@ -409,7 +409,8 @@ void SectorEditor::RenderUI(
         const engine::UIConfig& config,
         engine::Input& input,
         engine::AssetManager& assets,
-        engine::FontHandle font)
+        engine::FontHandle font,
+        engine::FontHandle statusFont)
 {
     PollLightmapBakeResult(assets);
 
@@ -503,7 +504,7 @@ void SectorEditor::RenderUI(
 
     DrawToolsPanel(ui, config, input, assets, font);
     DrawSectorsPanel(ui, config, input, assets, font);
-    DrawStatusPanel(ui, config, assets, font);
+    DrawStatusPanel(ui, config, assets, statusFont);
     DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawTexturePickerModal(ui, config, input, assets, font);
     uiState.keyboardCaptured = ui.focusedId != 0;
@@ -8492,7 +8493,7 @@ void SectorEditor::DrawStatusPanel(
         engine::UIContext& ui,
         const engine::UIConfig& config,
         engine::AssetManager& assets,
-        engine::FontHandle font)
+        engine::FontHandle statusFont)
 {
     (void)ui;
     const Rectangle panel = BuildBottomPanelRect();
@@ -8552,14 +8553,19 @@ void SectorEditor::DrawStatusPanel(
             selectedLabel.c_str()
     );
 
+    engine::UIConfig statusConfig = config;
+    if (const engine::FontAsset* statusFontAsset = assets.GetFont(statusFont)) {
+        statusConfig.fontSize = static_cast<float>(statusFontAsset->pixelSize);
+    }
+
     engine::Text(
-            config,
+            statusConfig,
             assets,
             Rectangle{panel.x + 18.0f, panel.y, panel.width - 36.0f, panel.height},
-            font,
+            statusFont,
             text,
             engine::UITextJustify::Left,
-            config.textColor,
+            statusConfig.textColor,
             true
     );
 }

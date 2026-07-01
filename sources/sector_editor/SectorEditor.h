@@ -33,7 +33,8 @@ public:
             const engine::UIConfig& config,
             engine::Input& input,
             engine::AssetManager& assets,
-            engine::FontHandle font);
+            engine::FontHandle font,
+            engine::FontHandle statusFont);
     bool IsPreview3DActive() const;
 
     Vector2 MapToScreen(Vector2 map) const;
@@ -197,7 +198,7 @@ private:
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::AssetManager& assets,
-            engine::FontHandle font);
+            engine::FontHandle statusFont);
 
     bool PointInTopologyLoop(Vector2 mapPoint, const SectorTopologyLoop& loop) const;
     bool PointInTopologySector(Vector2 mapPoint, const SectorTopologySector& sector) const;
