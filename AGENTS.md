@@ -296,6 +296,10 @@ task-scoping rules in the later sections.
 - When touching gameplay/collision/camera, explicitly state whether
   collision/sector lookup/physics changed.
 - Do not claim manual GUI verification unless it was actually performed.
+- C++ tests must not depend on user-edited levels under `assets/levels` or
+  `assets/sector_demo` staying in a particular shape. Use generated test data,
+  temporary JSON files, or dedicated immutable fixtures outside the engine asset
+  tree instead.
 - Run the usual checks:
   - `cmake --build cmake-build-debug -j2`
   - `ctest --test-dir cmake-build-debug --output-on-failure`

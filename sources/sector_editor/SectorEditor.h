@@ -13,6 +13,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace game {
 
@@ -50,6 +51,15 @@ private:
     bool IsMouseOverCanvas(const engine::Input& input) const;
     void UpdateHoverAndMouse(engine::Input& input);
     void HandleCanvasInput(engine::Input& input, float dt);
+    void UpdateSelectDragArm(engine::Input& input);
+    void ArmSelectedSelectDrag(Vector2 pressPosition);
+    void StartSelectDrag(SectorEditorPickTarget target, Vector2 screenPoint);
+    SectorEditorPickTarget CurrentPickSelectionTarget() const;
+    std::vector<SectorEditorPickCandidate> BuildSelectPickCandidates(Vector2 screenPoint) const;
+    bool SelectPickTarget(SectorEditorPickTarget target);
+    bool FindSelectedMovablePickTargetAtScreenPoint(
+            Vector2 screenPoint,
+            SectorEditorPickTarget& outTarget) const;
     void StartAuthoringVertexDrag(int vertexId, SectorTopologyCoordPoint point);
     void UpdateAuthoringVertexDrag(engine::Input& input);
     void FinishAuthoringVertexDrag();
