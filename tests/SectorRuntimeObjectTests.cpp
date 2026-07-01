@@ -235,6 +235,33 @@ void TestSectorBillboardFrameUvsPreserveFlippedSourceSigns()
             "billboard flipped UV bottom-left preserves negative source height");
 }
 
+void TestSectorBillboardQuadWorldPositions()
+{
+    const game::SectorBillboardQuad bottomCenter = game::BuildSectorBillboardQuad(
+            Vector3{10.0f, 2.0f, 20.0f},
+            Vector2{4.0f, 3.0f},
+            Vector2{0.5f, 1.0f},
+            Vector3{1.0f, 0.0f, 0.0f});
+
+    Check(Near(bottomCenter.bottomLeft, Vector3{8.0f, 2.0f, 20.0f})
+                  && Near(bottomCenter.bottomRight, Vector3{12.0f, 2.0f, 20.0f})
+                  && Near(bottomCenter.topRight, Vector3{12.0f, 5.0f, 20.0f})
+                  && Near(bottomCenter.topLeft, Vector3{8.0f, 5.0f, 20.0f}),
+            "billboard quad bottom-center origin builds expected world corners");
+
+    const game::SectorBillboardQuad customOrigin = game::BuildSectorBillboardQuad(
+            Vector3{1.0f, 2.0f, 3.0f},
+            Vector2{2.0f, 4.0f},
+            Vector2{0.25f, 0.25f},
+            Vector3{0.0f, 0.0f, 1.0f});
+
+    Check(Near(customOrigin.bottomLeft, Vector3{1.0f, -1.0f, 2.5f})
+                  && Near(customOrigin.bottomRight, Vector3{1.0f, -1.0f, 4.5f})
+                  && Near(customOrigin.topRight, Vector3{1.0f, 3.0f, 4.5f})
+                  && Near(customOrigin.topLeft, Vector3{1.0f, 3.0f, 2.5f}),
+            "billboard quad custom origin and camera right build expected world corners");
+}
+
 void TestClearSectorRuntimeObjectsOnlyDestroysSectorObjects()
 {
     engine::World world;
@@ -572,6 +599,7 @@ int main()
     TestSectorRuntimeObjectComponentsIterateAndDestroy();
     TestSectorBillboardFrameUvsUseSourceRectangle();
     TestSectorBillboardFrameUvsPreserveFlippedSourceSigns();
+    TestSectorBillboardQuadWorldPositions();
     TestClearSectorRuntimeObjectsOnlyDestroysSectorObjects();
     TestSectorBillboardSpriteAnimationRequestRejectsMissingInput();
     TestSectorBillboardAnimatorAdvances();

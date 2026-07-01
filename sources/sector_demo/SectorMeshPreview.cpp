@@ -157,29 +157,6 @@ bool ResolveBillboardFrameForDraw(
     return texture != nullptr;
 }
 
-float Clamp01(float value)
-{
-    return std::clamp(value, 0.0f, 1.0f);
-}
-
-float Smoothstep(float edge0, float edge1, float value)
-{
-    if (std::fabs(edge1 - edge0) <= 0.0001f) {
-        return value >= edge1 ? 1.0f : 0.0f;
-    }
-
-    const float t = Clamp01((value - edge0) / (edge1 - edge0));
-    return t * t * (3.0f - 2.0f * t);
-}
-
-Vector3 ClampRgb(Vector3 rgb, float maxValue)
-{
-    return Vector3{
-            std::clamp(rgb.x, 0.0f, maxValue),
-            std::clamp(rgb.y, 0.0f, maxValue),
-            std::clamp(rgb.z, 0.0f, maxValue)};
-}
-
 Vector3 BakedBillboardLighting(const SectorObjectLighting* lighting)
 {
     if (lighting == nullptr) {
@@ -194,76 +171,6 @@ Vector3 BakedBillboardLighting(const SectorObjectLighting* lighting)
                             lighting->baked.ambientCube[2]),
                     Vector3Add(lighting->baked.ambientCube[4], lighting->baked.ambientCube[5])),
             1.0f / 5.0f);
-}
-
-float DynamicSpotConeAttenuation(const SectorPreviewDynamicPointLightUniform& light, Vector3 lightToBillboardDirection)
-{
-    if (light.kind != SectorPreviewDynamicLightKind::Spot) {
-        return 1.0f;
-    }
-
-    const float directionLengthSq = Vector3LengthSqr(light.direction);
-    const Vector3 spotDirection = directionLengthSq > 0.000001f
-            ? Vector3Scale(light.direction, 1.0f / std::sqrt(directionLengthSq))
-            : Vector3{0.0f, -1.0f, 0.0f};
-    const float coneDot = Vector3DotProduct(spotDirection, lightToBillboardDirection);
-    if (light.innerConeCos > light.outerConeCos) {
-        return Smoothstep(light.outerConeCos, light.innerConeCos, coneDot);
-    }
-
-    return coneDot >= light.outerConeCos ? 1.0f : 0.0f;
-}
-
-Vector3 DynamicBillboardLighting(
-        Vector3 position,
-        bool enabled,
-        float runtimeSeconds,
-        const std::vector<SectorPreviewDynamicPointLightUniform>& lights)
-{
-    if (!enabled) {
-        return Vector3{};
-    }
-
-    Vector3 result{};
-    const std::size_t lightCount = std::min(lights.size(), static_cast<std::size_t>(MaxDynamicLights));
-    for (std::size_t i = 0; i < lightCount; ++i) {
-        const SectorPreviewDynamicPointLightUniform& light = lights[i];
-        if (light.radius <= 0.0f) {
-            continue;
-        }
-
-        const Vector3 lightToBillboard = Vector3Subtract(position, light.position);
-        const float distanceSq = Vector3LengthSqr(lightToBillboard);
-        if (distanceSq > light.radius * light.radius) {
-            continue;
-        }
-
-        const float distance = std::sqrt(std::max(distanceSq, 0.0f));
-        const Vector3 lightToBillboardDirection = distance > 0.0001f
-                ? Vector3Scale(lightToBillboard, 1.0f / distance)
-                : Vector3{0.0f, -1.0f, 0.0f};
-        float attenuation = Clamp01(1.0f - distance / light.radius);
-        attenuation *= attenuation;
-        const float coneAttenuation = DynamicSpotConeAttenuation(light, lightToBillboardDirection);
-        const float intensity = DynamicLightEffectiveUploadIntensity(light, runtimeSeconds);
-        result = Vector3Add(result, Vector3Scale(light.color, intensity * attenuation * coneAttenuation));
-    }
-
-    return result;
-}
-
-Color ApplyBillboardLighting(Color baseTint, Vector3 baked, Vector3 dynamic)
-{
-    const Vector3 base = Vector3{
-            static_cast<float>(baseTint.r) / 255.0f,
-            static_cast<float>(baseTint.g) / 255.0f,
-            static_cast<float>(baseTint.b) / 255.0f};
-    const Vector3 lighting = ClampRgb(Vector3Add(baked, dynamic), DynamicLightingClamp);
-    return Color{
-            static_cast<unsigned char>(std::round(Clamp01(base.x * lighting.x) * 255.0f)),
-            static_cast<unsigned char>(std::round(Clamp01(base.y * lighting.y) * 255.0f)),
-            static_cast<unsigned char>(std::round(Clamp01(base.z * lighting.z) * 255.0f)),
-            baseTint.a};
 }
 
 Vector2 PreviewYawForwardXZ(float yawRadians)
@@ -581,11 +488,13 @@ in vec4 vertexColor;
 uniform mat4 mvp;
 
 out vec2 fragTexCoord;
+out vec3 fragWorldPosition;
 out vec4 fragColor;
 
 void main()
 {
     fragTexCoord = vertexTexCoord;
+    fragWorldPosition = vertexPosition;
     fragColor = vertexColor;
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }
@@ -594,20 +503,155 @@ void main()
 const char* SectorBillboardCutoutFs = R"(
 #version 330
 in vec2 fragTexCoord;
+in vec3 fragWorldPosition;
 in vec4 fragColor;
 
 uniform sampler2D texture0;
 uniform float alphaCutoff;
+uniform vec3 bakedBillboardLighting;
+
+#define MAX_DYNAMIC_LIGHTS 8
+#define MAX_DYNAMIC_SHADOW_CASTERS 2
+uniform int dynamicLightCount;
+uniform vec3 dynamicLightPositions[MAX_DYNAMIC_LIGHTS];
+uniform vec3 dynamicLightColors[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightRadii[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightIntensities[MAX_DYNAMIC_LIGHTS];
+uniform int dynamicLightTypes[MAX_DYNAMIC_LIGHTS];
+uniform vec3 dynamicLightDirections[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
+uniform int dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS];
+uniform mat4 shadowLightMatrices[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform float shadowBias[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform sampler2D shadowMap0;
+uniform sampler2D shadowMap1;
+uniform float dynamicLightingClamp;
 
 out vec4 finalColor;
 
+const vec2 kPoissonDisk[12] = vec2[12](
+    vec2(-0.326, -0.406),
+    vec2(-0.840, -0.074),
+    vec2(-0.696,  0.457),
+    vec2(-0.203,  0.621),
+    vec2( 0.962, -0.195),
+    vec2( 0.473, -0.480),
+    vec2( 0.519,  0.767),
+    vec2( 0.185, -0.893),
+    vec2( 0.507,  0.064),
+    vec2( 0.896,  0.412),
+    vec2(-0.322, -0.933),
+    vec2(-0.792, -0.598)
+);
+
+vec3 SafeNormalize(vec3 value, vec3 fallback)
+{
+    float lengthSq = dot(value, value);
+    return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
+}
+
+float SampleShadowMap(int shadowSlot, vec2 uv)
+{
+    return shadowSlot == 0 ? texture(shadowMap0, uv).r : texture(shadowMap1, uv).r;
+}
+
+float DynamicSpotLightShadowVisibility(
+        int shadowSlot,
+        vec3 worldPosition,
+        vec3 shadowBiasNormal,
+        vec3 surfaceToLightDirection)
+{
+    if (shadowSlot < 0 || shadowSlot >= MAX_DYNAMIC_SHADOW_CASTERS) {
+        return 1.0;
+    }
+
+    vec4 lightClip = shadowLightMatrices[shadowSlot] * vec4(worldPosition, 1.0);
+    if (lightClip.w <= 0.0) {
+        return 1.0;
+    }
+
+    vec3 lightNdc = lightClip.xyz / lightClip.w;
+    vec3 shadowCoord = lightNdc * 0.5 + 0.5;
+    if (shadowCoord.x < 0.0 || shadowCoord.x > 1.0 ||
+            shadowCoord.y < 0.0 || shadowCoord.y > 1.0 ||
+            shadowCoord.z < 0.0 || shadowCoord.z > 1.0) {
+        return 1.0;
+    }
+
+    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap0, 0));
+    float normalLightDot = max(dot(
+            SafeNormalize(shadowBiasNormal, vec3(0.0, 1.0, 0.0)),
+            SafeNormalize(surfaceToLightDirection, vec3(0.0, 1.0, 0.0))), 0.0);
+    float effectiveBias = min(shadowBias[shadowSlot] * (1.0 + (1.0 - normalLightDot) * 2.0), 0.02);
+    float compareDepth = shadowCoord.z - effectiveBias;
+    float softness = clamp(shadowSoftness[shadowSlot], 0.0, 8.0);
+    if (softness <= 0.0) {
+        float shadowDepth = SampleShadowMap(shadowSlot, shadowCoord.xy);
+        return compareDepth <= shadowDepth ? 1.0 : 0.0;
+    }
+
+    vec2 radius = max(0.25, softness) * texelSize;
+    float visible = 0.0;
+    for (int i = 0; i < 12; ++i) {
+        vec2 sampleUv = clamp(shadowCoord.xy + kPoissonDisk[i] * radius, vec2(0.0), vec2(1.0));
+        float shadowDepth = SampleShadowMap(shadowSlot, sampleUv);
+        visible += compareDepth <= shadowDepth ? 1.0 : 0.0;
+    }
+    return visible / 12.0;
+}
+
 void main()
 {
-    vec4 sampled = texture(texture0, fragTexCoord) * fragColor;
+    vec4 sampled = texture(texture0, fragTexCoord);
     if (sampled.a < alphaCutoff) {
         discard;
     }
-    finalColor = vec4(sampled.rgb, 1.0);
+
+    vec3 dynamicDirect = vec3(0.0);
+    for (int i = 0; i < dynamicLightCount && i < MAX_DYNAMIC_LIGHTS; ++i) {
+        float radius = dynamicLightRadii[i];
+        vec3 toLight = dynamicLightPositions[i] - fragWorldPosition;
+        float distanceSq = dot(toLight, toLight);
+        if (radius > 0.0 && distanceSq < radius * radius) {
+            float distanceToLight = sqrt(max(distanceSq, 0.0));
+            vec3 lightDirection = distanceToLight > 0.0001
+                    ? toLight / distanceToLight
+                    : vec3(0.0, 1.0, 0.0);
+            float atten = clamp(1.0 - distanceToLight / radius, 0.0, 1.0);
+            atten *= atten;
+            float coneAtten = 1.0;
+            if (dynamicLightTypes[i] == 1) {
+                vec3 spotDirection = SafeNormalize(dynamicLightDirections[i], vec3(0.0, -1.0, 0.0));
+                vec3 fragmentDirectionFromLight = distanceToLight > 0.0001
+                        ? -lightDirection
+                        : spotDirection;
+                float coneDot = dot(spotDirection, fragmentDirectionFromLight);
+                float innerConeCos = dynamicLightInnerConeCos[i];
+                float outerConeCos = dynamicLightOuterConeCos[i];
+                coneAtten = abs(innerConeCos - outerConeCos) > 0.0001
+                        ? smoothstep(outerConeCos, innerConeCos, coneDot)
+                        : step(innerConeCos, coneDot);
+                int shadowSlot = dynamicLightShadowSlots[i];
+                if (shadowSlot >= 0) {
+                    // Stable world-up approximation used only for bias. Baked probe lighting never uses a camera-facing normal.
+                    float visibility = DynamicSpotLightShadowVisibility(
+                            shadowSlot,
+                            fragWorldPosition,
+                            vec3(0.0, 1.0, 0.0),
+                            lightDirection);
+                    coneAtten *= mix(1.0, visibility, clamp(shadowStrength[shadowSlot], 0.0, 1.0));
+                }
+            }
+            dynamicDirect += dynamicLightColors[i] * dynamicLightIntensities[i] * atten * coneAtten;
+        }
+    }
+
+    vec3 surfaceRgb = sampled.rgb * fragColor.rgb;
+    vec3 lighting = clamp(bakedBillboardLighting + dynamicDirect, 0.0, dynamicLightingClamp);
+    finalColor = vec4(surfaceRgb * lighting, 1.0);
 }
 )";
 
@@ -1075,6 +1119,24 @@ bool LoadBillboardCutoutShader(
         Shader& shader,
         int& textureLoc,
         int& alphaCutoffLoc,
+        int& bakedLightingLoc,
+        int& dynamicLightCountLoc,
+        int& dynamicLightPositionsLoc,
+        int& dynamicLightColorsLoc,
+        int& dynamicLightRadiiLoc,
+        int& dynamicLightIntensitiesLoc,
+        int& dynamicLightTypesLoc,
+        int& dynamicLightDirectionsLoc,
+        int& dynamicLightInnerConeCosLoc,
+        int& dynamicLightOuterConeCosLoc,
+        int& dynamicLightShadowSlotsLoc,
+        std::array<int, MaxDynamicSpotLightShadowCasters>& shadowLightMatrixLocs,
+        int& shadowBiasLoc,
+        int& shadowStrengthLoc,
+        int& shadowSoftnessLoc,
+        int& shadowMap0Loc,
+        int& shadowMap1Loc,
+        int& dynamicLightingClampLoc,
         bool& shaderLoaded)
 {
     shader = LoadShaderFromMemory(SectorBillboardCutoutVs, SectorBillboardCutoutFs);
@@ -1082,6 +1144,24 @@ bool LoadBillboardCutoutShader(
         shader = Shader{};
         textureLoc = -1;
         alphaCutoffLoc = -1;
+        bakedLightingLoc = -1;
+        dynamicLightCountLoc = -1;
+        dynamicLightPositionsLoc = -1;
+        dynamicLightColorsLoc = -1;
+        dynamicLightRadiiLoc = -1;
+        dynamicLightIntensitiesLoc = -1;
+        dynamicLightTypesLoc = -1;
+        dynamicLightDirectionsLoc = -1;
+        dynamicLightInnerConeCosLoc = -1;
+        dynamicLightOuterConeCosLoc = -1;
+        dynamicLightShadowSlotsLoc = -1;
+        shadowLightMatrixLocs.fill(-1);
+        shadowBiasLoc = -1;
+        shadowStrengthLoc = -1;
+        shadowSoftnessLoc = -1;
+        shadowMap0Loc = -1;
+        shadowMap1Loc = -1;
+        dynamicLightingClampLoc = -1;
         shaderLoaded = false;
         return false;
     }
@@ -1093,6 +1173,26 @@ bool LoadBillboardCutoutShader(
     shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(shader, "texture0");
     textureLoc = shader.locs[SHADER_LOC_MAP_DIFFUSE];
     alphaCutoffLoc = GetShaderLocation(shader, "alphaCutoff");
+    bakedLightingLoc = GetShaderLocation(shader, "bakedBillboardLighting");
+    dynamicLightCountLoc = GetShaderLocation(shader, "dynamicLightCount");
+    dynamicLightPositionsLoc = GetShaderLocationArrayBase(shader, "dynamicLightPositions");
+    dynamicLightColorsLoc = GetShaderLocationArrayBase(shader, "dynamicLightColors");
+    dynamicLightRadiiLoc = GetShaderLocationArrayBase(shader, "dynamicLightRadii");
+    dynamicLightIntensitiesLoc = GetShaderLocationArrayBase(shader, "dynamicLightIntensities");
+    dynamicLightTypesLoc = GetShaderLocationArrayBase(shader, "dynamicLightTypes");
+    dynamicLightDirectionsLoc = GetShaderLocationArrayBase(shader, "dynamicLightDirections");
+    dynamicLightInnerConeCosLoc = GetShaderLocationArrayBase(shader, "dynamicLightInnerConeCos");
+    dynamicLightOuterConeCosLoc = GetShaderLocationArrayBase(shader, "dynamicLightOuterConeCos");
+    dynamicLightShadowSlotsLoc = GetShaderLocationArrayBase(shader, "dynamicLightShadowSlots");
+    for (std::size_t i = 0; i < MaxDynamicSpotLightShadowCasters; ++i) {
+        shadowLightMatrixLocs[i] = GetShaderLocationArrayElement(shader, "shadowLightMatrices", i);
+    }
+    shadowBiasLoc = GetShaderLocationArrayBase(shader, "shadowBias");
+    shadowStrengthLoc = GetShaderLocationArrayBase(shader, "shadowStrength");
+    shadowSoftnessLoc = GetShaderLocationArrayBase(shader, "shadowSoftness");
+    shadowMap0Loc = GetShaderLocation(shader, "shadowMap0");
+    shadowMap1Loc = GetShaderLocation(shader, "shadowMap1");
+    dynamicLightingClampLoc = GetShaderLocation(shader, "dynamicLightingClamp");
     shaderLoaded = true;
     return true;
 }
@@ -1338,6 +1438,24 @@ bool SectorMeshPreview::RebuildRendererResources(
                 billboardCutoutShader,
                 billboardCutoutTextureLoc,
                 billboardCutoutAlphaCutoffLoc,
+                billboardCutoutBakedLightingLoc,
+                billboardCutoutDynamicLightCountLoc,
+                billboardCutoutDynamicLightPositionsLoc,
+                billboardCutoutDynamicLightColorsLoc,
+                billboardCutoutDynamicLightRadiiLoc,
+                billboardCutoutDynamicLightIntensitiesLoc,
+                billboardCutoutDynamicLightTypesLoc,
+                billboardCutoutDynamicLightDirectionsLoc,
+                billboardCutoutDynamicLightInnerConeCosLoc,
+                billboardCutoutDynamicLightOuterConeCosLoc,
+                billboardCutoutDynamicLightShadowSlotsLoc,
+                billboardCutoutShadowLightMatrixLocs,
+                billboardCutoutShadowBiasLoc,
+                billboardCutoutShadowStrengthLoc,
+                billboardCutoutShadowSoftnessLoc,
+                billboardCutoutShadowMap0Loc,
+                billboardCutoutShadowMap1Loc,
+                billboardCutoutDynamicLightingClampLoc,
                 billboardCutoutShaderLoaded)) {
         Shutdown(assets);
         error = "Preview failed: could not load billboard cutout shader";
@@ -1478,6 +1596,24 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
         billboardCutoutShader = Shader{};
         billboardCutoutTextureLoc = -1;
         billboardCutoutAlphaCutoffLoc = -1;
+        billboardCutoutBakedLightingLoc = -1;
+        billboardCutoutDynamicLightCountLoc = -1;
+        billboardCutoutDynamicLightPositionsLoc = -1;
+        billboardCutoutDynamicLightColorsLoc = -1;
+        billboardCutoutDynamicLightRadiiLoc = -1;
+        billboardCutoutDynamicLightIntensitiesLoc = -1;
+        billboardCutoutDynamicLightTypesLoc = -1;
+        billboardCutoutDynamicLightDirectionsLoc = -1;
+        billboardCutoutDynamicLightInnerConeCosLoc = -1;
+        billboardCutoutDynamicLightOuterConeCosLoc = -1;
+        billboardCutoutDynamicLightShadowSlotsLoc = -1;
+        billboardCutoutShadowLightMatrixLocs.fill(-1);
+        billboardCutoutShadowBiasLoc = -1;
+        billboardCutoutShadowStrengthLoc = -1;
+        billboardCutoutShadowSoftnessLoc = -1;
+        billboardCutoutShadowMap0Loc = -1;
+        billboardCutoutShadowMap1Loc = -1;
+        billboardCutoutDynamicLightingClampLoc = -1;
         billboardCutoutShaderLoaded = false;
     }
 
@@ -1632,6 +1768,47 @@ void SectorMeshPreview::DrawRuntimeBillboards(engine::AssetManager& assets, engi
     rlEnableDepthMask();
     BeginShaderMode(billboardCutoutShader);
 
+    UploadDynamicPointLights(
+            billboardCutoutShader,
+            billboardCutoutDynamicLightCountLoc,
+            billboardCutoutDynamicLightPositionsLoc,
+            billboardCutoutDynamicLightColorsLoc,
+            billboardCutoutDynamicLightRadiiLoc,
+            billboardCutoutDynamicLightIntensitiesLoc,
+            billboardCutoutDynamicLightTypesLoc,
+            billboardCutoutDynamicLightDirectionsLoc,
+            billboardCutoutDynamicLightInnerConeCosLoc,
+            billboardCutoutDynamicLightOuterConeCosLoc,
+            billboardCutoutDynamicLightingClampLoc,
+            dynamicLightingEnabled,
+            runtimeSeconds,
+            dynamicPointLights);
+    const SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms =
+            PackSectorPreviewDynamicSpotLightShadowUniforms(
+                    dynamicPointLights,
+                    dynamicSpotLightShadowCasters,
+                    dynamicSpotLightShadowMatrices);
+    UploadDynamicSpotLightShadowUniforms(
+            billboardCutoutShader,
+            billboardCutoutDynamicLightShadowSlotsLoc,
+            billboardCutoutShadowLightMatrixLocs,
+            billboardCutoutShadowBiasLoc,
+            billboardCutoutShadowStrengthLoc,
+            billboardCutoutShadowSoftnessLoc,
+            shadowUniforms);
+    if (billboardCutoutShadowMap0Loc >= 0 && dynamicSpotLightShadowMaps[0].depth.id != 0) {
+        SetShaderValueTexture(
+                billboardCutoutShader,
+                billboardCutoutShadowMap0Loc,
+                dynamicSpotLightShadowMaps[0].depth);
+    }
+    if (billboardCutoutShadowMap1Loc >= 0 && dynamicSpotLightShadowMaps[1].depth.id != 0) {
+        SetShaderValueTexture(
+                billboardCutoutShader,
+                billboardCutoutShadowMap1Loc,
+                dynamicSpotLightShadowMaps[1].depth);
+    }
+
     runtimeObjectWorld.ForEach<SectorObjectTransform, SectorObject, SectorBillboardSprite, SectorBillboardAnimator>(
             [this, &assets, &runtimeObjectWorld](
                     engine::Entity entity,
@@ -1678,20 +1855,10 @@ void SectorMeshPreview::DrawRuntimeBillboards(engine::AssetManager& assets, engi
                     size = Vector2{height * frameSize.x / std::max(frameSize.y, 1.0f), height};
                 }
 
-                const Vector2 origin = {
-                    size.x * sprite.originNormalized.x,
-                    size.y * (1.0f - sprite.originNormalized.y)
-                };
                 const SectorObjectLighting* objectLighting = runtimeObjectWorld.Has<SectorObjectLighting>(entity)
                         ? &runtimeObjectWorld.Get<SectorObjectLighting>(entity)
                         : nullptr;
                 const Vector3 bakedLighting = BakedBillboardLighting(objectLighting);
-                const Vector3 dynamicLighting = DynamicBillboardLighting(
-                        transform.position,
-                        dynamicLightingEnabled,
-                        runtimeSeconds,
-                        dynamicPointLights);
-                const Color tint = ApplyBillboardLighting(sprite.tint, bakedLighting, dynamicLighting);
                 const SectorBillboardFrameUvs uvs = BuildSectorBillboardFrameUvs(
                         frame->source,
                         texture->width,
@@ -1702,15 +1869,11 @@ void SectorMeshPreview::DrawRuntimeBillboards(engine::AssetManager& assets, engi
                 if (Vector3LengthSqr(right) <= 0.000001f) {
                     right = Vector3{1.0f, 0.0f, 0.0f};
                 }
-                const Vector3 up = Vector3{0.0f, 1.0f, 0.0f};
-                const Vector3 bottomLeft = Vector3Add(
+                const SectorBillboardQuad quad = BuildSectorBillboardQuad(
                         transform.position,
-                        Vector3Add(
-                                Vector3Scale(right, -origin.x),
-                                Vector3Scale(up, -origin.y)));
-                const Vector3 topLeft = Vector3Add(bottomLeft, Vector3Scale(up, size.y));
-                const Vector3 topRight = Vector3Add(topLeft, Vector3Scale(right, size.x));
-                const Vector3 bottomRight = Vector3Add(bottomLeft, Vector3Scale(right, size.x));
+                        size,
+                        sprite.originNormalized,
+                        right);
 
                 if (billboardCutoutAlphaCutoffLoc >= 0) {
                     SetShaderValue(
@@ -1719,27 +1882,36 @@ void SectorMeshPreview::DrawRuntimeBillboards(engine::AssetManager& assets, engi
                             &sprite.alphaCutoff,
                             SHADER_UNIFORM_FLOAT);
                 }
+                if (billboardCutoutBakedLightingLoc >= 0) {
+                    SetShaderValue(
+                            billboardCutoutShader,
+                            billboardCutoutBakedLightingLoc,
+                            &bakedLighting,
+                            SHADER_UNIFORM_VEC3);
+                }
                 if (billboardCutoutTextureLoc >= 0) {
                     SetShaderValueTexture(billboardCutoutShader, billboardCutoutTextureLoc, *texture);
                 }
 
+                // Cutout-only path: alpha is discarded in the shader, blending stays disabled, and surviving pixels write depth.
                 rlCheckRenderBatchLimit(4);
                 rlSetTexture(texture->id);
                 rlBegin(RL_QUADS);
-                    rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+                    rlColor4ub(sprite.tint.r, sprite.tint.g, sprite.tint.b, sprite.tint.a);
                     rlTexCoord2f(uvs.bottomLeft.x, uvs.bottomLeft.y);
-                    rlVertex3f(bottomLeft.x, bottomLeft.y, bottomLeft.z);
+                    rlVertex3f(quad.bottomLeft.x, quad.bottomLeft.y, quad.bottomLeft.z);
                     rlTexCoord2f(uvs.bottomRight.x, uvs.bottomRight.y);
-                    rlVertex3f(bottomRight.x, bottomRight.y, bottomRight.z);
+                    rlVertex3f(quad.bottomRight.x, quad.bottomRight.y, quad.bottomRight.z);
                     rlTexCoord2f(uvs.topRight.x, uvs.topRight.y);
-                    rlVertex3f(topRight.x, topRight.y, topRight.z);
+                    rlVertex3f(quad.topRight.x, quad.topRight.y, quad.topRight.z);
                     rlTexCoord2f(uvs.topLeft.x, uvs.topLeft.y);
-                    rlVertex3f(topLeft.x, topLeft.y, topLeft.z);
+                    rlVertex3f(quad.topLeft.x, quad.topLeft.y, quad.topLeft.z);
                 rlEnd();
                 rlSetTexture(0);
             });
 
     EndShaderMode();
+    rlActiveTextureSlot(0);
     rlSetTexture(0);
     rlEnableColorBlend();
     rlSetBlendMode(BLEND_ALPHA);

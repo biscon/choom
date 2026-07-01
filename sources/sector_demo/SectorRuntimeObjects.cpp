@@ -47,6 +47,34 @@ SectorBillboardFrameUvs BuildSectorBillboardFrameUvs(
             Vector2{u0, v1}};
 }
 
+SectorBillboardQuad BuildSectorBillboardQuad(
+        Vector3 position,
+        Vector2 sizeWorld,
+        Vector2 originNormalized,
+        Vector3 cameraRight)
+{
+    Vector3 right = cameraRight;
+    if (Vector3LengthSqr(right) <= 0.000001f) {
+        right = Vector3{1.0f, 0.0f, 0.0f};
+    }
+
+    const Vector2 origin = {
+        sizeWorld.x * originNormalized.x,
+        sizeWorld.y * (1.0f - originNormalized.y)
+    };
+    const Vector3 up = Vector3{0.0f, 1.0f, 0.0f};
+    const Vector3 bottomLeft = Vector3Add(
+            position,
+            Vector3Add(
+                    Vector3Scale(right, -origin.x),
+                    Vector3Scale(up, -origin.y)));
+    const Vector3 topLeft = Vector3Add(bottomLeft, Vector3Scale(up, sizeWorld.y));
+    const Vector3 topRight = Vector3Add(topLeft, Vector3Scale(right, sizeWorld.x));
+    const Vector3 bottomRight = Vector3Add(bottomLeft, Vector3Scale(right, sizeWorld.x));
+
+    return SectorBillboardQuad{bottomLeft, bottomRight, topRight, topLeft};
+}
+
 namespace {
 
 constexpr float TemporaryGoblinDebugSpawnDistance = 2.0f;

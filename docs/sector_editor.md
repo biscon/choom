@@ -595,8 +595,13 @@ Billboard baked lighting samples the baked object-probe payload through the
 runtime object lighting component. The renderer uses a stable probe-derived
 ambient value and does not use the camera-facing quad normal for baked lighting,
 so rotating the camera should not pulse baked brightness. Selected runtime
-dynamic point and spot light contribution is added on top as a simple
-center-point term; billboard dynamic shadow receiving remains deferred.
+dynamic point and spot light contribution is added on top in the billboard
+cutout shader using each fragment's world position. Dynamic spotlights that
+receive an existing sector shadow-map slot attenuate only their own dynamic
+spotlight contribution on billboards; baked object-probe lighting remains
+visible and is not darkened by runtime shadow maps. Dynamic point lights and
+dynamic spotlights without a shadow slot remain unshadowed. Billboards still do
+not cast dynamic shadows.
 
 The current goblin spawn is a temporary preview test path marked in code with
 `TODO_REMOVE_BILLBOARD_TEST_SPAWN`. In 3D preview, `F5` toggles one non-serialized

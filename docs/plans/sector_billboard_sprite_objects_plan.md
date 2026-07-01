@@ -129,6 +129,12 @@ When an agent is asked to execute this plan, it must:
       "type": "pass",
       "parent": "phase_06",
       "status": "Completed"
+    },
+    {
+      "id": "phase_08",
+      "title": "Dynamic Spotlight Shadow Receiving",
+      "type": "phase",
+      "status": "Completed"
     }
   ]
 }
@@ -154,6 +160,7 @@ When an agent is asked to execute this plan, it must:
 | Phase 6: Polish Tests Documentation And Completion                        | Completed   | 2026-07-01 | Phase 6A complete.                                                   |
 | Phase 6A: Document ECS Object Split And Close Plan                        | Completed   | 2026-07-01 | Documented the ECS object split and closed the plan.                 |
 | Phase 7: Ownership And Cutout Rendering Correction                        | Completed   | 2026-07-01 | Moved sector objects to `EngineContext::world` and converted billboards to cutout rendering. |
+| Phase 8: Dynamic Spotlight Shadow Receiving                               | Completed   | 2026-07-01 | Billboard shader now receives selected dynamic spotlight shadow maps; baked probe lighting remains unshadowed. |
 
 ## Execution Tracking Rules
 
@@ -194,6 +201,21 @@ Phase 7 corrected two prototype mistakes from the initial billboard branch.
   Aseprite frame source rectangle, preserving source rectangle sign/flip
   behavior. Pixel-art filtering remains controlled by the asset system; the
   cutout shader only samples, discards, and outputs color.
+
+## Dynamic Spotlight Shadow Receiving Notes, 2026-07-01
+
+Billboard dynamic lighting now runs in the cutout shader using per-fragment
+world position from the manual quad vertices. Dynamic point and spot light
+distance/cone/intensity semantics mirror the sector shader as closely as the
+current sprite lighting model allows; billboards still intentionally do not use
+a camera-facing `NdotL` term for dynamic direct lighting.
+
+Selected dynamic spotlights with existing shadow slots sample the same runtime
+shadow maps, matrices, bias, strength, and softness as sector geometry.
+Dynamic point lights and unshadowed dynamic spotlights remain unshadowed. Runtime
+shadow maps attenuate only the dynamic spotlight contribution; baked object-probe
+lighting is not shadowed. Billboards remain cutout-only, depth-tested, and
+depth-writing, with no billboard shadow casting and no transparent render queue.
 
 ## Goal And Desired End State
 

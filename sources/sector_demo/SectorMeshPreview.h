@@ -151,6 +151,28 @@ private:
     Shader billboardCutoutShader = {};
     int billboardCutoutTextureLoc = -1;
     int billboardCutoutAlphaCutoffLoc = -1;
+    int billboardCutoutBakedLightingLoc = -1;
+    int billboardCutoutDynamicLightCountLoc = -1;
+    int billboardCutoutDynamicLightPositionsLoc = -1;
+    int billboardCutoutDynamicLightColorsLoc = -1;
+    int billboardCutoutDynamicLightRadiiLoc = -1;
+    int billboardCutoutDynamicLightIntensitiesLoc = -1;
+    int billboardCutoutDynamicLightTypesLoc = -1;
+    int billboardCutoutDynamicLightDirectionsLoc = -1;
+    int billboardCutoutDynamicLightInnerConeCosLoc = -1;
+    int billboardCutoutDynamicLightOuterConeCosLoc = -1;
+    int billboardCutoutDynamicLightShadowSlotsLoc = -1;
+    std::array<int, MaxDynamicSpotLightShadowCasters> billboardCutoutShadowLightMatrixLocs = [] {
+        std::array<int, MaxDynamicSpotLightShadowCasters> locs{};
+        locs.fill(-1);
+        return locs;
+    }();
+    int billboardCutoutShadowBiasLoc = -1;
+    int billboardCutoutShadowStrengthLoc = -1;
+    int billboardCutoutShadowSoftnessLoc = -1;
+    int billboardCutoutShadowMap0Loc = -1;
+    int billboardCutoutShadowMap1Loc = -1;
+    int billboardCutoutDynamicLightingClampLoc = -1;
     bool billboardCutoutShaderLoaded = false;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightSources;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;

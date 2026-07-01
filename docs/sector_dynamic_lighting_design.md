@@ -52,6 +52,11 @@ lighting is future work.
 - Sector floors, ceilings, walls, and middle textures cast into dynamic
   spotlight shadow maps. Alpha-tested middle textures discard by base texture
   alpha in the shadow pass.
+- Sector-world billboard sprites receive selected dynamic spotlight shadow maps
+  in their cutout shader. The billboard shader uses each fragment's world
+  position for dynamic light attenuation and shadow projection, while baked
+  object-probe lighting remains unshadowed. Dynamic point lights and dynamic
+  spotlights without a shadow slot remain unshadowed.
 - Selected dynamic lights are rebuilt from authored lights, visibility
   candidates, receiver bounds, contribution ranking, and a small runtime-only
   top-N hysteresis step.
@@ -628,3 +633,5 @@ shader uniforms, shadow maps, and volumetric effects.
 Runtime dynamic spotlight shadow settings, selected shadow slots, shadow map
 resources, light-space matrices, PCF sampling, and visual shadow strength/bias
 remain runtime preview behavior and do not affect the lightmap source hash.
+Billboard dynamic shadow receiving reuses those runtime shadow slots and does
+not affect bake inputs, object probe sidecars, or the lightmap source hash.

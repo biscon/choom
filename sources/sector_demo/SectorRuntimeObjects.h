@@ -89,10 +89,23 @@ struct SectorBillboardFrameUvs {
     Vector2 bottomLeft = {};
 };
 
+struct SectorBillboardQuad {
+    Vector3 bottomLeft = {};
+    Vector3 bottomRight = {};
+    Vector3 topRight = {};
+    Vector3 topLeft = {};
+};
+
 SectorBillboardFrameUvs BuildSectorBillboardFrameUvs(
         Rectangle source,
         int atlasWidth,
         int atlasHeight);
+
+SectorBillboardQuad BuildSectorBillboardQuad(
+        Vector3 position,
+        Vector2 sizeWorld,
+        Vector2 originNormalized,
+        Vector3 cameraRight);
 
 inline engine::SpriteAnimationHandle RequestSectorBillboardSpriteAnimation(
         engine::AssetManager& assets,

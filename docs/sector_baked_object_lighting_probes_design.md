@@ -20,9 +20,11 @@ Future consumer contract:
   sector 3D preview billboard path currently uses an upper-hemisphere ambient
   average from the object's sampled ambient cube.
 - Runtime dynamic point/spot lights are added on top of baked object lighting
-  for preview billboards as a simple center-point contribution. Supported
-  dynamic spotlight shadow maps may be layered onto future object renderers, but
-  billboards do not receive dynamic shadows yet.
+  for preview billboards in the billboard cutout shader. Dynamic light
+  attenuation uses each billboard fragment's world position. Supported dynamic
+  spotlight shadow maps attenuate only the owning dynamic spotlight
+  contribution; baked object-probe lighting is not shadowed by runtime shadow
+  maps.
 
 Current implementation notes:
 
@@ -510,7 +512,10 @@ Implemented first billboard lighting:
 - Sample baked object lighting at the ECS object's world position and current
   sector.
 - Use an upper-hemisphere ambient cube average for stable baked brightness.
-- Add selected dynamic point/spot lights by center-point attenuation.
+- Add selected dynamic point/spot lights in the cutout shader using
+  per-fragment world position.
+- Shadow only dynamic spotlight contribution when the selected spotlight has an
+  existing runtime shadow-map slot. Dynamic point lights remain unshadowed.
 - Do not use the camera-facing quad normal for baked lighting.
 
 Later options:
@@ -536,8 +541,9 @@ sampling can come later if needed, but per-object sampling is a useful first
 contract.
 
 Dynamic spotlight shadow maps can later shadow model dynamic-light contribution.
-That should not change the baked probe data. Dynamic shadow receiving for models
-is a renderer feature layered on top of probe lighting.
+That should not change the baked probe data. Billboard dynamic shadow receiving
+is already layered on top of probe lighting and does not modify object probe
+sidecars, bake output, or the lightmap source hash.
 
 ## Debug and Editor Visualization
 
