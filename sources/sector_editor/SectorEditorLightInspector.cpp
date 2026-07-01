@@ -107,9 +107,9 @@ bool DrawSelectedStaticLightInspector(
     }
     y += rowH + gap;
 
-    const float numberLabelW = 92.0f;
-    const float numberFieldW = 112.0f;
     auto drawLightFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -118,8 +118,8 @@ bool DrawSelectedStaticLightInspector(
                 font,
                 id,
                 label,
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                layout.labelRect,
+                layout.inputRect,
                 engine::UITextJustify::Right,
                 value,
                 inputState,
@@ -142,6 +142,8 @@ bool DrawSelectedStaticLightInspector(
     light.radius = ClampLightRadius(light.radius);
     light.sourceRadius = ClampLightSourceRadius(light.sourceRadius, light.radius);
     {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -150,8 +152,8 @@ bool DrawSelectedStaticLightInspector(
                 font,
                 "sector_editor_light_source_radius",
                 "Source:",
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                layout.labelRect,
+                layout.inputRect,
                 engine::UITextJustify::Right,
                 light.sourceRadius,
                 uiState.lightSourceRadiusInput,
@@ -167,6 +169,7 @@ bool DrawSelectedStaticLightInspector(
     }
 
     auto drawLightChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
+        const float colorLabelW = 92.0f;
         const SectorEditorRgb8InputResult result = DrawRgb8ChannelInput(
                 ui,
                 config,
@@ -175,8 +178,8 @@ bool DrawSelectedStaticLightInspector(
                 font,
                 id,
                 label,
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, contentW - numberLabelW, rowH},
+                Rectangle{0.0f, y, colorLabelW, rowH},
+                Rectangle{colorLabelW, y, contentW - colorLabelW, rowH},
                 engine::UITextJustify::Right,
                 channel,
                 inputState);
@@ -191,10 +194,11 @@ bool DrawSelectedStaticLightInspector(
     drawLightChannel("sector_editor_light_g", "G:", light.color.g, uiState.lightGreenInput);
     drawLightChannel("sector_editor_light_b", "B:", light.color.b, uiState.lightBlueInput);
 
+    const float swatchW = std::min(120.0f, contentW);
     const Rectangle swatch{
-            scroll.viewport.x + numberLabelW,
+            scroll.viewport.x + std::max(0.0f, contentW - swatchW),
             scroll.viewport.y - uiState.inspectorScroll.offset.y + y + 2.0f,
-            std::min(120.0f, contentW - numberLabelW),
+            swatchW,
             28.0f
     };
     DrawColorSwatch(config, swatch, light.color, 1.0f);
@@ -241,9 +245,9 @@ bool DrawSelectedStaticSpotLightInspector(
     }
     y += rowH + gap;
 
-    const float numberLabelW = 126.0f;
-    const float numberFieldW = 112.0f;
     auto drawLightFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -252,8 +256,8 @@ bool DrawSelectedStaticSpotLightInspector(
                 font,
                 id,
                 label,
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                layout.labelRect,
+                layout.inputRect,
                 engine::UITextJustify::Right,
                 value,
                 inputState,
@@ -277,6 +281,8 @@ bool DrawSelectedStaticSpotLightInspector(
     light.range = ClampLightRadius(light.range);
     light.sourceRadius = ClampLightSourceRadius(light.sourceRadius, light.range);
     {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -285,8 +291,8 @@ bool DrawSelectedStaticSpotLightInspector(
                 font,
                 "sector_editor_static_spot_light_source_radius",
                 "Source radius:",
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                layout.labelRect,
+                layout.inputRect,
                 engine::UITextJustify::Right,
                 light.sourceRadius,
                 uiState.lightSourceRadiusInput,
@@ -308,6 +314,7 @@ bool DrawSelectedStaticSpotLightInspector(
     light.intensity = ClampLightIntensity(light.intensity);
 
     auto drawLightChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
+        const float colorLabelW = 126.0f;
         const SectorEditorRgb8InputResult result = DrawRgb8ChannelInput(
                 ui,
                 config,
@@ -316,8 +323,8 @@ bool DrawSelectedStaticSpotLightInspector(
                 font,
                 id,
                 label,
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, contentW - numberLabelW, rowH},
+                Rectangle{0.0f, y, colorLabelW, rowH},
+                Rectangle{colorLabelW, y, contentW - colorLabelW, rowH},
                 engine::UITextJustify::Right,
                 channel,
                 inputState);
@@ -332,10 +339,11 @@ bool DrawSelectedStaticSpotLightInspector(
     drawLightChannel("sector_editor_static_spot_light_g", "G:", light.color.g, uiState.lightGreenInput);
     drawLightChannel("sector_editor_static_spot_light_b", "B:", light.color.b, uiState.lightBlueInput);
 
+    const float swatchW = std::min(120.0f, contentW);
     const Rectangle swatch{
-            scroll.viewport.x + numberLabelW,
+            scroll.viewport.x + std::max(0.0f, contentW - swatchW),
             scroll.viewport.y - uiState.inspectorScroll.offset.y + y + 2.0f,
-            std::min(120.0f, contentW - numberLabelW),
+            swatchW,
             28.0f
     };
     DrawColorSwatch(config, swatch, light.color, 1.0f);
@@ -398,9 +406,9 @@ bool DrawSelectedDynamicLightInspector(
     }
     y += rowH + gap;
 
-    const float numberLabelW = 116.0f;
-    const float numberFieldW = 112.0f;
     auto drawLightFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -409,8 +417,8 @@ bool DrawSelectedDynamicLightInspector(
                 font,
                 id,
                 label,
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                layout.labelRect,
+                layout.inputRect,
                 engine::UITextJustify::Right,
                 value,
                 inputState,
@@ -452,6 +460,7 @@ bool DrawSelectedDynamicLightInspector(
     light.radius = ClampLightRadius(light.radius);
 
     auto drawLightChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
+        const float colorLabelW = 116.0f;
         const SectorEditorRgb8InputResult result = DrawRgb8ChannelInput(
                 ui,
                 config,
@@ -460,8 +469,8 @@ bool DrawSelectedDynamicLightInspector(
                 font,
                 id,
                 label,
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, contentW - numberLabelW, rowH},
+                Rectangle{0.0f, y, colorLabelW, rowH},
+                Rectangle{colorLabelW, y, contentW - colorLabelW, rowH},
                 engine::UITextJustify::Right,
                 channel,
                 inputState);
@@ -476,10 +485,11 @@ bool DrawSelectedDynamicLightInspector(
     drawLightChannel("sector_editor_dynamic_light_g", "G:", light.color.g, uiState.lightGreenInput);
     drawLightChannel("sector_editor_dynamic_light_b", "B:", light.color.b, uiState.lightBlueInput);
 
+    const float swatchW = std::min(120.0f, contentW);
     const Rectangle swatch{
-            scroll.viewport.x + numberLabelW,
+            scroll.viewport.x + std::max(0.0f, contentW - swatchW),
             scroll.viewport.y - uiState.inspectorScroll.offset.y + y + 2.0f,
-            std::min(120.0f, contentW - numberLabelW),
+            swatchW,
             28.0f
     };
     DrawColorSwatch(config, swatch, light.color, light.enabled ? 1.0f : 0.45f);
@@ -539,9 +549,9 @@ bool DrawSelectedDynamicSpotLightInspector(
     }
     y += rowH + gap;
 
-    const float numberLabelW = 126.0f;
-    const float numberFieldW = 112.0f;
     auto drawLightFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -550,8 +560,8 @@ bool DrawSelectedDynamicSpotLightInspector(
                 font,
                 id,
                 label,
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                layout.labelRect,
+                layout.inputRect,
                 engine::UITextJustify::Right,
                 value,
                 inputState,
@@ -614,6 +624,8 @@ bool DrawSelectedDynamicSpotLightInspector(
     y += shadowNoteHeight + gap;
 
     {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightIntRowLayout(y, contentW, rowH, gap);
         const SectorEditorIntInputResult result = DrawLabeledIntInput(
                 ui,
                 config,
@@ -622,8 +634,8 @@ bool DrawSelectedDynamicSpotLightInspector(
                 font,
                 "sector_editor_dynamic_spot_light_shadow_priority",
                 "Shadow priority:",
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                layout.labelRect,
+                layout.inputRect,
                 engine::UITextJustify::Right,
                 light.shadowPriority,
                 uiState.lightShadowPriorityInput,
@@ -638,6 +650,8 @@ bool DrawSelectedDynamicSpotLightInspector(
         y += rowH + gap;
     }
     {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -646,8 +660,8 @@ bool DrawSelectedDynamicSpotLightInspector(
                 font,
                 "sector_editor_dynamic_spot_light_shadow_bias",
                 "Shadow bias:",
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                layout.labelRect,
+                layout.inputRect,
                 engine::UITextJustify::Right,
                 light.shadowBias,
                 uiState.lightShadowBiasInput,
@@ -662,6 +676,8 @@ bool DrawSelectedDynamicSpotLightInspector(
         y += rowH + gap;
     }
     {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -670,8 +686,8 @@ bool DrawSelectedDynamicSpotLightInspector(
                 font,
                 "sector_editor_dynamic_spot_light_shadow_strength",
                 "Shadow strength:",
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                layout.labelRect,
+                layout.inputRect,
                 engine::UITextJustify::Right,
                 light.shadowStrength,
                 uiState.lightShadowStrengthInput,
@@ -686,6 +702,8 @@ bool DrawSelectedDynamicSpotLightInspector(
         y += rowH + gap;
     }
     {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -694,8 +712,8 @@ bool DrawSelectedDynamicSpotLightInspector(
                 font,
                 "sector_editor_dynamic_spot_light_shadow_softness",
                 "Softness",
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, numberFieldW, rowH},
+                layout.labelRect,
+                layout.inputRect,
                 engine::UITextJustify::Right,
                 light.shadowSoftness,
                 uiState.lightShadowSoftnessInput,
@@ -726,6 +744,7 @@ bool DrawSelectedDynamicSpotLightInspector(
     light.outerConeDegrees = std::clamp(std::max(light.outerConeDegrees, light.innerConeDegrees), 0.0f, 179.0f);
 
     auto drawLightChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
+        const float colorLabelW = 126.0f;
         const SectorEditorRgb8InputResult result = DrawRgb8ChannelInput(
                 ui,
                 config,
@@ -734,8 +753,8 @@ bool DrawSelectedDynamicSpotLightInspector(
                 font,
                 id,
                 label,
-                Rectangle{0.0f, y, numberLabelW, rowH},
-                Rectangle{numberLabelW, y, contentW - numberLabelW, rowH},
+                Rectangle{0.0f, y, colorLabelW, rowH},
+                Rectangle{colorLabelW, y, contentW - colorLabelW, rowH},
                 engine::UITextJustify::Right,
                 channel,
                 inputState);
@@ -750,10 +769,11 @@ bool DrawSelectedDynamicSpotLightInspector(
     drawLightChannel("sector_editor_dynamic_spot_light_g", "G:", light.color.g, uiState.lightGreenInput);
     drawLightChannel("sector_editor_dynamic_spot_light_b", "B:", light.color.b, uiState.lightBlueInput);
 
+    const float swatchW = std::min(120.0f, contentW);
     const Rectangle swatch{
-            scroll.viewport.x + numberLabelW,
+            scroll.viewport.x + std::max(0.0f, contentW - swatchW),
             scroll.viewport.y - uiState.inspectorScroll.offset.y + y + 2.0f,
-            std::min(120.0f, contentW - numberLabelW),
+            swatchW,
             28.0f
     };
     DrawColorSwatch(config, swatch, light.color, light.enabled ? 1.0f : 0.45f);

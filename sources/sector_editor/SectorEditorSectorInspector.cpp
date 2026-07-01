@@ -71,7 +71,6 @@ bool DrawTopologySectorInspector(
     y += 38.0f;
 
     const float labelW = 92.0f;
-    const float numberFieldW = 112.0f;
 
     engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, "Name", engine::UITextJustify::Left, config.mutedTextColor);
     const engine::UITextInputResult nameResult = engine::TextInput(
@@ -131,6 +130,8 @@ bool DrawTopologySectorInspector(
     y += rowH + gap;
 
     auto drawHeight = [&](const char* id, const char* label, float current, engine::UIFloatInputState& inputState, bool floorField) {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -139,8 +140,8 @@ bool DrawTopologySectorInspector(
                 font,
                 id,
                 label,
-                Rectangle{0.0f, y, labelW, rowH},
-                Rectangle{labelW, y, numberFieldW, rowH},
+                layout.labelRect,
+                layout.inputRect,
                 engine::UITextJustify::Right,
                 current,
                 inputState,
@@ -183,6 +184,8 @@ bool DrawTopologySectorInspector(
     y += 30.0f;
 
     float ambientIntensity = ClampAmbientIntensity(sector.ambientIntensity);
+    const SectorEditorInspectorNumericRowLayout ambientLayout =
+            BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
     const SectorEditorFloatInputResult ambientResult = DrawLabeledFloatInput(
             ui,
             config,
@@ -191,8 +194,8 @@ bool DrawTopologySectorInspector(
             font,
             "sector_editor_topology_ambient_intensity",
             "Intensity:",
-            Rectangle{0.0f, y, labelW, rowH},
-            Rectangle{labelW, y, numberFieldW, rowH},
+            ambientLayout.labelRect,
+            ambientLayout.inputRect,
             engine::UITextJustify::Right,
             ambientIntensity,
             uiState.ambientIntensityInput,
@@ -234,10 +237,11 @@ bool DrawTopologySectorInspector(
     drawAmbientChannel("sector_editor_topology_ambient_g", "G:", sector.ambientColor.g, uiState.ambientGreenInput);
     drawAmbientChannel("sector_editor_topology_ambient_b", "B:", sector.ambientColor.b, uiState.ambientBlueInput);
 
+    const float swatchW = std::min(120.0f, contentW);
     const Rectangle swatch{
-            scroll.viewport.x + labelW,
+            scroll.viewport.x + std::max(0.0f, contentW - swatchW),
             scroll.viewport.y - uiState.inspectorScroll.offset.y + y + 2.0f,
-            std::min(120.0f, contentW - labelW),
+            swatchW,
             28.0f};
     DrawColorSwatch(config, swatch, TopologySectorAmbientPreviewColor(sector, 255), 1.0f);
     y += 36.0f + gap;

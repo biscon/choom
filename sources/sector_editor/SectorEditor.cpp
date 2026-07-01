@@ -6760,8 +6760,6 @@ void SectorEditor::DrawSectorsPanel(
                 true);
         y += anchorHeight;
 
-        const float labelW = 92.0f;
-        const float numberFieldW = 112.0f;
         const int faceAnchorId = selectedAuthoringFaceAnchor->id;
         const auto mutateFaceAnchor =
                 [this, faceAnchorId](const char* status, const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate) {
@@ -6792,6 +6790,8 @@ void SectorEditor::DrawSectorsPanel(
         y += rowH + gap;
 
         auto drawHeight = [&](const char* id, const char* label, float current, engine::UIFloatInputState& inputState, bool floorField) {
+            const SectorEditorInspectorNumericRowLayout layout =
+                    BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
             const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                     ui,
                     config,
@@ -6800,8 +6800,8 @@ void SectorEditor::DrawSectorsPanel(
                     font,
                     id,
                     label,
-                    Rectangle{0.0f, y, labelW, rowH},
-                    Rectangle{labelW, y, numberFieldW, rowH},
+                    layout.labelRect,
+                    layout.inputRect,
                     engine::UITextJustify::Right,
                     current,
                     inputState,
@@ -6860,6 +6860,8 @@ void SectorEditor::DrawSectorsPanel(
         y += 30.0f;
 
         const float ambientIntensity = std::clamp(selectedAuthoringFaceAnchor->ambientIntensity, 0.0f, 1.0f);
+        const SectorEditorInspectorNumericRowLayout ambientLayout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult ambientResult = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -6868,8 +6870,8 @@ void SectorEditor::DrawSectorsPanel(
                 font,
                 "sector_editor_authoring_face_ambient_intensity",
                 "Intensity:",
-                Rectangle{0.0f, y, labelW, rowH},
-                Rectangle{labelW, y, numberFieldW, rowH},
+                ambientLayout.labelRect,
+                ambientLayout.inputRect,
                 engine::UITextJustify::Right,
                 ambientIntensity,
                 uiState.ambientIntensityInput,
@@ -6890,6 +6892,7 @@ void SectorEditor::DrawSectorsPanel(
         y += rowH + gap;
 
         auto drawAmbientChannel = [&](const char* id, const char* label, unsigned char current, engine::UIIntInputState& inputState, int channel) {
+            const float colorLabelW = 92.0f;
             const SectorEditorRgb8InputResult result = DrawRgb8ChannelInput(
                     ui,
                     config,
@@ -6898,8 +6901,8 @@ void SectorEditor::DrawSectorsPanel(
                     font,
                     id,
                     label,
-                    Rectangle{0.0f, y, labelW, rowH},
-                    Rectangle{labelW, y, contentW - labelW, rowH},
+                    Rectangle{0.0f, y, colorLabelW, rowH},
+                    Rectangle{colorLabelW, y, contentW - colorLabelW, rowH},
                     engine::UITextJustify::Right,
                     current,
                     inputState);

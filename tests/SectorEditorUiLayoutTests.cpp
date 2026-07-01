@@ -68,6 +68,44 @@ void TestCompactNumericRow()
     Check(!Overlaps(wide.labelRect, wide.inputRect), "compact numeric label does not overlap input");
 }
 
+void TestRightFloatNumericRow()
+{
+    const game::SectorEditorInspectorNumericRowLayout layout =
+            game::BuildSectorEditorInspectorRightFloatRowLayout(8.0f, 260.0f, 36.0f, 8.0f);
+
+    Check(Near(layout.inputRect.width, game::SectorEditorInspectorFloatInputWidth),
+          "right float numeric input keeps fixed width when space allows");
+    Check(Near(layout.inputRect.x + layout.inputRect.width, 260.0f),
+          "right float numeric input is right aligned");
+    Check(!Overlaps(layout.labelRect, layout.inputRect),
+          "right float numeric label does not overlap input");
+    Check(layout.labelRect.width > 120.0f,
+          "right float numeric label has room for long labels");
+}
+
+void TestRightIntNumericRow()
+{
+    const game::SectorEditorInspectorNumericRowLayout layout =
+            game::BuildSectorEditorInspectorRightIntRowLayout(8.0f, 260.0f, 36.0f, 8.0f);
+
+    Check(Near(layout.inputRect.width, game::SectorEditorInspectorIntInputWidth),
+          "right int numeric input keeps fixed width when space allows");
+    Check(Near(layout.inputRect.x + layout.inputRect.width, 260.0f),
+          "right int numeric input is right aligned");
+    Check(!Overlaps(layout.labelRect, layout.inputRect),
+          "right int numeric label does not overlap input");
+}
+
+void TestRightNumericRowClamps()
+{
+    const game::SectorEditorInspectorNumericRowLayout layout =
+            game::BuildSectorEditorInspectorRightFloatRowLayout(8.0f, 72.0f, 36.0f, 8.0f);
+
+    Check(Near(layout.inputRect.x, 0.0f), "right numeric input clamps to narrow content x");
+    Check(Near(layout.inputRect.width, 72.0f), "right numeric input clamps to narrow content width");
+    Check(!Overlaps(layout.labelRect, layout.inputRect), "clamped right numeric label does not overlap input");
+}
+
 void TestTextureRowHeight()
 {
     Check(Near(game::SectorEditorInspectorTextureRowHeight(), 60.0f),
@@ -81,6 +119,9 @@ int main()
     TestTextureRowWithoutClear();
     TestTextureRowWithClear();
     TestCompactNumericRow();
+    TestRightFloatNumericRow();
+    TestRightIntNumericRow();
+    TestRightNumericRowClamps();
     TestTextureRowHeight();
 
     if (failures != 0) {
