@@ -493,7 +493,7 @@ void SectorEditor::RenderUI(
             ui.focusedId = 0;
             ui.openOptionId = 0;
         } else {
-            DrawPreviewOverlay(ui, config, input, assets, font);
+            DrawPreviewOverlay(ui, config, input, assets, font, smallFont);
         }
         if (!state.previewUiHidden
                 && !state.texturePicker.open
@@ -2056,19 +2056,25 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
     const Vector2 mouse = input.MousePosition();
     const bool overPanel = IsValidTopologySurfaceEditTarget(state.selectedTopologySurface3D)
             && Contains(BuildPreviewUvPanelRect(), mouse);
+    const bool overPreviewOverlay = IsPreviewOverlayMouseInteractive()
+            && Contains(BuildPreviewOverlayInteractionRect(), mouse);
     state.hoveredSurface3D = overPanel
+            || overPreviewOverlay
             ? SectorSurfaceHit{}
             : PickSectorSurface3D(mouse, viewport);
 
     input.ForEachEvent(
             engine::InputEventType::MouseClick,
             true,
-            [this, overPanel](engine::InputEvent& event) {
+            [this, overPanel, overPreviewOverlay](engine::InputEvent& event) {
                 if (event.mouseClick.button != MOUSE_LEFT_BUTTON) {
                     return;
                 }
                 if (overPanel) {
                     engine::ConsumeEvent(event);
+                    return;
+                }
+                if (overPreviewOverlay) {
                     return;
                 }
                 if (state.hoveredSurface3D.hit) {
@@ -3815,109 +3821,82 @@ void SectorEditor::RefreshPreviewObjectProbeDebugData()
     RefreshSectorRuntimeObjectMapData(state.runtimeObjects, state.topologyMap);
 }
 
+bool SectorEditor::IsPreviewOverlayMouseInteractive() const
+{
+    return !state.freeflyController.mouseLookEnabled;
+}
+
+Rectangle SectorEditor::BuildPreviewOverlayInteractionRect() const
+{
+    constexpr float x = 32.0f;
+    constexpr float y = 32.0f;
+    constexpr float width = 620.0f;
+    constexpr float collapsedHeight = 92.0f;
+    constexpr float expandedHeight = 390.0f;
+    return Rectangle{
+            x,
+            y,
+            width,
+            state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::None
+                    || !IsPreviewOverlayMouseInteractive()
+                    ? collapsedHeight
+                    : expandedHeight};
+}
+
 void SectorEditor::DrawPreviewOverlay(
         engine::UIContext& ui,
         const engine::UIConfig& config,
         engine::Input& input,
         engine::AssetManager& assets,
-        engine::FontHandle font)
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
 {
-    const Rectangle panel{32.0f, 32.0f, EditorWidth - 64.0f, 356.0f};
-    DrawRectangleRec(panel, Color{12, 15, 20, 205});
-    DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
+    struct OverlayLine {
+        std::string text;
+        Color color;
+        bool wrap;
+    };
+
+    const bool mouseInteractive = IsPreviewOverlayMouseInteractive();
+    const bool drawExpanded = mouseInteractive
+            && state.activePreviewDebugOverlayTab != PreviewDebugOverlayTab::None;
+    const float panelW = 620.0f;
+    const float padding = 14.0f;
+    const float gap = 8.0f;
+    const float stripH = 26.0f;
+    const float tabH = 30.0f;
+    const float rowH = 24.0f;
+    const Rectangle basePanel{32.0f, 32.0f, panelW, 0.0f};
+    const float contentW = panelW - padding * 2.0f;
+    engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
 
     const SectorViewPose pose = ActivePreviewPose();
     const Vector3 position = pose.position;
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 14.0f, panel.width - 36.0f, 34.0f},
-            font,
-            TextFormat("3D Mode | %s", PreviewControlModeName(state.previewControlMode)),
-            engine::UITextJustify::Left
-    );
-    if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_preview_settings",
-                Rectangle{panel.x + panel.width - 152.0f, panel.y + 12.0f, 130.0f, 36.0f},
-                font,
-                "Settings")) {
-        OpenPreviewSettingsModal();
-    }
-    const bool hasSelectedSpotLight = SelectedTopologyStaticSpotLight() != nullptr
-            || SelectedTopologyDynamicSpotLight() != nullptr;
-    if (state.spotLightPilot.active) {
-        constexpr float buttonW = 108.0f;
-        if (engine::Button(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    "sector_editor_preview_spotlight_pilot_apply",
-                    Rectangle{
-                            panel.x + panel.width - 152.0f - buttonW * 2.0f - 20.0f,
-                            panel.y + 12.0f,
-                            buttonW,
-                            36.0f},
-                    font,
-                    "Apply")) {
-            ApplySpotLightPilot();
-        }
-        if (engine::Button(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    "sector_editor_preview_spotlight_pilot_cancel",
-                    Rectangle{
-                            panel.x + panel.width - 152.0f - buttonW - 10.0f,
-                            panel.y + 12.0f,
-                            buttonW,
-                            36.0f},
-                    font,
-                    "Cancel")) {
-            CancelSpotLightPilot("Spotlight pilot cancelled");
-        }
-    } else if (hasSelectedSpotLight && state.previewControlMode == SectorPreviewControlMode::FreeFly) {
-        if (engine::Button(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    "sector_editor_preview_spotlight_pilot_start",
-                    Rectangle{panel.x + panel.width - 290.0f, panel.y + 12.0f, 118.0f, 36.0f},
-                    font,
-                    "Pilot Light")) {
-            StartSpotLightPilot();
-        }
-    }
-    const char* interactionText = state.freeflyController.mouseLookEnabled
-            ? (state.spotLightPilot.active
-                    ? "Pilot Light | WASD move | Mouse look | Space/Ctrl up/down | Apply or Cancel"
-                    : (state.previewControlMode == SectorPreviewControlMode::Gameplay
-                    ? "WASD move | Space jump | Shift run | Mouse look | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc"
-                    : "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc"))
-            : "F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | click surface to select | Tab/Esc";
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 54.0f, panel.width - 36.0f, 30.0f},
-            font,
-            interactionText,
-            engine::UITextJustify::Left,
-            config.mutedTextColor
-    );
+    const RuntimePortalVisibilityResult& visibility = preview.VisibilityResult();
+    const int compactSectorId =
+            state.previewControlMode == SectorPreviewControlMode::Gameplay
+                    ? state.fpsControllerState.currentSectorId
+                    : (visibility.validStartSector ? visibility.startSectorId : 0);
+    std::string compactSector = compactSectorId > 0
+            ? TextFormat("sector %d", compactSectorId)
+            : "sector none";
+    const char* dirtyText = state.topologyDocumentDirty ? "unsaved" : "saved";
+    const std::string compactStatus = TextFormat(
+            "3D %s | %s | assets %.0f%% | lightmap %s | %s",
+            PreviewControlModeName(state.previewControlMode),
+            compactSector.c_str(),
+            preview.RendererAssetProgress(assets) * 100.0f,
+            preview.RendererLightmapStatusText(),
+            dirtyText);
+
     std::string collisionStatus;
     if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
         if (state.sectorCollisionWorldValid) {
             if (state.previewCollisionNoclipFallback) {
-                collisionStatus = "Gameplay collision: no sector | noclip";
+                collisionStatus = "mode: gameplay collision | status: no sector / noclip";
             } else if (state.fpsControllerState.currentSectorId == 0
                     || !state.previewVerticalResult.hasSector) {
-                collisionStatus = "Gameplay collision: on | no sector";
+                collisionStatus = "mode: gameplay collision | status: no sector";
             } else {
                 std::string blockText;
                 if (state.previewMoveResult.hitWall) {
@@ -3938,149 +3917,284 @@ void SectorEditor::DrawPreviewOverlay(
                                 ? "grounded"
                                 : (state.fpsControllerState.verticalVelocity > 0.0f ? "jumping" : "falling"));
                 collisionStatus = TextFormat(
-                        "Gameplay collision: sector %d | %s%s | vertical %s | block %s | r %.2f step %.2f jump %.2f | floor %.2f feet %.2f vel %.2f",
+                        "mode: gameplay collision | sector: %d | vertical: %s / %s | block: %s | radius: %.2f | step: %.2f | jump: %.2f",
                         state.fpsControllerState.currentSectorId,
                         verticalState,
-                        state.previewVerticalResult.cannotFit ? " grounded" : "",
                         VerticalTransitionName(state.previewVerticalResult.transition),
                         blockText.c_str(),
                         state.fpsControllerConfig.playerRadius,
                         state.fpsControllerConfig.stepHeight,
-                        state.fpsControllerConfig.jumpHeight,
-                        state.previewVerticalResult.floorZ,
-                        state.fpsControllerState.feetPosition.y,
-                        state.fpsControllerState.verticalVelocity);
+                        state.fpsControllerConfig.jumpHeight);
             }
         } else {
-            collisionStatus = "Gameplay collision: unavailable";
+            collisionStatus = "mode: gameplay collision | status: unavailable";
+        }
+    } else {
+        collisionStatus = "mode: FreeFly | collision: noclip";
+    }
+
+    std::vector<OverlayLine> lines;
+    const auto addLine = [&](const std::string& text, Color color, bool wrap) {
+        lines.push_back(OverlayLine{text, color, wrap});
+    };
+    const auto addWrappedLine = [&](const std::string& text) {
+        addLine(text, smallConfig.mutedTextColor, true);
+    };
+    const auto addKeyValue = [&](const char* key, const std::string& value) {
+        addLine(std::string(key) + ": " + value, smallConfig.mutedTextColor, false);
+    };
+    const auto addKeyValueStyled = [&](const char* key, const std::string& value, Color color, bool wrap) {
+        addLine(std::string(key) + ": " + value, color, wrap);
+    };
+
+    if (drawExpanded) {
+        switch (state.activePreviewDebugOverlayTab) {
+            case PreviewDebugOverlayTab::View:
+                addKeyValue("mode", PreviewControlModeName(state.previewControlMode));
+                addKeyValue("position", TextFormat("%.2f, %.2f, %.2f", position.x, position.y, position.z));
+                addKeyValue("sector", compactSector);
+                addWrappedLine(collisionStatus);
+                if (!state.sectorCollisionWorldWarning.empty()) {
+                    addKeyValueStyled("warning", state.sectorCollisionWorldWarning, Color{236, 92, 92, 245}, true);
+                }
+                break;
+            case PreviewDebugOverlayTab::Render:
+                addKeyValue("sectors", TextFormat("%zu", preview.SectorCount()));
+                addKeyValue("batches", TextFormat("%zu", preview.BatchCount()));
+                addKeyValue("triangles", TextFormat("%d", preview.TriangleCount()));
+                addKeyValueStyled("render", preview.RenderDebugText(), smallConfig.mutedTextColor, true);
+                break;
+            case PreviewDebugOverlayTab::Visibility:
+                addKeyValue("valid start", visibility.validStartSector ? "yes" : "no");
+                addKeyValue("visible", TextFormat("%zu / %zu", visibility.visibleSectorIds.size(), visibility.totalSectorCount));
+                addKeyValue("fallback", visibility.fallbackDrawAll ? "draw all" : "none");
+                addKeyValueStyled("details", preview.PortalVisibilityDebugText(), smallConfig.mutedTextColor, true);
+                break;
+            case PreviewDebugOverlayTab::Lighting:
+                addKeyValue("dynamic", preview.DynamicLightingEnabled() ? "on" : "off");
+                addKeyValue("AO", state.useBakedAmbientOcclusion ? "on" : "off");
+                addKeyValue("lightmap", preview.RendererLightmapStatusText());
+                addKeyValueStyled("render lights", preview.RenderDebugText(), smallConfig.mutedTextColor, true);
+                break;
+            case PreviewDebugOverlayTab::Objects: {
+                const SectorRuntimeObjectState& objects = state.runtimeObjects;
+                addKeyValue("placed/spawned/skipped", TextFormat(
+                        "%zu / %zu / %zu",
+                        objects.placedObjectCount,
+                        objects.spawnedObjectCount,
+                        objects.skippedObjectCount));
+                addKeyValue("sprites ready/pending/failed", TextFormat(
+                        "%zu / %zu / %zu",
+                        objects.spriteAnimationReadyCount,
+                        objects.spriteAnimationPendingCount,
+                        objects.spriteAnimationFailedCount));
+                addKeyValue("directional clips", TextFormat(
+                        "resolved %zu | missing %zu | fallback %zu",
+                        objects.directionalClipResolvedCount,
+                        objects.directionalClipMissingCount,
+                        objects.directionalClipFallbackCount));
+                addKeyValue("single clips", TextFormat(
+                        "resolved %zu | missing %zu | fallback %zu",
+                        objects.singleClipResolvedCount,
+                        objects.singleClipMissingCount,
+                        objects.singleClipFallbackCount));
+                addKeyValueStyled("billboards", preview.RenderDebugText(), smallConfig.mutedTextColor, true);
+                if (!objects.placedObjectWarning.empty()) {
+                    addKeyValueStyled("warning", objects.placedObjectWarning, Color{236, 92, 92, 245}, true);
+                }
+                break;
+            }
+            case PreviewDebugOverlayTab::Probes: {
+                const char* objectProbeStatus = state.runtimeObjects.objectProbeStatus.empty()
+                        ? "none"
+                        : state.runtimeObjects.objectProbeStatus.c_str();
+                addKeyValueStyled("status", objectProbeStatus, smallConfig.mutedTextColor, true);
+                addKeyValue("probe count", TextFormat("%zu", state.runtimeObjects.objectLightProbes.probes.size()));
+                if (!state.runtimeObjects.objectSectorLookupWarning.empty()) {
+                    addKeyValueStyled("lookup warning", state.runtimeObjects.objectSectorLookupWarning, Color{236, 92, 92, 245}, true);
+                }
+                break;
+            }
+            case PreviewDebugOverlayTab::Controls:
+                if (state.spotLightPilot.active) {
+                    addWrappedLine("pilot light: WASD move, mouse look, Space/Ctrl up/down. Unlock cursor with F11 to click Apply or Cancel.");
+                } else if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
+                    addWrappedLine("movement: WASD move, Space jump, Shift run, mouse look. F11 unlocks cursor for UI tabs.");
+                } else {
+                    addWrappedLine("movement: WASD move, mouse look, Space/Ctrl up/down. F11 unlocks cursor for UI tabs.");
+                }
+                addWrappedLine("hotkeys: F1 AO, F2 hide/show 3D UI, F3 control mode, F4 dynamic lights, Tab/Esc return to 2D.");
+                break;
+            case PreviewDebugOverlayTab::None:
+                break;
         }
     }
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 92.0f, panel.width - 36.0f, 30.0f},
-            font,
-            TextFormat(
-                    "pos %.2f %.2f %.2f | sectors %zu | batches %zu | triangles %d",
-                    position.x,
-                    position.y,
-                    position.z,
-                    preview.SectorCount(),
-                    preview.BatchCount(),
-                    preview.TriangleCount()
-            ),
-            engine::UITextJustify::Left,
-            config.mutedTextColor
-    );
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 122.0f, panel.width - 36.0f, 30.0f},
-            font,
-            collisionStatus.empty() ? "3D collision: FreeFly noclip" : collisionStatus.c_str(),
-            engine::UITextJustify::Left,
-            config.mutedTextColor
-    );
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 152.0f, panel.width - 36.0f, 30.0f},
-            font,
-            preview.PortalVisibilityDebugText().c_str(),
-            engine::UITextJustify::Left,
-            config.mutedTextColor
-    );
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 182.0f, panel.width - 36.0f, 30.0f},
-            font,
-            preview.RenderDebugText().c_str(),
-            engine::UITextJustify::Left,
-            config.mutedTextColor
-    );
-    engine::Checkbox(
-            ui,
-            config,
-            input,
-            assets,
-            "sector_editor_show_object_probe_debug_overlay",
-            Rectangle{panel.x + 18.0f, panel.y + 212.0f, 240.0f, 30.0f},
-            font,
-            "Show Object Probes",
-            state.showObjectProbeDebugOverlay);
-    const char* objectProbeStatus = state.runtimeObjects.objectProbeStatus.empty()
-            ? "Object probes: none"
-            : state.runtimeObjects.objectProbeStatus.c_str();
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 276.0f, panel.y + 212.0f, panel.width - 294.0f, 30.0f},
-            font,
-            objectProbeStatus,
-            engine::UITextJustify::Left,
-            config.mutedTextColor
-    );
-    const char* previewStatusText = statusText.empty() ? "Ready" : statusText.c_str();
-    const char* collisionWarningText = state.sectorCollisionWorldWarning.empty()
-            ? previewStatusText
-            : state.sectorCollisionWorldWarning.c_str();
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 250.0f, panel.width - 36.0f, 30.0f},
-            font,
-            state.runtimeObjects.placedObjectStatus.empty()
-                    ? "Runtime objects: 0 placed / 0 spawned, 0 skipped"
-                    : state.runtimeObjects.placedObjectStatus.c_str(),
-            engine::UITextJustify::Left,
-            (state.runtimeObjects.skippedObjectCount > 0
-                    || state.runtimeObjects.spriteAnimationFailedCount > 0
-                    || (state.runtimeObjects.directionalClipMissingCount > 0
-                            && state.runtimeObjects.spriteAnimationPendingCount == 0))
-                    ? Color{236, 92, 92, 245}
-                    : config.mutedTextColor
-    );
-    if (!state.runtimeObjects.placedObjectWarning.empty()) {
-        engine::Text(
-                config,
-                assets,
-                Rectangle{panel.x + 18.0f, panel.y + 280.0f, panel.width - 36.0f, 30.0f},
-                font,
-                state.runtimeObjects.placedObjectWarning.c_str(),
-                engine::UITextJustify::Left,
-                Color{236, 92, 92, 245}
-        );
+
+    float contentH = 0.0f;
+    for (const OverlayLine& line : lines) {
+        contentH += line.wrap
+                ? MeasureSectorEditorWrappedTextHeight(smallConfig, assets, smallFont, line.text.c_str(), contentW, 1)
+                : rowH;
+        contentH += 4.0f;
     }
+    if (contentH > 0.0f) {
+        contentH += gap;
+    }
+    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
+        contentH += rowH + 6.0f;
+    }
+    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
+        contentH += rowH + 6.0f;
+    }
+    const Rectangle panel{
+            basePanel.x,
+            basePanel.y,
+            basePanel.width,
+            padding + stripH + gap + tabH + contentH + padding};
+    DrawRectangleRec(panel, Color{12, 15, 20, 205});
+    DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
+
+    const bool hasSelectedSpotLight = SelectedTopologyStaticSpotLight() != nullptr
+            || SelectedTopologyDynamicSpotLight() != nullptr;
     engine::Text(
-            config,
+            smallConfig,
             assets,
-            Rectangle{panel.x + 18.0f, panel.y + 310.0f, panel.width - 36.0f, 30.0f},
-            font,
-            state.previewControlMode == SectorPreviewControlMode::Gameplay
-                    ? TextFormat(
-                            "assets %.0f%% | Lightmap: %s | AO: %s | walk %.1f | run %.1f | eye %.1f | height %.1f | gravity %.1f | jump %.1f | %s%s",
-                            preview.RendererAssetProgress(assets) * 100.0f,
-                            preview.RendererLightmapStatusText(),
-                            state.useBakedAmbientOcclusion ? "on" : "off",
-                            state.fpsControllerConfig.walkSpeed,
-                            state.fpsControllerConfig.runSpeed,
-                            state.fpsControllerConfig.eyeHeight,
-                            state.fpsControllerConfig.playerHeight,
-                            state.fpsControllerConfig.gravity,
-                            state.fpsControllerConfig.jumpHeight,
-                            collisionWarningText,
-                            state.topologyDocumentDirty ? " | unsaved changes" : "")
-                    : TextFormat(
-                            "assets %.0f%% | Lightmap: %s | AO: %s | %s%s",
-                            preview.RendererAssetProgress(assets) * 100.0f,
-                            preview.RendererLightmapStatusText(),
-                            state.useBakedAmbientOcclusion ? "on" : "off",
-                            collisionWarningText,
-                            state.topologyDocumentDirty ? " | unsaved changes" : ""),
+            Rectangle{
+                    panel.x + padding,
+                    panel.y + padding,
+                    mouseInteractive && (state.spotLightPilot.active
+                            || (hasSelectedSpotLight && state.previewControlMode == SectorPreviewControlMode::FreeFly))
+                            ? contentW - 170.0f
+                            : contentW,
+                    stripH},
+            smallFont,
+            compactStatus.c_str(),
             engine::UITextJustify::Left,
-            state.topologyDocumentDirty ? Color{236, 196, 92, 255} : config.mutedTextColor
-    );
+            state.topologyDocumentDirty ? Color{236, 196, 92, 255} : smallConfig.textColor,
+            true);
+
+    float actionsRight = panel.x + panel.width - padding;
+    const float actionY = panel.y + padding - 2.0f;
+    if (mouseInteractive) {
+        if (state.spotLightPilot.active) {
+            if (engine::Button(
+                        ui,
+                        smallConfig,
+                        input,
+                        assets,
+                        "sector_editor_preview_spotlight_pilot_cancel",
+                        Rectangle{actionsRight - 72.0f, actionY, 72.0f, 28.0f},
+                        smallFont,
+                        "Cancel")) {
+                CancelSpotLightPilot("Spotlight pilot cancelled");
+            }
+            actionsRight -= 82.0f;
+            if (engine::Button(
+                        ui,
+                        smallConfig,
+                        input,
+                        assets,
+                        "sector_editor_preview_spotlight_pilot_apply",
+                        Rectangle{actionsRight - 66.0f, actionY, 66.0f, 28.0f},
+                        smallFont,
+                        "Apply")) {
+                ApplySpotLightPilot();
+            }
+        } else if (hasSelectedSpotLight && state.previewControlMode == SectorPreviewControlMode::FreeFly) {
+            if (engine::Button(
+                        ui,
+                        smallConfig,
+                        input,
+                        assets,
+                        "sector_editor_preview_spotlight_pilot_start",
+                        Rectangle{actionsRight - 92.0f, actionY, 92.0f, 28.0f},
+                        smallFont,
+                        "Pilot")) {
+                StartSpotLightPilot();
+            }
+        }
+    }
+
+    const struct {
+        PreviewDebugOverlayTab tab;
+        const char* id;
+        const char* label;
+    } tabs[] = {
+            {PreviewDebugOverlayTab::View, "sector_editor_preview_tab_view", "View"},
+            {PreviewDebugOverlayTab::Render, "sector_editor_preview_tab_render", "Render"},
+            {PreviewDebugOverlayTab::Visibility, "sector_editor_preview_tab_visibility", "Visibility"},
+            {PreviewDebugOverlayTab::Lighting, "sector_editor_preview_tab_lighting", "Lighting"},
+            {PreviewDebugOverlayTab::Objects, "sector_editor_preview_tab_objects", "Objects"},
+            {PreviewDebugOverlayTab::Probes, "sector_editor_preview_tab_probes", "Probes"},
+            {PreviewDebugOverlayTab::Controls, "sector_editor_preview_tab_controls", "Controls"},
+    };
+
+    const float tabY = panel.y + padding + stripH + gap;
+    const float tabGap = 6.0f;
+    const float tabW = (contentW - tabGap * 6.0f) / 7.0f;
+    for (int i = 0; i < 7; ++i) {
+        const Rectangle tabRect{
+                panel.x + padding + static_cast<float>(i) * (tabW + tabGap),
+                tabY,
+                tabW,
+                tabH};
+        const bool selected = state.activePreviewDebugOverlayTab == tabs[i].tab;
+        if (mouseInteractive) {
+            if (engine::ToolButton(ui, smallConfig, input, assets, tabs[i].id, tabRect, smallFont, tabs[i].label, selected)) {
+                state.activePreviewDebugOverlayTab = selected
+                        ? PreviewDebugOverlayTab::None
+                        : tabs[i].tab;
+            }
+        } else {
+            DrawRectangleRec(tabRect, selected ? Color{48, 68, 86, 210} : Color{24, 30, 38, 185});
+            DrawRectangleLinesEx(tabRect, config.borderThickness, config.borderColor);
+            engine::Text(smallConfig, assets, tabRect, smallFont, tabs[i].label, engine::UITextJustify::Center, smallConfig.mutedTextColor);
+        }
+    }
+
+    float y = tabY + tabH + gap;
+    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
+        engine::Checkbox(
+                ui,
+                smallConfig,
+                input,
+                assets,
+                "sector_editor_show_object_probe_debug_overlay",
+                Rectangle{panel.x + padding, y, 240.0f, rowH},
+                smallFont,
+                "Show Object Probes",
+                state.showObjectProbeDebugOverlay);
+        y += rowH + 6.0f;
+    }
+    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
+        if (engine::Button(
+                    ui,
+                    smallConfig,
+                    input,
+                    assets,
+                    "sector_editor_preview_settings",
+                    Rectangle{panel.x + padding, y, 112.0f, rowH},
+                    smallFont,
+                    "Settings")) {
+            OpenPreviewSettingsModal();
+        }
+        y += rowH + 6.0f;
+    }
+    for (const OverlayLine& line : lines) {
+        const float lineH = line.wrap
+                ? MeasureSectorEditorWrappedTextHeight(smallConfig, assets, smallFont, line.text.c_str(), contentW, 1)
+                : rowH;
+        engine::Text(
+                smallConfig,
+                assets,
+                Rectangle{panel.x + padding, y, contentW, lineH},
+                smallFont,
+                line.text.c_str(),
+                engine::UITextJustify::Left,
+                line.color,
+                line.wrap);
+        y += lineH + 4.0f;
+    }
 }
 
 Rectangle SectorEditor::BuildPreviewUvPanelRect() const

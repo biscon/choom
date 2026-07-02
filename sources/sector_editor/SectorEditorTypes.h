@@ -52,6 +52,17 @@ enum class SectorPreviewControlMode {
     Gameplay
 };
 
+enum class PreviewDebugOverlayTab {
+    None,
+    View,
+    Render,
+    Visibility,
+    Lighting,
+    Objects,
+    Probes,
+    Controls
+};
+
 enum class SectorEditorAuthoringDerivationState {
     InvalidNoDerived,
     ValidCurrent,
@@ -601,6 +612,7 @@ struct SectorEditorState {
     bool showObjectProbeDebugOverlay = false;
     SectorRuntimeObjectState runtimeObjects;
     bool previewUiHidden = false;
+    PreviewDebugOverlayTab activePreviewDebugOverlayTab = PreviewDebugOverlayTab::None;
     SectorPreviewControlMode previewControlMode = SectorPreviewControlMode::FreeFly;
     SectorFreeflyControllerState freeflyController;
     SectorFpsControllerConfig fpsControllerConfig;

@@ -111,12 +111,15 @@ private:
     void DrawPreviewSpotLightOverlay() const;
     void DrawPreviewObjectProbeOverlay() const;
     void RefreshPreviewObjectProbeDebugData();
+    bool IsPreviewOverlayMouseInteractive() const;
+    Rectangle BuildPreviewOverlayInteractionRect() const;
     void DrawPreviewOverlay(
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::Input& input,
             engine::AssetManager& assets,
-            engine::FontHandle font);
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawPreviewUvPanel(
             engine::UIContext& ui,
             const engine::UIConfig& config,

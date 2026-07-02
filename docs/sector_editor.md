@@ -473,6 +473,10 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 - `F3`: toggle `FreeFly` / `Gameplay` preview controls.
 - `F1`: toggle baked ambient-occlusion display.
 - `Tab` or `Escape`: return to 2D mode.
+- The 3D overlay shows a compact status strip and debug tabs by default. Detailed
+  diagnostics and the longer controls legend are available from the overlay tabs.
+- Overlay tabs and controls are mouse-clickable when the cursor is unlocked with
+  `F11`; locked mouse-look mode keeps normal 3D input focused on the preview.
 - In `FreeFly` mouse-look mode: `WASD` move, mouse looks, `Space` moves up,
   `Ctrl` moves down.
 - In `Gameplay` mouse-look mode: `WASD` moves horizontally relative to yaw,
@@ -485,10 +489,10 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 - In visible-cursor mode: click generated surfaces to select/edit them.
 
 The left tools pane `Settings` button opens editor-session preview settings.
-The same settings are available from the 3D preview overlay while its UI is
-visible. The modal edits walk speed, run speed, mouse sensitivity, camera eye
-height, gravity, player radius, player height, step height, jump height, head
-bob strength, and head bob frequency. Gameplay Preview Settings use
+The same settings are available from the 3D preview overlay `Controls` tab while
+its UI is visible. The modal edits walk speed, run speed, mouse sensitivity,
+camera eye height, gravity, player radius, player height, step height, jump
+height, head bob strength, and head bob frequency. Gameplay Preview Settings use
 runtime/world units or simple unitless multipliers, not authored units. The
 gameplay controller stores a feet/body position; the camera eye is computed by
 adding the configured eye height, while player height is the collision cylinder
