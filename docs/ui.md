@@ -335,7 +335,9 @@ engine::List(
 
 `Option()` is a dropdown combo box. One option is always selected when the
 option list is not empty. When open, the dropdown is rendered by `EndUI()` above
-widgets below it.
+widgets below it. Open option overlays receive pointer and mouse-wheel input
+priority over normal widgets while they are open, so row clicks and outside
+clicks do not also trigger widgets underneath.
 
 ```cpp
 const char* const displayModes[] = {
@@ -360,6 +362,11 @@ if (engine::Option(
     ApplyDisplayMode(selectedDisplayMode);
 }
 ```
+
+Dropdowns flip above the field when there is not enough visible UI space below
+them. If neither side can fit the full list, the dropdown clamps to visible UI
+bounds and internally scrolls rows with the mouse wheel while the pointer is
+over the dropdown.
 
 ## Scroll Areas
 
@@ -410,9 +417,11 @@ button, and clicking a scrollbar track pages by one viewport.
 Pass `false` for the optional `drawFrame` argument when a scroll area is used
 inside an already-framed panel and should only provide clipping/scrolling.
 
-Nested scroll areas are not supported. `Option()` can be displayed as a closed
-field inside a scroll area, but dropdown overlays from inside a clipped scroll
-area are not opened in this version.
+Nested scroll areas are not supported. `Option()` closed fields can be used
+inside a scroll area and are clipped like other scroll-area widgets. Open
+dropdown overlays are drawn outside the scroll clip by
+`EndUI(ui, config, input, assets)`, and mouse-wheel scrolling over an open
+dropdown takes priority over the containing scroll area.
 
 ## Panels And Property Rows
 

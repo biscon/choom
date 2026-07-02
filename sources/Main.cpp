@@ -138,6 +138,12 @@ int main()
 
     engine::UIContext ui;
     engine::UIConfig uiConfig;
+    uiConfig.overlayBounds = Rectangle{
+            0.0f,
+            0.0f,
+            static_cast<float>(INTERNAL_WIDTH),
+            static_cast<float>(INTERNAL_HEIGHT)
+    };
     game::SectorEditor sectorEditor;
     sectorEditor.Init(context);
 

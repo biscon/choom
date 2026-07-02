@@ -49,6 +49,7 @@ struct UIConfig {
     float mouseWheelScrollAmount = 48.0f;
     float panelHeaderHeight = 44.0f;
     float rowSpacing = 10.0f;
+    Rectangle overlayBounds = {};
 };
 
 struct UIScrollState {
@@ -74,6 +75,8 @@ struct UIContext {
         FontHandle font = NullFontHandle();
         const char* const* options = nullptr;
         size_t optionCount = 0;
+        size_t firstVisibleIndex = 0;
+        size_t visibleOptionCount = 0;
         int* selectedIndex = nullptr;
     };
 
@@ -94,6 +97,17 @@ struct UIContext {
     Rectangle scrollViewport = {};
     Vector2 scrollOffset = {};
     OptionOverlay optionOverlay;
+    bool openOptionIssuedThisFrame = false;
+    bool openOptionBoundsValid = false;
+    Rectangle openOptionFieldBounds = {};
+    Rectangle openOptionDropdownBounds = {};
+    size_t openOptionFirstVisibleIndex = 0;
+    size_t openOptionVisibleCount = 0;
+    bool openOptionBlocksNormalInput = false;
+    bool openOptionClickPending = false;
+    Vector2 openOptionClickPosition = {};
+    bool openOptionCloseRequested = false;
+    float openOptionWheelDelta = 0.0f;
 };
 
 struct UITextInputResult {

@@ -41,6 +41,13 @@ bool Contains(Rectangle rect, Vector2 point)
         && point.y <= rect.y + rect.height;
 }
 
+bool OpenOptionBlocksPoint(const UIContext& ui, Vector2 point)
+{
+    return ui.openOptionId != 0
+        && ui.openOptionBoundsValid
+        && (ui.openOptionBlocksNormalInput || Contains(ui.openOptionDropdownBounds, point));
+}
+
 Rectangle TransformBounds(const UIContext& ui, Rectangle bounds)
 {
     if (!ui.inScrollArea) {
@@ -57,6 +64,9 @@ Rectangle TransformBounds(const UIContext& ui, Rectangle bounds)
 
 bool AllowsWidgetHit(const UIContext& ui, Vector2 point)
 {
+    if (OpenOptionBlocksPoint(ui, point)) {
+        return false;
+    }
     return !ui.inScrollArea || Contains(ui.scrollViewport, point);
 }
 
@@ -636,25 +646,123 @@ void DrawSelectablePanelLines(const UIContext& ui, const UIConfig& config, Recta
     DrawRectangleLinesEx(drawBounds, config.borderThickness, config.borderColor);
 }
 
-bool ConsumeOutsideClick(Input& input, Rectangle keepA, Rectangle keepB)
+Rectangle ResolveOverlayBounds(const UIConfig& config)
 {
-    bool clickedOutside = false;
-    input.ForEachEvent(
-            InputEventType::MouseClick,
-            true,
-            [keepA, keepB, &clickedOutside](InputEvent& event) {
-                if (event.mouseClick.button != MOUSE_LEFT_BUTTON) {
-                    return;
-                }
+    if (config.overlayBounds.width > 0.0f && config.overlayBounds.height > 0.0f) {
+        return config.overlayBounds;
+    }
 
-                const Vector2 position = event.mouseClick.releasePosition;
-                if (!Contains(keepA, position) && !Contains(keepB, position)) {
-                    clickedOutside = true;
-                    ConsumeEvent(event);
-                }
-            }
-    );
-    return clickedOutside;
+    return Rectangle{
+            0.0f,
+            0.0f,
+            static_cast<float>(GetScreenWidth()),
+            static_cast<float>(GetScreenHeight())
+    };
+}
+
+struct OptionDropdownLayout {
+    Rectangle bounds = {};
+    size_t visibleOptionCount = 0;
+};
+
+OptionDropdownLayout BuildOptionDropdownLayout(
+        const UIConfig& config,
+        Rectangle fieldBounds,
+        size_t optionCount)
+{
+    OptionDropdownLayout layout;
+    if (optionCount == 0 || config.listItemHeight <= 0.0f) {
+        return layout;
+    }
+
+    const Rectangle visibleBounds = ResolveOverlayBounds(config);
+    const float rowHeight = config.listItemHeight;
+    const float fullHeight = rowHeight * static_cast<float>(optionCount);
+    const float fieldBottom = fieldBounds.y + fieldBounds.height;
+    const float visibleBottom = visibleBounds.y + visibleBounds.height;
+    const float belowSpace = std::max(0.0f, visibleBottom - fieldBottom);
+    const float aboveSpace = std::max(0.0f, fieldBounds.y - visibleBounds.y);
+
+    bool openBelow = true;
+    float availableHeight = belowSpace;
+    if (fullHeight <= belowSpace) {
+        openBelow = true;
+        availableHeight = belowSpace;
+    } else if (fullHeight <= aboveSpace) {
+        openBelow = false;
+        availableHeight = aboveSpace;
+    } else if (aboveSpace > belowSpace) {
+        openBelow = false;
+        availableHeight = aboveSpace;
+    }
+
+    const size_t fitRows = static_cast<size_t>(std::floor(availableHeight / rowHeight));
+    const size_t visibleRows = std::min(optionCount, fitRows);
+    if (visibleRows == 0) {
+        return layout;
+    }
+
+    float width = fieldBounds.width;
+    if (visibleBounds.width > 0.0f) {
+        width = std::min(width, visibleBounds.width);
+    }
+
+    float x = fieldBounds.x;
+    if (visibleBounds.width > width) {
+        x = std::clamp(x, visibleBounds.x, visibleBounds.x + visibleBounds.width - width);
+    } else {
+        x = visibleBounds.x;
+    }
+
+    const float height = rowHeight * static_cast<float>(visibleRows);
+    float y = openBelow ? fieldBottom : fieldBounds.y - height;
+    if (visibleBounds.height > height) {
+        y = std::clamp(y, visibleBounds.y, visibleBottom - height);
+    } else {
+        y = visibleBounds.y;
+    }
+
+    layout.bounds = Rectangle{x, y, width, height};
+    layout.visibleOptionCount = visibleRows;
+    return layout;
+}
+
+size_t ClampOptionFirstVisibleIndex(size_t firstVisibleIndex, size_t optionCount, size_t visibleOptionCount)
+{
+    if (visibleOptionCount == 0 || optionCount <= visibleOptionCount) {
+        return 0;
+    }
+
+    return std::min(firstVisibleIndex, optionCount - visibleOptionCount);
+}
+
+size_t InitialOptionFirstVisibleIndex(int selectedIndex, size_t optionCount, size_t visibleOptionCount)
+{
+    if (visibleOptionCount == 0 || optionCount <= visibleOptionCount || selectedIndex < 0) {
+        return 0;
+    }
+
+    const size_t selected = std::min(static_cast<size_t>(selectedIndex), optionCount - 1u);
+    if (selected < visibleOptionCount) {
+        return 0;
+    }
+
+    return ClampOptionFirstVisibleIndex(selected, optionCount, visibleOptionCount);
+}
+
+void ClearOpenOption(UIContext& ui)
+{
+    ui.openOptionId = 0;
+    ui.openOptionBoundsValid = false;
+    ui.openOptionFieldBounds = {};
+    ui.openOptionDropdownBounds = {};
+    ui.openOptionFirstVisibleIndex = 0;
+    ui.openOptionVisibleCount = 0;
+    ui.openOptionBlocksNormalInput = false;
+    ui.openOptionClickPending = false;
+    ui.openOptionClickPosition = {};
+    ui.openOptionCloseRequested = false;
+    ui.openOptionWheelDelta = 0.0f;
 }
 
 bool IsFloatEditCharacter(uint32_t codepoint)
@@ -949,10 +1057,73 @@ void BeginUI(UIContext& ui, Input& input)
     ui.mousePosition = input.MousePosition();
     ui.mouseDown = input.IsMouseButtonDown(MOUSE_LEFT_BUTTON);
     ui.optionOverlay = UIContext::OptionOverlay{};
+    ui.openOptionIssuedThisFrame = false;
+    ui.openOptionClickPending = false;
+    ui.openOptionClickPosition = {};
+    ui.openOptionCloseRequested = false;
+    ui.openOptionWheelDelta = 0.0f;
+    ui.openOptionBlocksNormalInput = false;
+
+    if (ui.openOptionId != 0 && ui.openOptionBoundsValid) {
+        const Rectangle fieldBounds = ui.openOptionFieldBounds;
+        const Rectangle dropdownBounds = ui.openOptionDropdownBounds;
+        ui.openOptionBlocksNormalInput = !Contains(fieldBounds, ui.mousePosition);
+
+        input.ForEachEvent(
+                InputEventType::MouseWheel,
+                true,
+                [&ui, dropdownBounds](InputEvent& event) {
+                    if (Contains(dropdownBounds, ui.mousePosition)) {
+                        ui.openOptionWheelDelta += event.wheel.value;
+                        ConsumeEvent(event);
+                    }
+                }
+        );
+
+        input.ForEachEvent(
+                InputEventType::MouseButtonPressed,
+                true,
+                [fieldBounds, dropdownBounds](InputEvent& event) {
+                    if (event.mouseButton.button != MOUSE_LEFT_BUTTON) {
+                        return;
+                    }
+
+                    const Vector2 position = event.mouseButton.position;
+                    if (Contains(dropdownBounds, position)
+                            || (!Contains(fieldBounds, position) && !Contains(dropdownBounds, position))) {
+                        ConsumeEvent(event);
+                    }
+                }
+        );
+
+        input.ForEachEvent(
+                InputEventType::MouseClick,
+                true,
+                [&ui, fieldBounds, dropdownBounds](InputEvent& event) {
+                    if (event.mouseClick.button != MOUSE_LEFT_BUTTON) {
+                        return;
+                    }
+
+                    const Vector2 position = event.mouseClick.releasePosition;
+                    if (Contains(dropdownBounds, position)) {
+                        ui.openOptionClickPending = true;
+                        ui.openOptionClickPosition = position;
+                        ConsumeEvent(event);
+                    } else if (!Contains(fieldBounds, position)) {
+                        ui.openOptionCloseRequested = true;
+                        ConsumeEvent(event);
+                    }
+                }
+        );
+    }
 }
 
 void EndUI(UIContext& ui, Input&)
 {
+    if (ui.openOptionId != 0 && !ui.openOptionIssuedThisFrame) {
+        ClearOpenOption(ui);
+    }
+
     if (!ui.mouseDown) {
         ui.activeId = 0;
     }
@@ -974,27 +1145,31 @@ void EndUI(
 
         DrawSelectablePanelBackground(ui, config, overlay.dropdownBounds);
 
-        for (size_t i = 0; i < overlay.optionCount; ++i) {
+        const size_t visibleCount = overlay.visibleOptionCount == 0
+                ? overlay.optionCount
+                : std::min(overlay.visibleOptionCount, overlay.optionCount - overlay.firstVisibleIndex);
+        for (size_t i = 0; i < visibleCount; ++i) {
+            const size_t optionIndex = overlay.firstVisibleIndex + i;
             const Rectangle row = ListItemBounds(
                     overlay.dropdownBounds,
                     config.listItemHeight,
                     i
             );
             const bool hovered = Contains(row, ui.mousePosition);
-            const bool selected = *overlay.selectedIndex == static_cast<int>(i);
+            const bool selected = *overlay.selectedIndex == static_cast<int>(optionIndex);
             DrawSelectableRow(
                     ui,
                     config,
                     assets,
                     row,
                     overlay.font,
-                    overlay.options[i],
+                    overlay.options[optionIndex],
                     hovered,
                     selected
             );
         }
 
-        DrawSelectablePanelLines(ui, config, overlay.dropdownBounds, overlay.optionCount);
+        DrawSelectablePanelLines(ui, config, overlay.dropdownBounds, visibleCount);
     }
 
     EndUI(ui, input);
@@ -2081,6 +2256,9 @@ bool Option(
 {
     const uint32_t widgetId = HashId(id);
     if (options == nullptr || optionCount == 0) {
+        if (ui.openOptionId == widgetId) {
+            ClearOpenOption(ui);
+        }
         selectedIndex = -1;
         DrawWidgetBackground(ui, config, bounds, config.widgetColor, config.borderColor);
         Text(ui, config, assets, bounds, font, "", UITextJustify::Left, config.mutedTextColor);
@@ -2091,62 +2269,60 @@ bool Option(
         selectedIndex = 0;
     }
 
-    const Rectangle dropdownBounds{
-            TransformBounds(ui, bounds).x,
-            TransformBounds(ui, bounds).y + bounds.height,
-            bounds.width,
-            config.listItemHeight * static_cast<float>(optionCount)
-    };
-    const bool allowOpen = !ui.inScrollArea;
-    const bool open = allowOpen && ui.openOptionId == widgetId;
+    const Rectangle fieldBounds = TransformBounds(ui, bounds);
+    const OptionDropdownLayout dropdownLayout = BuildOptionDropdownLayout(config, fieldBounds, optionCount);
+    const Rectangle dropdownBounds = dropdownLayout.bounds;
+    bool open = ui.openOptionId == widgetId && dropdownLayout.visibleOptionCount > 0;
 
     if (open) {
-        if (ConsumeOutsideClick(input, bounds, dropdownBounds)) {
-            ui.openOptionId = 0;
+        ui.openOptionIssuedThisFrame = true;
+
+        if (ui.openOptionCloseRequested) {
+            ClearOpenOption(ui);
+            open = false;
+        }
+    }
+
+    bool changed = false;
+    if (open) {
+        ui.openOptionVisibleCount = dropdownLayout.visibleOptionCount;
+        ui.openOptionFirstVisibleIndex = ClampOptionFirstVisibleIndex(
+                ui.openOptionFirstVisibleIndex,
+                optionCount,
+                dropdownLayout.visibleOptionCount
+        );
+
+        if (ui.openOptionWheelDelta != 0.0f && optionCount > dropdownLayout.visibleOptionCount) {
+            const int rowDelta = ui.openOptionWheelDelta > 0.0f
+                    ? -static_cast<int>(std::ceil(ui.openOptionWheelDelta))
+                    : static_cast<int>(std::ceil(-ui.openOptionWheelDelta));
+            const int current = static_cast<int>(ui.openOptionFirstVisibleIndex);
+            const int maxFirst = static_cast<int>(optionCount - dropdownLayout.visibleOptionCount);
+            ui.openOptionFirstVisibleIndex = static_cast<size_t>(std::clamp(current + rowDelta, 0, maxFirst));
         }
 
-        for (size_t i = 0; i < optionCount; ++i) {
-            const Rectangle row = ListItemBounds(dropdownBounds, config.listItemHeight, static_cast<size_t>(i));
-            const uint32_t rowId = widgetId ^ static_cast<uint32_t>((static_cast<size_t>(i) + 1u) * 16777619u);
+        const size_t firstVisibleIndex = ui.openOptionFirstVisibleIndex;
+        const size_t visibleCount = std::min(dropdownLayout.visibleOptionCount, optionCount - firstVisibleIndex);
+
+        for (size_t i = 0; i < visibleCount; ++i) {
+            const size_t optionIndex = firstVisibleIndex + i;
+            const Rectangle row = ListItemBounds(dropdownBounds, config.listItemHeight, i);
+            const uint32_t rowId = widgetId ^ static_cast<uint32_t>((optionIndex + 1u) * 16777619u);
             if (Contains(row, ui.mousePosition)) {
                 ui.hotId = rowId;
                 if (ui.mouseDown) {
                     ui.activeId = rowId;
                 }
-                // Dropdown overlays are already in screen space.
-                input.ForEachEvent(
-                        InputEventType::MouseButtonPressed,
-                        true,
-                        [row](InputEvent& event) {
-                            if (event.mouseButton.button == MOUSE_LEFT_BUTTON
-                                    && Contains(row, event.mouseButton.position)) {
-                                ConsumeEvent(event);
-                            }
-                        }
-                );
             }
 
-            bool clickedRow = false;
-            input.ForEachEvent(
-                    InputEventType::MouseClick,
-                    true,
-                    [row, &clickedRow](InputEvent& event) {
-                        if (event.mouseClick.button == MOUSE_LEFT_BUTTON
-                                && Contains(row, event.mouseClick.releasePosition)) {
-                            clickedRow = true;
-                            ConsumeEvent(event);
-                        }
-                    }
-            );
-            if (clickedRow) {
-                if (selectedIndex != static_cast<int>(i)) {
-                    selectedIndex = static_cast<int>(i);
-                    ui.openOptionId = 0;
-                    DrawWidgetBackground(ui, config, bounds, config.widgetActiveColor, config.borderColor);
-                    Text(ui, config, assets, bounds, font, options[selectedIndex], UITextJustify::Left, config.textColor);
-                    return true;
+            if (ui.openOptionClickPending && Contains(row, ui.openOptionClickPosition)) {
+                if (selectedIndex != static_cast<int>(optionIndex)) {
+                    selectedIndex = static_cast<int>(optionIndex);
+                    changed = true;
                 }
-                ui.openOptionId = 0;
+                ClearOpenOption(ui);
+                open = false;
+                break;
             }
         }
     }
@@ -2160,8 +2336,22 @@ bool Option(
         ConsumeMousePresses(ui, input, bounds);
     }
 
-    if (ConsumeMouseClick(ui, input, bounds) && allowOpen) {
-        ui.openOptionId = open ? 0 : widgetId;
+    if (ConsumeMouseClick(ui, input, bounds)) {
+        if (open) {
+            ClearOpenOption(ui);
+            open = false;
+        } else if (dropdownLayout.visibleOptionCount > 0) {
+            if (ui.openOptionId != widgetId) {
+                ui.openOptionFirstVisibleIndex = InitialOptionFirstVisibleIndex(
+                        selectedIndex,
+                        optionCount,
+                        dropdownLayout.visibleOptionCount
+                );
+            }
+            ui.openOptionId = widgetId;
+            ui.openOptionVisibleCount = dropdownLayout.visibleOptionCount;
+            open = true;
+        }
     }
 
     DrawWidgetBackground(ui, config, bounds, InteractiveFill(config, ui, widgetId), config.borderColor);
@@ -2177,20 +2367,34 @@ bool Option(
             config.textColor
     );
 
-    if (allowOpen && ui.openOptionId == widgetId) {
+    if (open && ui.openOptionId == widgetId) {
+        ui.openOptionIssuedThisFrame = true;
+        ui.openOptionBoundsValid = true;
+        ui.openOptionFieldBounds = fieldBounds;
+        ui.openOptionDropdownBounds = dropdownBounds;
+        ui.openOptionVisibleCount = dropdownLayout.visibleOptionCount;
+        ui.openOptionFirstVisibleIndex = ClampOptionFirstVisibleIndex(
+                ui.openOptionFirstVisibleIndex,
+                optionCount,
+                dropdownLayout.visibleOptionCount
+        );
         ui.optionOverlay = UIContext::OptionOverlay{
                 true,
                 widgetId,
-                bounds,
+                fieldBounds,
                 dropdownBounds,
                 font,
                 options,
                 optionCount,
+                ui.openOptionFirstVisibleIndex,
+                dropdownLayout.visibleOptionCount,
                 &selectedIndex
         };
+    } else if (ui.openOptionId == widgetId) {
+        ClearOpenOption(ui);
     }
 
-    return false;
+    return changed;
 }
 
 UIPanelResult BeginPanel(
