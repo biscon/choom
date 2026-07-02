@@ -111,12 +111,15 @@ private:
     void DrawPreviewSpotLightOverlay() const;
     void DrawPreviewObjectProbeOverlay() const;
     void RefreshPreviewObjectProbeDebugData();
+    bool IsPreviewOverlayMouseInteractive() const;
+    Rectangle BuildPreviewOverlayInteractionRect() const;
     void DrawPreviewOverlay(
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::Input& input,
             engine::AssetManager& assets,
-            engine::FontHandle font);
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawPreviewUvPanel(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -161,6 +164,12 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font);
     void DrawAddMapTextureModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
+    void DrawSpritePickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::Input& input,
@@ -368,6 +377,8 @@ private:
     void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer);
     void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer);
     void OpenMapSkyTexturePicker();
+    void OpenSelectedBillboardSpritePicker();
+    void ApplySelectedBillboardSpritePickerSelection();
     void ApplyTexturePickerSelection(engine::AssetManager& assets);
     std::string CurrentTextureForPickerTarget() const;
     bool TryRenameSelectedTopologySector();

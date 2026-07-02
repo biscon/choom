@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
+#include "util/json.hpp"
 
 #include <raylib.h>
 
@@ -9,6 +10,7 @@
 #include <cctype>
 #include <cmath>
 #include <fstream>
+#include <set>
 #include <system_error>
 #include <utility>
 
@@ -142,6 +144,113 @@ bool HasPngExtension(const std::filesystem::path& path)
     return extension == ".png";
 }
 
+namespace {
+
+bool HasJsonExtension(const std::filesystem::path& path)
+{
+    std::string extension = path.extension().string();
+    for (char& ch : extension) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return extension == ".json";
+}
+
+std::string ExtractSpriteClipNameFromFrameName(const std::string& frameName)
+{
+    const size_t marker = frameName.find('#');
+    if (marker == std::string::npos) {
+        return "";
+    }
+
+    const size_t begin = marker + 1;
+    size_t end = begin;
+    while (end < frameName.size()
+            && !std::isspace(static_cast<unsigned char>(frameName[end]))) {
+        ++end;
+    }
+    return frameName.substr(begin, end - begin);
+}
+
+bool PushUniqueClipName(std::vector<std::string>& clipNames, std::set<std::string>& seen, const std::string& name)
+{
+    if (name.empty() || seen.find(name) != seen.end()) {
+        return false;
+    }
+    clipNames.push_back(name);
+    seen.insert(name);
+    return true;
+}
+
+std::string NormalizeAssetPath(
+        const std::filesystem::path& assetsRoot,
+        const std::filesystem::path& path)
+{
+    std::error_code ec;
+    std::filesystem::path relativePath = std::filesystem::relative(path, assetsRoot, ec);
+    if (ec || relativePath.empty() || StartsWith(relativePath.generic_string(), "../")) {
+        return path.lexically_normal().generic_string();
+    }
+    return std::string{"assets/"} + relativePath.lexically_normal().generic_string();
+}
+
+bool ReadSpriteMetadataJson(
+        const std::filesystem::path& assetsRoot,
+        const std::filesystem::path& jsonPath,
+        SectorSpriteMetadata& outMetadata)
+{
+    std::ifstream input(jsonPath);
+    if (!input.is_open()) {
+        return false;
+    }
+
+    nlohmann::ordered_json document = nlohmann::ordered_json::parse(input, nullptr, false);
+    if (document.is_discarded()
+            || !document.is_object()
+            || !document.contains("frames")
+            || !document["frames"].is_object()
+            || !document.contains("meta")
+            || !document["meta"].is_object()
+            || !document["meta"].contains("image")
+            || !document["meta"]["image"].is_string()
+            || document["meta"]["image"].get<std::string>().empty()) {
+        return false;
+    }
+
+    std::filesystem::path imagePath(document["meta"]["image"].get<std::string>());
+    if (imagePath.is_relative()) {
+        imagePath = jsonPath.parent_path() / imagePath;
+    }
+    imagePath = imagePath.lexically_normal();
+
+    outMetadata = SectorSpriteMetadata{};
+    outMetadata.spriteAnimationPath = NormalizeAssetPath(assetsRoot, jsonPath);
+    outMetadata.atlasImagePath = NormalizeAssetPath(assetsRoot, imagePath);
+
+    std::set<std::string> seenClipNames;
+    const nlohmann::ordered_json& meta = document["meta"];
+    if (meta.contains("frameTags") && meta["frameTags"].is_array()) {
+        for (const nlohmann::ordered_json& tag : meta["frameTags"]) {
+            if (tag.is_object() && tag.contains("name") && tag["name"].is_string()) {
+                PushUniqueClipName(outMetadata.clipNames, seenClipNames, tag["name"].get<std::string>());
+            }
+        }
+    }
+
+    if (outMetadata.clipNames.empty()) {
+        const nlohmann::ordered_json& frames = document["frames"];
+        for (auto it = frames.begin(); it != frames.end(); ++it) {
+            PushUniqueClipName(outMetadata.clipNames, seenClipNames, ExtractSpriteClipNameFromFrameName(it.key()));
+        }
+    }
+
+    if (outMetadata.clipNames.empty()) {
+        outMetadata.clipNames.push_back("Default");
+    }
+    return true;
+}
+
+} // namespace
+
 std::vector<std::string> ScanAssetImagePngs(std::string& message)
 {
     std::vector<std::string> paths;
@@ -187,6 +296,66 @@ std::vector<std::string> ScanAssetImagePngs(std::string& message)
         message = "No PNG files found under assets/images";
     }
     return paths;
+}
+
+std::vector<SectorSpriteMetadata> ScanAssetSpriteAsepriteJsons(std::string& message)
+{
+    return ScanAssetSpriteAsepriteJsons(std::filesystem::path(ASSETS_PATH), message);
+}
+
+std::vector<SectorSpriteMetadata> ScanAssetSpriteAsepriteJsons(
+        const std::filesystem::path& assetsRoot,
+        std::string& message)
+{
+    std::vector<SectorSpriteMetadata> sprites;
+    message.clear();
+
+    const std::filesystem::path normalizedAssetsRoot = assetsRoot.lexically_normal();
+    const std::filesystem::path spritesRoot = normalizedAssetsRoot / "sprites";
+    std::error_code ec;
+    if (!std::filesystem::exists(spritesRoot, ec) || !std::filesystem::is_directory(spritesRoot, ec)) {
+        message = "assets/sprites was not found";
+        return sprites;
+    }
+
+    std::filesystem::recursive_directory_iterator it(
+            spritesRoot,
+            std::filesystem::directory_options::skip_permission_denied,
+            ec);
+    const std::filesystem::recursive_directory_iterator end;
+    if (ec) {
+        message = TextFormat("Could not scan assets/sprites: %s", ec.message().c_str());
+        return sprites;
+    }
+
+    for (; it != end; it.increment(ec)) {
+        if (ec) {
+            message = TextFormat("Stopped scan early: %s", ec.message().c_str());
+            break;
+        }
+
+        const std::filesystem::directory_entry& entry = *it;
+        if (!entry.is_regular_file(ec) || ec || !HasJsonExtension(entry.path())) {
+            ec.clear();
+            continue;
+        }
+
+        SectorSpriteMetadata metadata;
+        if (ReadSpriteMetadataJson(normalizedAssetsRoot, entry.path(), metadata)) {
+            sprites.push_back(std::move(metadata));
+        }
+    }
+
+    std::sort(
+            sprites.begin(),
+            sprites.end(),
+            [](const SectorSpriteMetadata& left, const SectorSpriteMetadata& right) {
+                return left.spriteAnimationPath < right.spriteAnimationPath;
+            });
+    if (sprites.empty() && message.empty()) {
+        message = "No Aseprite JSON files found under assets/sprites";
+    }
+    return sprites;
 }
 
 bool IsValidTextureIdCharacter(char ch)
@@ -384,7 +553,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::AuthoringRectangle: return "Rectangle";
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex";
         case SectorEditorTool::AuthoringMove: return "Move Vertex";
-        case SectorEditorTool::RuntimeObject: return "Object";
+        case SectorEditorTool::RuntimeObject: return "Billboard";
         case SectorEditorTool::StaticLight: return "Static Light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot";
         case SectorEditorTool::DynamicLight: return "Dynamic Light";
@@ -855,7 +1024,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::AuthoringRectangle: return "Rectangle: click first corner, then opposite corner, right click/Esc cancels";
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex: click an authoring line to split it, right click/Esc cancels";
         case SectorEditorTool::AuthoringMove: return "Move Vertex: hidden; use Select to move selected authoring vertices";
-        case SectorEditorTool::RuntimeObject: return "Object: click inside a sector to place a goblin runtime object";
+        case SectorEditorTool::RuntimeObject: return "Billboard: click inside a sector to place a billboard marker";
         case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place a baked point light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place a baked spot light";
         case SectorEditorTool::DynamicLight: return "Dynamic Light: click inside a sector to place a runtime point light";

@@ -112,6 +112,7 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorDocumentActions.cpp
             sources/sector_editor/SectorEditorHelpers.cpp
             sources/sector_editor/SectorEditorTextureActions.cpp
+            sources/sector_editor/SectorEditorTopologyActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorCollisionWorld.cpp

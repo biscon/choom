@@ -45,6 +45,10 @@ bool StartsWith(const std::string& value, const char* prefix);
 std::string ResolveEditorAssetPath(const std::string& path);
 bool HasPngExtension(const std::filesystem::path& path);
 std::vector<std::string> ScanAssetImagePngs(std::string& message);
+std::vector<SectorSpriteMetadata> ScanAssetSpriteAsepriteJsons(std::string& message);
+std::vector<SectorSpriteMetadata> ScanAssetSpriteAsepriteJsons(
+        const std::filesystem::path& assetsRoot,
+        std::string& message);
 bool IsValidTextureIdCharacter(char ch);
 bool IsValidTextureId(const std::string& id);
 float ClampAmbientIntensity(float value);

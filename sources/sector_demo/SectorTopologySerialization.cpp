@@ -19,6 +19,7 @@ namespace {
 using Json = nlohmann::ordered_json;
 
 constexpr float Pi = 3.14159265358979323846f;
+constexpr const char* RuntimeObjectKindBillboard = "billboard";
 
 [[noreturn]] void Fail(const std::string& message)
 {
@@ -131,6 +132,22 @@ std::string ReadString(const Json& object, const char* field, const std::string&
     return value.get<std::string>();
 }
 
+std::string ReadOptionalString(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        const std::string& defaultValue = {})
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        return defaultValue;
+    }
+    if (!it->is_string()) {
+        Fail(context + "." + field + " must be a string");
+    }
+    return it->get<std::string>();
+}
+
 bool ReadOptionalBool(const Json& object, const char* field, const std::string& context, bool defaultValue)
 {
     const auto it = object.find(field);
@@ -215,6 +232,16 @@ Vector2 ReadVector2(const Json& value, const std::string& context)
     return Vector2{static_cast<float>(x), static_cast<float>(y)};
 }
 
+Vector2 ReadUnitVector2(const Json& value, const std::string& context)
+{
+    const Vector2 vector = ReadVector2(value, context);
+    if (vector.x < 0.0f || vector.x > 1.0f
+            || vector.y < 0.0f || vector.y > 1.0f) {
+        Fail(context + " values must be between 0 and 1");
+    }
+    return vector;
+}
+
 Vector3 ReadVector3(const Json& value, const std::string& context)
 {
     if (!value.is_array() || value.size() != 3
@@ -243,6 +270,80 @@ float RadiansToDegrees(float radians)
     return radians * 180.0f / Pi;
 }
 
+bool IsDefaultBillboardOrigin(Vector2 origin)
+{
+    return origin.x == 0.5f && origin.y == 1.0f;
+}
+
+bool IsDefaultBillboardDirectionalClips(const SectorPlacedBillboard& billboard)
+{
+    return billboard.frontClip == "Front"
+            && billboard.backClip == "Back"
+            && billboard.leftClip == "Left"
+            && billboard.rightClip == "Right";
+}
+
+void ValidatePlacedBillboard(const SectorPlacedBillboard& billboard, const std::string& context)
+{
+    if (!std::isfinite(billboard.sizeWorld.x)
+            || !std::isfinite(billboard.sizeWorld.y)
+            || billboard.sizeWorld.x <= 0.0f
+            || billboard.sizeWorld.y <= 0.0f) {
+        Fail(context + ".width and .height must be finite positive values");
+    }
+    if (!std::isfinite(billboard.originNormalized.x)
+            || !std::isfinite(billboard.originNormalized.y)
+            || billboard.originNormalized.x < 0.0f
+            || billboard.originNormalized.x > 1.0f
+            || billboard.originNormalized.y < 0.0f
+            || billboard.originNormalized.y > 1.0f) {
+        Fail(context + ".originNormalized values must be finite floats between 0 and 1");
+    }
+}
+
+float ReadOptionalPositiveFloat(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        float defaultValue)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        return defaultValue;
+    }
+    const float value = ReadFloat(object, field, context);
+    if (value <= 0.0f) {
+        Fail(context + "." + field + " must be positive");
+    }
+    return value;
+}
+
+SectorPlacedBillboard ReadPlacedBillboard(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorPlacedBillboard billboard;
+    billboard.spriteAnimationPath = ReadString(value, "spriteAnimationPath", context);
+    billboard.sizeWorld.x = ReadOptionalPositiveFloat(value, "width", context, billboard.sizeWorld.x);
+    billboard.sizeWorld.y = ReadOptionalPositiveFloat(value, "height", context, billboard.sizeWorld.y);
+    billboard.keepAspectRatio = ReadOptionalBool(value, "keepAspectRatio", context, billboard.keepAspectRatio);
+    const auto originIt = value.find("originNormalized");
+    if (originIt != value.end()) {
+        billboard.originNormalized = ReadUnitVector2(*originIt, context + ".originNormalized");
+    }
+    billboard.directional = ReadOptionalBool(value, "directional", context, billboard.directional);
+    billboard.clip = ReadOptionalString(value, "clip", context, billboard.clip);
+    billboard.frontClip = ReadOptionalString(value, "frontClip", context, billboard.frontClip);
+    billboard.backClip = ReadOptionalString(value, "backClip", context, billboard.backClip);
+    billboard.leftClip = ReadOptionalString(value, "leftClip", context, billboard.leftClip);
+    billboard.rightClip = ReadOptionalString(value, "rightClip", context, billboard.rightClip);
+    billboard.playing = ReadOptionalBool(value, "playing", context, billboard.playing);
+    ValidatePlacedBillboard(billboard, context);
+    return billboard;
+}
+
 SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -254,9 +355,18 @@ SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string
     if (!IsValidSectorTopologyId(object.id)) {
         Fail(context + ".id must be a positive integer");
     }
-    object.definitionId = ReadString(value, "definitionId", context);
-    if (object.definitionId.empty()) {
-        Fail(context + ".definitionId must not be empty");
+    object.kind = ReadOptionalString(value, "kind", context, object.kind);
+    if (!object.kind.empty()) {
+        if (object.kind != RuntimeObjectKindBillboard) {
+            Fail(context + ".kind must be 'billboard'");
+        }
+        object.billboard = ReadPlacedBillboard(RequireObjectField(value, "billboard", context),
+                context + ".billboard");
+    } else {
+        if (value.contains("definitionId")) {
+            Fail(context + ".definitionId-only runtime objects are legacy unsupported data; use kind 'billboard'");
+        }
+        Fail(context + ".kind must be 'billboard'");
     }
     object.position = ReadVector3(RequireField(value, "position", context), context + ".position");
     object.yawRadians = DegreesToRadians(ReadFloat(value, "yawDegrees", context));
@@ -751,23 +861,62 @@ Json WriteVector3(Vector3 value, const std::string& context)
 
 void RequireFinite(float value, const std::string& context);
 
+Json WritePlacedBillboard(const SectorPlacedBillboard& billboard, const std::string& context)
+{
+    ValidatePlacedBillboard(billboard, context);
+
+    Json json{
+            {"spriteAnimationPath", billboard.spriteAnimationPath},
+            {"width", billboard.sizeWorld.x},
+            {"height", billboard.sizeWorld.y}
+    };
+    if (!billboard.keepAspectRatio) {
+        json["keepAspectRatio"] = false;
+    }
+    if (!IsDefaultBillboardOrigin(billboard.originNormalized)) {
+        json["originNormalized"] = WriteVector2(billboard.originNormalized, context + ".originNormalized");
+    }
+    if (billboard.directional) {
+        json["directional"] = true;
+        if (!IsDefaultBillboardDirectionalClips(billboard)) {
+            json["frontClip"] = billboard.frontClip;
+            json["backClip"] = billboard.backClip;
+            json["leftClip"] = billboard.leftClip;
+            json["rightClip"] = billboard.rightClip;
+        }
+    } else if (!billboard.clip.empty()) {
+        json["clip"] = billboard.clip;
+    }
+    if (!billboard.playing) {
+        json["playing"] = false;
+    }
+    return json;
+}
+
 Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::string& context)
 {
     if (!IsValidSectorTopologyId(object.id)) {
         Fail(context + ".id must be a positive integer");
     }
-    if (object.definitionId.empty()) {
-        Fail(context + ".definitionId must not be empty");
-    }
     RequireFinite(object.yawRadians, context + ".yawRadians");
     const float yawDegrees = RadiansToDegrees(object.yawRadians);
     RequireFinite(yawDegrees, context + ".yawDegrees");
-    return Json{
-            {"id", object.id},
-            {"definitionId", object.definitionId},
-            {"position", WriteVector3(object.position, context + ".position")},
-            {"yawDegrees", yawDegrees}
+
+    Json json{
+            {"id", object.id}
     };
+    if (object.kind.empty()) {
+        Fail(context + ".kind must be 'billboard'");
+    } else {
+        if (object.kind != RuntimeObjectKindBillboard) {
+            Fail(context + ".kind must be 'billboard'");
+        }
+        json["kind"] = object.kind;
+        json["billboard"] = WritePlacedBillboard(object.billboard, context + ".billboard");
+    }
+    json["position"] = WriteVector3(object.position, context + ".position");
+    json["yawDegrees"] = yawDegrees;
+    return json;
 }
 
 Json WriteUv(const SectorTopologyUvSettings& uv, const std::string& context)
@@ -1159,8 +1308,13 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
         if (!IsValidSectorTopologyId(object.id)) {
             Fail(objectContext + ".id must be a positive integer");
         }
-        if (object.definitionId.empty()) {
-            Fail(objectContext + ".definitionId must not be empty");
+        if (object.kind.empty()) {
+            Fail(objectContext + ".kind must be 'billboard'");
+        } else {
+            if (object.kind != RuntimeObjectKindBillboard) {
+                Fail(objectContext + ".kind must be 'billboard'");
+            }
+            ValidatePlacedBillboard(object.billboard, objectContext + ".billboard");
         }
         if (!std::isfinite(object.position.x)
                 || !std::isfinite(object.position.y)

@@ -17,6 +17,7 @@ inline constexpr float SectorEditorInspectorCompactInputLabelWidth = 82.0f;
 inline constexpr float SectorEditorInspectorCompactInputWidth = 104.0f;
 inline constexpr float SectorEditorInspectorFloatInputWidth = 112.0f;
 inline constexpr float SectorEditorInspectorIntInputWidth = 150.0f;
+inline constexpr float SectorEditorInspectorStackedLabelHeight = 26.0f;
 
 struct SectorEditorInspectorTextureRowLayout {
     Rectangle labelRect = {};
@@ -29,6 +30,12 @@ struct SectorEditorInspectorTextureRowLayout {
 struct SectorEditorInspectorNumericRowLayout {
     Rectangle labelRect = {};
     Rectangle inputRect = {};
+};
+
+struct SectorEditorInspectorStackedOptionRowLayout {
+    Rectangle labelRect = {};
+    Rectangle fieldRect = {};
+    float height = 0.0f;
 };
 
 inline float SectorEditorInspectorTextureRowHeight()
@@ -128,6 +135,56 @@ inline SectorEditorInspectorNumericRowLayout BuildSectorEditorInspectorRightIntR
             rowH,
             gap,
             SectorEditorInspectorIntInputWidth);
+}
+
+inline float SectorEditorInspectorStackedOptionRowHeight(float rowH, float gap)
+{
+    return SectorEditorInspectorStackedLabelHeight + gap + rowH;
+}
+
+inline SectorEditorInspectorStackedOptionRowLayout BuildSectorEditorInspectorStackedOptionRowLayout(
+        float y,
+        float contentW,
+        float rowH,
+        float gap)
+{
+    return SectorEditorInspectorStackedOptionRowLayout{
+            Rectangle{0.0f, y, contentW, SectorEditorInspectorStackedLabelHeight},
+            Rectangle{0.0f, y + SectorEditorInspectorStackedLabelHeight + gap, contentW, rowH},
+            SectorEditorInspectorStackedOptionRowHeight(rowH, gap)};
+}
+
+inline float SectorEditorRuntimeObjectInspectorContentHeight(
+        float rowH,
+        float gap,
+        bool isBillboard,
+        bool keepAspectWarningVisible,
+        bool directionalBillboard,
+        float spriteLabelHeight,
+        float aspectWarningHeight)
+{
+    float height = 0.0f;
+    height += 38.0f;
+    height += 34.0f;
+    height += spriteLabelHeight + gap;
+    if (isBillboard) {
+        height += rowH + gap;
+    }
+    height += (rowH + gap) * 4.0f;
+    if (isBillboard) {
+        height += (rowH + gap) * 2.0f;
+        height += rowH + gap;
+        if (keepAspectWarningVisible) {
+            height += aspectWarningHeight + gap;
+        }
+        height += (rowH + gap) * 2.0f;
+        height += rowH + gap;
+        height += (SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap)
+                * static_cast<float>(directionalBillboard ? 4 : 1);
+        height += rowH + gap;
+    }
+    height += rowH + gap;
+    return height;
 }
 
 struct SectorEditorFloatInputResult {

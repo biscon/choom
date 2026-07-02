@@ -52,6 +52,17 @@ enum class SectorPreviewControlMode {
     Gameplay
 };
 
+enum class PreviewDebugOverlayTab {
+    None,
+    View,
+    Render,
+    Visibility,
+    Lighting,
+    Objects,
+    Probes,
+    Controls
+};
+
 enum class SectorEditorAuthoringDerivationState {
     InvalidNoDerived,
     ValidCurrent,
@@ -238,6 +249,32 @@ struct AddMapTextureState {
     engine::TextureHandle previewTexture = engine::NullTextureHandle();
     std::string previewPath;
     SectorTextureFilter previewFilter = SectorTextureFilter::Anisotropic8x;
+};
+
+struct SectorSpriteMetadata {
+    std::string spriteAnimationPath;
+    std::string atlasImagePath;
+    std::vector<std::string> clipNames;
+};
+
+struct SectorSpriteMetadataCatalog {
+    bool scanned = false;
+    std::string scanMessage;
+    std::vector<SectorSpriteMetadata> sprites;
+};
+
+struct SpritePickerState {
+    bool open = false;
+    bool scanned = false;
+    std::string scanMessage;
+    engine::UIScrollState spriteScroll;
+    std::vector<SectorSpriteMetadata> sprites;
+    std::vector<const char*> spriteOptionLabels;
+    int selectedSpriteIndex = -1;
+    std::string requestedSpriteAnimationPath;
+    engine::AssetScopeHandle previewScope = engine::NullAssetScopeHandle();
+    engine::TextureHandle previewTexture = engine::NullTextureHandle();
+    std::string previewAtlasPath;
 };
 
 struct SaveLevelModalState {
@@ -575,6 +612,7 @@ struct SectorEditorState {
     bool showObjectProbeDebugOverlay = false;
     SectorRuntimeObjectState runtimeObjects;
     bool previewUiHidden = false;
+    PreviewDebugOverlayTab activePreviewDebugOverlayTab = PreviewDebugOverlayTab::None;
     SectorPreviewControlMode previewControlMode = SectorPreviewControlMode::FreeFly;
     SectorFreeflyControllerState freeflyController;
     SectorFpsControllerConfig fpsControllerConfig;
@@ -601,6 +639,11 @@ struct SectorEditorState {
     std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;
     TexturePickerState texturePicker;
     AddMapTextureState addMapTexture;
+    SectorSpriteMetadataCatalog spriteMetadataCatalog;
+    int billboardMetadataObjectId = -1;
+    std::string billboardMetadataSpriteAnimationPath;
+    bool billboardMetadataInitialRepairAttempted = false;
+    SpritePickerState spritePicker;
     SaveLevelModalState saveLevelModal;
     LoadLevelModalState loadLevelModal;
     ConfirmationModalState confirmationModal;
@@ -645,6 +688,10 @@ struct SectorEditorUiState {
     engine::UIFloatInputState runtimeObjectYInput;
     engine::UIFloatInputState runtimeObjectZInput;
     engine::UIFloatInputState runtimeObjectYawInput;
+    engine::UIFloatInputState runtimeObjectWidthInput;
+    engine::UIFloatInputState runtimeObjectHeightInput;
+    engine::UIFloatInputState runtimeObjectOriginXInput;
+    engine::UIFloatInputState runtimeObjectOriginYInput;
     engine::UIFloatInputState surface3DUvScaleUInput;
     engine::UIFloatInputState surface3DUvScaleVInput;
     engine::UIFloatInputState surface3DUvOffsetUInput;

@@ -5,6 +5,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace engine {
 
@@ -49,6 +51,7 @@ struct UIConfig {
     float mouseWheelScrollAmount = 48.0f;
     float panelHeaderHeight = 44.0f;
     float rowSpacing = 10.0f;
+    Rectangle overlayBounds = {};
 };
 
 struct UIScrollState {
@@ -72,9 +75,10 @@ struct UIContext {
         Rectangle fieldBounds = {};
         Rectangle dropdownBounds = {};
         FontHandle font = NullFontHandle();
-        const char* const* options = nullptr;
-        size_t optionCount = 0;
-        int* selectedIndex = nullptr;
+        std::vector<std::string> options;
+        size_t firstVisibleIndex = 0;
+        size_t visibleOptionCount = 0;
+        int selectedIndexSnapshot = -1;
     };
 
     uint32_t hotId = 0;
@@ -94,6 +98,17 @@ struct UIContext {
     Rectangle scrollViewport = {};
     Vector2 scrollOffset = {};
     OptionOverlay optionOverlay;
+    bool openOptionIssuedThisFrame = false;
+    bool openOptionBoundsValid = false;
+    Rectangle openOptionFieldBounds = {};
+    Rectangle openOptionDropdownBounds = {};
+    size_t openOptionFirstVisibleIndex = 0;
+    size_t openOptionVisibleCount = 0;
+    bool openOptionBlocksNormalInput = false;
+    bool openOptionClickPending = false;
+    Vector2 openOptionClickPosition = {};
+    bool openOptionCloseRequested = false;
+    float openOptionWheelDelta = 0.0f;
 };
 
 struct UITextInputResult {
@@ -296,6 +311,17 @@ bool Option(
         FontHandle font,
         const char* const* options,
         size_t optionCount,
+        int& selectedIndex);
+
+bool Option(
+        UIContext& ui,
+        const UIConfig& config,
+        Input& input,
+        AssetManager& assets,
+        const char* id,
+        Rectangle bounds,
+        FontHandle font,
+        const std::vector<std::string>& options,
         int& selectedIndex);
 
 UIPanelResult BeginPanel(

@@ -17,13 +17,14 @@ namespace game {
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(6);
+    world.ReserveComponentTypes(7);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
     world.ReserveComponent<SectorBillboardSprite>(objectCapacity);
     world.ReserveComponent<SectorBillboardAnimator>(objectCapacity);
     world.ReserveComponent<SectorBillboardDirectionalClips>(objectCapacity);
+    world.ReserveComponent<SectorBillboardSingleClip>(objectCapacity);
     world.LockComponentRegistration();
 }
 
@@ -101,6 +102,16 @@ uint32_t FindFallbackClipIndex(const engine::SpriteAnimationAsset& asset)
     return FindClipIndexInAsset(asset, "Default");
 }
 
+uint32_t FindFirstFallbackClipIndex(const engine::SpriteAnimationAsset& asset)
+{
+    const uint32_t defaultClip = FindFallbackClipIndex(asset);
+    if (defaultClip != engine::InvalidSpriteClipIndex) {
+        return defaultClip;
+    }
+
+    return asset.clips.empty() ? engine::InvalidSpriteClipIndex : 0;
+}
+
 uint32_t ResolveDirectionalClipIndex(
         const engine::SpriteAnimationAsset& asset,
         const char* name,
@@ -153,6 +164,13 @@ void ClearDirectionalClipResolution(SectorBillboardDirectionalClips& clips)
     clips.usedFallback = false;
 }
 
+void ClearSingleClipResolution(SectorBillboardSingleClip& clip)
+{
+    clip.clip = engine::InvalidSpriteClipIndex;
+    clip.resolved = false;
+    clip.usedFallback = false;
+}
+
 Vector3 PlacedRuntimeObjectAuthoringToWorldPosition(Vector3 authoringPosition)
 {
     // Runtime object placements are saved in the editor's authored coordinate space.
@@ -175,20 +193,19 @@ void RefreshPlacedRuntimeObjectDiagnostics(
     size_t clipResolvedCount = 0;
     size_t clipMissingCount = 0;
     size_t clipFallbackCount = 0;
+    size_t singleClipResolvedCount = 0;
+    size_t singleClipMissingCount = 0;
+    size_t singleClipFallbackCount = 0;
 
-    world.ForEach<SectorObject, SectorBillboardSprite, SectorBillboardDirectionalClips>(
+    world.ForEach<SectorObject, SectorBillboardSprite>(
             [&assets,
              &requestedCount,
              &readyCount,
              &pendingCount,
-             &failedCount,
-             &clipResolvedCount,
-             &clipMissingCount,
-             &clipFallbackCount](
+             &failedCount](
                     engine::Entity,
                     SectorObject&,
-                    SectorBillboardSprite& sprite,
-                    SectorBillboardDirectionalClips& directionalClips) {
+                    SectorBillboardSprite& sprite) {
                 if (!engine::IsNull(sprite.animation)) {
                     ++requestedCount;
                     if (assets.IsReady(sprite.animation)) {
@@ -201,7 +218,13 @@ void RefreshPlacedRuntimeObjectDiagnostics(
                         ++pendingCount;
                     }
                 }
+            });
 
+    world.ForEach<SectorObject, SectorBillboardDirectionalClips>(
+            [&clipResolvedCount, &clipMissingCount, &clipFallbackCount](
+                    engine::Entity,
+                    SectorObject&,
+                    SectorBillboardDirectionalClips& directionalClips) {
                 if (directionalClips.resolved) {
                     ++clipResolvedCount;
                     if (directionalClips.usedFallback) {
@@ -212,6 +235,21 @@ void RefreshPlacedRuntimeObjectDiagnostics(
                 }
             });
 
+    world.ForEach<SectorObject, SectorBillboardSingleClip>(
+            [&singleClipResolvedCount, &singleClipMissingCount, &singleClipFallbackCount](
+                    engine::Entity,
+                    SectorObject&,
+                    SectorBillboardSingleClip& singleClip) {
+                if (singleClip.resolved) {
+                    ++singleClipResolvedCount;
+                    if (singleClip.usedFallback) {
+                        ++singleClipFallbackCount;
+                    }
+                } else {
+                    ++singleClipMissingCount;
+                }
+            });
+
     state.spriteAnimationRequestedCount = requestedCount;
     state.spriteAnimationReadyCount = readyCount;
     state.spriteAnimationPendingCount = pendingCount;
@@ -219,6 +257,9 @@ void RefreshPlacedRuntimeObjectDiagnostics(
     state.directionalClipResolvedCount = clipResolvedCount;
     state.directionalClipMissingCount = clipMissingCount;
     state.directionalClipFallbackCount = clipFallbackCount;
+    state.singleClipResolvedCount = singleClipResolvedCount;
+    state.singleClipMissingCount = singleClipMissingCount;
+    state.singleClipFallbackCount = singleClipFallbackCount;
 
     state.placedObjectStatus = TextFormat(
             "Runtime objects: %zu placed / %zu spawned, %zu skipped | sprites %zu ready, %zu pending, %zu failed | clips %zu resolved, %zu missing",
@@ -228,8 +269,8 @@ void RefreshPlacedRuntimeObjectDiagnostics(
             readyCount,
             pendingCount,
             failedCount,
-            clipResolvedCount,
-            clipMissingCount);
+            clipResolvedCount + singleClipResolvedCount,
+            clipMissingCount + singleClipMissingCount);
 
     if (state.skippedObjectCount == 0) {
         state.placedObjectWarning.clear();
@@ -239,14 +280,14 @@ void RefreshPlacedRuntimeObjectDiagnostics(
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu sprite animation asset(s) failed",
                 failedCount);
-    } else if (clipMissingCount > 0 && pendingCount == 0) {
+    } else if (clipMissingCount + singleClipMissingCount > 0 && pendingCount == 0) {
         state.placedObjectWarning = TextFormat(
-                "Runtime object warnings: %zu billboard object(s) have missing directional clips",
-                clipMissingCount);
-    } else if (clipFallbackCount > 0) {
+                "Runtime object warnings: %zu billboard object(s) have missing clips",
+                clipMissingCount + singleClipMissingCount);
+    } else if (clipFallbackCount + singleClipFallbackCount > 0) {
         state.placedObjectWarning = TextFormat(
-                "Runtime object warnings: %zu billboard object(s) used fallback directional clips",
-                clipFallbackCount);
+                "Runtime object warnings: %zu billboard object(s) used fallback clips",
+                clipFallbackCount + singleClipFallbackCount);
     }
 }
 
@@ -390,11 +431,9 @@ void SpawnPlacedRuntimeObjects(
         }
     };
     for (const SectorPlacedRuntimeObject& placedObject : map.runtimeObjects) {
-        const SectorRuntimeObjectDefinition* definition =
-                FindSectorRuntimeObjectDefinition(placedObject.definitionId);
-        if (definition == nullptr) {
+        if (!placedObject.definitionId.empty()) {
             const std::string warning = TextFormat(
-                    "missing definition '%s' for placed object %d",
+                    "legacy definitionId '%s' for placed object %d is unsupported",
                     placedObject.definitionId.c_str(),
                     placedObject.id);
             std::fprintf(stderr,
@@ -405,10 +444,22 @@ void SpawnPlacedRuntimeObjects(
             continue;
         }
 
-        if (definition->kind != "billboard") {
+        if (placedObject.kind != "billboard") {
             const std::string warning = TextFormat(
                     "unsupported kind '%s' for placed object %d",
-                    definition->kind.c_str(),
+                    placedObject.kind.c_str(),
+                    placedObject.id);
+            std::fprintf(stderr,
+                    "[SectorRuntimeObjects WARNING] %s\n",
+                    warning.c_str());
+            recordWarning(warning);
+            ++skippedCount;
+            continue;
+        }
+
+        if (placedObject.billboard.spriteAnimationPath.empty()) {
+            const std::string warning = TextFormat(
+                    "missing billboard sprite animation path for placed object %d",
                     placedObject.id);
             std::fprintf(stderr,
                     "[SectorRuntimeObjects WARNING] %s\n",
@@ -427,18 +478,19 @@ void SpawnPlacedRuntimeObjects(
         SectorBillboardSprite sprite;
         SectorBillboardAnimator animator;
         const std::string animationPath = ResolveSectorAssetPath(
-                definition->billboard.spriteAnimationAssetPath);
+                placedObject.billboard.spriteAnimationPath);
         RequestSectorBillboardSpriteAnimation(
                 assets,
                 state.runtimeObjectAssetScope,
-                definition->id.c_str(),
+                placedObject.billboard.spriteAnimationPath.c_str(),
                 animationPath.c_str(),
                 sprite,
                 animator);
-        sprite.sizeWorld = definition->billboard.sizeWorld;
-        sprite.originNormalized = definition->billboard.originNormalized;
+        sprite.sizeWorld = placedObject.billboard.sizeWorld;
+        sprite.originNormalized = placedObject.billboard.originNormalized;
         sprite.alphaCutoff = kSectorBillboardDefaultAlphaCutoff;
         sprite.tint = WHITE;
+        animator.playing = placedObject.billboard.playing;
 
         const Vector3 worldPosition = PlacedRuntimeObjectAuthoringToWorldPosition(placedObject.position);
         SectorObject object;
@@ -448,15 +500,6 @@ void SpawnPlacedRuntimeObjects(
                     -1);
             object.currentSectorId = foundSectorId != 0 ? foundSectorId : -1;
         }
-
-        SectorBillboardDirectionalClips directionalClips;
-        StoreDirectionalClipNames(
-                directionalClips,
-                SectorBillboardDirectionalClipNames{
-                        definition->billboard.frontClipName.c_str(),
-                        definition->billboard.backClipName.c_str(),
-                        definition->billboard.leftClipName.c_str(),
-                        definition->billboard.rightClipName.c_str()});
 
         const engine::Entity entity = world.CreateEntity();
         world.Add(entity, SectorObjectTransform{worldPosition, placedObject.yawRadians});
@@ -468,7 +511,21 @@ void SpawnPlacedRuntimeObjects(
                 &map)});
         world.Add(entity, sprite);
         world.Add(entity, animator);
-        world.Add(entity, directionalClips);
+        if (placedObject.billboard.directional) {
+            SectorBillboardDirectionalClips directionalClips;
+            StoreDirectionalClipNames(
+                    directionalClips,
+                    SectorBillboardDirectionalClipNames{
+                            placedObject.billboard.frontClip.c_str(),
+                            placedObject.billboard.backClip.c_str(),
+                            placedObject.billboard.leftClip.c_str(),
+                            placedObject.billboard.rightClip.c_str()});
+            world.Add(entity, directionalClips);
+        } else {
+            SectorBillboardSingleClip singleClip;
+            singleClip.name = placedObject.billboard.clip;
+            world.Add(entity, singleClip);
+        }
         state.placedObjectEntities.push_back(SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
         ++spawnedCount;
     }
@@ -496,46 +553,24 @@ void UpdateSectorRuntimeObjects(
                             directionalClips);
                 }
             });
+    world.ForEach<SectorBillboardSprite, SectorBillboardSingleClip>(
+            [&assets](engine::Entity, SectorBillboardSprite& sprite, SectorBillboardSingleClip& singleClip) {
+                if (!singleClip.resolved) {
+                    ResolveSectorBillboardSingleClip(
+                            assets,
+                            sprite.animation,
+                            singleClip.name.c_str(),
+                            singleClip);
+                    if (singleClip.resolved) {
+                        sprite.clipIndex = singleClip.clip;
+                    }
+                }
+            });
     if (state.objectSectorLookupWorldValid) {
         UpdateSectorObjectCurrentSectorSystem(world, state.objectSectorLookupWorld);
     }
     UpdateSectorObjectBakedLightingSystem(world, state.objectLightProbes, &map);
     RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
-}
-
-const std::vector<SectorRuntimeObjectDefinition>& GetSectorRuntimeObjectDefinitions()
-{
-    static const std::vector<SectorRuntimeObjectDefinition> definitions = {
-        SectorRuntimeObjectDefinition{
-            "goblin",
-            "billboard",
-            SectorRuntimeObjectBillboardDefinition{
-                "assets/sprites/goblin.json",
-                Vector2{0.8f, 1.2f},
-                Vector2{0.5f, 1.0f},
-                "Front",
-                "Back",
-                "Left",
-                "Right"
-            }
-        }
-    };
-    return definitions;
-}
-
-const SectorRuntimeObjectDefinition* FindSectorRuntimeObjectDefinition(const std::string& definitionId)
-{
-    if (definitionId.empty()) {
-        return nullptr;
-    }
-
-    const std::vector<SectorRuntimeObjectDefinition>& definitions = GetSectorRuntimeObjectDefinitions();
-    for (const SectorRuntimeObjectDefinition& definition : definitions) {
-        if (definition.id == definitionId) {
-            return &definition;
-        }
-    }
-    return nullptr;
 }
 
 bool ResolveSectorBillboardDirectionalClipsFromAsset(
@@ -584,6 +619,76 @@ bool ResolveSectorBillboardDirectionalClips(
     }
 
     return ResolveSectorBillboardDirectionalClipsFromAsset(*asset, names, clips);
+}
+
+bool ResolveSectorBillboardSingleClipFromAsset(
+        const engine::SpriteAnimationAsset& asset,
+        const char* name,
+        SectorBillboardSingleClip& clip)
+{
+    clip.name = name != nullptr ? name : "";
+    ClearSingleClipResolution(clip);
+    if (asset.clips.empty()) {
+        return false;
+    }
+
+    if (clip.name.empty()) {
+        const uint32_t defaultClip = FindFirstFallbackClipIndex(asset);
+        if (defaultClip == engine::InvalidSpriteClipIndex) {
+            return false;
+        }
+
+        clip.clip = defaultClip;
+        clip.resolved = true;
+        return true;
+    }
+
+    {
+        const uint32_t clipIndex = FindClipIndexInAsset(asset, clip.name.c_str());
+        if (clipIndex != engine::InvalidSpriteClipIndex) {
+            clip.clip = clipIndex;
+            clip.resolved = true;
+            return true;
+        }
+    }
+
+    const uint32_t fallback = FindFirstFallbackClipIndex(asset);
+    if (fallback == engine::InvalidSpriteClipIndex) {
+        return false;
+    }
+
+    clip.clip = fallback;
+    clip.usedFallback = true;
+    clip.resolved = true;
+    std::fprintf(stderr,
+            "[SectorRuntimeObjects WARNING] Missing billboard single clip '%s'; using clip %u as fallback\n",
+            clip.name.empty() ? "<default>" : clip.name.c_str(),
+            fallback);
+    return true;
+}
+
+bool ResolveSectorBillboardSingleClip(
+        engine::AssetManager& assets,
+        engine::SpriteAnimationHandle animation,
+        const char* name,
+        SectorBillboardSingleClip& clip)
+{
+    clip.name = name != nullptr ? name : "";
+    ClearSingleClipResolution(clip);
+    if (engine::IsNull(animation)) {
+        return false;
+    }
+
+    const engine::SpriteAnimationAsset* asset = assets.GetSpriteAnimation(animation);
+    if (asset == nullptr) {
+        if (assets.HasFailed(animation)) {
+            std::fprintf(stderr,
+                    "[SectorRuntimeObjects WARNING] Cannot resolve billboard single clip; animation asset failed\n");
+        }
+        return false;
+    }
+
+    return ResolveSectorBillboardSingleClipFromAsset(*asset, name, clip);
 }
 
 uint32_t SelectSectorBillboardDirectionalClip(

@@ -40,11 +40,27 @@ struct SectorTopologyDirectionalLightSettings {
     float intensity = 1.0f;
 };
 
+struct SectorPlacedBillboard {
+    std::string spriteAnimationPath;
+    Vector2 sizeWorld = {1.0f, 1.0f};
+    bool keepAspectRatio = true;
+    Vector2 originNormalized = {0.5f, 1.0f};
+    bool directional = false;
+    std::string clip;
+    std::string frontClip = "Front";
+    std::string backClip = "Back";
+    std::string leftClip = "Left";
+    std::string rightClip = "Right";
+    bool playing = true;
+};
+
 struct SectorPlacedRuntimeObject {
     int id = 0;
     std::string definitionId;
     Vector3 position = {};
     float yawRadians = 0.0f;
+    std::string kind;
+    SectorPlacedBillboard billboard;
 };
 
 struct SectorTopologyMap {

@@ -4,7 +4,9 @@
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_demo/SectorTextureTypes.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <utility>
 
 namespace game {
 
@@ -46,6 +48,35 @@ bool HasCurrentAuthoringDerivation(const SectorEditorState& state)
             && state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
             && !state.authoringDerivedTopologyStale
             && state.authoringDerivation.success;
+}
+
+bool ContainsClipName(const std::vector<std::string>& clipNames, const std::string& clipName)
+{
+    return !clipName.empty()
+            && std::find(clipNames.begin(), clipNames.end(), clipName) != clipNames.end();
+}
+
+std::string FirstAvailableClipName(const SectorSpriteMetadata& metadata)
+{
+    return metadata.clipNames.empty() ? std::string{} : metadata.clipNames.front();
+}
+
+std::string ChooseBillboardClipName(
+        const SectorSpriteMetadata& metadata,
+        const std::string& preferred,
+        const std::string& current,
+        bool repairInvalidNonEmpty)
+{
+    if (ContainsClipName(metadata.clipNames, current)) {
+        return current;
+    }
+    if (!current.empty() && !repairInvalidNonEmpty) {
+        return current;
+    }
+    if (ContainsClipName(metadata.clipNames, preferred)) {
+        return preferred;
+    }
+    return FirstAvailableClipName(metadata);
 }
 
 bool ResolveAuthoringFaceAnchorPickerTarget(
@@ -386,6 +417,149 @@ SectorEditorAddTextureResult AddSelectedMapTexture(SectorEditorState& state)
 
     result.success = true;
     return result;
+}
+
+void RefreshSpritePickerScan(SpritePickerState& picker)
+{
+    picker.sprites = ScanAssetSpriteAsepriteJsons(picker.scanMessage);
+    picker.spriteOptionLabels.clear();
+    picker.spriteOptionLabels.reserve(picker.sprites.size());
+    for (const SectorSpriteMetadata& metadata : picker.sprites) {
+        picker.spriteOptionLabels.push_back(metadata.spriteAnimationPath.c_str());
+    }
+    picker.scanned = true;
+    picker.spriteScroll = engine::UIScrollState{};
+    int selectedIndex = picker.sprites.empty() ? -1 : 0;
+    if (!picker.requestedSpriteAnimationPath.empty()) {
+        for (size_t i = 0; i < picker.sprites.size(); ++i) {
+            if (picker.sprites[i].spriteAnimationPath == picker.requestedSpriteAnimationPath) {
+                selectedIndex = static_cast<int>(i);
+                break;
+            }
+        }
+    }
+    SelectSpritePickerSprite(picker, selectedIndex);
+}
+
+void RefreshSpriteMetadataCatalog(SectorSpriteMetadataCatalog& catalog)
+{
+    catalog.sprites = ScanAssetSpriteAsepriteJsons(catalog.scanMessage);
+    catalog.scanned = true;
+}
+
+const SectorSpriteMetadata* FindSpriteMetadata(
+        const SectorSpriteMetadataCatalog& catalog,
+        const std::string& spriteAnimationPath)
+{
+    if (spriteAnimationPath.empty()) {
+        return nullptr;
+    }
+    const auto it = std::find_if(
+            catalog.sprites.begin(),
+            catalog.sprites.end(),
+            [&spriteAnimationPath](const SectorSpriteMetadata& metadata) {
+                return metadata.spriteAnimationPath == spriteAnimationPath;
+            });
+    return it == catalog.sprites.end() ? nullptr : &(*it);
+}
+
+void SelectSpritePickerSprite(SpritePickerState& picker, int spriteIndex)
+{
+    if (spriteIndex < 0 || spriteIndex >= static_cast<int>(picker.sprites.size())) {
+        picker.selectedSpriteIndex = -1;
+        picker.previewTexture = engine::NullTextureHandle();
+        picker.previewAtlasPath.clear();
+        return;
+    }
+
+    picker.selectedSpriteIndex = spriteIndex;
+    picker.previewTexture = engine::NullTextureHandle();
+    picker.previewAtlasPath.clear();
+}
+
+SectorEditorSpritePickerResult SelectedSpritePickerResult(const SpritePickerState& picker)
+{
+    SectorEditorSpritePickerResult result;
+    if (picker.selectedSpriteIndex < 0 || picker.selectedSpriteIndex >= static_cast<int>(picker.sprites.size())) {
+        return result;
+    }
+
+    const SectorSpriteMetadata& metadata = picker.sprites[static_cast<size_t>(picker.selectedSpriteIndex)];
+    result.valid = true;
+    result.spriteAnimationPath = metadata.spriteAnimationPath;
+    result.atlasImagePath = metadata.atlasImagePath;
+    result.clipNames = metadata.clipNames;
+    return result;
+}
+
+void OpenBillboardSpritePicker(
+        SpritePickerState& picker,
+        const std::string& spriteAnimationPath)
+{
+    picker.open = true;
+    picker.scanned = false;
+    picker.scanMessage.clear();
+    picker.spriteScroll = engine::UIScrollState{};
+    picker.selectedSpriteIndex = -1;
+    picker.requestedSpriteAnimationPath = spriteAnimationPath;
+    picker.previewTexture = engine::NullTextureHandle();
+    picker.previewAtlasPath.clear();
+}
+
+bool ApplySpritePickerResultToBillboard(
+        SectorPlacedBillboard& billboard,
+        const SectorEditorSpritePickerResult& result)
+{
+    if (!result.valid || result.spriteAnimationPath.empty()) {
+        return false;
+    }
+
+    SectorSpriteMetadata metadata;
+    metadata.spriteAnimationPath = result.spriteAnimationPath;
+    metadata.atlasImagePath = result.atlasImagePath;
+    metadata.clipNames = result.clipNames;
+
+    SectorPlacedBillboard edited = billboard;
+    edited.spriteAnimationPath = result.spriteAnimationPath;
+    RepairBillboardClipsForSpriteMetadata(edited, metadata, true);
+
+    const bool changed = edited.spriteAnimationPath != billboard.spriteAnimationPath
+            || edited.clip != billboard.clip
+            || edited.frontClip != billboard.frontClip
+            || edited.backClip != billboard.backClip
+            || edited.leftClip != billboard.leftClip
+            || edited.rightClip != billboard.rightClip;
+    if (changed) {
+        billboard = std::move(edited);
+    }
+    return changed;
+}
+
+bool RepairBillboardClipsForSpriteMetadata(
+        SectorPlacedBillboard& billboard,
+        const SectorSpriteMetadata& metadata,
+        bool repairInvalidNonEmpty)
+{
+    if (metadata.clipNames.empty()) {
+        return false;
+    }
+
+    SectorPlacedBillboard edited = billboard;
+    edited.clip = ChooseBillboardClipName(metadata, "Default", edited.clip, repairInvalidNonEmpty);
+    edited.frontClip = ChooseBillboardClipName(metadata, "Front", edited.frontClip, repairInvalidNonEmpty);
+    edited.backClip = ChooseBillboardClipName(metadata, "Back", edited.backClip, repairInvalidNonEmpty);
+    edited.leftClip = ChooseBillboardClipName(metadata, "Left", edited.leftClip, repairInvalidNonEmpty);
+    edited.rightClip = ChooseBillboardClipName(metadata, "Right", edited.rightClip, repairInvalidNonEmpty);
+
+    const bool changed = edited.clip != billboard.clip
+            || edited.frontClip != billboard.frontClip
+            || edited.backClip != billboard.backClip
+            || edited.leftClip != billboard.leftClip
+            || edited.rightClip != billboard.rightClip;
+    if (changed) {
+        billboard = std::move(edited);
+    }
+    return changed;
 }
 
 std::string CurrentTextureForPickerTarget(const SectorEditorState& state)

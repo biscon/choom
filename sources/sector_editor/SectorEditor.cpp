@@ -50,6 +50,8 @@ namespace game {
 namespace {
 
 constexpr float SectorEditorPanelScrollPaddingPx = 8.0f;
+constexpr float BillboardSizeMin = 0.001f;
+constexpr float BillboardSizeMax = 100000.0f;
 
 float ScrollAreaContentWidthForVerticalScrollbar(
         float boundsWidth,
@@ -147,12 +149,56 @@ void UpdateCachedRuntimeObjectDraw(
             continue;
         }
 
-        cached.definitionId = object.definitionId;
+        cached.definitionId = !object.kind.empty() ? object.kind : object.definitionId;
         cached.map = Vector2{object.position.x, object.position.z};
         cached.yawRadians = object.yawRadians;
-        cached.definitionKnown = FindSectorRuntimeObjectDefinition(object.definitionId) != nullptr;
+        cached.definitionKnown = object.kind == "billboard";
         return;
     }
+}
+
+void ResetRuntimeObjectUiState(SectorEditorUiState& uiState)
+{
+    uiState.runtimeObjectXInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectYInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectZInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectYawInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectWidthInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectHeightInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectOriginXInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectOriginYInput = engine::UIFloatInputState{};
+}
+
+bool ResolveBillboardAspectFromAnimation(
+        const engine::AssetManager& assets,
+        const engine::SpriteAnimationHandle animation,
+        uint32_t clipIndex,
+        float& outAspect)
+{
+    const engine::SpriteAnimationAsset* asset = assets.GetSpriteAnimation(animation);
+    if (asset == nullptr || asset->frames.empty()) {
+        return false;
+    }
+
+    uint32_t frameIndex = 0;
+    if (clipIndex != engine::InvalidSpriteClipIndex && clipIndex < asset->clips.size()) {
+        const engine::SpriteClip& clip = asset->clips[clipIndex];
+        if (clip.frameCount > 0 && clip.firstFrame < asset->frames.size()) {
+            frameIndex = clip.firstFrame;
+        }
+    }
+
+    const engine::SpriteFrame& frame = asset->frames[frameIndex];
+    Vector2 frameSize = frame.sourceSize;
+    if (frameSize.x <= 0.0f || frameSize.y <= 0.0f) {
+        frameSize = Vector2{std::abs(frame.source.width), std::abs(frame.source.height)};
+    }
+    if (frameSize.x <= 0.0f || frameSize.y <= 0.0f) {
+        return false;
+    }
+
+    outAspect = frameSize.x / frameSize.y;
+    return std::isfinite(outAspect) && outAspect > 0.0f;
 }
 
 int64_t CoordinateSequencePeriod(SectorCoord stepDelta, int64_t snapStep)
@@ -356,6 +402,9 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     if (!engine::IsNull(state.addMapTexture.previewScope)) {
         assets.UnloadScope(state.addMapTexture.previewScope);
     }
+    if (!engine::IsNull(state.spritePicker.previewScope)) {
+        assets.UnloadScope(state.spritePicker.previewScope);
+    }
     state = SectorEditorState{};
     uiState = SectorEditorUiState{};
     canvasRect = {};
@@ -379,7 +428,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
     if (state.mode == SectorEditorMode::Preview3D) {
         UpdateSectorRuntimeObjects(context.world, assets, state.runtimeObjects, state.topologyMap, dt);
         preview.AdvanceRuntime(dt);
-        if (state.texturePicker.open || HasDocumentModalOpen()) {
+        if (state.texturePicker.open || state.spritePicker.open || HasDocumentModalOpen()) {
             return;
         }
         UpdatePreview3D(input, assets, dt);
@@ -387,7 +436,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
     }
 
     canvasRect = BuildCanvasRect();
-    if (state.texturePicker.open || state.addMapTexture.open || HasDocumentModalOpen()) {
+    if (state.texturePicker.open || state.addMapTexture.open || state.spritePicker.open || HasDocumentModalOpen()) {
         return;
     }
     UpdateHoverAndMouse(input);
@@ -444,10 +493,11 @@ void SectorEditor::RenderUI(
             ui.focusedId = 0;
             ui.openOptionId = 0;
         } else {
-            DrawPreviewOverlay(ui, config, input, assets, font);
+            DrawPreviewOverlay(ui, config, input, assets, font, smallFont);
         }
         if (!state.previewUiHidden
                 && !state.texturePicker.open
+                && !state.spritePicker.open
                 && !state.decalTintModal.open
                 && !state.previewSettingsModal.open) {
             DrawPreviewUvPanel(ui, config, input, assets, font);
@@ -459,8 +509,9 @@ void SectorEditor::RenderUI(
             DrawPreviewSettingsModal(ui, config, input, assets, font);
         }
         DrawTexturePickerModal(ui, config, input, assets, font);
+        DrawSpritePickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = ui.focusedId != 0;
-        if (state.texturePicker.open || state.decalTintModal.open || state.previewSettingsModal.open) {
+        if (state.texturePicker.open || state.spritePicker.open || state.decalTintModal.open || state.previewSettingsModal.open) {
             uiState.keyboardCaptured = true;
         }
         engine::EndUI(ui, config, input, assets);
@@ -517,14 +568,21 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
+    if (state.spritePicker.open) {
+        DrawSpritePickerModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
 
     DrawToolsPanel(ui, config, input, assets, font);
     DrawSectorsPanel(ui, config, input, assets, font, smallFont);
     DrawStatusPanel(ui, config, assets, smallFont);
     DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawTexturePickerModal(ui, config, input, assets, font);
+    DrawSpritePickerModal(ui, config, input, assets, font);
     uiState.keyboardCaptured = ui.focusedId != 0;
-    if (state.texturePicker.open || state.addMapTexture.open || HasDocumentModalOpen()) {
+    if (state.texturePicker.open || state.addMapTexture.open || state.spritePicker.open || HasDocumentModalOpen()) {
         uiState.keyboardCaptured = true;
     }
     engine::EndUI(ui, config, input, assets);
@@ -1998,19 +2056,25 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
     const Vector2 mouse = input.MousePosition();
     const bool overPanel = IsValidTopologySurfaceEditTarget(state.selectedTopologySurface3D)
             && Contains(BuildPreviewUvPanelRect(), mouse);
+    const bool overPreviewOverlay = IsPreviewOverlayMouseInteractive()
+            && Contains(BuildPreviewOverlayInteractionRect(), mouse);
     state.hoveredSurface3D = overPanel
+            || overPreviewOverlay
             ? SectorSurfaceHit{}
             : PickSectorSurface3D(mouse, viewport);
 
     input.ForEachEvent(
             engine::InputEventType::MouseClick,
             true,
-            [this, overPanel](engine::InputEvent& event) {
+            [this, overPanel, overPreviewOverlay](engine::InputEvent& event) {
                 if (event.mouseClick.button != MOUSE_LEFT_BUTTON) {
                     return;
                 }
                 if (overPanel) {
                     engine::ConsumeEvent(event);
+                    return;
+                }
+                if (overPreviewOverlay) {
                     return;
                 }
                 if (state.hoveredSurface3D.hit) {
@@ -3065,21 +3129,19 @@ void SectorEditor::AddDynamicSpotLightAt(Vector2 mapPoint)
 void SectorEditor::AddRuntimeObjectAt(Vector2 mapPoint)
 {
     const int sectorId = FindTopologySectorAt(mapPoint);
-    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sectorId);
-    if (sector == nullptr) {
-        statusText = "Object: click inside a sector";
+    const SectorEditorAddBillboardResult result = AddBillboardToSector(
+            state.topologyMap,
+            sectorId,
+            mapPoint);
+    if (!result.changed) {
+        if (!result.status.empty()) {
+            statusText = result.status;
+        }
         return;
     }
 
-    SectorPlacedRuntimeObject object;
-    object.id = AllocateSectorPlacedRuntimeObjectId(state.topologyMap);
-    object.definitionId = "goblin";
-    object.position = Vector3{mapPoint.x, sector->floorZ, mapPoint.y};
-    object.yawRadians = 0.0f;
-    state.topologyMap.runtimeObjects.push_back(object);
-
-    SelectRuntimeObject(object.id);
-    MarkTopologyDocumentEdited(TextFormat("Placed goblin object %d", object.id));
+    SelectRuntimeObject(result.objectId);
+    MarkTopologyDocumentEdited(result.status.c_str());
     RefreshRuntimeObjectsAfterAuthoringEdit();
 }
 
@@ -3738,7 +3800,6 @@ void SectorEditor::DrawPreviewSpotLightOverlay() const
 void SectorEditor::DrawPreviewObjectProbeOverlay() const
 {
     if (!preview.IsRendererReady()
-            || state.freeflyController.mouseLookEnabled
             || !state.showObjectProbeDebugOverlay
             || state.runtimeObjects.objectLightProbes.probes.empty()) {
         return;
@@ -3759,109 +3820,80 @@ void SectorEditor::RefreshPreviewObjectProbeDebugData()
     RefreshSectorRuntimeObjectMapData(state.runtimeObjects, state.topologyMap);
 }
 
+bool SectorEditor::IsPreviewOverlayMouseInteractive() const
+{
+    return !state.freeflyController.mouseLookEnabled;
+}
+
+Rectangle SectorEditor::BuildPreviewOverlayInteractionRect() const
+{
+    constexpr float x = 32.0f;
+    constexpr float y = 32.0f;
+    constexpr float width = 620.0f;
+    constexpr float collapsedHeight = 78.0f;
+    constexpr float expandedHeight = 300.0f;
+    return Rectangle{
+            x,
+            y,
+            width,
+            state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::None
+                    ? collapsedHeight
+                    : expandedHeight};
+}
+
 void SectorEditor::DrawPreviewOverlay(
         engine::UIContext& ui,
         const engine::UIConfig& config,
         engine::Input& input,
         engine::AssetManager& assets,
-        engine::FontHandle font)
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
 {
-    const Rectangle panel{32.0f, 32.0f, EditorWidth - 64.0f, 356.0f};
-    DrawRectangleRec(panel, Color{12, 15, 20, 205});
-    DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
+    struct OverlayLine {
+        std::string text;
+        Color color;
+        bool wrap;
+    };
+
+    const bool mouseInteractive = IsPreviewOverlayMouseInteractive();
+    const bool drawExpanded = state.activePreviewDebugOverlayTab != PreviewDebugOverlayTab::None;
+    const float panelW = 620.0f;
+    const float padding = 10.0f;
+    const float gap = 6.0f;
+    const float stripH = 26.0f;
+    const float tabH = 30.0f;
+    const float rowH = 24.0f;
+    const Rectangle basePanel{32.0f, 32.0f, panelW, 0.0f};
+    const float contentW = panelW - padding * 2.0f;
+    engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
 
     const SectorViewPose pose = ActivePreviewPose();
     const Vector3 position = pose.position;
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 14.0f, panel.width - 36.0f, 34.0f},
-            font,
-            TextFormat("3D Mode | %s", PreviewControlModeName(state.previewControlMode)),
-            engine::UITextJustify::Left
-    );
-    if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_preview_settings",
-                Rectangle{panel.x + panel.width - 152.0f, panel.y + 12.0f, 130.0f, 36.0f},
-                font,
-                "Settings")) {
-        OpenPreviewSettingsModal();
-    }
-    const bool hasSelectedSpotLight = SelectedTopologyStaticSpotLight() != nullptr
-            || SelectedTopologyDynamicSpotLight() != nullptr;
-    if (state.spotLightPilot.active) {
-        constexpr float buttonW = 108.0f;
-        if (engine::Button(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    "sector_editor_preview_spotlight_pilot_apply",
-                    Rectangle{
-                            panel.x + panel.width - 152.0f - buttonW * 2.0f - 20.0f,
-                            panel.y + 12.0f,
-                            buttonW,
-                            36.0f},
-                    font,
-                    "Apply")) {
-            ApplySpotLightPilot();
-        }
-        if (engine::Button(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    "sector_editor_preview_spotlight_pilot_cancel",
-                    Rectangle{
-                            panel.x + panel.width - 152.0f - buttonW - 10.0f,
-                            panel.y + 12.0f,
-                            buttonW,
-                            36.0f},
-                    font,
-                    "Cancel")) {
-            CancelSpotLightPilot("Spotlight pilot cancelled");
-        }
-    } else if (hasSelectedSpotLight && state.previewControlMode == SectorPreviewControlMode::FreeFly) {
-        if (engine::Button(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    "sector_editor_preview_spotlight_pilot_start",
-                    Rectangle{panel.x + panel.width - 290.0f, panel.y + 12.0f, 118.0f, 36.0f},
-                    font,
-                    "Pilot Light")) {
-            StartSpotLightPilot();
-        }
-    }
-    const char* interactionText = state.freeflyController.mouseLookEnabled
-            ? (state.spotLightPilot.active
-                    ? "Pilot Light | WASD move | Mouse look | Space/Ctrl up/down | Apply or Cancel"
-                    : (state.previewControlMode == SectorPreviewControlMode::Gameplay
-                    ? "WASD move | Space jump | Shift run | Mouse look | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc"
-                    : "WASD move | Mouse look | Space/Ctrl up/down | F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | Tab/Esc"))
-            : "F1 AO | F2 UI | F3 mode | F4 dyn lights | F11 cursor | click surface to select | Tab/Esc";
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 54.0f, panel.width - 36.0f, 30.0f},
-            font,
-            interactionText,
-            engine::UITextJustify::Left,
-            config.mutedTextColor
-    );
+    const RuntimePortalVisibilityResult& visibility = preview.VisibilityResult();
+    const int compactSectorId =
+            state.previewControlMode == SectorPreviewControlMode::Gameplay
+                    ? state.fpsControllerState.currentSectorId
+                    : (visibility.validStartSector ? visibility.startSectorId : 0);
+    std::string compactSector = compactSectorId > 0
+            ? TextFormat("sector %d", compactSectorId)
+            : "sector none";
+    const char* dirtyText = state.topologyDocumentDirty ? "unsaved" : "saved";
+    const std::string compactStatus = TextFormat(
+            "3D %s | %s | assets %.0f%% | lightmap %s | %s",
+            PreviewControlModeName(state.previewControlMode),
+            compactSector.c_str(),
+            preview.RendererAssetProgress(assets) * 100.0f,
+            preview.RendererLightmapStatusText(),
+            dirtyText);
+
     std::string collisionStatus;
     if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
         if (state.sectorCollisionWorldValid) {
             if (state.previewCollisionNoclipFallback) {
-                collisionStatus = "Gameplay collision: no sector | noclip";
+                collisionStatus = "mode: gameplay collision | status: no sector / noclip";
             } else if (state.fpsControllerState.currentSectorId == 0
                     || !state.previewVerticalResult.hasSector) {
-                collisionStatus = "Gameplay collision: on | no sector";
+                collisionStatus = "mode: gameplay collision | status: no sector";
             } else {
                 std::string blockText;
                 if (state.previewMoveResult.hitWall) {
@@ -3882,149 +3914,330 @@ void SectorEditor::DrawPreviewOverlay(
                                 ? "grounded"
                                 : (state.fpsControllerState.verticalVelocity > 0.0f ? "jumping" : "falling"));
                 collisionStatus = TextFormat(
-                        "Gameplay collision: sector %d | %s%s | vertical %s | block %s | r %.2f step %.2f jump %.2f | floor %.2f feet %.2f vel %.2f",
+                        "mode: gameplay collision | sector: %d | vertical: %s / %s | block: %s | radius: %.2f | step: %.2f | jump: %.2f",
                         state.fpsControllerState.currentSectorId,
                         verticalState,
-                        state.previewVerticalResult.cannotFit ? " grounded" : "",
                         VerticalTransitionName(state.previewVerticalResult.transition),
                         blockText.c_str(),
                         state.fpsControllerConfig.playerRadius,
                         state.fpsControllerConfig.stepHeight,
-                        state.fpsControllerConfig.jumpHeight,
-                        state.previewVerticalResult.floorZ,
-                        state.fpsControllerState.feetPosition.y,
-                        state.fpsControllerState.verticalVelocity);
+                        state.fpsControllerConfig.jumpHeight);
             }
         } else {
-            collisionStatus = "Gameplay collision: unavailable";
+            collisionStatus = "mode: gameplay collision | status: unavailable";
+        }
+    } else {
+        collisionStatus = "mode: FreeFly | collision: noclip";
+    }
+
+    std::vector<OverlayLine> lines;
+    const auto addLine = [&](const std::string& text, Color color, bool wrap) {
+        lines.push_back(OverlayLine{text, color, wrap});
+    };
+    const auto addWrappedLine = [&](const std::string& text) {
+        addLine(text, smallConfig.mutedTextColor, true);
+    };
+    const auto addKeyValue = [&](const char* key, const std::string& value) {
+        addLine(std::string(key) + ": " + value, smallConfig.mutedTextColor, false);
+    };
+    const auto addKeyValueStyled = [&](const char* key, const std::string& value, Color color, bool wrap) {
+        addLine(std::string(key) + ": " + value, color, wrap);
+    };
+
+    if (drawExpanded) {
+        switch (state.activePreviewDebugOverlayTab) {
+            case PreviewDebugOverlayTab::View:
+                addKeyValue("mode", PreviewControlModeName(state.previewControlMode));
+                addKeyValue("position", TextFormat("%.2f, %.2f, %.2f", position.x, position.y, position.z));
+                addKeyValue("sector", compactSector);
+                addWrappedLine(collisionStatus);
+                if (!state.sectorCollisionWorldWarning.empty()) {
+                    addKeyValueStyled("warning", state.sectorCollisionWorldWarning, Color{236, 92, 92, 245}, true);
+                }
+                break;
+            case PreviewDebugOverlayTab::Render:
+                addKeyValue("sectors", TextFormat("%zu", preview.SectorCount()));
+                addKeyValue("batches", TextFormat("%zu", preview.BatchCount()));
+                addKeyValue("triangles", TextFormat("%d", preview.TriangleCount()));
+                addKeyValueStyled("render", preview.RenderDebugText(), smallConfig.mutedTextColor, true);
+                break;
+            case PreviewDebugOverlayTab::Visibility:
+                addKeyValue("valid start", visibility.validStartSector ? "yes" : "no");
+                addKeyValue("visible", TextFormat("%zu / %zu", visibility.visibleSectorIds.size(), visibility.totalSectorCount));
+                addKeyValue("fallback", visibility.fallbackDrawAll ? "draw all" : "none");
+                addKeyValueStyled("details", preview.PortalVisibilityDebugText(), smallConfig.mutedTextColor, true);
+                break;
+            case PreviewDebugOverlayTab::Lighting:
+                addKeyValue("dynamic", preview.DynamicLightingEnabled() ? "on" : "off");
+                addKeyValue("AO", state.useBakedAmbientOcclusion ? "on" : "off");
+                addKeyValue("lightmap", preview.RendererLightmapStatusText());
+                addKeyValueStyled("render lights", preview.RenderDebugText(), smallConfig.mutedTextColor, true);
+                break;
+            case PreviewDebugOverlayTab::Objects: {
+                const SectorRuntimeObjectState& objects = state.runtimeObjects;
+                addKeyValue("placed/spawned/skipped", TextFormat(
+                        "%zu / %zu / %zu",
+                        objects.placedObjectCount,
+                        objects.spawnedObjectCount,
+                        objects.skippedObjectCount));
+                addKeyValue("sprites ready/pending/failed", TextFormat(
+                        "%zu / %zu / %zu",
+                        objects.spriteAnimationReadyCount,
+                        objects.spriteAnimationPendingCount,
+                        objects.spriteAnimationFailedCount));
+                addKeyValue("directional clips", TextFormat(
+                        "resolved %zu | missing %zu | fallback %zu",
+                        objects.directionalClipResolvedCount,
+                        objects.directionalClipMissingCount,
+                        objects.directionalClipFallbackCount));
+                addKeyValue("single clips", TextFormat(
+                        "resolved %zu | missing %zu | fallback %zu",
+                        objects.singleClipResolvedCount,
+                        objects.singleClipMissingCount,
+                        objects.singleClipFallbackCount));
+                addKeyValueStyled("billboards", preview.RenderDebugText(), smallConfig.mutedTextColor, true);
+                if (!objects.placedObjectWarning.empty()) {
+                    addKeyValueStyled("warning", objects.placedObjectWarning, Color{236, 92, 92, 245}, true);
+                }
+                break;
+            }
+            case PreviewDebugOverlayTab::Probes: {
+                const char* objectProbeStatus = state.runtimeObjects.objectProbeStatus.empty()
+                        ? "none"
+                        : state.runtimeObjects.objectProbeStatus.c_str();
+                addKeyValueStyled("status", objectProbeStatus, smallConfig.mutedTextColor, true);
+                addKeyValue("probe count", TextFormat("%zu", state.runtimeObjects.objectLightProbes.probes.size()));
+                if (!state.runtimeObjects.objectSectorLookupWarning.empty()) {
+                    addKeyValueStyled("lookup warning", state.runtimeObjects.objectSectorLookupWarning, Color{236, 92, 92, 245}, true);
+                }
+                break;
+            }
+            case PreviewDebugOverlayTab::Controls:
+                if (state.spotLightPilot.active) {
+                    addWrappedLine("pilot light: WASD move, mouse look, Space/Ctrl up/down. Unlock cursor with F11 to click Apply or Cancel.");
+                } else if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
+                    addWrappedLine("movement: WASD move, Space jump, Shift run, mouse look. F11 unlocks cursor for UI tabs.");
+                } else {
+                    addWrappedLine("movement: WASD move, mouse look, Space/Ctrl up/down. F11 unlocks cursor for UI tabs.");
+                }
+                addWrappedLine("hotkeys: F1 AO, F2 hide/show 3D UI, F3 control mode, F4 dynamic lights, Tab/Esc return to 2D.");
+                break;
+            case PreviewDebugOverlayTab::None:
+                break;
         }
     }
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 92.0f, panel.width - 36.0f, 30.0f},
-            font,
-            TextFormat(
-                    "pos %.2f %.2f %.2f | sectors %zu | batches %zu | triangles %d",
-                    position.x,
-                    position.y,
-                    position.z,
-                    preview.SectorCount(),
-                    preview.BatchCount(),
-                    preview.TriangleCount()
-            ),
-            engine::UITextJustify::Left,
-            config.mutedTextColor
-    );
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 122.0f, panel.width - 36.0f, 30.0f},
-            font,
-            collisionStatus.empty() ? "3D collision: FreeFly noclip" : collisionStatus.c_str(),
-            engine::UITextJustify::Left,
-            config.mutedTextColor
-    );
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 152.0f, panel.width - 36.0f, 30.0f},
-            font,
-            preview.PortalVisibilityDebugText().c_str(),
-            engine::UITextJustify::Left,
-            config.mutedTextColor
-    );
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 182.0f, panel.width - 36.0f, 30.0f},
-            font,
-            preview.RenderDebugText().c_str(),
-            engine::UITextJustify::Left,
-            config.mutedTextColor
-    );
-    engine::Checkbox(
-            ui,
-            config,
-            input,
-            assets,
-            "sector_editor_show_object_probe_debug_overlay",
-            Rectangle{panel.x + 18.0f, panel.y + 212.0f, 240.0f, 30.0f},
-            font,
-            "Show Object Probes",
-            state.showObjectProbeDebugOverlay);
-    const char* objectProbeStatus = state.runtimeObjects.objectProbeStatus.empty()
-            ? "Object probes: none"
-            : state.runtimeObjects.objectProbeStatus.c_str();
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 276.0f, panel.y + 212.0f, panel.width - 294.0f, 30.0f},
-            font,
-            objectProbeStatus,
-            engine::UITextJustify::Left,
-            config.mutedTextColor
-    );
-    const char* previewStatusText = statusText.empty() ? "Ready" : statusText.c_str();
-    const char* collisionWarningText = state.sectorCollisionWorldWarning.empty()
-            ? previewStatusText
-            : state.sectorCollisionWorldWarning.c_str();
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + 18.0f, panel.y + 250.0f, panel.width - 36.0f, 30.0f},
-            font,
-            state.runtimeObjects.placedObjectStatus.empty()
-                    ? "Runtime objects: 0 placed / 0 spawned, 0 skipped"
-                    : state.runtimeObjects.placedObjectStatus.c_str(),
-            engine::UITextJustify::Left,
-            (state.runtimeObjects.skippedObjectCount > 0
-                    || state.runtimeObjects.spriteAnimationFailedCount > 0
-                    || (state.runtimeObjects.directionalClipMissingCount > 0
-                            && state.runtimeObjects.spriteAnimationPendingCount == 0))
-                    ? Color{236, 92, 92, 245}
-                    : config.mutedTextColor
-    );
-    if (!state.runtimeObjects.placedObjectWarning.empty()) {
-        engine::Text(
-                config,
-                assets,
-                Rectangle{panel.x + 18.0f, panel.y + 280.0f, panel.width - 36.0f, 30.0f},
-                font,
-                state.runtimeObjects.placedObjectWarning.c_str(),
-                engine::UITextJustify::Left,
-                Color{236, 92, 92, 245}
-        );
+
+    float contentH = 0.0f;
+    for (const OverlayLine& line : lines) {
+        contentH += line.wrap
+                ? MeasureSectorEditorWrappedTextHeight(smallConfig, assets, smallFont, line.text.c_str(), contentW, 1)
+                : rowH;
+        contentH += 4.0f;
     }
+    if (contentH > 0.0f) {
+        contentH += gap;
+    }
+    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
+        contentH += rowH + 6.0f;
+    }
+    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
+        contentH += rowH + 6.0f;
+    }
+    const Rectangle panel{
+            basePanel.x,
+            basePanel.y,
+            basePanel.width,
+            padding + stripH + gap + tabH + contentH + padding};
+    DrawRectangleRec(panel, Color{12, 15, 20, 205});
+    DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
+
+    const bool hasSelectedSpotLight = SelectedTopologyStaticSpotLight() != nullptr
+            || SelectedTopologyDynamicSpotLight() != nullptr;
     engine::Text(
-            config,
+            smallConfig,
             assets,
-            Rectangle{panel.x + 18.0f, panel.y + 310.0f, panel.width - 36.0f, 30.0f},
-            font,
-            state.previewControlMode == SectorPreviewControlMode::Gameplay
-                    ? TextFormat(
-                            "assets %.0f%% | Lightmap: %s | AO: %s | walk %.1f | run %.1f | eye %.1f | height %.1f | gravity %.1f | jump %.1f | %s%s",
-                            preview.RendererAssetProgress(assets) * 100.0f,
-                            preview.RendererLightmapStatusText(),
-                            state.useBakedAmbientOcclusion ? "on" : "off",
-                            state.fpsControllerConfig.walkSpeed,
-                            state.fpsControllerConfig.runSpeed,
-                            state.fpsControllerConfig.eyeHeight,
-                            state.fpsControllerConfig.playerHeight,
-                            state.fpsControllerConfig.gravity,
-                            state.fpsControllerConfig.jumpHeight,
-                            collisionWarningText,
-                            state.topologyDocumentDirty ? " | unsaved changes" : "")
-                    : TextFormat(
-                            "assets %.0f%% | Lightmap: %s | AO: %s | %s%s",
-                            preview.RendererAssetProgress(assets) * 100.0f,
-                            preview.RendererLightmapStatusText(),
-                            state.useBakedAmbientOcclusion ? "on" : "off",
-                            collisionWarningText,
-                            state.topologyDocumentDirty ? " | unsaved changes" : ""),
+            Rectangle{
+                    panel.x + padding,
+                    panel.y + padding,
+                    mouseInteractive && (state.spotLightPilot.active
+                            || (hasSelectedSpotLight && state.previewControlMode == SectorPreviewControlMode::FreeFly))
+                            ? contentW - 170.0f
+                            : contentW,
+                    stripH},
+            smallFont,
+            compactStatus.c_str(),
             engine::UITextJustify::Left,
-            state.topologyDocumentDirty ? Color{236, 196, 92, 255} : config.mutedTextColor
-    );
+            state.topologyDocumentDirty ? Color{236, 196, 92, 255} : smallConfig.textColor,
+            true);
+
+    float actionsRight = panel.x + panel.width - padding;
+    const float actionY = panel.y + padding - 2.0f;
+    if (mouseInteractive) {
+        if (state.spotLightPilot.active) {
+            if (engine::Button(
+                        ui,
+                        smallConfig,
+                        input,
+                        assets,
+                        "sector_editor_preview_spotlight_pilot_cancel",
+                        Rectangle{actionsRight - 72.0f, actionY, 72.0f, 28.0f},
+                        smallFont,
+                        "Cancel")) {
+                CancelSpotLightPilot("Spotlight pilot cancelled");
+            }
+            actionsRight -= 82.0f;
+            if (engine::Button(
+                        ui,
+                        smallConfig,
+                        input,
+                        assets,
+                        "sector_editor_preview_spotlight_pilot_apply",
+                        Rectangle{actionsRight - 66.0f, actionY, 66.0f, 28.0f},
+                        smallFont,
+                        "Apply")) {
+                ApplySpotLightPilot();
+            }
+        } else if (hasSelectedSpotLight && state.previewControlMode == SectorPreviewControlMode::FreeFly) {
+            if (engine::Button(
+                        ui,
+                        smallConfig,
+                        input,
+                        assets,
+                        "sector_editor_preview_spotlight_pilot_start",
+                        Rectangle{actionsRight - 92.0f, actionY, 92.0f, 28.0f},
+                        smallFont,
+                        "Pilot")) {
+                StartSpotLightPilot();
+            }
+        }
+    }
+
+    const struct {
+        PreviewDebugOverlayTab tab;
+        const char* id;
+        const char* label;
+    } tabs[] = {
+            {PreviewDebugOverlayTab::View, "sector_editor_preview_tab_view", "View"},
+            {PreviewDebugOverlayTab::Render, "sector_editor_preview_tab_render", "Render"},
+            {PreviewDebugOverlayTab::Visibility, "sector_editor_preview_tab_visibility", "Visibility"},
+            {PreviewDebugOverlayTab::Lighting, "sector_editor_preview_tab_lighting", "Lighting"},
+            {PreviewDebugOverlayTab::Objects, "sector_editor_preview_tab_objects", "Objects"},
+            {PreviewDebugOverlayTab::Probes, "sector_editor_preview_tab_probes", "Probes"},
+            {PreviewDebugOverlayTab::Controls, "sector_editor_preview_tab_controls", "Controls"},
+    };
+
+    const float tabY = panel.y + padding + stripH + gap;
+    const float tabGap = 6.0f;
+    const float tabW = (contentW - tabGap * 6.0f) / 7.0f;
+    for (int i = 0; i < 7; ++i) {
+        const Rectangle tabRect{
+                panel.x + padding + static_cast<float>(i) * (tabW + tabGap),
+                tabY,
+                tabW,
+                tabH};
+        const bool selected = state.activePreviewDebugOverlayTab == tabs[i].tab;
+        if (mouseInteractive) {
+            if (engine::ToolButton(ui, smallConfig, input, assets, tabs[i].id, tabRect, smallFont, tabs[i].label, selected)) {
+                state.activePreviewDebugOverlayTab = selected
+                        ? PreviewDebugOverlayTab::None
+                        : tabs[i].tab;
+            }
+        } else {
+            DrawRectangleRec(tabRect, selected ? Color{48, 68, 86, 210} : Color{24, 30, 38, 185});
+            DrawRectangleLinesEx(tabRect, config.borderThickness, config.borderColor);
+            engine::Text(smallConfig, assets, tabRect, smallFont, tabs[i].label, engine::UITextJustify::Center, smallConfig.mutedTextColor);
+        }
+    }
+
+    float y = tabY + tabH + gap;
+    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
+        const Rectangle checkboxRect{panel.x + padding, y, 240.0f, rowH};
+        if (mouseInteractive) {
+            engine::Checkbox(
+                    ui,
+                    smallConfig,
+                    input,
+                    assets,
+                    "sector_editor_show_object_probe_debug_overlay",
+                    checkboxRect,
+                    smallFont,
+                    "Show Object Probes",
+                    state.showObjectProbeDebugOverlay);
+        } else {
+            DrawRectangleRec(checkboxRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(checkboxRect, config.borderThickness, config.borderColor);
+            const float boxSize = 12.0f;
+            const Rectangle box{
+                    checkboxRect.x + smallConfig.paddingX,
+                    checkboxRect.y + (checkboxRect.height - boxSize) * 0.5f,
+                    boxSize,
+                    boxSize};
+            DrawRectangleRec(box, Color{12, 15, 20, 205});
+            DrawRectangleLinesEx(box, config.borderThickness, config.borderColor);
+            if (state.showObjectProbeDebugOverlay) {
+                constexpr float markPadding = 3.0f;
+                const Rectangle mark{
+                        box.x + markPadding,
+                        box.y + markPadding,
+                        box.width - markPadding * 2.0f,
+                        box.height - markPadding * 2.0f};
+                DrawRectangleRec(mark, smallConfig.accentColor);
+            }
+            const float labelX = box.x + box.width + smallConfig.paddingX;
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    Rectangle{labelX, checkboxRect.y, checkboxRect.x + checkboxRect.width - labelX, checkboxRect.height},
+                    smallFont,
+                    "Show Object Probes",
+                    engine::UITextJustify::Left,
+                    smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+    }
+    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
+        const Rectangle settingsRect{panel.x + padding, y, 112.0f, rowH};
+        if (mouseInteractive) {
+            if (engine::Button(
+                        ui,
+                        smallConfig,
+                        input,
+                        assets,
+                        "sector_editor_preview_settings",
+                        settingsRect,
+                        smallFont,
+                        "Settings")) {
+                OpenPreviewSettingsModal();
+            }
+        } else {
+            DrawRectangleRec(settingsRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(settingsRect, config.borderThickness, config.borderColor);
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    settingsRect,
+                    smallFont,
+                    "Settings",
+                    engine::UITextJustify::Center,
+                    smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+    }
+    for (const OverlayLine& line : lines) {
+        const float lineH = line.wrap
+                ? MeasureSectorEditorWrappedTextHeight(smallConfig, assets, smallFont, line.text.c_str(), contentW, 1)
+                : rowH;
+        engine::Text(
+                smallConfig,
+                assets,
+                Rectangle{panel.x + padding, y, contentW, lineH},
+                smallFont,
+                line.text.c_str(),
+                engine::UITextJustify::Left,
+                line.color,
+                line.wrap);
+        y += lineH + 4.0f;
+    }
 }
 
 Rectangle SectorEditor::BuildPreviewUvPanelRect() const
@@ -5284,7 +5497,7 @@ void SectorEditor::DrawToolsPanel(
                 statusText = "Insert Vertex: select or click an authoring line";
             }
         } else if (tool == SectorEditorTool::RuntimeObject) {
-            statusText = "Object: click inside a sector to place goblin";
+            statusText = "Billboard: click inside a sector to place a billboard";
         }
     };
 
@@ -5532,12 +5745,86 @@ void SectorEditor::DrawSectorsPanel(
             SectorEditorPanelScrollPaddingPx,
             false);
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
+    const auto runtimeObjectSpriteLabel = [](const SectorPlacedRuntimeObject& object) {
+        return object.billboard.spriteAnimationPath.empty()
+                ? std::string("Sprite: None selected")
+                : std::string(TextFormat("Sprite: %s", object.billboard.spriteAnimationPath.c_str()));
+    };
+    const auto resolveBillboardAspect =
+            [this, &assets](const SectorPlacedRuntimeObject& object) {
+                if (engineContext == nullptr || object.kind != "billboard") {
+                    return 0.0f;
+                }
+
+                engine::SpriteAnimationHandle animation = engine::NullSpriteAnimationHandle();
+                uint32_t clipIndex = engine::InvalidSpriteClipIndex;
+                for (const SectorPlacedRuntimeObjectEntity& entry : state.runtimeObjects.placedObjectEntities) {
+                    if (entry.placedObjectId != object.id
+                            || !engineContext->world.IsAlive(entry.entity)
+                            || !engineContext->world.Has<SectorBillboardSprite>(entry.entity)) {
+                        continue;
+                    }
+
+                    const SectorBillboardSprite& sprite = engineContext->world.Get<SectorBillboardSprite>(entry.entity);
+                    animation = sprite.animation;
+                    clipIndex = sprite.clipIndex;
+                    break;
+                }
+
+                if (engine::IsNull(animation)) {
+                    return 0.0f;
+                }
+
+                if (object.billboard.directional) {
+                    const uint32_t frontClipIndex = assets.FindSpriteClipIndex(
+                            animation,
+                            object.billboard.frontClip.c_str());
+                    if (frontClipIndex != engine::InvalidSpriteClipIndex) {
+                        clipIndex = frontClipIndex;
+                    }
+                } else if (!object.billboard.clip.empty()) {
+                    const uint32_t selectedClipIndex = assets.FindSpriteClipIndex(
+                            animation,
+                            object.billboard.clip.c_str());
+                    if (selectedClipIndex != engine::InvalidSpriteClipIndex) {
+                        clipIndex = selectedClipIndex;
+                    }
+                }
+
+                float aspect = 0.0f;
+                return ResolveBillboardAspectFromAnimation(assets, animation, clipIndex, aspect)
+                        ? aspect
+                        : 0.0f;
+            };
     const auto inspectorContentHeight = [&]() {
         if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
             return 120.0f;
         }
         if (hasSelectedRuntimeObject) {
-            return 408.0f;
+            const SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
+            if (object == nullptr) {
+                return 42.0f;
+            }
+            const bool isBillboard = object->kind == "billboard";
+            const std::string spriteLabel = runtimeObjectSpriteLabel(*object);
+            const float spriteLabelHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    spriteLabel.c_str(),
+                    scrollContentW,
+                    1);
+            const bool hasBillboardAspect = isBillboard && resolveBillboardAspect(*object) > 0.0f;
+            const bool keepAspectWarningVisible =
+                    isBillboard && object->billboard.keepAspectRatio && !hasBillboardAspect;
+            return SectorEditorRuntimeObjectInspectorContentHeight(
+                    rowH,
+                    gap,
+                    isBillboard,
+                    keepAspectWarningVisible,
+                    isBillboard && object->billboard.directional,
+                    spriteLabelHeight,
+                    28.0f);
         }
         if (hasSelectedLight) {
             return StaticLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
@@ -5673,54 +5960,41 @@ void SectorEditor::DrawSectorsPanel(
                 config.textColor);
         y += 38.0f;
 
-        const bool definitionKnown = FindSectorRuntimeObjectDefinition(selectedObject->definitionId) != nullptr;
+        const bool isBillboard = selectedObject->kind == "billboard";
         engine::Text(
                 ui,
                 config,
                 assets,
                 Rectangle{0.0f, y, contentW, 30.0f},
                 font,
-                TextFormat("Definition ID: %s", selectedObject->definitionId.c_str()),
+                isBillboard ? "Type: Billboard" : "Type: Unsupported object",
                 engine::UITextJustify::Left,
-                definitionKnown ? config.mutedTextColor : config.invalidColor);
+                isBillboard ? config.mutedTextColor : config.invalidColor);
         y += 34.0f;
 
-        if (selectedObject->definitionId == "goblin") {
-            engine::Text(
-                    ui,
-                    config,
-                    assets,
-                    Rectangle{0.0f, y, contentW, 30.0f},
-                    font,
-                    "Definition: goblin",
-                    engine::UITextJustify::Left,
-                    config.textColor);
-            y += 34.0f;
-        } else {
-            if (engine::Button(
-                        ui,
-                        config,
-                        input,
-                        assets,
-                        "sector_editor_runtime_object_definition_goblin",
-                        Rectangle{0.0f, y, contentW, rowH},
-                        font,
-                        "Set definition: goblin")) {
-                MutateSelectedRuntimeObject(
-                        "Updated object definition",
-                        [](SectorPlacedRuntimeObject& object) {
-                            if (object.definitionId == "goblin") {
-                                return false;
-                            }
-                            object.definitionId = "goblin";
-                            return true;
-                        });
-                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
-                engine::EndPanel(ui, config, panel);
-                return;
-            }
-            y += rowH + gap;
-        }
+        const std::string spriteLabel = runtimeObjectSpriteLabel(*selectedObject);
+        const float spriteLabelHeight = MeasureSectorEditorWrappedTextHeight(
+                smallConfig,
+                assets,
+                smallFont,
+                spriteLabel.c_str(),
+                contentW,
+                1);
+        engine::Text(
+                ui,
+                smallConfig,
+                assets,
+                Rectangle{0.0f, y, contentW, spriteLabelHeight},
+                smallFont,
+                spriteLabel.c_str(),
+                engine::UITextJustify::Left,
+                selectedObject->billboard.spriteAnimationPath.empty() ? config.invalidColor : config.textColor,
+                true);
+        y += spriteLabelHeight + gap;
+
+        const float selectedBillboardAspect =
+                selectedObject != nullptr ? resolveBillboardAspect(*selectedObject) : 0.0f;
+        const bool hasBillboardAspect = selectedBillboardAspect > 0.0f;
 
         auto drawObjectFloat =
                 [&](const char* id,
@@ -5755,6 +6029,192 @@ void SectorEditor::DrawSectorsPanel(
                     }
                     y += rowH + gap;
                 };
+
+        auto drawBillboardFloat =
+                [&](const char* id,
+                    const char* label,
+                    float value,
+                    engine::UIFloatInputState& inputState,
+                    float minValue,
+                    float maxValue,
+                    int decimals,
+                    const std::function<bool(SectorPlacedRuntimeObject&, float)>& applyValue) {
+                    const float labelW = 92.0f;
+                    const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                            ui,
+                            config,
+                            input,
+                            assets,
+                            font,
+                            id,
+                            label,
+                            Rectangle{0.0f, y, labelW, rowH},
+                            Rectangle{labelW + gap, y, std::max(0.0f, contentW - labelW - gap), rowH},
+                            engine::UITextJustify::Left,
+                            value,
+                            inputState,
+                            minValue,
+                            maxValue,
+                            decimals);
+                    if (result.changed && result.finite && result.value != value) {
+                        MutateSelectedRuntimeObject("Updated billboard properties", [applyValue, value = result.value](SectorPlacedRuntimeObject& object) {
+                            return applyValue(object, value);
+                        });
+                    }
+                    y += rowH + gap;
+                };
+
+        auto openBillboardPickerButton =
+                [&](const char* id,
+                    const char* label) {
+                    if (engine::Button(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                id,
+                                Rectangle{0.0f, y, contentW, rowH},
+                                font,
+                                label)) {
+                        OpenSelectedBillboardSpritePicker();
+                    }
+                    y += rowH + gap;
+                };
+
+        const SectorSpriteMetadata* selectedBillboardMetadata = nullptr;
+        std::string selectedBillboardMetadataStatus;
+        auto resolveSelectedBillboardMetadata = [&]() -> const SectorSpriteMetadata* {
+            if (!isBillboard || selectedObject == nullptr) {
+                return nullptr;
+            }
+            const std::string spritePath = selectedObject->billboard.spriteAnimationPath;
+            if (spritePath.empty()) {
+                selectedBillboardMetadataStatus = "Pick a sprite first";
+                return nullptr;
+            }
+
+            const bool targetChanged = state.billboardMetadataObjectId != selectedObject->id
+                    || state.billboardMetadataSpriteAnimationPath != spritePath;
+            if (targetChanged) {
+                state.billboardMetadataObjectId = selectedObject->id;
+                state.billboardMetadataSpriteAnimationPath = spritePath;
+                state.billboardMetadataInitialRepairAttempted = false;
+                if (!state.spriteMetadataCatalog.scanned
+                        || FindSpriteMetadata(state.spriteMetadataCatalog, spritePath) == nullptr) {
+                    RefreshSpriteMetadataCatalog(state.spriteMetadataCatalog);
+                }
+            }
+
+            const SectorSpriteMetadata* metadata = FindSpriteMetadata(state.spriteMetadataCatalog, spritePath);
+            if (metadata == nullptr) {
+                selectedBillboardMetadataStatus = state.spriteMetadataCatalog.scanMessage.empty()
+                        ? "Sprite metadata unavailable"
+                        : state.spriteMetadataCatalog.scanMessage;
+                return nullptr;
+            }
+            if (metadata->clipNames.empty()) {
+                selectedBillboardMetadataStatus = "Sprite has no clips";
+                return nullptr;
+            }
+
+            if (!state.billboardMetadataInitialRepairAttempted) {
+                state.billboardMetadataInitialRepairAttempted = true;
+                const int objectId = selectedObject->id;
+                MutateSelectedRuntimeObject(
+                        "Updated billboard clip defaults",
+                        [objectId, spritePath, metadata](SectorPlacedRuntimeObject& object) {
+                            if (object.id != objectId
+                                    || object.kind != "billboard"
+                                    || object.billboard.spriteAnimationPath != spritePath) {
+                                return false;
+                            }
+                            return RepairBillboardClipsForSpriteMetadata(object.billboard, *metadata, false);
+                        });
+                selectedObject = SelectedRuntimeObject();
+            }
+            return metadata;
+        };
+
+        auto drawBillboardClipOptionRow =
+                [&](const char* optionId,
+                    const char* label,
+                    const std::string& clipName,
+                    const std::function<bool(SectorPlacedRuntimeObject&, const std::string&)>& applyClip) {
+                    const SectorEditorInspectorStackedOptionRowLayout layout =
+                            BuildSectorEditorInspectorStackedOptionRowLayout(y, contentW, rowH, gap);
+                    engine::Text(
+                            ui,
+                            config,
+                            assets,
+                            layout.labelRect,
+                            font,
+                            label,
+                            engine::UITextJustify::Left,
+                            config.mutedTextColor);
+                    if (selectedBillboardMetadata == nullptr || selectedBillboardMetadata->clipNames.empty()) {
+                        engine::Text(
+                                ui,
+                                config,
+                                assets,
+                                layout.fieldRect,
+                                font,
+                                selectedBillboardMetadataStatus.empty()
+                                        ? "Sprite metadata unavailable"
+                                        : selectedBillboardMetadataStatus.c_str(),
+                                engine::UITextJustify::Left,
+                                config.mutedTextColor);
+                        y += layout.height + gap;
+                        return;
+                    }
+
+                    int selectedIndex = 0;
+                    const auto it = std::find(
+                            selectedBillboardMetadata->clipNames.begin(),
+                            selectedBillboardMetadata->clipNames.end(),
+                            clipName);
+                    if (it != selectedBillboardMetadata->clipNames.end()) {
+                        selectedIndex = static_cast<int>(
+                                std::distance(selectedBillboardMetadata->clipNames.begin(), it));
+                    }
+                    const int previousIndex = selectedIndex;
+                    if (engine::Option(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                optionId,
+                                layout.fieldRect,
+                                font,
+                                selectedBillboardMetadata->clipNames,
+                                selectedIndex)
+                            && selectedIndex >= 0
+                            && selectedIndex < static_cast<int>(selectedBillboardMetadata->clipNames.size())
+                            && selectedIndex != previousIndex) {
+                        const std::string selectedClip =
+                                selectedBillboardMetadata->clipNames[static_cast<size_t>(selectedIndex)];
+                        MutateSelectedRuntimeObject(
+                                "Updated billboard clip",
+                                [applyClip, selectedClip](SectorPlacedRuntimeObject& object) {
+                                    if (object.kind != "billboard") {
+                                        return false;
+                                    }
+                                    return applyClip(object, selectedClip);
+                                });
+                    }
+                    y += layout.height + gap;
+                };
+
+        if (isBillboard) {
+            openBillboardPickerButton(
+                    "sector_editor_runtime_object_pick_sprite",
+                    "Pick Sprite");
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+        }
 
         drawObjectFloat(
                 "sector_editor_runtime_object_x",
@@ -5837,6 +6297,300 @@ void SectorEditor::DrawSectorsPanel(
                     object.yawRadians = radians;
                     return true;
                 });
+        selectedObject = SelectedRuntimeObject();
+        if (selectedObject == nullptr) {
+            engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+            engine::EndPanel(ui, config, panel);
+            return;
+        }
+
+        if (isBillboard) {
+            drawBillboardFloat(
+                    "sector_editor_runtime_object_width",
+                    "Width",
+                    selectedObject->billboard.sizeWorld.x,
+                    uiState.runtimeObjectWidthInput,
+                    BillboardSizeMin,
+                    BillboardSizeMax,
+                    3,
+                    [hasBillboardAspect, selectedBillboardAspect](SectorPlacedRuntimeObject& object, float value) {
+                        const float width = std::max(BillboardSizeMin, value);
+                        bool changed = object.billboard.sizeWorld.x != width;
+                        object.billboard.sizeWorld.x = width;
+                        if (object.billboard.keepAspectRatio && hasBillboardAspect) {
+                            const float height = std::max(BillboardSizeMin, width / selectedBillboardAspect);
+                            changed = changed || object.billboard.sizeWorld.y != height;
+                            object.billboard.sizeWorld.y = height;
+                        }
+                        return changed;
+                    });
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            drawBillboardFloat(
+                    "sector_editor_runtime_object_height",
+                    "Height",
+                    selectedObject->billboard.sizeWorld.y,
+                    uiState.runtimeObjectHeightInput,
+                    BillboardSizeMin,
+                    BillboardSizeMax,
+                    3,
+                    [hasBillboardAspect, selectedBillboardAspect](SectorPlacedRuntimeObject& object, float value) {
+                        const float height = std::max(BillboardSizeMin, value);
+                        bool changed = object.billboard.sizeWorld.y != height;
+                        object.billboard.sizeWorld.y = height;
+                        if (object.billboard.keepAspectRatio && hasBillboardAspect) {
+                            const float width = std::max(BillboardSizeMin, height * selectedBillboardAspect);
+                            changed = changed || object.billboard.sizeWorld.x != width;
+                            object.billboard.sizeWorld.x = width;
+                        }
+                        return changed;
+                    });
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            bool keepAspect = selectedObject->billboard.keepAspectRatio;
+            if (engine::Checkbox(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_runtime_object_keep_aspect",
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font,
+                        "Keep aspect ratio",
+                        keepAspect)) {
+                MutateSelectedRuntimeObject(
+                        keepAspect && !hasBillboardAspect
+                                ? "Billboard aspect unavailable until sprite metadata loads"
+                                : "Updated billboard aspect mode",
+                        [keepAspect](SectorPlacedRuntimeObject& object) {
+                            if (object.billboard.keepAspectRatio == keepAspect) {
+                                return false;
+                            }
+                            object.billboard.keepAspectRatio = keepAspect;
+                            return true;
+                        });
+            }
+            y += rowH + gap;
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+            if (selectedObject->billboard.keepAspectRatio && !hasBillboardAspect) {
+                engine::Text(
+                        ui,
+                        smallConfig,
+                        assets,
+                        Rectangle{0.0f, y, contentW, 28.0f},
+                        smallFont,
+                        "Aspect unavailable until sprite metadata loads",
+                        engine::UITextJustify::Left,
+                        config.mutedTextColor);
+                y += 28.0f + gap;
+            }
+
+            drawBillboardFloat(
+                    "sector_editor_runtime_object_origin_x",
+                    "Origin X",
+                    selectedObject->billboard.originNormalized.x,
+                    uiState.runtimeObjectOriginXInput,
+                    0.0f,
+                    1.0f,
+                    3,
+                    [](SectorPlacedRuntimeObject& object, float value) {
+                        const float origin = Clamp(value, 0.0f, 1.0f);
+                        if (object.billboard.originNormalized.x == origin) {
+                            return false;
+                        }
+                        object.billboard.originNormalized.x = origin;
+                        return true;
+                    });
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            drawBillboardFloat(
+                    "sector_editor_runtime_object_origin_y",
+                    "Origin Y",
+                    selectedObject->billboard.originNormalized.y,
+                    uiState.runtimeObjectOriginYInput,
+                    0.0f,
+                    1.0f,
+                    3,
+                    [](SectorPlacedRuntimeObject& object, float value) {
+                        const float origin = Clamp(value, 0.0f, 1.0f);
+                        if (object.billboard.originNormalized.y == origin) {
+                            return false;
+                        }
+                        object.billboard.originNormalized.y = origin;
+                        return true;
+                    });
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            bool directional = selectedObject->billboard.directional;
+            if (engine::Checkbox(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_runtime_object_directional",
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font,
+                        "Directional",
+                        directional)) {
+                MutateSelectedRuntimeObject("Updated billboard directional mode", [directional](SectorPlacedRuntimeObject& object) {
+                    if (object.billboard.directional == directional) {
+                        return false;
+                    }
+                    object.billboard.directional = directional;
+                    return true;
+                });
+            }
+            y += rowH + gap;
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            selectedBillboardMetadata = resolveSelectedBillboardMetadata();
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            if (selectedObject->billboard.directional) {
+                drawBillboardClipOptionRow(
+                        "sector_editor_billboard_clip_front_option",
+                        "Front Clip",
+                        selectedObject->billboard.frontClip,
+                        [](SectorPlacedRuntimeObject& object, const std::string& clip) {
+                            if (object.billboard.frontClip == clip) {
+                                return false;
+                            }
+                            object.billboard.frontClip = clip;
+                            return true;
+                        });
+                selectedObject = SelectedRuntimeObject();
+                if (selectedObject == nullptr) {
+                    engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                    engine::EndPanel(ui, config, panel);
+                    return;
+                }
+                drawBillboardClipOptionRow(
+                        "sector_editor_billboard_clip_back_option",
+                        "Back Clip",
+                        selectedObject->billboard.backClip,
+                        [](SectorPlacedRuntimeObject& object, const std::string& clip) {
+                            if (object.billboard.backClip == clip) {
+                                return false;
+                            }
+                            object.billboard.backClip = clip;
+                            return true;
+                        });
+                selectedObject = SelectedRuntimeObject();
+                if (selectedObject == nullptr) {
+                    engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                    engine::EndPanel(ui, config, panel);
+                    return;
+                }
+                drawBillboardClipOptionRow(
+                        "sector_editor_billboard_clip_left_option",
+                        "Left Clip",
+                        selectedObject->billboard.leftClip,
+                        [](SectorPlacedRuntimeObject& object, const std::string& clip) {
+                            if (object.billboard.leftClip == clip) {
+                                return false;
+                            }
+                            object.billboard.leftClip = clip;
+                            return true;
+                        });
+                selectedObject = SelectedRuntimeObject();
+                if (selectedObject == nullptr) {
+                    engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                    engine::EndPanel(ui, config, panel);
+                    return;
+                }
+                drawBillboardClipOptionRow(
+                        "sector_editor_billboard_clip_right_option",
+                        "Right Clip",
+                        selectedObject->billboard.rightClip,
+                        [](SectorPlacedRuntimeObject& object, const std::string& clip) {
+                            if (object.billboard.rightClip == clip) {
+                                return false;
+                            }
+                            object.billboard.rightClip = clip;
+                            return true;
+                        });
+                selectedObject = SelectedRuntimeObject();
+                if (selectedObject == nullptr) {
+                    engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                    engine::EndPanel(ui, config, panel);
+                    return;
+                }
+            } else {
+                drawBillboardClipOptionRow(
+                        "sector_editor_billboard_clip_single_option",
+                        "Clip",
+                        selectedObject->billboard.clip,
+                        [](SectorPlacedRuntimeObject& object, const std::string& clip) {
+                            if (object.billboard.clip == clip) {
+                                return false;
+                            }
+                            object.billboard.clip = clip;
+                            return true;
+                        });
+                selectedObject = SelectedRuntimeObject();
+                if (selectedObject == nullptr) {
+                    engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                    engine::EndPanel(ui, config, panel);
+                    return;
+                }
+            }
+
+            bool playing = selectedObject->billboard.playing;
+            if (engine::Checkbox(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_runtime_object_playing",
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font,
+                        "Playing",
+                        playing)) {
+                MutateSelectedRuntimeObject("Updated billboard playback", [playing](SectorPlacedRuntimeObject& object) {
+                    if (object.billboard.playing == playing) {
+                        return false;
+                    }
+                    object.billboard.playing = playing;
+                    return true;
+                });
+            }
+            y += rowH + gap;
+        }
 
         if (engine::Button(
                     ui,
@@ -8146,6 +8900,31 @@ void SectorEditor::DrawTexturePickerModal(
     game::DrawTexturePickerModal(ui, config, input, assets, font, state.texturePicker, state.topologyMap, callbacks);
 }
 
+void SectorEditor::DrawSpritePickerModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    const SectorEditorSpritePickerCallbacks callbacks{
+            [this, &assets]() { CloseSpritePicker(state.spritePicker, assets); },
+            [this, &assets]() {
+                ApplySelectedBillboardSpritePickerSelection();
+                CloseSpritePicker(state.spritePicker, assets);
+            },
+            [this]() {
+                RefreshSpritePickerScan(state.spritePicker);
+                state.spriteMetadataCatalog.scanned = true;
+                state.spriteMetadataCatalog.scanMessage = state.spritePicker.scanMessage;
+                state.spriteMetadataCatalog.sprites = state.spritePicker.sprites;
+            },
+            [this](int spriteIndex) { SelectSpritePickerSprite(state.spritePicker, spriteIndex); },
+            [this, &assets]() { RefreshSpritePickerPreview(state.spritePicker, assets); }
+    };
+    game::DrawSpritePickerModal(ui, config, input, assets, font, state.spritePicker, callbacks);
+}
+
 void SectorEditor::DrawSaveLevelModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -10105,10 +10884,7 @@ void SectorEditor::SelectRuntimeObject(int objectId)
     ClearSelection();
     state.selectedRuntimeObjectId = objectId;
     ResetSurface3DUiState();
-    uiState.runtimeObjectXInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectYInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectZInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectYawInput = engine::UIFloatInputState{};
+    ResetRuntimeObjectUiState(uiState);
     uiState.inspectorScroll.offset = Vector2{};
 }
 
@@ -10237,10 +11013,7 @@ void SectorEditor::ClearTopologySelectionOnly()
     state.selectedSurface3D = SectorSurfaceRef{};
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
-    uiState.runtimeObjectXInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectYInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectZInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectYawInput = engine::UIFloatInputState{};
+    ResetRuntimeObjectUiState(uiState);
     uiState.idBufferSectorIndex = -1;
     uiState.idBufferLightIndex = -1;
     SyncSelectedSectorIdBuffer();
@@ -10273,10 +11046,7 @@ void SectorEditor::ClearSelection()
     uiState.ambientRedInput = engine::UIIntInputState{};
     uiState.ambientGreenInput = engine::UIIntInputState{};
     uiState.ambientBlueInput = engine::UIIntInputState{};
-    uiState.runtimeObjectXInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectYInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectZInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectYawInput = engine::UIFloatInputState{};
+    ResetRuntimeObjectUiState(uiState);
     uiState.inspectorScroll.offset = Vector2{};
     SyncSelectedSectorIdBuffer();
     SyncSelectedLightIdBuffer();
@@ -11011,6 +11781,40 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
 std::string SectorEditor::CurrentTextureForPickerTarget() const
 {
     return game::CurrentTextureForPickerTarget(state);
+}
+
+void SectorEditor::OpenSelectedBillboardSpritePicker()
+{
+    const SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
+    if (object == nullptr || object->kind != "billboard") {
+        statusText = "Select a billboard first.";
+        return;
+    }
+
+    OpenBillboardSpritePicker(
+            state.spritePicker,
+            object->billboard.spriteAnimationPath);
+}
+
+void SectorEditor::ApplySelectedBillboardSpritePickerSelection()
+{
+    const SectorEditorSpritePickerResult selected = SelectedSpritePickerResult(state.spritePicker);
+    if (!selected.valid) {
+        statusText = "Select a sprite";
+        return;
+    }
+
+    const bool changed = MutateSelectedRuntimeObject(
+            "Updated billboard sprite",
+            [&selected](SectorPlacedRuntimeObject& object) {
+                if (object.kind != "billboard") {
+                    return false;
+                }
+                return ApplySpritePickerResultToBillboard(object.billboard, selected);
+            });
+    statusText = changed
+            ? TextFormat("Selected sprite %s", selected.spriteAnimationPath.c_str())
+            : "Billboard sprite unchanged";
 }
 
 void SectorEditor::OpenTopologyTexturePicker(
