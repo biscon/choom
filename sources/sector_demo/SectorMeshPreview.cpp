@@ -173,6 +173,24 @@ Vector3 BakedBillboardLighting(const SectorObjectLighting* lighting)
             1.0f / 5.0f);
 }
 
+Vector3 BakedDoorFaceLighting(const SectorObjectLighting* lighting, Vector3 normal)
+{
+    if (lighting == nullptr) {
+        return Vector3{1.0f, 1.0f, 1.0f};
+    }
+
+    const Vector3 absNormal = Vector3{std::abs(normal.x), std::abs(normal.y), std::abs(normal.z)};
+    int face = 0;
+    if (absNormal.y >= absNormal.x && absNormal.y >= absNormal.z) {
+        face = normal.y >= 0.0f ? 2 : 3;
+    } else if (absNormal.z >= absNormal.x) {
+        face = normal.z >= 0.0f ? 4 : 5;
+    } else {
+        face = normal.x >= 0.0f ? 0 : 1;
+    }
+    return lighting->baked.ambientCube[face];
+}
+
 void AppendBillboardRenderDebugText(std::string& renderDebugText, const std::string& billboardText)
 {
     const size_t existing = renderDebugText.find(" | billboards:");
@@ -182,6 +200,47 @@ void AppendBillboardRenderDebugText(std::string& renderDebugText, const std::str
     if (!billboardText.empty() && !renderDebugText.empty()) {
         renderDebugText += " | " + billboardText;
     }
+}
+
+void AppendDoorRenderDebugText(std::string& renderDebugText, const std::string& doorText)
+{
+    const size_t existing = renderDebugText.find(" | doors:");
+    if (existing != std::string::npos) {
+        renderDebugText.erase(existing);
+    }
+    if (!doorText.empty() && !renderDebugText.empty()) {
+        renderDebugText += " | " + doorText;
+    }
+}
+
+void DrawDoorFace(
+        const Vector3& normal,
+        const Vector3& bakedLighting,
+        Color tint,
+        const Vector3& a,
+        const Vector3& b,
+        const Vector3& c,
+        const Vector3& d,
+        float uScale,
+        float vScale)
+{
+    const unsigned char r = static_cast<unsigned char>(
+            std::clamp(bakedLighting.x, 0.0f, 1.0f) * static_cast<float>(tint.r));
+    const unsigned char g = static_cast<unsigned char>(
+            std::clamp(bakedLighting.y, 0.0f, 1.0f) * static_cast<float>(tint.g));
+    const unsigned char bColor = static_cast<unsigned char>(
+            std::clamp(bakedLighting.z, 0.0f, 1.0f) * static_cast<float>(tint.b));
+
+    rlNormal3f(normal.x, normal.y, normal.z);
+    rlColor4ub(r, g, bColor, tint.a);
+    rlTexCoord2f(0.0f, vScale);
+    rlVertex3f(a.x, a.y, a.z);
+    rlTexCoord2f(uScale, vScale);
+    rlVertex3f(b.x, b.y, b.z);
+    rlTexCoord2f(uScale, 0.0f);
+    rlVertex3f(c.x, c.y, c.z);
+    rlTexCoord2f(0.0f, 0.0f);
+    rlVertex3f(d.x, d.y, d.z);
 }
 
 Vector2 PreviewYawForwardXZ(float yawRadians)
@@ -1763,9 +1822,275 @@ void SectorMeshPreview::DrawScene(
         DrawMesh(batch.mesh, material, MatrixIdentity());
     }
     if (runtimeObjectWorld != nullptr) {
+        DrawRuntimeDoors(assets, *runtimeObjectWorld);
         DrawRuntimeBillboards(assets, *runtimeObjectWorld);
     }
     EndMode3D();
+}
+
+void SectorMeshPreview::DrawRuntimeDoors(engine::AssetManager& assets, engine::World& runtimeObjectWorld)
+{
+    if (!materialLoaded || material.shader.id == 0) {
+        doorConsideredCount = 0;
+        doorDrawnCount = 0;
+        doorSkippedCount = 0;
+        AppendDoorRenderDebugText(renderDebugText, "doors: shader unavailable");
+        return;
+    }
+
+    size_t consideredCount = 0;
+    size_t drawnCount = 0;
+    size_t skippedCount = 0;
+
+    const float useLightmap = 0.0f;
+    const float useAo = 0.0f;
+    const int hasLightmap = 0;
+    const int alphaTest = 0;
+    const float alphaCutoff = 0.0f;
+    const int hasDecal = 0;
+    const float decalOpacity = 0.0f;
+    const int decalEmissive = 0;
+    const Vector3 decalTint = Vector3{1.0f, 1.0f, 1.0f};
+
+    if (useLightmapLoc >= 0) {
+        SetShaderValue(material.shader, useLightmapLoc, &useLightmap, SHADER_UNIFORM_FLOAT);
+    }
+    if (useBakedAmbientOcclusionLoc >= 0) {
+        SetShaderValue(material.shader, useBakedAmbientOcclusionLoc, &useAo, SHADER_UNIFORM_FLOAT);
+    }
+    if (hasLightmapLoc >= 0) {
+        SetShaderValue(material.shader, hasLightmapLoc, &hasLightmap, SHADER_UNIFORM_INT);
+    }
+    if (alphaTestLoc >= 0) {
+        SetShaderValue(material.shader, alphaTestLoc, &alphaTest, SHADER_UNIFORM_INT);
+    }
+    if (alphaCutoffLoc >= 0) {
+        SetShaderValue(material.shader, alphaCutoffLoc, &alphaCutoff, SHADER_UNIFORM_FLOAT);
+    }
+    if (hasDecalLoc >= 0) {
+        SetShaderValue(material.shader, hasDecalLoc, &hasDecal, SHADER_UNIFORM_INT);
+    }
+    if (decalOpacityLoc >= 0) {
+        SetShaderValue(material.shader, decalOpacityLoc, &decalOpacity, SHADER_UNIFORM_FLOAT);
+    }
+    if (decalEmissiveLoc >= 0) {
+        SetShaderValue(material.shader, decalEmissiveLoc, &decalEmissive, SHADER_UNIFORM_INT);
+    }
+    if (decalTintLoc >= 0) {
+        SetShaderValue(material.shader, decalTintLoc, &decalTint, SHADER_UNIFORM_VEC3);
+    }
+    UploadDynamicPointLights(
+            material.shader,
+            dynamicLightCountLoc,
+            dynamicLightPositionsLoc,
+            dynamicLightColorsLoc,
+            dynamicLightRadiiLoc,
+            dynamicLightIntensitiesLoc,
+            dynamicLightTypesLoc,
+            dynamicLightDirectionsLoc,
+            dynamicLightInnerConeCosLoc,
+            dynamicLightOuterConeCosLoc,
+            dynamicLightingClampLoc,
+            dynamicLightingEnabled,
+            runtimeSeconds,
+            dynamicPointLights);
+    const SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms =
+            PackSectorPreviewDynamicSpotLightShadowUniforms(
+                    dynamicPointLights,
+                    dynamicSpotLightShadowCasters,
+                    dynamicSpotLightShadowMatrices);
+    UploadDynamicSpotLightShadowUniforms(
+            material.shader,
+            dynamicLightShadowSlotsLoc,
+            shadowLightMatrixLocs,
+            shadowBiasLoc,
+            shadowStrengthLoc,
+            shadowSoftnessLoc,
+            shadowUniforms);
+    if (material.shader.locs[SHADER_LOC_MAP_ROUGHNESS] >= 0 && dynamicSpotLightShadowMaps[0].depth.id != 0) {
+        SetShaderValueTexture(
+                material.shader,
+                material.shader.locs[SHADER_LOC_MAP_ROUGHNESS],
+                dynamicSpotLightShadowMaps[0].depth);
+    }
+    if (material.shader.locs[SHADER_LOC_MAP_OCCLUSION] >= 0 && dynamicSpotLightShadowMaps[1].depth.id != 0) {
+        SetShaderValueTexture(
+                material.shader,
+                material.shader.locs[SHADER_LOC_MAP_OCCLUSION],
+                dynamicSpotLightShadowMaps[1].depth);
+    }
+
+    rlDisableColorBlend();
+    rlDisableBackfaceCulling();
+    rlEnableDepthTest();
+    rlEnableDepthMask();
+    BeginShaderMode(material.shader);
+
+    runtimeObjectWorld.ForEach<
+            SectorObjectTransform,
+            SectorObject,
+            SectorDoor,
+            SectorDoorResolvedAnchor,
+            SectorDoorRender>(
+            [this, &assets, &runtimeObjectWorld, &consideredCount, &drawnCount, &skippedCount](
+                    engine::Entity entity,
+                    SectorObjectTransform& transform,
+                    SectorObject& object,
+                    SectorDoor& door,
+                    SectorDoorResolvedAnchor& anchor,
+                    SectorDoorRender& render) {
+                ++consideredCount;
+                if (!object.visible || !door.enabled || !render.visible) {
+                    ++skippedCount;
+                    return;
+                }
+                if (render.width <= 0.0f || render.height <= 0.0f || render.thickness <= 0.0f) {
+                    ++skippedCount;
+                    return;
+                }
+
+                Vector3 tangent = Vector3{anchor.tangent.x, 0.0f, anchor.tangent.y};
+                if (Vector3LengthSqr(tangent) <= 0.000001f) {
+                    tangent = Vector3{1.0f, 0.0f, 0.0f};
+                } else {
+                    tangent = Vector3Normalize(tangent);
+                }
+                Vector3 normal = Vector3{anchor.normal.x, 0.0f, anchor.normal.y};
+                if (Vector3LengthSqr(normal) <= 0.000001f) {
+                    normal = Vector3{0.0f, 0.0f, -1.0f};
+                } else {
+                    normal = Vector3Normalize(normal);
+                }
+
+                const Vector3 tangentHalf = Vector3Scale(tangent, render.width * 0.5f);
+                const Vector3 normalHalf = Vector3Scale(normal, render.thickness * 0.5f);
+                const float bottomY = transform.position.y - render.height * 0.5f;
+                const float topY = transform.position.y + render.height * 0.5f;
+
+                const Vector3 center = transform.position;
+                const Vector3 leftFront = Vector3Add(Vector3Subtract(center, tangentHalf), normalHalf);
+                const Vector3 rightFront = Vector3Add(Vector3Add(center, tangentHalf), normalHalf);
+                const Vector3 rightBack = Vector3Subtract(Vector3Add(center, tangentHalf), normalHalf);
+                const Vector3 leftBack = Vector3Subtract(Vector3Subtract(center, tangentHalf), normalHalf);
+
+                const Vector3 bfl = Vector3{leftFront.x, bottomY, leftFront.z};
+                const Vector3 bfr = Vector3{rightFront.x, bottomY, rightFront.z};
+                const Vector3 bbr = Vector3{rightBack.x, bottomY, rightBack.z};
+                const Vector3 bbl = Vector3{leftBack.x, bottomY, leftBack.z};
+                const Vector3 tfl = Vector3{leftFront.x, topY, leftFront.z};
+                const Vector3 tfr = Vector3{rightFront.x, topY, rightFront.z};
+                const Vector3 tbr = Vector3{rightBack.x, topY, rightBack.z};
+                const Vector3 tbl = Vector3{leftBack.x, topY, leftBack.z};
+
+                const engine::TextureHandle textureHandle = !render.textureId.empty()
+                        ? TextureForId(render.textureId)
+                        : engine::NullTextureHandle();
+                const Texture2D* texture = assets.GetTexture(textureHandle);
+                if (texture == nullptr) {
+                    texture = &defaultMaterialTexture;
+                }
+                if (texture == nullptr || texture->id == 0) {
+                    ++skippedCount;
+                    return;
+                }
+
+                const SectorObjectLighting* objectLighting = runtimeObjectWorld.Has<SectorObjectLighting>(entity)
+                        ? &runtimeObjectWorld.Get<SectorObjectLighting>(entity)
+                        : nullptr;
+
+                if (material.shader.locs[SHADER_LOC_MAP_DIFFUSE] >= 0) {
+                    SetShaderValueTexture(material.shader, material.shader.locs[SHADER_LOC_MAP_DIFFUSE], *texture);
+                }
+
+                rlCheckRenderBatchLimit(24);
+                rlSetTexture(texture->id);
+                rlBegin(RL_QUADS);
+                    DrawDoorFace(
+                            normal,
+                            BakedDoorFaceLighting(objectLighting, normal),
+                            render.tint,
+                            bfl,
+                            bfr,
+                            tfr,
+                            tfl,
+                            render.width,
+                            render.height);
+                    DrawDoorFace(
+                            Vector3Negate(normal),
+                            BakedDoorFaceLighting(objectLighting, Vector3Negate(normal)),
+                            render.tint,
+                            bbr,
+                            bbl,
+                            tbl,
+                            tbr,
+                            render.width,
+                            render.height);
+                    DrawDoorFace(
+                            tangent,
+                            BakedDoorFaceLighting(objectLighting, tangent),
+                            render.tint,
+                            bfr,
+                            bbr,
+                            tbr,
+                            tfr,
+                            render.thickness,
+                            render.height);
+                    DrawDoorFace(
+                            Vector3Negate(tangent),
+                            BakedDoorFaceLighting(objectLighting, Vector3Negate(tangent)),
+                            render.tint,
+                            bbl,
+                            bfl,
+                            tfl,
+                            tbl,
+                            render.thickness,
+                            render.height);
+                    DrawDoorFace(
+                            Vector3{0.0f, 1.0f, 0.0f},
+                            BakedDoorFaceLighting(objectLighting, Vector3{0.0f, 1.0f, 0.0f}),
+                            render.tint,
+                            tfl,
+                            tfr,
+                            tbr,
+                            tbl,
+                            render.width,
+                            render.thickness);
+                    DrawDoorFace(
+                            Vector3{0.0f, -1.0f, 0.0f},
+                            BakedDoorFaceLighting(objectLighting, Vector3{0.0f, -1.0f, 0.0f}),
+                            render.tint,
+                            bbl,
+                            bbr,
+                            bfr,
+                            bfl,
+                            render.width,
+                            render.thickness);
+                rlEnd();
+                rlSetTexture(0);
+                ++drawnCount;
+            });
+
+    EndShaderMode();
+    rlActiveTextureSlot(0);
+    rlSetTexture(0);
+    rlEnableColorBlend();
+    rlSetBlendMode(BLEND_ALPHA);
+    rlEnableDepthTest();
+    rlEnableDepthMask();
+    rlEnableBackfaceCulling();
+
+    doorConsideredCount = consideredCount;
+    doorDrawnCount = drawnCount;
+    doorSkippedCount = skippedCount;
+    AppendDoorRenderDebugText(
+            renderDebugText,
+            "doors: "
+                    + std::to_string(drawnCount)
+                    + " drawn / "
+                    + std::to_string(consideredCount)
+                    + " considered, "
+                    + std::to_string(skippedCount)
+                    + " skipped");
 }
 
 void SectorMeshPreview::DrawRuntimeBillboards(engine::AssetManager& assets, engine::World& runtimeObjectWorld)

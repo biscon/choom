@@ -52,121 +52,121 @@ Important product decisions:
       "id": "phase_01",
       "title": "Authored Door Data And Serialization",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01a",
       "title": "Add Door Payload And JSON Round Trip",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01b",
       "title": "Add Door Defaults Validation And Fixture Coverage",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02",
       "title": "Portal Anchor Resolution And Diagnostics",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02a",
       "title": "Resolve Door Anchors To Portal Basis",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02b",
       "title": "Surface Door Anchor Diagnostics",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03",
       "title": "Runtime ECS Door Spawn And Closed Slab Rendering",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03a",
       "title": "Spawn Door ECS Components",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03b",
       "title": "Render Closed Procedural Door Slabs",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04",
       "title": "Door Motion And Runtime State",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04a",
       "title": "Add Door Motion Update",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04b",
       "title": "Add Door Transform Collider And Blocker State",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05",
       "title": "Door Interaction",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05a",
       "title": "Add Door Auto Open Runtime Behavior",
       "type": "pass",
       "parent": "phase_05",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05b",
       "title": "Add Interact Key Door Toggle",
       "type": "pass",
       "parent": "phase_05",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_06",
       "title": "Dynamic Collision Blockers",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_06a",
       "title": "Collect Door Dynamic Colliders",
       "type": "pass",
       "parent": "phase_06",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_06b",
       "title": "Resolve Player Movement Against Door Colliders",
       "type": "pass",
       "parent": "phase_06",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_07",
@@ -263,24 +263,24 @@ Important product decisions:
 
 | Phase / Pass | Status | Date | Notes |
 | --- | --- | --- | --- |
-| Phase 1: Authored Door Data And Serialization | Not Started |  | Parent phase. |
-| Phase 1A: Add Door Payload And JSON Round Trip | Not Started |  | First executable pass; data model and JSON only. |
-| Phase 1B: Add Door Defaults Validation And Fixture Coverage | Not Started |  | Tighten defaults/validation/tests without runtime behavior. |
-| Phase 2: Portal Anchor Resolution And Diagnostics | Not Started |  | Parent phase. |
-| Phase 2A: Resolve Door Anchors To Portal Basis | Not Started |  | Resolve line/sector anchor into basis/opening/dimensions. |
-| Phase 2B: Surface Door Anchor Diagnostics | Not Started |  | Warnings/status for invalid anchors. |
-| Phase 3: Runtime ECS Door Spawn And Closed Slab Rendering | Not Started |  | Parent phase. |
-| Phase 3A: Spawn Door ECS Components | Not Started |  | Spawn door ECS entities; no rendering yet if too broad. |
-| Phase 3B: Render Closed Procedural Door Slabs | Not Started |  | Renderer-only slab drawing. |
-| Phase 4: Door Motion And Runtime State | Not Started |  | Parent phase. |
-| Phase 4A: Add Door Motion Update | Not Started |  | openFraction/target/speed updates. |
-| Phase 4B: Add Door Transform Collider And Blocker State | Not Started |  | Derive dynamic shape/blocker state from motion. |
-| Phase 5: Door Interaction | Not Started |  | Parent phase. |
-| Phase 5A: Add Door Auto Open Runtime Behavior | Not Started |  | Player proximity opens auto-open doors. |
-| Phase 5B: Add Interact Key Door Toggle | Not Started |  | Add minimal F interact path for non-auto doors. |
-| Phase 6: Dynamic Collision Blockers | Not Started |  | Parent phase. |
-| Phase 6A: Collect Door Dynamic Colliders | Not Started |  | Dynamic collider collection from ECS. |
-| Phase 6B: Resolve Player Movement Against Door Colliders | Not Started |  | Post-static collision dynamic blockers. |
+| Phase 1: Authored Door Data And Serialization | Completed | 2026-07-02 | Authored door serialization/default validation passes complete. |
+| Phase 1A: Add Door Payload And JSON Round Trip | Completed | 2026-07-02 | Added authored door payload structs and JSON round-trip support; data model and JSON only. |
+| Phase 1B: Add Door Defaults Validation And Fixture Coverage | Completed | 2026-07-02 | Tightened door defaults/validation and added invalid JSON fixture coverage. |
+| Phase 2: Portal Anchor Resolution And Diagnostics | Completed | 2026-07-02 | Anchor resolution and diagnostics surfacing passes complete. |
+| Phase 2A: Resolve Door Anchors To Portal Basis | Completed | 2026-07-02 | Added resolver helper for portal basis/opening/default dimensions. |
+| Phase 2B: Surface Door Anchor Diagnostics | Completed | 2026-07-02 | Added runtime/editor-facing door anchor diagnostic counts and messages. |
+| Phase 3: Runtime ECS Door Spawn And Closed Slab Rendering | Completed | 2026-07-02 | Door ECS spawn and closed procedural slab rendering passes complete. |
+| Phase 3A: Spawn Door ECS Components | Completed | 2026-07-02 | Valid authored doors now spawn ECS entities with door-specific components; no rendering yet. |
+| Phase 3B: Render Closed Procedural Door Slabs | Completed | 2026-07-02 | Added renderer-only procedural slab drawing for ECS doors. |
+| Phase 4: Door Motion And Runtime State | Completed | 2026-07-02 | Door motion advancement and derived transform/collider/blocker state passes complete. |
+| Phase 4A: Add Door Motion Update | Completed | 2026-07-02 | Added deterministic ECS door motion advancement. |
+| Phase 4B: Add Door Transform Collider And Blocker State | Completed | 2026-07-02 | Derived current slab transform, collider OBB state, and portal blocker state from ECS door motion. |
+| Phase 5: Door Interaction | Completed | 2026-07-02 | Auto-open and Interact key passes complete. |
+| Phase 5A: Add Door Auto Open Runtime Behavior | Completed | 2026-07-02 | Player proximity opens auto-open doors and closes them when leaving range. |
+| Phase 5B: Add Interact Key Door Toggle | Completed | 2026-07-02 | Added minimal F interact path for targeted non-auto doors. |
+| Phase 6: Dynamic Collision Blockers | Completed | 2026-07-02 | Door dynamic collider collection and player movement resolution passes complete. |
+| Phase 6A: Collect Door Dynamic Colliders | Completed | 2026-07-02 | Added ECS door dynamic collider snapshot collection; movement resolution remains scoped to Phase 6B. |
+| Phase 6B: Resolve Player Movement Against Door Colliders | Completed | 2026-07-02 | Added post-static player movement resolution against collected door OBB colliders. |
 | Phase 7: Dynamic Portal Visibility Blockers | Not Started |  | Parent phase. |
 | Phase 7A: Add Dynamic Portal Blocker Query | Not Started |  | Static graph plus dynamic blocker overlay. |
 | Phase 7B: Wire Door Blockers Into Preview Visibility | Not Started |  | Preview traversal uses door blockers. |
@@ -294,6 +294,128 @@ Important product decisions:
 | Phase 10: Tests Documentation And Cleanup | Not Started |  | Parent phase. |
 | Phase 10A: Strengthen Door Tests And Diagnostics | Not Started |  | Focused tests and diagnostics pass. |
 | Phase 10B: Update Documentation And Close Plan | Not Started |  | Docs and final closure. |
+
+## Pass Execution Log
+
+### Phase 1A: Add Door Payload And JSON Round Trip
+
+- Status: Completed
+- Date: 2026-07-02
+- Summary: Added authored `SectorDoorAnchor`, `SectorPlacedDoor`, and `SectorDoorMotionType` data to runtime objects, plus `kind: "door"` JSON read/write support with nested `door` payload round-trip coverage.
+- JSON/default behavior: Door anchors save stable IDs and exact integer endpoint coordinates. Default door values are omitted on save and restored on load for dimensions, thickness, normal offset, `slide_vertical` motion, open distance, speed, initial open fraction, `autoOpen`, interaction distances, and empty texture ID. Non-default `autoOpen`, `interactionDistance`, and `autoOpenDistance` are serialized as authored settings only.
+- Validation behavior: This pass rejects unknown door motion strings and non-finite authored door numeric values on save/load, while stricter positive/range/anchor validation remains scoped to Phase 1B.
+- Behavior notes: Existing billboard runtime object serialization remains supported. Renderer behavior, runtime ECS spawn/update behavior, collision, portal visibility, topology render-cache invalidation, and lightmap source-hash behavior are unchanged.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_topology_serialization_tests sector_runtime_object_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R 'sector_topology_serialization|sector_runtime_object'` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed; `git diff --check` passed.
+
+### Phase 1B: Add Door Defaults Validation And Fixture Coverage
+
+- Status: Completed
+- Date: 2026-07-02
+- Summary: Tightened door validation so anchor IDs must be positive, endpoint coordinates must remain exact integer pairs, width/height/openDistance accept zero-derived defaults but reject negatives, thickness and interaction distances require positive values, speed rejects negatives, and `initialOpenFraction` must stay within `0..1`.
+- JSON/default behavior: Existing default omission/restoration is unchanged; zero width, height, and open distance remain valid derived defaults. Added in-memory invalid JSON coverage for door dimensions, interaction distances, initial open fraction, anchor IDs/types, texture ID type, and mixed billboard + door runtime objects.
+- Validation behavior: Unknown motion strings remain rejected. Door validation now runs after loading door payloads and during save validation.
+- Behavior notes: Existing billboard runtime object serialization remains supported. Renderer behavior, runtime ECS spawn/update behavior, collision, portal visibility, topology render-cache invalidation, and lightmap source-hash behavior are unchanged.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_topology_serialization_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_topology_serialization` passed; `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 2A: Resolve Door Anchors To Portal Basis
+
+- Status: Completed
+- Date: 2026-07-02
+- Summary: Added `ResolveSectorDoorAnchor()` and `SectorResolvedDoorAnchor` to resolve authored door anchors by `lineDefId` into current portal endpoints, midpoint, tangent, front-to-back normal, vertical opening, portal dimensions, and resolved door width/height defaults.
+- Basis/origin behavior: Endpoints are read from the current linedef vertices in world XZ. Tangent follows linedef start-to-end. Normal points from the stored front sector toward the stored back sector. Vertical opening is `max(front.floorZ, back.floorZ)` to `min(front.ceilingZ, back.ceilingZ)` converted to world units; zero authored width/height derive from portal width/opening height.
+- Invalid-anchor behavior: Missing linedef, one-sided/non-portal linedef, sidedef ID mismatch, invalid front/back sidedef pairing, sector-pair mismatch, missing sector/vertex, zero-length segment, and non-positive vertical opening return an invalid result with a diagnostic string instead of guessing.
+- Behavior notes: No runtime ECS door spawn, rendering, collision, portal visibility traversal, editor diagnostics, topology mutation, 2D topology render-cache invalidation, serialization behavior, asset loading, or lightmap source-hash behavior changed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `cmake --build cmake-build-debug -j2 --target sector_topology_tests sector_runtime_object_tests` passed after removing an unintended `SectorTopologyUnits.cpp` link dependency from the resolver; `ctest --test-dir cmake-build-debug --output-on-failure -R 'sector_topology_validation|sector_runtime_object'` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 2B: Surface Door Anchor Diagnostics
+
+- Status: Completed
+- Date: 2026-07-02
+- Summary: Added `SectorDoorAnchorDiagnostic` plus door anchor counts to `SectorRuntimeObjectState`, populated during `RefreshSectorRuntimeObjectMapData()` by resolving authored `kind: "door"` anchors.
+- Invalid-anchor behavior: Invalid door anchors now produce placed-object/linedef diagnostic messages and warning/status counts. Door ECS spawn remains deferred; authored door objects are skipped safely without creating entities or asset scopes. Valid billboard runtime object behavior is unchanged when invalid door anchors are present.
+- Behavior notes: No topology mutation, 2D topology render-cache invalidation, serialization schema/default behavior, renderer behavior, collision/sector lookup/physics behavior, portal visibility traversal, asset loading policy, or lightmap source-hash behavior changed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R 'sector_topology|sector_runtime_object'` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed.
+
+### Phase 3A: Spawn Door ECS Components
+
+- Status: Completed
+- Date: 2026-07-02
+- Summary: Added door-specific ECS components for placed object identity, resolved portal anchor basis, motion state, render payload, collider marker, and portal blocker marker. Valid authored `kind: "door"` runtime objects now spawn into `EngineContext::world` through the existing runtime object reset/refresh lifecycle.
+- Spawn lifecycle and reset behavior: `SpawnPlacedRuntimeObjects()` replaces existing mapped runtime entities before respawn, skips invalid door anchors with existing diagnostics, and stores valid door placed-object ID to ECS entity mappings. Door spawn reuses `SectorObjectTransform`, `SectorObject`, and `SectorObjectLighting`; no runtime object asset scope is created for doors yet because material loading is deferred.
+- Runtime state behavior: `openFraction` and `targetOpenFraction` initialize from authored `initialOpenFraction`. No auto-open behavior, Interact key behavior, animation update, renderer draw path, collision response, or portal visibility traversal is implemented in this pass.
+- Behavior notes: Serialization schema/default behavior, static sector rendering, billboard rendering, topology mutation/cache invalidation, collision/sector lookup/physics behavior, portal visibility traversal, asset loading policy, and lightmap source-hash behavior are unchanged. Door entities participate in the existing object-sector lookup and baked object lighting sample update through shared runtime object components.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 3B: Render Closed Procedural Door Slabs
+
+- Status: Completed
+- Date: 2026-07-02
+- Summary: Added a renderer-only `DrawRuntimeDoors()` path in `SectorMeshPreview` that observes ECS door components and draws opaque procedural box/slab geometry from the resolved portal basis, transform, dimensions, thickness, and normal offset established during spawn.
+- Renderer path: Door slabs are emitted with immediate-mode quads after static sector geometry and before runtime billboards. The pass uses the existing sector object shader with lightmap and decal inputs disabled, depth test/write enabled, blending disabled, and a default material texture fallback when the door `textureId` is empty or unresolved. No per-door mesh allocation or sector mesh rebuild is performed.
+- Lighting approach: Door faces use the ECS `SectorObjectLighting` object-probe ambient cube by face normal and receive the existing selected dynamic point/spot light uniforms. Doors do not use surface lightmaps and do not participate in bloom in this pass.
+- Behavior notes: Door animation/open fraction transforms, collision, portal visibility blocking, interaction, editor placement/inspection, serialization schema/default behavior, topology mutation/cache invalidation, asset loading policy, and lightmap source-hash behavior are unchanged. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests` passed with no work needed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 4A: Add Door Motion Update
+
+- Status: Completed
+- Date: 2026-07-02
+- Summary: Added `AdvanceSectorDoorMotionSystem()` and wired it into `UpdateSectorRuntimeObjects()` so enabled ECS doors advance `openFraction` deterministically toward clamped `targetOpenFraction`.
+- Motion semantics: Door `speed` is treated as world units per second and converted to fraction-per-second through `openDistance`. Authored zero `openDistance` derives to portal opening height for `slide_vertical` and portal width for `slide_left` / `slide_right` at spawn. Non-finite or non-positive dt is ignored, zero/non-finite speed is safe and does not advance, and invalid current/target fractions are clamped or reset into `0..1`.
+- Implemented motion types: `slide_vertical`, `slide_left`, and `slide_right` all share the same fraction update semantics in this pass. Physical transform offset by motion type remains scoped to Phase 4B.
+- Behavior notes: Source code changed. Authored `initialOpenFraction` remains unchanged during runtime updates. Save/load schema, renderer transform derivation, collider shape, portal blocker state, collision/sector lookup/physics behavior, portal visibility traversal, topology mutation/cache invalidation, asset loading policy, and lightmap source-hash behavior are unchanged. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `cmake --build cmake-build-debug -j2` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 4B: Add Door Transform Collider And Blocker State
+
+- Status: Completed
+- Date: 2026-07-02
+- Summary: Added `UpdateSectorDoorDerivedStateSystem()` so ECS doors derive current `SectorObjectTransform`, `SectorDoorCollider` OBB footprint/vertical interval, and `SectorDoorPortalBlocker::blocksPortal` from resolved anchor data, render dimensions, and `SectorDoorMotion`.
+- Motion semantics: Phase 4A fraction advancement remains unchanged. `speed` is still world units per second converted through `openDistance`; Phase 4B only derives the current physical state from the resulting `openFraction`.
+- Implemented motion types: `slide_vertical` offsets the slab upward by `openFraction * openDistance`; `slide_left` offsets along negative portal tangent; `slide_right` offsets along positive portal tangent. Closed center remains portal midpoint plus normal offset and half door height above the resolved opening bottom.
+- Transform/collider/blocker behavior: Spawned doors now run the derived-state system so authored `initialOpenFraction` affects the initial ECS transform. Collider state stores current XZ center, tangent, normal, half extents, bottom, top, and an enabled flag for valid enabled doors. Portal blocker state uses `openFraction <= 0.001f` as the closed threshold and opens beyond that threshold.
+- Behavior notes: Source code changed. Renderer door drawing continues to consume `SectorObjectTransform`, so it now follows the current derived slab transform. Collision response and portal visibility traversal are still not wired to these ECS components. Authored data/save-load schema, `initialOpenFraction` persistence, topology mutation/cache invalidation, asset loading policy, and lightmap source-hash behavior are unchanged. Collision/sector lookup/physics behavior is unchanged except door ECS transforms can update the existing object-sector/light-probe sampling point. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `cmake --build cmake-build-debug -j2` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 5A: Add Door Auto Open Runtime Behavior
+
+- Status: Completed
+- Date: 2026-07-02
+- Summary: Added ECS `SectorDoorInteraction` runtime settings copied from authored door interaction fields, plus `UpdateSectorDoorAutoOpenSystem()` wired through sector demo and editor Preview3D runtime updates using the current freefly/player pose.
+- Auto-open policy: Doors with `autoOpen == true` set `targetOpenFraction` to `1.0` while the player is within horizontal `autoOpenDistance` of the current door transform, and set it back to `0.0` when the player leaves range. Non-auto doors are ignored in this pass. Invalid player positions are ignored, and disabled doors are unaffected.
+- Runtime behavior: Auto-open changes ECS `SectorDoorMotion::targetOpenFraction` only. Authored `initialOpenFraction`, saved door data, and authored interaction settings are not mutated. Motion advancement and derived transform/collider/blocker updates continue through the existing Phase 4 systems.
+- Behavior notes: Source code changed. No `F` interact key, keybinding UI, general interaction framework, collision response, dynamic collider collection, portal visibility traversal, topology mutation/cache invalidation, serialization schema/default behavior, asset loading policy, or lightmap source-hash behavior changed. Collision/sector lookup/physics behavior is unchanged except auto-open doors may move their ECS transform during runtime animation and therefore update existing object-sector/light-probe sampling as in Phase 4B. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 5B: Add Interact Key Door Toggle
+
+- Status: Completed
+- Date: 2026-07-02
+- Summary: Added `ToggleTargetedSectorDoorInteractionSystem()` and wired `KEY_F` pressed events in the sector demo and editor Preview3D paths to toggle the targeted non-auto door's ECS `SectorDoorMotion::targetOpenFraction`.
+- Targeting behavior: Manual interaction ignores auto-open doors, disabled doors, doors outside `interactionDistance`, doors behind/outside a facing cone, invalid player positions, and invalid horizontal view directions. If multiple valid manual doors are targeted, the nearest door center in horizontal distance is toggled. The toggle opens when the current/target fraction is mostly closed and closes when current or target state is mostly open.
+- Input behavior: The path uses key-pressed events rather than held state. In the editor, the `F` interaction runs only in Preview3D after modal checks, so texture/sprite/document modals keep input focus. The sector demo assumes the active freefly 3D mode owns keyboard input. No keybinding UI or general interaction framework was added.
+- Behavior notes: Source code changed. Runtime interaction mutates ECS target state only; authored `initialOpenFraction`, authored door interaction settings, serialization schema/default behavior, topology mutation/cache invalidation, asset loading policy, dynamic collision response, portal visibility traversal, and lightmap source-hash behavior are unchanged. Collision/sector lookup/physics behavior is unchanged except manually toggled doors may move their ECS transform during existing runtime animation and object-sector/light-probe updates as in Phase 4B. Auto-open policy remains open while near and close when leaving range. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `cmake --build cmake-build-debug -j2` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 6A: Collect Door Dynamic Colliders
+
+- Status: Completed
+- Date: 2026-07-02
+- Summary: Added `SectorDynamicDoorCollider` snapshots and `CollectSectorDoorDynamicColliders()` to collect enabled, valid ECS door collider OBB footprints and vertical intervals for future movement queries.
+- Collection behavior: The helper appends to a caller-owned vector so callers can reserve/reuse storage. It filters disabled doors, disabled colliders, invalid/non-finite shapes, non-positive extents, and invalid vertical intervals. Fully open doors are still collected as physical moved slabs; Phase 6B will decide movement blocking from the current OBB plus vertical interval.
+- Behavior notes: Source code changed. Authored data, serialization schema/default behavior, topology mutation/cache invalidation, asset loading policy, static collision resolution, player movement, sector lookup, portal visibility traversal, renderer state, and lightmap source-hash behavior are unchanged. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_collision|sector_runtime_object"` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 6B: Resolve Player Movement Against Door Colliders
+
+- Status: Completed
+- Date: 2026-07-02
+- Summary: Added `ResolveSectorDoorDynamicCollidersForPlayerMovement()` and wired editor gameplay preview movement to resolve collected ECS door OBB colliders after static topology collision.
+- Collision integration point: Static `SectorCollisionWorld::ResolveMovement()` still runs first. The dynamic door pass then resolves the player cylinder/circle against `SectorRuntimeObjectState::dynamicDoorColliders`, which is cleared and recollected from ECS doors each Preview3D update after runtime door state updates.
+- Dynamic collider shape: Door blockers use the current collected 2D OBB footprint (`center`, normalized `tangent`/`normal`, `halfExtents`) plus vertical interval overlap against the player feet/head interval. The pass uses conservative blocking from the current slab shape; open vertical doors allow movement when their moved vertical interval no longer overlaps the player, and horizontally opened doors block only at their current moved footprint.
+- Player-inside behavior: If the player starts inside a door slab, the resolver pushes out along a least-penetration OBB axis when possible and reports `hitWall`; invalid/non-finite colliders are ignored safely. If static movement crossed sectors and then hits a dynamic door, the resolver constrains the player back to the starting side and preserves the prior sector ID.
+- Behavior notes: Source code changed. Authored data, serialization schema/default behavior, topology mutation/cache invalidation, asset loading policy, portal visibility traversal, renderer state, and lightmap source-hash behavior are unchanged. Collision/sector lookup/physics changed only for editor gameplay preview player movement after static collision; static topology collision remains unchanged. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_collision|sector_runtime_object"` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
 
 ## Execution Tracking Rules
 

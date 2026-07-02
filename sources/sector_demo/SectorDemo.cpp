@@ -5,10 +5,20 @@
 
 #include <raylib.h>
 
+#include <cmath>
 #include <cstdio>
 #include <string>
 
 namespace game {
+
+namespace {
+
+Vector3 HorizontalForwardFromYaw(float yawRadians)
+{
+    return Vector3{std::cos(yawRadians), 0.0f, std::sin(yawRadians)};
+}
+
+} // namespace
 
 bool SectorDemo::Init(engine::EngineContext& context, const char* mapPath)
 {
@@ -59,8 +69,7 @@ void SectorDemo::Update(engine::EngineContext& context, float dt)
     }
 
     engine::Input& input = context.input;
-    UpdateSectorRuntimeObjects(context.world, context.assets, runtimeObjects, topologyMap, dt);
-    preview.AdvanceRuntime(dt);
+    const Vector3 playerPosition = freeflyController.pose.position;
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
@@ -71,6 +80,22 @@ void SectorDemo::Update(engine::EngineContext& context, float dt)
                 preview.ToggleDynamicLightingEnabled();
                 engine::ConsumeEvent(event);
             });
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [this, &context, &playerPosition](engine::InputEvent& event) {
+                if (event.key.key != KEY_F) {
+                    return;
+                }
+                if (ToggleTargetedSectorDoorInteractionSystem(
+                            context.world,
+                            playerPosition,
+                            HorizontalForwardFromYaw(freeflyController.pose.yawRadians))) {
+                    engine::ConsumeEvent(event);
+                }
+            });
+    UpdateSectorRuntimeObjects(context.world, context.assets, runtimeObjects, topologyMap, dt, &playerPosition);
+    preview.AdvanceRuntime(dt);
 
     UpdateSectorFreeflyController(freeflyController, input, dt);
     preview.ApplyRendererPose(freeflyController.pose);
@@ -89,7 +114,7 @@ void SectorDemo::RenderOverlay(engine::AssetManager& assets)
 
     const Vector3 position = preview.Position();
     DrawText("Sector Mesh Demo", 40, 36, 30, RAYWHITE);
-    DrawText("WASD move  |  Mouse look  |  Space/Ctrl up/down  |  F4 dynamic lights  |  F11 cursor toggle", 40, 76, 20, LIGHTGRAY);
+    DrawText("WASD move  |  Mouse look  |  Space/Ctrl up/down  |  F interact  |  F4 dynamic lights  |  F11 cursor toggle", 40, 76, 20, LIGHTGRAY);
     DrawText(
             TextFormat(
                     "pos %.2f %.2f %.2f   sectors %zu   batches %zu   assets %.0f%%",

@@ -4,10 +4,12 @@
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <raymath.h>
@@ -17,7 +19,7 @@ namespace game {
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(7);
+    world.ReserveComponentTypes(14);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
@@ -25,6 +27,13 @@ void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity
     world.ReserveComponent<SectorBillboardAnimator>(objectCapacity);
     world.ReserveComponent<SectorBillboardDirectionalClips>(objectCapacity);
     world.ReserveComponent<SectorBillboardSingleClip>(objectCapacity);
+    world.ReserveComponent<SectorDoor>(objectCapacity);
+    world.ReserveComponent<SectorDoorResolvedAnchor>(objectCapacity);
+    world.ReserveComponent<SectorDoorMotion>(objectCapacity);
+    world.ReserveComponent<SectorDoorInteraction>(objectCapacity);
+    world.ReserveComponent<SectorDoorRender>(objectCapacity);
+    world.ReserveComponent<SectorDoorCollider>(objectCapacity);
+    world.ReserveComponent<SectorDoorPortalBlocker>(objectCapacity);
     world.LockComponentRegistration();
 }
 
@@ -81,6 +90,8 @@ SectorBillboardQuad BuildSectorBillboardQuad(
 namespace {
 
 constexpr const char* SectorRuntimeObjectAssetScopeName = "sector_runtime_objects";
+constexpr float DoorInteractionFacingDotThreshold = 0.5f;
+constexpr float DoorDynamicCollisionEpsilon = 0.0001f;
 
 uint32_t FindClipIndexInAsset(const engine::SpriteAnimationAsset& asset, const char* name)
 {
@@ -271,12 +282,22 @@ void RefreshPlacedRuntimeObjectDiagnostics(
             failedCount,
             clipResolvedCount + singleClipResolvedCount,
             clipMissingCount + singleClipMissingCount);
+    if (state.doorObjectCount > 0) {
+        state.placedObjectStatus += TextFormat(
+                " | doors %zu valid, %zu invalid anchors",
+                state.validDoorAnchorCount,
+                state.invalidDoorAnchorCount);
+    }
 
     if (state.skippedObjectCount == 0) {
         state.placedObjectWarning.clear();
     }
 
-    if (failedCount > 0) {
+    if (state.invalidDoorAnchorCount > 0) {
+        state.placedObjectWarning = TextFormat(
+                "Runtime object warnings: %zu door object(s) have invalid anchors",
+                state.invalidDoorAnchorCount);
+    } else if (failedCount > 0) {
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu sprite animation asset(s) failed",
                 failedCount);
@@ -288,6 +309,40 @@ void RefreshPlacedRuntimeObjectDiagnostics(
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu billboard object(s) used fallback clips",
                 clipFallbackCount + singleClipFallbackCount);
+    }
+}
+
+void RefreshDoorAnchorDiagnostics(
+        SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map)
+{
+    state.doorAnchorDiagnostics.clear();
+    state.doorObjectCount = 0;
+    state.validDoorAnchorCount = 0;
+    state.invalidDoorAnchorCount = 0;
+
+    for (const SectorPlacedRuntimeObject& placedObject : map.runtimeObjects) {
+        if (placedObject.kind != "door") {
+            continue;
+        }
+
+        ++state.doorObjectCount;
+        const SectorResolvedDoorAnchor resolved = ResolveSectorDoorAnchor(map, placedObject.door);
+        if (resolved.valid) {
+            ++state.validDoorAnchorCount;
+            continue;
+        }
+
+        ++state.invalidDoorAnchorCount;
+        SectorDoorAnchorDiagnostic diagnostic;
+        diagnostic.placedObjectId = placedObject.id;
+        diagnostic.lineDefId = placedObject.door.anchor.lineDefId;
+        diagnostic.message = TextFormat(
+                "door object %d anchor on linedef %d is invalid: %s",
+                placedObject.id,
+                placedObject.door.anchor.lineDefId,
+                resolved.diagnostic.empty() ? "unknown anchor error" : resolved.diagnostic.c_str());
+        state.doorAnchorDiagnostics.push_back(std::move(diagnostic));
     }
 }
 
@@ -318,6 +373,300 @@ float WrapRadiansPi(float angle)
         angle -= TwoPi;
     }
     return angle;
+}
+
+float ResolvedDoorOpenDistance(const SectorResolvedDoorAnchor& resolved, const SectorPlacedDoor& door)
+{
+    if (door.openDistance > 0.0f) {
+        return door.openDistance;
+    }
+
+    switch (door.motion) {
+        case SectorDoorMotionType::SlideVertical:
+            return resolved.height;
+        case SectorDoorMotionType::SlideLeft:
+        case SectorDoorMotionType::SlideRight:
+            return resolved.width;
+    }
+
+    return resolved.height;
+}
+
+float DoorAnchorYawRadians(const SectorResolvedDoorAnchor& resolved)
+{
+    return std::atan2(resolved.tangent.y, resolved.tangent.x);
+}
+
+Vector2 NormalizedOrFallback(Vector2 value, Vector2 fallback)
+{
+    const float lengthSquared = value.x * value.x + value.y * value.y;
+    if (lengthSquared <= 0.000001f || !std::isfinite(lengthSquared)) {
+        return fallback;
+    }
+
+    const float invLength = 1.0f / std::sqrt(lengthSquared);
+    return Vector2{value.x * invLength, value.y * invLength};
+}
+
+bool IsFinite(Vector2 value)
+{
+    return std::isfinite(value.x) && std::isfinite(value.y);
+}
+
+float Abs(float value)
+{
+    return value < 0.0f ? -value : value;
+}
+
+float SignForAxis(float value)
+{
+    return value < 0.0f ? -1.0f : 1.0f;
+}
+
+float Dot(Vector2 a, Vector2 b)
+{
+    return a.x * b.x + a.y * b.y;
+}
+
+Vector2 Add(Vector2 a, Vector2 b)
+{
+    return Vector2{a.x + b.x, a.y + b.y};
+}
+
+Vector2 Subtract(Vector2 a, Vector2 b)
+{
+    return Vector2{a.x - b.x, a.y - b.y};
+}
+
+Vector2 Scale(Vector2 value, float scale)
+{
+    return Vector2{value.x * scale, value.y * scale};
+}
+
+bool PlayerVerticalIntervalOverlapsDoor(
+        const SectorCollisionMoveState& moveState,
+        const SectorCollisionMoveConfig& config,
+        const SectorDynamicDoorCollider& collider)
+{
+    const float playerBottom = moveState.feetY;
+    const float playerTop = moveState.feetY + config.playerHeight;
+    return playerTop > collider.bottom + DoorDynamicCollisionEpsilon
+            && playerBottom < collider.top - DoorDynamicCollisionEpsilon;
+}
+
+bool ResolveCircleAgainstDoorObb(
+        Vector2& position,
+        float radius,
+        const SectorDynamicDoorCollider& collider)
+{
+    const Vector2 tangent = NormalizedOrFallback(collider.tangent, Vector2{1.0f, 0.0f});
+    const Vector2 normal = NormalizedOrFallback(collider.normal, Vector2{0.0f, -1.0f});
+    const Vector2 relative = Subtract(position, collider.center);
+    const Vector2 local{
+            Dot(relative, tangent),
+            Dot(relative, normal)};
+    const Vector2 closest{
+            Clamp(local.x, -collider.halfExtents.x, collider.halfExtents.x),
+            Clamp(local.y, -collider.halfExtents.y, collider.halfExtents.y)};
+    const Vector2 delta{
+            local.x - closest.x,
+            local.y - closest.y};
+    const float distanceSq = delta.x * delta.x + delta.y * delta.y;
+    const float radiusSq = radius * radius;
+
+    Vector2 pushLocal = {};
+    if (distanceSq > DoorDynamicCollisionEpsilon) {
+        if (distanceSq >= radiusSq - DoorDynamicCollisionEpsilon) {
+            return false;
+        }
+        const float distance = std::sqrt(distanceSq);
+        const float penetration = radius - distance + DoorDynamicCollisionEpsilon;
+        pushLocal = Vector2{delta.x / distance * penetration, delta.y / distance * penetration};
+    } else {
+        const float overlapTangent = collider.halfExtents.x + radius - Abs(local.x);
+        const float overlapNormal = collider.halfExtents.y + radius - Abs(local.y);
+        if (overlapTangent <= 0.0f || overlapNormal <= 0.0f) {
+            return false;
+        }
+        if (overlapTangent < overlapNormal) {
+            pushLocal = Vector2{SignForAxis(local.x) * (overlapTangent + DoorDynamicCollisionEpsilon), 0.0f};
+        } else {
+            pushLocal = Vector2{0.0f, SignForAxis(local.y) * (overlapNormal + DoorDynamicCollisionEpsilon)};
+        }
+    }
+
+    position = Add(
+            position,
+            Add(Scale(tangent, pushLocal.x), Scale(normal, pushLocal.y)));
+    return true;
+}
+
+bool SegmentIntersectsExpandedDoorObb(
+        Vector2 startPosition,
+        Vector2 endPosition,
+        float radius,
+        const SectorDynamicDoorCollider& collider)
+{
+    const Vector2 tangent = NormalizedOrFallback(collider.tangent, Vector2{1.0f, 0.0f});
+    const Vector2 normal = NormalizedOrFallback(collider.normal, Vector2{0.0f, -1.0f});
+    const Vector2 startRelative = Subtract(startPosition, collider.center);
+    const Vector2 endRelative = Subtract(endPosition, collider.center);
+    const Vector2 startLocal{
+            Dot(startRelative, tangent),
+            Dot(startRelative, normal)};
+    const Vector2 endLocal{
+            Dot(endRelative, tangent),
+            Dot(endRelative, normal)};
+    const Vector2 expanded{
+            collider.halfExtents.x + radius,
+            collider.halfExtents.y + radius};
+
+    if (startLocal.x > -expanded.x + DoorDynamicCollisionEpsilon
+            && startLocal.x < expanded.x - DoorDynamicCollisionEpsilon
+            && startLocal.y > -expanded.y + DoorDynamicCollisionEpsilon
+            && startLocal.y < expanded.y - DoorDynamicCollisionEpsilon) {
+        return false;
+    }
+
+    const Vector2 deltaLocal = Subtract(endLocal, startLocal);
+    float tEnter = 0.0f;
+    float tExit = 1.0f;
+    const float startAxes[2] = {startLocal.x, startLocal.y};
+    const float deltaAxes[2] = {deltaLocal.x, deltaLocal.y};
+    const float minAxes[2] = {-expanded.x, -expanded.y};
+    const float maxAxes[2] = {expanded.x, expanded.y};
+
+    for (int axis = 0; axis < 2; ++axis) {
+        if (std::fabs(deltaAxes[axis]) <= DoorDynamicCollisionEpsilon) {
+            if (startAxes[axis] < minAxes[axis] || startAxes[axis] > maxAxes[axis]) {
+                return false;
+            }
+            continue;
+        }
+
+        const float invDelta = 1.0f / deltaAxes[axis];
+        float axisEnter = (minAxes[axis] - startAxes[axis]) * invDelta;
+        float axisExit = (maxAxes[axis] - startAxes[axis]) * invDelta;
+        if (axisEnter > axisExit) {
+            std::swap(axisEnter, axisExit);
+        }
+
+        tEnter = std::max(tEnter, axisEnter);
+        tExit = std::min(tExit, axisExit);
+        if (tEnter > tExit) {
+            return false;
+        }
+    }
+
+    return tExit >= -DoorDynamicCollisionEpsilon
+            && tEnter <= 1.0f + DoorDynamicCollisionEpsilon;
+}
+
+void ConstrainCircleToStartingSideOfDoorObb(
+        Vector2& position,
+        Vector2 startPosition,
+        float radius,
+        const SectorDynamicDoorCollider& collider)
+{
+    const Vector2 tangent = NormalizedOrFallback(collider.tangent, Vector2{1.0f, 0.0f});
+    const Vector2 normal = NormalizedOrFallback(collider.normal, Vector2{0.0f, -1.0f});
+    const Vector2 startRelative = Subtract(startPosition, collider.center);
+    const Vector2 positionRelative = Subtract(position, collider.center);
+    const Vector2 startLocal{
+            Dot(startRelative, tangent),
+            Dot(startRelative, normal)};
+    const Vector2 positionLocal{
+            Dot(positionRelative, tangent),
+            Dot(positionRelative, normal)};
+    const Vector2 expanded{
+            collider.halfExtents.x + radius,
+            collider.halfExtents.y + radius};
+
+    Vector2 constrainedLocal = positionLocal;
+    bool constrained = false;
+    if (startLocal.x <= -expanded.x
+            && positionLocal.x > -expanded.x + DoorDynamicCollisionEpsilon) {
+        constrainedLocal.x = -expanded.x - DoorDynamicCollisionEpsilon;
+        constrained = true;
+    } else if (startLocal.x >= expanded.x
+            && positionLocal.x < expanded.x - DoorDynamicCollisionEpsilon) {
+        constrainedLocal.x = expanded.x + DoorDynamicCollisionEpsilon;
+        constrained = true;
+    }
+
+    if (startLocal.y <= -expanded.y
+            && positionLocal.y > -expanded.y + DoorDynamicCollisionEpsilon) {
+        constrainedLocal.y = -expanded.y - DoorDynamicCollisionEpsilon;
+        constrained = true;
+    } else if (startLocal.y >= expanded.y
+            && positionLocal.y < expanded.y - DoorDynamicCollisionEpsilon) {
+        constrainedLocal.y = expanded.y + DoorDynamicCollisionEpsilon;
+        constrained = true;
+    }
+
+    if (!constrained) {
+        return;
+    }
+
+    position = Add(
+            collider.center,
+            Add(Scale(tangent, constrainedLocal.x), Scale(normal, constrainedLocal.y)));
+}
+
+Vector3 DoorMotionOffset(
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorMotion& motion)
+{
+    const float openFraction = std::isfinite(motion.openFraction)
+            ? Clamp(motion.openFraction, 0.0f, 1.0f)
+            : 0.0f;
+    const float openDistance = motion.openDistance > 0.0f && std::isfinite(motion.openDistance)
+            ? motion.openDistance
+            : 0.0f;
+    const float offset = openFraction * openDistance;
+    const Vector2 tangent = NormalizedOrFallback(anchor.tangent, Vector2{1.0f, 0.0f});
+
+    switch (motion.motion) {
+        case SectorDoorMotionType::SlideVertical:
+            return Vector3{0.0f, offset, 0.0f};
+        case SectorDoorMotionType::SlideLeft:
+            return Vector3{-tangent.x * offset, 0.0f, -tangent.y * offset};
+        case SectorDoorMotionType::SlideRight:
+            return Vector3{tangent.x * offset, 0.0f, tangent.y * offset};
+    }
+
+    return Vector3{};
+}
+
+Vector3 DoorClosedCenter(
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render)
+{
+    const Vector2 normal = NormalizedOrFallback(anchor.normal, Vector2{0.0f, -1.0f});
+    return Vector3{
+            anchor.midpoint.x + normal.x * render.normalOffset,
+            anchor.openBottom + render.height * 0.5f,
+            anchor.midpoint.y + normal.y * render.normalOffset};
+}
+
+SectorDoorResolvedAnchor ToRuntimeDoorAnchor(const SectorResolvedDoorAnchor& resolved)
+{
+    SectorDoorResolvedAnchor anchor;
+    anchor.lineDefId = resolved.lineDefId;
+    anchor.frontSectorId = resolved.frontSectorId;
+    anchor.backSectorId = resolved.backSectorId;
+    anchor.frontSideDefId = resolved.frontSideDefId;
+    anchor.backSideDefId = resolved.backSideDefId;
+    anchor.endpointA = resolved.endpointA;
+    anchor.endpointB = resolved.endpointB;
+    anchor.midpoint = resolved.midpoint;
+    anchor.tangent = resolved.tangent;
+    anchor.normal = resolved.normal;
+    anchor.openBottom = resolved.openBottom;
+    anchor.openTop = resolved.openTop;
+    anchor.portalWidth = resolved.portalWidth;
+    anchor.portalHeight = resolved.portalHeight;
+    return anchor;
 }
 
 } // namespace
@@ -365,6 +714,8 @@ void RefreshSectorRuntimeObjectMapData(
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map)
 {
+    RefreshDoorAnchorDiagnostics(state, map);
+
     state.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
     state.objectProbeStatus.clear();
     if (map.bakedLightmap.objectProbes.path.empty()) {
@@ -441,6 +792,79 @@ void SpawnPlacedRuntimeObjects(
                     warning.c_str());
             recordWarning(warning);
             ++skippedCount;
+            continue;
+        }
+
+        if (placedObject.kind == "door") {
+            const SectorResolvedDoorAnchor resolved = ResolveSectorDoorAnchor(map, placedObject.door);
+            if (!resolved.valid) {
+                const std::string warning = TextFormat(
+                        "door object %d anchor on linedef %d is invalid: %s",
+                        placedObject.id,
+                        placedObject.door.anchor.lineDefId,
+                        resolved.diagnostic.empty() ? "unknown anchor error" : resolved.diagnostic.c_str());
+                std::fprintf(stderr,
+                        "[SectorRuntimeObjects WARNING] %s\n",
+                        warning.c_str());
+                recordWarning(warning);
+                ++skippedCount;
+                continue;
+            }
+
+            const SectorDoorResolvedAnchor runtimeAnchor = ToRuntimeDoorAnchor(resolved);
+            const SectorDoorMotion runtimeMotion{
+                    placedObject.door.motion,
+                    placedObject.door.initialOpenFraction,
+                    placedObject.door.initialOpenFraction,
+                    ResolvedDoorOpenDistance(resolved, placedObject.door),
+                    placedObject.door.speed};
+            const SectorDoorRender runtimeRender{
+                    resolved.width,
+                    resolved.height,
+                    placedObject.door.thickness,
+                    placedObject.door.normalOffset,
+                    placedObject.door.textureId,
+                    WHITE,
+                    true};
+            const Vector3 worldPosition = Vector3Add(
+                    DoorClosedCenter(runtimeAnchor, runtimeRender),
+                    DoorMotionOffset(runtimeAnchor, runtimeMotion));
+            SectorObject object;
+            if (state.objectSectorLookupWorldValid) {
+                const int foundSectorId = state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
+                        Vector2{worldPosition.x, worldPosition.z},
+                        resolved.frontSectorId);
+                object.currentSectorId = foundSectorId != 0 ? foundSectorId : resolved.frontSectorId;
+            } else {
+                object.currentSectorId = resolved.frontSectorId;
+            }
+
+            const engine::Entity entity = world.CreateEntity();
+            world.Add(entity, SectorObjectTransform{worldPosition, DoorAnchorYawRadians(resolved)});
+            world.Add(entity, object);
+            world.Add(entity, SectorObjectLighting{SampleBakedObjectLighting(
+                    state.objectLightProbes,
+                    worldPosition,
+                    object.currentSectorId,
+                    &map)});
+            world.Add(entity, SectorDoor{placedObject.id, true});
+            world.Add(entity, runtimeAnchor);
+            world.Add(entity, runtimeMotion);
+            world.Add(entity, SectorDoorInteraction{
+                    placedObject.door.autoOpen,
+                    placedObject.door.interactionDistance,
+                    placedObject.door.autoOpenDistance});
+            world.Add(entity, runtimeRender);
+            world.Add(entity, SectorDoorCollider{});
+            world.Add(entity, SectorDoorPortalBlocker{
+                    resolved.lineDefId,
+                    resolved.frontSectorId,
+                    resolved.backSectorId,
+                    resolved.frontSideDefId,
+                    resolved.backSideDefId,
+                    placedObject.door.initialOpenFraction <= kSectorDoorPortalBlockEpsilon});
+            state.placedObjectEntities.push_back(SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
+            ++spawnedCount;
             continue;
         }
 
@@ -532,6 +956,7 @@ void SpawnPlacedRuntimeObjects(
 
     state.spawnedObjectCount = spawnedCount;
     state.skippedObjectCount = skippedCount;
+    UpdateSectorDoorDerivedStateSystem(world);
     RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
 }
 
@@ -540,9 +965,15 @@ void UpdateSectorRuntimeObjects(
         engine::AssetManager& assets,
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map,
-        float dt)
+        float dt,
+        const Vector3* playerPosition)
 {
     AdvanceSectorBillboardAnimatorSystem(world, dt);
+    if (playerPosition != nullptr) {
+        UpdateSectorDoorAutoOpenSystem(world, *playerPosition);
+    }
+    AdvanceSectorDoorMotionSystem(world, dt);
+    UpdateSectorDoorDerivedStateSystem(world);
     world.ForEach<SectorBillboardSprite, SectorBillboardDirectionalClips>(
             [&assets](engine::Entity, SectorBillboardSprite& sprite, SectorBillboardDirectionalClips& directionalClips) {
                 if (!directionalClips.resolved) {
@@ -752,6 +1183,322 @@ void UpdateSectorObjectBakedLightingSystem(
                         object.currentSectorId,
                         mapForFallback);
             });
+}
+
+void UpdateSectorDoorAutoOpenSystem(engine::World& world, const Vector3& playerPosition)
+{
+    if (!std::isfinite(playerPosition.x) || !std::isfinite(playerPosition.y) || !std::isfinite(playerPosition.z)) {
+        return;
+    }
+
+    world.ForEach<SectorObjectTransform, SectorDoor, SectorDoorMotion, SectorDoorInteraction>(
+            [&playerPosition](
+                    engine::Entity,
+                    SectorObjectTransform& transform,
+                    SectorDoor& door,
+                    SectorDoorMotion& motion,
+                    SectorDoorInteraction& interaction) {
+                if (!door.enabled || !interaction.autoOpen) {
+                    return;
+                }
+
+                const float distance = interaction.autoOpenDistance > 0.0f
+                                && std::isfinite(interaction.autoOpenDistance)
+                        ? interaction.autoOpenDistance
+                        : kSectorDoorAutoOpenFallbackDistance;
+                const float dx = playerPosition.x - transform.position.x;
+                const float dz = playerPosition.z - transform.position.z;
+                const float distanceSq = dx * dx + dz * dz;
+                motion.targetOpenFraction = distanceSq <= distance * distance ? 1.0f : 0.0f;
+            });
+}
+
+bool ToggleTargetedSectorDoorInteractionSystem(
+        engine::World& world,
+        const Vector3& playerPosition,
+        const Vector3& playerForward)
+{
+    if (!std::isfinite(playerPosition.x) || !std::isfinite(playerPosition.y) || !std::isfinite(playerPosition.z)
+            || !std::isfinite(playerForward.x) || !std::isfinite(playerForward.y) || !std::isfinite(playerForward.z)) {
+        return false;
+    }
+
+    Vector2 forward{playerForward.x, playerForward.z};
+    if (Vector2LengthSqr(forward) <= 0.000001f) {
+        return false;
+    }
+    forward = Vector2Normalize(forward);
+
+    engine::Entity bestEntity;
+    bool found = false;
+    float bestDistanceSq = std::numeric_limits<float>::max();
+
+    world.ForEach<SectorObjectTransform, SectorDoor, SectorDoorMotion, SectorDoorInteraction>(
+            [&playerPosition, &forward, &bestEntity, &found, &bestDistanceSq](
+                    engine::Entity entity,
+                    SectorObjectTransform& transform,
+                    SectorDoor& door,
+                    SectorDoorMotion&,
+                    SectorDoorInteraction& interaction) {
+                if (!door.enabled || interaction.autoOpen) {
+                    return;
+                }
+
+                const float distance = interaction.interactionDistance > 0.0f
+                                && std::isfinite(interaction.interactionDistance)
+                        ? interaction.interactionDistance
+                        : 1.5f;
+                const Vector2 toDoor{
+                        transform.position.x - playerPosition.x,
+                        transform.position.z - playerPosition.z};
+                const float distanceSq = Vector2LengthSqr(toDoor);
+                if (distanceSq > distance * distance || distanceSq <= 0.000001f) {
+                    return;
+                }
+
+                const Vector2 directionToDoor = Vector2Scale(toDoor, 1.0f / std::sqrt(distanceSq));
+                if (Vector2DotProduct(forward, directionToDoor) < DoorInteractionFacingDotThreshold) {
+                    return;
+                }
+
+                if (distanceSq < bestDistanceSq) {
+                    bestDistanceSq = distanceSq;
+                    bestEntity = entity;
+                    found = true;
+                }
+            });
+
+    if (!found) {
+        return false;
+    }
+
+    SectorDoorMotion& motion = world.Get<SectorDoorMotion>(bestEntity);
+    const float openFraction = std::isfinite(motion.openFraction)
+            ? Clamp(motion.openFraction, 0.0f, 1.0f)
+            : 0.0f;
+    const float targetOpenFraction = std::isfinite(motion.targetOpenFraction)
+            ? Clamp(motion.targetOpenFraction, 0.0f, 1.0f)
+            : openFraction;
+    motion.targetOpenFraction = targetOpenFraction > 0.5f || openFraction > 0.5f ? 0.0f : 1.0f;
+    return true;
+}
+
+void AdvanceSectorDoorMotionSystem(engine::World& world, float dt)
+{
+    if (!std::isfinite(dt) || dt <= 0.0f) {
+        return;
+    }
+
+    world.ForEach<SectorDoor, SectorDoorMotion>(
+            [dt](engine::Entity, SectorDoor& door, SectorDoorMotion& motion) {
+                if (!door.enabled) {
+                    return;
+                }
+
+                if (!std::isfinite(motion.openFraction)) {
+                    motion.openFraction = 0.0f;
+                }
+                if (!std::isfinite(motion.targetOpenFraction)) {
+                    motion.targetOpenFraction = motion.openFraction;
+                }
+
+                motion.openFraction = Clamp(motion.openFraction, 0.0f, 1.0f);
+                motion.targetOpenFraction = Clamp(motion.targetOpenFraction, 0.0f, 1.0f);
+                if (motion.speed <= 0.0f || !std::isfinite(motion.speed)) {
+                    return;
+                }
+
+                const float distance = motion.openDistance > 0.0f && std::isfinite(motion.openDistance)
+                        ? motion.openDistance
+                        : 1.0f;
+                const float fractionStep = (motion.speed * dt) / distance;
+                if (!std::isfinite(fractionStep) || fractionStep <= 0.0f) {
+                    return;
+                }
+
+                if (motion.openFraction < motion.targetOpenFraction) {
+                    motion.openFraction = std::min(motion.openFraction + fractionStep, motion.targetOpenFraction);
+                } else if (motion.openFraction > motion.targetOpenFraction) {
+                    motion.openFraction = std::max(motion.openFraction - fractionStep, motion.targetOpenFraction);
+                }
+            });
+}
+
+void UpdateSectorDoorDerivedStateSystem(engine::World& world)
+{
+    world.ForEach<
+            SectorObjectTransform,
+            SectorDoor,
+            SectorDoorResolvedAnchor,
+            SectorDoorMotion,
+            SectorDoorRender,
+            SectorDoorCollider,
+            SectorDoorPortalBlocker>(
+            [](engine::Entity,
+                    SectorObjectTransform& transform,
+                    SectorDoor& door,
+                    SectorDoorResolvedAnchor& anchor,
+                    SectorDoorMotion& motion,
+                    SectorDoorRender& render,
+                    SectorDoorCollider& collider,
+                    SectorDoorPortalBlocker& blocker) {
+                const Vector2 tangent = NormalizedOrFallback(anchor.tangent, Vector2{1.0f, 0.0f});
+                const Vector2 normal = NormalizedOrFallback(anchor.normal, Vector2{0.0f, -1.0f});
+                const bool validShape = render.width > 0.0f
+                        && std::isfinite(render.width)
+                        && render.height > 0.0f
+                        && std::isfinite(render.height)
+                        && render.thickness > 0.0f
+                        && std::isfinite(render.thickness);
+                const Vector3 center = Vector3Add(
+                        DoorClosedCenter(anchor, render),
+                        DoorMotionOffset(anchor, motion));
+
+                transform.position = center;
+                transform.yawRadians = std::atan2(tangent.y, tangent.x);
+
+                collider.center = Vector2{center.x, center.z};
+                collider.tangent = tangent;
+                collider.normal = normal;
+                collider.halfExtents = Vector2{
+                        validShape ? render.width * 0.5f : 0.0f,
+                        validShape ? render.thickness * 0.5f : 0.0f};
+                collider.bottom = center.y - (validShape ? render.height * 0.5f : 0.0f);
+                collider.top = center.y + (validShape ? render.height * 0.5f : 0.0f);
+                collider.enabled = door.enabled && validShape;
+
+                const float openFraction = std::isfinite(motion.openFraction)
+                        ? Clamp(motion.openFraction, 0.0f, 1.0f)
+                        : 0.0f;
+                blocker.blocksPortal = door.enabled && openFraction <= kSectorDoorPortalBlockEpsilon;
+            });
+}
+
+void CollectSectorDoorDynamicColliders(
+        engine::World& world,
+        std::vector<SectorDynamicDoorCollider>& colliders)
+{
+    world.ForEach<SectorDoor, SectorDoorCollider>(
+            [&colliders](engine::Entity entity, SectorDoor& door, SectorDoorCollider& collider) {
+                if (!door.enabled || !collider.enabled) {
+                    return;
+                }
+                if (!IsFinite(collider.center)
+                        || !IsFinite(collider.tangent)
+                        || !IsFinite(collider.normal)
+                        || !IsFinite(collider.halfExtents)
+                        || !std::isfinite(collider.bottom)
+                        || !std::isfinite(collider.top)
+                        || collider.halfExtents.x <= 0.0f
+                        || collider.halfExtents.y <= 0.0f
+                        || collider.top <= collider.bottom) {
+                    return;
+                }
+
+                colliders.push_back(SectorDynamicDoorCollider{
+                        door.placedObjectId,
+                        entity,
+                        collider.center,
+                        NormalizedOrFallback(collider.tangent, Vector2{1.0f, 0.0f}),
+                        NormalizedOrFallback(collider.normal, Vector2{0.0f, -1.0f}),
+                        collider.halfExtents,
+                        collider.bottom,
+                        collider.top});
+            });
+}
+
+SectorCollisionMoveResult ResolveSectorDoorDynamicCollidersForPlayerMovement(
+        const SectorCollisionMoveState& moveState,
+        const SectorCollisionMoveResult& staticResult,
+        const SectorCollisionMoveConfig& moveConfig,
+        const std::vector<SectorDynamicDoorCollider>& colliders)
+{
+    SectorCollisionMoveResult result = staticResult;
+    SectorCollisionMoveConfig config = moveConfig;
+    if (!std::isfinite(config.radius)) {
+        config.radius = 0.25f;
+    }
+    if (!std::isfinite(config.playerHeight)) {
+        config.playerHeight = 1.6f;
+    }
+    if (!std::isfinite(config.stepHeight)) {
+        config.stepHeight = 0.25f;
+    }
+    config.radius = std::clamp(config.radius, 0.001f, 64.0f);
+    config.playerHeight = std::clamp(config.playerHeight, 0.001f, 64.0f);
+    config.stepHeight = std::clamp(config.stepHeight, 0.0f, 64.0f);
+    config.maxIterations = std::clamp(config.maxIterations, 1, 16);
+
+    if (!IsFinite(result.positionXZ) || !IsFinite(moveState.positionXZ) || colliders.empty()) {
+        return result;
+    }
+
+    bool hitDynamicDoor = false;
+    for (const SectorDynamicDoorCollider& collider : colliders) {
+        if (!IsFinite(collider.center)
+                || !IsFinite(collider.tangent)
+                || !IsFinite(collider.normal)
+                || !IsFinite(collider.halfExtents)
+                || !std::isfinite(collider.bottom)
+                || !std::isfinite(collider.top)
+                || collider.halfExtents.x <= 0.0f
+                || collider.halfExtents.y <= 0.0f
+                || collider.top <= collider.bottom
+                || !PlayerVerticalIntervalOverlapsDoor(moveState, config, collider)) {
+            continue;
+        }
+
+        if (SegmentIntersectsExpandedDoorObb(
+                    moveState.positionXZ,
+                    staticResult.positionXZ,
+                    config.radius,
+                    collider)) {
+            result.positionXZ = moveState.positionXZ;
+            result.currentSectorId = moveState.currentSectorId;
+            result.hitWall = true;
+            hitDynamicDoor = true;
+            break;
+        }
+    }
+
+    for (int iteration = 0; iteration < config.maxIterations; ++iteration) {
+        bool changed = false;
+        for (const SectorDynamicDoorCollider& collider : colliders) {
+            if (!IsFinite(collider.center)
+                    || !IsFinite(collider.tangent)
+                    || !IsFinite(collider.normal)
+                    || !IsFinite(collider.halfExtents)
+                    || !std::isfinite(collider.bottom)
+                    || !std::isfinite(collider.top)
+                    || collider.halfExtents.x <= 0.0f
+                    || collider.halfExtents.y <= 0.0f
+                    || collider.top <= collider.bottom
+                    || !PlayerVerticalIntervalOverlapsDoor(moveState, config, collider)) {
+                continue;
+            }
+
+            if (ResolveCircleAgainstDoorObb(result.positionXZ, config.radius, collider)) {
+                if (staticResult.currentSectorId != moveState.currentSectorId) {
+                    ConstrainCircleToStartingSideOfDoorObb(
+                            result.positionXZ,
+                            moveState.positionXZ,
+                            config.radius,
+                            collider);
+                }
+                result.hitWall = true;
+                hitDynamicDoor = true;
+                changed = true;
+            }
+        }
+        if (!changed) {
+            break;
+        }
+    }
+
+    if (hitDynamicDoor && result.currentSectorId != moveState.currentSectorId) {
+        result.currentSectorId = moveState.currentSectorId;
+    }
+    return result;
 }
 
 void AdvanceSectorBillboardAnimatorSystem(engine::World& world, float dt)

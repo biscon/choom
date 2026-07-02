@@ -426,11 +426,28 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
     }
 
     if (state.mode == SectorEditorMode::Preview3D) {
-        UpdateSectorRuntimeObjects(context.world, assets, state.runtimeObjects, state.topologyMap, dt);
+        const Vector3 playerPosition = state.freeflyController.pose.position;
+        UpdateSectorRuntimeObjects(context.world, assets, state.runtimeObjects, state.topologyMap, dt, &playerPosition);
+        state.runtimeObjects.dynamicDoorColliders.clear();
+        CollectSectorDoorDynamicColliders(context.world, state.runtimeObjects.dynamicDoorColliders);
         preview.AdvanceRuntime(dt);
         if (state.texturePicker.open || state.spritePicker.open || HasDocumentModalOpen()) {
             return;
         }
+        input.ForEachEvent(
+                engine::InputEventType::KeyPressed,
+                true,
+                [this, &context](engine::InputEvent& event) {
+                    if (event.key.key != KEY_F) {
+                        return;
+                    }
+                    if (ToggleTargetedSectorDoorInteractionSystem(
+                                context.world,
+                                state.freeflyController.pose.position,
+                                PreviewForwardFromPose(state.freeflyController.pose))) {
+                        engine::ConsumeEvent(event);
+                    }
+                });
         UpdatePreview3D(input, assets, dt);
         return;
     }

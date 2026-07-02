@@ -248,6 +248,19 @@ void UpdateSectorEditorGameplayPreview(
                                     normalizedConfig.playerHeight,
                                     normalizedConfig.stepHeight,
                                     4});
+            moveResult = ResolveSectorDoorDynamicCollidersForPlayerMovement(
+                    SectorCollisionMoveState{
+                            feetXZ,
+                            state.fpsControllerState.feetPosition.y,
+                            state.fpsControllerState.currentSectorId,
+                            state.fpsControllerState.grounded},
+                    moveResult,
+                    SectorCollisionMoveConfig{
+                            normalizedConfig.playerRadius,
+                            normalizedConfig.playerHeight,
+                            normalizedConfig.stepHeight,
+                            4},
+                    state.runtimeObjects.dynamicDoorColliders);
             SectorCollisionHeights movedHeights;
             if (wasGrounded
                     && moveResult.currentSectorId != previousSectorId

@@ -20,6 +20,7 @@ using Json = nlohmann::ordered_json;
 
 constexpr float Pi = 3.14159265358979323846f;
 constexpr const char* RuntimeObjectKindBillboard = "billboard";
+constexpr const char* RuntimeObjectKindDoor = "door";
 
 [[noreturn]] void Fail(const std::string& message)
 {
@@ -160,6 +161,19 @@ bool ReadOptionalBool(const Json& object, const char* field, const std::string& 
     return it->get<bool>();
 }
 
+float ReadOptionalFloat(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        float defaultValue)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        return defaultValue;
+    }
+    return ReadFloat(object, field, context);
+}
+
 int ReadOptionalClampedInt(
         const Json& object,
         const char* field,
@@ -283,6 +297,8 @@ bool IsDefaultBillboardDirectionalClips(const SectorPlacedBillboard& billboard)
             && billboard.rightClip == "Right";
 }
 
+const char* WriteSectorDoorMotionType(SectorDoorMotionType motion);
+
 void ValidatePlacedBillboard(const SectorPlacedBillboard& billboard, const std::string& context)
 {
     if (!std::isfinite(billboard.sizeWorld.x)
@@ -301,6 +317,44 @@ void ValidatePlacedBillboard(const SectorPlacedBillboard& billboard, const std::
     }
 }
 
+void ValidatePlacedDoorForSerialization(const SectorPlacedDoor& door, const std::string& context)
+{
+    if (!IsValidSectorTopologyId(door.anchor.lineDefId)
+            || !IsValidSectorTopologyId(door.anchor.frontSectorId)
+            || !IsValidSectorTopologyId(door.anchor.backSectorId)
+            || !IsValidSectorTopologyId(door.anchor.frontSideDefId)
+            || !IsValidSectorTopologyId(door.anchor.backSideDefId)) {
+        Fail(context + ".anchor IDs must be positive integers");
+    }
+    if (!std::isfinite(door.width)
+            || !std::isfinite(door.height)
+            || !std::isfinite(door.thickness)
+            || !std::isfinite(door.normalOffset)
+            || !std::isfinite(door.openDistance)
+            || !std::isfinite(door.speed)
+            || !std::isfinite(door.initialOpenFraction)
+            || !std::isfinite(door.interactionDistance)
+            || !std::isfinite(door.autoOpenDistance)) {
+        Fail(context + " numeric values must be finite");
+    }
+    if (door.width < 0.0f || door.height < 0.0f || door.openDistance < 0.0f) {
+        Fail(context + ".width, .height, and .openDistance must be non-negative");
+    }
+    if (door.thickness <= 0.0f) {
+        Fail(context + ".thickness must be positive");
+    }
+    if (door.speed < 0.0f) {
+        Fail(context + ".speed must be non-negative");
+    }
+    if (door.initialOpenFraction < 0.0f || door.initialOpenFraction > 1.0f) {
+        Fail(context + ".initialOpenFraction must be between 0 and 1");
+    }
+    if (door.interactionDistance <= 0.0f || door.autoOpenDistance <= 0.0f) {
+        Fail(context + ".interactionDistance and .autoOpenDistance must be positive");
+    }
+    (void)WriteSectorDoorMotionType(door.motion);
+}
+
 float ReadOptionalPositiveFloat(
         const Json& object,
         const char* field,
@@ -316,6 +370,114 @@ float ReadOptionalPositiveFloat(
         Fail(context + "." + field + " must be positive");
     }
     return value;
+}
+
+SectorDoorMotionType ReadSectorDoorMotionType(const Json& object, const char* field, const std::string& context)
+{
+    const std::string value = ReadOptionalString(object, field, context, "slide_vertical");
+    if (value == "slide_vertical") {
+        return SectorDoorMotionType::SlideVertical;
+    }
+    if (value == "slide_left") {
+        return SectorDoorMotionType::SlideLeft;
+    }
+    if (value == "slide_right") {
+        return SectorDoorMotionType::SlideRight;
+    }
+    Fail(context + "." + field + " must be 'slide_vertical', 'slide_left', or 'slide_right'");
+}
+
+SectorCoord ReadCoordPairElement(const Json& value, size_t index, const std::string& context)
+{
+    if (index >= value.size()) {
+        Fail(context + " must be an array of two integers");
+    }
+    if (!value[index].is_number_integer() && !value[index].is_number_unsigned()) {
+        Fail(context + " values must be JSON integers");
+    }
+    if (value[index].is_number_unsigned()) {
+        const uint64_t number = value[index].get<uint64_t>();
+        if (number > static_cast<uint64_t>(std::numeric_limits<SectorCoord>::max())) {
+            Fail(context + " value is outside the SectorCoord range");
+        }
+        return static_cast<SectorCoord>(number);
+    }
+    const int64_t number = value[index].get<int64_t>();
+    if (number < std::numeric_limits<SectorCoord>::min()
+            || number > std::numeric_limits<SectorCoord>::max()) {
+        Fail(context + " value is outside the SectorCoord range");
+    }
+    return static_cast<SectorCoord>(number);
+}
+
+void ReadSectorCoordPair(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        SectorCoord& outX,
+        SectorCoord& outY)
+{
+    const Json& value = RequireArrayField(object, field, context);
+    if (value.size() != 2) {
+        Fail(context + "." + field + " must be an array of two integers");
+    }
+    const std::string pairContext = context + "." + field;
+    outX = ReadCoordPairElement(value, 0, pairContext);
+    outY = ReadCoordPairElement(value, 1, pairContext);
+}
+
+SectorDoorAnchor ReadSectorDoorAnchor(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorDoorAnchor anchor;
+    anchor.lineDefId = ReadInt(value, "lineDefId", context);
+    anchor.frontSectorId = ReadInt(value, "frontSectorId", context);
+    anchor.backSectorId = ReadInt(value, "backSectorId", context);
+    anchor.frontSideDefId = ReadInt(value, "frontSideDefId", context);
+    anchor.backSideDefId = ReadInt(value, "backSideDefId", context);
+    ReadSectorCoordPair(value, "endpointA", context, anchor.endpointAX, anchor.endpointAY);
+    ReadSectorCoordPair(value, "endpointB", context, anchor.endpointBX, anchor.endpointBY);
+    return anchor;
+}
+
+SectorPlacedDoor ReadPlacedDoor(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorPlacedDoor door;
+    door.anchor = ReadSectorDoorAnchor(RequireObjectField(value, "anchor", context),
+            context + ".anchor");
+    door.width = ReadOptionalFloat(value, "width", context, door.width);
+    door.height = ReadOptionalFloat(value, "height", context, door.height);
+    door.thickness = ReadOptionalFloat(value, "thickness", context, door.thickness);
+    door.normalOffset = ReadOptionalFloat(value, "normalOffset", context, door.normalOffset);
+    door.motion = ReadSectorDoorMotionType(value, "motion", context);
+    door.openDistance = ReadOptionalFloat(value, "openDistance", context, door.openDistance);
+    door.speed = ReadOptionalFloat(value, "speed", context, door.speed);
+    door.initialOpenFraction = ReadOptionalFloat(
+            value,
+            "initialOpenFraction",
+            context,
+            door.initialOpenFraction);
+    door.autoOpen = ReadOptionalBool(value, "autoOpen", context, door.autoOpen);
+    door.interactionDistance = ReadOptionalFloat(
+            value,
+            "interactionDistance",
+            context,
+            door.interactionDistance);
+    door.autoOpenDistance = ReadOptionalFloat(
+            value,
+            "autoOpenDistance",
+            context,
+            door.autoOpenDistance);
+    door.textureId = ReadOptionalString(value, "textureId", context, door.textureId);
+    ValidatePlacedDoorForSerialization(door, context);
+    return door;
 }
 
 SectorPlacedBillboard ReadPlacedBillboard(const Json& value, const std::string& context)
@@ -357,16 +519,20 @@ SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string
     }
     object.kind = ReadOptionalString(value, "kind", context, object.kind);
     if (!object.kind.empty()) {
-        if (object.kind != RuntimeObjectKindBillboard) {
-            Fail(context + ".kind must be 'billboard'");
+        if (object.kind == RuntimeObjectKindBillboard) {
+            object.billboard = ReadPlacedBillboard(RequireObjectField(value, "billboard", context),
+                    context + ".billboard");
+        } else if (object.kind == RuntimeObjectKindDoor) {
+            object.door = ReadPlacedDoor(RequireObjectField(value, "door", context),
+                    context + ".door");
+        } else {
+            Fail(context + ".kind must be 'billboard' or 'door'");
         }
-        object.billboard = ReadPlacedBillboard(RequireObjectField(value, "billboard", context),
-                context + ".billboard");
     } else {
         if (value.contains("definitionId")) {
             Fail(context + ".definitionId-only runtime objects are legacy unsupported data; use kind 'billboard'");
         }
-        Fail(context + ".kind must be 'billboard'");
+        Fail(context + ".kind must be 'billboard' or 'door'");
     }
     object.position = ReadVector3(RequireField(value, "position", context), context + ".position");
     object.yawRadians = DegreesToRadians(ReadFloat(value, "yawDegrees", context));
@@ -893,6 +1059,81 @@ Json WritePlacedBillboard(const SectorPlacedBillboard& billboard, const std::str
     return json;
 }
 
+const char* WriteSectorDoorMotionType(SectorDoorMotionType motion)
+{
+    switch (motion) {
+        case SectorDoorMotionType::SlideVertical:
+            return "slide_vertical";
+        case SectorDoorMotionType::SlideLeft:
+            return "slide_left";
+        case SectorDoorMotionType::SlideRight:
+            return "slide_right";
+    }
+    Fail("door motion has an invalid value");
+}
+
+Json WriteSectorCoordPair(SectorCoord x, SectorCoord y)
+{
+    return Json::array({x, y});
+}
+
+Json WriteSectorDoorAnchor(const SectorDoorAnchor& anchor)
+{
+    return Json{
+            {"lineDefId", anchor.lineDefId},
+            {"frontSectorId", anchor.frontSectorId},
+            {"backSectorId", anchor.backSectorId},
+            {"frontSideDefId", anchor.frontSideDefId},
+            {"backSideDefId", anchor.backSideDefId},
+            {"endpointA", WriteSectorCoordPair(anchor.endpointAX, anchor.endpointAY)},
+            {"endpointB", WriteSectorCoordPair(anchor.endpointBX, anchor.endpointBY)}
+    };
+}
+
+Json WritePlacedDoor(const SectorPlacedDoor& door)
+{
+    Json json{
+            {"anchor", WriteSectorDoorAnchor(door.anchor)}
+    };
+    if (door.width != 0.0f) {
+        json["width"] = door.width;
+    }
+    if (door.height != 0.0f) {
+        json["height"] = door.height;
+    }
+    if (door.thickness != 0.25f) {
+        json["thickness"] = door.thickness;
+    }
+    if (door.normalOffset != 0.0f) {
+        json["normalOffset"] = door.normalOffset;
+    }
+    if (door.motion != SectorDoorMotionType::SlideVertical) {
+        json["motion"] = WriteSectorDoorMotionType(door.motion);
+    }
+    if (door.openDistance != 0.0f) {
+        json["openDistance"] = door.openDistance;
+    }
+    if (door.speed != 1.5f) {
+        json["speed"] = door.speed;
+    }
+    if (door.initialOpenFraction != 0.0f) {
+        json["initialOpenFraction"] = door.initialOpenFraction;
+    }
+    if (door.autoOpen) {
+        json["autoOpen"] = true;
+    }
+    if (door.interactionDistance != 1.5f) {
+        json["interactionDistance"] = door.interactionDistance;
+    }
+    if (door.autoOpenDistance != 2.0f) {
+        json["autoOpenDistance"] = door.autoOpenDistance;
+    }
+    if (!door.textureId.empty()) {
+        json["textureId"] = door.textureId;
+    }
+    return json;
+}
+
 Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::string& context)
 {
     if (!IsValidSectorTopologyId(object.id)) {
@@ -906,13 +1147,17 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             {"id", object.id}
     };
     if (object.kind.empty()) {
-        Fail(context + ".kind must be 'billboard'");
+        Fail(context + ".kind must be 'billboard' or 'door'");
     } else {
-        if (object.kind != RuntimeObjectKindBillboard) {
-            Fail(context + ".kind must be 'billboard'");
+        if (object.kind == RuntimeObjectKindBillboard) {
+            json["kind"] = object.kind;
+            json["billboard"] = WritePlacedBillboard(object.billboard, context + ".billboard");
+        } else if (object.kind == RuntimeObjectKindDoor) {
+            json["kind"] = object.kind;
+            json["door"] = WritePlacedDoor(object.door);
+        } else {
+            Fail(context + ".kind must be 'billboard' or 'door'");
         }
-        json["kind"] = object.kind;
-        json["billboard"] = WritePlacedBillboard(object.billboard, context + ".billboard");
     }
     json["position"] = WriteVector3(object.position, context + ".position");
     json["yawDegrees"] = yawDegrees;
@@ -1309,12 +1554,15 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
             Fail(objectContext + ".id must be a positive integer");
         }
         if (object.kind.empty()) {
-            Fail(objectContext + ".kind must be 'billboard'");
+            Fail(objectContext + ".kind must be 'billboard' or 'door'");
         } else {
-            if (object.kind != RuntimeObjectKindBillboard) {
-                Fail(objectContext + ".kind must be 'billboard'");
+            if (object.kind == RuntimeObjectKindBillboard) {
+                ValidatePlacedBillboard(object.billboard, objectContext + ".billboard");
+            } else if (object.kind == RuntimeObjectKindDoor) {
+                ValidatePlacedDoorForSerialization(object.door, objectContext + ".door");
+            } else {
+                Fail(objectContext + ".kind must be 'billboard' or 'door'");
             }
-            ValidatePlacedBillboard(object.billboard, objectContext + ".billboard");
         }
         if (!std::isfinite(object.position.x)
                 || !std::isfinite(object.position.y)

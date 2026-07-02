@@ -6,6 +6,7 @@
 #include "engine/components/SpriteAnimator.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorLightmapTypes.h"
+#include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
 
@@ -16,22 +17,44 @@
 namespace game {
 
 struct SectorBakedObjectLightProbeRuntimeData;
-struct SectorTopologyMap;
-
 constexpr size_t kSectorRuntimeObjectInitialCapacity = 128;
 constexpr float kSectorBillboardDefaultAlphaCutoff = 0.5f;
+constexpr float kSectorDoorPortalBlockEpsilon = 0.001f;
+constexpr float kSectorDoorAutoOpenFallbackDistance = 2.0f;
 
 struct SectorPlacedRuntimeObjectEntity {
     int placedObjectId = 0;
     engine::Entity entity = engine::NullEntity();
 };
 
+struct SectorDoorAnchorDiagnostic {
+    int placedObjectId = 0;
+    int lineDefId = 0;
+    std::string message;
+};
+
+struct SectorDynamicDoorCollider {
+    int placedObjectId = 0;
+    engine::Entity entity = engine::NullEntity();
+    Vector2 center = {};
+    Vector2 tangent = {1.0f, 0.0f};
+    Vector2 normal = {0.0f, -1.0f};
+    Vector2 halfExtents = {};
+    float bottom = 0.0f;
+    float top = 0.0f;
+};
+
 struct SectorRuntimeObjectState {
     engine::AssetScopeHandle runtimeObjectAssetScope = engine::NullAssetScopeHandle();
     std::vector<SectorPlacedRuntimeObjectEntity> placedObjectEntities;
+    std::vector<SectorDoorAnchorDiagnostic> doorAnchorDiagnostics;
+    std::vector<SectorDynamicDoorCollider> dynamicDoorColliders;
     size_t placedObjectCount = 0;
     size_t spawnedObjectCount = 0;
     size_t skippedObjectCount = 0;
+    size_t doorObjectCount = 0;
+    size_t validDoorAnchorCount = 0;
+    size_t invalidDoorAnchorCount = 0;
     size_t spriteAnimationRequestedCount = 0;
     size_t spriteAnimationReadyCount = 0;
     size_t spriteAnimationPendingCount = 0;
@@ -112,6 +135,71 @@ struct SectorBillboardSingleClip {
     uint32_t clip = engine::InvalidSpriteClipIndex;
     bool resolved = false;
     bool usedFallback = false;
+};
+
+struct SectorDoor {
+    int placedObjectId = 0;
+    bool enabled = true;
+};
+
+struct SectorDoorResolvedAnchor {
+    int lineDefId = 0;
+    int frontSectorId = 0;
+    int backSectorId = 0;
+    int frontSideDefId = 0;
+    int backSideDefId = 0;
+    Vector2 endpointA = {};
+    Vector2 endpointB = {};
+    Vector2 midpoint = {};
+    Vector2 tangent = {1.0f, 0.0f};
+    Vector2 normal = {0.0f, -1.0f};
+    float openBottom = 0.0f;
+    float openTop = 0.0f;
+    float portalWidth = 0.0f;
+    float portalHeight = 0.0f;
+};
+
+struct SectorDoorMotion {
+    SectorDoorMotionType motion = SectorDoorMotionType::SlideVertical;
+    float openFraction = 0.0f;
+    float targetOpenFraction = 0.0f;
+    float openDistance = 0.0f;
+    float speed = 1.5f;
+};
+
+struct SectorDoorInteraction {
+    bool autoOpen = false;
+    float interactionDistance = 1.5f;
+    float autoOpenDistance = kSectorDoorAutoOpenFallbackDistance;
+};
+
+struct SectorDoorRender {
+    float width = 0.0f;
+    float height = 0.0f;
+    float thickness = 0.25f;
+    float normalOffset = 0.0f;
+    std::string textureId;
+    Color tint = WHITE;
+    bool visible = true;
+};
+
+struct SectorDoorCollider {
+    Vector2 center = {};
+    Vector2 tangent = {1.0f, 0.0f};
+    Vector2 normal = {0.0f, -1.0f};
+    Vector2 halfExtents = {};
+    float bottom = 0.0f;
+    float top = 0.0f;
+    bool enabled = true;
+};
+
+struct SectorDoorPortalBlocker {
+    int lineDefId = 0;
+    int frontSectorId = 0;
+    int backSectorId = 0;
+    int frontSideDefId = 0;
+    int backSideDefId = 0;
+    bool blocksPortal = true;
 };
 
 struct SectorBillboardFrameUvs {
@@ -207,7 +295,8 @@ void UpdateSectorRuntimeObjects(
         engine::AssetManager& assets,
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map,
-        float dt);
+        float dt,
+        const Vector3* playerPosition = nullptr);
 
 bool ResolveSectorBillboardDirectionalClipsFromAsset(
         const engine::SpriteAnimationAsset& asset,
@@ -244,6 +333,29 @@ void UpdateSectorObjectBakedLightingSystem(
         engine::World& world,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         const SectorTopologyMap* mapForFallback);
+
+void UpdateSectorDoorAutoOpenSystem(
+        engine::World& world,
+        const Vector3& playerPosition);
+
+bool ToggleTargetedSectorDoorInteractionSystem(
+        engine::World& world,
+        const Vector3& playerPosition,
+        const Vector3& playerForward);
+
+void AdvanceSectorDoorMotionSystem(engine::World& world, float dt);
+
+void UpdateSectorDoorDerivedStateSystem(engine::World& world);
+
+void CollectSectorDoorDynamicColliders(
+        engine::World& world,
+        std::vector<SectorDynamicDoorCollider>& colliders);
+
+SectorCollisionMoveResult ResolveSectorDoorDynamicCollidersForPlayerMovement(
+        const SectorCollisionMoveState& moveState,
+        const SectorCollisionMoveResult& staticResult,
+        const SectorCollisionMoveConfig& config,
+        const std::vector<SectorDynamicDoorCollider>& colliders);
 
 void AdvanceSectorBillboardAnimatorSystem(engine::World& world, float dt);
 

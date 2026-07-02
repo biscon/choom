@@ -162,6 +162,35 @@ SectorPlacedRuntimeObject MakeBillboardRuntimeObject(
     return object;
 }
 
+SectorPlacedRuntimeObject MakeDoorRuntimeObject(int id)
+{
+    SectorPlacedRuntimeObject object;
+    object.id = id;
+    object.kind = "door";
+    object.door.anchor.lineDefId = 2;
+    object.door.anchor.frontSectorId = 1;
+    object.door.anchor.backSectorId = 2;
+    object.door.anchor.frontSideDefId = 2;
+    object.door.anchor.backSideDefId = 8;
+    object.door.anchor.endpointAX = 64;
+    object.door.anchor.endpointAY = 0;
+    object.door.anchor.endpointBX = 64;
+    object.door.anchor.endpointBY = 64;
+    object.door.width = 4.0f;
+    object.door.height = 2.5f;
+    object.door.thickness = 0.375f;
+    object.door.normalOffset = 0.125f;
+    object.door.motion = game::SectorDoorMotionType::SlideRight;
+    object.door.openDistance = 3.0f;
+    object.door.speed = 2.25f;
+    object.door.initialOpenFraction = 0.5f;
+    object.door.autoOpen = true;
+    object.door.interactionDistance = 1.75f;
+    object.door.autoOpenDistance = 2.5f;
+    object.door.textureId = "industrial_door";
+    return object;
+}
+
 SectorTopologyMap MakeAdjacentSquares()
 {
     SectorTopologyMap map;
@@ -1097,6 +1126,214 @@ void TestRuntimeObjectsRoundTripAndValidation()
     invalidBillboard = billboardSaved;
     invalidBillboard["runtimeObjects"][0].erase("billboard");
     ExpectRejected(invalidBillboard, "missing billboard payload is rejected");
+
+    SectorTopologyMap doorMap = MakeSquare();
+    doorMap.runtimeObjects.push_back(MakeDoorRuntimeObject(30));
+    const Json doorSaved = Json::parse(SaveText(doorMap));
+    Check(doorSaved["runtimeObjects"][0]["kind"].get<std::string>() == "door"
+                  && doorSaved["runtimeObjects"][0]["door"].is_object()
+                  && !doorSaved["runtimeObjects"][0].contains("billboard"),
+          "door runtime object writes kind and nested door payload");
+    const Json& savedDoor = doorSaved["runtimeObjects"][0]["door"];
+    Check(savedDoor["anchor"]["lineDefId"].get<int>() == 2
+                  && savedDoor["anchor"]["frontSectorId"].get<int>() == 1
+                  && savedDoor["anchor"]["backSectorId"].get<int>() == 2
+                  && savedDoor["anchor"]["frontSideDefId"].get<int>() == 2
+                  && savedDoor["anchor"]["backSideDefId"].get<int>() == 8
+                  && savedDoor["anchor"]["endpointA"][0].get<int>() == 64
+                  && savedDoor["anchor"]["endpointA"][1].get<int>() == 0
+                  && savedDoor["anchor"]["endpointB"][0].get<int>() == 64
+                  && savedDoor["anchor"]["endpointB"][1].get<int>() == 64,
+          "door anchor writes IDs and exact topology endpoints");
+    Check(Near(savedDoor["width"].get<float>(), 4.0f)
+                  && Near(savedDoor["height"].get<float>(), 2.5f)
+                  && Near(savedDoor["thickness"].get<float>(), 0.375f)
+                  && Near(savedDoor["normalOffset"].get<float>(), 0.125f)
+                  && savedDoor["motion"].get<std::string>() == "slide_right"
+                  && Near(savedDoor["openDistance"].get<float>(), 3.0f)
+                  && Near(savedDoor["speed"].get<float>(), 2.25f)
+                  && Near(savedDoor["initialOpenFraction"].get<float>(), 0.5f)
+                  && savedDoor["autoOpen"].get<bool>()
+                  && Near(savedDoor["interactionDistance"].get<float>(), 1.75f)
+                  && Near(savedDoor["autoOpenDistance"].get<float>(), 2.5f)
+                  && savedDoor["textureId"].get<std::string>() == "industrial_door",
+          "door payload writes dimensions motion interaction fields and texture ID");
+
+    SectorTopologyMap doorLoaded;
+    Check(LoadText(doorSaved.dump(), doorLoaded, error), "door runtime object JSON loads");
+    const SectorPlacedRuntimeObject* loadedDoor =
+            game::FindSectorPlacedRuntimeObject(doorLoaded, 30);
+    Check(loadedDoor != nullptr
+                  && loadedDoor->kind == "door"
+                  && loadedDoor->door.anchor.lineDefId == 2
+                  && loadedDoor->door.anchor.frontSectorId == 1
+                  && loadedDoor->door.anchor.backSectorId == 2
+                  && loadedDoor->door.anchor.frontSideDefId == 2
+                  && loadedDoor->door.anchor.backSideDefId == 8
+                  && loadedDoor->door.anchor.endpointAX == 64
+                  && loadedDoor->door.anchor.endpointAY == 0
+                  && loadedDoor->door.anchor.endpointBX == 64
+                  && loadedDoor->door.anchor.endpointBY == 64
+                  && Near(loadedDoor->door.width, 4.0f)
+                  && Near(loadedDoor->door.height, 2.5f)
+                  && Near(loadedDoor->door.thickness, 0.375f)
+                  && Near(loadedDoor->door.normalOffset, 0.125f)
+                  && loadedDoor->door.motion == game::SectorDoorMotionType::SlideRight
+                  && Near(loadedDoor->door.openDistance, 3.0f)
+                  && Near(loadedDoor->door.speed, 2.25f)
+                  && Near(loadedDoor->door.initialOpenFraction, 0.5f)
+                  && loadedDoor->door.autoOpen
+                  && Near(loadedDoor->door.interactionDistance, 1.75f)
+                  && Near(loadedDoor->door.autoOpenDistance, 2.5f)
+                  && loadedDoor->door.textureId == "industrial_door",
+          "door payload round-trips authored fields");
+
+    SectorTopologyMap defaultDoorMap = MakeSquare();
+    SectorPlacedRuntimeObject defaultDoor = MakeDoorRuntimeObject(31);
+    defaultDoor.door.width = 0.0f;
+    defaultDoor.door.height = 0.0f;
+    defaultDoor.door.thickness = 0.25f;
+    defaultDoor.door.normalOffset = 0.0f;
+    defaultDoor.door.motion = game::SectorDoorMotionType::SlideVertical;
+    defaultDoor.door.openDistance = 0.0f;
+    defaultDoor.door.speed = 1.5f;
+    defaultDoor.door.initialOpenFraction = 0.0f;
+    defaultDoor.door.autoOpen = false;
+    defaultDoor.door.interactionDistance = 1.5f;
+    defaultDoor.door.autoOpenDistance = 2.0f;
+    defaultDoor.door.textureId.clear();
+    defaultDoorMap.runtimeObjects.push_back(defaultDoor);
+    const Json defaultDoorSaved = Json::parse(SaveText(defaultDoorMap));
+    const Json& savedDefaultDoor = defaultDoorSaved["runtimeObjects"][0]["door"];
+    Check(!savedDefaultDoor.contains("width")
+                  && !savedDefaultDoor.contains("height")
+                  && !savedDefaultDoor.contains("thickness")
+                  && !savedDefaultDoor.contains("normalOffset")
+                  && !savedDefaultDoor.contains("motion")
+                  && !savedDefaultDoor.contains("openDistance")
+                  && !savedDefaultDoor.contains("speed")
+                  && !savedDefaultDoor.contains("initialOpenFraction")
+                  && !savedDefaultDoor.contains("autoOpen")
+                  && !savedDefaultDoor.contains("interactionDistance")
+                  && !savedDefaultDoor.contains("autoOpenDistance")
+                  && !savedDefaultDoor.contains("textureId"),
+          "default door payload fields are omitted");
+
+    SectorTopologyMap defaultDoorLoaded;
+    Check(LoadText(defaultDoorSaved.dump(), defaultDoorLoaded, error),
+          "default door payload JSON loads");
+    const SectorPlacedRuntimeObject* loadedDefaultDoor =
+            game::FindSectorPlacedRuntimeObject(defaultDoorLoaded, 31);
+    Check(loadedDefaultDoor != nullptr
+                  && loadedDefaultDoor->kind == "door"
+                  && Near(loadedDefaultDoor->door.width, 0.0f)
+                  && Near(loadedDefaultDoor->door.height, 0.0f)
+                  && Near(loadedDefaultDoor->door.thickness, 0.25f)
+                  && Near(loadedDefaultDoor->door.normalOffset, 0.0f)
+                  && loadedDefaultDoor->door.motion == game::SectorDoorMotionType::SlideVertical
+                  && Near(loadedDefaultDoor->door.openDistance, 0.0f)
+                  && Near(loadedDefaultDoor->door.speed, 1.5f)
+                  && Near(loadedDefaultDoor->door.initialOpenFraction, 0.0f)
+                  && !loadedDefaultDoor->door.autoOpen
+                  && Near(loadedDefaultDoor->door.interactionDistance, 1.5f)
+                  && Near(loadedDefaultDoor->door.autoOpenDistance, 2.0f)
+                  && loadedDefaultDoor->door.textureId.empty(),
+          "default door payload restores default fields");
+
+    SectorTopologyMap mixedMap = MakeSquare();
+    mixedMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
+            32,
+            "assets/sprites/torch/torch.json",
+            Vector3{1.0f, 0.0f, 2.0f},
+            0.0f));
+    mixedMap.runtimeObjects.push_back(MakeDoorRuntimeObject(33));
+    const Json mixedSaved = Json::parse(SaveText(mixedMap));
+    SectorTopologyMap mixedLoaded;
+    Check(LoadText(mixedSaved.dump(), mixedLoaded, error),
+          "mixed billboard and door runtime object JSON loads");
+    Check(mixedLoaded.runtimeObjects.size() == 2
+                  && game::FindSectorPlacedRuntimeObject(mixedLoaded, 32) != nullptr
+                  && game::FindSectorPlacedRuntimeObject(mixedLoaded, 33) != nullptr
+                  && game::FindSectorPlacedRuntimeObject(mixedLoaded, 32)->kind == "billboard"
+                  && game::FindSectorPlacedRuntimeObject(mixedLoaded, 33)->kind == "door",
+          "mixed billboard and door runtime objects round-trip");
+
+    game::SectorAuthoringDocument doorDocument = MakeAuthoringDocumentFromMap(doorMap);
+    const Json doorAuthoringSaved = Json::parse(SaveAuthoringText(doorDocument));
+    Check(doorAuthoringSaved["runtimeObjects"][0]["kind"].get<std::string>() == "door",
+          "graph-native save writes door runtime objects");
+    game::SectorAuthoringDocument doorAuthoringLoaded;
+    Check(LoadAuthoringText(doorAuthoringSaved.dump(), doorAuthoringLoaded, error),
+          "graph-native door runtime object JSON loads");
+    Check(doorAuthoringLoaded.mapData.runtimeObjects.size() == 1
+                  && doorAuthoringLoaded.mapData.runtimeObjects[0].kind == "door"
+                  && doorAuthoringLoaded.derivation.topology.runtimeObjects.size() == 1
+                  && doorAuthoringLoaded.derivation.topology.runtimeObjects[0].kind == "door",
+          "graph-native door runtime object survives load and derivation copy");
+
+    Json invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["motion"] = "spin";
+    ExpectRejected(invalidDoor, "unknown door motion is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["anchor"]["lineDefId"] = 0;
+    ExpectRejected(invalidDoor, "non-positive door anchor linedef ID is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["anchor"]["frontSectorId"] = -1;
+    ExpectRejected(invalidDoor, "non-positive door anchor sector ID is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["anchor"]["frontSideDefId"] = 0;
+    ExpectRejected(invalidDoor, "non-positive door anchor sidedef ID is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["anchor"]["endpointA"] = Json::array({64.0f, 0});
+    ExpectRejected(invalidDoor, "floating door anchor endpoint coordinate is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["anchor"]["endpointB"] = Json::array({64});
+    ExpectRejected(invalidDoor, "wrong-size door anchor endpoint is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["width"] = -0.01f;
+    ExpectRejected(invalidDoor, "negative door width is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["height"] = -0.01f;
+    ExpectRejected(invalidDoor, "negative door height is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["thickness"] = 0.0f;
+    ExpectRejected(invalidDoor, "non-positive door thickness is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["openDistance"] = -0.01f;
+    ExpectRejected(invalidDoor, "negative door open distance is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["speed"] = -0.01f;
+    ExpectRejected(invalidDoor, "negative door speed is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["initialOpenFraction"] = 1.01f;
+    ExpectRejected(invalidDoor, "out-of-range door initial open fraction is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["interactionDistance"] = 0.0f;
+    ExpectRejected(invalidDoor, "non-positive door interaction distance is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["autoOpenDistance"] = 0.0f;
+    ExpectRejected(invalidDoor, "non-positive door auto-open distance is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["textureId"] = 7;
+    ExpectRejected(invalidDoor, "wrong-type door texture ID is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0].erase("door");
+    ExpectRejected(invalidDoor, "missing door payload is rejected");
 }
 
 void TestRuntimeObjectEditAndDeleteHelpers()

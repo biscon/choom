@@ -93,6 +93,7 @@ private:
     void UnloadSkyCylinderMesh();
     void DrawSkyCylinder(const Texture2D& texture);
     void DrawRuntimeBillboards(engine::AssetManager& assets, engine::World& runtimeObjectWorld);
+    void DrawRuntimeDoors(engine::AssetManager& assets, engine::World& runtimeObjectWorld);
     bool EnsureDynamicSpotLightShadowMapResources();
     void UnloadDynamicSpotLightShadowMapResources();
 
@@ -194,6 +195,9 @@ private:
     size_t billboardConsideredCount = 0;
     size_t billboardDrawnCount = 0;
     size_t billboardSkippedCount = 0;
+    size_t doorConsideredCount = 0;
+    size_t doorDrawnCount = 0;
+    size_t doorSkippedCount = 0;
     Material bloomSourceMaterial = {};
     Texture2D bloomDefaultMaterialTexture = {};
     bool bloomSourceMaterialLoaded = false;
