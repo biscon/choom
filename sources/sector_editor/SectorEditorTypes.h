@@ -240,6 +240,40 @@ struct AddMapTextureState {
     SectorTextureFilter previewFilter = SectorTextureFilter::Anisotropic8x;
 };
 
+struct SectorSpriteMetadata {
+    std::string spriteAnimationPath;
+    std::string atlasImagePath;
+    std::vector<std::string> clipNames;
+};
+
+enum class BillboardSpritePickerTarget {
+    None,
+    SingleClip,
+    FrontClip,
+    BackClip,
+    LeftClip,
+    RightClip
+};
+
+struct SpritePickerState {
+    bool open = false;
+    bool scanned = false;
+    std::string scanMessage;
+    engine::UIScrollState spriteScroll;
+    engine::UIScrollState clipScroll;
+    std::vector<SectorSpriteMetadata> sprites;
+    std::vector<const char*> spriteOptionLabels;
+    std::vector<const char*> clipOptionLabels;
+    int selectedSpriteIndex = -1;
+    int selectedClipIndex = -1;
+    BillboardSpritePickerTarget billboardTarget = BillboardSpritePickerTarget::None;
+    std::string requestedSpriteAnimationPath;
+    std::string requestedClipName;
+    engine::AssetScopeHandle previewScope = engine::NullAssetScopeHandle();
+    engine::TextureHandle previewTexture = engine::NullTextureHandle();
+    std::string previewAtlasPath;
+};
+
 struct SaveLevelModalState {
     bool open = false;
     char nameBuffer[96] = {};
@@ -601,6 +635,7 @@ struct SectorEditorState {
     std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;
     TexturePickerState texturePicker;
     AddMapTextureState addMapTexture;
+    SpritePickerState spritePicker;
     SaveLevelModalState saveLevelModal;
     LoadLevelModalState loadLevelModal;
     ConfirmationModalState confirmationModal;
@@ -645,6 +680,10 @@ struct SectorEditorUiState {
     engine::UIFloatInputState runtimeObjectYInput;
     engine::UIFloatInputState runtimeObjectZInput;
     engine::UIFloatInputState runtimeObjectYawInput;
+    engine::UIFloatInputState runtimeObjectWidthInput;
+    engine::UIFloatInputState runtimeObjectHeightInput;
+    engine::UIFloatInputState runtimeObjectOriginXInput;
+    engine::UIFloatInputState runtimeObjectOriginYInput;
     engine::UIFloatInputState surface3DUvScaleUInput;
     engine::UIFloatInputState surface3DUvScaleVInput;
     engine::UIFloatInputState surface3DUvOffsetUInput;

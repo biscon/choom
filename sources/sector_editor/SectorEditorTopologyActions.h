@@ -37,6 +37,12 @@ struct SectorEditorAddDynamicSpotLightResult {
     std::string status;
 };
 
+struct SectorEditorAddBillboardResult {
+    bool changed = false;
+    int objectId = -1;
+    std::string status;
+};
+
 SectorEditorAddStaticLightResult AddStaticLightToSector(
         SectorTopologyMap& map,
         int sectorId,
@@ -72,6 +78,11 @@ SectorEditorAddDynamicSpotLightResult AddDynamicSpotLightToSector(
 SectorEditorTopologyActionResult DeleteDynamicSpotLight(
         SectorTopologyMap& map,
         int lightId);
+
+SectorEditorAddBillboardResult AddBillboardToSector(
+        SectorTopologyMap& map,
+        int sectorId,
+        Vector2 mapPoint);
 
 SectorEditorTopologyActionResult FinishMoveStaticLight(
         SectorTopologyMap& map,

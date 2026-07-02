@@ -911,6 +911,39 @@ void TestRuntimeObjectsRoundTripAndValidation()
     Check(game::AllocateSectorPlacedRuntimeObjectId(loaded) == 13,
           "runtime object allocator returns next stable ID");
 
+    SectorTopologyMap placeholderMap = MakeSquare();
+    placeholderMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
+            14,
+            "",
+            Vector3{1.0f, 0.0f, 1.0f},
+            0.0f));
+    const Json placeholderSaved = Json::parse(SaveText(placeholderMap));
+    Check(placeholderSaved["runtimeObjects"][0]["billboard"]["spriteAnimationPath"]
+                  .get<std::string>().empty(),
+          "empty billboard sprite path placeholder is serialized");
+    SectorTopologyMap placeholderLoaded;
+    Check(LoadText(placeholderSaved.dump(), placeholderLoaded, error),
+          "empty billboard sprite path placeholder loads");
+    const SectorPlacedRuntimeObject* placeholder =
+            game::FindSectorPlacedRuntimeObject(placeholderLoaded, 14);
+    Check(placeholder != nullptr
+                  && placeholder->kind == "billboard"
+                  && placeholder->billboard.spriteAnimationPath.empty(),
+          "empty billboard sprite path placeholder round-trips");
+
+    const game::SectorAuthoringDocument placeholderDocument =
+            MakeAuthoringDocumentFromMap(placeholderMap);
+    const Json placeholderAuthoringSaved = Json::parse(SaveAuthoringText(placeholderDocument));
+    Check(placeholderAuthoringSaved["runtimeObjects"][0]["billboard"]["spriteAnimationPath"]
+                  .get<std::string>().empty(),
+          "graph-native save writes empty billboard sprite path placeholder");
+    game::SectorAuthoringDocument placeholderAuthoringLoaded;
+    Check(LoadAuthoringText(placeholderAuthoringSaved.dump(), placeholderAuthoringLoaded, error),
+          "graph-native empty billboard sprite path placeholder loads");
+    Check(placeholderAuthoringLoaded.mapData.runtimeObjects.size() == 1
+                  && placeholderAuthoringLoaded.mapData.runtimeObjects[0].billboard.spriteAnimationPath.empty(),
+          "graph-native empty billboard sprite path placeholder survives load");
+
     SectorTopologyMap authoringSource = original;
     game::SectorAuthoringDocument document = MakeAuthoringDocumentFromMap(authoringSource);
     const Json graphSaved = Json::parse(SaveAuthoringText(document));
@@ -1049,10 +1082,6 @@ void TestRuntimeObjectsRoundTripAndValidation()
           "directional billboard payload round-trips");
 
     Json invalidBillboard = billboardSaved;
-    invalidBillboard["runtimeObjects"][0]["billboard"]["spriteAnimationPath"] = "";
-    ExpectRejected(invalidBillboard, "empty billboard sprite path is rejected");
-
-    invalidBillboard = billboardSaved;
     invalidBillboard["runtimeObjects"][0]["billboard"]["width"] = 0.0f;
     ExpectRejected(invalidBillboard, "non-positive billboard width is rejected");
 

@@ -82,6 +82,7 @@ views and maps to world Z for generated 3D geometry.
 - `Reload`: confirm and reload the current saved level.
 - `Add Map Texture`: add or update a texture entry from a PNG under
   `assets/images`.
+- Billboard tool: place a generic authored billboard marker inside a sector.
 - `Bake Lightmaps`: bake topology static lights into the level lightmap atlas.
 - `3D Mode`: rebuild the 3D preview from the current in-memory topology map.
 
@@ -602,35 +603,53 @@ visible and is not darkened by runtime shadow maps. Dynamic point lights and
 dynamic spotlights without a shadow slot remain unshadowed. Billboards still do
 not cast dynamic shadows.
 
-Runtime object authoring is persistent v1 level data. The `Object` 2D tool
-places the current built-in `goblin` object definition inside a sector, saves it
-as a placed runtime object with a stable positive ID, position, definition ID,
-and yaw, and draws a 2D marker with a yaw tick. Selecting an object exposes a
-basic inspector for Object ID, Definition ID, Position X/Y/Z, Yaw, and Delete.
-Moving, editing, or deleting an object mutates the authored placed-object list,
+Runtime object authoring is persistent v1 level data. The `Billboard` 2D tool
+places a generic authored `kind: "billboard"` object inside a sector, saves it
+with a stable positive ID, position, yaw, and nested billboard payload, and draws
+a 2D marker with a yaw tick. New billboards default to a bottom-center normalized
+origin `{0.5, 1.0}`, width and height of `1.0` world unit, keep-aspect enabled,
+playing enabled, non-directional mode, and an empty sprite path until a sprite is
+chosen.
+
+Selecting a billboard exposes Object ID, sprite/type status, Position X/Y/Z,
+Yaw, Width, Height, Keep aspect ratio, Origin X/Y, Directional, Playing, sprite
+and clip selection, and Delete. Width and height are runtime world units, not
+sector authoring height units. With keep-aspect enabled, committed width edits
+update height from the selected sprite's aspect ratio, and committed height edits
+update width. If sprite metadata is not ready, the edited dimension is kept and
+the paired dimension is left unchanged. With keep-aspect disabled, width and
+height edit independently. Origin X/Y are normalized and clamped to `0..1`.
+
+The sprite picker scans `assets/sprites` recursively for Aseprite JSON files,
+uses each file's `meta.image` atlas for preview through `AssetManager`, and
+offers discovered clip names. Single billboards store one selected clip.
+Directional billboards store Front, Back, Left, and Right clip names and choose
+among them at render time from camera-relative facing. Missing or unloaded
+assets and missing clips are skipped or fall back safely instead of crashing.
+Aseprite frame durations, reverse playback, and pingpong playback are respected
+by the existing billboard runtime path where supported by the sprite animation
+asset parser.
+
+Editing, moving, selecting a sprite, changing clips, toggling directional or
+playing state, or deleting a billboard mutates the authored placed-object list,
 marks the topology document edited, invalidates the 2D topology render cache,
 and refreshes the spawned ECS object when a preview runtime is available.
+Runtime ECS entities are spawned from placed billboards into
+`EngineContext::world` during explicit map load/reset or preview refresh. The
+runtime object asset scope, object probe data, object sector lookup data, and
+placed-ID-to-entity mapping live in higher-level runtime object state, not in
+`SectorMeshPreview`. Runtime cleanup destroys entities identified by the
+`SectorObject` component and leaves unrelated ECS entities alone.
 
-Object definitions are reusable content descriptions. The current v1 registry
-contains the `goblin` billboard definition, which points at the Aseprite sprite
-animation asset and stores world size, origin, and named directional clips
-`Front`, `Back`, `Left`, and `Right`. Placed objects are authored level data.
-Runtime ECS entities are spawned from placed objects into `EngineContext::world`
-during explicit map load/reset or preview refresh. The runtime object asset
-scope, object probe data, object sector lookup data, and placed-ID-to-entity
-mapping live in higher-level runtime object state, not in `SectorMeshPreview`.
-Runtime cleanup destroys entities identified by the `SectorObject` component
-and leaves unrelated ECS entities alone.
-
-Runtime object spawning requests the goblin Aseprite animation through
-`AssetManager::RequestSpriteAnimation()` with point-filtered texture loading
-from the runtime object asset scope. The scope unloads only on explicit runtime
-object reset, new/load level reset, editor/demo shutdown, or equivalent
-high-level lifecycle, not on preview renderer resource rebuild. The old F5
-temporary non-serialized goblin spawn path has been removed; placed objects are
-the runtime-object authoring path. NPC AI/state machines, actor
-collision/physics, doors, object scripting, object asset browsing, attached
-lights, and 3D model rendering are still deferred.
+`goblin` is no longer a special editor object type or hardcoded runtime object
+definition. The checked-in goblin sprite files, if present, are ordinary sprite
+assets that can be selected like any other Aseprite billboard asset. Legacy
+external maps containing only `definitionId: "goblin"` are not migrated into
+functional generic billboards by the editor. The old F5 temporary
+non-serialized spawn path has been removed; placed billboards are the runtime
+object authoring path. NPC AI/state machines, actor collision/physics, doors,
+object scripting, attached lights, 3D model rendering, and transparent
+alpha-blended sprites are still deferred.
 
 ## Baked Lightmaps
 

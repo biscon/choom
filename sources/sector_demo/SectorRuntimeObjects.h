@@ -39,6 +39,9 @@ struct SectorRuntimeObjectState {
     size_t directionalClipResolvedCount = 0;
     size_t directionalClipMissingCount = 0;
     size_t directionalClipFallbackCount = 0;
+    size_t singleClipResolvedCount = 0;
+    size_t singleClipMissingCount = 0;
+    size_t singleClipFallbackCount = 0;
     std::string placedObjectStatus;
     std::string placedObjectWarning;
     SectorBakedObjectLightProbeRuntimeData objectLightProbes;
@@ -91,22 +94,6 @@ struct SectorBillboardDirectionalClipNames {
     const char* right = "Right";
 };
 
-struct SectorRuntimeObjectBillboardDefinition {
-    std::string spriteAnimationAssetPath;
-    Vector2 sizeWorld = {1.0f, 1.0f};
-    Vector2 originNormalized = {0.5f, 1.0f};
-    std::string frontClipName = "Front";
-    std::string backClipName = "Back";
-    std::string leftClipName = "Left";
-    std::string rightClipName = "Right";
-};
-
-struct SectorRuntimeObjectDefinition {
-    std::string id;
-    std::string kind;
-    SectorRuntimeObjectBillboardDefinition billboard;
-};
-
 struct SectorBillboardDirectionalClips {
     std::string frontName = "Front";
     std::string backName = "Back";
@@ -116,6 +103,13 @@ struct SectorBillboardDirectionalClips {
     uint32_t back = engine::InvalidSpriteClipIndex;
     uint32_t left = engine::InvalidSpriteClipIndex;
     uint32_t right = engine::InvalidSpriteClipIndex;
+    bool resolved = false;
+    bool usedFallback = false;
+};
+
+struct SectorBillboardSingleClip {
+    std::string name;
+    uint32_t clip = engine::InvalidSpriteClipIndex;
     bool resolved = false;
     bool usedFallback = false;
 };
@@ -215,10 +209,6 @@ void UpdateSectorRuntimeObjects(
         const SectorTopologyMap& map,
         float dt);
 
-const std::vector<SectorRuntimeObjectDefinition>& GetSectorRuntimeObjectDefinitions();
-
-const SectorRuntimeObjectDefinition* FindSectorRuntimeObjectDefinition(const std::string& definitionId);
-
 bool ResolveSectorBillboardDirectionalClipsFromAsset(
         const engine::SpriteAnimationAsset& asset,
         const SectorBillboardDirectionalClipNames& names,
@@ -229,6 +219,17 @@ bool ResolveSectorBillboardDirectionalClips(
         engine::SpriteAnimationHandle animation,
         const SectorBillboardDirectionalClipNames& names,
         SectorBillboardDirectionalClips& clips);
+
+bool ResolveSectorBillboardSingleClipFromAsset(
+        const engine::SpriteAnimationAsset& asset,
+        const char* name,
+        SectorBillboardSingleClip& clip);
+
+bool ResolveSectorBillboardSingleClip(
+        engine::AssetManager& assets,
+        engine::SpriteAnimationHandle animation,
+        const char* name,
+        SectorBillboardSingleClip& clip);
 
 uint32_t SelectSectorBillboardDirectionalClip(
         const SectorObjectTransform& transform,

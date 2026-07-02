@@ -8,6 +8,7 @@
 #include "sector_editor/SectorEditorDocumentActions.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorTextureModals.h"
+#include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
 #include "util/json.hpp"
 
@@ -54,6 +55,20 @@ std::string ReadTextFile(const std::filesystem::path& path)
     contents << file.rdbuf();
     Check(static_cast<bool>(file) || file.eof(), TextFormat("read temp file %s", path.string().c_str()));
     return contents.str();
+}
+
+std::filesystem::path TempDirectoryPath(const char* name)
+{
+    return std::filesystem::temp_directory_path() / name;
+}
+
+void RecreateTempDirectory(const std::filesystem::path& path)
+{
+    std::error_code ec;
+    std::filesystem::remove_all(path, ec);
+    ec.clear();
+    std::filesystem::create_directories(path, ec);
+    Check(!ec, TextFormat("created temp directory %s", path.string().c_str()));
 }
 
 bool Near(float a, float b)
@@ -4997,6 +5012,209 @@ void TestEditorMapTextureImportPreservesMapLevelRegistryOnly()
           "map texture import does not bump topology render revision by itself");
 }
 
+void TestSpriteMetadataScannerFindsNestedJsonAndFrameTagClips()
+{
+    const std::filesystem::path assetsRoot = TempDirectoryPath("sector_sprite_scan_tags_assets");
+    RecreateTempDirectory(assetsRoot / "sprites" / "effects");
+    WriteTextFile(
+            assetsRoot / "sprites" / "effects" / "torch.json",
+            R"json({
+  "frames": {
+    "torch_0001": {},
+    "torch_0002": {}
+  },
+  "meta": {
+    "image": "torch.png",
+    "frameTags": [
+      { "name": "Idle", "from": 0, "to": 0 },
+      { "name": "Burn", "from": 1, "to": 1 }
+    ]
+  }
+})json");
+    WriteTextFile(
+            assetsRoot / "sprites" / "effects" / "not_sprite.json",
+            R"json({ "meta": { "image": "ignored.png" } })json");
+    WriteTextFile(assetsRoot / "sprites" / "effects" / "notes.txt", "ignored");
+
+    std::string message;
+    const std::vector<game::SectorSpriteMetadata> sprites =
+            game::ScanAssetSpriteAsepriteJsons(assetsRoot, message);
+
+    Check(sprites.size() == 1, "sprite metadata scan finds only valid nested Aseprite JSON");
+    if (!sprites.empty()) {
+        Check(sprites[0].spriteAnimationPath == "assets/sprites/effects/torch.json",
+              "sprite metadata scan returns normalized sprite JSON asset path");
+        Check(sprites[0].atlasImagePath == "assets/sprites/effects/torch.png",
+              "sprite metadata scan resolves relative atlas image as an asset path");
+        Check(sprites[0].clipNames == std::vector<std::string>({"Idle", "Burn"}),
+              "sprite metadata scan reads clip names from frameTags");
+    }
+    Check(message.empty(), "sprite metadata scan leaves message empty when candidates are found");
+
+    std::error_code ec;
+    std::filesystem::remove_all(assetsRoot, ec);
+}
+
+void TestSpriteMetadataScannerFallsBackToFrameNamesAndDefaultClip()
+{
+    const std::filesystem::path assetsRoot = TempDirectoryPath("sector_sprite_scan_fallback_assets");
+    RecreateTempDirectory(assetsRoot / "sprites" / "characters");
+    WriteTextFile(
+            assetsRoot / "sprites" / "characters" / "hero.json",
+            R"json({
+  "frames": {
+    "hero#Walk 0": {},
+    "hero#Walk 1": {},
+    "hero#Run 0": {}
+  },
+  "meta": {
+    "image": "../atlases/hero.png"
+  }
+})json");
+    WriteTextFile(
+            assetsRoot / "sprites" / "characters" / "marker.json",
+            R"json({
+  "frames": {
+    "0": {}
+  },
+  "meta": {
+    "image": "marker.png"
+  }
+})json");
+
+    std::string message;
+    const std::vector<game::SectorSpriteMetadata> sprites =
+            game::ScanAssetSpriteAsepriteJsons(assetsRoot, message);
+
+    Check(sprites.size() == 2, "sprite metadata fallback scan finds both valid sprites");
+    if (sprites.size() == 2) {
+        Check(sprites[0].spriteAnimationPath == "assets/sprites/characters/hero.json",
+              "sprite metadata fallback scan sorts by asset path");
+        Check(sprites[0].atlasImagePath == "assets/sprites/atlases/hero.png",
+              "sprite metadata fallback scan resolves parent-relative atlas path");
+        Check(sprites[0].clipNames == std::vector<std::string>({"Walk", "Run"}),
+              "sprite metadata fallback scan derives clip names from frame names");
+        Check(sprites[1].spriteAnimationPath == "assets/sprites/characters/marker.json",
+              "sprite metadata fallback scan keeps second sorted sprite");
+        Check(sprites[1].clipNames == std::vector<std::string>({"Default"}),
+              "sprite metadata fallback scan provides Default when no clip name can be derived");
+    }
+    Check(message.empty(), "sprite metadata fallback scan leaves message empty when candidates are found");
+
+    std::error_code ec;
+    std::filesystem::remove_all(assetsRoot, ec);
+}
+
+void TestSpriteMetadataScannerRejectsMissingSpritesDirectory()
+{
+    const std::filesystem::path assetsRoot = TempDirectoryPath("sector_sprite_scan_missing_assets");
+    RecreateTempDirectory(assetsRoot);
+
+    std::string message;
+    const std::vector<game::SectorSpriteMetadata> sprites =
+            game::ScanAssetSpriteAsepriteJsons(assetsRoot, message);
+
+    Check(sprites.empty(), "sprite metadata scan returns no candidates without assets/sprites");
+    Check(message == "assets/sprites was not found",
+          "sprite metadata scan reports missing assets/sprites directory");
+
+    std::error_code ec;
+    std::filesystem::remove_all(assetsRoot, ec);
+}
+
+void TestSpritePickerSelectsSpriteAndClipMetadata()
+{
+    game::SpritePickerState picker;
+    picker.sprites.push_back(game::SectorSpriteMetadata{
+            "assets/sprites/effects/torch.json",
+            "assets/sprites/effects/torch.png",
+            {"Idle", "Burn"}});
+    picker.sprites.push_back(game::SectorSpriteMetadata{
+            "assets/sprites/props/barrel.json",
+            "assets/sprites/props/barrel.png",
+            {"Default"}});
+
+    game::SelectSpritePickerSprite(picker, 1);
+    const game::SectorEditorSpritePickerResult selected =
+            game::SelectedSpritePickerResult(picker);
+
+    Check(picker.selectedSpriteIndex == 1, "sprite picker selects requested sprite index");
+    Check(picker.selectedClipIndex == 0, "sprite picker selects first clip by default");
+    Check(picker.clipOptionLabels.size() == 1
+                  && std::string(picker.clipOptionLabels[0]) == "Default",
+          "sprite picker populates clip labels from selected metadata");
+    Check(selected.valid
+                  && selected.spriteAnimationPath == "assets/sprites/props/barrel.json"
+                  && selected.atlasImagePath == "assets/sprites/props/barrel.png"
+                  && selected.clipName == "Default",
+          "sprite picker result returns selected sprite, atlas, and clip");
+
+    game::SelectSpritePickerSprite(picker, -1);
+    const game::SectorEditorSpritePickerResult cleared =
+            game::SelectedSpritePickerResult(picker);
+    Check(!cleared.valid, "sprite picker result is invalid after clearing selection");
+}
+
+void TestBillboardSpritePickerApplyWritesSingleClip()
+{
+    game::SectorPlacedBillboard billboard;
+    billboard.spriteAnimationPath.clear();
+    billboard.clip.clear();
+
+    game::SectorEditorSpritePickerResult result;
+    result.valid = true;
+    result.spriteAnimationPath = "assets/sprites/effects/torch.json";
+    result.atlasImagePath = "assets/sprites/effects/torch.png";
+    result.clipName = "Burn";
+    result.clipNames = {"Idle", "Burn"};
+
+    Check(game::ApplySpritePickerResultToBillboard(
+                  billboard,
+                  game::BillboardSpritePickerTarget::SingleClip,
+                  result),
+          "billboard sprite picker apply reports single-clip change");
+    Check(billboard.spriteAnimationPath == "assets/sprites/effects/torch.json",
+          "billboard sprite picker apply writes sprite animation path");
+    Check(billboard.clip == "Burn",
+          "billboard sprite picker apply writes selected single clip");
+    Check(billboard.frontClip == "Burn"
+                  && billboard.backClip == "Burn"
+                  && billboard.leftClip == "Burn"
+                  && billboard.rightClip == "Burn",
+          "billboard sprite picker apply defaults invalid directional clips to selected metadata");
+}
+
+void TestBillboardSpritePickerApplyWritesDirectionalClip()
+{
+    game::SectorPlacedBillboard billboard;
+    billboard.spriteAnimationPath = "assets/sprites/old.json";
+    billboard.directional = true;
+    billboard.frontClip = "North";
+    billboard.backClip = "";
+    billboard.leftClip = "Left";
+    billboard.rightClip = "Missing";
+
+    game::SectorEditorSpritePickerResult result;
+    result.valid = true;
+    result.spriteAnimationPath = "assets/sprites/characters/guard.json";
+    result.atlasImagePath = "assets/sprites/characters/guard.png";
+    result.clipName = "Attack";
+    result.clipNames = {"Front", "Back", "Left", "Right", "Attack"};
+
+    Check(game::ApplySpritePickerResultToBillboard(
+                  billboard,
+                  game::BillboardSpritePickerTarget::LeftClip,
+                  result),
+          "billboard sprite picker apply reports directional change");
+    Check(billboard.spriteAnimationPath == "assets/sprites/characters/guard.json",
+          "billboard directional picker apply writes sprite animation path");
+    Check(billboard.frontClip == "Front"
+                  && billboard.backClip == "Back"
+                  && billboard.leftClip == "Attack"
+                  && billboard.rightClip == "Right",
+          "billboard directional picker apply preserves valid/default clips and writes selected slot");
+}
+
 void TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics()
 {
     game::SectorEditorState state;
@@ -6690,10 +6908,10 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "rectangle remains available in graph-authoritative mode");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::AuthoringMove),
           "authoring move remains available in graph-authoritative mode");
-    Check(TextContains(game::ToolName(game::SectorEditorTool::RuntimeObject), "Object"),
-          "runtime object tool label is exposed as a map object tool");
-    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::RuntimeObject), "goblin"),
-          "runtime object tool help describes the v1 goblin placement target");
+    Check(TextContains(game::ToolName(game::SectorEditorTool::RuntimeObject), "Billboard"),
+          "runtime object tool label is exposed as the billboard tool");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::RuntimeObject), "billboard"),
+          "runtime object tool help describes billboard placement");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::RuntimeObject),
           "runtime object placement remains available in graph-authoritative mode");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::StaticLight),
@@ -6720,6 +6938,46 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "legacy topology move tool is blocked in graph-authoritative mode");
     Check(TextContains(game::LegacyTopologyMutationUnavailableMessage(), "unavailable"),
           "legacy topology retirement has a status message");
+}
+
+void TestEditorBillboardPlacementCreatesGenericAuthoredObject()
+{
+    game::SectorTopologyMap map = MakeSingleSectorSquareMap();
+    const game::SectorEditorAddBillboardResult result =
+            game::AddBillboardToSector(map, 200, Vector2{2.0f, 2.0f});
+
+    Check(result.changed && result.objectId > 0, "billboard placement helper reports a new object");
+    Check(map.runtimeObjects.size() == 1, "billboard placement helper appends one runtime object");
+    if (map.runtimeObjects.empty()) {
+        return;
+    }
+
+    const game::SectorPlacedRuntimeObject& object = map.runtimeObjects.front();
+    Check(object.id == result.objectId, "billboard placement helper assigns the reported object ID");
+    Check(object.kind == "billboard" && object.definitionId.empty(),
+          "billboard placement helper writes generic billboard authored data");
+    Check(object.position.x == 2.0f && object.position.y == -2.0f && object.position.z == 2.0f,
+          "billboard placement helper places the object at the sector floor");
+    Check(object.yawRadians == 0.0f, "billboard placement helper defaults yaw to zero");
+    Check(object.billboard.spriteAnimationPath.empty(),
+          "billboard placement helper leaves sprite path empty until the inspector selects one");
+    Check(object.billboard.sizeWorld.x == 1.0f && object.billboard.sizeWorld.y == 1.0f,
+          "billboard placement helper defaults size to one world unit square");
+    Check(object.billboard.keepAspectRatio && object.billboard.playing && !object.billboard.directional,
+          "billboard placement helper defaults aspect, playback, and directional state");
+    Check(object.billboard.originNormalized.x == 0.5f && object.billboard.originNormalized.y == 1.0f,
+          "billboard placement helper defaults to bottom-center origin");
+
+    const game::SectorEditorTopologyRenderCache cache =
+            game::BuildSectorEditorTopologyRenderCache(
+                    map,
+                    game::SectorAuthoringGraph{},
+                    game::SectorAuthoringDerivationResult{},
+                    1);
+    Check(cache.runtimeObjects.size() == 1
+                  && cache.runtimeObjects[0].definitionKnown
+                  && cache.runtimeObjects[0].definitionId == "billboard",
+          "2D render cache treats generic billboard markers as known drawable objects");
 }
 
 void TestEditorUnifiedSelectPickOrderingCyclingAndDragGate()
@@ -7455,6 +7713,12 @@ int main()
     TestEditorAuthoringTexturePickerRejectsStaleMapping();
     TestEditorLegacyTopologyTexturePickerWritesLiveTopologyWithoutAuthoringGraph();
     TestEditorMapTextureImportPreservesMapLevelRegistryOnly();
+    TestSpriteMetadataScannerFindsNestedJsonAndFrameTagClips();
+    TestSpriteMetadataScannerFallsBackToFrameNamesAndDefaultClip();
+    TestSpriteMetadataScannerRejectsMissingSpritesDirectory();
+    TestSpritePickerSelectsSpriteAndClipMetadata();
+    TestBillboardSpritePickerApplyWritesSingleClip();
+    TestBillboardSpritePickerApplyWritesDirectionalClip();
     TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics();
     TestEditorAuthoringPreviewAndBakeGateAllowsCurrentDerivedTopology();
     TestEditorAuthoringPreviewAndBakeGateRejectsInvalidNoDerived();
@@ -7495,6 +7759,7 @@ int main()
     TestEditorAuthoringEditsRefreshValidCrossingDerivation();
     TestEditorAuthoringFailedRefreshDoesNotReplaceLastValidTopology();
     TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools();
+    TestEditorBillboardPlacementCreatesGenericAuthoredObject();
     TestEditorUnifiedSelectPickOrderingCyclingAndDragGate();
     TestEditorAuthoringLastValidTopologyIsNotPersisted();
     TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent();

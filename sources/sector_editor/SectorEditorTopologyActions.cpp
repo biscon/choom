@@ -200,6 +200,41 @@ SectorEditorAddDynamicSpotLightResult AddDynamicSpotLightToSector(
             TextFormat("Added dynamic spot %d", lightId)};
 }
 
+SectorEditorAddBillboardResult AddBillboardToSector(
+        SectorTopologyMap& map,
+        int sectorId,
+        Vector2 mapPoint)
+{
+    const SectorTopologySector* sector = FindSectorTopologySector(map, sectorId);
+    if (sector == nullptr) {
+        return SectorEditorAddBillboardResult{
+                false,
+                -1,
+                "Billboard placement failed: click inside a sector"};
+    }
+
+    const int objectId = AllocateSectorPlacedRuntimeObjectId(map);
+    if (!IsValidSectorTopologyId(objectId)) {
+        return SectorEditorAddBillboardResult{
+                false,
+                -1,
+                "Billboard placement failed: no runtime object IDs available"};
+    }
+
+    SectorPlacedRuntimeObject object;
+    object.id = objectId;
+    object.kind = "billboard";
+    object.position = Vector3{mapPoint.x, sector->floorZ, mapPoint.y};
+    object.yawRadians = 0.0f;
+    object.billboard = SectorPlacedBillboard{};
+
+    map.runtimeObjects.push_back(std::move(object));
+    return SectorEditorAddBillboardResult{
+            true,
+            objectId,
+            TextFormat("Added billboard %d", objectId)};
+}
+
 SectorEditorTopologyActionResult DeleteStaticLight(
         SectorTopologyMap& map,
         int lightId)

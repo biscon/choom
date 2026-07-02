@@ -315,6 +315,52 @@ int CountSectorObjects(engine::World& world)
     return count;
 }
 
+int CountDirectionalBillboardObjects(engine::World& world)
+{
+    int count = 0;
+    world.ForEach<game::SectorObject, game::SectorBillboardDirectionalClips>(
+            [&count](engine::Entity, game::SectorObject&, game::SectorBillboardDirectionalClips&) {
+                ++count;
+            });
+    return count;
+}
+
+int CountSingleClipBillboardObjects(engine::World& world)
+{
+    int count = 0;
+    world.ForEach<game::SectorObject, game::SectorBillboardSingleClip>(
+            [&count](engine::Entity, game::SectorObject&, game::SectorBillboardSingleClip&) {
+                ++count;
+            });
+    return count;
+}
+
+game::SectorPlacedRuntimeObject MakePlacedBillboard(
+        int id,
+        Vector3 position,
+        Vector2 size,
+        Vector2 origin,
+        bool playing,
+        bool directional)
+{
+    game::SectorPlacedRuntimeObject object;
+    object.id = id;
+    object.kind = "billboard";
+    object.position = position;
+    object.yawRadians = 0.75f;
+    object.billboard.spriteAnimationPath = "assets/sprites/goblin.json";
+    object.billboard.sizeWorld = size;
+    object.billboard.originNormalized = origin;
+    object.billboard.playing = playing;
+    object.billboard.directional = directional;
+    object.billboard.clip = "Idle";
+    object.billboard.frontClip = "North";
+    object.billboard.backClip = "South";
+    object.billboard.leftClip = "West";
+    object.billboard.rightClip = "East";
+    return object;
+}
+
 void TestSpawnPlacedRuntimeObjectSkipsLegacyGoblinDefinition()
 {
     engine::World world;
@@ -357,36 +403,162 @@ void TestSpawnPlacedRuntimeObjectSkipsLegacyGoblinDefinition()
             "runtime object update does not revive legacy definitionId goblin data");
 }
 
-void TestSpawnPlacedRuntimeObjectSkipsMissingDefinition()
+void TestSpawnPlacedRuntimeObjectSkipsUnsupportedKind()
 {
     engine::World world;
     engine::AssetManager assets;
     game::SectorRuntimeObjectState state;
     game::SectorTopologyMap map = MakeSquareMap();
-    map.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
-            2,
-            "missing_definition",
-            Vector3{1.0f, 0.5f, 1.0f},
-            0.0f});
+    game::SectorPlacedRuntimeObject unsupported;
+    unsupported.id = 2;
+    unsupported.kind = "unsupported";
+    unsupported.position = Vector3{1.0f, 0.5f, 1.0f};
+    map.runtimeObjects.push_back(unsupported);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
 
     Check(CountSectorObjects(world) == 0,
-            "placed runtime object with missing definition is skipped");
+            "placed runtime object with unsupported kind is skipped");
     Check(state.placedObjectEntities.empty(),
-            "missing definition does not store placed object entity mapping");
+            "unsupported kind does not store placed object entity mapping");
     Check(engine::IsNull(state.runtimeObjectAssetScope),
-            "missing definition does not create runtime object asset scope");
+            "unsupported kind does not create runtime object asset scope");
     Check(state.placedObjectCount == 1 && state.spawnedObjectCount == 0 && state.skippedObjectCount == 1,
-            "missing definition skip records debug counts");
+            "unsupported kind skip records debug counts");
     Check(state.placedObjectStatus.find("Runtime objects: 1 placed / 0 spawned, 1 skipped")
                   != std::string::npos,
-            "missing definition skip records debug status");
-    Check(state.placedObjectWarning.find(
-                  "legacy definitionId 'missing_definition' for placed object 2 is unsupported")
+            "unsupported kind skip records debug status");
+    Check(state.placedObjectWarning.find("unsupported kind 'unsupported' for placed object 2")
                   != std::string::npos,
-            "legacy definitionId skip records debug warning");
+            "unsupported kind skip records debug warning");
+}
+
+void TestSpawnPlacedRuntimeObjectSkipsMissingBillboardSprite()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    game::SectorPlacedRuntimeObject object = MakePlacedBillboard(
+            12,
+            Vector3{1.0f, 0.5f, 1.0f},
+            Vector2{1.0f, 1.0f},
+            Vector2{0.5f, 1.0f},
+            true,
+            false);
+    object.billboard.spriteAnimationPath.clear();
+    map.runtimeObjects.push_back(object);
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(CountSectorObjects(world) == 0,
+            "placed billboard with missing sprite animation path is skipped");
+    Check(state.placedObjectEntities.empty(),
+            "missing billboard sprite path does not store placed object entity mapping");
+    Check(engine::IsNull(state.runtimeObjectAssetScope),
+            "missing billboard sprite path does not create runtime object asset scope");
+    Check(state.placedObjectCount == 1 && state.spawnedObjectCount == 0 && state.skippedObjectCount == 1,
+            "missing billboard sprite path skip records debug counts");
+    Check(state.placedObjectWarning.find("missing billboard sprite animation path for placed object 12")
+                  != std::string::npos,
+            "missing billboard sprite path skip records debug warning");
+}
+
+void TestSpawnPlacedBillboardCopiesAuthoredPayloadToEcs()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    map.runtimeObjects.push_back(MakePlacedBillboard(
+            6,
+            Vector3{16.0f, 8.0f, 32.0f},
+            Vector2{2.5f, 3.5f},
+            Vector2{0.25f, 0.75f},
+            false,
+            false));
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(CountSectorObjects(world) == 1,
+            "generic billboard placed object spawns one sector object entity");
+    Check(state.placedObjectEntities.size() == 1 && state.placedObjectEntities[0].placedObjectId == 6,
+            "generic billboard stores placed object ID to entity mapping");
+    Check(state.placedObjectCount == 1 && state.spawnedObjectCount == 1 && state.skippedObjectCount == 0,
+            "generic billboard spawn records debug counts");
+    Check(!engine::IsNull(state.runtimeObjectAssetScope),
+            "generic billboard spawn creates runtime object asset scope");
+    Check(state.spriteAnimationRequestedCount == 1 && state.spriteAnimationPendingCount == 1,
+            "generic billboard spawn requests sprite animation asset during spawn");
+
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.IsAlive(entity), "generic billboard mapped entity is alive");
+    const game::SectorObjectTransform& transform = world.Get<game::SectorObjectTransform>(entity);
+    Check(Near(transform.position, Vector3{2.0f, 1.0f, 4.0f}),
+            "generic billboard spawn converts authored position to world position");
+    Check(Near(transform.yawRadians, 0.75f),
+            "generic billboard spawn copies authored yaw to ECS transform");
+
+    const game::SectorBillboardSprite& sprite = world.Get<game::SectorBillboardSprite>(entity);
+    Check(!engine::IsNull(sprite.animation),
+            "generic billboard spawn stores requested sprite animation handle");
+    Check(Near(sprite.sizeWorld.x, 2.5f) && Near(sprite.sizeWorld.y, 3.5f),
+            "generic billboard spawn copies authored world size without authoring-unit conversion");
+    Check(Near(sprite.originNormalized.x, 0.25f) && Near(sprite.originNormalized.y, 0.75f),
+            "generic billboard spawn copies authored normalized origin");
+    Check(sprite.alphaCutoff == game::kSectorBillboardDefaultAlphaCutoff,
+            "generic billboard spawn uses default alpha cutoff");
+
+    const game::SectorBillboardAnimator& animator = world.Get<game::SectorBillboardAnimator>(entity);
+    Check(animator.animationId == "assets/sprites/goblin.json",
+            "generic billboard animator stores authored sprite animation path as animation id");
+    Check(!animator.playing,
+            "generic billboard spawn copies authored playing flag");
+    Check(!world.Has<game::SectorBillboardDirectionalClips>(entity),
+            "non-directional generic billboard omits directional clip component");
+    Check(CountSingleClipBillboardObjects(world) == 1,
+            "non-directional generic billboard adds single clip component");
+    const game::SectorBillboardSingleClip& singleClip = world.Get<game::SectorBillboardSingleClip>(entity);
+    Check(singleClip.name == "Idle",
+            "non-directional generic billboard stores authored single clip name");
+    Check(singleClip.clip == engine::InvalidSpriteClipIndex && !singleClip.resolved,
+            "non-directional generic billboard single clip starts unresolved until asset is ready");
+}
+
+void TestSpawnPlacedDirectionalBillboardCopiesClipNames()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    map.runtimeObjects.push_back(MakePlacedBillboard(
+            7,
+            Vector3{1.0f, 0.5f, 1.0f},
+            Vector2{1.0f, 2.0f},
+            Vector2{0.5f, 1.0f},
+            true,
+            true));
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(CountSectorObjects(world) == 1,
+            "directional generic billboard spawns one sector object entity");
+    Check(CountDirectionalBillboardObjects(world) == 1,
+            "directional generic billboard adds directional clip component");
+    Check(CountSingleClipBillboardObjects(world) == 0,
+            "directional generic billboard omits single clip component");
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    const game::SectorBillboardDirectionalClips& clips =
+            world.Get<game::SectorBillboardDirectionalClips>(entity);
+    Check(clips.frontName == "North" && clips.backName == "South"
+                  && clips.leftName == "West" && clips.rightName == "East",
+            "directional generic billboard copies authored clip names");
+    Check(!clips.resolved,
+            "directional generic billboard clip component starts unresolved until asset is ready");
 }
 
 void TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate()
@@ -395,32 +567,35 @@ void TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate()
     engine::AssetManager assets;
     game::SectorRuntimeObjectState state;
     game::SectorTopologyMap map = MakeSquareMap();
-    map.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+    map.runtimeObjects.push_back(MakePlacedBillboard(
             3,
-            "goblin",
-            Vector3{1.0f, 0.5f, 1.0f},
-            0.0f});
+            Vector3{16.0f, 8.0f, 16.0f},
+            Vector2{1.0f, 1.0f},
+            Vector2{0.5f, 1.0f},
+            true,
+            false));
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
-    const engine::Entity firstEntity = state.placedObjectEntities.empty()
-            ? engine::NullEntity()
-            : state.placedObjectEntities[0].entity;
-    map.runtimeObjects[0].position = Vector3{2.0f, 0.5f, 2.0f};
+    const engine::Entity firstEntity = state.placedObjectEntities[0].entity;
+    map.runtimeObjects[0].position = Vector3{32.0f, 8.0f, 32.0f};
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    const engine::Entity secondEntity = state.placedObjectEntities[0].entity;
 
-    Check(engine::IsNull(firstEntity),
-            "legacy placed runtime object does not create an initial mapped entity");
-    Check(CountSectorObjects(world) == 0,
-            "repeated legacy placed runtime object spawn refresh does not create entities");
-    Check(state.placedObjectEntities.empty(),
-            "repeated legacy placed runtime object spawn refresh keeps no mapping");
+    Check(CountSectorObjects(world) == 1,
+            "repeated generic billboard spawn refresh keeps one sector object entity");
+    Check(!world.IsAlive(firstEntity) && world.IsAlive(secondEntity) && firstEntity != secondEntity,
+            "generic billboard spawn refresh replaces the mapped ECS entity");
+    Check(state.placedObjectEntities.size() == 1 && state.placedObjectEntities[0].placedObjectId == 3,
+            "generic billboard spawn refresh keeps one placed object mapping");
+    Check(Near(world.Get<game::SectorObjectTransform>(secondEntity).position, Vector3{4.0f, 1.0f, 4.0f}),
+            "generic billboard spawn refresh uses edited authored position");
 
     game::ClearSectorRuntimeObjects(world, assets, state);
     Check(CountSectorObjects(world) == 0,
-            "explicit runtime reset clears placed runtime object entities");
+            "explicit runtime reset clears generic billboard runtime object entities");
     Check(state.placedObjectEntities.empty(),
-            "explicit runtime reset clears placed runtime object mappings");
+            "explicit runtime reset clears generic billboard placed object mappings");
 }
 
 void TestPreviewRuntimeObjectRefreshKeepsAssetScope()
@@ -429,28 +604,29 @@ void TestPreviewRuntimeObjectRefreshKeepsAssetScope()
     engine::AssetManager assets;
     game::SectorRuntimeObjectState state;
     game::SectorTopologyMap map = MakeSquareMap();
-    map.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+    map.runtimeObjects.push_back(MakePlacedBillboard(
             4,
-            "goblin",
-            Vector3{1.0f, 0.5f, 1.0f},
-            0.0f});
+            Vector3{16.0f, 8.0f, 16.0f},
+            Vector2{1.0f, 1.0f},
+            Vector2{0.5f, 1.0f},
+            true,
+            false));
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
     const engine::AssetScopeHandle firstScope = state.runtimeObjectAssetScope;
-    const engine::Entity firstEntity = state.placedObjectEntities.empty()
-            ? engine::NullEntity()
-            : state.placedObjectEntities[0].entity;
+    const engine::Entity firstEntity = state.placedObjectEntities[0].entity;
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    const engine::Entity secondEntity = state.placedObjectEntities[0].entity;
 
-    Check(CountSectorObjects(world) == 0,
-            "preview runtime object refresh keeps legacy definitionId data skipped");
+    Check(CountSectorObjects(world) == 1,
+            "preview runtime object refresh keeps generic billboard spawned once");
     Check(state.runtimeObjectAssetScope == firstScope,
-            "preview runtime object refresh keeps the null runtime object asset scope");
-    Check(engine::IsNull(firstEntity) && state.placedObjectEntities.empty(),
-            "preview runtime object refresh does not create legacy placed object mappings");
+            "preview runtime object refresh keeps existing runtime object asset scope");
+    Check(!world.IsAlive(firstEntity) && world.IsAlive(secondEntity),
+            "preview runtime object refresh replaces generic billboard mapped entity");
 }
 
 void TestResetSectorRuntimeObjectsForMapReloadsWithoutDuplicates()
@@ -459,29 +635,30 @@ void TestResetSectorRuntimeObjectsForMapReloadsWithoutDuplicates()
     engine::AssetManager assets;
     game::SectorRuntimeObjectState state;
     game::SectorTopologyMap map = MakeSquareMap();
-    map.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+    map.runtimeObjects.push_back(MakePlacedBillboard(
             5,
-            "goblin",
-            Vector3{1.0f, 0.5f, 1.0f},
-            0.0f});
+            Vector3{16.0f, 8.0f, 16.0f},
+            Vector2{1.0f, 1.0f},
+            Vector2{0.5f, 1.0f},
+            true,
+            false));
 
     game::ResetSectorRuntimeObjectsForMap(world, assets, state, map);
     const engine::AssetScopeHandle firstScope = state.runtimeObjectAssetScope;
-    const engine::Entity firstEntity = state.placedObjectEntities.empty()
-            ? engine::NullEntity()
-            : state.placedObjectEntities[0].entity;
+    const engine::Entity firstEntity = state.placedObjectEntities[0].entity;
 
-    map.runtimeObjects[0].position = Vector3{2.0f, 0.5f, 2.0f};
+    map.runtimeObjects[0].position = Vector3{32.0f, 8.0f, 32.0f};
     game::ResetSectorRuntimeObjectsForMap(world, assets, state, map);
+    const engine::Entity secondEntity = state.placedObjectEntities[0].entity;
 
-    Check(CountSectorObjects(world) == 0,
-            "explicit map runtime reset keeps legacy definitionId data skipped");
+    Check(CountSectorObjects(world) == 1,
+            "explicit map runtime reset respawns one generic billboard");
     Check(!world.IsAlive(firstEntity),
-            "explicit map runtime reset has no previous legacy runtime object entity to keep alive");
-    Check(firstScope == state.runtimeObjectAssetScope && engine::IsNull(state.runtimeObjectAssetScope),
-            "explicit map runtime reset keeps runtime object asset scope null for legacy data");
-    Check(state.placedObjectEntities.empty(),
-            "explicit map runtime reset does not create legacy placed object mappings");
+            "explicit map runtime reset destroys previous generic billboard entity");
+    Check(world.IsAlive(secondEntity) && firstScope.index != state.runtimeObjectAssetScope.index,
+            "explicit map runtime reset creates a fresh runtime object asset scope");
+    Check(state.placedObjectEntities.size() == 1,
+            "explicit map runtime reset creates one generic billboard placed object mapping");
 }
 
 void TestSectorBillboardSpriteAnimationRequestRejectsMissingInput()
@@ -544,77 +721,55 @@ void TestSectorBillboardSpriteAnimationRequestRejectsMissingInput()
     Check(!animator.finished, "billboard sprite request clears finished flag on missing path");
 }
 
-void TestSectorRuntimeObjectGoblinDefinitionExists()
+void TestBillboardSpriteFixtureIsOrdinaryAssetData()
 {
-    const game::SectorRuntimeObjectDefinition* definition =
-            game::FindSectorRuntimeObjectDefinition("goblin");
-
-    Check(definition != nullptr, "goblin runtime object definition resolves");
-    if (definition == nullptr) {
-        return;
-    }
-
-    Check(definition->id == "goblin", "goblin runtime object definition stores string id");
-    Check(definition->kind == "billboard", "goblin runtime object definition stores billboard kind");
-    Check(definition->billboard.spriteAnimationAssetPath == "assets/sprites/goblin.json",
-            "goblin runtime object definition uses checked-in Aseprite JSON asset path");
-    Check(Near(definition->billboard.sizeWorld.x, 0.8f)
-                  && Near(definition->billboard.sizeWorld.y, 1.2f),
-            "goblin runtime object definition stores billboard world size");
-    Check(Near(definition->billboard.originNormalized.x, 0.5f)
-                  && Near(definition->billboard.originNormalized.y, 1.0f),
-            "goblin runtime object definition stores normalized origin");
-
     const char* goblinJsonPath = ASSETS_PATH "sprites/goblin.json";
     FILE* goblinJson = std::fopen(goblinJsonPath, "rb");
-    Check(goblinJson != nullptr, "goblin runtime object definition asset exists at assets/sprites/goblin.json");
+    Check(goblinJson != nullptr, "checked-in billboard sprite fixture exists at assets/sprites/goblin.json");
     if (goblinJson != nullptr) {
         std::fclose(goblinJson);
     }
 
     Json goblinDocument;
     Check(LoadJsonFile(goblinJsonPath, goblinDocument),
-            "goblin runtime object definition asset JSON loads");
+            "checked-in billboard sprite fixture JSON loads");
     if (!goblinDocument.is_null()) {
         Check(goblinDocument.contains("meta")
                       && goblinDocument["meta"].contains("image")
                       && goblinDocument["meta"]["image"].get<std::string>() == "goblin.png",
-                "goblin Aseprite JSON references relative goblin.png image");
+                "checked-in billboard sprite fixture references relative atlas image");
         const char* goblinPngPath = ASSETS_PATH "sprites/goblin.png";
         FILE* goblinPng = std::fopen(goblinPngPath, "rb");
         Check(goblinPng != nullptr,
-                "goblin Aseprite relative image resolves to checked-in assets/sprites/goblin.png");
+                "checked-in billboard sprite fixture atlas exists at assets/sprites/goblin.png");
         if (goblinPng != nullptr) {
             std::fclose(goblinPng);
         }
     }
 }
 
-void TestSectorRuntimeObjectDefinitionLookupFailsSafely()
+void TestPlacedBillboardStoresDirectionalClipNamesAsStrings()
 {
-    Check(game::FindSectorRuntimeObjectDefinition("") == nullptr,
-            "runtime object definition lookup rejects empty id");
-    Check(game::FindSectorRuntimeObjectDefinition("missing_definition") == nullptr,
-            "runtime object definition lookup returns null for missing id");
-}
+    const game::SectorPlacedRuntimeObject object = MakePlacedBillboard(
+            4,
+            Vector3{1.0f, 2.0f, 3.0f},
+            Vector2{0.8f, 1.2f},
+            Vector2{0.5f, 1.0f},
+            true,
+            true);
 
-void TestSectorRuntimeObjectDefinitionStoresClipNamesAsStrings()
-{
-    const game::SectorRuntimeObjectDefinition* definition =
-            game::FindSectorRuntimeObjectDefinition("goblin");
-    Check(definition != nullptr, "clip-name test fixture resolves goblin definition");
-    if (definition == nullptr) {
-        return;
-    }
-
-    Check(definition->billboard.frontClipName == std::string("Front"),
-            "runtime object definition stores Front clip name as string");
-    Check(definition->billboard.backClipName == std::string("Back"),
-            "runtime object definition stores Back clip name as string");
-    Check(definition->billboard.leftClipName == std::string("Left"),
-            "runtime object definition stores Left clip name as string");
-    Check(definition->billboard.rightClipName == std::string("Right"),
-            "runtime object definition stores Right clip name as string");
+    Check(object.kind == "billboard" && object.definitionId.empty(),
+            "placed billboard stores generic kind without legacy definition id");
+    Check(object.billboard.spriteAnimationPath == "assets/sprites/goblin.json",
+            "placed billboard stores sprite fixture as authored sprite path");
+    Check(object.billboard.frontClip == std::string("North"),
+            "placed billboard stores front clip name as authored string");
+    Check(object.billboard.backClip == std::string("South"),
+            "placed billboard stores back clip name as authored string");
+    Check(object.billboard.leftClip == std::string("West"),
+            "placed billboard stores left clip name as authored string");
+    Check(object.billboard.rightClip == std::string("East"),
+            "placed billboard stores right clip name as authored string");
 }
 
 void TestSectorBillboardAnimatorAdvances()
@@ -638,6 +793,31 @@ void TestSectorBillboardAnimatorAdvances()
             "billboard animator ignores invalid negative dt");
 }
 
+void TestSectorBillboardAnimatorDoesNotAdvanceWhenPaused()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+
+    const engine::Entity pausedObject = world.CreateEntity();
+    game::SectorBillboardAnimator paused;
+    paused.timeSeconds = 1.0f;
+    paused.playing = false;
+    world.Add(pausedObject, paused);
+
+    const engine::Entity playingObject = world.CreateEntity();
+    game::SectorBillboardAnimator playing;
+    playing.timeSeconds = 1.0f;
+    playing.playing = true;
+    world.Add(playingObject, playing);
+
+    game::AdvanceSectorBillboardAnimatorSystem(world, 0.5f);
+
+    Check(world.Get<game::SectorBillboardAnimator>(pausedObject).timeSeconds == 1.0f,
+            "paused billboard animator does not advance time");
+    Check(world.Get<game::SectorBillboardAnimator>(playingObject).timeSeconds == 1.5f,
+            "playing billboard animator advances time");
+}
+
 engine::SpriteAnimationAsset MakeDirectionalClipAsset(bool includeLeft, bool includeDefault)
 {
     engine::SpriteAnimationAsset asset;
@@ -652,6 +832,79 @@ engine::SpriteAnimationAsset MakeDirectionalClipAsset(bool includeLeft, bool inc
         asset.clips.push_back(engine::SpriteClip{"Default", 4, 1, engine::SpritePlaybackMode::Loop, 0});
     }
     return asset;
+}
+
+engine::SpriteAnimationAsset MakeSingleClipAsset(bool includeIdle, bool includeDefault)
+{
+    engine::SpriteAnimationAsset asset;
+    asset.frames.resize(3);
+    if (includeIdle) {
+        asset.clips.push_back(engine::SpriteClip{"Idle", 0, 1, engine::SpritePlaybackMode::Loop, 0});
+    }
+    asset.clips.push_back(engine::SpriteClip{"Walk", 1, 1, engine::SpritePlaybackMode::Loop, 0});
+    if (includeDefault) {
+        asset.clips.push_back(engine::SpriteClip{"Default", 2, 1, engine::SpritePlaybackMode::Loop, 0});
+    }
+    return asset;
+}
+
+void TestSectorBillboardSingleClipResolve()
+{
+    const engine::SpriteAnimationAsset asset = MakeSingleClipAsset(true, false);
+
+    game::SectorBillboardSingleClip clip;
+    const bool resolved = game::ResolveSectorBillboardSingleClipFromAsset(asset, "Idle", clip);
+
+    Check(resolved, "billboard single clip resolver succeeds when named clip exists");
+    Check(clip.resolved && !clip.usedFallback,
+            "billboard single clip resolver marks exact mapping resolved without fallback");
+    Check(clip.name == "Idle" && clip.clip == 0,
+            "billboard single clip resolver stores resolved clip index");
+}
+
+void TestSectorBillboardSingleClipEmptyFallsBackToFirstClip()
+{
+    const engine::SpriteAnimationAsset asset = MakeSingleClipAsset(true, false);
+
+    game::SectorBillboardSingleClip clip;
+    const bool resolved = game::ResolveSectorBillboardSingleClipFromAsset(asset, "", clip);
+
+    Check(resolved, "billboard single clip resolver succeeds for empty/default clip");
+    Check(clip.resolved && !clip.usedFallback,
+            "billboard single clip resolver treats empty/default clip as normal resolution");
+    Check(clip.name.empty() && clip.clip == 0,
+            "billboard single clip resolver uses first clip when no Default clip exists");
+}
+
+void TestSectorBillboardSingleClipMissingFallsBackToDefaultClip()
+{
+    const engine::SpriteAnimationAsset asset = MakeSingleClipAsset(false, true);
+
+    game::SectorBillboardSingleClip clip;
+    const bool resolved = game::ResolveSectorBillboardSingleClipFromAsset(asset, "Idle", clip);
+
+    Check(resolved, "billboard single clip resolver succeeds with Default fallback");
+    Check(clip.resolved && clip.usedFallback,
+            "billboard single clip resolver records fallback for missing clip");
+    Check(clip.name == "Idle" && clip.clip == 1,
+            "billboard single clip resolver uses Default clip for missing named clip");
+}
+
+void TestSectorBillboardSingleClipMissingWithoutFallback()
+{
+    engine::SpriteAnimationAsset asset;
+
+    game::SectorBillboardSingleClip clip;
+    clip.clip = 4;
+    clip.resolved = true;
+    clip.usedFallback = true;
+    const bool resolved = game::ResolveSectorBillboardSingleClipFromAsset(asset, "Idle", clip);
+
+    Check(!resolved, "billboard single clip resolver reports missing clip when asset has no clips");
+    Check(!clip.resolved && !clip.usedFallback && clip.clip == engine::InvalidSpriteClipIndex,
+            "billboard single clip resolver clears state when no fallback is available");
+    Check(clip.name == "Idle",
+            "billboard single clip resolver preserves requested missing clip name");
 }
 
 void TestSectorBillboardDirectionalClipsResolve()
@@ -891,15 +1144,22 @@ int main()
     TestSectorBillboardQuadWorldPositions();
     TestClearSectorRuntimeObjectsOnlyDestroysSectorObjects();
     TestSpawnPlacedRuntimeObjectSkipsLegacyGoblinDefinition();
-    TestSpawnPlacedRuntimeObjectSkipsMissingDefinition();
+    TestSpawnPlacedRuntimeObjectSkipsUnsupportedKind();
+    TestSpawnPlacedRuntimeObjectSkipsMissingBillboardSprite();
+    TestSpawnPlacedBillboardCopiesAuthoredPayloadToEcs();
+    TestSpawnPlacedDirectionalBillboardCopiesClipNames();
     TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate();
     TestPreviewRuntimeObjectRefreshKeepsAssetScope();
     TestResetSectorRuntimeObjectsForMapReloadsWithoutDuplicates();
     TestSectorBillboardSpriteAnimationRequestRejectsMissingInput();
-    TestSectorRuntimeObjectGoblinDefinitionExists();
-    TestSectorRuntimeObjectDefinitionLookupFailsSafely();
-    TestSectorRuntimeObjectDefinitionStoresClipNamesAsStrings();
+    TestBillboardSpriteFixtureIsOrdinaryAssetData();
+    TestPlacedBillboardStoresDirectionalClipNamesAsStrings();
     TestSectorBillboardAnimatorAdvances();
+    TestSectorBillboardAnimatorDoesNotAdvanceWhenPaused();
+    TestSectorBillboardSingleClipResolve();
+    TestSectorBillboardSingleClipEmptyFallsBackToFirstClip();
+    TestSectorBillboardSingleClipMissingFallsBackToDefaultClip();
+    TestSectorBillboardSingleClipMissingWithoutFallback();
     TestSectorBillboardDirectionalClipsResolve();
     TestSectorBillboardDirectionalClipsFallback();
     TestSectorBillboardDirectionalClipsMissingWithoutFallback();

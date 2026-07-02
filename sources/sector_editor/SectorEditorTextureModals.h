@@ -9,6 +9,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace game {
 
@@ -27,11 +28,27 @@ struct SectorEditorTexturePickerCallbacks {
     std::function<engine::TextureHandle(const std::string&)> textureHandleForId;
 };
 
+struct SectorEditorSpritePickerCallbacks {
+    std::function<void()> close;
+    std::function<void()> applySelection;
+    std::function<void()> refreshScan;
+    std::function<void(int)> selectSprite;
+    std::function<void()> refreshPreview;
+};
+
 struct SectorEditorTexturePickerApplyResult {
     bool changed = false;
     bool useMaterialMutationFinish = false;
     bool rebuildPreviewOnApply = false;
     std::string status;
+};
+
+struct SectorEditorSpritePickerResult {
+    bool valid = false;
+    std::string spriteAnimationPath;
+    std::string atlasImagePath;
+    std::string clipName;
+    std::vector<std::string> clipNames;
 };
 
 struct SectorEditorAddTextureResult {
@@ -60,6 +77,15 @@ void DrawTexturePickerModal(
         const SectorTopologyMap& map,
         const SectorEditorTexturePickerCallbacks& callbacks);
 
+void DrawSpritePickerModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        SpritePickerState& picker,
+        const SectorEditorSpritePickerCallbacks& callbacks);
+
 void RefreshAddMapTextureScan(AddMapTextureState& modalState);
 void SelectAddMapTexturePath(
         AddMapTextureState& modalState,
@@ -68,6 +94,21 @@ void SelectAddMapTexturePath(
 void RefreshAddMapTexturePreview(AddMapTextureState& modalState, engine::AssetManager& assets);
 bool ValidateAddMapTextureId(const AddMapTextureState& modalState, std::string& error);
 SectorEditorAddTextureResult AddSelectedMapTexture(SectorEditorState& state);
+
+void RefreshSpritePickerScan(SpritePickerState& picker);
+void SelectSpritePickerSprite(SpritePickerState& picker, int spriteIndex);
+void RefreshSpritePickerPreview(SpritePickerState& picker, engine::AssetManager& assets);
+void CloseSpritePicker(SpritePickerState& picker, engine::AssetManager& assets);
+SectorEditorSpritePickerResult SelectedSpritePickerResult(const SpritePickerState& picker);
+void OpenBillboardSpritePicker(
+        SpritePickerState& picker,
+        BillboardSpritePickerTarget target,
+        const std::string& spriteAnimationPath,
+        const std::string& clipName);
+bool ApplySpritePickerResultToBillboard(
+        SectorPlacedBillboard& billboard,
+        BillboardSpritePickerTarget target,
+        const SectorEditorSpritePickerResult& result);
 
 bool OpenTopologyTexturePicker(
         SectorEditorState& state,

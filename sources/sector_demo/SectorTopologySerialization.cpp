@@ -285,9 +285,6 @@ bool IsDefaultBillboardDirectionalClips(const SectorPlacedBillboard& billboard)
 
 void ValidatePlacedBillboard(const SectorPlacedBillboard& billboard, const std::string& context)
 {
-    if (billboard.spriteAnimationPath.empty()) {
-        Fail(context + ".spriteAnimationPath must not be empty");
-    }
     if (!std::isfinite(billboard.sizeWorld.x)
             || !std::isfinite(billboard.sizeWorld.y)
             || billboard.sizeWorld.x <= 0.0f

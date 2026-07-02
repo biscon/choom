@@ -166,6 +166,12 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawSpritePickerModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
     void DrawSaveLevelModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -368,6 +374,8 @@ private:
     void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer);
     void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer);
     void OpenMapSkyTexturePicker();
+    void OpenSelectedBillboardSpritePicker(BillboardSpritePickerTarget target, const std::string& clipName);
+    void ApplySelectedBillboardSpritePickerSelection();
     void ApplyTexturePickerSelection(engine::AssetManager& assets);
     std::string CurrentTextureForPickerTarget() const;
     bool TryRenameSelectedTopologySector();
