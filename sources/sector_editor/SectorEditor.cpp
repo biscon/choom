@@ -3800,7 +3800,6 @@ void SectorEditor::DrawPreviewSpotLightOverlay() const
 void SectorEditor::DrawPreviewObjectProbeOverlay() const
 {
     if (!preview.IsRendererReady()
-            || state.freeflyController.mouseLookEnabled
             || !state.showObjectProbeDebugOverlay
             || state.runtimeObjects.objectLightProbes.probes.empty()) {
         return;
@@ -3831,14 +3830,13 @@ Rectangle SectorEditor::BuildPreviewOverlayInteractionRect() const
     constexpr float x = 32.0f;
     constexpr float y = 32.0f;
     constexpr float width = 620.0f;
-    constexpr float collapsedHeight = 92.0f;
-    constexpr float expandedHeight = 390.0f;
+    constexpr float collapsedHeight = 78.0f;
+    constexpr float expandedHeight = 300.0f;
     return Rectangle{
             x,
             y,
             width,
             state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::None
-                    || !IsPreviewOverlayMouseInteractive()
                     ? collapsedHeight
                     : expandedHeight};
 }
@@ -3858,11 +3856,10 @@ void SectorEditor::DrawPreviewOverlay(
     };
 
     const bool mouseInteractive = IsPreviewOverlayMouseInteractive();
-    const bool drawExpanded = mouseInteractive
-            && state.activePreviewDebugOverlayTab != PreviewDebugOverlayTab::None;
+    const bool drawExpanded = state.activePreviewDebugOverlayTab != PreviewDebugOverlayTab::None;
     const float panelW = 620.0f;
-    const float padding = 14.0f;
-    const float gap = 8.0f;
+    const float padding = 10.0f;
+    const float gap = 6.0f;
     const float stripH = 26.0f;
     const float tabH = 30.0f;
     const float rowH = 24.0f;
@@ -4154,29 +4151,75 @@ void SectorEditor::DrawPreviewOverlay(
 
     float y = tabY + tabH + gap;
     if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
-        engine::Checkbox(
-                ui,
-                smallConfig,
-                input,
-                assets,
-                "sector_editor_show_object_probe_debug_overlay",
-                Rectangle{panel.x + padding, y, 240.0f, rowH},
-                smallFont,
-                "Show Object Probes",
-                state.showObjectProbeDebugOverlay);
-        y += rowH + 6.0f;
-    }
-    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
-        if (engine::Button(
+        const Rectangle checkboxRect{panel.x + padding, y, 240.0f, rowH};
+        if (mouseInteractive) {
+            engine::Checkbox(
                     ui,
                     smallConfig,
                     input,
                     assets,
-                    "sector_editor_preview_settings",
-                    Rectangle{panel.x + padding, y, 112.0f, rowH},
+                    "sector_editor_show_object_probe_debug_overlay",
+                    checkboxRect,
                     smallFont,
-                    "Settings")) {
-            OpenPreviewSettingsModal();
+                    "Show Object Probes",
+                    state.showObjectProbeDebugOverlay);
+        } else {
+            DrawRectangleRec(checkboxRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(checkboxRect, config.borderThickness, config.borderColor);
+            const float boxSize = 12.0f;
+            const Rectangle box{
+                    checkboxRect.x + smallConfig.paddingX,
+                    checkboxRect.y + (checkboxRect.height - boxSize) * 0.5f,
+                    boxSize,
+                    boxSize};
+            DrawRectangleRec(box, Color{12, 15, 20, 205});
+            DrawRectangleLinesEx(box, config.borderThickness, config.borderColor);
+            if (state.showObjectProbeDebugOverlay) {
+                constexpr float markPadding = 3.0f;
+                const Rectangle mark{
+                        box.x + markPadding,
+                        box.y + markPadding,
+                        box.width - markPadding * 2.0f,
+                        box.height - markPadding * 2.0f};
+                DrawRectangleRec(mark, smallConfig.accentColor);
+            }
+            const float labelX = box.x + box.width + smallConfig.paddingX;
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    Rectangle{labelX, checkboxRect.y, checkboxRect.x + checkboxRect.width - labelX, checkboxRect.height},
+                    smallFont,
+                    "Show Object Probes",
+                    engine::UITextJustify::Left,
+                    smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+    }
+    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
+        const Rectangle settingsRect{panel.x + padding, y, 112.0f, rowH};
+        if (mouseInteractive) {
+            if (engine::Button(
+                        ui,
+                        smallConfig,
+                        input,
+                        assets,
+                        "sector_editor_preview_settings",
+                        settingsRect,
+                        smallFont,
+                        "Settings")) {
+                OpenPreviewSettingsModal();
+            }
+        } else {
+            DrawRectangleRec(settingsRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(settingsRect, config.borderThickness, config.borderColor);
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    settingsRect,
+                    smallFont,
+                    "Settings",
+                    engine::UITextJustify::Center,
+                    smallConfig.mutedTextColor);
         }
         y += rowH + 6.0f;
     }
