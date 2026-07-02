@@ -47,7 +47,6 @@ struct SectorEditorSpritePickerResult {
     bool valid = false;
     std::string spriteAnimationPath;
     std::string atlasImagePath;
-    std::string clipName;
     std::vector<std::string> clipNames;
 };
 
@@ -96,19 +95,24 @@ bool ValidateAddMapTextureId(const AddMapTextureState& modalState, std::string& 
 SectorEditorAddTextureResult AddSelectedMapTexture(SectorEditorState& state);
 
 void RefreshSpritePickerScan(SpritePickerState& picker);
+void RefreshSpriteMetadataCatalog(SectorSpriteMetadataCatalog& catalog);
+const SectorSpriteMetadata* FindSpriteMetadata(
+        const SectorSpriteMetadataCatalog& catalog,
+        const std::string& spriteAnimationPath);
 void SelectSpritePickerSprite(SpritePickerState& picker, int spriteIndex);
 void RefreshSpritePickerPreview(SpritePickerState& picker, engine::AssetManager& assets);
 void CloseSpritePicker(SpritePickerState& picker, engine::AssetManager& assets);
 SectorEditorSpritePickerResult SelectedSpritePickerResult(const SpritePickerState& picker);
 void OpenBillboardSpritePicker(
         SpritePickerState& picker,
-        BillboardSpritePickerTarget target,
-        const std::string& spriteAnimationPath,
-        const std::string& clipName);
+        const std::string& spriteAnimationPath);
 bool ApplySpritePickerResultToBillboard(
         SectorPlacedBillboard& billboard,
-        BillboardSpritePickerTarget target,
         const SectorEditorSpritePickerResult& result);
+bool RepairBillboardClipsForSpriteMetadata(
+        SectorPlacedBillboard& billboard,
+        const SectorSpriteMetadata& metadata,
+        bool repairInvalidNonEmpty);
 
 bool OpenTopologyTexturePicker(
         SectorEditorState& state,

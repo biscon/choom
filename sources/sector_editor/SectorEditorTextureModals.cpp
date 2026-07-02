@@ -434,38 +434,6 @@ void DrawSpritePickerModal(
             TextFormat("Atlas: %s", selected.atlasImagePath.empty() ? "<none>" : selected.atlasImagePath.c_str()),
             engine::UITextJustify::Left,
             config.mutedTextColor);
-    y += 64.0f;
-
-    const Rectangle clipBounds{rightX, y, 420.0f, 104.0f};
-    const float clipContentW = ScrollAreaContentWidthForVerticalScrollbar(clipBounds.width, config);
-    const Vector2 clipContentSize{
-            clipContentW,
-            std::max(clipBounds.height, config.listItemHeight * static_cast<float>(picker.clipOptionLabels.size()))
-    };
-    engine::UIScrollAreaResult clipScroll = engine::BeginScrollArea(
-            ui,
-            config,
-            input,
-            "sector_editor_sprite_picker_clip_scroll",
-            clipBounds,
-            clipContentSize,
-            picker.clipScroll
-    );
-    if (!picker.clipOptionLabels.empty()) {
-        engine::List(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_sprite_picker_clip_list",
-                Rectangle{0.0f, 0.0f, clipScroll.viewport.width, clipContentSize.y},
-                font,
-                picker.clipOptionLabels.data(),
-                picker.clipOptionLabels.size(),
-                picker.selectedClipIndex
-        );
-    }
-    engine::EndScrollArea(ui, config, input, clipScroll, picker.clipScroll);
 
     const float buttonY = modal.y + modal.height - 64.0f;
     const float buttonW = 150.0f;

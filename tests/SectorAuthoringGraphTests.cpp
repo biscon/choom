@@ -5122,7 +5122,7 @@ void TestSpriteMetadataScannerRejectsMissingSpritesDirectory()
     std::filesystem::remove_all(assetsRoot, ec);
 }
 
-void TestSpritePickerSelectsSpriteAndClipMetadata()
+void TestSpritePickerSelectsSpriteMetadata()
 {
     game::SpritePickerState picker;
     picker.sprites.push_back(game::SectorSpriteMetadata{
@@ -5139,15 +5139,11 @@ void TestSpritePickerSelectsSpriteAndClipMetadata()
             game::SelectedSpritePickerResult(picker);
 
     Check(picker.selectedSpriteIndex == 1, "sprite picker selects requested sprite index");
-    Check(picker.selectedClipIndex == 0, "sprite picker selects first clip by default");
-    Check(picker.clipOptionLabels.size() == 1
-                  && std::string(picker.clipOptionLabels[0]) == "Default",
-          "sprite picker populates clip labels from selected metadata");
     Check(selected.valid
                   && selected.spriteAnimationPath == "assets/sprites/props/barrel.json"
                   && selected.atlasImagePath == "assets/sprites/props/barrel.png"
-                  && selected.clipName == "Default",
-          "sprite picker result returns selected sprite, atlas, and clip");
+                  && selected.clipNames == std::vector<std::string>({"Default"}),
+          "sprite picker result returns selected sprite, atlas, and clip metadata");
 
     game::SelectSpritePickerSprite(picker, -1);
     const game::SectorEditorSpritePickerResult cleared =
@@ -5155,7 +5151,7 @@ void TestSpritePickerSelectsSpriteAndClipMetadata()
     Check(!cleared.valid, "sprite picker result is invalid after clearing selection");
 }
 
-void TestBillboardSpritePickerApplyWritesSingleClip()
+void TestBillboardSpritePickerApplyRepairsSingleClips()
 {
     game::SectorPlacedBillboard billboard;
     billboard.spriteAnimationPath.clear();
@@ -5165,26 +5161,24 @@ void TestBillboardSpritePickerApplyWritesSingleClip()
     result.valid = true;
     result.spriteAnimationPath = "assets/sprites/effects/torch.json";
     result.atlasImagePath = "assets/sprites/effects/torch.png";
-    result.clipName = "Burn";
     result.clipNames = {"Idle", "Burn"};
 
     Check(game::ApplySpritePickerResultToBillboard(
                   billboard,
-                  game::BillboardSpritePickerTarget::SingleClip,
                   result),
-          "billboard sprite picker apply reports single-clip change");
+          "billboard sprite picker apply reports sprite change");
     Check(billboard.spriteAnimationPath == "assets/sprites/effects/torch.json",
           "billboard sprite picker apply writes sprite animation path");
-    Check(billboard.clip == "Burn",
-          "billboard sprite picker apply writes selected single clip");
-    Check(billboard.frontClip == "Burn"
-                  && billboard.backClip == "Burn"
-                  && billboard.leftClip == "Burn"
-                  && billboard.rightClip == "Burn",
-          "billboard sprite picker apply defaults invalid directional clips to selected metadata");
+    Check(billboard.clip == "Idle",
+          "billboard sprite picker apply defaults empty single clip to first metadata clip");
+    Check(billboard.frontClip == "Idle"
+                  && billboard.backClip == "Idle"
+                  && billboard.leftClip == "Idle"
+                  && billboard.rightClip == "Idle",
+          "billboard sprite picker apply defaults empty directional clips to metadata");
 }
 
-void TestBillboardSpritePickerApplyWritesDirectionalClip()
+void TestBillboardSpritePickerApplyRepairsDirectionalClips()
 {
     game::SectorPlacedBillboard billboard;
     billboard.spriteAnimationPath = "assets/sprites/old.json";
@@ -5198,21 +5192,69 @@ void TestBillboardSpritePickerApplyWritesDirectionalClip()
     result.valid = true;
     result.spriteAnimationPath = "assets/sprites/characters/guard.json";
     result.atlasImagePath = "assets/sprites/characters/guard.png";
-    result.clipName = "Attack";
     result.clipNames = {"Front", "Back", "Left", "Right", "Attack"};
 
     Check(game::ApplySpritePickerResultToBillboard(
                   billboard,
-                  game::BillboardSpritePickerTarget::LeftClip,
                   result),
           "billboard sprite picker apply reports directional change");
     Check(billboard.spriteAnimationPath == "assets/sprites/characters/guard.json",
           "billboard directional picker apply writes sprite animation path");
     Check(billboard.frontClip == "Front"
                   && billboard.backClip == "Back"
-                  && billboard.leftClip == "Attack"
+                  && billboard.leftClip == "Left"
                   && billboard.rightClip == "Right",
-          "billboard directional picker apply preserves valid/default clips and writes selected slot");
+          "billboard directional picker apply repairs invalid directional clips from selected metadata");
+}
+
+void TestBillboardClipRepairPreservesNonEmptyOnInitialMetadataResolve()
+{
+    game::SectorPlacedBillboard billboard;
+    billboard.spriteAnimationPath = "assets/sprites/characters/guard.json";
+    billboard.clip.clear();
+    billboard.frontClip = "Missing";
+    billboard.backClip.clear();
+    billboard.leftClip = "Left";
+    billboard.rightClip = "AlsoMissing";
+
+    const game::SectorSpriteMetadata metadata{
+            "assets/sprites/characters/guard.json",
+            "assets/sprites/characters/guard.png",
+            {"Front", "Back", "Left", "Right"}};
+
+    Check(game::RepairBillboardClipsForSpriteMetadata(billboard, metadata, false),
+          "initial metadata repair fills empty clip fields");
+    Check(billboard.clip == "Front"
+                  && billboard.frontClip == "Missing"
+                  && billboard.backClip == "Back"
+                  && billboard.leftClip == "Left"
+                  && billboard.rightClip == "AlsoMissing",
+          "initial metadata repair preserves non-empty authored stale clips");
+}
+
+void TestBillboardClipRepairOverwritesInvalidOnSpriteChange()
+{
+    game::SectorPlacedBillboard billboard;
+    billboard.spriteAnimationPath = "assets/sprites/characters/guard.json";
+    billboard.clip = "Missing";
+    billboard.frontClip = "Missing";
+    billboard.backClip.clear();
+    billboard.leftClip = "Left";
+    billboard.rightClip = "AlsoMissing";
+
+    const game::SectorSpriteMetadata metadata{
+            "assets/sprites/characters/guard.json",
+            "assets/sprites/characters/guard.png",
+            {"Front", "Back", "Left", "Right"}};
+
+    Check(game::RepairBillboardClipsForSpriteMetadata(billboard, metadata, true),
+          "sprite-change metadata repair overwrites invalid clip fields");
+    Check(billboard.clip == "Front"
+                  && billboard.frontClip == "Front"
+                  && billboard.backClip == "Back"
+                  && billboard.leftClip == "Left"
+                  && billboard.rightClip == "Right",
+          "sprite-change metadata repair chooses directional defaults and first single clip");
 }
 
 void TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics()
@@ -7716,9 +7758,11 @@ int main()
     TestSpriteMetadataScannerFindsNestedJsonAndFrameTagClips();
     TestSpriteMetadataScannerFallsBackToFrameNamesAndDefaultClip();
     TestSpriteMetadataScannerRejectsMissingSpritesDirectory();
-    TestSpritePickerSelectsSpriteAndClipMetadata();
-    TestBillboardSpritePickerApplyWritesSingleClip();
-    TestBillboardSpritePickerApplyWritesDirectionalClip();
+    TestSpritePickerSelectsSpriteMetadata();
+    TestBillboardSpritePickerApplyRepairsSingleClips();
+    TestBillboardSpritePickerApplyRepairsDirectionalClips();
+    TestBillboardClipRepairPreservesNonEmptyOnInitialMetadataResolve();
+    TestBillboardClipRepairOverwritesInvalidOnSpriteChange();
     TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics();
     TestEditorAuthoringPreviewAndBakeGateAllowsCurrentDerivedTopology();
     TestEditorAuthoringPreviewAndBakeGateRejectsInvalidNoDerived();

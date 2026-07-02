@@ -5873,9 +5873,7 @@ void SectorEditor::DrawSectorsPanel(
 
         auto openBillboardPickerButton =
                 [&](const char* id,
-                    const char* label,
-                    BillboardSpritePickerTarget target,
-                    const std::string& clipName) {
+                    const char* label) {
                     if (engine::Button(
                                 ui,
                                 config,
@@ -5885,47 +5883,142 @@ void SectorEditor::DrawSectorsPanel(
                                 Rectangle{0.0f, y, contentW, rowH},
                                 font,
                                 label)) {
-                        OpenSelectedBillboardSpritePicker(target, clipName);
+                        OpenSelectedBillboardSpritePicker();
                     }
                     y += rowH + gap;
                 };
 
-        auto drawBillboardClipRow =
-                [&](const char* textId,
-                    const char* buttonId,
+        const SectorSpriteMetadata* selectedBillboardMetadata = nullptr;
+        std::string selectedBillboardMetadataStatus;
+        auto resolveSelectedBillboardMetadata = [&]() -> const SectorSpriteMetadata* {
+            if (!isBillboard || selectedObject == nullptr) {
+                return nullptr;
+            }
+            const std::string spritePath = selectedObject->billboard.spriteAnimationPath;
+            if (spritePath.empty()) {
+                selectedBillboardMetadataStatus = "Pick a sprite first";
+                return nullptr;
+            }
+
+            const bool targetChanged = state.billboardMetadataObjectId != selectedObject->id
+                    || state.billboardMetadataSpriteAnimationPath != spritePath;
+            if (targetChanged) {
+                state.billboardMetadataObjectId = selectedObject->id;
+                state.billboardMetadataSpriteAnimationPath = spritePath;
+                state.billboardMetadataInitialRepairAttempted = false;
+                if (!state.spriteMetadataCatalog.scanned
+                        || FindSpriteMetadata(state.spriteMetadataCatalog, spritePath) == nullptr) {
+                    RefreshSpriteMetadataCatalog(state.spriteMetadataCatalog);
+                }
+            }
+
+            const SectorSpriteMetadata* metadata = FindSpriteMetadata(state.spriteMetadataCatalog, spritePath);
+            if (metadata == nullptr) {
+                selectedBillboardMetadataStatus = state.spriteMetadataCatalog.scanMessage.empty()
+                        ? "Sprite metadata unavailable"
+                        : state.spriteMetadataCatalog.scanMessage;
+                return nullptr;
+            }
+            if (metadata->clipNames.empty()) {
+                selectedBillboardMetadataStatus = "Sprite has no clips";
+                return nullptr;
+            }
+
+            if (!state.billboardMetadataInitialRepairAttempted) {
+                state.billboardMetadataInitialRepairAttempted = true;
+                const int objectId = selectedObject->id;
+                MutateSelectedRuntimeObject(
+                        "Updated billboard clip defaults",
+                        [objectId, spritePath, metadata](SectorPlacedRuntimeObject& object) {
+                            if (object.id != objectId
+                                    || object.kind != "billboard"
+                                    || object.billboard.spriteAnimationPath != spritePath) {
+                                return false;
+                            }
+                            return RepairBillboardClipsForSpriteMetadata(object.billboard, *metadata, false);
+                        });
+                selectedObject = SelectedRuntimeObject();
+            }
+            return metadata;
+        };
+
+        auto drawBillboardClipOptionRow =
+                [&](const char* optionId,
                     const char* label,
-                    const char* buttonLabel,
-                    BillboardSpritePickerTarget target,
-                    const std::string& clipName) {
-                    (void)textId;
-                    const std::string clipLabel = clipName.empty()
-                            ? TextFormat("%s: <default>", label)
-                            : TextFormat("%s: %s", label, clipName.c_str());
+                    const std::string& clipName,
+                    const std::function<bool(SectorPlacedRuntimeObject&, const std::string&)>& applyClip) {
+                    constexpr float labelW = 92.0f;
                     engine::Text(
                             ui,
                             config,
                             assets,
-                            Rectangle{0.0f, y, contentW, 28.0f},
+                            Rectangle{0.0f, y, labelW, rowH},
                             font,
-                            clipLabel.c_str(),
+                            label,
                             engine::UITextJustify::Left,
-                            clipName.empty() ? config.mutedTextColor : config.textColor);
-                    y += 30.0f;
-                    openBillboardPickerButton(buttonId, buttonLabel, target, clipName);
+                            config.mutedTextColor);
+                    const Rectangle fieldBounds{
+                            labelW + gap,
+                            y,
+                            std::max(0.0f, contentW - labelW - gap),
+                            rowH};
+                    if (selectedBillboardMetadata == nullptr || selectedBillboardMetadata->clipNames.empty()) {
+                        engine::Text(
+                                ui,
+                                config,
+                                assets,
+                                fieldBounds,
+                                font,
+                                selectedBillboardMetadataStatus.empty()
+                                        ? "Sprite metadata unavailable"
+                                        : selectedBillboardMetadataStatus.c_str(),
+                                engine::UITextJustify::Left,
+                                config.mutedTextColor);
+                        y += rowH + gap;
+                        return;
+                    }
+
+                    int selectedIndex = 0;
+                    const auto it = std::find(
+                            selectedBillboardMetadata->clipNames.begin(),
+                            selectedBillboardMetadata->clipNames.end(),
+                            clipName);
+                    if (it != selectedBillboardMetadata->clipNames.end()) {
+                        selectedIndex = static_cast<int>(
+                                std::distance(selectedBillboardMetadata->clipNames.begin(), it));
+                    }
+                    const int previousIndex = selectedIndex;
+                    if (engine::Option(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                optionId,
+                                fieldBounds,
+                                font,
+                                selectedBillboardMetadata->clipNames,
+                                selectedIndex)
+                            && selectedIndex >= 0
+                            && selectedIndex < static_cast<int>(selectedBillboardMetadata->clipNames.size())
+                            && selectedIndex != previousIndex) {
+                        const std::string selectedClip =
+                                selectedBillboardMetadata->clipNames[static_cast<size_t>(selectedIndex)];
+                        MutateSelectedRuntimeObject(
+                                "Updated billboard clip",
+                                [applyClip, selectedClip](SectorPlacedRuntimeObject& object) {
+                                    if (object.kind != "billboard") {
+                                        return false;
+                                    }
+                                    return applyClip(object, selectedClip);
+                                });
+                    }
+                    y += rowH + gap;
                 };
 
         if (isBillboard) {
-            const BillboardSpritePickerTarget spriteButtonTarget = selectedObject->billboard.directional
-                    ? BillboardSpritePickerTarget::FrontClip
-                    : BillboardSpritePickerTarget::SingleClip;
-            const std::string spriteButtonClip = selectedObject->billboard.directional
-                    ? selectedObject->billboard.frontClip
-                    : selectedObject->billboard.clip;
             openBillboardPickerButton(
                     "sector_editor_runtime_object_pick_sprite",
-                    "Pick Sprite / Clip",
-                    spriteButtonTarget,
-                    spriteButtonClip);
+                    "Pick Sprite");
             selectedObject = SelectedRuntimeObject();
             if (selectedObject == nullptr) {
                 engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
@@ -6191,53 +6284,77 @@ void SectorEditor::DrawSectorsPanel(
                 return;
             }
 
+            selectedBillboardMetadata = resolveSelectedBillboardMetadata();
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
             if (selectedObject->billboard.directional) {
-                drawBillboardClipRow(
-                        "sector_editor_runtime_object_front_clip_label",
-                        "sector_editor_runtime_object_front_clip",
-                        "Front clip",
-                        "Pick Front Clip",
-                        BillboardSpritePickerTarget::FrontClip,
-                        selectedObject->billboard.frontClip);
+                drawBillboardClipOptionRow(
+                        "sector_editor_billboard_clip_front_option",
+                        "Front Clip",
+                        selectedObject->billboard.frontClip,
+                        [](SectorPlacedRuntimeObject& object, const std::string& clip) {
+                            if (object.billboard.frontClip == clip) {
+                                return false;
+                            }
+                            object.billboard.frontClip = clip;
+                            return true;
+                        });
                 selectedObject = SelectedRuntimeObject();
                 if (selectedObject == nullptr) {
                     engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
                     engine::EndPanel(ui, config, panel);
                     return;
                 }
-                drawBillboardClipRow(
-                        "sector_editor_runtime_object_back_clip_label",
-                        "sector_editor_runtime_object_back_clip",
-                        "Back clip",
-                        "Pick Back Clip",
-                        BillboardSpritePickerTarget::BackClip,
-                        selectedObject->billboard.backClip);
+                drawBillboardClipOptionRow(
+                        "sector_editor_billboard_clip_back_option",
+                        "Back Clip",
+                        selectedObject->billboard.backClip,
+                        [](SectorPlacedRuntimeObject& object, const std::string& clip) {
+                            if (object.billboard.backClip == clip) {
+                                return false;
+                            }
+                            object.billboard.backClip = clip;
+                            return true;
+                        });
                 selectedObject = SelectedRuntimeObject();
                 if (selectedObject == nullptr) {
                     engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
                     engine::EndPanel(ui, config, panel);
                     return;
                 }
-                drawBillboardClipRow(
-                        "sector_editor_runtime_object_left_clip_label",
-                        "sector_editor_runtime_object_left_clip",
-                        "Left clip",
-                        "Pick Left Clip",
-                        BillboardSpritePickerTarget::LeftClip,
-                        selectedObject->billboard.leftClip);
+                drawBillboardClipOptionRow(
+                        "sector_editor_billboard_clip_left_option",
+                        "Left Clip",
+                        selectedObject->billboard.leftClip,
+                        [](SectorPlacedRuntimeObject& object, const std::string& clip) {
+                            if (object.billboard.leftClip == clip) {
+                                return false;
+                            }
+                            object.billboard.leftClip = clip;
+                            return true;
+                        });
                 selectedObject = SelectedRuntimeObject();
                 if (selectedObject == nullptr) {
                     engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
                     engine::EndPanel(ui, config, panel);
                     return;
                 }
-                drawBillboardClipRow(
-                        "sector_editor_runtime_object_right_clip_label",
-                        "sector_editor_runtime_object_right_clip",
-                        "Right clip",
-                        "Pick Right Clip",
-                        BillboardSpritePickerTarget::RightClip,
-                        selectedObject->billboard.rightClip);
+                drawBillboardClipOptionRow(
+                        "sector_editor_billboard_clip_right_option",
+                        "Right Clip",
+                        selectedObject->billboard.rightClip,
+                        [](SectorPlacedRuntimeObject& object, const std::string& clip) {
+                            if (object.billboard.rightClip == clip) {
+                                return false;
+                            }
+                            object.billboard.rightClip = clip;
+                            return true;
+                        });
                 selectedObject = SelectedRuntimeObject();
                 if (selectedObject == nullptr) {
                     engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
@@ -6245,13 +6362,17 @@ void SectorEditor::DrawSectorsPanel(
                     return;
                 }
             } else {
-                drawBillboardClipRow(
-                        "sector_editor_runtime_object_clip_label",
-                        "sector_editor_runtime_object_clip",
+                drawBillboardClipOptionRow(
+                        "sector_editor_billboard_clip_single_option",
                         "Clip",
-                        "Pick Clip",
-                        BillboardSpritePickerTarget::SingleClip,
-                        selectedObject->billboard.clip);
+                        selectedObject->billboard.clip,
+                        [](SectorPlacedRuntimeObject& object, const std::string& clip) {
+                            if (object.billboard.clip == clip) {
+                                return false;
+                            }
+                            object.billboard.clip = clip;
+                            return true;
+                        });
                 selectedObject = SelectedRuntimeObject();
                 if (selectedObject == nullptr) {
                     engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
@@ -8603,7 +8724,12 @@ void SectorEditor::DrawSpritePickerModal(
                 ApplySelectedBillboardSpritePickerSelection();
                 CloseSpritePicker(state.spritePicker, assets);
             },
-            [this]() { RefreshSpritePickerScan(state.spritePicker); },
+            [this]() {
+                RefreshSpritePickerScan(state.spritePicker);
+                state.spriteMetadataCatalog.scanned = true;
+                state.spriteMetadataCatalog.scanMessage = state.spritePicker.scanMessage;
+                state.spriteMetadataCatalog.sprites = state.spritePicker.sprites;
+            },
             [this](int spriteIndex) { SelectSpritePickerSprite(state.spritePicker, spriteIndex); },
             [this, &assets]() { RefreshSpritePickerPreview(state.spritePicker, assets); }
     };
@@ -11468,9 +11594,7 @@ std::string SectorEditor::CurrentTextureForPickerTarget() const
     return game::CurrentTextureForPickerTarget(state);
 }
 
-void SectorEditor::OpenSelectedBillboardSpritePicker(
-        BillboardSpritePickerTarget target,
-        const std::string& clipName)
+void SectorEditor::OpenSelectedBillboardSpritePicker()
 {
     const SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
     if (object == nullptr || object->kind != "billboard") {
@@ -11480,9 +11604,7 @@ void SectorEditor::OpenSelectedBillboardSpritePicker(
 
     OpenBillboardSpritePicker(
             state.spritePicker,
-            target,
-            object->billboard.spriteAnimationPath,
-            clipName);
+            object->billboard.spriteAnimationPath);
 }
 
 void SectorEditor::ApplySelectedBillboardSpritePickerSelection()
@@ -11493,14 +11615,13 @@ void SectorEditor::ApplySelectedBillboardSpritePickerSelection()
         return;
     }
 
-    const BillboardSpritePickerTarget target = state.spritePicker.billboardTarget;
     const bool changed = MutateSelectedRuntimeObject(
             "Updated billboard sprite",
-            [target, &selected](SectorPlacedRuntimeObject& object) {
+            [&selected](SectorPlacedRuntimeObject& object) {
                 if (object.kind != "billboard") {
                     return false;
                 }
-                return ApplySpritePickerResultToBillboard(object.billboard, target, selected);
+                return ApplySpritePickerResultToBillboard(object.billboard, selected);
             });
     statusText = changed
             ? TextFormat("Selected sprite %s", selected.spriteAnimationPath.c_str())

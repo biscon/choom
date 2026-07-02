@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <utility>
+#include <vector>
 
 namespace engine {
 
@@ -1137,33 +1139,31 @@ void EndUI(
 {
     (void)input;
 
-    if (ui.optionOverlay.active
-            && ui.optionOverlay.options != nullptr
-            && ui.optionOverlay.selectedIndex != nullptr
-            && ui.optionOverlay.optionCount > 0) {
+    if (ui.optionOverlay.active && !ui.optionOverlay.options.empty()) {
         UIContext::OptionOverlay& overlay = ui.optionOverlay;
 
         DrawSelectablePanelBackground(ui, config, overlay.dropdownBounds);
 
+        const size_t firstVisibleIndex = std::min(overlay.firstVisibleIndex, overlay.options.size());
         const size_t visibleCount = overlay.visibleOptionCount == 0
-                ? overlay.optionCount
-                : std::min(overlay.visibleOptionCount, overlay.optionCount - overlay.firstVisibleIndex);
+                ? overlay.options.size() - firstVisibleIndex
+                : std::min(overlay.visibleOptionCount, overlay.options.size() - firstVisibleIndex);
         for (size_t i = 0; i < visibleCount; ++i) {
-            const size_t optionIndex = overlay.firstVisibleIndex + i;
+            const size_t optionIndex = firstVisibleIndex + i;
             const Rectangle row = ListItemBounds(
                     overlay.dropdownBounds,
                     config.listItemHeight,
                     i
             );
             const bool hovered = Contains(row, ui.mousePosition);
-            const bool selected = *overlay.selectedIndex == static_cast<int>(optionIndex);
+            const bool selected = overlay.selectedIndexSnapshot == static_cast<int>(optionIndex);
             DrawSelectableRow(
                     ui,
                     config,
                     assets,
                     row,
                     overlay.font,
-                    overlay.options[optionIndex],
+                    overlay.options[optionIndex].c_str(),
                     hovered,
                     selected
             );
@@ -2378,23 +2378,54 @@ bool Option(
                 optionCount,
                 dropdownLayout.visibleOptionCount
         );
-        ui.optionOverlay = UIContext::OptionOverlay{
-                true,
-                widgetId,
-                fieldBounds,
-                dropdownBounds,
-                font,
-                options,
-                optionCount,
-                ui.openOptionFirstVisibleIndex,
-                dropdownLayout.visibleOptionCount,
-                &selectedIndex
-        };
+        UIContext::OptionOverlay overlay;
+        overlay.active = true;
+        overlay.id = widgetId;
+        overlay.fieldBounds = fieldBounds;
+        overlay.dropdownBounds = dropdownBounds;
+        overlay.font = font;
+        overlay.options.reserve(optionCount);
+        for (size_t i = 0; i < optionCount; ++i) {
+            overlay.options.emplace_back(options[i] == nullptr ? "" : options[i]);
+        }
+        overlay.firstVisibleIndex = ui.openOptionFirstVisibleIndex;
+        overlay.visibleOptionCount = dropdownLayout.visibleOptionCount;
+        overlay.selectedIndexSnapshot = selectedIndex;
+        ui.optionOverlay = std::move(overlay);
     } else if (ui.openOptionId == widgetId) {
         ClearOpenOption(ui);
     }
 
     return changed;
+}
+
+bool Option(
+        UIContext& ui,
+        const UIConfig& config,
+        Input& input,
+        AssetManager& assets,
+        const char* id,
+        Rectangle bounds,
+        FontHandle font,
+        const std::vector<std::string>& options,
+        int& selectedIndex)
+{
+    std::vector<const char*> optionLabels;
+    optionLabels.reserve(options.size());
+    for (const std::string& option : options) {
+        optionLabels.push_back(option.c_str());
+    }
+    return Option(
+            ui,
+            config,
+            input,
+            assets,
+            id,
+            bounds,
+            font,
+            optionLabels.empty() ? nullptr : optionLabels.data(),
+            optionLabels.size(),
+            selectedIndex);
 }
 
 UIPanelResult BeginPanel(

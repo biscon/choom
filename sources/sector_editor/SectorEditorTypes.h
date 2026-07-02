@@ -246,13 +246,10 @@ struct SectorSpriteMetadata {
     std::vector<std::string> clipNames;
 };
 
-enum class BillboardSpritePickerTarget {
-    None,
-    SingleClip,
-    FrontClip,
-    BackClip,
-    LeftClip,
-    RightClip
+struct SectorSpriteMetadataCatalog {
+    bool scanned = false;
+    std::string scanMessage;
+    std::vector<SectorSpriteMetadata> sprites;
 };
 
 struct SpritePickerState {
@@ -260,15 +257,10 @@ struct SpritePickerState {
     bool scanned = false;
     std::string scanMessage;
     engine::UIScrollState spriteScroll;
-    engine::UIScrollState clipScroll;
     std::vector<SectorSpriteMetadata> sprites;
     std::vector<const char*> spriteOptionLabels;
-    std::vector<const char*> clipOptionLabels;
     int selectedSpriteIndex = -1;
-    int selectedClipIndex = -1;
-    BillboardSpritePickerTarget billboardTarget = BillboardSpritePickerTarget::None;
     std::string requestedSpriteAnimationPath;
-    std::string requestedClipName;
     engine::AssetScopeHandle previewScope = engine::NullAssetScopeHandle();
     engine::TextureHandle previewTexture = engine::NullTextureHandle();
     std::string previewAtlasPath;
@@ -635,6 +627,10 @@ struct SectorEditorState {
     std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;
     TexturePickerState texturePicker;
     AddMapTextureState addMapTexture;
+    SectorSpriteMetadataCatalog spriteMetadataCatalog;
+    int billboardMetadataObjectId = -1;
+    std::string billboardMetadataSpriteAnimationPath;
+    bool billboardMetadataInitialRepairAttempted = false;
     SpritePickerState spritePicker;
     SaveLevelModalState saveLevelModal;
     LoadLevelModalState loadLevelModal;

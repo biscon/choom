@@ -56,39 +56,27 @@ bool ContainsClipName(const std::vector<std::string>& clipNames, const std::stri
             && std::find(clipNames.begin(), clipNames.end(), clipName) != clipNames.end();
 }
 
-std::string FirstAvailableClipName(const SectorEditorSpritePickerResult& result)
+std::string FirstAvailableClipName(const SectorSpriteMetadata& metadata)
 {
-    if (!result.clipName.empty()) {
-        return result.clipName;
-    }
-    return result.clipNames.empty() ? std::string{} : result.clipNames.front();
+    return metadata.clipNames.empty() ? std::string{} : metadata.clipNames.front();
 }
 
 std::string ChooseBillboardClipName(
-        const SectorEditorSpritePickerResult& result,
+        const SectorSpriteMetadata& metadata,
         const std::string& preferred,
-        const std::string& current)
+        const std::string& current,
+        bool repairInvalidNonEmpty)
 {
-    if (ContainsClipName(result.clipNames, current)) {
+    if (ContainsClipName(metadata.clipNames, current)) {
         return current;
     }
-    if (ContainsClipName(result.clipNames, preferred)) {
+    if (!current.empty() && !repairInvalidNonEmpty) {
+        return current;
+    }
+    if (ContainsClipName(metadata.clipNames, preferred)) {
         return preferred;
     }
-    return FirstAvailableClipName(result);
-}
-
-void SelectSpritePickerClip(SpritePickerState& picker, const std::string& clipName)
-{
-    if (picker.selectedSpriteIndex < 0 || picker.selectedSpriteIndex >= static_cast<int>(picker.sprites.size())) {
-        return;
-    }
-    const SectorSpriteMetadata& metadata = picker.sprites[static_cast<size_t>(picker.selectedSpriteIndex)];
-    const auto it = std::find(metadata.clipNames.begin(), metadata.clipNames.end(), clipName);
-    if (it == metadata.clipNames.end()) {
-        return;
-    }
-    picker.selectedClipIndex = static_cast<int>(std::distance(metadata.clipNames.begin(), it));
+    return FirstAvailableClipName(metadata);
 }
 
 bool ResolveAuthoringFaceAnchorPickerTarget(
@@ -451,29 +439,40 @@ void RefreshSpritePickerScan(SpritePickerState& picker)
         }
     }
     SelectSpritePickerSprite(picker, selectedIndex);
-    SelectSpritePickerClip(picker, picker.requestedClipName);
+}
+
+void RefreshSpriteMetadataCatalog(SectorSpriteMetadataCatalog& catalog)
+{
+    catalog.sprites = ScanAssetSpriteAsepriteJsons(catalog.scanMessage);
+    catalog.scanned = true;
+}
+
+const SectorSpriteMetadata* FindSpriteMetadata(
+        const SectorSpriteMetadataCatalog& catalog,
+        const std::string& spriteAnimationPath)
+{
+    if (spriteAnimationPath.empty()) {
+        return nullptr;
+    }
+    const auto it = std::find_if(
+            catalog.sprites.begin(),
+            catalog.sprites.end(),
+            [&spriteAnimationPath](const SectorSpriteMetadata& metadata) {
+                return metadata.spriteAnimationPath == spriteAnimationPath;
+            });
+    return it == catalog.sprites.end() ? nullptr : &(*it);
 }
 
 void SelectSpritePickerSprite(SpritePickerState& picker, int spriteIndex)
 {
     if (spriteIndex < 0 || spriteIndex >= static_cast<int>(picker.sprites.size())) {
         picker.selectedSpriteIndex = -1;
-        picker.selectedClipIndex = -1;
-        picker.clipOptionLabels.clear();
         picker.previewTexture = engine::NullTextureHandle();
         picker.previewAtlasPath.clear();
         return;
     }
 
     picker.selectedSpriteIndex = spriteIndex;
-    const SectorSpriteMetadata& metadata = picker.sprites[static_cast<size_t>(spriteIndex)];
-    picker.selectedClipIndex = metadata.clipNames.empty() ? -1 : 0;
-    picker.clipScroll = engine::UIScrollState{};
-    picker.clipOptionLabels.clear();
-    picker.clipOptionLabels.reserve(metadata.clipNames.size());
-    for (const std::string& clipName : metadata.clipNames) {
-        picker.clipOptionLabels.push_back(clipName.c_str());
-    }
     picker.previewTexture = engine::NullTextureHandle();
     picker.previewAtlasPath.clear();
 }
@@ -490,75 +489,69 @@ SectorEditorSpritePickerResult SelectedSpritePickerResult(const SpritePickerStat
     result.spriteAnimationPath = metadata.spriteAnimationPath;
     result.atlasImagePath = metadata.atlasImagePath;
     result.clipNames = metadata.clipNames;
-    if (picker.selectedClipIndex >= 0 && picker.selectedClipIndex < static_cast<int>(metadata.clipNames.size())) {
-        result.clipName = metadata.clipNames[static_cast<size_t>(picker.selectedClipIndex)];
-    }
     return result;
 }
 
 void OpenBillboardSpritePicker(
         SpritePickerState& picker,
-        BillboardSpritePickerTarget target,
-        const std::string& spriteAnimationPath,
-        const std::string& clipName)
+        const std::string& spriteAnimationPath)
 {
     picker.open = true;
     picker.scanned = false;
     picker.scanMessage.clear();
     picker.spriteScroll = engine::UIScrollState{};
-    picker.clipScroll = engine::UIScrollState{};
     picker.selectedSpriteIndex = -1;
-    picker.selectedClipIndex = -1;
-    picker.billboardTarget = target;
     picker.requestedSpriteAnimationPath = spriteAnimationPath;
-    picker.requestedClipName = clipName;
     picker.previewTexture = engine::NullTextureHandle();
     picker.previewAtlasPath.clear();
 }
 
 bool ApplySpritePickerResultToBillboard(
         SectorPlacedBillboard& billboard,
-        BillboardSpritePickerTarget target,
         const SectorEditorSpritePickerResult& result)
 {
     if (!result.valid || result.spriteAnimationPath.empty()) {
         return false;
     }
 
+    SectorSpriteMetadata metadata;
+    metadata.spriteAnimationPath = result.spriteAnimationPath;
+    metadata.atlasImagePath = result.atlasImagePath;
+    metadata.clipNames = result.clipNames;
+
     SectorPlacedBillboard edited = billboard;
     edited.spriteAnimationPath = result.spriteAnimationPath;
-
-    edited.clip = ChooseBillboardClipName(result, "Default", edited.clip);
-    edited.frontClip = ChooseBillboardClipName(result, "Front", edited.frontClip);
-    edited.backClip = ChooseBillboardClipName(result, "Back", edited.backClip);
-    edited.leftClip = ChooseBillboardClipName(result, "Left", edited.leftClip);
-    edited.rightClip = ChooseBillboardClipName(result, "Right", edited.rightClip);
-
-    const std::string selectedClip = FirstAvailableClipName(result);
-    if (!selectedClip.empty()) {
-        switch (target) {
-            case BillboardSpritePickerTarget::SingleClip:
-                edited.clip = selectedClip;
-                break;
-            case BillboardSpritePickerTarget::FrontClip:
-                edited.frontClip = selectedClip;
-                break;
-            case BillboardSpritePickerTarget::BackClip:
-                edited.backClip = selectedClip;
-                break;
-            case BillboardSpritePickerTarget::LeftClip:
-                edited.leftClip = selectedClip;
-                break;
-            case BillboardSpritePickerTarget::RightClip:
-                edited.rightClip = selectedClip;
-                break;
-            case BillboardSpritePickerTarget::None:
-                break;
-        }
-    }
+    RepairBillboardClipsForSpriteMetadata(edited, metadata, true);
 
     const bool changed = edited.spriteAnimationPath != billboard.spriteAnimationPath
             || edited.clip != billboard.clip
+            || edited.frontClip != billboard.frontClip
+            || edited.backClip != billboard.backClip
+            || edited.leftClip != billboard.leftClip
+            || edited.rightClip != billboard.rightClip;
+    if (changed) {
+        billboard = std::move(edited);
+    }
+    return changed;
+}
+
+bool RepairBillboardClipsForSpriteMetadata(
+        SectorPlacedBillboard& billboard,
+        const SectorSpriteMetadata& metadata,
+        bool repairInvalidNonEmpty)
+{
+    if (metadata.clipNames.empty()) {
+        return false;
+    }
+
+    SectorPlacedBillboard edited = billboard;
+    edited.clip = ChooseBillboardClipName(metadata, "Default", edited.clip, repairInvalidNonEmpty);
+    edited.frontClip = ChooseBillboardClipName(metadata, "Front", edited.frontClip, repairInvalidNonEmpty);
+    edited.backClip = ChooseBillboardClipName(metadata, "Back", edited.backClip, repairInvalidNonEmpty);
+    edited.leftClip = ChooseBillboardClipName(metadata, "Left", edited.leftClip, repairInvalidNonEmpty);
+    edited.rightClip = ChooseBillboardClipName(metadata, "Right", edited.rightClip, repairInvalidNonEmpty);
+
+    const bool changed = edited.clip != billboard.clip
             || edited.frontClip != billboard.frontClip
             || edited.backClip != billboard.backClip
             || edited.leftClip != billboard.leftClip

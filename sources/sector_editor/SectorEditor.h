@@ -374,7 +374,7 @@ private:
     void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer);
     void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer);
     void OpenMapSkyTexturePicker();
-    void OpenSelectedBillboardSpritePicker(BillboardSpritePickerTarget target, const std::string& clipName);
+    void OpenSelectedBillboardSpritePicker();
     void ApplySelectedBillboardSpritePickerSelection();
     void ApplyTexturePickerSelection(engine::AssetManager& assets);
     std::string CurrentTextureForPickerTarget() const;

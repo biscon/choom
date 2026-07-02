@@ -5,6 +5,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace engine {
 
@@ -73,11 +75,10 @@ struct UIContext {
         Rectangle fieldBounds = {};
         Rectangle dropdownBounds = {};
         FontHandle font = NullFontHandle();
-        const char* const* options = nullptr;
-        size_t optionCount = 0;
+        std::vector<std::string> options;
         size_t firstVisibleIndex = 0;
         size_t visibleOptionCount = 0;
-        int* selectedIndex = nullptr;
+        int selectedIndexSnapshot = -1;
     };
 
     uint32_t hotId = 0;
@@ -310,6 +311,17 @@ bool Option(
         FontHandle font,
         const char* const* options,
         size_t optionCount,
+        int& selectedIndex);
+
+bool Option(
+        UIContext& ui,
+        const UIConfig& config,
+        Input& input,
+        AssetManager& assets,
+        const char* id,
+        Rectangle bounds,
+        FontHandle font,
+        const std::vector<std::string>& options,
         int& selectedIndex);
 
 UIPanelResult BeginPanel(
