@@ -20,7 +20,7 @@ struct SectorEditorLightInspectorCallbacks {
 float StaticLightInspectorContentHeight(float rowH, float gap, bool hasIdError);
 float StaticSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError);
 float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError);
-float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError);
+float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError, float shadowNoteHeight);
 
 bool DrawSelectedStaticLightInspector(
         engine::UIContext& ui,
@@ -70,6 +70,7 @@ bool DrawSelectedDynamicSpotLightInspector(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
+        engine::FontHandle smallFont,
         engine::UIScrollAreaResult scroll,
         float contentW,
         float rowH,

@@ -396,8 +396,7 @@ const char* ToolName(SectorEditorTool tool)
 
 bool IsGraphAuthoringTool(SectorEditorTool tool)
 {
-    return tool == SectorEditorTool::Select
-            || tool == SectorEditorTool::AuthoringLine
+    return tool == SectorEditorTool::AuthoringLine
             || tool == SectorEditorTool::AuthoringRectangle
             || tool == SectorEditorTool::AuthoringInsertVertex
             || tool == SectorEditorTool::AuthoringMove;
@@ -421,6 +420,130 @@ bool IsSectorEditorGraphAuthoritativeMode()
 const char* LegacyTopologyMutationUnavailableMessage()
 {
     return "Legacy direct-topology tools are unavailable in graph-authoritative mode; use authoring lines and vertices instead.";
+}
+
+const char* SectorEditorPickKindName(SectorEditorPickKind kind)
+{
+    switch (kind) {
+        case SectorEditorPickKind::None: return "none";
+        case SectorEditorPickKind::RuntimeObject: return "object";
+        case SectorEditorPickKind::DynamicSpotLight: return "dynamic spot";
+        case SectorEditorPickKind::DynamicLight: return "dynamic light";
+        case SectorEditorPickKind::StaticSpotLight: return "static spot";
+        case SectorEditorPickKind::StaticLight: return "static light";
+        case SectorEditorPickKind::AuthoringVertex: return "authoring vertex";
+        case SectorEditorPickKind::AuthoringLine: return "authoring line";
+        case SectorEditorPickKind::AuthoringFaceAnchor: return "authoring face";
+    }
+    return "unknown";
+}
+
+bool SameSectorEditorPickTarget(SectorEditorPickTarget a, SectorEditorPickTarget b)
+{
+    return a.kind == b.kind
+            && a.id == b.id
+            && a.spotHandle == b.spotHandle;
+}
+
+bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target)
+{
+    switch (target.kind) {
+        case SectorEditorPickKind::RuntimeObject:
+        case SectorEditorPickKind::DynamicSpotLight:
+        case SectorEditorPickKind::DynamicLight:
+        case SectorEditorPickKind::StaticSpotLight:
+        case SectorEditorPickKind::StaticLight:
+        case SectorEditorPickKind::AuthoringVertex:
+            return target.id >= 0;
+        case SectorEditorPickKind::None:
+        case SectorEditorPickKind::AuthoringLine:
+        case SectorEditorPickKind::AuthoringFaceAnchor:
+            return false;
+    }
+    return false;
+}
+
+bool ShouldStartSectorEditorSelectDrag(Vector2 pressPosition, Vector2 currentPosition)
+{
+    constexpr float dragThresholdPixels = 4.0f;
+    const float dx = currentPosition.x - pressPosition.x;
+    const float dy = currentPosition.y - pressPosition.y;
+    return dx * dx + dy * dy >= dragThresholdPixels * dragThresholdPixels;
+}
+
+int SectorEditorPickPriority(SectorEditorPickKind kind)
+{
+    switch (kind) {
+        case SectorEditorPickKind::RuntimeObject: return 0;
+        case SectorEditorPickKind::DynamicSpotLight: return 1;
+        case SectorEditorPickKind::DynamicLight: return 2;
+        case SectorEditorPickKind::StaticSpotLight: return 3;
+        case SectorEditorPickKind::StaticLight: return 4;
+        case SectorEditorPickKind::AuthoringVertex: return 5;
+        case SectorEditorPickKind::AuthoringLine: return 6;
+        case SectorEditorPickKind::AuthoringFaceAnchor: return 7;
+        case SectorEditorPickKind::None: break;
+    }
+    return 100;
+}
+
+std::vector<SectorEditorPickCandidate> SortSectorEditorPickCandidates(
+        std::vector<SectorEditorPickCandidate> candidates)
+{
+    std::sort(
+            candidates.begin(),
+            candidates.end(),
+            [](const SectorEditorPickCandidate& left, const SectorEditorPickCandidate& right) {
+                const int leftPriority = SectorEditorPickPriority(left.target.kind);
+                const int rightPriority = SectorEditorPickPriority(right.target.kind);
+                if (leftPriority != rightPriority) {
+                    return leftPriority < rightPriority;
+                }
+                if (std::fabs(left.distance2 - right.distance2) > 0.001f) {
+                    return left.distance2 < right.distance2;
+                }
+                if (left.target.id != right.target.id) {
+                    return left.target.id < right.target.id;
+                }
+                return static_cast<int>(left.target.spotHandle)
+                        < static_cast<int>(right.target.spotHandle);
+            });
+    return candidates;
+}
+
+SectorEditorPickTarget ChooseSectorEditorPickTarget(
+        std::vector<SectorEditorPickCandidate> candidates,
+        SectorEditorPickTarget currentSelection,
+        int* outCycleIndex,
+        int* outCycleCount)
+{
+    candidates = SortSectorEditorPickCandidates(std::move(candidates));
+    if (outCycleIndex != nullptr) {
+        *outCycleIndex = -1;
+    }
+    if (outCycleCount != nullptr) {
+        *outCycleCount = static_cast<int>(candidates.size());
+    }
+    if (candidates.empty()) {
+        return SectorEditorPickTarget{};
+    }
+
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (!SameSectorEditorPickTarget(candidates[i].target, currentSelection)) {
+            continue;
+        }
+
+        const size_t next = (i + 1) % candidates.size();
+        if (outCycleIndex != nullptr) {
+            *outCycleIndex = static_cast<int>(next);
+        }
+        return candidates[next].target;
+    }
+
+    if (outCycleIndex != nullptr) {
+        *outCycleIndex = 0;
+    }
+    return candidates.front().target;
 }
 
 const char* TopologyWallPartName(TopologyWallPart part)
@@ -727,17 +850,17 @@ Vector3 SectorPointToWorld(SectorPoint point, float height)
 const char* ToolHelpText(SectorEditorTool tool)
 {
     switch (tool) {
-        case SectorEditorTool::Select: return "Select: click authoring lines or vertices";
+        case SectorEditorTool::Select: return "Select: click primitives to select/cycle, drag an already-selected movable primitive to move";
         case SectorEditorTool::AuthoringLine: return "Authoring line: click snapped points to draw a continuous line chain, right click/Esc stops chain";
         case SectorEditorTool::AuthoringRectangle: return "Rectangle: click first corner, then opposite corner, right click/Esc cancels";
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex: click an authoring line to split it, right click/Esc cancels";
-        case SectorEditorTool::AuthoringMove: return "Move Vertex: drag authoring vertices";
+        case SectorEditorTool::AuthoringMove: return "Move Vertex: hidden; use Select to move selected authoring vertices";
         case SectorEditorTool::RuntimeObject: return "Object: click inside a sector to place a goblin runtime object";
-        case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place, or drag an existing baked point light";
-        case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place, or drag an existing baked spot origin/target";
-        case SectorEditorTool::DynamicLight: return "Dynamic Light: click inside a sector to place, or drag an existing runtime point light";
-        case SectorEditorTool::DynamicSpotLight: return "Dynamic Spot: click inside a sector to place, edit target and cone in Inspector";
-        case SectorEditorTool::Move: return "Legacy move: unavailable in graph-authoritative mode; use Move Vertex for authoring vertices";
+        case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place a baked point light";
+        case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place a baked spot light";
+        case SectorEditorTool::DynamicLight: return "Dynamic Light: click inside a sector to place a runtime point light";
+        case SectorEditorTool::DynamicSpotLight: return "Dynamic Spot: click inside a sector to place a runtime spot light";
+        case SectorEditorTool::Move: return "Legacy move: unavailable in graph-authoritative mode; use Select to move selected primitives";
     }
     return "";
 }

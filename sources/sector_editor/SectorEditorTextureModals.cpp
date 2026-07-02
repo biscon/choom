@@ -9,6 +9,16 @@
 
 namespace game {
 
+namespace {
+
+float ScrollAreaContentWidthForVerticalScrollbar(float boundsWidth, const engine::UIConfig& config)
+{
+    const float clientWidth = std::max(0.0f, boundsWidth - config.borderThickness * 2.0f);
+    return std::max(0.0f, clientWidth - config.scrollbarSize - engine::DefaultScrollAreaPaddingPx * 2.0f);
+}
+
+} // namespace
+
 void DrawAddMapTextureModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -57,8 +67,9 @@ void DrawAddMapTextureModal(
     y += 50.0f;
 
     const Rectangle listBounds{modal.x + 22.0f, y, 380.0f, 470.0f};
+    const float listContentW = ScrollAreaContentWidthForVerticalScrollbar(listBounds.width, config);
     const Vector2 contentSize{
-            listBounds.width,
+            listContentW,
             std::max(listBounds.height, config.listItemHeight * static_cast<float>(modalState.optionLabels.size()))
     };
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
@@ -78,7 +89,7 @@ void DrawAddMapTextureModal(
                 input,
                 assets,
                 "sector_editor_add_texture_list",
-                Rectangle{0.0f, 0.0f, listBounds.width - (scroll.scrollY ? config.scrollbarSize : 0.0f), contentSize.y},
+                Rectangle{0.0f, 0.0f, scroll.viewport.width, contentSize.y},
                 font,
                 modalState.optionLabels.data(),
                 modalState.optionLabels.size(),
@@ -224,8 +235,9 @@ void DrawTexturePickerModal(
     y += 50.0f;
 
     const Rectangle listBounds{modal.x + 22.0f, y, 350.0f, 420.0f};
+    const float listContentW = ScrollAreaContentWidthForVerticalScrollbar(listBounds.width, config);
     const Vector2 contentSize{
-            listBounds.width,
+            listContentW,
             std::max(listBounds.height, config.listItemHeight * static_cast<float>(picker.optionLabels.size()))
     };
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
@@ -244,7 +256,7 @@ void DrawTexturePickerModal(
                 input,
                 assets,
                 "sector_editor_texture_picker_list",
-                Rectangle{0.0f, 0.0f, listBounds.width - (scroll.scrollY ? config.scrollbarSize : 0.0f), contentSize.y},
+                Rectangle{0.0f, 0.0f, scroll.viewport.width, contentSize.y},
                 font,
                 picker.optionLabels.data(),
                 picker.optionLabels.size(),

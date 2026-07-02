@@ -8,6 +8,8 @@
 
 namespace engine {
 
+inline constexpr float DefaultScrollAreaPaddingPx = 4.0f;
+
 enum class UITextJustify {
     Left,
     Center,
@@ -42,7 +44,7 @@ struct UIConfig {
     float caretWidth = 2.0f;
     float caretBlinkInterval = 0.5f;
     float listItemHeight = 42.0f;
-    float scrollbarSize = 14.0f;
+    float scrollbarSize = 8.0f;
     float scrollbarMinThumbSize = 24.0f;
     float mouseWheelScrollAmount = 48.0f;
     float panelHeaderHeight = 44.0f;
@@ -57,6 +59,7 @@ struct UIScrollAreaResult {
     Rectangle bounds = {};
     Rectangle viewport = {};
     Vector2 contentSize = {};
+    float paddingPx = DefaultScrollAreaPaddingPx;
     bool scrollX = false;
     bool scrollY = false;
     bool drawFrame = true;
@@ -142,7 +145,8 @@ UIScrollAreaResult BeginScrollArea(
         Rectangle bounds,
         Vector2 contentSize,
         UIScrollState& state,
-        bool drawFrame = true);
+        bool drawFrame = true,
+        float paddingPx = DefaultScrollAreaPaddingPx);
 
 void EndScrollArea(
         UIContext& ui,
@@ -158,7 +162,8 @@ void Text(
         FontHandle font,
         const char* text,
         UITextJustify justify = UITextJustify::Left,
-        Color tint = BLANK);
+        Color tint = BLANK,
+        bool wordWrap = false);
 
 void Text(
         const UIContext& ui,
@@ -168,7 +173,8 @@ void Text(
         FontHandle font,
         const char* text,
         UITextJustify justify = UITextJustify::Left,
-        Color tint = BLANK);
+        Color tint = BLANK,
+        bool wordWrap = false);
 
 UITextInputResult TextInput(
         UIContext& ui,

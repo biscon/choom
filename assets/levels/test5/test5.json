@@ -377,12 +377,12 @@
     "path": "assets/levels/test5/test5.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "e799b26c305ef69b",
+    "sourceHash": "445a2c40062bf6eb",
     "objectProbes": {
       "path": "assets/levels/test5/test5.lightmap.object_probes.bin",
       "version": 1,
-      "sourceHash": "e799b26c305ef69b",
-      "count": 47,
+      "sourceHash": "445a2c40062bf6eb",
+      "count": 54,
       "probeSpacingWorld": 4.0,
       "probeHeightWorld": 1.2000000476837158,
       "format": "ambientCubeF32LE"
@@ -679,6 +679,96 @@
         "id": 63,
         "x": 4992,
         "y": 2048
+      },
+      {
+        "id": 64,
+        "x": 5504,
+        "y": 1024
+      },
+      {
+        "id": 65,
+        "x": 6272,
+        "y": 1024
+      },
+      {
+        "id": 66,
+        "x": 6272,
+        "y": 1536
+      },
+      {
+        "id": 67,
+        "x": 5504,
+        "y": 1536
+      },
+      {
+        "id": 68,
+        "x": 5504,
+        "y": 1152
+      },
+      {
+        "id": 69,
+        "x": 5440,
+        "y": 1120
+      },
+      {
+        "id": 70,
+        "x": 5440,
+        "y": 1376
+      },
+      {
+        "id": 71,
+        "x": 5504,
+        "y": 1408
+      },
+      {
+        "id": 72,
+        "x": 5360,
+        "y": 1104
+      },
+      {
+        "id": 73,
+        "x": 5376,
+        "y": 1360
+      },
+      {
+        "id": 74,
+        "x": 5280,
+        "y": 1120
+      },
+      {
+        "id": 75,
+        "x": 5312,
+        "y": 1360
+      },
+      {
+        "id": 76,
+        "x": 5216,
+        "y": 1152
+      },
+      {
+        "id": 77,
+        "x": 5248,
+        "y": 1376
+      },
+      {
+        "id": 78,
+        "x": 5120,
+        "y": 1200
+      },
+      {
+        "id": 79,
+        "x": 5184,
+        "y": 1408
+      },
+      {
+        "id": 80,
+        "x": 5024,
+        "y": 1264
+      },
+      {
+        "id": 81,
+        "x": 5104,
+        "y": 1440
       }
     ],
     "lines": [
@@ -895,11 +985,6 @@
         "endVertexId": 42
       },
       {
-        "id": 42,
-        "startVertexId": 42,
-        "endVertexId": 43
-      },
-      {
         "id": 43,
         "startVertexId": 43,
         "endVertexId": 44
@@ -993,6 +1078,136 @@
         "id": 61,
         "startVertexId": 62,
         "endVertexId": 63
+      },
+      {
+        "id": 62,
+        "startVertexId": 42,
+        "endVertexId": 64
+      },
+      {
+        "id": 64,
+        "startVertexId": 64,
+        "endVertexId": 65
+      },
+      {
+        "id": 65,
+        "startVertexId": 65,
+        "endVertexId": 66
+      },
+      {
+        "id": 67,
+        "startVertexId": 67,
+        "endVertexId": 43
+      },
+      {
+        "id": 68,
+        "startVertexId": 66,
+        "endVertexId": 67
+      },
+      {
+        "id": 69,
+        "startVertexId": 64,
+        "endVertexId": 68
+      },
+      {
+        "id": 71,
+        "startVertexId": 68,
+        "endVertexId": 69
+      },
+      {
+        "id": 72,
+        "startVertexId": 69,
+        "endVertexId": 70
+      },
+      {
+        "id": 73,
+        "startVertexId": 68,
+        "endVertexId": 71
+      },
+      {
+        "id": 74,
+        "startVertexId": 71,
+        "endVertexId": 67
+      },
+      {
+        "id": 75,
+        "startVertexId": 70,
+        "endVertexId": 71
+      },
+      {
+        "id": 76,
+        "startVertexId": 69,
+        "endVertexId": 72
+      },
+      {
+        "id": 77,
+        "startVertexId": 72,
+        "endVertexId": 73
+      },
+      {
+        "id": 78,
+        "startVertexId": 73,
+        "endVertexId": 70
+      },
+      {
+        "id": 79,
+        "startVertexId": 72,
+        "endVertexId": 74
+      },
+      {
+        "id": 80,
+        "startVertexId": 74,
+        "endVertexId": 75
+      },
+      {
+        "id": 81,
+        "startVertexId": 75,
+        "endVertexId": 73
+      },
+      {
+        "id": 82,
+        "startVertexId": 74,
+        "endVertexId": 76
+      },
+      {
+        "id": 83,
+        "startVertexId": 76,
+        "endVertexId": 77
+      },
+      {
+        "id": 84,
+        "startVertexId": 77,
+        "endVertexId": 75
+      },
+      {
+        "id": 85,
+        "startVertexId": 76,
+        "endVertexId": 78
+      },
+      {
+        "id": 86,
+        "startVertexId": 78,
+        "endVertexId": 79
+      },
+      {
+        "id": 87,
+        "startVertexId": 79,
+        "endVertexId": 77
+      },
+      {
+        "id": 88,
+        "startVertexId": 78,
+        "endVertexId": 80
+      },
+      {
+        "id": 89,
+        "startVertexId": 80,
+        "endVertexId": 81
+      },
+      {
+        "id": 90,
+        "startVertexId": 81,
+        "endVertexId": 79
       }
     ],
     "lineSides": [
@@ -1379,6 +1594,49 @@
             "offset": [
               0.0,
               0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 17,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
             ]
           }
         }
@@ -1969,6 +2227,135 @@
         }
       },
       {
+        "lineId": 34,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 35,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 36,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
         "lineId": 37,
         "side": "front",
         "wall": {
@@ -1980,7 +2367,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -3.125
             ]
           },
           "decal": {
@@ -2020,6 +2407,1124 @@
         },
         "upper": {
           "textureId": "",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 38,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 39,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 40,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 41,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 43,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 44,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 45,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 46,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 47,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 62,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 67,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.125
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 69,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              1.0,
+              -1.25
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 71,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              1.5,
+              -1.0625
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 73,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.25
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 74,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              -0.5,
+              -1.25
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 75,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.2576940953731537,
+              -1.0625
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 76,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              1.7795084714889526,
+              -0.875
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 78,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.875
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 79,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              2.0981972217559814,
+              -0.6875
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 81,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              -0.25,
+              -0.6875
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 82,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              2.4168858528137207,
+              -0.5
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 84,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              -0.5076941251754761,
+              -0.5
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 85,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              2.696394443511963,
+              -0.3125
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 87,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              -0.7872025966644287,
+              -0.3125
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 88,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              3.115657091140747,
+              -0.125
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 90,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              -1.1237753629684448,
+              -0.125
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -2918,7 +4423,7 @@
         "x": 4160,
         "y": 312,
         "floorZ": 0.0,
-        "ceilingZ": 35.0,
+        "ceilingZ": 50.0,
         "floorTextureId": "floor",
         "ceilingTextureId": "ceiling",
         "floorUv": {
@@ -3293,6 +4798,544 @@
             ]
           }
         }
+      },
+      {
+        "id": 17,
+        "name": "Sector 17",
+        "x": 5840,
+        "y": 1040,
+        "floorZ": 20.0,
+        "ceilingZ": 45.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.75,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 18,
+        "name": "Sector 18",
+        "x": 5468,
+        "y": 1160,
+        "floorZ": 17.0,
+        "ceilingZ": 50.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.75,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "ceilingSky": true
+      },
+      {
+        "id": 19,
+        "name": "Sector 19",
+        "x": 5404,
+        "y": 1160,
+        "floorZ": 14.0,
+        "ceilingZ": 50.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.75,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "ceilingSky": true
+      },
+      {
+        "id": 20,
+        "name": "Sector 20",
+        "x": 5340,
+        "y": 1160,
+        "floorZ": 11.0,
+        "ceilingZ": 50.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.75,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "ceilingSky": true
+      },
+      {
+        "id": 21,
+        "name": "Sector 21",
+        "x": 5276,
+        "y": 1160,
+        "floorZ": 8.0,
+        "ceilingZ": 50.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.75,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "ceilingSky": true
+      },
+      {
+        "id": 22,
+        "name": "Sector 22",
+        "x": 5212,
+        "y": 1160,
+        "floorZ": 5.0,
+        "ceilingZ": 50.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.75,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "ceilingSky": true
+      },
+      {
+        "id": 23,
+        "name": "Sector 23",
+        "x": 5114,
+        "y": 1207,
+        "floorZ": 2.0,
+        "ceilingZ": 50.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.75,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "ceilingSky": true
       }
     ]
   }

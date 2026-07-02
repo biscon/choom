@@ -8,6 +8,16 @@
 
 namespace game {
 
+namespace {
+
+float ScrollAreaContentWidthForVerticalScrollbar(float boundsWidth, const engine::UIConfig& config)
+{
+    const float clientWidth = std::max(0.0f, boundsWidth - config.borderThickness * 2.0f);
+    return std::max(0.0f, clientWidth - config.scrollbarSize - engine::DefaultScrollAreaPaddingPx * 2.0f);
+}
+
+} // namespace
+
 void DrawPreviewSettingsModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -99,7 +109,7 @@ void DrawPreviewSettingsModal(
             modal.width - 60.0f,
             std::max(80.0f, buttonY - y - 18.0f)
     };
-    const float scrollContentW = std::max(0.0f, scrollBounds.width - config.scrollbarSize);
+    const float scrollContentW = ScrollAreaContentWidthForVerticalScrollbar(scrollBounds.width, config);
     const float rowH = 40.0f;
     const float gap = 12.0f;
     const float labelW = 220.0f;

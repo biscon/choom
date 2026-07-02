@@ -327,6 +327,35 @@ enum class SpotLightHandle {
     Target
 };
 
+enum class SectorEditorPickKind {
+    None,
+    RuntimeObject,
+    DynamicSpotLight,
+    DynamicLight,
+    StaticSpotLight,
+    StaticLight,
+    AuthoringVertex,
+    AuthoringLine,
+    AuthoringFaceAnchor
+};
+
+struct SectorEditorPickTarget {
+    SectorEditorPickKind kind = SectorEditorPickKind::None;
+    int id = -1;
+    SpotLightHandle spotHandle = SpotLightHandle::Origin;
+};
+
+struct SectorEditorPickCandidate {
+    SectorEditorPickTarget target;
+    float distance2 = 0.0f;
+};
+
+struct SelectDragArmState {
+    bool active = false;
+    SectorEditorPickTarget target;
+    Vector2 pressPosition = {};
+};
+
 enum class SpotLightPilotKind {
     None,
     Static,
@@ -506,6 +535,7 @@ struct SectorEditorState {
     int selectedTopologyDynamicLightId = -1;
     int selectedTopologyDynamicSpotLightId = -1;
     int selectedRuntimeObjectId = -1;
+    SelectDragArmState selectDragArm;
     int hoveredTopologyLightId = -1;
     int hoveredTopologyStaticSpotLightId = -1;
     int hoveredTopologyDynamicLightId = -1;

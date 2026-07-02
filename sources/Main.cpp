@@ -111,9 +111,16 @@ int main()
             28,
             engine::FontLoad_BilinearFilter
     );
+    engine::FontHandle smallFont = assets.RequestFont(
+            assets.GlobalScope(),
+            "editor_ui_regular_22",
+            ASSETS_PATH "fonts/IBMPlexSans-Regular.ttf",
+            22,
+            engine::FontLoad_BilinearFilter
+    );
 
     while (!WindowShouldClose()
-            && !assets.IsFinished(uiFont)) {
+            && (!assets.IsFinished(uiFont) || !assets.IsFinished(smallFont))) {
         assets.UpdateMainThread(2.0f);
 
         BeginDrawing();
@@ -168,7 +175,8 @@ int main()
                 uiConfig,
                 context.input,
                 assets,
-                uiFont
+                uiFont,
+                smallFont
         );
         EndTextureMode();
 

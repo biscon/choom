@@ -13,6 +13,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace game {
 
@@ -32,7 +33,8 @@ public:
             const engine::UIConfig& config,
             engine::Input& input,
             engine::AssetManager& assets,
-            engine::FontHandle font);
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     bool IsPreview3DActive() const;
 
     Vector2 MapToScreen(Vector2 map) const;
@@ -50,6 +52,15 @@ private:
     bool IsMouseOverCanvas(const engine::Input& input) const;
     void UpdateHoverAndMouse(engine::Input& input);
     void HandleCanvasInput(engine::Input& input, float dt);
+    void UpdateSelectDragArm(engine::Input& input);
+    void ArmSelectedSelectDrag(Vector2 pressPosition);
+    void StartSelectDrag(SectorEditorPickTarget target, Vector2 screenPoint);
+    SectorEditorPickTarget CurrentPickSelectionTarget() const;
+    std::vector<SectorEditorPickCandidate> BuildSelectPickCandidates(Vector2 screenPoint) const;
+    bool SelectPickTarget(SectorEditorPickTarget target);
+    bool FindSelectedMovablePickTargetAtScreenPoint(
+            Vector2 screenPoint,
+            SectorEditorPickTarget& outTarget) const;
     void StartAuthoringVertexDrag(int vertexId, SectorTopologyCoordPoint point);
     void UpdateAuthoringVertexDrag(engine::Input& input);
     void FinishAuthoringVertexDrag();
@@ -124,13 +135,15 @@ private:
             const engine::UIConfig& config,
             engine::Input& input,
             engine::AssetManager& assets,
-            engine::FontHandle font);
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     bool DrawTopologySideDefInspector(
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font,
+            engine::FontHandle smallFont,
             engine::UIScrollAreaResult scroll,
             float contentW,
             float rowH,
@@ -187,7 +200,7 @@ private:
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::AssetManager& assets,
-            engine::FontHandle font);
+            engine::FontHandle smallFont);
 
     bool PointInTopologyLoop(Vector2 mapPoint, const SectorTopologyLoop& loop) const;
     bool PointInTopologySector(Vector2 mapPoint, const SectorTopologySector& sector) const;

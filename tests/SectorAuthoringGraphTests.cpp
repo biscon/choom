@@ -6636,14 +6636,14 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "authoring line tool name is exposed as an authoring graph tool");
     Check(TextContains(game::ToolHelpText(game::SectorEditorTool::AuthoringLine), "continuous line chain"),
           "authoring line tool help describes continuous line-chain creation");
-    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Select), "authoring"),
-          "select tool help includes authoring graph selection targets");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Select), "cycle"),
+          "select tool help describes unified click cycling");
     Check(TextContains(game::ToolName(game::SectorEditorTool::AuthoringMove), "Move"),
           "authoring move tool name is exposed as a graph tool");
     Check(TextContains(game::ToolHelpText(game::SectorEditorTool::AuthoringMove), "authoring vertices"),
           "authoring move tool help describes graph vertex movement");
-    Check(game::IsGraphAuthoringTool(game::SectorEditorTool::Select),
-          "select is classified as a graph-authoring tool");
+    Check(!game::IsGraphAuthoringTool(game::SectorEditorTool::Select),
+          "select is not classified as a graph-only authoring tool");
     Check(game::IsGraphAuthoringTool(game::SectorEditorTool::AuthoringLine),
           "authoring line is classified as a graph-authoring tool");
     Check(TextContains(game::ToolName(game::SectorEditorTool::AuthoringRectangle), "Rectangle"),
@@ -6683,12 +6683,12 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "runtime object placement remains available in graph-authoritative mode");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::StaticLight),
           "static light placement remains available in graph-authoritative mode");
-    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::StaticLight), "drag"),
-          "static light tool help preserves existing-light drag workflow");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::StaticLight), "place"),
+          "static light tool help describes placement-only workflow");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::StaticSpotLight),
           "static spot placement remains available in graph-authoritative mode");
-    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::StaticSpotLight), "drag"),
-          "static spot tool help describes existing-light drag workflow");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::StaticSpotLight), "place"),
+          "static spot tool help describes placement-only workflow");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::DynamicLight),
           "dynamic light placement remains available in graph-authoritative mode");
     Check(TextContains(game::ToolName(game::SectorEditorTool::DynamicLight), "Dynamic Light"),
@@ -6697,14 +6697,68 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "dynamic spot placement remains available in graph-authoritative mode");
     Check(TextContains(game::ToolName(game::SectorEditorTool::DynamicSpotLight), "Dynamic Spot"),
           "dynamic spot tool label is separate from dynamic point light");
-    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::DynamicSpotLight), "Inspector"),
-          "dynamic spot tool help points users to inspector editing before 2D handles exist");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::DynamicSpotLight), "place"),
+          "dynamic spot tool help describes placement-only workflow");
     Check(game::IsSectorEditorGraphAuthoritativeMode(),
           "sector editor runs in graph-authoritative mode");
     Check(!game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::Move),
           "legacy topology move tool is blocked in graph-authoritative mode");
     Check(TextContains(game::LegacyTopologyMutationUnavailableMessage(), "unavailable"),
           "legacy topology retirement has a status message");
+}
+
+void TestEditorUnifiedSelectPickOrderingCyclingAndDragGate()
+{
+    std::vector<game::SectorEditorPickCandidate> candidates{
+            {game::SectorEditorPickTarget{game::SectorEditorPickKind::StaticLight, 7}, 1.0f},
+            {game::SectorEditorPickTarget{game::SectorEditorPickKind::RuntimeObject, 4}, 30.0f},
+            {game::SectorEditorPickTarget{game::SectorEditorPickKind::DynamicLight, 2}, 2.0f},
+            {game::SectorEditorPickTarget{game::SectorEditorPickKind::AuthoringVertex, 9}, 0.0f},
+    };
+
+    const std::vector<game::SectorEditorPickCandidate> sorted =
+            game::SortSectorEditorPickCandidates(candidates);
+    Check(sorted.size() == 4
+                  && sorted[0].target.kind == game::SectorEditorPickKind::RuntimeObject
+                  && sorted[1].target.kind == game::SectorEditorPickKind::DynamicLight
+                  && sorted[2].target.kind == game::SectorEditorPickKind::StaticLight
+                  && sorted[3].target.kind == game::SectorEditorPickKind::AuthoringVertex,
+          "unified select pick candidates use stable primitive priority");
+
+    int cycleIndex = -1;
+    int cycleCount = 0;
+    game::SectorEditorPickTarget chosen = game::ChooseSectorEditorPickTarget(
+            candidates,
+            game::SectorEditorPickTarget{},
+            &cycleIndex,
+            &cycleCount);
+    Check(chosen.kind == game::SectorEditorPickKind::RuntimeObject
+                  && chosen.id == 4
+                  && cycleIndex == 0
+                  && cycleCount == 4,
+          "unified select chooses the top candidate when current selection is not under cursor");
+
+    chosen = game::ChooseSectorEditorPickTarget(
+            candidates,
+            game::SectorEditorPickTarget{game::SectorEditorPickKind::RuntimeObject, 4},
+            &cycleIndex,
+            &cycleCount);
+    Check(chosen.kind == game::SectorEditorPickKind::DynamicLight
+                  && chosen.id == 2
+                  && cycleIndex == 1
+                  && cycleCount == 4,
+          "unified select cycles to the next candidate when current selection is under cursor");
+
+    Check(game::IsSectorEditorPickTargetMovable(
+                  game::SectorEditorPickTarget{game::SectorEditorPickKind::RuntimeObject, 4}),
+          "runtime object pick target is movable");
+    Check(!game::IsSectorEditorPickTargetMovable(
+                  game::SectorEditorPickTarget{game::SectorEditorPickKind::AuthoringLine, 9}),
+          "authoring line pick target is selectable but not movable");
+    Check(!game::ShouldStartSectorEditorSelectDrag(Vector2{10.0f, 10.0f}, Vector2{12.0f, 12.0f}),
+          "select drag gate ignores small hand jitter");
+    Check(game::ShouldStartSectorEditorSelectDrag(Vector2{10.0f, 10.0f}, Vector2{15.0f, 10.0f}),
+          "select drag gate starts after deliberate movement");
 }
 
 void TestEditorAuthoringLastValidTopologyIsNotPersisted()
@@ -7186,33 +7240,65 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     std::filesystem::remove(probeDocumentPath, removeError);
 }
 
-void TestEditorGraphNativeShadowMapRuntimeObjectsSurviveLoadDerivation()
+void TestEditorGraphNativeRuntimeObjectsSurviveLoadDerivation()
 {
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {128, 0}, {128, 128}, {0, 128}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(graph, 200, 64, 64, "room");
+    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
+    state.topologyMap.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+            1,
+            "goblin",
+            Vector3{64.0f, 0.0f, 112.0f},
+            0.0f});
+    state.topologyMap.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+            7,
+            "goblin",
+            Vector3{32.0f, 0.0f, 48.0f},
+            1.57079632679f});
+
+    std::string savedText;
+    SaveEditorStateToJson(
+            state,
+            "sector_editor_runtime_objects_graph_native_save_test.json",
+            &savedText);
+    const std::filesystem::path path =
+            TempJsonPath("sector_editor_runtime_objects_graph_native_reload_test.json");
+    WriteTextFile(path, savedText);
+
     game::SectorEditorLoadedDocument loaded;
     std::string error;
-    Check(game::LoadSectorEditorDocumentFromAsset(
-                  "assets/levels/shadow_map_test1/shadow_map_test1.json",
-                  loaded,
-                  error),
-          "shadow_map_test1 graph-native document loads");
+    Check(game::LoadSectorEditorDocumentFromAsset(path.string(), loaded, error),
+          "graph-native runtime object fixture loads");
     Check(loaded.format == game::SectorEditorDocumentFormat::AuthoringGraph,
-          "shadow_map_test1 uses graph-native load path");
-    Check(loaded.mapData.runtimeObjects.size() == 7,
-          "shadow_map_test1 loaded map data includes saved runtime objects");
+          "runtime object fixture uses graph-native load path");
+    Check(loaded.mapData.runtimeObjects.size() == 2,
+          "runtime object fixture loaded map data includes saved runtime objects");
 
     bool current = false;
     const game::SectorEditorState loadedState =
             MakeEditorStateFromLoadedDocument(loaded, &current);
-    Check(current, "shadow_map_test1 rederives as current after editor load");
+    Check(current, "runtime object fixture rederives as current after editor load");
     Check(loadedState.topologyMap.runtimeObjects.size() == loaded.mapData.runtimeObjects.size(),
-          "shadow_map_test1 runtime objects survive editor authoring rederivation");
-    if (!loadedState.topologyMap.runtimeObjects.empty()) {
-        const game::SectorPlacedRuntimeObject& object = loadedState.topologyMap.runtimeObjects.front();
-        Check(object.id == 1
-                      && object.definitionId == "goblin"
-                      && Near(object.position, Vector3{64.0f, 0.0f, 108.0f}),
-              "shadow_map_test1 first placed goblin survives load with stable authored data");
-    }
+          "runtime objects survive editor authoring rederivation");
+    const game::SectorPlacedRuntimeObject* first =
+            game::FindSectorPlacedRuntimeObject(loadedState.topologyMap, 1);
+    const game::SectorPlacedRuntimeObject* second =
+            game::FindSectorPlacedRuntimeObject(loadedState.topologyMap, 7);
+    Check(first != nullptr
+                  && first->definitionId == "goblin"
+                  && Near(first->position, Vector3{64.0f, 0.0f, 112.0f})
+                  && Near(first->yawRadians, 0.0f),
+          "first generated runtime object survives load with stable authored data");
+    Check(second != nullptr
+                  && second->definitionId == "goblin"
+                  && Near(second->position, Vector3{32.0f, 0.0f, 48.0f})
+                  && Near(second->yawRadians, 1.57079632679f),
+          "second generated runtime object survives load with stable authored data");
+
+    std::error_code removeError;
+    std::filesystem::remove(path, removeError);
 }
 
 } // namespace
@@ -7388,6 +7474,7 @@ int main()
     TestEditorAuthoringEditsRefreshValidCrossingDerivation();
     TestEditorAuthoringFailedRefreshDoesNotReplaceLastValidTopology();
     TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools();
+    TestEditorUnifiedSelectPickOrderingCyclingAndDragGate();
     TestEditorAuthoringLastValidTopologyIsNotPersisted();
     TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent();
     TestEditorAuthoringDocumentSavePreservesInvalidGraphAndReloadDiagnostics();
@@ -7395,7 +7482,7 @@ int main()
     TestEditorGraphNativeNestedRoundTripPreservesAnchorsMaterialsAndSelection();
     TestEditorGraphNativeSiblingHolesRoundTripPreservesSelection();
     TestEditorGraphNativeMapLevelDataRoundTrip();
-    TestEditorGraphNativeShadowMapRuntimeObjectsSurviveLoadDerivation();
+    TestEditorGraphNativeRuntimeObjectsSurviveLoadDerivation();
 
     if (failures != 0) {
         std::cerr << failures << " authoring graph test(s) failed\n";

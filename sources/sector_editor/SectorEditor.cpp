@@ -49,6 +49,20 @@ namespace game {
 
 namespace {
 
+constexpr float SectorEditorPanelScrollPaddingPx = 8.0f;
+
+float ScrollAreaContentWidthForVerticalScrollbar(
+        float boundsWidth,
+        const engine::UIConfig& config,
+        float paddingPx,
+        bool drawFrame)
+{
+    const float clientWidth = std::max(
+            0.0f,
+            boundsWidth - (drawFrame ? config.borderThickness * 2.0f : 0.0f));
+    return std::max(0.0f, clientWidth - config.scrollbarSize - paddingPx * 2.0f);
+}
+
 bool IsFlatTopologySurfaceTarget(TopologySurfaceEditTarget target)
 {
     return target.kind == TopologySurfaceEditTargetKind::SectorFloor
@@ -252,11 +266,12 @@ float AuthoringLineInspectorContentHeight(
         const SectorAuthoringLine& line,
         const SectorAuthoringGraph& graph,
         float rowH,
-        float gap)
+        float gap,
+        float endpointSummaryHeight)
 {
     float height = 0.0f;
     height += 38.0f;
-    height += 32.0f;
+    height += endpointSummaryHeight;
     height += 36.0f + gap;
 
     const auto addSideSection = [&](SectorTopologySideKind sideKind) {
@@ -288,11 +303,12 @@ float AuthoringLineInspectorContentHeight(
 float AuthoringFaceInspectorContentHeight(
         const SectorAuthoringFaceAnchor& anchor,
         float rowH,
-        float gap)
+        float gap,
+        float anchorSummaryHeight)
 {
     float height = 0.0f;
     height += 38.0f;
-    height += 32.0f;
+    height += anchorSummaryHeight;
     height += (rowH + gap) * 2.0f;
     height += rowH + gap;
 
@@ -409,7 +425,8 @@ void SectorEditor::RenderUI(
         const engine::UIConfig& config,
         engine::Input& input,
         engine::AssetManager& assets,
-        engine::FontHandle font)
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
 {
     PollLightmapBakeResult(assets);
 
@@ -502,8 +519,8 @@ void SectorEditor::RenderUI(
     }
 
     DrawToolsPanel(ui, config, input, assets, font);
-    DrawSectorsPanel(ui, config, input, assets, font);
-    DrawStatusPanel(ui, config, assets, font);
+    DrawSectorsPanel(ui, config, input, assets, font, smallFont);
+    DrawStatusPanel(ui, config, assets, smallFont);
     DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawTexturePickerModal(ui, config, input, assets, font);
     uiState.keyboardCaptured = ui.focusedId != 0;
@@ -655,16 +672,22 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
     }
 
     if (state.currentTool == SectorEditorTool::Select) {
-        SectorAuthoringSelectionTarget target;
-        SectorTopologyCoordPoint authoringVertexPoint{};
-        if (FindAuthoringSelectionNearScreenPoint(
-                    input.MousePosition(),
-                    target,
-                    authoringVertexPoint)) {
-            if (target.kind == SectorAuthoringSelectionKind::Vertex) {
-                SetHoveredSectorEditorAuthoringVertex(state, target.vertexId);
-            } else if (target.kind == SectorAuthoringSelectionKind::Line) {
-                SetHoveredSectorEditorAuthoringLine(state, target.lineId);
+        const std::vector<SectorEditorPickCandidate> candidates =
+                BuildSelectPickCandidates(input.MousePosition());
+        if (!candidates.empty()) {
+            const SectorEditorPickTarget target = candidates.front().target;
+            if (target.kind == SectorEditorPickKind::AuthoringVertex) {
+                SetHoveredSectorEditorAuthoringVertex(state, target.id);
+            } else if (target.kind == SectorEditorPickKind::AuthoringLine) {
+                SetHoveredSectorEditorAuthoringLine(state, target.id);
+            } else if (target.kind == SectorEditorPickKind::StaticLight) {
+                state.hoveredTopologyLightId = target.id;
+            } else if (target.kind == SectorEditorPickKind::StaticSpotLight) {
+                state.hoveredTopologyStaticSpotLightId = target.id;
+            } else if (target.kind == SectorEditorPickKind::DynamicLight) {
+                state.hoveredTopologyDynamicLightId = target.id;
+            } else if (target.kind == SectorEditorPickKind::DynamicSpotLight) {
+                state.hoveredTopologyDynamicSpotLightId = target.id;
             }
         }
         state.inspectedTopologyVertexId = -1;
@@ -889,6 +912,11 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
         return;
     }
 
+    UpdateSelectDragArm(input);
+    if (state.authoringVertexDrag.active || state.lightDrag.active || state.runtimeObjectDrag.active) {
+        return;
+    }
+
     if (!uiState.keyboardCaptured) {
         Vector2 pan{};
         if (input.IsKeyDown(KEY_A)) {
@@ -922,125 +950,17 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
             engine::InputEventType::MouseButtonPressed,
             true,
             [this](engine::InputEvent& event) {
-                if (state.currentTool == SectorEditorTool::AuthoringMove
-                        && event.mouseButton.button == MOUSE_LEFT_BUTTON
-                        && Contains(canvasRect, event.mouseButton.position)) {
-                    int authoringVertexId = -1;
-                    SectorTopologyCoordPoint point{};
-                    if (FindAuthoringVertexNearScreenPoint(
-                                event.mouseButton.position,
-                                authoringVertexId,
-                                point)) {
-                        StartAuthoringVertexDrag(authoringVertexId, point);
-                        engine::ConsumeEvent(event);
-                    } else {
-                        statusText = "Move Vertex: click an authoring vertex";
-                        engine::ConsumeEvent(event);
-                    }
-                    return;
-                }
-
-                if (state.currentTool == SectorEditorTool::StaticLight
-                        && event.mouseButton.button == MOUSE_LEFT_BUTTON
-                        && Contains(canvasRect, event.mouseButton.position)) {
-                    const int lightId = FindTopologyLightNearScreenPoint(event.mouseButton.position);
-                    if (lightId >= 0) {
-                        StartLightDrag(lightId);
-                        engine::ConsumeEvent(event);
-                    }
-                    return;
-                }
-
-                if (state.currentTool == SectorEditorTool::StaticSpotLight
-                        && event.mouseButton.button == MOUSE_LEFT_BUTTON
-                        && Contains(canvasRect, event.mouseButton.position)) {
-                    int lightId = -1;
-                    SpotLightHandle handle = SpotLightHandle::Origin;
-                    if (FindTopologyStaticSpotLightHandleNearScreenPoint(
-                                event.mouseButton.position,
-                                lightId,
-                                handle)) {
-                        StartLightDrag(lightId, handle);
-                        engine::ConsumeEvent(event);
-                        return;
-                    }
-
-                    lightId = FindTopologyStaticSpotLightNearScreenPoint(event.mouseButton.position);
-                    if (lightId >= 0) {
-                        SelectTopologyStaticSpotLight(lightId);
-                        statusText = TextFormat("Selected static spot %d", lightId);
-                        engine::ConsumeEvent(event);
-                    }
-                    return;
-                }
-
-                if (state.currentTool == SectorEditorTool::DynamicLight
-                        && event.mouseButton.button == MOUSE_LEFT_BUTTON
-                        && Contains(canvasRect, event.mouseButton.position)) {
-                    const int lightId = FindTopologyDynamicLightNearScreenPoint(event.mouseButton.position);
-                    if (lightId >= 0) {
-                        StartLightDrag(lightId);
-                        engine::ConsumeEvent(event);
-                    }
-                    return;
-                }
-
-                if (state.currentTool == SectorEditorTool::DynamicSpotLight
-                        && event.mouseButton.button == MOUSE_LEFT_BUTTON
-                        && Contains(canvasRect, event.mouseButton.position)) {
-                    int lightId = -1;
-                    SpotLightHandle handle = SpotLightHandle::Origin;
-                    if (FindTopologyDynamicSpotLightHandleNearScreenPoint(
-                                event.mouseButton.position,
-                                lightId,
-                                handle)) {
-                        StartLightDrag(lightId, handle);
-                        engine::ConsumeEvent(event);
-                        return;
-                    }
-
-                    lightId = FindTopologyDynamicSpotLightNearScreenPoint(event.mouseButton.position);
-                    if (lightId >= 0) {
-                        SelectTopologyDynamicSpotLight(lightId);
-                        statusText = TextFormat("Selected dynamic spot %d", lightId);
-                        engine::ConsumeEvent(event);
-                    }
-                    return;
-                }
-
-                if (state.currentTool == SectorEditorTool::RuntimeObject
-                        && event.mouseButton.button == MOUSE_LEFT_BUTTON
-                        && Contains(canvasRect, event.mouseButton.position)) {
-                    const int objectId = FindRuntimeObjectNearScreenPoint(event.mouseButton.position);
-                    if (objectId >= 0) {
-                        StartRuntimeObjectDrag(objectId);
-                        engine::ConsumeEvent(event);
-                    }
-                    return;
-                }
-
-                if (state.currentTool != SectorEditorTool::Move
-                        || event.mouseButton.button != MOUSE_LEFT_BUTTON
+                if (event.mouseButton.button != MOUSE_LEFT_BUTTON
                         || !Contains(canvasRect, event.mouseButton.position)) {
                     return;
                 }
 
-                const int lightId = FindTopologyLightNearScreenPoint(event.mouseButton.position);
-                if (lightId >= 0) {
-                    StartLightDrag(lightId);
-                } else {
-                    if (IsSectorEditorGraphAuthoritativeMode()) {
-                        statusText = "Move: drag an existing light, or use Move Vertex for authoring vertices.";
+                if (state.currentTool == SectorEditorTool::Select) {
+                    ArmSelectedSelectDrag(event.mouseButton.position);
+                    if (state.selectDragArm.active) {
                         engine::ConsumeEvent(event);
-                        return;
                     }
-                    int vertexId = -1;
-                    SectorTopologyCoordPoint point;
-                    statusText = FindTopologyVertexNearScreenPoint(event.mouseButton.position, vertexId, point)
-                            ? LegacyTopologyMutationUnavailableMessage()
-                            : "Move: click a topology light";
                 }
-                engine::ConsumeEvent(event);
             }
     );
 
@@ -1090,36 +1010,29 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::Select) {
-                    const int objectId = FindRuntimeObjectNearScreenPoint(event.mouseClick.releasePosition);
-                    if (objectId >= 0) {
-                        SelectRuntimeObject(objectId);
-                        statusText = TextFormat("Selected object %d", objectId);
-                        engine::ConsumeEvent(event);
-                        return;
+                    const std::vector<SectorEditorPickCandidate> candidates =
+                            BuildSelectPickCandidates(event.mouseClick.releasePosition);
+                    int cycleIndex = -1;
+                    int cycleCount = 0;
+                    const SectorEditorPickTarget target = ChooseSectorEditorPickTarget(
+                            candidates,
+                            CurrentPickSelectionTarget(),
+                            &cycleIndex,
+                            &cycleCount);
+                    if (target.kind == SectorEditorPickKind::None) {
+                        ClearSelection();
+                        statusText = "Selection cleared";
+                    } else if (SelectPickTarget(target)) {
+                        const char* kindName = SectorEditorPickKindName(target.kind);
+                        statusText = cycleCount > 1 && cycleIndex >= 0
+                                ? TextFormat(
+                                        "Selected %s %d (%d/%d)",
+                                        kindName,
+                                        target.id,
+                                        cycleIndex + 1,
+                                        cycleCount)
+                                : TextFormat("Selected %s %d", kindName, target.id);
                     }
-
-                    SectorAuthoringSelectionTarget target;
-                    SectorTopologyCoordPoint authoringVertexPoint{};
-                    if (FindAuthoringSelectionNearScreenPoint(
-                                event.mouseClick.releasePosition,
-                                target,
-                                authoringVertexPoint)) {
-                        if (target.kind == SectorAuthoringSelectionKind::Vertex) {
-                            SelectAuthoringVertex(target.vertexId);
-                            statusText = TextFormat("Selected authoring vertex %d", target.vertexId);
-                        } else if (target.kind == SectorAuthoringSelectionKind::Line) {
-                            SelectAuthoringLine(target.lineId);
-                            statusText = TextFormat("Selected authoring line %d", target.lineId);
-                        } else if (target.kind == SectorAuthoringSelectionKind::FaceAnchor) {
-                            SelectAuthoringFaceAnchor(target.faceAnchorId);
-                            statusText = TextFormat("Selected authoring face anchor %d", target.faceAnchorId);
-                        }
-                        engine::ConsumeEvent(event);
-                        return;
-                    }
-
-                    ClearSelection();
-                    statusText = "Selected authoring: none";
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -1167,13 +1080,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::RuntimeObject) {
-                    const int objectId = FindRuntimeObjectNearScreenPoint(event.mouseClick.releasePosition);
-                    if (objectId >= 0) {
-                        SelectRuntimeObject(objectId);
-                        statusText = TextFormat("Selected object %d", objectId);
-                    } else {
-                        AddRuntimeObjectAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
-                    }
+                    AddRuntimeObjectAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -1190,6 +1097,280 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
             }
     );
+}
+
+void SectorEditor::UpdateSelectDragArm(engine::Input& input)
+{
+    if (!state.selectDragArm.active) {
+        return;
+    }
+    if (state.currentTool != SectorEditorTool::Select
+            || !input.IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+        state.selectDragArm = SelectDragArmState{};
+        return;
+    }
+    if (!ShouldStartSectorEditorSelectDrag(
+                state.selectDragArm.pressPosition,
+                input.MousePosition())) {
+        return;
+    }
+
+    const SectorEditorPickTarget target = state.selectDragArm.target;
+    state.selectDragArm = SelectDragArmState{};
+    StartSelectDrag(target, input.MousePosition());
+}
+
+void SectorEditor::ArmSelectedSelectDrag(Vector2 pressPosition)
+{
+    state.selectDragArm = SelectDragArmState{};
+    SectorEditorPickTarget target;
+    if (!FindSelectedMovablePickTargetAtScreenPoint(pressPosition, target)) {
+        return;
+    }
+    state.selectDragArm.active = true;
+    state.selectDragArm.target = target;
+    state.selectDragArm.pressPosition = pressPosition;
+}
+
+void SectorEditor::StartSelectDrag(SectorEditorPickTarget target, Vector2 screenPoint)
+{
+    if (!IsSectorEditorPickTargetMovable(target)) {
+        return;
+    }
+
+    switch (target.kind) {
+        case SectorEditorPickKind::RuntimeObject:
+            StartRuntimeObjectDrag(target.id);
+            break;
+        case SectorEditorPickKind::DynamicSpotLight:
+        case SectorEditorPickKind::DynamicLight:
+        case SectorEditorPickKind::StaticSpotLight:
+        case SectorEditorPickKind::StaticLight:
+            StartLightDrag(target.id, target.spotHandle);
+            break;
+        case SectorEditorPickKind::AuthoringVertex: {
+            (void) screenPoint;
+            const SectorAuthoringVertex* vertex = FindSectorAuthoringVertex(
+                    state.authoringGraph,
+                    target.id);
+            if (vertex != nullptr) {
+                StartAuthoringVertexDrag(
+                        target.id,
+                        SectorTopologyCoordPoint{vertex->x, vertex->y});
+            }
+            break;
+        }
+        case SectorEditorPickKind::None:
+        case SectorEditorPickKind::AuthoringLine:
+        case SectorEditorPickKind::AuthoringFaceAnchor:
+            break;
+    }
+}
+
+SectorEditorPickTarget SectorEditor::CurrentPickSelectionTarget() const
+{
+    if (state.selectedRuntimeObjectId >= 0) {
+        return SectorEditorPickTarget{SectorEditorPickKind::RuntimeObject, state.selectedRuntimeObjectId};
+    }
+    if (state.topologySelectionKind == TopologySelectionKind::DynamicSpotLight
+            && state.selectedTopologyDynamicSpotLightId >= 0) {
+        return SectorEditorPickTarget{SectorEditorPickKind::DynamicSpotLight, state.selectedTopologyDynamicSpotLightId};
+    }
+    if (state.topologySelectionKind == TopologySelectionKind::DynamicLight
+            && state.selectedTopologyDynamicLightId >= 0) {
+        return SectorEditorPickTarget{SectorEditorPickKind::DynamicLight, state.selectedTopologyDynamicLightId};
+    }
+    if (state.topologySelectionKind == TopologySelectionKind::StaticSpotLight
+            && state.selectedTopologyStaticSpotLightId >= 0) {
+        return SectorEditorPickTarget{SectorEditorPickKind::StaticSpotLight, state.selectedTopologyStaticSpotLightId};
+    }
+    if (state.topologySelectionKind == TopologySelectionKind::StaticLight
+            && state.selectedTopologyLightId >= 0) {
+        return SectorEditorPickTarget{SectorEditorPickKind::StaticLight, state.selectedTopologyLightId};
+    }
+    if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex
+            && state.selectedAuthoring.vertexId >= 0) {
+        return SectorEditorPickTarget{SectorEditorPickKind::AuthoringVertex, state.selectedAuthoring.vertexId};
+    }
+    if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
+            && state.selectedAuthoring.lineId >= 0) {
+        return SectorEditorPickTarget{SectorEditorPickKind::AuthoringLine, state.selectedAuthoring.lineId};
+    }
+    if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
+            && state.selectedAuthoring.faceAnchorId >= 0) {
+        return SectorEditorPickTarget{SectorEditorPickKind::AuthoringFaceAnchor, state.selectedAuthoring.faceAnchorId};
+    }
+    return SectorEditorPickTarget{};
+}
+
+std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(Vector2 screenPoint) const
+{
+    std::vector<SectorEditorPickCandidate> candidates;
+    candidates.reserve(
+            state.topologyMap.runtimeObjects.size()
+            + state.topologyMap.dynamicSpotLights.size()
+            + state.topologyMap.dynamicPointLights.size()
+            + state.topologyMap.staticSpotLights.size()
+            + state.topologyMap.staticLights.size()
+            + 3);
+
+    const auto addPointCandidate = [&](SectorEditorPickKind kind, int id, Vector2 center) {
+        const float dx = center.x - screenPoint.x;
+        const float dy = center.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 > ScreenLightPickPixels * ScreenLightPickPixels) {
+            return;
+        }
+        candidates.push_back(SectorEditorPickCandidate{
+                SectorEditorPickTarget{kind, id},
+                distance2});
+    };
+    const auto addSpotCandidate = [&](SectorEditorPickKind kind, int id, Vector2 origin, Vector2 target) {
+        const float originDx = origin.x - screenPoint.x;
+        const float originDy = origin.y - screenPoint.y;
+        const float targetDx = target.x - screenPoint.x;
+        const float targetDy = target.y - screenPoint.y;
+        const float originDistance2 = originDx * originDx + originDy * originDy;
+        const float targetDistance2 = targetDx * targetDx + targetDy * targetDy;
+        const float distance2 = std::min(originDistance2, targetDistance2);
+        if (distance2 > ScreenLightPickPixels * ScreenLightPickPixels) {
+            return;
+        }
+        candidates.push_back(SectorEditorPickCandidate{
+                SectorEditorPickTarget{kind, id},
+                distance2});
+    };
+
+    for (const SectorPlacedRuntimeObject& object : state.topologyMap.runtimeObjects) {
+        addPointCandidate(
+                SectorEditorPickKind::RuntimeObject,
+                object.id,
+                MapToScreen(Vector2{object.position.x, object.position.z}));
+    }
+    for (const SectorTopologyDynamicSpotLight& light : state.topologyMap.dynamicSpotLights) {
+        addSpotCandidate(
+                SectorEditorPickKind::DynamicSpotLight,
+                light.id,
+                MapToScreen(Vector2{light.position.x, light.position.z}),
+                MapToScreen(Vector2{light.target.x, light.target.z}));
+    }
+    for (const SectorTopologyDynamicPointLight& light : state.topologyMap.dynamicPointLights) {
+        addPointCandidate(
+                SectorEditorPickKind::DynamicLight,
+                light.id,
+                MapToScreen(Vector2{light.position.x, light.position.z}));
+    }
+    for (const SectorTopologyStaticSpotLight& light : state.topologyMap.staticSpotLights) {
+        addSpotCandidate(
+                SectorEditorPickKind::StaticSpotLight,
+                light.id,
+                MapToScreen(Vector2{light.position.x, light.position.z}),
+                MapToScreen(Vector2{light.target.x, light.target.z}));
+    }
+    for (const SectorTopologyStaticPointLight& light : state.topologyMap.staticLights) {
+        addPointCandidate(
+                SectorEditorPickKind::StaticLight,
+                light.id,
+                MapToScreen(Vector2{light.position.x, light.position.z}));
+    }
+
+    SectorAuthoringSelectionTarget authoringTarget;
+    SectorTopologyCoordPoint authoringVertexPoint{};
+    if (FindAuthoringSelectionNearScreenPoint(screenPoint, authoringTarget, authoringVertexPoint)) {
+        if (authoringTarget.kind == SectorAuthoringSelectionKind::Vertex) {
+            candidates.push_back(SectorEditorPickCandidate{
+                    SectorEditorPickTarget{SectorEditorPickKind::AuthoringVertex, authoringTarget.vertexId},
+                    0.0f});
+        } else if (authoringTarget.kind == SectorAuthoringSelectionKind::Line) {
+            candidates.push_back(SectorEditorPickCandidate{
+                    SectorEditorPickTarget{SectorEditorPickKind::AuthoringLine, authoringTarget.lineId},
+                    0.0f});
+        } else if (authoringTarget.kind == SectorAuthoringSelectionKind::FaceAnchor) {
+            candidates.push_back(SectorEditorPickCandidate{
+                    SectorEditorPickTarget{SectorEditorPickKind::AuthoringFaceAnchor, authoringTarget.faceAnchorId},
+                    0.0f});
+        }
+    }
+
+    return SortSectorEditorPickCandidates(std::move(candidates));
+}
+
+bool SectorEditor::SelectPickTarget(SectorEditorPickTarget target)
+{
+    state.selectDragArm = SelectDragArmState{};
+    switch (target.kind) {
+        case SectorEditorPickKind::RuntimeObject:
+            SelectRuntimeObject(target.id);
+            return state.selectedRuntimeObjectId == target.id;
+        case SectorEditorPickKind::DynamicSpotLight:
+            SelectTopologyDynamicSpotLight(target.id);
+            return state.selectedTopologyDynamicSpotLightId == target.id;
+        case SectorEditorPickKind::DynamicLight:
+            SelectTopologyDynamicLight(target.id);
+            return state.selectedTopologyDynamicLightId == target.id;
+        case SectorEditorPickKind::StaticSpotLight:
+            SelectTopologyStaticSpotLight(target.id);
+            return state.selectedTopologyStaticSpotLightId == target.id;
+        case SectorEditorPickKind::StaticLight:
+            SelectTopologyLight(target.id);
+            return state.selectedTopologyLightId == target.id;
+        case SectorEditorPickKind::AuthoringVertex:
+            SelectAuthoringVertex(target.id);
+            return state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex
+                    && state.selectedAuthoring.vertexId == target.id;
+        case SectorEditorPickKind::AuthoringLine:
+            SelectAuthoringLine(target.id);
+            return state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
+                    && state.selectedAuthoring.lineId == target.id;
+        case SectorEditorPickKind::AuthoringFaceAnchor:
+            SelectAuthoringFaceAnchor(target.id);
+            return state.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
+                    && state.selectedAuthoring.faceAnchorId == target.id;
+        case SectorEditorPickKind::None:
+            ClearSelection();
+            return true;
+    }
+    return false;
+}
+
+bool SectorEditor::FindSelectedMovablePickTargetAtScreenPoint(
+        Vector2 screenPoint,
+        SectorEditorPickTarget& outTarget) const
+{
+    outTarget = SectorEditorPickTarget{};
+    const SectorEditorPickTarget selected = CurrentPickSelectionTarget();
+    if (!IsSectorEditorPickTargetMovable(selected)) {
+        return false;
+    }
+
+    if (selected.kind == SectorEditorPickKind::StaticSpotLight) {
+        int lightId = -1;
+        SpotLightHandle handle = SpotLightHandle::Origin;
+        if (FindTopologyStaticSpotLightHandleNearScreenPoint(screenPoint, lightId, handle)
+                && lightId == selected.id) {
+            outTarget = SectorEditorPickTarget{selected.kind, selected.id, handle};
+            return true;
+        }
+    }
+    if (selected.kind == SectorEditorPickKind::DynamicSpotLight) {
+        int lightId = -1;
+        SpotLightHandle handle = SpotLightHandle::Origin;
+        if (FindTopologyDynamicSpotLightHandleNearScreenPoint(screenPoint, lightId, handle)
+                && lightId == selected.id) {
+            outTarget = SectorEditorPickTarget{selected.kind, selected.id, handle};
+            return true;
+        }
+    }
+
+    const std::vector<SectorEditorPickCandidate> candidates = BuildSelectPickCandidates(screenPoint);
+    for (const SectorEditorPickCandidate& candidate : candidates) {
+        if (!SameSectorEditorPickTarget(candidate.target, selected)) {
+            continue;
+        }
+        outTarget = selected;
+        return true;
+    }
+    return false;
 }
 
 void SectorEditor::StartAuthoringVertexDrag(int vertexId, SectorTopologyCoordPoint point)
@@ -1289,7 +1470,14 @@ void SectorEditor::CancelAuthoringVertexDrag(const char* message)
 
 void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandle)
 {
-    if (state.currentTool == SectorEditorTool::StaticSpotLight) {
+    const bool staticSpotSelected = state.topologySelectionKind == TopologySelectionKind::StaticSpotLight
+            && state.selectedTopologyStaticSpotLightId == topologyLightId;
+    const bool dynamicSpotSelected = state.topologySelectionKind == TopologySelectionKind::DynamicSpotLight
+            && state.selectedTopologyDynamicSpotLightId == topologyLightId;
+    const bool dynamicLightSelected = state.topologySelectionKind == TopologySelectionKind::DynamicLight
+            && state.selectedTopologyDynamicLightId == topologyLightId;
+
+    if (staticSpotSelected || state.currentTool == SectorEditorTool::StaticSpotLight) {
         const SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
                 state.topologyMap,
                 topologyLightId);
@@ -1312,7 +1500,7 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
         return;
     }
 
-    if (state.currentTool == SectorEditorTool::DynamicSpotLight) {
+    if (dynamicSpotSelected || state.currentTool == SectorEditorTool::DynamicSpotLight) {
         const SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(
                 state.topologyMap,
                 topologyLightId);
@@ -1335,7 +1523,7 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
         return;
     }
 
-    if (state.currentTool == SectorEditorTool::DynamicLight) {
+    if (dynamicLightSelected || state.currentTool == SectorEditorTool::DynamicLight) {
         const SectorTopologyDynamicPointLight* light = FindSectorTopologyDynamicLight(
                 state.topologyMap,
                 topologyLightId);
@@ -4769,7 +4957,8 @@ void SectorEditor::DrawAuthoringVertexMoveOverlay() const
 
 void SectorEditor::DrawLightMoveOverlay() const
 {
-    if (state.currentTool != SectorEditorTool::StaticLight
+    if (state.currentTool != SectorEditorTool::Select
+            && state.currentTool != SectorEditorTool::StaticLight
             && state.currentTool != SectorEditorTool::StaticSpotLight
             && state.currentTool != SectorEditorTool::DynamicLight
             && state.currentTool != SectorEditorTool::DynamicSpotLight
@@ -4879,7 +5068,7 @@ void SectorEditor::DrawLightMoveOverlay() const
         return;
     }
 
-    if (state.currentTool == SectorEditorTool::StaticSpotLight) {
+    if (state.hoveredTopologyStaticSpotLightId >= 0) {
         const SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
                 state.topologyMap,
                 state.hoveredTopologyStaticSpotLightId);
@@ -4902,7 +5091,7 @@ void SectorEditor::DrawLightMoveOverlay() const
         return;
     }
 
-    if (state.currentTool == SectorEditorTool::DynamicSpotLight) {
+    if (state.hoveredTopologyDynamicSpotLightId >= 0) {
         const SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(
                 state.topologyMap,
                 state.hoveredTopologyDynamicSpotLightId);
@@ -4925,7 +5114,7 @@ void SectorEditor::DrawLightMoveOverlay() const
         return;
     }
 
-    if (state.currentTool == SectorEditorTool::DynamicLight) {
+    if (state.hoveredTopologyDynamicLightId >= 0) {
         const SectorTopologyDynamicPointLight* light = FindSectorTopologyDynamicLight(
                 state.topologyMap,
                 state.hoveredTopologyDynamicLightId);
@@ -4988,7 +5177,11 @@ void SectorEditor::DrawToolsPanel(
             + separatorH + rowsHeight(4)
             + separatorH + rowsHeight(1)
             + bottomPadding;
-    const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
+    const float scrollContentW = ScrollAreaContentWidthForVerticalScrollbar(
+            panel.contentRect.width,
+            config,
+            SectorEditorPanelScrollPaddingPx,
+            false);
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
             ui,
             config,
@@ -4997,7 +5190,8 @@ void SectorEditor::DrawToolsPanel(
             panel.contentRect,
             Vector2{scrollContentW, toolsContentH},
             uiState.toolsScroll,
-            false
+            false,
+            SectorEditorPanelScrollPaddingPx
     );
 
     const float contentW = scroll.viewport.width;
@@ -5051,6 +5245,7 @@ void SectorEditor::DrawToolsPanel(
             statusText = LegacyTopologyMutationUnavailableMessage();
             return;
         }
+        state.selectDragArm = SelectDragArmState{};
         if (state.pendingAuthoringLine.active && tool != SectorEditorTool::AuthoringLine) {
             CancelPendingAuthoringLine("Cancelled authoring line");
         }
@@ -5065,7 +5260,9 @@ void SectorEditor::DrawToolsPanel(
         }
         if (state.lightDrag.active
                 && tool != SectorEditorTool::Move
+                && tool != SectorEditorTool::Select
                 && tool != SectorEditorTool::StaticLight
+                && tool != SectorEditorTool::StaticSpotLight
                 && tool != SectorEditorTool::DynamicLight
                 && tool != SectorEditorTool::DynamicSpotLight) {
             CancelLightDrag("Cancelled light move");
@@ -5096,8 +5293,7 @@ void SectorEditor::DrawToolsPanel(
             SectorEditorTool::Select,
             SectorEditorTool::AuthoringLine,
             SectorEditorTool::AuthoringRectangle,
-            SectorEditorTool::AuthoringInsertVertex,
-            SectorEditorTool::AuthoringMove
+            SectorEditorTool::AuthoringInsertVertex
     };
     for (SectorEditorTool tool : graphTools) {
         if (drawToolButton(tool)) {
@@ -5271,7 +5467,8 @@ void SectorEditor::DrawSectorsPanel(
         const engine::UIConfig& config,
         engine::Input& input,
         engine::AssetManager& assets,
-        engine::FontHandle font)
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
 {
     const engine::UIPanelResult panel = engine::BeginPanel(
             ui,
@@ -5329,7 +5526,12 @@ void SectorEditor::DrawSectorsPanel(
 
     const float rowH = 40.0f;
     const float gap = 8.0f;
-    const float scrollContentW = std::max(0.0f, panel.contentRect.width - config.scrollbarSize);
+    const float scrollContentW = ScrollAreaContentWidthForVerticalScrollbar(
+            panel.contentRect.width,
+            config,
+            SectorEditorPanelScrollPaddingPx,
+            false);
+    const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     const auto inspectorContentHeight = [&]() {
         if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
             return 120.0f;
@@ -5347,7 +5549,16 @@ void SectorEditor::DrawSectorsPanel(
             return DynamicLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
         }
         if (hasSelectedDynamicSpotLight) {
-            return DynamicSpotLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
+            const float shadowNoteHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    TextFormat(
+                            "Requests one of %zu shadow slots. Priority decides budget; over-budget spots still light.",
+                            MaxDynamicSpotLightShadowCasters),
+                    scrollContentW,
+                    2);
+            return DynamicSpotLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty(), shadowNoteHeight);
         }
         if (hasSelectedTopologySector && allowLegacyTopologyInspector) {
             return SectorInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
@@ -5365,10 +5576,41 @@ void SectorEditor::DrawSectorsPanel(
             return InspectedVertexInspectorContentHeight();
         }
         if (selectedAuthoringLine != nullptr) {
-            return AuthoringLineInspectorContentHeight(*selectedAuthoringLine, state.authoringGraph, rowH, gap);
+            const SectorAuthoringVertex* start =
+                    FindSectorAuthoringVertex(state.authoringGraph, selectedAuthoringLine->startVertexId);
+            const SectorAuthoringVertex* end =
+                    FindSectorAuthoringVertex(state.authoringGraph, selectedAuthoringLine->endVertexId);
+            const float endpointSummaryHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    start != nullptr && end != nullptr
+                            ? TextFormat(
+                                    "From %.2f, %.2f  To %.2f, %.2f",
+                                    SectorCoordToVisibleAuthoring(start->x),
+                                    SectorCoordToVisibleAuthoring(start->y),
+                                    SectorCoordToVisibleAuthoring(end->x),
+                                    SectorCoordToVisibleAuthoring(end->y))
+                            : "Line endpoints are invalid",
+                    scrollContentW);
+            return AuthoringLineInspectorContentHeight(
+                    *selectedAuthoringLine,
+                    state.authoringGraph,
+                    rowH,
+                    gap,
+                    endpointSummaryHeight);
         }
         if (selectedAuthoringFaceAnchor != nullptr) {
-            return AuthoringFaceInspectorContentHeight(*selectedAuthoringFaceAnchor, rowH, gap);
+            const float anchorSummaryHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    TextFormat(
+                            "Anchor %.2f, %.2f",
+                            SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->x),
+                            SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->y)),
+                    scrollContentW);
+            return AuthoringFaceInspectorContentHeight(*selectedAuthoringFaceAnchor, rowH, gap, anchorSummaryHeight);
         }
         if (selectedAuthoringVertex != nullptr) {
             return 120.0f;
@@ -5384,7 +5626,8 @@ void SectorEditor::DrawSectorsPanel(
             panel.contentRect,
             Vector2{scrollContentW, contentH},
             uiState.inspectorScroll,
-            false
+            false,
+            SectorEditorPanelScrollPaddingPx
     );
 
     const float contentW = scroll.viewport.width;
@@ -5902,6 +6145,7 @@ void SectorEditor::DrawSectorsPanel(
                     input,
                     assets,
                     font,
+                    smallFont,
                     scroll,
                     contentW,
                     rowH,
@@ -5917,7 +6161,7 @@ void SectorEditor::DrawSectorsPanel(
     }
 
     if (allowLegacyTopologyInspector && (hasSelectedTopologySideDef || hasSelectedTopologyLineDef)) {
-        if (DrawTopologySideDefInspector(ui, config, input, assets, font, scroll, contentW, rowH, gap)) {
+        if (DrawTopologySideDefInspector(ui, config, input, assets, font, smallFont, scroll, contentW, rowH, gap)) {
             engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
             engine::EndPanel(ui, config, panel);
             return;
@@ -6028,6 +6272,7 @@ void SectorEditor::DrawSectorsPanel(
                 input,
                 assets,
                 font,
+                smallFont,
                 scroll,
                 contentW,
                 rowH,
@@ -6080,24 +6325,38 @@ void SectorEditor::DrawSectorsPanel(
         y += 38.0f;
 
         if (start != nullptr && end != nullptr) {
+            const char* endpointText = TextFormat(
+                    "From %.2f, %.2f  To %.2f, %.2f",
+                    SectorCoordToVisibleAuthoring(start->x),
+                    SectorCoordToVisibleAuthoring(start->y),
+                    SectorCoordToVisibleAuthoring(end->x),
+                    SectorCoordToVisibleAuthoring(end->y));
+            const float endpointHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    endpointText,
+                    contentW);
             engine::Text(
                     ui,
-                    config,
+                    smallConfig,
                     assets,
-                    Rectangle{0.0f, y, contentW, 30.0f},
-                    font,
-                    TextFormat(
-                            "From %.2f, %.2f  To %.2f, %.2f",
-                            SectorCoordToVisibleAuthoring(start->x),
-                            SectorCoordToVisibleAuthoring(start->y),
-                            SectorCoordToVisibleAuthoring(end->x),
-                            SectorCoordToVisibleAuthoring(end->y)),
+                    Rectangle{0.0f, y, contentW, endpointHeight},
+                    smallFont,
+                    endpointText,
                     engine::UITextJustify::Left,
-                    config.mutedTextColor);
-            y += 32.0f;
+                    smallConfig.mutedTextColor,
+                    true);
+            y += endpointHeight;
         } else {
-            engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Line endpoints are invalid", engine::UITextJustify::Left, config.invalidColor);
-            y += 32.0f;
+            const float endpointHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    "Line endpoints are invalid",
+                    contentW);
+            engine::Text(ui, smallConfig, assets, Rectangle{0.0f, y, contentW, endpointHeight}, smallFont, "Line endpoints are invalid", engine::UITextJustify::Left, config.invalidColor, true);
+            y += endpointHeight;
         }
 
         if (engine::Button(
@@ -6207,10 +6466,10 @@ void SectorEditor::DrawSectorsPanel(
                                 engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                                 engine::Text(
                                         ui,
-                                        config,
+                                        smallConfig,
                                         assets,
                                         row.valueRect,
-                                        font,
+                                        smallFont,
                                         textureId.empty() ? "<none>" : textureId.c_str(),
                                         engine::UITextJustify::Left,
                                         missing ? config.invalidColor : config.mutedTextColor);
@@ -6267,10 +6526,10 @@ void SectorEditor::DrawSectorsPanel(
                                 engine::Text(ui, config, assets, row.labelRect, font, title, engine::UITextJustify::Left, config.mutedTextColor);
                                 engine::Text(
                                         ui,
-                                        config,
+                                        smallConfig,
                                         assets,
                                         row.valueRect,
-                                        font,
+                                        smallFont,
                                         decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
                                         engine::UITextJustify::Left,
                                         missing ? config.invalidColor : config.mutedTextColor);
@@ -6479,22 +6738,28 @@ void SectorEditor::DrawSectorsPanel(
                 engine::UITextJustify::Left,
                 config.textColor);
         y += 38.0f;
+        const char* anchorText = TextFormat(
+                "Anchor %.2f, %.2f",
+                SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->x),
+                SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->y));
+        const float anchorHeight = MeasureSectorEditorWrappedTextHeight(
+                smallConfig,
+                assets,
+                smallFont,
+                anchorText,
+                contentW);
         engine::Text(
                 ui,
-                config,
+                smallConfig,
                 assets,
-                Rectangle{0.0f, y, contentW, 30.0f},
-                font,
-                TextFormat(
-                        "Anchor %.2f, %.2f",
-                        SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->x),
-                        SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->y)),
+                Rectangle{0.0f, y, contentW, anchorHeight},
+                smallFont,
+                anchorText,
                 engine::UITextJustify::Left,
-                config.mutedTextColor);
-        y += 32.0f;
+                smallConfig.mutedTextColor,
+                true);
+        y += anchorHeight;
 
-        const float labelW = 92.0f;
-        const float numberFieldW = 112.0f;
         const int faceAnchorId = selectedAuthoringFaceAnchor->id;
         const auto mutateFaceAnchor =
                 [this, faceAnchorId](const char* status, const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate) {
@@ -6525,6 +6790,8 @@ void SectorEditor::DrawSectorsPanel(
         y += rowH + gap;
 
         auto drawHeight = [&](const char* id, const char* label, float current, engine::UIFloatInputState& inputState, bool floorField) {
+            const SectorEditorInspectorNumericRowLayout layout =
+                    BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
             const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                     ui,
                     config,
@@ -6533,8 +6800,8 @@ void SectorEditor::DrawSectorsPanel(
                     font,
                     id,
                     label,
-                    Rectangle{0.0f, y, labelW, rowH},
-                    Rectangle{labelW, y, numberFieldW, rowH},
+                    layout.labelRect,
+                    layout.inputRect,
                     engine::UITextJustify::Right,
                     current,
                     inputState,
@@ -6593,6 +6860,8 @@ void SectorEditor::DrawSectorsPanel(
         y += 30.0f;
 
         const float ambientIntensity = std::clamp(selectedAuthoringFaceAnchor->ambientIntensity, 0.0f, 1.0f);
+        const SectorEditorInspectorNumericRowLayout ambientLayout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult ambientResult = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -6601,8 +6870,8 @@ void SectorEditor::DrawSectorsPanel(
                 font,
                 "sector_editor_authoring_face_ambient_intensity",
                 "Intensity:",
-                Rectangle{0.0f, y, labelW, rowH},
-                Rectangle{labelW, y, numberFieldW, rowH},
+                ambientLayout.labelRect,
+                ambientLayout.inputRect,
                 engine::UITextJustify::Right,
                 ambientIntensity,
                 uiState.ambientIntensityInput,
@@ -6623,6 +6892,7 @@ void SectorEditor::DrawSectorsPanel(
         y += rowH + gap;
 
         auto drawAmbientChannel = [&](const char* id, const char* label, unsigned char current, engine::UIIntInputState& inputState, int channel) {
+            const float colorLabelW = 92.0f;
             const SectorEditorRgb8InputResult result = DrawRgb8ChannelInput(
                     ui,
                     config,
@@ -6631,8 +6901,8 @@ void SectorEditor::DrawSectorsPanel(
                     font,
                     id,
                     label,
-                    Rectangle{0.0f, y, labelW, rowH},
-                    Rectangle{labelW, y, contentW - labelW, rowH},
+                    Rectangle{0.0f, y, colorLabelW, rowH},
+                    Rectangle{colorLabelW, y, contentW - colorLabelW, rowH},
                     engine::UITextJustify::Right,
                     current,
                     inputState);
@@ -6673,10 +6943,10 @@ void SectorEditor::DrawSectorsPanel(
             engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
             engine::Text(
                     ui,
-                    config,
+                    smallConfig,
                     assets,
                     row.valueRect,
-                    font,
+                    smallFont,
                     textureId.empty() ? "<none>" : textureId.c_str(),
                     engine::UITextJustify::Left,
                     missing ? config.invalidColor : config.mutedTextColor);
@@ -6727,10 +6997,10 @@ void SectorEditor::DrawSectorsPanel(
                     engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                     engine::Text(
                             ui,
-                            config,
+                            smallConfig,
                             assets,
                             row.valueRect,
-                            font,
+                            smallFont,
                             decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
                             engine::UITextJustify::Left,
                             missing ? config.invalidColor : config.mutedTextColor);
@@ -6930,10 +7200,10 @@ void SectorEditor::DrawSectorsPanel(
                     engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                     engine::Text(
                             ui,
-                            config,
+                            smallConfig,
                             assets,
                             row.valueRect,
-                            font,
+                            smallFont,
                             decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
                             engine::UITextJustify::Left,
                             missing ? config.invalidColor : config.mutedTextColor);
@@ -7146,11 +7416,13 @@ bool SectorEditor::DrawTopologySideDefInspector(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
+        engine::FontHandle smallFont,
         engine::UIScrollAreaResult scroll,
         float contentW,
         float rowH,
         float gap)
 {
+    const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     const SectorTopologyLineDef* lineDef = SelectedTopologyLineDef();
     if (lineDef == nullptr) {
         return false;
@@ -7187,19 +7459,33 @@ bool SectorEditor::DrawTopologySideDefInspector(
     if (hasEndpoints) {
         const Vector2 from = SectorTopologyVertexToMap(*start);
         const Vector2 to = SectorTopologyVertexToMap(*end);
+        const char* endpointText = TextFormat("Line %d  From %.2f, %.2f  To %.2f, %.2f", lineDef->id, from.x, from.y, to.x, to.y);
+        const float endpointHeight = MeasureSectorEditorWrappedTextHeight(
+                smallConfig,
+                assets,
+                smallFont,
+                endpointText,
+                contentW);
         engine::Text(
                 ui,
-                config,
+                smallConfig,
                 assets,
-                Rectangle{0.0f, y, contentW, 30.0f},
-                font,
-                TextFormat("Line %d  From %.2f, %.2f  To %.2f, %.2f", lineDef->id, from.x, from.y, to.x, to.y),
+                Rectangle{0.0f, y, contentW, endpointHeight},
+                smallFont,
+                endpointText,
                 engine::UITextJustify::Left,
-                config.mutedTextColor);
-        y += 32.0f;
+                smallConfig.mutedTextColor,
+                true);
+        y += endpointHeight;
     } else {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Line endpoints are invalid", engine::UITextJustify::Left, config.invalidColor);
-        y += 32.0f;
+        const float endpointHeight = MeasureSectorEditorWrappedTextHeight(
+                smallConfig,
+                assets,
+                smallFont,
+                "Line endpoints are invalid",
+                contentW);
+        engine::Text(ui, smallConfig, assets, Rectangle{0.0f, y, contentW, endpointHeight}, smallFont, "Line endpoints are invalid", engine::UITextJustify::Left, config.invalidColor, true);
+        y += endpointHeight;
     }
 
     engine::Text(
@@ -7361,10 +7647,10 @@ bool SectorEditor::DrawTopologySideDefInspector(
         engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
         engine::Text(
                 ui,
-                config,
+                smallConfig,
                 assets,
                 Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
-                font,
+                smallFont,
                 textureId.empty() ? "<none>" : textureId.c_str(),
                 engine::UITextJustify::Left,
                 missing ? config.invalidColor : config.mutedTextColor);
@@ -8010,8 +8296,13 @@ void SectorEditor::DrawLoadLevelModal(
     engine::Text(config, assets, Rectangle{modal.x + 24.0f, modal.y + 20.0f, modal.width - 48.0f, 40.0f}, font, "Load Level");
 
     const Rectangle listBounds{modal.x + 24.0f, modal.y + 74.0f, modal.width - 48.0f, 450.0f};
-    const Vector2 contentSize{
+    const float listContentW = ScrollAreaContentWidthForVerticalScrollbar(
             listBounds.width,
+            config,
+            engine::DefaultScrollAreaPaddingPx,
+            true);
+    const Vector2 contentSize{
+            listContentW,
             std::max(listBounds.height, config.listItemHeight * static_cast<float>(modalState.optionLabels.size()))
     };
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
@@ -8030,7 +8321,7 @@ void SectorEditor::DrawLoadLevelModal(
                 input,
                 assets,
                 "sector_editor_load_level_list",
-                Rectangle{0.0f, 0.0f, listBounds.width - (scroll.scrollY ? config.scrollbarSize : 0.0f), contentSize.y},
+                Rectangle{0.0f, 0.0f, scroll.viewport.width, contentSize.y},
                 font,
                 modalState.optionLabels.data(),
                 modalState.optionLabels.size(),
@@ -8318,7 +8609,7 @@ void SectorEditor::DrawStatusPanel(
         engine::UIContext& ui,
         const engine::UIConfig& config,
         engine::AssetManager& assets,
-        engine::FontHandle font)
+        engine::FontHandle smallFont)
 {
     (void)ui;
     const Rectangle panel = BuildBottomPanelRect();
@@ -8378,13 +8669,17 @@ void SectorEditor::DrawStatusPanel(
             selectedLabel.c_str()
     );
 
+    engine::UIConfig statusConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
+
     engine::Text(
-            config,
+            statusConfig,
             assets,
-            Rectangle{panel.x + 18.0f, panel.y + 17.0f, panel.width - 36.0f, 44.0f},
-            font,
+            Rectangle{panel.x + 18.0f, panel.y, panel.width - 36.0f, panel.height},
+            smallFont,
             text,
-            engine::UITextJustify::Left
+            engine::UITextJustify::Left,
+            statusConfig.textColor,
+            true
     );
 }
 
@@ -9924,6 +10219,7 @@ void SectorEditor::ResetSurface3DUiState()
 void SectorEditor::ClearTopologySelectionOnly()
 {
     CancelSpotLightPilot(nullptr);
+    state.selectDragArm = SelectDragArmState{};
     state.lightDrag = LightDragState{};
     state.runtimeObjectDrag = RuntimeObjectDragState{};
     state.topologySelectionKind = TopologySelectionKind::None;
@@ -9954,6 +10250,7 @@ void SectorEditor::ClearTopologySelectionOnly()
 void SectorEditor::ClearSelection()
 {
     CancelSpotLightPilot(nullptr);
+    state.selectDragArm = SelectDragArmState{};
     state.authoringVertexDrag = AuthoringVertexDragState{};
     state.topologySelectionKind = TopologySelectionKind::None;
     state.selectedTopologySectorId = -1;

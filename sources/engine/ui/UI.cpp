@@ -334,6 +334,168 @@ Vector2 TextPosition(
     return TextPositionRaw(config, assets, TransformBounds(ui, bounds), font, text, justify);
 }
 
+void DrawWrappedTextLine(
+        AssetManager& assets,
+        FontHandle font,
+        const char* text,
+        size_t start,
+        size_t length,
+        Vector2 position,
+        float fontSize,
+        float spacing,
+        Color tint)
+{
+    char line[2048] = {};
+    const size_t copyLength = std::min(length, sizeof(line) - 1);
+    std::memcpy(line, text + start, copyLength);
+    line[copyLength] = '\0';
+    DrawTextWithFont(assets, font, line, position, fontSize, spacing, tint);
+}
+
+float MeasureTextRangeWidth(
+        AssetManager& assets,
+        FontHandle font,
+        const char* text,
+        size_t start,
+        size_t length,
+        float fontSize,
+        float spacing)
+{
+    char line[2048] = {};
+    const size_t copyLength = std::min(length, sizeof(line) - 1);
+    std::memcpy(line, text + start, copyLength);
+    line[copyLength] = '\0';
+    return MeasureTextWithFont(assets, font, line, fontSize, spacing).x;
+}
+
+void DrawTextWrappedRaw(
+        const UIConfig& config,
+        AssetManager& assets,
+        Rectangle bounds,
+        FontHandle font,
+        const char* text,
+        UITextJustify justify,
+        Color tint)
+{
+    const char* safeText = text == nullptr ? "" : text;
+    const size_t byteCount = TextByteLength(safeText);
+    const float contentX = bounds.x + config.paddingX;
+    const float contentY = bounds.y + config.paddingY;
+    const float contentWidth = std::max(0.0f, bounds.width - config.paddingX * 2.0f);
+    const float contentBottom = bounds.y + bounds.height - config.paddingY;
+    const float lineHeight = config.fontSize;
+    const float lineAdvance = config.fontSize + config.textSpacing;
+    const Color textColor = ResolveTint(tint, config.textColor);
+
+    if (byteCount == 0 || contentWidth <= 0.0f || lineHeight <= 0.0f) {
+        return;
+    }
+
+    size_t lineStart = 0;
+    size_t lineEnd = 0;
+    size_t lastBreak = 0;
+    bool hasBreak = false;
+    float y = contentY;
+
+    auto drawLine = [&](size_t start, size_t end) {
+        while (start < end && (safeText[start] == ' ' || safeText[start] == '\t')) {
+            ++start;
+        }
+        while (end > start && (safeText[end - 1] == ' ' || safeText[end - 1] == '\t')) {
+            --end;
+        }
+        if (y + lineHeight > contentBottom) {
+            return false;
+        }
+        if (start >= end) {
+            y += lineAdvance;
+            return true;
+        }
+
+        const float lineWidth = MeasureTextRangeWidth(
+                assets,
+                font,
+                safeText,
+                start,
+                end - start,
+                config.fontSize,
+                config.textSpacing
+        );
+        float x = contentX;
+        if (justify == UITextJustify::Center) {
+            x = bounds.x + (bounds.width - lineWidth) * 0.5f;
+        } else if (justify == UITextJustify::Right) {
+            x = bounds.x + bounds.width - config.paddingX - lineWidth;
+        }
+
+        DrawWrappedTextLine(
+                assets,
+                font,
+                safeText,
+                start,
+                end - start,
+                Vector2{std::round(x), std::round(y)},
+                config.fontSize,
+                config.textSpacing,
+                textColor
+        );
+        y += lineAdvance;
+        return true;
+    };
+
+    for (size_t cursor = 0; cursor < byteCount;) {
+        const size_t next = NextUtf8Boundary(safeText, cursor);
+        const char ch = safeText[cursor];
+
+        if (ch == '\n') {
+            if (!drawLine(lineStart, cursor)) {
+                return;
+            }
+            lineStart = next;
+            lineEnd = next;
+            lastBreak = next;
+            hasBreak = false;
+            cursor = next;
+            continue;
+        }
+
+        const float measuredWidth = MeasureTextRangeWidth(
+                assets,
+                font,
+                safeText,
+                lineStart,
+                next - lineStart,
+                config.fontSize,
+                config.textSpacing
+        );
+
+        if (measuredWidth > contentWidth && lineEnd > lineStart) {
+            const size_t breakEnd = hasBreak && lastBreak > lineStart ? lastBreak : lineEnd;
+            if (!drawLine(lineStart, breakEnd)) {
+                return;
+            }
+            lineStart = breakEnd;
+            while (lineStart < byteCount && (safeText[lineStart] == ' ' || safeText[lineStart] == '\t')) {
+                lineStart = NextUtf8Boundary(safeText, lineStart);
+            }
+            cursor = lineStart;
+            lineEnd = lineStart;
+            lastBreak = lineStart;
+            hasBreak = false;
+            continue;
+        }
+
+        lineEnd = next;
+        if (ch == ' ' || ch == '\t') {
+            lastBreak = next;
+            hasBreak = true;
+        }
+        cursor = next;
+    }
+
+    (void)drawLine(lineStart, byteCount);
+}
+
 void DrawWidgetBackgroundRaw(const UIConfig& config, Rectangle bounds, Color fill, Color border)
 {
     DrawRectangleRec(bounds, fill);
@@ -718,10 +880,22 @@ float ClampScrollOffset(float value, float contentExtent, float viewportExtent)
     return std::clamp(value, 0.0f, std::max(0.0f, contentExtent - viewportExtent));
 }
 
+Rectangle ScrollClientBounds(const UIConfig& config, Rectangle bounds)
+{
+    const float inset = std::max(0.0f, config.borderThickness);
+    return Rectangle{
+            bounds.x + inset,
+            bounds.y + inset,
+            std::max(0.0f, bounds.width - inset * 2.0f),
+            std::max(0.0f, bounds.height - inset * 2.0f)
+    };
+}
+
 Rectangle VerticalScrollTrack(const UIConfig& config, const UIScrollAreaResult& area)
 {
+    const Rectangle client = area.drawFrame ? ScrollClientBounds(config, area.bounds) : area.bounds;
     return Rectangle{
-            area.viewport.x + area.viewport.width,
+            client.x + std::max(0.0f, client.width - config.scrollbarSize),
             area.viewport.y,
             config.scrollbarSize,
             area.viewport.height
@@ -730,9 +904,10 @@ Rectangle VerticalScrollTrack(const UIConfig& config, const UIScrollAreaResult& 
 
 Rectangle HorizontalScrollTrack(const UIConfig& config, const UIScrollAreaResult& area)
 {
+    const Rectangle client = area.drawFrame ? ScrollClientBounds(config, area.bounds) : area.bounds;
     return Rectangle{
             area.viewport.x,
-            area.viewport.y + area.viewport.height,
+            client.y + std::max(0.0f, client.height - config.scrollbarSize),
             area.viewport.width,
             config.scrollbarSize
     };
@@ -764,17 +939,6 @@ Rectangle ScrollThumb(float offset, float contentExtent, float viewportExtent, R
 uint32_t ScrollAxisId(uint32_t baseId, int axis)
 {
     return baseId ^ (axis == 1 ? 0x9E3779B9u : 0x85EBCA6Bu);
-}
-
-Rectangle ScrollClientBounds(const UIConfig& config, Rectangle bounds)
-{
-    const float inset = std::max(0.0f, config.borderThickness);
-    return Rectangle{
-            bounds.x + inset,
-            bounds.y + inset,
-            std::max(0.0f, bounds.width - inset * 2.0f),
-            std::max(0.0f, bounds.height - inset * 2.0f)
-    };
 }
 
 } // namespace
@@ -844,13 +1008,15 @@ UIScrollAreaResult BeginScrollArea(
         Rectangle bounds,
         Vector2 contentSize,
         UIScrollState& state,
-        bool drawFrame)
+        bool drawFrame,
+        float paddingPx)
 {
     assert(!ui.inScrollArea && "Nested scroll areas are not supported.");
     UIScrollAreaResult result;
     result.bounds = bounds;
     result.contentSize = contentSize;
     result.drawFrame = drawFrame;
+    result.paddingPx = std::max(0.0f, paddingPx);
 
     if (ui.inScrollArea) {
         return result;
@@ -858,22 +1024,29 @@ UIScrollAreaResult BeginScrollArea(
 
     const uint32_t scrollId = HashId(id);
 
-    Rectangle viewport = drawFrame ? ScrollClientBounds(config, bounds) : bounds;
+    const Rectangle client = drawFrame ? ScrollClientBounds(config, bounds) : bounds;
+    const auto buildViewport = [client, padding = result.paddingPx, scrollbarSize = config.scrollbarSize](bool scrollX, bool scrollY) {
+        const float rightInset = scrollY ? padding + scrollbarSize : padding;
+        const float bottomInset = scrollX ? padding + scrollbarSize : padding;
+        return Rectangle{
+                client.x + padding,
+                client.y + padding,
+                std::max(0.0f, client.width - padding - rightInset),
+                std::max(0.0f, client.height - padding - bottomInset)
+        };
+    };
+
+    Rectangle viewport = buildViewport(false, false);
     bool scrollX = contentSize.x > viewport.width;
     bool scrollY = contentSize.y > viewport.height;
-    if (scrollY) {
-        viewport.width = std::max(0.0f, viewport.width - config.scrollbarSize);
-    }
-    if (scrollX) {
-        viewport.height = std::max(0.0f, viewport.height - config.scrollbarSize);
-    }
+    viewport = buildViewport(scrollX, scrollY);
     if (!scrollX && contentSize.x > viewport.width) {
         scrollX = true;
-        viewport.height = std::max(0.0f, viewport.height - config.scrollbarSize);
+        viewport = buildViewport(scrollX, scrollY);
     }
     if (!scrollY && contentSize.y > viewport.height) {
         scrollY = true;
-        viewport.width = std::max(0.0f, viewport.width - config.scrollbarSize);
+        viewport = buildViewport(scrollX, scrollY);
     }
 
     result.viewport = viewport;
@@ -1073,8 +1246,8 @@ void EndScrollArea(
                 Rectangle{
                         scrollArea.viewport.x + scrollArea.viewport.width,
                         scrollArea.viewport.y + scrollArea.viewport.height,
-                        config.scrollbarSize,
-                        config.scrollbarSize
+                        scrollArea.paddingPx + config.scrollbarSize,
+                        scrollArea.paddingPx + config.scrollbarSize
                 },
                 config.panelColor
         );
@@ -1093,8 +1266,14 @@ void Text(
         FontHandle font,
         const char* text,
         UITextJustify justify,
-        Color tint)
+        Color tint,
+        bool wordWrap)
 {
+    if (wordWrap) {
+        DrawTextWrappedRaw(config, assets, bounds, font, text, justify, tint);
+        return;
+    }
+
     DrawTextWithFont(
             assets,
             font,
@@ -1114,8 +1293,14 @@ void Text(
         FontHandle font,
         const char* text,
         UITextJustify justify,
-        Color tint)
+        Color tint,
+        bool wordWrap)
 {
+    if (wordWrap) {
+        DrawTextWrappedRaw(config, assets, TransformBounds(ui, bounds), font, text, justify, tint);
+        return;
+    }
+
     DrawTextWithFont(
             assets,
             font,

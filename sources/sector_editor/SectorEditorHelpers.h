@@ -70,6 +70,17 @@ bool IsLegacyTopologyMutationTool(SectorEditorTool tool);
 bool IsToolAvailableInGraphAuthoritativeMode(SectorEditorTool tool);
 bool IsSectorEditorGraphAuthoritativeMode();
 const char* LegacyTopologyMutationUnavailableMessage();
+const char* SectorEditorPickKindName(SectorEditorPickKind kind);
+bool SameSectorEditorPickTarget(SectorEditorPickTarget a, SectorEditorPickTarget b);
+bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target);
+bool ShouldStartSectorEditorSelectDrag(Vector2 pressPosition, Vector2 currentPosition);
+std::vector<SectorEditorPickCandidate> SortSectorEditorPickCandidates(
+        std::vector<SectorEditorPickCandidate> candidates);
+SectorEditorPickTarget ChooseSectorEditorPickTarget(
+        std::vector<SectorEditorPickCandidate> candidates,
+        SectorEditorPickTarget currentSelection,
+        int* outCycleIndex = nullptr,
+        int* outCycleCount = nullptr);
 const char* TopologyWallPartName(TopologyWallPart part);
 const char* TopologyWallPartStatusName(TopologyWallPart part);
 const char* TopologyMaterialLayerName(TopologyMaterialLayer layer);

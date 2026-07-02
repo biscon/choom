@@ -11,10 +11,12 @@
 namespace game {
 
 inline constexpr float SectorEditorInspectorTextureActionHeight = 36.0f;
-inline constexpr float SectorEditorInspectorTextureValueHeight = 30.0f;
+inline constexpr float SectorEditorInspectorTextureValueHeight = 22.0f;
 inline constexpr float SectorEditorInspectorTextureValueIndent = 12.0f;
 inline constexpr float SectorEditorInspectorCompactInputLabelWidth = 82.0f;
 inline constexpr float SectorEditorInspectorCompactInputWidth = 104.0f;
+inline constexpr float SectorEditorInspectorFloatInputWidth = 112.0f;
+inline constexpr float SectorEditorInspectorIntInputWidth = 150.0f;
 
 struct SectorEditorInspectorTextureRowLayout {
     Rectangle labelRect = {};
@@ -84,6 +86,48 @@ inline SectorEditorInspectorNumericRowLayout BuildSectorEditorInspectorCompactNu
     return SectorEditorInspectorNumericRowLayout{
             Rectangle{0.0f, y, SectorEditorInspectorCompactInputLabelWidth, rowH},
             Rectangle{SectorEditorInspectorCompactInputLabelWidth, y, inputW, rowH}};
+}
+
+inline SectorEditorInspectorNumericRowLayout BuildSectorEditorInspectorRightNumericRowLayout(
+        float y,
+        float contentW,
+        float rowH,
+        float gap,
+        float inputWidth)
+{
+    const float inputW = std::min(std::max(0.0f, inputWidth), std::max(0.0f, contentW));
+    const float inputX = std::max(0.0f, contentW - inputW);
+    return SectorEditorInspectorNumericRowLayout{
+            Rectangle{0.0f, y, std::max(0.0f, inputX - gap), rowH},
+            Rectangle{inputX, y, inputW, rowH}};
+}
+
+inline SectorEditorInspectorNumericRowLayout BuildSectorEditorInspectorRightFloatRowLayout(
+        float y,
+        float contentW,
+        float rowH,
+        float gap)
+{
+    return BuildSectorEditorInspectorRightNumericRowLayout(
+            y,
+            contentW,
+            rowH,
+            gap,
+            SectorEditorInspectorFloatInputWidth);
+}
+
+inline SectorEditorInspectorNumericRowLayout BuildSectorEditorInspectorRightIntRowLayout(
+        float y,
+        float contentW,
+        float rowH,
+        float gap)
+{
+    return BuildSectorEditorInspectorRightNumericRowLayout(
+            y,
+            contentW,
+            rowH,
+            gap,
+            SectorEditorInspectorIntInputWidth);
 }
 
 struct SectorEditorFloatInputResult {
@@ -175,5 +219,18 @@ void DrawColorSwatch(
         Rectangle bounds,
         Color color,
         float borderThickness);
+
+engine::UIConfig SectorEditorSmallFontConfig(
+        const engine::UIConfig& config,
+        engine::AssetManager& assets,
+        engine::FontHandle smallFont);
+
+float MeasureSectorEditorWrappedTextHeight(
+        const engine::UIConfig& config,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        const char* text,
+        float boundsWidth,
+        int minimumLines = 1);
 
 } // namespace game
