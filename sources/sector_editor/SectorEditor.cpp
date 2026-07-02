@@ -147,10 +147,10 @@ void UpdateCachedRuntimeObjectDraw(
             continue;
         }
 
-        cached.definitionId = object.definitionId;
+        cached.definitionId = !object.kind.empty() ? object.kind : object.definitionId;
         cached.map = Vector2{object.position.x, object.position.z};
         cached.yawRadians = object.yawRadians;
-        cached.definitionKnown = FindSectorRuntimeObjectDefinition(object.definitionId) != nullptr;
+        cached.definitionKnown = object.kind == "billboard";
         return;
     }
 }
@@ -3064,23 +3064,8 @@ void SectorEditor::AddDynamicSpotLightAt(Vector2 mapPoint)
 
 void SectorEditor::AddRuntimeObjectAt(Vector2 mapPoint)
 {
-    const int sectorId = FindTopologySectorAt(mapPoint);
-    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, sectorId);
-    if (sector == nullptr) {
-        statusText = "Object: click inside a sector";
-        return;
-    }
-
-    SectorPlacedRuntimeObject object;
-    object.id = AllocateSectorPlacedRuntimeObjectId(state.topologyMap);
-    object.definitionId = "goblin";
-    object.position = Vector3{mapPoint.x, sector->floorZ, mapPoint.y};
-    object.yawRadians = 0.0f;
-    state.topologyMap.runtimeObjects.push_back(object);
-
-    SelectRuntimeObject(object.id);
-    MarkTopologyDocumentEdited(TextFormat("Placed goblin object %d", object.id));
-    RefreshRuntimeObjectsAfterAuthoringEdit();
+    (void)mapPoint;
+    statusText = "Billboard placement needs sprite selection";
 }
 
 bool SectorEditor::DeleteSelectedRuntimeObject()

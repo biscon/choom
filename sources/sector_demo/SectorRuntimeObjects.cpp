@@ -390,6 +390,19 @@ void SpawnPlacedRuntimeObjects(
         }
     };
     for (const SectorPlacedRuntimeObject& placedObject : map.runtimeObjects) {
+        if (!placedObject.definitionId.empty()) {
+            const std::string warning = TextFormat(
+                    "legacy definitionId '%s' for placed object %d is unsupported",
+                    placedObject.definitionId.c_str(),
+                    placedObject.id);
+            std::fprintf(stderr,
+                    "[SectorRuntimeObjects WARNING] %s\n",
+                    warning.c_str());
+            recordWarning(warning);
+            ++skippedCount;
+            continue;
+        }
+
         const SectorRuntimeObjectDefinition* definition =
                 FindSectorRuntimeObjectDefinition(placedObject.definitionId);
         if (definition == nullptr) {

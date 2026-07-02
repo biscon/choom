@@ -651,10 +651,10 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
     for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
         CachedRuntimeObjectDraw cached;
         cached.objectId = object.id;
-        cached.definitionId = object.definitionId;
+        cached.definitionId = !object.kind.empty() ? object.kind : object.definitionId;
         cached.map = Vector2{object.position.x, object.position.z};
         cached.yawRadians = object.yawRadians;
-        cached.definitionKnown = object.definitionId == "goblin";
+        cached.definitionKnown = object.kind == "billboard";
         cache.runtimeObjects.push_back(cached);
     }
 

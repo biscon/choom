@@ -315,7 +315,7 @@ int CountSectorObjects(engine::World& world)
     return count;
 }
 
-void TestSpawnPlacedRuntimeObjectCreatesBillboardEntity()
+void TestSpawnPlacedRuntimeObjectSkipsLegacyGoblinDefinition()
 {
     engine::World world;
     engine::AssetManager assets;
@@ -330,72 +330,31 @@ void TestSpawnPlacedRuntimeObjectCreatesBillboardEntity()
     game::RefreshSectorRuntimeObjectMapData(state, map);
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
 
-    Check(CountSectorObjects(world) == 1, "placed goblin spawns one sector object entity");
-    Check(state.placedObjectEntities.size() == 1,
-            "placed goblin stores placed object ID to entity mapping");
-    Check(!engine::IsNull(state.runtimeObjectAssetScope),
-            "placed goblin spawn creates sector runtime object asset scope");
-    Check(state.placedObjectCount == 1 && state.spawnedObjectCount == 1 && state.skippedObjectCount == 0,
-            "placed goblin spawn records debug counts");
-    Check(state.spriteAnimationRequestedCount == 1
-                  && state.spriteAnimationPendingCount == 1
+    Check(CountSectorObjects(world) == 0,
+            "legacy definitionId goblin does not spawn a hardcoded sector object entity");
+    Check(state.placedObjectEntities.empty(),
+            "legacy definitionId goblin does not store placed object ID to entity mapping");
+    Check(engine::IsNull(state.runtimeObjectAssetScope),
+            "legacy definitionId goblin does not create sector runtime object asset scope");
+    Check(state.placedObjectCount == 1 && state.spawnedObjectCount == 0 && state.skippedObjectCount == 1,
+            "legacy definitionId goblin skip records debug counts");
+    Check(state.spriteAnimationRequestedCount == 0
+                  && state.spriteAnimationPendingCount == 0
                   && state.spriteAnimationReadyCount == 0
                   && state.spriteAnimationFailedCount == 0,
-            "placed goblin spawn records pending sprite animation diagnostics");
-    Check(state.directionalClipResolvedCount == 0 && state.directionalClipMissingCount == 1,
-            "placed goblin spawn records unresolved directional clip diagnostics before asset readiness");
-    Check(state.placedObjectStatus.find("Runtime objects: 1 placed / 1 spawned, 0 skipped")
+            "legacy definitionId goblin skip does not request sprite animation assets");
+    Check(state.directionalClipResolvedCount == 0 && state.directionalClipMissingCount == 0,
+            "legacy definitionId goblin skip does not record missing directional clips");
+    Check(state.placedObjectStatus.find("Runtime objects: 1 placed / 0 spawned, 1 skipped")
                   != std::string::npos,
-            "placed goblin spawn records successful debug status");
-    Check(state.placedObjectStatus.find("sprites 0 ready, 1 pending, 0 failed")
+            "legacy definitionId goblin skip records debug status");
+    Check(state.placedObjectWarning.find("legacy definitionId 'goblin' for placed object 1 is unsupported")
                   != std::string::npos,
-            "placed goblin spawn status surfaces pending sprite asset");
-    Check(state.placedObjectWarning.empty(),
-            "placed goblin spawn records no warning");
-    if (state.placedObjectEntities.empty()) {
-        return;
-    }
-
-    const engine::Entity entity = state.placedObjectEntities[0].entity;
-    Check(state.placedObjectEntities[0].placedObjectId == 1,
-            "placed goblin mapping stores stable placed object ID");
-    Check(world.IsAlive(entity), "placed goblin mapped entity is alive");
-
-    const game::SectorObjectTransform& transform = world.Get<game::SectorObjectTransform>(entity);
-    Check(Near(transform.position, Vector3{
-                        game::SectorAuthoringToWorldDistance(1.0f),
-                        game::SectorAuthoringToWorldDistance(0.5f),
-                        game::SectorAuthoringToWorldDistance(1.0f)})
-                  && Near(transform.yawRadians, 0.75f),
-            "placed goblin entity receives runtime world-space transform");
-
-    const game::SectorObject& object = world.Get<game::SectorObject>(entity);
-    Check(object.currentSectorId == 10,
-            "placed goblin current sector lookup uses world-space X/Z");
-
-    const game::SectorBillboardSprite& sprite = world.Get<game::SectorBillboardSprite>(entity);
-    Check(!engine::IsNull(sprite.animation),
-            "placed goblin requests billboard sprite animation");
-    Check(Near(sprite.sizeWorld.x, 0.8f) && Near(sprite.sizeWorld.y, 1.2f),
-            "placed goblin uses billboard definition size");
-    Check(Near(sprite.originNormalized.x, 0.5f) && Near(sprite.originNormalized.y, 1.0f),
-            "placed goblin uses billboard definition origin");
-
-    const game::SectorBillboardAnimator& animator = world.Get<game::SectorBillboardAnimator>(entity);
-    Check(animator.animationId == "goblin",
-            "placed goblin animator uses definition ID as animation request key");
-
-    const game::SectorBillboardDirectionalClips& directionalClips =
-            world.Get<game::SectorBillboardDirectionalClips>(entity);
-    Check(directionalClips.frontName == "Front"
-                  && directionalClips.backName == "Back"
-                  && directionalClips.leftName == "Left"
-                  && directionalClips.rightName == "Right",
-            "placed goblin stores definition directional clip names on spawned billboard");
+            "legacy definitionId goblin skip records debug warning");
 
     game::UpdateSectorRuntimeObjects(world, assets, state, map, 0.0f);
-    Check(state.spriteAnimationPendingCount == 1 && state.directionalClipMissingCount == 1,
-            "runtime object update keeps pending async asset diagnostics live");
+    Check(CountSectorObjects(world) == 0,
+            "runtime object update does not revive legacy definitionId goblin data");
 }
 
 void TestSpawnPlacedRuntimeObjectSkipsMissingDefinition()
@@ -424,9 +383,10 @@ void TestSpawnPlacedRuntimeObjectSkipsMissingDefinition()
     Check(state.placedObjectStatus.find("Runtime objects: 1 placed / 0 spawned, 1 skipped")
                   != std::string::npos,
             "missing definition skip records debug status");
-    Check(state.placedObjectWarning.find("missing definition 'missing_definition' for placed object 2")
+    Check(state.placedObjectWarning.find(
+                  "legacy definitionId 'missing_definition' for placed object 2 is unsupported")
                   != std::string::npos,
-            "missing definition skip records debug warning");
+            "legacy definitionId skip records debug warning");
 }
 
 void TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate()
@@ -449,21 +409,12 @@ void TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate()
     map.runtimeObjects[0].position = Vector3{2.0f, 0.5f, 2.0f};
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
 
-    Check(CountSectorObjects(world) == 1,
-            "repeated placed runtime object spawn refresh does not duplicate entities");
-    Check(state.placedObjectEntities.size() == 1,
-            "repeated placed runtime object spawn refresh keeps one mapping");
-    if (!state.placedObjectEntities.empty()) {
-        const engine::Entity refreshedEntity = state.placedObjectEntities[0].entity;
-        Check(refreshedEntity != firstEntity,
-                "placed runtime object refresh replaces previous mapped entity");
-        Check(Near(world.Get<game::SectorObjectTransform>(refreshedEntity).position,
-                      Vector3{
-                              game::SectorAuthoringToWorldDistance(2.0f),
-                              game::SectorAuthoringToWorldDistance(0.5f),
-                              game::SectorAuthoringToWorldDistance(2.0f)}),
-                "placed runtime object refresh applies latest authored position in world space");
-    }
+    Check(engine::IsNull(firstEntity),
+            "legacy placed runtime object does not create an initial mapped entity");
+    Check(CountSectorObjects(world) == 0,
+            "repeated legacy placed runtime object spawn refresh does not create entities");
+    Check(state.placedObjectEntities.empty(),
+            "repeated legacy placed runtime object spawn refresh keeps no mapping");
 
     game::ClearSectorRuntimeObjects(world, assets, state);
     Check(CountSectorObjects(world) == 0,
@@ -494,14 +445,12 @@ void TestPreviewRuntimeObjectRefreshKeepsAssetScope()
     game::RefreshSectorRuntimeObjectMapData(state, map);
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
 
-    Check(CountSectorObjects(world) == 1,
-            "preview runtime object refresh keeps one spawned sector object");
+    Check(CountSectorObjects(world) == 0,
+            "preview runtime object refresh keeps legacy definitionId data skipped");
     Check(state.runtimeObjectAssetScope == firstScope,
-            "preview runtime object refresh keeps the runtime object asset scope alive");
-    if (!state.placedObjectEntities.empty()) {
-        Check(state.placedObjectEntities[0].entity != firstEntity,
-                "preview runtime object refresh replaces mapped entity without duplicating it");
-    }
+            "preview runtime object refresh keeps the null runtime object asset scope");
+    Check(engine::IsNull(firstEntity) && state.placedObjectEntities.empty(),
+            "preview runtime object refresh does not create legacy placed object mappings");
 }
 
 void TestResetSectorRuntimeObjectsForMapReloadsWithoutDuplicates()
@@ -525,23 +474,14 @@ void TestResetSectorRuntimeObjectsForMapReloadsWithoutDuplicates()
     map.runtimeObjects[0].position = Vector3{2.0f, 0.5f, 2.0f};
     game::ResetSectorRuntimeObjectsForMap(world, assets, state, map);
 
-    Check(CountSectorObjects(world) == 1,
-            "explicit map runtime reset reloads placed objects without duplicates");
+    Check(CountSectorObjects(world) == 0,
+            "explicit map runtime reset keeps legacy definitionId data skipped");
     Check(!world.IsAlive(firstEntity),
-            "explicit map runtime reset destroys the previous runtime object entity");
-    Check(firstScope != state.runtimeObjectAssetScope,
-            "explicit map runtime reset unloads the previous runtime object asset scope");
-    Check(state.placedObjectEntities.size() == 1,
-            "explicit map runtime reset recreates one placed object mapping");
-    if (!state.placedObjectEntities.empty()) {
-        const engine::Entity reloadedEntity = state.placedObjectEntities[0].entity;
-        Check(Near(world.Get<game::SectorObjectTransform>(reloadedEntity).position,
-                      Vector3{
-                              game::SectorAuthoringToWorldDistance(2.0f),
-                              game::SectorAuthoringToWorldDistance(0.5f),
-                              game::SectorAuthoringToWorldDistance(2.0f)}),
-                "explicit map runtime reset spawns from the latest loaded map data in world space");
-    }
+            "explicit map runtime reset has no previous legacy runtime object entity to keep alive");
+    Check(firstScope == state.runtimeObjectAssetScope && engine::IsNull(state.runtimeObjectAssetScope),
+            "explicit map runtime reset keeps runtime object asset scope null for legacy data");
+    Check(state.placedObjectEntities.empty(),
+            "explicit map runtime reset does not create legacy placed object mappings");
 }
 
 void TestSectorBillboardSpriteAnimationRequestRejectsMissingInput()
@@ -950,7 +890,7 @@ int main()
     TestSectorBillboardFrameUvsPreserveFlippedSourceSigns();
     TestSectorBillboardQuadWorldPositions();
     TestClearSectorRuntimeObjectsOnlyDestroysSectorObjects();
-    TestSpawnPlacedRuntimeObjectCreatesBillboardEntity();
+    TestSpawnPlacedRuntimeObjectSkipsLegacyGoblinDefinition();
     TestSpawnPlacedRuntimeObjectSkipsMissingDefinition();
     TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate();
     TestPreviewRuntimeObjectRefreshKeepsAssetScope();

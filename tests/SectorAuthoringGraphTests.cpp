@@ -66,6 +66,21 @@ bool Near(Vector3 a, Vector3 b)
     return Near(a.x, b.x) && Near(a.y, b.y) && Near(a.z, b.z);
 }
 
+game::SectorPlacedRuntimeObject MakeBillboardRuntimeObject(
+        int id,
+        const char* spritePath,
+        Vector3 position,
+        float yawRadians)
+{
+    game::SectorPlacedRuntimeObject object;
+    object.id = id;
+    object.kind = "billboard";
+    object.position = position;
+    object.yawRadians = yawRadians;
+    object.billboard.spriteAnimationPath = spritePath;
+    return object;
+}
+
 bool HasIssueFor(
         const std::vector<game::SectorAuthoringValidationIssue>& issues,
         game::SectorAuthoringObjectKind objectKind,
@@ -7078,11 +7093,11 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     state.topologyMap.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
     state.topologyMap.directionalLight.intensity = 1.5f;
     state.topologyMap.lightmapSettings.ambientOcclusionStrength = 0.25f;
-    state.topologyMap.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+    state.topologyMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             44,
-            "goblin",
+            "assets/sprites/torch/torch.json",
             Vector3{12.0f, 0.0f, 20.0f},
-            1.57079632679f});
+            1.57079632679f));
     const std::filesystem::path lightmapPath =
             TempJsonPath("sector_editor_map_level_graph_native.lightmap.png");
     WriteTextFile(lightmapPath, "fake-lightmap");
@@ -7109,7 +7124,9 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     Check(saved["bakedLightmap"]["path"] == lightmapPath.string(),
           "editor graph-native save persists baked lightmap path");
     Check(saved["runtimeObjects"][0]["id"] == 44
-                  && saved["runtimeObjects"][0]["definitionId"] == "goblin",
+                  && saved["runtimeObjects"][0]["kind"] == "billboard"
+                  && saved["runtimeObjects"][0]["billboard"]["spriteAnimationPath"]
+                             == "assets/sprites/torch/torch.json",
           "editor graph-native save persists runtime objects");
     Check(saved["bakedLightmap"]["width"] == 2048
                   && saved["bakedLightmap"]["height"] == 2048,
@@ -7247,16 +7264,16 @@ void TestEditorGraphNativeRuntimeObjectsSurviveLoadDerivation()
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
     AddFaceAnchor(graph, 200, 64, 64, "room");
     game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
-    state.topologyMap.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+    state.topologyMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             1,
-            "goblin",
+            "assets/sprites/torch/torch.json",
             Vector3{64.0f, 0.0f, 112.0f},
-            0.0f});
-    state.topologyMap.runtimeObjects.push_back(game::SectorPlacedRuntimeObject{
+            0.0f));
+    state.topologyMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             7,
-            "goblin",
+            "assets/sprites/crate/crate.json",
             Vector3{32.0f, 0.0f, 48.0f},
-            1.57079632679f});
+            1.57079632679f));
 
     std::string savedText;
     SaveEditorStateToJson(
@@ -7287,12 +7304,16 @@ void TestEditorGraphNativeRuntimeObjectsSurviveLoadDerivation()
     const game::SectorPlacedRuntimeObject* second =
             game::FindSectorPlacedRuntimeObject(loadedState.topologyMap, 7);
     Check(first != nullptr
-                  && first->definitionId == "goblin"
+                  && first->kind == "billboard"
+                  && first->definitionId.empty()
+                  && first->billboard.spriteAnimationPath == "assets/sprites/torch/torch.json"
                   && Near(first->position, Vector3{64.0f, 0.0f, 112.0f})
                   && Near(first->yawRadians, 0.0f),
           "first generated runtime object survives load with stable authored data");
     Check(second != nullptr
-                  && second->definitionId == "goblin"
+                  && second->kind == "billboard"
+                  && second->definitionId.empty()
+                  && second->billboard.spriteAnimationPath == "assets/sprites/crate/crate.json"
                   && Near(second->position, Vector3{32.0f, 0.0f, 48.0f})
                   && Near(second->yawRadians, 1.57079632679f),
           "second generated runtime object survives load with stable authored data");

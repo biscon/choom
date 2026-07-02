@@ -80,6 +80,12 @@ bool Near(float actual, float expected, float epsilon = 0.00001f)
     return std::fabs(actual - expected) <= epsilon;
 }
 
+bool Near(Vector2 actual, Vector2 expected, float epsilon = 0.00001f)
+{
+    return Near(actual.x, expected.x, epsilon)
+            && Near(actual.y, expected.y, epsilon);
+}
+
 bool Near(Vector3 actual, Vector3 expected, float epsilon = 0.00001f)
 {
     return Near(actual.x, expected.x, epsilon)
@@ -139,6 +145,21 @@ SectorTopologyMap MakeSquare()
     sector.defaultUpper = MakePart("wall", 9.0f, 10.0f, 11.0f, 12.0f);
     map.sectors.push_back(sector);
     return map;
+}
+
+SectorPlacedRuntimeObject MakeBillboardRuntimeObject(
+        int id,
+        const char* spritePath,
+        Vector3 position,
+        float yawRadians)
+{
+    SectorPlacedRuntimeObject object;
+    object.id = id;
+    object.kind = "billboard";
+    object.position = position;
+    object.yawRadians = yawRadians;
+    object.billboard.spriteAnimationPath = spritePath;
+    return object;
 }
 
 SectorTopologyMap MakeAdjacentSquares()
@@ -849,25 +870,25 @@ void TestRuntimeObjectsRoundTripAndValidation()
     Check(missingLoaded.runtimeObjects.empty(), "missing runtimeObjects loads empty");
 
     SectorTopologyMap original = MakeSquare();
-    original.runtimeObjects.push_back(SectorPlacedRuntimeObject{
+    original.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             12,
-            "goblin",
+            "assets/sprites/torch/torch.json",
             Vector3{4.5f, 1.25f, -8.0f},
-            1.57079632679f
-    });
-    original.runtimeObjects.push_back(SectorPlacedRuntimeObject{
+            1.57079632679f));
+    original.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             3,
-            "barrel",
+            "assets/sprites/crate/crate.json",
             Vector3{-2.0f, 0.0f, 5.5f},
-            -0.78539816339f
-    });
+            -0.78539816339f));
 
     const Json saved = Json::parse(SaveText(original));
     Check(saved["runtimeObjects"].is_array(), "runtime object array is written");
     Check(saved["runtimeObjects"][0]["id"].get<int>() == 3
                   && saved["runtimeObjects"][1]["id"].get<int>() == 12,
           "runtime objects serialize sorted by stable ID");
-    Check(saved["runtimeObjects"][1]["definitionId"].get<std::string>() == "goblin"
+    Check(saved["runtimeObjects"][1]["kind"].get<std::string>() == "billboard"
+                  && saved["runtimeObjects"][1]["billboard"]["spriteAnimationPath"]
+                             .get<std::string>() == "assets/sprites/torch/torch.json"
                   && Near(saved["runtimeObjects"][1]["position"][0].get<float>(), 4.5f)
                   && Near(saved["runtimeObjects"][1]["position"][1].get<float>(), 1.25f)
                   && Near(saved["runtimeObjects"][1]["position"][2].get<float>(), -8.0f)
@@ -877,13 +898,15 @@ void TestRuntimeObjectsRoundTripAndValidation()
     SectorTopologyMap loaded;
     Check(LoadText(saved.dump(), loaded, error), "runtime object JSON loads");
     Check(loaded.runtimeObjects.size() == 2, "runtime objects round-trip");
-    const SectorPlacedRuntimeObject* goblin = game::FindSectorPlacedRuntimeObject(loaded, 12);
-    Check(goblin != nullptr, "round-tripped runtime object can be found by stable ID");
-    if (goblin != nullptr) {
-        Check(goblin->definitionId == "goblin"
-                      && Near(goblin->position, Vector3{4.5f, 1.25f, -8.0f})
-                      && Near(goblin->yawRadians, 1.57079632679f),
-              "round-tripped runtime object preserves definition position and yaw");
+    const SectorPlacedRuntimeObject* billboard = game::FindSectorPlacedRuntimeObject(loaded, 12);
+    Check(billboard != nullptr, "round-tripped runtime object can be found by stable ID");
+    if (billboard != nullptr) {
+        Check(billboard->kind == "billboard"
+                      && billboard->definitionId.empty()
+                      && billboard->billboard.spriteAnimationPath == "assets/sprites/torch/torch.json"
+                      && Near(billboard->position, Vector3{4.5f, 1.25f, -8.0f})
+                      && Near(billboard->yawRadians, 1.57079632679f),
+              "round-tripped runtime object preserves billboard payload position and yaw");
     }
     Check(game::AllocateSectorPlacedRuntimeObjectId(loaded) == 13,
           "runtime object allocator returns next stable ID");
@@ -913,9 +936,15 @@ void TestRuntimeObjectsRoundTripAndValidation()
     invalid["runtimeObjects"][1]["id"] = 3;
     ExpectRejected(invalid, "duplicate runtime object ID is rejected");
 
+    Json legacyObject = saved;
+    legacyObject["runtimeObjects"][0].erase("kind");
+    legacyObject["runtimeObjects"][0].erase("billboard");
+    legacyObject["runtimeObjects"][0]["definitionId"] = "goblin";
+    ExpectRejected(legacyObject, "legacy definitionId-only runtime object is rejected");
+
     invalid = saved;
-    invalid["runtimeObjects"][0]["definitionId"] = "";
-    ExpectRejected(invalid, "empty runtime object definition ID is rejected");
+    invalid["runtimeObjects"][0].erase("kind");
+    ExpectRejected(invalid, "missing runtime object kind is rejected");
 
     invalid = saved;
     invalid["runtimeObjects"][0]["position"] = Json::array({1.0f, 2.0f});
@@ -939,23 +968,121 @@ void TestRuntimeObjectsRoundTripAndValidation()
     SectorTopologyMap largeYaw = original;
     largeYaw.runtimeObjects[0].yawRadians = std::numeric_limits<float>::max();
     ExpectSaveRejected(largeYaw, "finite runtime object yaw that overflows degrees is rejected on save");
+
+    SectorTopologyMap billboardMap = MakeSquare();
+    SectorPlacedRuntimeObject single;
+    single.id = 20;
+    single.kind = "billboard";
+    single.position = Vector3{8.0f, 0.0f, 6.0f};
+    single.yawRadians = 0.25f;
+    single.billboard.spriteAnimationPath = "assets/sprites/torch/torch.json";
+    single.billboard.sizeWorld = Vector2{1.5f, 2.25f};
+    single.billboard.clip = "Idle";
+    billboardMap.runtimeObjects.push_back(single);
+
+    SectorPlacedRuntimeObject directional;
+    directional.id = 21;
+    directional.kind = "billboard";
+    directional.position = Vector3{10.0f, 0.5f, 7.0f};
+    directional.yawRadians = 1.0f;
+    directional.billboard.spriteAnimationPath = "assets/sprites/guard/guard.json";
+    directional.billboard.sizeWorld = Vector2{0.8f, 1.2f};
+    directional.billboard.keepAspectRatio = false;
+    directional.billboard.originNormalized = Vector2{0.25f, 0.75f};
+    directional.billboard.directional = true;
+    directional.billboard.frontClip = "Face";
+    directional.billboard.backClip = "Away";
+    directional.billboard.leftClip = "Port";
+    directional.billboard.rightClip = "Starboard";
+    directional.billboard.playing = false;
+    billboardMap.runtimeObjects.push_back(directional);
+
+    const Json billboardSaved = Json::parse(SaveText(billboardMap));
+    Check(billboardSaved["runtimeObjects"][0]["kind"].get<std::string>() == "billboard"
+                  && !billboardSaved["runtimeObjects"][0].contains("definitionId"),
+          "generic billboard runtime object writes kind without definition ID");
+    Check(billboardSaved["runtimeObjects"][0]["billboard"]["spriteAnimationPath"]
+                          .get<std::string>() == "assets/sprites/torch/torch.json"
+                  && Near(billboardSaved["runtimeObjects"][0]["billboard"]["width"].get<float>(), 1.5f)
+                  && Near(billboardSaved["runtimeObjects"][0]["billboard"]["height"].get<float>(), 2.25f)
+                  && billboardSaved["runtimeObjects"][0]["billboard"]["clip"].get<std::string>() == "Idle",
+          "single-clip billboard payload writes sprite path size and clip");
+    Check(!billboardSaved["runtimeObjects"][0]["billboard"].contains("keepAspectRatio")
+                  && !billboardSaved["runtimeObjects"][0]["billboard"].contains("originNormalized")
+                  && !billboardSaved["runtimeObjects"][0]["billboard"].contains("directional")
+                  && !billboardSaved["runtimeObjects"][0]["billboard"].contains("playing"),
+          "default billboard payload fields are omitted");
+    Check(billboardSaved["runtimeObjects"][1]["billboard"]["directional"].get<bool>()
+                  && !billboardSaved["runtimeObjects"][1]["billboard"]["keepAspectRatio"].get<bool>()
+                  && !billboardSaved["runtimeObjects"][1]["billboard"]["playing"].get<bool>()
+                  && billboardSaved["runtimeObjects"][1]["billboard"]["frontClip"].get<std::string>() == "Face"
+                  && billboardSaved["runtimeObjects"][1]["billboard"]["rightClip"].get<std::string>() == "Starboard",
+          "directional billboard payload writes non-default fields");
+
+    SectorTopologyMap billboardLoaded;
+    Check(LoadText(billboardSaved.dump(), billboardLoaded, error), "generic billboard JSON loads");
+    const SectorPlacedRuntimeObject* loadedSingle =
+            game::FindSectorPlacedRuntimeObject(billboardLoaded, 20);
+    const SectorPlacedRuntimeObject* loadedDirectional =
+            game::FindSectorPlacedRuntimeObject(billboardLoaded, 21);
+    Check(loadedSingle != nullptr
+                  && loadedSingle->kind == "billboard"
+                  && loadedSingle->definitionId.empty()
+                  && loadedSingle->billboard.spriteAnimationPath == "assets/sprites/torch/torch.json"
+                  && Near(loadedSingle->billboard.sizeWorld, Vector2{1.5f, 2.25f})
+                  && loadedSingle->billboard.keepAspectRatio
+                  && Near(loadedSingle->billboard.originNormalized, Vector2{0.5f, 1.0f})
+                  && !loadedSingle->billboard.directional
+                  && loadedSingle->billboard.clip == "Idle"
+                  && loadedSingle->billboard.playing,
+          "single-clip billboard payload restores explicit and default fields");
+    Check(loadedDirectional != nullptr
+                  && loadedDirectional->kind == "billboard"
+                  && loadedDirectional->billboard.directional
+                  && loadedDirectional->billboard.frontClip == "Face"
+                  && loadedDirectional->billboard.backClip == "Away"
+                  && loadedDirectional->billboard.leftClip == "Port"
+                  && loadedDirectional->billboard.rightClip == "Starboard"
+                  && !loadedDirectional->billboard.keepAspectRatio
+                  && !loadedDirectional->billboard.playing
+                  && Near(loadedDirectional->billboard.originNormalized, Vector2{0.25f, 0.75f}),
+          "directional billboard payload round-trips");
+
+    Json invalidBillboard = billboardSaved;
+    invalidBillboard["runtimeObjects"][0]["billboard"]["spriteAnimationPath"] = "";
+    ExpectRejected(invalidBillboard, "empty billboard sprite path is rejected");
+
+    invalidBillboard = billboardSaved;
+    invalidBillboard["runtimeObjects"][0]["billboard"]["width"] = 0.0f;
+    ExpectRejected(invalidBillboard, "non-positive billboard width is rejected");
+
+    invalidBillboard = billboardSaved;
+    invalidBillboard["runtimeObjects"][0]["billboard"]["originNormalized"] =
+            Json::array({1.25f, 0.5f});
+    ExpectRejected(invalidBillboard, "out-of-range billboard origin is rejected");
+
+    invalidBillboard = billboardSaved;
+    invalidBillboard["runtimeObjects"][0]["kind"] = "unknown";
+    ExpectRejected(invalidBillboard, "unknown runtime object kind is rejected");
+
+    invalidBillboard = billboardSaved;
+    invalidBillboard["runtimeObjects"][0].erase("billboard");
+    ExpectRejected(invalidBillboard, "missing billboard payload is rejected");
 }
 
 void TestRuntimeObjectEditAndDeleteHelpers()
 {
     SectorTopologyMap map = MakeSquare();
-    map.runtimeObjects.push_back(SectorPlacedRuntimeObject{
+    map.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             4,
-            "goblin",
+            "assets/sprites/torch/torch.json",
             Vector3{1.0f, 0.5f, 1.0f},
-            0.0f
-    });
-    map.runtimeObjects.push_back(SectorPlacedRuntimeObject{
+            0.0f));
+    map.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             9,
-            "goblin",
+            "assets/sprites/crate/crate.json",
             Vector3{2.0f, 0.5f, 2.0f},
-            0.25f
-    });
+            0.25f));
 
     SectorPlacedRuntimeObject* edited = game::FindSectorPlacedRuntimeObject(map, 4);
     Check(edited != nullptr, "runtime object edit target can be found by stable ID");
