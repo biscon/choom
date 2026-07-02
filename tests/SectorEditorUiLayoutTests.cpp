@@ -112,6 +112,68 @@ void TestTextureRowHeight()
           "texture row height accounts for action and value lines");
 }
 
+void TestStackedOptionRow()
+{
+    const game::SectorEditorInspectorStackedOptionRowLayout layout =
+            game::BuildSectorEditorInspectorStackedOptionRowLayout(12.0f, 260.0f, 40.0f, 8.0f);
+
+    Check(Near(layout.labelRect.x, 0.0f), "stacked option label starts at content x");
+    Check(Near(layout.labelRect.width, 260.0f), "stacked option label is full width");
+    Check(Near(layout.fieldRect.y, layout.labelRect.y + layout.labelRect.height + 8.0f),
+          "stacked option field is below label with gap");
+    Check(Near(layout.fieldRect.width, 260.0f), "stacked option field is full width");
+    Check(!Overlaps(layout.labelRect, layout.fieldRect), "stacked option label does not overlap field");
+    Check(Near(layout.height, 74.0f), "stacked option height accounts for label gap and field");
+}
+
+void TestRuntimeObjectInspectorHeightCountsBillboardRows()
+{
+    const float rowH = 40.0f;
+    const float gap = 8.0f;
+    const float spriteLabelHeight = 54.0f;
+    const float aspectWarningHeight = 28.0f;
+    const float unsupportedHeight = game::SectorEditorRuntimeObjectInspectorContentHeight(
+            rowH,
+            gap,
+            false,
+            false,
+            false,
+            spriteLabelHeight,
+            aspectWarningHeight);
+    const float singleClipHeight = game::SectorEditorRuntimeObjectInspectorContentHeight(
+            rowH,
+            gap,
+            true,
+            false,
+            false,
+            spriteLabelHeight,
+            aspectWarningHeight);
+    const float directionalHeight = game::SectorEditorRuntimeObjectInspectorContentHeight(
+            rowH,
+            gap,
+            true,
+            false,
+            true,
+            spriteLabelHeight,
+            aspectWarningHeight);
+    const float warningHeight = game::SectorEditorRuntimeObjectInspectorContentHeight(
+            rowH,
+            gap,
+            true,
+            true,
+            true,
+            spriteLabelHeight,
+            aspectWarningHeight);
+
+    Check(singleClipHeight > unsupportedHeight,
+          "billboard inspector height includes billboard controls");
+    Check(Near(directionalHeight - singleClipHeight,
+               (game::SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap) * 3.0f),
+          "directional billboard height includes three extra stacked clip rows");
+    Check(Near(warningHeight - directionalHeight, aspectWarningHeight + gap),
+          "aspect warning height includes text row and trailing gap");
+}
+
 } // namespace
 
 int main()
@@ -123,6 +185,8 @@ int main()
     TestRightIntNumericRow();
     TestRightNumericRowClamps();
     TestTextureRowHeight();
+    TestStackedOptionRow();
+    TestRuntimeObjectInspectorHeightCountsBillboardRows();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorUiLayoutTests failure(s)\n";

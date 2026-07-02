@@ -5588,12 +5588,86 @@ void SectorEditor::DrawSectorsPanel(
             SectorEditorPanelScrollPaddingPx,
             false);
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
+    const auto runtimeObjectSpriteLabel = [](const SectorPlacedRuntimeObject& object) {
+        return object.billboard.spriteAnimationPath.empty()
+                ? std::string("Sprite: None selected")
+                : std::string(TextFormat("Sprite: %s", object.billboard.spriteAnimationPath.c_str()));
+    };
+    const auto resolveBillboardAspect =
+            [this, &assets](const SectorPlacedRuntimeObject& object) {
+                if (engineContext == nullptr || object.kind != "billboard") {
+                    return 0.0f;
+                }
+
+                engine::SpriteAnimationHandle animation = engine::NullSpriteAnimationHandle();
+                uint32_t clipIndex = engine::InvalidSpriteClipIndex;
+                for (const SectorPlacedRuntimeObjectEntity& entry : state.runtimeObjects.placedObjectEntities) {
+                    if (entry.placedObjectId != object.id
+                            || !engineContext->world.IsAlive(entry.entity)
+                            || !engineContext->world.Has<SectorBillboardSprite>(entry.entity)) {
+                        continue;
+                    }
+
+                    const SectorBillboardSprite& sprite = engineContext->world.Get<SectorBillboardSprite>(entry.entity);
+                    animation = sprite.animation;
+                    clipIndex = sprite.clipIndex;
+                    break;
+                }
+
+                if (engine::IsNull(animation)) {
+                    return 0.0f;
+                }
+
+                if (object.billboard.directional) {
+                    const uint32_t frontClipIndex = assets.FindSpriteClipIndex(
+                            animation,
+                            object.billboard.frontClip.c_str());
+                    if (frontClipIndex != engine::InvalidSpriteClipIndex) {
+                        clipIndex = frontClipIndex;
+                    }
+                } else if (!object.billboard.clip.empty()) {
+                    const uint32_t selectedClipIndex = assets.FindSpriteClipIndex(
+                            animation,
+                            object.billboard.clip.c_str());
+                    if (selectedClipIndex != engine::InvalidSpriteClipIndex) {
+                        clipIndex = selectedClipIndex;
+                    }
+                }
+
+                float aspect = 0.0f;
+                return ResolveBillboardAspectFromAnimation(assets, animation, clipIndex, aspect)
+                        ? aspect
+                        : 0.0f;
+            };
     const auto inspectorContentHeight = [&]() {
         if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
             return 120.0f;
         }
         if (hasSelectedRuntimeObject) {
-            return 1040.0f;
+            const SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
+            if (object == nullptr) {
+                return 42.0f;
+            }
+            const bool isBillboard = object->kind == "billboard";
+            const std::string spriteLabel = runtimeObjectSpriteLabel(*object);
+            const float spriteLabelHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    spriteLabel.c_str(),
+                    scrollContentW,
+                    1);
+            const bool hasBillboardAspect = isBillboard && resolveBillboardAspect(*object) > 0.0f;
+            const bool keepAspectWarningVisible =
+                    isBillboard && object->billboard.keepAspectRatio && !hasBillboardAspect;
+            return SectorEditorRuntimeObjectInspectorContentHeight(
+                    rowH,
+                    gap,
+                    isBillboard,
+                    keepAspectWarningVisible,
+                    isBillboard && object->billboard.directional,
+                    spriteLabelHeight,
+                    28.0f);
         }
         if (hasSelectedLight) {
             return StaticLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
@@ -5741,66 +5815,28 @@ void SectorEditor::DrawSectorsPanel(
                 isBillboard ? config.mutedTextColor : config.invalidColor);
         y += 34.0f;
 
-        const std::string spriteLabel = selectedObject->billboard.spriteAnimationPath.empty()
-                ? "Sprite: None selected"
-                : TextFormat("Sprite: %s", selectedObject->billboard.spriteAnimationPath.c_str());
+        const std::string spriteLabel = runtimeObjectSpriteLabel(*selectedObject);
+        const float spriteLabelHeight = MeasureSectorEditorWrappedTextHeight(
+                smallConfig,
+                assets,
+                smallFont,
+                spriteLabel.c_str(),
+                contentW,
+                1);
         engine::Text(
                 ui,
-                config,
+                smallConfig,
                 assets,
-                Rectangle{0.0f, y, contentW, 30.0f},
-                font,
+                Rectangle{0.0f, y, contentW, spriteLabelHeight},
+                smallFont,
                 spriteLabel.c_str(),
                 engine::UITextJustify::Left,
-                selectedObject->billboard.spriteAnimationPath.empty() ? config.invalidColor : config.textColor);
-        y += 34.0f;
+                selectedObject->billboard.spriteAnimationPath.empty() ? config.invalidColor : config.textColor,
+                true);
+        y += spriteLabelHeight + gap;
 
-        auto resolveSelectedBillboardAspect = [&]() {
-            float aspect = 0.0f;
-            if (engineContext == nullptr || selectedObject == nullptr || !isBillboard) {
-                return aspect;
-            }
-
-            engine::SpriteAnimationHandle animation = engine::NullSpriteAnimationHandle();
-            uint32_t clipIndex = engine::InvalidSpriteClipIndex;
-            for (const SectorPlacedRuntimeObjectEntity& entry : state.runtimeObjects.placedObjectEntities) {
-                if (entry.placedObjectId != selectedObject->id
-                        || !engineContext->world.IsAlive(entry.entity)
-                        || !engineContext->world.Has<SectorBillboardSprite>(entry.entity)) {
-                    continue;
-                }
-
-                const SectorBillboardSprite& sprite = engineContext->world.Get<SectorBillboardSprite>(entry.entity);
-                animation = sprite.animation;
-                clipIndex = sprite.clipIndex;
-                break;
-            }
-
-            if (engine::IsNull(animation)) {
-                return 0.0f;
-            }
-
-            if (selectedObject->billboard.directional) {
-                const uint32_t frontClipIndex = assets.FindSpriteClipIndex(
-                        animation,
-                        selectedObject->billboard.frontClip.c_str());
-                if (frontClipIndex != engine::InvalidSpriteClipIndex) {
-                    clipIndex = frontClipIndex;
-                }
-            } else if (!selectedObject->billboard.clip.empty()) {
-                const uint32_t selectedClipIndex = assets.FindSpriteClipIndex(
-                        animation,
-                        selectedObject->billboard.clip.c_str());
-                if (selectedClipIndex != engine::InvalidSpriteClipIndex) {
-                    clipIndex = selectedClipIndex;
-                }
-            }
-
-            return ResolveBillboardAspectFromAnimation(assets, animation, clipIndex, aspect)
-                    ? aspect
-                    : 0.0f;
-        };
-        const float selectedBillboardAspect = resolveSelectedBillboardAspect();
+        const float selectedBillboardAspect =
+                selectedObject != nullptr ? resolveBillboardAspect(*selectedObject) : 0.0f;
         const bool hasBillboardAspect = selectedBillboardAspect > 0.0f;
 
         auto drawObjectFloat =
@@ -5947,34 +5983,30 @@ void SectorEditor::DrawSectorsPanel(
                     const char* label,
                     const std::string& clipName,
                     const std::function<bool(SectorPlacedRuntimeObject&, const std::string&)>& applyClip) {
-                    constexpr float labelW = 92.0f;
+                    const SectorEditorInspectorStackedOptionRowLayout layout =
+                            BuildSectorEditorInspectorStackedOptionRowLayout(y, contentW, rowH, gap);
                     engine::Text(
                             ui,
                             config,
                             assets,
-                            Rectangle{0.0f, y, labelW, rowH},
+                            layout.labelRect,
                             font,
                             label,
                             engine::UITextJustify::Left,
                             config.mutedTextColor);
-                    const Rectangle fieldBounds{
-                            labelW + gap,
-                            y,
-                            std::max(0.0f, contentW - labelW - gap),
-                            rowH};
                     if (selectedBillboardMetadata == nullptr || selectedBillboardMetadata->clipNames.empty()) {
                         engine::Text(
                                 ui,
                                 config,
                                 assets,
-                                fieldBounds,
+                                layout.fieldRect,
                                 font,
                                 selectedBillboardMetadataStatus.empty()
                                         ? "Sprite metadata unavailable"
                                         : selectedBillboardMetadataStatus.c_str(),
                                 engine::UITextJustify::Left,
                                 config.mutedTextColor);
-                        y += rowH + gap;
+                        y += layout.height + gap;
                         return;
                     }
 
@@ -5994,7 +6026,7 @@ void SectorEditor::DrawSectorsPanel(
                                 input,
                                 assets,
                                 optionId,
-                                fieldBounds,
+                                layout.fieldRect,
                                 font,
                                 selectedBillboardMetadata->clipNames,
                                 selectedIndex)
@@ -6012,7 +6044,7 @@ void SectorEditor::DrawSectorsPanel(
                                     return applyClip(object, selectedClip);
                                 });
                     }
-                    y += rowH + gap;
+                    y += layout.height + gap;
                 };
 
         if (isBillboard) {
@@ -6208,7 +6240,7 @@ void SectorEditor::DrawSectorsPanel(
                         "Aspect unavailable until sprite metadata loads",
                         engine::UITextJustify::Left,
                         config.mutedTextColor);
-                y += 32.0f;
+                y += 28.0f + gap;
             }
 
             drawBillboardFloat(
