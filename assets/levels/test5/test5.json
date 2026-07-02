@@ -377,11 +377,11 @@
     "path": "assets/levels/test5/test5.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "bcefdb0dff43b440",
+    "sourceHash": "445a2c40062bf6eb",
     "objectProbes": {
       "path": "assets/levels/test5/test5.lightmap.object_probes.bin",
       "version": 1,
-      "sourceHash": "bcefdb0dff43b440",
+      "sourceHash": "445a2c40062bf6eb",
       "count": 54,
       "probeSpacingWorld": 4.0,
       "probeHeightWorld": 1.2000000476837158,
@@ -2961,6 +2961,49 @@
             "offset": [
               1.5,
               -1.0625
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 73,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.25
             ]
           }
         },
