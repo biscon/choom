@@ -269,6 +269,19 @@ Matrix BuildSectorDoorSlabModelMatrix(
         const SectorObjectTransform& transform,
         const SectorDoorResolvedAnchor& anchor);
 
+Vector3 EvaluateSectorObjectAmbientCubeLighting(
+        const BakedObjectLightingSample& sample,
+        Vector3 worldNormal);
+
+bool BuildSectorDoorStaticLightingColors(
+        const SectorDoorSlabMeshData& meshData,
+        const SectorObjectTransform& transform,
+        const SectorObject& object,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
+        const SectorTopologyMap* mapForFallback,
+        std::vector<Color>& outColors);
+
 bool AppendSectorDoorReceiverBounds(
         const SectorObjectTransform& transform,
         const SectorObject& object,

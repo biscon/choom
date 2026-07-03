@@ -553,7 +553,7 @@ uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightingClamp;
 uniform int doorDebugMode;
-uniform vec3 bakedAmbientCube[6];
+uniform vec4 doorTint;
 
 #define DOOR_DEBUG_NORMAL 0
 #define DOOR_DEBUG_ALBEDO_ONLY 1
@@ -570,25 +570,11 @@ vec3 SafeNormalize(vec3 value, vec3 fallback)
     return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
 }
 
-vec3 BakedDoorFaceLighting(vec3 normal)
-{
-    vec3 absNormal = abs(normal);
-    int face = 0;
-    if (absNormal.y >= absNormal.x && absNormal.y >= absNormal.z) {
-        face = normal.y >= 0.0 ? 2 : 3;
-    } else if (absNormal.z >= absNormal.x) {
-        face = normal.z >= 0.0 ? 4 : 5;
-    } else {
-        face = normal.x >= 0.0 ? 0 : 1;
-    }
-    return bakedAmbientCube[face];
-}
-
 void main()
 {
     vec3 worldNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
-    vec3 bakedLighting = BakedDoorFaceLighting(worldNormal);
-    vec3 tintedBakedLighting = bakedLighting * clamp(fragColor.rgb, 0.0, 1.0);
+    vec3 staticProbeLighting = clamp(fragColor.rgb, 0.0, 1.0);
+    vec3 tint = clamp(doorTint.rgb, 0.0, 1.0);
 
     if (doorDebugMode == DOOR_DEBUG_NORMAL_VISUALIZE) {
         finalColor = vec4(worldNormal * 0.5 + vec3(0.5), 1.0);
@@ -599,7 +585,7 @@ void main()
         return;
     }
     if (doorDebugMode == DOOR_DEBUG_BAKED_ONLY) {
-        finalColor = vec4(clamp(tintedBakedLighting, 0.0, 1.0), 1.0);
+        finalColor = vec4(staticProbeLighting, 1.0);
         return;
     }
     if (doorDebugMode == DOOR_DEBUG_ALBEDO_ONLY) {
@@ -643,8 +629,8 @@ void main()
 
     vec4 sampled = texture(texture0, fragTexCoord);
     vec3 surfaceRgb = sampled.rgb;
-    vec3 lighting = clamp(tintedBakedLighting + dynamicDirect, 0.0, dynamicLightingClamp);
-    finalColor = vec4(surfaceRgb * lighting, sampled.a * fragColor.a);
+    vec3 lighting = clamp(staticProbeLighting + dynamicDirect, 0.0, dynamicLightingClamp);
+    finalColor = vec4(surfaceRgb * tint * lighting, sampled.a * doorTint.a);
 }
 )";
 
@@ -1298,7 +1284,7 @@ bool LoadDoorOpaqueShader(
         int& dynamicLightOuterConeCosLoc,
         int& dynamicLightingClampLoc,
         int& debugModeLoc,
-        int& bakedAmbientCubeLoc,
+        int& tintLoc,
         bool& shaderLoaded)
 {
     shader = LoadShaderFromMemory(SectorDoorOpaqueVs, SectorDoorOpaqueFs);
@@ -1316,7 +1302,7 @@ bool LoadDoorOpaqueShader(
         dynamicLightOuterConeCosLoc = -1;
         dynamicLightingClampLoc = -1;
         debugModeLoc = -1;
-        bakedAmbientCubeLoc = -1;
+        tintLoc = -1;
         shaderLoaded = false;
         return false;
     }
@@ -1341,7 +1327,7 @@ bool LoadDoorOpaqueShader(
     dynamicLightOuterConeCosLoc = GetShaderLocationArrayBase(shader, "dynamicLightOuterConeCos");
     dynamicLightingClampLoc = GetShaderLocation(shader, "dynamicLightingClamp");
     debugModeLoc = GetShaderLocation(shader, "doorDebugMode");
-    bakedAmbientCubeLoc = GetShaderLocationArrayBase(shader, "bakedAmbientCube");
+    tintLoc = GetShaderLocation(shader, "doorTint");
     shaderLoaded = true;
     return true;
 }
@@ -1779,7 +1765,7 @@ bool SectorMeshPreview::RebuildRendererResources(
                 doorOpaqueDynamicLightOuterConeCosLoc,
                 doorOpaqueDynamicLightingClampLoc,
                 doorOpaqueDebugModeLoc,
-                doorOpaqueBakedAmbientCubeLoc,
+                doorOpaqueTintLoc,
                 doorOpaqueShaderLoaded)) {
         Shutdown(assets);
         error = "Preview failed: could not load door opaque shader";
@@ -1969,7 +1955,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
         doorOpaqueDynamicLightOuterConeCosLoc = -1;
         doorOpaqueDynamicLightingClampLoc = -1;
         doorOpaqueDebugModeLoc = -1;
-        doorOpaqueBakedAmbientCubeLoc = -1;
+        doorOpaqueTintLoc = -1;
         doorOpaqueMaterialLoaded = false;
         doorOpaqueShaderLoaded = false;
     }
@@ -1992,16 +1978,18 @@ void SectorMeshPreview::AdvanceRuntime(float dt)
 void SectorMeshPreview::Render(
         engine::AssetManager& assets,
         bool useBakedAmbientOcclusion,
-        engine::World* runtimeObjectWorld)
+        engine::World* runtimeObjectWorld,
+        SectorRuntimeDoorLightingContext doorLighting)
 {
     RenderDynamicSpotLightShadowMaps(assets);
-    DrawScene(assets, useBakedAmbientOcclusion, runtimeObjectWorld);
+    DrawScene(assets, useBakedAmbientOcclusion, runtimeObjectWorld, doorLighting);
 }
 
 void SectorMeshPreview::DrawScene(
         engine::AssetManager& assets,
         bool useBakedAmbientOcclusion,
-        engine::World* runtimeObjectWorld)
+        engine::World* runtimeObjectWorld,
+        SectorRuntimeDoorLightingContext doorLighting)
 {
     if (!initialized) {
         return;
@@ -2108,13 +2096,16 @@ void SectorMeshPreview::DrawScene(
         DrawMesh(batch.mesh, material, MatrixIdentity());
     }
     if (runtimeObjectWorld != nullptr) {
-        DrawRuntimeDoors(assets, *runtimeObjectWorld);
+        DrawRuntimeDoors(assets, *runtimeObjectWorld, doorLighting);
         DrawRuntimeBillboards(assets, *runtimeObjectWorld);
     }
     EndMode3D();
 }
 
-void SectorMeshPreview::DrawRuntimeDoors(engine::AssetManager& assets, engine::World& runtimeObjectWorld)
+void SectorMeshPreview::DrawRuntimeDoors(
+        engine::AssetManager& assets,
+        engine::World& runtimeObjectWorld,
+        SectorRuntimeDoorLightingContext doorLighting)
 {
     if (!doorOpaqueMaterialLoaded || !doorOpaqueShaderLoaded || doorOpaqueMaterial.shader.id == 0) {
         doorConsideredCount = 0;
@@ -2130,6 +2121,11 @@ void SectorMeshPreview::DrawRuntimeDoors(engine::AssetManager& assets, engine::W
     for (auto& entry : doorMeshCache) {
         entry.second.seenThisFrame = false;
     }
+    const SectorBakedObjectLightProbeRuntimeData emptyObjectLightProbes;
+    const SectorBakedObjectLightProbeRuntimeData& objectLightProbes =
+            doorLighting.objectLightProbes != nullptr
+            ? *doorLighting.objectLightProbes
+            : emptyObjectLightProbes;
 
     rlDisableColorBlend();
     rlDisableBackfaceCulling();
@@ -2165,7 +2161,13 @@ void SectorMeshPreview::DrawRuntimeDoors(engine::AssetManager& assets, engine::W
             SectorDoor,
             SectorDoorResolvedAnchor,
             SectorDoorRender>(
-            [this, &assets, &runtimeObjectWorld, &consideredCount, &drawnCount, &skippedCount](
+            [this,
+             &assets,
+             &consideredCount,
+             &drawnCount,
+             &skippedCount,
+             &objectLightProbes,
+             doorLighting](
                     engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorObject& object,
@@ -2194,47 +2196,63 @@ void SectorMeshPreview::DrawRuntimeDoors(engine::AssetManager& assets, engine::W
                     return;
                 }
 
-                const SectorObjectLighting* objectLighting = runtimeObjectWorld.Has<SectorObjectLighting>(entity)
-                        ? &runtimeObjectWorld.Get<SectorObjectLighting>(entity)
-                        : nullptr;
                 DoorMeshCacheEntry& cacheEntry = doorMeshCache[door.placedObjectId];
                 cacheEntry.seenThisFrame = true;
                 const bool meshDirty = cacheEntry.mesh.vertexCount <= 0
                         || cacheEntry.width != render.width
                         || cacheEntry.height != render.height
-                        || cacheEntry.thickness != render.thickness
-                        || cacheEntry.tint.r != render.tint.r
-                        || cacheEntry.tint.g != render.tint.g
-                        || cacheEntry.tint.b != render.tint.b
-                        || cacheEntry.tint.a != render.tint.a;
+                        || cacheEntry.thickness != render.thickness;
                 if (meshDirty) {
                     if (cacheEntry.mesh.vertexCount > 0) {
                         UnloadMesh(cacheEntry.mesh);
                     }
-                    cacheEntry.mesh = CreateDoorSlabMesh(BuildSectorDoorSlabMeshData(render));
+                    cacheEntry.meshData = BuildSectorDoorSlabMeshData(render);
+                    cacheEntry.mesh = CreateDoorSlabMesh(cacheEntry.meshData);
                     cacheEntry.width = render.width;
                     cacheEntry.height = render.height;
                     cacheEntry.thickness = render.thickness;
-                    cacheEntry.tint = render.tint;
                 }
                 if (cacheEntry.mesh.vertexCount <= 0) {
                     ++skippedCount;
                     return;
                 }
 
-                Vector3 bakedAmbientCube[6];
-                for (int i = 0; i < 6; ++i) {
-                    bakedAmbientCube[i] = objectLighting != nullptr
-                            ? objectLighting->baked.ambientCube[i]
-                            : Vector3{1.0f, 1.0f, 1.0f};
+                if (!BuildSectorDoorStaticLightingColors(
+                            cacheEntry.meshData,
+                            transform,
+                            object,
+                            anchor,
+                            objectLightProbes,
+                            doorLighting.mapForFallback,
+                            cacheEntry.staticLightingColors)) {
+                    cacheEntry.staticLightingColors.assign(
+                            static_cast<size_t>(cacheEntry.mesh.vertexCount),
+                            WHITE);
                 }
-                if (doorOpaqueBakedAmbientCubeLoc >= 0) {
-                    SetShaderValueV(
-                            doorOpaqueMaterial.shader,
-                            doorOpaqueBakedAmbientCubeLoc,
-                            bakedAmbientCube,
-                            SHADER_UNIFORM_VEC3,
-                            6);
+                if (cacheEntry.mesh.colors != nullptr
+                        && cacheEntry.staticLightingColors.size() == static_cast<size_t>(cacheEntry.mesh.vertexCount)) {
+                    for (int i = 0; i < cacheEntry.mesh.vertexCount; ++i) {
+                        const Color color = cacheEntry.staticLightingColors[static_cast<size_t>(i)];
+                        cacheEntry.mesh.colors[i * 4 + 0] = color.r;
+                        cacheEntry.mesh.colors[i * 4 + 1] = color.g;
+                        cacheEntry.mesh.colors[i * 4 + 2] = color.b;
+                        cacheEntry.mesh.colors[i * 4 + 3] = color.a;
+                    }
+                    UpdateMeshBuffer(
+                            cacheEntry.mesh,
+                            RL_DEFAULT_SHADER_ATTRIB_LOCATION_COLOR,
+                            cacheEntry.mesh.colors,
+                            cacheEntry.mesh.vertexCount * 4 * static_cast<int>(sizeof(unsigned char)),
+                            0);
+                }
+
+                if (doorOpaqueTintLoc >= 0) {
+                    const Vector4 tint{
+                            static_cast<float>(render.tint.r) / 255.0f,
+                            static_cast<float>(render.tint.g) / 255.0f,
+                            static_cast<float>(render.tint.b) / 255.0f,
+                            static_cast<float>(render.tint.a) / 255.0f};
+                    SetShaderValue(doorOpaqueMaterial.shader, doorOpaqueTintLoc, &tint, SHADER_UNIFORM_VEC4);
                 }
 
                 doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = *texture;

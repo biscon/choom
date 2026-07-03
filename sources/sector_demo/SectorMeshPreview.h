@@ -23,6 +23,12 @@ class World;
 namespace game {
 
 struct SectorTopologyMap;
+struct SectorBakedObjectLightProbeRuntimeData;
+
+struct SectorRuntimeDoorLightingContext {
+    const SectorBakedObjectLightProbeRuntimeData* objectLightProbes = nullptr;
+    const SectorTopologyMap* mapForFallback = nullptr;
+};
 
 enum class SectorDoorLightingDebugMode {
     Normal = 0,
@@ -54,12 +60,14 @@ public:
     void Render(
             engine::AssetManager& assets,
             bool useBakedAmbientOcclusion = true,
-            engine::World* runtimeObjectWorld = nullptr);
+            engine::World* runtimeObjectWorld = nullptr,
+            SectorRuntimeDoorLightingContext doorLighting = {});
     void RenderDynamicSpotLightShadowMaps(engine::AssetManager& assets);
     void DrawScene(
             engine::AssetManager& assets,
             bool useBakedAmbientOcclusion = true,
-            engine::World* runtimeObjectWorld = nullptr);
+            engine::World* runtimeObjectWorld = nullptr,
+            SectorRuntimeDoorLightingContext doorLighting = {});
     void ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
     void ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
 
@@ -115,7 +123,10 @@ private:
     void UnloadSkyCylinderMesh();
     void DrawSkyCylinder(const Texture2D& texture);
     void DrawRuntimeBillboards(engine::AssetManager& assets, engine::World& runtimeObjectWorld);
-    void DrawRuntimeDoors(engine::AssetManager& assets, engine::World& runtimeObjectWorld);
+    void DrawRuntimeDoors(
+            engine::AssetManager& assets,
+            engine::World& runtimeObjectWorld,
+            SectorRuntimeDoorLightingContext doorLighting);
     void BuildDirectDynamicLightReceiverBounds(engine::World* runtimeObjectWorld);
     void UnloadDoorMeshes();
     bool EnsureDynamicSpotLightShadowMapResources();
@@ -213,17 +224,18 @@ private:
     int doorOpaqueDynamicLightOuterConeCosLoc = -1;
     int doorOpaqueDynamicLightingClampLoc = -1;
     int doorOpaqueDebugModeLoc = -1;
-    int doorOpaqueBakedAmbientCubeLoc = -1;
+    int doorOpaqueTintLoc = -1;
     bool doorOpaqueShaderLoaded = false;
     Material doorOpaqueMaterial = {};
     Texture2D doorOpaqueDefaultMaterialTexture = {};
     bool doorOpaqueMaterialLoaded = false;
     struct DoorMeshCacheEntry {
         Mesh mesh = {};
+        SectorDoorSlabMeshData meshData;
         float width = 0.0f;
         float height = 0.0f;
         float thickness = 0.0f;
-        Color tint = WHITE;
+        std::vector<Color> staticLightingColors;
         bool seenThisFrame = false;
     };
     std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;

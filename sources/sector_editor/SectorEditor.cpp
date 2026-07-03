@@ -3728,7 +3728,11 @@ void SectorEditor::RenderPreview3DShadowMaps(engine::AssetManager& assets)
 
 void SectorEditor::RenderPreview3DScene(engine::EngineContext& context)
 {
-    preview.DrawScene(context.assets, state.useBakedAmbientOcclusion, &context.world);
+    preview.DrawScene(
+            context.assets,
+            state.useBakedAmbientOcclusion,
+            &context.world,
+            SectorRuntimeDoorLightingContext{&state.runtimeObjects.objectLightProbes, &state.topologyMap});
 }
 
 void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)

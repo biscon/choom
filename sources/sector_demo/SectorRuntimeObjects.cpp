@@ -158,7 +158,7 @@ SectorDoorSlabMeshData BuildSectorDoorSlabMeshData(const SectorDoorRender& rende
     const Vector3 topBackRight{halfWidth, halfHeight, -halfThickness};
     const Vector3 topBackLeft{-halfWidth, halfHeight, -halfThickness};
 
-    const auto appendFace = [&data, tint = render.tint](
+    const auto appendFace = [&data](
             Vector3 normal,
             Vector3 a,
             Vector3 b,
@@ -167,10 +167,10 @@ SectorDoorSlabMeshData BuildSectorDoorSlabMeshData(const SectorDoorRender& rende
             float uScale,
             float vScale) {
         const uint16_t base = static_cast<uint16_t>(data.vertices.size());
-        data.vertices.push_back(SectorDoorSlabMeshVertex{a, normal, Vector2{0.0f, vScale}, tint});
-        data.vertices.push_back(SectorDoorSlabMeshVertex{b, normal, Vector2{uScale, vScale}, tint});
-        data.vertices.push_back(SectorDoorSlabMeshVertex{c, normal, Vector2{uScale, 0.0f}, tint});
-        data.vertices.push_back(SectorDoorSlabMeshVertex{d, normal, Vector2{0.0f, 0.0f}, tint});
+        data.vertices.push_back(SectorDoorSlabMeshVertex{a, normal, Vector2{0.0f, vScale}, WHITE});
+        data.vertices.push_back(SectorDoorSlabMeshVertex{b, normal, Vector2{uScale, vScale}, WHITE});
+        data.vertices.push_back(SectorDoorSlabMeshVertex{c, normal, Vector2{uScale, 0.0f}, WHITE});
+        data.vertices.push_back(SectorDoorSlabMeshVertex{d, normal, Vector2{0.0f, 0.0f}, WHITE});
         data.indices.push_back(base + 0);
         data.indices.push_back(base + 1);
         data.indices.push_back(base + 2);
@@ -255,6 +255,84 @@ Matrix BuildSectorDoorSlabModelMatrix(
             tangent.y, up.y, normal.y, transform.position.y,
             tangent.z, up.z, normal.z, transform.position.z,
             0.0f, 0.0f, 0.0f, 1.0f};
+}
+
+Vector3 EvaluateSectorObjectAmbientCubeLighting(
+        const BakedObjectLightingSample& sample,
+        Vector3 worldNormal)
+{
+    if (Vector3LengthSqr(worldNormal) <= 0.000001f) {
+        worldNormal = Vector3{0.0f, 1.0f, 0.0f};
+    } else {
+        worldNormal = Vector3Normalize(worldNormal);
+    }
+
+    const Vector3 absNormal = Vector3{std::fabs(worldNormal.x), std::fabs(worldNormal.y), std::fabs(worldNormal.z)};
+    int face = 0;
+    if (absNormal.y >= absNormal.x && absNormal.y >= absNormal.z) {
+        face = worldNormal.y >= 0.0f ? 2 : 3;
+    } else if (absNormal.z >= absNormal.x) {
+        face = worldNormal.z >= 0.0f ? 4 : 5;
+    } else {
+        face = worldNormal.x >= 0.0f ? 0 : 1;
+    }
+    return sample.ambientCube[face];
+}
+
+namespace {
+
+Color QuantizeStaticLightingColor(Vector3 lighting)
+{
+    const auto channel = [](float value) -> unsigned char {
+        if (!std::isfinite(value)) {
+            value = 0.0f;
+        }
+        value = std::clamp(value, 0.0f, 1.0f);
+        return static_cast<unsigned char>(std::round(value * 255.0f));
+    };
+    return Color{channel(lighting.x), channel(lighting.y), channel(lighting.z), 255};
+}
+
+Vector3 TransformDoorLocalDirection(Matrix model, Vector3 localDirection)
+{
+    const Vector3 origin = Vector3Transform(Vector3{}, model);
+    Vector3 direction = Vector3Subtract(Vector3Transform(localDirection, model), origin);
+    if (Vector3LengthSqr(direction) <= 0.000001f) {
+        return Vector3{0.0f, 1.0f, 0.0f};
+    }
+    return Vector3Normalize(direction);
+}
+
+} // namespace
+
+bool BuildSectorDoorStaticLightingColors(
+        const SectorDoorSlabMeshData& meshData,
+        const SectorObjectTransform& transform,
+        const SectorObject& object,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
+        const SectorTopologyMap* mapForFallback,
+        std::vector<Color>& outColors)
+{
+    outColors.clear();
+    if (meshData.vertices.empty()) {
+        return false;
+    }
+
+    const Matrix model = BuildSectorDoorSlabModelMatrix(transform, anchor);
+    outColors.reserve(meshData.vertices.size());
+    for (const SectorDoorSlabMeshVertex& vertex : meshData.vertices) {
+        const Vector3 worldPosition = Vector3Transform(vertex.position, model);
+        const Vector3 worldNormal = TransformDoorLocalDirection(model, vertex.normal);
+        const BakedObjectLightingSample sample = SampleBakedObjectLighting(
+                objectLightProbes,
+                worldPosition,
+                object.currentSectorId,
+                mapForFallback);
+        outColors.push_back(QuantizeStaticLightingColor(
+                EvaluateSectorObjectAmbientCubeLighting(sample, worldNormal)));
+    }
+    return outColors.size() == meshData.vertices.size();
 }
 
 bool AppendSectorDoorReceiverBounds(

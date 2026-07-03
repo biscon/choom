@@ -1038,7 +1038,7 @@ void TestSectorDoorSlabMeshDataHasStableAttributes()
 
     bool finiteAttributes = true;
     bool stableAttributes = true;
-    bool colorsOwned = true;
+    bool colorsNeutral = true;
     for (size_t i = 0; i < first.vertices.size(); ++i) {
         const game::SectorDoorSlabMeshVertex& vertex = first.vertices[i];
         const game::SectorDoorSlabMeshVertex& stableVertex = second.vertices[i];
@@ -1051,11 +1051,11 @@ void TestSectorDoorSlabMeshDataHasStableAttributes()
                 && Near(vertex.normal, stableVertex.normal)
                 && Near(vertex.uv, stableVertex.uv)
                 && SameColor(vertex.color, stableVertex.color);
-        colorsOwned = colorsOwned && SameColor(vertex.color, render.tint);
+        colorsNeutral = colorsNeutral && SameColor(vertex.color, WHITE);
     }
     Check(finiteAttributes, "door slab mesh positions normals and UVs are finite");
     Check(stableAttributes, "door slab mesh vertex attributes are stable");
-    Check(colorsOwned, "door slab mesh stores tint in owned vertex colors");
+    Check(colorsNeutral, "door slab mesh starts with neutral static lighting vertex colors");
 
     bool indicesValid = true;
     bool stableIndices = true;
@@ -1143,6 +1143,166 @@ void TestSectorDoorSlabModelMatrixPreservesResolvedBasis()
                       && Near(Vector3Transform(mesh.vertices[7].position, model), slab.topBackRight),
                 "door slab model matrix matches existing world-space slab placement");
     }
+}
+
+game::SectorBakedObjectLightProbeRuntimeData MakeDoorProbeRuntimeData(
+        Vector3 firstPosition,
+        Vector3 firstLighting,
+        Vector3 secondPosition,
+        Vector3 secondLighting)
+{
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    game::SectorBakedObjectLightProbe first;
+    first.sectorId = 10;
+    first.position = firstPosition;
+    for (Vector3& face : first.ambientCube) {
+        face = firstLighting;
+    }
+    probes.probes.push_back(first);
+
+    game::SectorBakedObjectLightProbe second;
+    second.sectorId = 10;
+    second.position = secondPosition;
+    for (Vector3& face : second.ambientCube) {
+        face = secondLighting;
+    }
+    probes.probes.push_back(second);
+
+    probes.sectorRanges.push_back(game::SectorBakedObjectLightProbeSectorRange{10, 0, 2});
+    return probes;
+}
+
+game::SectorDoorResolvedAnchor MakeStaticLightingDoorAnchor()
+{
+    game::SectorDoorResolvedAnchor anchor;
+    anchor.frontSectorId = 10;
+    anchor.backSectorId = 20;
+    anchor.tangent = Vector2{1.0f, 0.0f};
+    anchor.normal = Vector2{0.0f, 1.0f};
+    return anchor;
+}
+
+game::SectorDoorRender MakeStaticLightingDoorRender()
+{
+    game::SectorDoorRender render;
+    render.width = 4.0f;
+    render.height = 1.0f;
+    render.thickness = 0.25f;
+    render.tint = Color{64, 128, 192, 255};
+    return render;
+}
+
+void TestSectorDoorStaticLightingColorsSamplePerVertexProbes()
+{
+    const game::SectorObjectTransform transform{Vector3{}, 0.0f};
+    const game::SectorObject object{10, true};
+    const game::SectorDoorResolvedAnchor anchor = MakeStaticLightingDoorAnchor();
+    const game::SectorDoorRender render = MakeStaticLightingDoorRender();
+    const game::SectorDoorSlabMeshData mesh = game::BuildSectorDoorSlabMeshData(render);
+    const Matrix model = game::BuildSectorDoorSlabModelMatrix(transform, anchor);
+    const Vector3 leftVertex = Vector3Transform(mesh.vertices[0].position, model);
+    const Vector3 rightVertex = Vector3Transform(mesh.vertices[1].position, model);
+    const game::SectorBakedObjectLightProbeRuntimeData probes = MakeDoorProbeRuntimeData(
+            leftVertex,
+            Vector3{1.0f, 0.0f, 0.0f},
+            rightVertex,
+            Vector3{0.0f, 0.0f, 1.0f});
+
+    std::vector<Color> colors;
+    const bool built = game::BuildSectorDoorStaticLightingColors(
+            mesh,
+            transform,
+            object,
+            anchor,
+            probes,
+            nullptr,
+            colors);
+
+    Check(built && colors.size() == mesh.vertices.size(),
+            "door static lighting helper emits one color per duplicated mesh vertex");
+    Check(colors.size() >= 2
+                  && colors[0].r > 240
+                  && colors[0].b < 16
+                  && colors[1].b > 240
+                  && colors[1].r < 16,
+            "door static lighting helper samples object probes at individual vertex positions");
+    Check(colors.size() >= 8 && !SameColor(colors[0], colors[4]),
+            "door duplicated face vertices can receive different static probe colors");
+}
+
+void TestSectorDoorStaticLightingColorsFallbackSafely()
+{
+    const game::SectorObjectTransform transform{Vector3{}, 0.0f};
+    const game::SectorObject object{10, true};
+    const game::SectorDoorResolvedAnchor anchor = MakeStaticLightingDoorAnchor();
+    const game::SectorDoorRender render = MakeStaticLightingDoorRender();
+    const game::SectorDoorSlabMeshData mesh = game::BuildSectorDoorSlabMeshData(render);
+    const game::SectorBakedObjectLightProbeRuntimeData missingProbes;
+
+    std::vector<Color> colors;
+    Check(game::BuildSectorDoorStaticLightingColors(
+                  mesh,
+                  transform,
+                  object,
+                  anchor,
+                  missingProbes,
+                  nullptr,
+                  colors),
+            "door static lighting helper handles missing probes without a map fallback");
+    Check(!colors.empty() && SameColor(colors[0], Color{38, 38, 38, 255}),
+            "door static lighting helper uses neutral fallback without probes or map");
+
+    game::SectorTopologyMap map = MakeSquareMap();
+    game::SectorTopologySector* sector = game::FindSectorTopologySector(map, 10);
+    Check(sector != nullptr, "door static lighting fallback fixture has sector");
+    if (sector != nullptr) {
+        sector->ambientColor = Color{64, 128, 255, 255};
+        sector->ambientIntensity = 0.5f;
+    }
+
+    Check(game::BuildSectorDoorStaticLightingColors(
+                  mesh,
+                  transform,
+                  object,
+                  anchor,
+                  missingProbes,
+                  &map,
+                  colors),
+            "door static lighting helper handles missing probes with a map fallback");
+    Check(!colors.empty() && SameColor(colors[0], Color{32, 64, 128, 255}),
+            "door static lighting helper uses sector ambient fallback when map is supplied");
+}
+
+void TestSectorDoorStaticLightingColorsDoNotMutateGeometry()
+{
+    const game::SectorObjectTransform transform{Vector3{}, 0.0f};
+    const game::SectorObject object{10, true};
+    const game::SectorDoorResolvedAnchor anchor = MakeStaticLightingDoorAnchor();
+    const game::SectorDoorRender render = MakeStaticLightingDoorRender();
+    const game::SectorDoorSlabMeshData before = game::BuildSectorDoorSlabMeshData(render);
+    game::SectorDoorSlabMeshData mesh = before;
+    const game::SectorBakedObjectLightProbeRuntimeData probes = MakeDoorProbeRuntimeData(
+            Vector3{-2.0f, -0.5f, 0.125f},
+            Vector3{1.0f, 0.0f, 0.0f},
+            Vector3{2.0f, -0.5f, 0.125f},
+            Vector3{0.0f, 0.0f, 1.0f});
+
+    std::vector<Color> colors;
+    game::BuildSectorDoorStaticLightingColors(mesh, transform, object, anchor, probes, nullptr, colors);
+
+    bool geometryUnchanged = mesh.vertices.size() == before.vertices.size()
+            && mesh.indices.size() == before.indices.size();
+    for (size_t i = 0; geometryUnchanged && i < mesh.vertices.size(); ++i) {
+        geometryUnchanged = Near(mesh.vertices[i].position, before.vertices[i].position)
+                && Near(mesh.vertices[i].normal, before.vertices[i].normal)
+                && Near(mesh.vertices[i].uv, before.vertices[i].uv)
+                && SameColor(mesh.vertices[i].color, before.vertices[i].color);
+    }
+    for (size_t i = 0; geometryUnchanged && i < mesh.indices.size(); ++i) {
+        geometryUnchanged = mesh.indices[i] == before.indices[i];
+    }
+    Check(geometryUnchanged,
+            "door static lighting color helper does not mutate geometry positions normals UVs colors or indices");
 }
 
 engine::Entity AddDoorForDerivedState(
@@ -3023,6 +3183,9 @@ int main()
     TestSectorDoorSlabGeometryIsFiniteAndStable();
     TestSectorDoorSlabMeshDataHasStableAttributes();
     TestSectorDoorSlabModelMatrixPreservesResolvedBasis();
+    TestSectorDoorStaticLightingColorsSamplePerVertexProbes();
+    TestSectorDoorStaticLightingColorsFallbackSafely();
+    TestSectorDoorStaticLightingColorsDoNotMutateGeometry();
     TestSectorDoorReceiverBoundsUseAnimatedSlabGeometry();
     TestSectorDoorReceiverBoundsSkipNonRenderableDoors();
     TestSectorDoorHorizontalSlideMotionUsesResolvedTangent();

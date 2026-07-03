@@ -106,7 +106,11 @@ void SectorDemo::Update(engine::EngineContext& context, float dt)
 
 void SectorDemo::Render(engine::EngineContext& context)
 {
-    preview.DrawScene(context.assets, true, &context.world);
+    preview.DrawScene(
+            context.assets,
+            true,
+            &context.world,
+            SectorRuntimeDoorLightingContext{&runtimeObjects.objectLightProbes, &topologyMap});
 }
 
 void SectorDemo::RenderOverlay(engine::AssetManager& assets)
