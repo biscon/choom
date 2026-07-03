@@ -35,6 +35,7 @@ enum class SectorEditorTool {
     AuthoringInsertVertex,
     AuthoringMove,
     RuntimeObject,
+    Door,
     StaticLight,
     StaticSpotLight,
     DynamicLight,
@@ -98,7 +99,8 @@ enum class TopologyTexturePickerTargetKind {
     SideDef,
     AuthoringFaceAnchor,
     AuthoringSide,
-    MapSky
+    MapSky,
+    RuntimeDoor
 };
 
 enum class PreviewSettingsTab {
@@ -228,6 +230,7 @@ struct TexturePickerState {
     int authoringFaceAnchorId = -1;
     int authoringLineId = -1;
     SectorTopologySideKind authoringSide = SectorTopologySideKind::Front;
+    int runtimeObjectId = -1;
     int selectedTextureIndex = -1;
     engine::UIScrollState scroll;
     std::vector<std::string> textureIds;
@@ -483,6 +486,11 @@ struct CachedRuntimeObjectDraw {
     Vector2 map = {};
     float yawRadians = 0.0f;
     bool definitionKnown = false;
+    bool isDoor = false;
+    bool doorFootprintValid = false;
+    Vector2 doorCorners[4] = {};
+    Vector2 doorEndpointA = {};
+    Vector2 doorEndpointB = {};
 };
 
 struct CachedAuthoringVertexDraw {
@@ -690,6 +698,13 @@ struct SectorEditorUiState {
     engine::UIFloatInputState runtimeObjectYawInput;
     engine::UIFloatInputState runtimeObjectWidthInput;
     engine::UIFloatInputState runtimeObjectHeightInput;
+    engine::UIFloatInputState runtimeObjectThicknessInput;
+    engine::UIFloatInputState runtimeObjectNormalOffsetInput;
+    engine::UIFloatInputState runtimeObjectOpenDistanceInput;
+    engine::UIFloatInputState runtimeObjectSpeedInput;
+    engine::UIFloatInputState runtimeObjectInitialOpenFractionInput;
+    engine::UIFloatInputState runtimeObjectAutoOpenDistanceInput;
+    engine::UIFloatInputState runtimeObjectInteractionDistanceInput;
     engine::UIFloatInputState runtimeObjectOriginXInput;
     engine::UIFloatInputState runtimeObjectOriginYInput;
     engine::UIFloatInputState surface3DUvScaleUInput;

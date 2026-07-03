@@ -377,6 +377,7 @@ private:
     void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer);
     void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer);
     void OpenMapSkyTexturePicker();
+    void OpenSelectedDoorTexturePicker();
     void OpenSelectedBillboardSpritePicker();
     void ApplySelectedBillboardSpritePickerSelection();
     void ApplyTexturePickerSelection(engine::AssetManager& assets);
@@ -394,6 +395,7 @@ private:
     bool DeleteDynamicSpotLightById(int topologyLightId);
     void AddDynamicSpotLightAt(Vector2 mapPoint);
     void AddRuntimeObjectAt(Vector2 mapPoint);
+    void AddDoorAtPortal(Vector2 screenPoint);
     bool DeleteSelectedRuntimeObject();
     bool DeleteRuntimeObjectById(int objectId);
     bool MutateSelectedRuntimeObject(

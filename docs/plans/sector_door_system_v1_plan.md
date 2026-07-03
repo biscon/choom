@@ -172,88 +172,88 @@ Important product decisions:
       "id": "phase_07",
       "title": "Dynamic Portal Visibility Blockers",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_07a",
       "title": "Add Dynamic Portal Blocker Query",
       "type": "pass",
       "parent": "phase_07",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_07b",
       "title": "Wire Door Blockers Into Preview Visibility",
       "type": "pass",
       "parent": "phase_07",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_08",
       "title": "Door Editor Tool And Inspector",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_08a",
       "title": "Add Door Placement Tool And 2D Footprint",
       "type": "pass",
       "parent": "phase_08",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_08b",
       "title": "Add Door Inspector Core Fields",
       "type": "pass",
       "parent": "phase_08",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_08c",
       "title": "Add Door Inspector Interaction Controls",
       "type": "pass",
       "parent": "phase_08",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_09",
       "title": "Door Material V1",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_09a",
       "title": "Add Single Texture Door Material",
       "type": "pass",
       "parent": "phase_09",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_09b",
       "title": "Add Door Texture Picker Integration",
       "type": "pass",
       "parent": "phase_09",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_10",
       "title": "Tests Documentation And Cleanup",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_10a",
       "title": "Strengthen Door Tests And Diagnostics",
       "type": "pass",
       "parent": "phase_10",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_10b",
       "title": "Update Documentation And Close Plan",
       "type": "pass",
       "parent": "phase_10",
-      "status": "Not Started"
+      "status": "Completed"
     }
   ]
 }
@@ -281,19 +281,19 @@ Important product decisions:
 | Phase 6: Dynamic Collision Blockers | Completed | 2026-07-02 | Door dynamic collider collection and player movement resolution passes complete. |
 | Phase 6A: Collect Door Dynamic Colliders | Completed | 2026-07-02 | Added ECS door dynamic collider snapshot collection; movement resolution remains scoped to Phase 6B. |
 | Phase 6B: Resolve Player Movement Against Door Colliders | Completed | 2026-07-02 | Added post-static player movement resolution against collected door OBB colliders. |
-| Phase 7: Dynamic Portal Visibility Blockers | Not Started |  | Parent phase. |
-| Phase 7A: Add Dynamic Portal Blocker Query | Not Started |  | Static graph plus dynamic blocker overlay. |
-| Phase 7B: Wire Door Blockers Into Preview Visibility | Not Started |  | Preview traversal uses door blockers. |
-| Phase 8: Door Editor Tool And Inspector | Not Started |  | Parent phase. |
-| Phase 8A: Add Door Placement Tool And 2D Footprint | Not Started |  | Click portal to place door. |
-| Phase 8B: Add Door Inspector Core Fields | Not Started |  | Dimensions/motion/anchor fields. |
-| Phase 8C: Add Door Inspector Interaction Controls | Not Started |  | Auto open and debug/open controls. |
-| Phase 9: Door Material V1 | Not Started |  | Parent phase. |
-| Phase 9A: Add Single Texture Door Material | Not Started |  | One texture ID for all faces. |
-| Phase 9B: Add Door Texture Picker Integration | Not Started |  | Reuse topology texture picker. |
-| Phase 10: Tests Documentation And Cleanup | Not Started |  | Parent phase. |
-| Phase 10A: Strengthen Door Tests And Diagnostics | Not Started |  | Focused tests and diagnostics pass. |
-| Phase 10B: Update Documentation And Close Plan | Not Started |  | Docs and final closure. |
+| Phase 7: Dynamic Portal Visibility Blockers | Completed | 2026-07-03 | Dynamic portal blocker query and preview/ECS wiring passes complete. |
+| Phase 7A: Add Dynamic Portal Blocker Query | Completed | 2026-07-03 | Added optional dynamic blocker overlay to portal visibility traversal APIs. |
+| Phase 7B: Wire Door Blockers Into Preview Visibility | Completed | 2026-07-03 | Preview visibility traversal now consumes collected ECS door portal blockers. |
+| Phase 8: Door Editor Tool And Inspector | Completed | 2026-07-03 | Door placement, 2D footprint, core inspector fields, and interaction controls complete. |
+| Phase 8A: Add Door Placement Tool And 2D Footprint | Completed | 2026-07-03 | Added Door tool, portal placement helper, and cached 2D footprint drawing. |
+| Phase 8B: Add Door Inspector Core Fields | Completed | 2026-07-03 | Added door anchor status, core dimension/motion fields, and layout coverage. |
+| Phase 8C: Add Door Inspector Interaction Controls | Completed | 2026-07-03 | Added authored auto-open fields and a runtime-only debug target toggle. |
+| Phase 9: Door Material V1 | Completed | 2026-07-03 | Single texture rendering and picker integration complete. |
+| Phase 9A: Add Single Texture Door Material | Completed | 2026-07-03 | Doors use authored texture ID for all slab faces with fallback material behavior. |
+| Phase 9B: Add Door Texture Picker Integration | Completed | 2026-07-03 | Door inspector reuses the topology texture picker to assign authored door texture IDs. |
+| Phase 10: Tests Documentation And Cleanup | Completed | 2026-07-03 | Tests, documentation, and plan closure complete. |
+| Phase 10A: Strengthen Door Tests And Diagnostics | Completed | 2026-07-03 | Added focused runtime-object tests for stale door endpoint diagnostics and spawned-door portal blocker collection after runtime motion. |
+| Phase 10B: Update Documentation And Close Plan | Completed | 2026-07-03 | Documented V1 door authoring/runtime behavior, manual smoke checklist, deferred work, and closed the plan. |
 
 ## Pass Execution Log
 
@@ -416,6 +416,101 @@ Important product decisions:
 - Player-inside behavior: If the player starts inside a door slab, the resolver pushes out along a least-penetration OBB axis when possible and reports `hitWall`; invalid/non-finite colliders are ignored safely. If static movement crossed sectors and then hits a dynamic door, the resolver constrains the player back to the starting side and preserves the prior sector ID.
 - Behavior notes: Source code changed. Authored data, serialization schema/default behavior, topology mutation/cache invalidation, asset loading policy, portal visibility traversal, renderer state, and lightmap source-hash behavior are unchanged. Collision/sector lookup/physics changed only for editor gameplay preview player movement after static collision; static topology collision remains unchanged. No manual GUI verification was performed.
 - Verification: `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_collision|sector_runtime_object"` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 7A: Add Dynamic Portal Blocker Query
+
+- Status: Completed
+- Date: 2026-07-03
+- Summary: Added `RuntimePortalDynamicBlocker` and optional blocker-vector parameters to connected, point, and view-aware portal visibility traversal APIs. Traversal now checks static `edge.open`, then `IsRuntimePortalDynamicallyBlocked()`, then the existing angular/window tests.
+- Blocker key and threshold behavior: The blocker query matches `lineDefId` plus either directed `fromSectorId`/`toSectorId` or `sideDefId`. This pass stores only `blocksPortal`; the door `openFraction <= 0.001f` threshold remains in ECS door derived state from Phase 4B and ECS-to-visibility collection remains Phase 7B.
+- Fallback behavior: Supplying no blocker data or an empty blocker vector preserves existing traversal results. Invalid start, outside-sector, iteration-cap, and draw-all fallback behavior remains unchanged and does not over-filter.
+- Behavior notes: Source code changed. Public portal visibility APIs gained optional parameters with default `nullptr`, and existing call sites remain compatible. Static portal graph building, generated sector meshes, renderer state, ECS ownership, collision/sector lookup/physics, topology mutation/cache invalidation, asset loading, serialization, and lightmap source-hash behavior are unchanged. Portal visibility traversal can now be dynamically blocked only when explicit blocker data is supplied. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_portal_visibility_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_portal_visibility|sector_runtime_object"` passed; `cmake --build cmake-build-debug -j2` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 7B: Wire Door Blockers Into Preview Visibility
+
+- Status: Completed
+- Date: 2026-07-03
+- Summary: Added `CollectSectorDoorDynamicPortalBlockers()` to convert closed ECS `SectorDoorPortalBlocker` state into `RuntimePortalDynamicBlocker` entries, cached those entries on `SectorRuntimeObjectState`, and passed them into editor Preview3D visibility traversal.
+- Blocker key and threshold behavior: Closed doors emit two directed blocker keys for the anchored portal: front sidedef/front sector to back sector, and back sidedef/back sector to front sector. Partly open doors emit no visibility blockers because `SectorDoorPortalBlocker::blocksPortal` is still derived from the Phase 4B `openFraction <= 0.001f` threshold.
+- Traversal/fallback behavior: `SectorMeshPreview::UpdateVisibilityDebug()` now accepts optional dynamic portal blockers and forwards them to `ComputeRuntimeSectorVisibilityFromView()`. If the runtime object world is unavailable or no blockers are supplied, behavior remains unchanged. Visibility graph unavailable/invalid-start fallback draw-all behavior remains handled by the existing visibility code and is not over-filtered by this pass.
+- Behavior notes: Source code changed. Portal visibility runtime behavior now reflects closed ECS doors in editor Preview3D after door runtime updates. Static portal graph building, generated sector meshes, renderer drawing state, ECS ownership of mutable door state, collision/sector lookup/physics, topology mutation/cache invalidation, asset loading, serialization, and lightmap source-hash behavior are unchanged. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests sector_portal_visibility_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_portal_visibility|sector_runtime_object"` passed; `cmake --build cmake-build-debug -j2` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 8A: Add Door Placement Tool And 2D Footprint
+
+- Status: Completed
+- Date: 2026-07-03
+- Summary: Added a `Door` map-object tool that clicks a two-sided portal linedef and creates an authored `kind: "door"` runtime object with stable anchor IDs, exact endpoint diagnostics, explicit default width/height from the resolved portal opening, and vertical open distance defaulted to door height.
+- Placement behavior: Valid two-sided portal placement selects the newly created door, marks the topology document edited, invalidates the 2D topology render cache through `MarkTopologyDocumentEdited()`, and refreshes runtime ECS objects through the existing runtime-object authoring refresh path. One-sided walls, missing lines, invalid endpoints, and unresolved anchors produce status text without mutating authored data.
+- 2D footprint behavior: The cached runtime-object draw data now treats valid doors as known runtime objects and stores a derived portal-aligned footprint rectangle from resolved anchor basis, authored width, thickness, and normal offset. The 2D draw path renders the footprint and portal span; invalid door anchors remain warning-colored/missing-object markers.
+- Behavior notes: Source code changed. Serialization schema/default behavior, asset loading, lightmap source-hash behavior, generated sector meshes, 3D renderer state, collision/sector lookup/physics, and portal visibility traversal behavior are unchanged by this pass. Door runtime state remains ECS-owned; this pass writes authored door placement data only. Door drag movement is blocked in 2D because doors stay anchored to portal lines. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_authoring_graph_tests sector_runtime_object_tests sector_topology_serialization_tests` passed; `git diff --check` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_runtime_object|sector_authoring_graph|sector_topology_serialization"` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed; `git diff --stat` reviewed.
+
+### Phase 8B: Add Door Inspector Core Fields
+
+- Status: Completed
+- Date: 2026-07-03
+- Summary: Expanded the selected door inspector from delete-only status to show wrapped anchor diagnostics, line/sector pair status, editable authored width, height, thickness, normal offset, motion type, open distance, speed, initial open fraction, texture status, and Delete.
+- Inspector behavior: Numeric edits mutate `SectorPlacedDoor` authored defaults through `MutateSelectedRuntimeObject()`. Motion uses the existing compact option dropdown for `Slide Vertical`, `Slide Left`, and `Slide Right`. Width, height, and open distance allow zero for existing derived-default semantics; thickness is clamped positive, speed is clamped non-negative, and initial open fraction is clamped to `0..1`.
+- Dirty/cache/runtime refresh behavior: Door inspector mutations use the existing runtime-object mutation path, so edits mark the topology document dirty, invalidate the 2D topology render cache through `MarkTopologyDocumentEdited()`, and respawn/refresh runtime ECS objects. Over-invalidation is intentional for authored door changes.
+- Behavior notes: Source code changed. Serialization schema/default behavior, asset loading, generated sector meshes, renderer state, collision/sector lookup/physics, portal visibility traversal, and lightmap source-hash behavior are unchanged. Phase 8 remains `In Progress` because Phase 8C interaction controls are not implemented. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_editor_ui_layout_tests sector_authoring_graph_tests sector_runtime_object_tests sector_topology_serialization_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_editor_ui_layout|sector_runtime_object|sector_authoring_graph|sector_topology_serialization"` passed; `git diff --check` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed.
+
+### Phase 8C: Add Door Inspector Interaction Controls
+
+- Status: Completed
+- Date: 2026-07-03
+- Summary: Added selected-door inspector controls for authored `autoOpen`, `autoOpenDistance`, and `interactionDistance`, plus a clearly labeled runtime debug target button that opens/closes the live ECS door target when a spawned door entity is available.
+- Inspector behavior: `Auto Open` mutates authored `door.autoOpen`. `Auto Dist` and `Use Dist` mutate authored interaction distances through the existing selected runtime-object mutation path and clamp them to positive values. The debug target button mutates only `SectorDoorMotion::targetOpenFraction`; it does not rewrite `initialOpenFraction` or other authored door data.
+- Dirty/cache/runtime refresh behavior: Authored interaction edits use `MutateSelectedRuntimeObject()`, so they mark the topology document dirty, invalidate the 2D topology render cache through `MarkTopologyDocumentEdited()`, and respawn/refresh runtime ECS objects. The runtime debug target button does not mark the document dirty and does not invalidate the 2D topology render cache because it changes only transient ECS state.
+- Behavior notes: Source code changed. Serialization schema/default behavior, asset loading, generated sector meshes, renderer state, collision/sector lookup/physics, portal visibility traversal, and lightmap source-hash behavior are unchanged. Runtime door behavior can change after authored interaction edits refresh ECS state, and the debug target button can change live ECS door target state only. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_editor_ui_layout_tests sector_authoring_graph_tests sector_runtime_object_tests sector_topology_serialization_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_editor_ui_layout|sector_runtime_object|sector_authoring_graph|sector_topology_serialization"` passed; `git diff --check` passed; `cmake --build cmake-build-debug -j2` passed after fixing a status-field compile error; `ctest --test-dir cmake-build-debug --output-on-failure` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 9A: Add Single Texture Door Material
+
+- Status: Completed
+- Date: 2026-07-03
+- Summary: Verified the current door material path uses authored `door.textureId` as a single texture for all procedural slab faces and preserves the existing fallback material when the ID is empty, missing from the map texture dictionary, or not ready from `AssetManager`.
+- Material fields: `SectorPlacedDoor::textureId` remains authored string data, serializes only when non-empty, and is copied into `SectorDoorRender::textureId` at ECS spawn. No raylib texture handles are saved or stored in authored door data.
+- Picker behavior: Door texture picker integration is unchanged and remains scoped to Phase 9B.
+- UV generation: Door slab faces use procedural UVs from face dimensions: front/back by width and height, side faces by thickness and height, and top/bottom by width and thickness.
+- Missing-texture behavior: Missing, empty, or not-yet-ready door texture IDs fall back to the renderer default material texture instead of crashing or skipping valid door state.
+- Behavior notes: No source code changed during this pass beyond plan tracking; the existing current implementation already satisfied the Phase 9A source requirements. Serialization behavior is unchanged from the prior door data passes, renderer state remains opaque/depth-writing with no transparent pass, asset loading still resolves map texture IDs through existing preview texture handles, topology mutation/cache invalidation is unchanged, collision/sector lookup/physics and portal visibility behavior are unchanged, and lightmap source-hash behavior is unchanged. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_runtime_object|sector_topology_serialization"` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 9B: Add Door Texture Picker Integration
+
+- Status: Completed
+- Date: 2026-07-03
+- Summary: Added a runtime-door target to the existing topology texture picker, exposed a `Pick Texture` control in the selected-door inspector, and wired picker apply through the selected authored runtime-object mutation path.
+- Material fields: `SectorPlacedDoor::textureId` remains the single authored map texture ID for all procedural slab faces. No raylib texture handles or asset handles are stored in authored door data.
+- Picker behavior: The picker stores the target runtime object ID, lists existing map texture IDs, selects the current door texture when present, and applies the selected ID to the authored door texture. The editor apply path uses `MutateSelectedRuntimeObject()`, so it marks the document edited, invalidates the 2D topology render cache through the existing document-edited path, and refreshes runtime ECS objects.
+- UV generation: Door slab UV generation is unchanged from Phase 9A; procedural UVs still derive from slab face dimensions.
+- Missing-texture behavior: Empty door texture IDs continue to use the default material. Non-empty IDs missing from the map texture dictionary now show a door inspector warning while renderer fallback behavior remains unchanged.
+- Behavior notes: Source code changed. Serialization schema/default behavior, generated sector meshes, renderer draw state, asset loading, collision/sector lookup/physics, portal visibility behavior, and lightmap source-hash behavior are unchanged. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_authoring_graph_tests sector_editor_ui_layout_tests sector_runtime_object_tests sector_topology_serialization_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_authoring_graph|sector_editor_ui_layout|sector_runtime_object|sector_topology_serialization"` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 10A: Strengthen Door Tests And Diagnostics
+
+- Status: Completed
+- Date: 2026-07-03
+- Summary: Strengthened focused door runtime tests by covering stale saved endpoint diagnostics after portal vertex movement and verifying spawned ECS door motion changes the collected dynamic portal blocker output from closed/blocking to open/unblocked.
+- Tests added/updated: Added `TestResolveSectorDoorAnchorToleratesStaleEndpointDiagnostics()` and `TestSpawnedDoorRuntimeUpdateRefreshesPortalBlockerCollection()` to `SectorRuntimeObjectTests.cpp`.
+- Diagnostics behavior: Door anchor resolution continues to use stable linedef/sidedef/sector IDs and current linedef vertices as the source of truth; stale authored endpoint coordinates remain diagnostic data and do not invalidate a valid stable anchor.
+- Runtime behavior: No production runtime behavior changed. The new spawned-door test exercises existing ECS spawn, motion update, derived blocker threshold, and dynamic portal blocker collection.
+- Behavior notes: Source code changed only in tests plus this plan tracking update. Serialization schema/default behavior, generated sector meshes, renderer state, asset loading, topology mutation/cache invalidation, collision/sector lookup/physics, portal visibility implementation, and lightmap source-hash behavior are unchanged. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2 --target sector_runtime_object_tests` passed; `ctest --test-dir cmake-build-debug --output-on-failure -R sector_runtime_object` passed; `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
+
+### Phase 10B: Update Documentation And Close Plan
+
+- Status: Completed
+- Date: 2026-07-03
+- Summary: Updated `docs/sector_editor.md` with V1 door authoring, runtime ECS ownership, procedural slab rendering, motion, interaction, collision, portal visibility, material limitations, inspector behavior, and deferred door work, then marked Phase 10 and the overall V1 plan complete.
+- Documentation behavior: Added Door tool coverage, portal-attached slab behavior, variable thickness/normal offset notes, implemented slide motion types, auto-open and `F` interact behavior, dynamic collision/visibility behavior, single-texture material limitations, and inspector diagnostic guidance. The manual smoke checklist remains documented in this plan for user-run verification.
+- Tests added/updated: No tests were added in Phase 10B; focused test additions were completed in Phase 10A.
+- Behavior notes: Documentation and plan tracking changed only. No source code changed in this pass. Serialization schema/default behavior, generated sector meshes, renderer state, asset loading, ECS ownership, topology mutation/cache invalidation, collision/sector lookup/physics implementation, portal visibility implementation, and lightmap source-hash behavior are unchanged. No manual GUI verification was performed.
+- Verification: `cmake --build cmake-build-debug -j2` passed; `ctest --test-dir cmake-build-debug --output-on-failure` passed; `git diff --check` passed; `git diff --stat` reviewed; `git status --short` reviewed.
 
 ## Execution Tracking Rules
 
@@ -1850,3 +1945,5 @@ This plan is complete when:
 - `SectorMeshPreview` remains renderer-only.
 - Static sector meshes are not rebuilt for door animation.
 - No dynamic sector-height/glTF/NPC/scripting/swing-door scope leaked into V1.
+
+Final completion note, 2026-07-03: All listed phases and passes are complete. V1 procedural portal-attached doors are documented, tested through the focused automated coverage described above, and closed for this plan. Manual GUI smoke verification remains user-run unless performed in a future session.

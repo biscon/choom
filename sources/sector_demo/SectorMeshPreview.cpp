@@ -2702,7 +2702,8 @@ void SectorMeshPreview::RefreshDynamicLightSources(const SectorTopologyMap& map)
 void SectorMeshPreview::UpdateVisibilityDebug(
         int preferredStartSectorId,
         float visibilitySeedRadiusWorld,
-        bool validateEyeY)
+        bool validateEyeY,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers)
 {
     if (!visibilityGraphValid) {
         visibilityResult = RuntimePortalVisibilityResult{};
@@ -2720,7 +2721,8 @@ void SectorMeshPreview::UpdateVisibilityDebug(
                 0,
                 visibilitySeedRadiusWorld,
                 camera.position.y,
-                validateEyeY);
+                validateEyeY,
+                dynamicPortalBlockers);
     }
     portalVisibilityDebugText = FormatRuntimePortalVisibilityDebugText(visibilityResult);
     visibilityDebugText = portalVisibilityDebugText;

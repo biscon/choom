@@ -43,6 +43,12 @@ struct SectorEditorAddBillboardResult {
     std::string status;
 };
 
+struct SectorEditorAddDoorResult {
+    bool changed = false;
+    int objectId = -1;
+    std::string status;
+};
+
 SectorEditorAddStaticLightResult AddStaticLightToSector(
         SectorTopologyMap& map,
         int sectorId,
@@ -83,6 +89,10 @@ SectorEditorAddBillboardResult AddBillboardToSector(
         SectorTopologyMap& map,
         int sectorId,
         Vector2 mapPoint);
+
+SectorEditorAddDoorResult AddDoorToPortal(
+        SectorTopologyMap& map,
+        int lineDefId);
 
 SectorEditorTopologyActionResult FinishMoveStaticLight(
         SectorTopologyMap& map,

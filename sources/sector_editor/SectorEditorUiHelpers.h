@@ -187,6 +187,26 @@ inline float SectorEditorRuntimeObjectInspectorContentHeight(
     return height;
 }
 
+inline float SectorEditorDoorInspectorContentHeight(
+        float rowH,
+        float gap,
+        float anchorStatusHeight,
+        float textureStatusHeight)
+{
+    float height = 0.0f;
+    height += 38.0f;
+    height += 34.0f;
+    height += anchorStatusHeight + gap;
+    height += (rowH + gap) * 4.0f;
+    height += SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap;
+    height += (rowH + gap) * 3.0f;
+    height += (rowH + gap) * 4.0f;
+    height += textureStatusHeight + gap;
+    height += rowH + gap;
+    height += rowH + gap;
+    return height;
+}
+
 struct SectorEditorFloatInputResult {
     bool changed = false;
     float value = 0.0f;

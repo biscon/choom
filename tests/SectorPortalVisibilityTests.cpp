@@ -425,6 +425,72 @@ void TestConnectedAndDisconnectedTraversal()
           "disconnected sectors are not visible");
 }
 
+void TestDynamicPortalBlockerTraversal()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(MakeAdjacent(), graph, &error),
+          "dynamic blocker traversal graph builds");
+
+    const game::RuntimePortalVisibilityResult unblocked =
+            game::TraverseRuntimeSectorVisibility(graph, 10);
+    const std::vector<game::RuntimePortalDynamicBlocker> emptyBlockers;
+    const game::RuntimePortalVisibilityResult noBlocker =
+            game::TraverseRuntimeSectorVisibility(graph, 10, &emptyBlockers);
+    Check(noBlocker.visibleSectorIds == unblocked.visibleSectorIds
+                  && noBlocker.traversedPortalLineDefIds == unblocked.traversedPortalLineDefIds,
+          "empty dynamic blocker data preserves traversal result");
+
+    const std::vector<game::RuntimePortalDynamicBlocker> closedBlocker = {
+            game::RuntimePortalDynamicBlocker{2, -1, 10, 20, true}};
+    const game::RuntimePortalVisibilityResult blocked =
+            game::TraverseRuntimeSectorVisibility(graph, 10, &closedBlocker);
+    Check(blocked.visibleSectorIds.size() == 1 && blocked.visibleSectorIds[0] == 10,
+          "matching dynamic blocker prevents directed portal traversal");
+    Check(blocked.traversedPortalLineDefIds.empty(),
+          "blocked dynamic portal is not recorded as traversed");
+
+    const game::RuntimePortalVisibilityResult oppositeDirection =
+            game::TraverseRuntimeSectorVisibility(graph, 20, &closedBlocker);
+    Check(Contains(oppositeDirection.visibleSectorIds, 10)
+                  && Contains(oppositeDirection.visibleSectorIds, 20),
+          "directed blocker does not prevent opposite portal traversal");
+
+    const std::vector<game::RuntimePortalDynamicBlocker> sideBlocker = {
+            game::RuntimePortalDynamicBlocker{2, 2, -1, -1, true}};
+    const game::RuntimePortalVisibilityResult sideBlocked =
+            game::TraverseRuntimeSectorVisibility(graph, 10, &sideBlocker);
+    Check(sideBlocked.visibleSectorIds.size() == 1 && sideBlocked.visibleSectorIds[0] == 10,
+          "matching sidedef dynamic blocker prevents portal traversal");
+}
+
+void TestDynamicPortalBlockerMismatchAndUnblockedEntries()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(MakeAdjacent(), graph, &error),
+          "dynamic blocker mismatch graph builds");
+
+    const std::vector<game::RuntimePortalDynamicBlocker> nonMatchingBlockers = {
+            game::RuntimePortalDynamicBlocker{99, -1, 10, 20, true},
+            game::RuntimePortalDynamicBlocker{2, -1, 20, 10, true},
+            game::RuntimePortalDynamicBlocker{2, 8, -1, -1, true},
+            game::RuntimePortalDynamicBlocker{2, -1, 10, 20, false}};
+    const game::RuntimePortalVisibilityResult result =
+            game::TraverseRuntimeSectorVisibility(graph, 10, &nonMatchingBlockers);
+    Check(Contains(result.visibleSectorIds, 10) && Contains(result.visibleSectorIds, 20),
+          "mismatched or unblocked dynamic blocker entries allow traversal");
+
+    const std::vector<game::RuntimePortalDynamicBlocker> queryMatch = {
+            game::RuntimePortalDynamicBlocker{2, -1, 10, 20, true}};
+    const std::vector<game::RuntimePortalDynamicBlocker> queryOpen = {
+            game::RuntimePortalDynamicBlocker{2, -1, 10, 20, false}};
+    Check(game::IsRuntimePortalDynamicallyBlocked(graph.portals[0], &queryMatch),
+          "dynamic blocker query matches directed sector key");
+    Check(!game::IsRuntimePortalDynamicallyBlocked(graph.portals[0], &queryOpen),
+          "dynamic blocker query ignores unblocked entries");
+}
+
 void TestCycleTerminates()
 {
     game::RuntimeSectorVisibilityGraph graph;
@@ -758,6 +824,46 @@ void TestViewClosedPortalDoesNotTraverse()
           "view height-closed portal is not traversed even inside FOV");
 }
 
+void TestViewDynamicPortalBlockerDoesNotTraverse()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(MakeAdjacent(), graph, &error),
+          "view dynamic blocker graph builds");
+
+    const std::vector<game::RuntimePortalDynamicBlocker> unblocked = {
+            game::RuntimePortalDynamicBlocker{2, -1, 10, 20, false}};
+    const game::RuntimePortalVisibilityResult openResult =
+            game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+                    graph,
+                    game::SectorCoordToWorldPosition2(32, 32),
+                    ForwardFromPreviewYaw(0.0f),
+                    Degrees(60.0f),
+                    {10},
+                    10,
+                    0,
+                    &unblocked);
+    Check(Contains(openResult.visibleSectorIds, 20),
+          "view traversal allows unblocked dynamic portal entries");
+
+    const std::vector<game::RuntimePortalDynamicBlocker> closed = {
+            game::RuntimePortalDynamicBlocker{2, -1, 10, 20, true}};
+    const game::RuntimePortalVisibilityResult blocked =
+            game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+                    graph,
+                    game::SectorCoordToWorldPosition2(32, 32),
+                    ForwardFromPreviewYaw(0.0f),
+                    Degrees(60.0f),
+                    {10},
+                    10,
+                    0,
+                    &closed);
+    Check(blocked.visibleSectorIds.size() == 1 && blocked.visibleSectorIds[0] == 10,
+          "view traversal skips matching dynamic portal blocker before angular tests");
+    Check(blocked.traversedPortalLineDefIds.empty(),
+          "view traversal does not record dynamically blocked portal");
+}
+
 void TestViewOneSidedVoidBoundaryDoesNotTraverse()
 {
     game::RuntimeSectorVisibilityGraph graph;
@@ -1053,6 +1159,8 @@ int main()
     TestOneSidedWallCreatesNoPortal();
     TestClosedPortalDoesNotTraverse();
     TestConnectedAndDisconnectedTraversal();
+    TestDynamicPortalBlockerTraversal();
+    TestDynamicPortalBlockerMismatchAndUnblockedEntries();
     TestCycleTerminates();
     TestInvalidStartFallback();
     TestViewYawFacingPortalIncludesNeighbor();
@@ -1067,6 +1175,7 @@ int main()
     TestViewTraversalCapFallbackDrawsAll();
     TestViewInvalidStartFallbackDrawsAll();
     TestViewClosedPortalDoesNotTraverse();
+    TestViewDynamicPortalBlockerDoesNotTraverse();
     TestViewOneSidedVoidBoundaryDoesNotTraverse();
     TestViewMultiStartUnionAndSortedMetadata();
     TestViewMultiStartFallbackPropagates();

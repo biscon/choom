@@ -554,6 +554,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex";
         case SectorEditorTool::AuthoringMove: return "Move Vertex";
         case SectorEditorTool::RuntimeObject: return "Billboard";
+        case SectorEditorTool::Door: return "Door";
         case SectorEditorTool::StaticLight: return "Static Light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot";
         case SectorEditorTool::DynamicLight: return "Dynamic Light";
@@ -1025,6 +1026,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex: click an authoring line to split it, right click/Esc cancels";
         case SectorEditorTool::AuthoringMove: return "Move Vertex: hidden; use Select to move selected authoring vertices";
         case SectorEditorTool::RuntimeObject: return "Billboard: click inside a sector to place a billboard marker";
+        case SectorEditorTool::Door: return "Door: click a two-sided portal line to place a sliding door";
         case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place a baked point light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place a baked spot light";
         case SectorEditorTool::DynamicLight: return "Dynamic Light: click inside a sector to place a runtime point light";

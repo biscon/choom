@@ -654,7 +654,46 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         cached.definitionId = !object.kind.empty() ? object.kind : object.definitionId;
         cached.map = Vector2{object.position.x, object.position.z};
         cached.yawRadians = object.yawRadians;
-        cached.definitionKnown = object.kind == "billboard";
+        cached.definitionKnown = object.kind == "billboard" || object.kind == "door";
+        cached.isDoor = object.kind == "door";
+        if (cached.isDoor) {
+            const SectorResolvedDoorAnchor resolved = ResolveSectorDoorAnchor(map, object.door);
+            if (resolved.valid) {
+                const float halfWidth = SectorWorldToAuthoringDistance(resolved.width) * 0.5f;
+                const float halfThickness = SectorWorldToAuthoringDistance(object.door.thickness) * 0.5f;
+                const float normalOffset = SectorWorldToAuthoringDistance(object.door.normalOffset);
+                const Vector2 midpoint{
+                        SectorWorldToAuthoringDistance(resolved.midpoint.x),
+                        SectorWorldToAuthoringDistance(resolved.midpoint.y)};
+                const Vector2 tangent{resolved.tangent.x, resolved.tangent.y};
+                const Vector2 normal{resolved.normal.x, resolved.normal.y};
+                const Vector2 center{
+                        midpoint.x + normal.x * normalOffset,
+                        midpoint.y + normal.y * normalOffset};
+                cached.map = center;
+                cached.doorEndpointA = Vector2{
+                        SectorWorldToAuthoringDistance(resolved.endpointA.x),
+                        SectorWorldToAuthoringDistance(resolved.endpointA.y)};
+                cached.doorEndpointB = Vector2{
+                        SectorWorldToAuthoringDistance(resolved.endpointB.x),
+                        SectorWorldToAuthoringDistance(resolved.endpointB.y)};
+                cached.doorCorners[0] = Vector2{
+                        center.x - tangent.x * halfWidth - normal.x * halfThickness,
+                        center.y - tangent.y * halfWidth - normal.y * halfThickness};
+                cached.doorCorners[1] = Vector2{
+                        center.x + tangent.x * halfWidth - normal.x * halfThickness,
+                        center.y + tangent.y * halfWidth - normal.y * halfThickness};
+                cached.doorCorners[2] = Vector2{
+                        center.x + tangent.x * halfWidth + normal.x * halfThickness,
+                        center.y + tangent.y * halfWidth + normal.y * halfThickness};
+                cached.doorCorners[3] = Vector2{
+                        center.x - tangent.x * halfWidth + normal.x * halfThickness,
+                        center.y - tangent.y * halfWidth + normal.y * halfThickness};
+                cached.doorFootprintValid = true;
+            } else {
+                cached.definitionKnown = false;
+            }
+        }
         cache.runtimeObjects.push_back(cached);
     }
 
@@ -1223,6 +1262,8 @@ void DrawCachedRuntimeObjects(
 {
     const Color outline = Color{20, 24, 32, 255};
     const Color objectFill = Color{238, 204, 96, 235};
+    const Color doorFill = Color{72, 220, 128, 64};
+    const Color doorLine = Color{72, 220, 128, 235};
     const Color selectedFill = Color{122, 220, 244, 255};
     const Color missingFill = Color{236, 92, 92, 245};
     for (const CachedRuntimeObjectDraw& object : cache.runtimeObjects) {
@@ -1233,19 +1274,44 @@ void DrawCachedRuntimeObjects(
                 : selected ? selectedFill : objectFill;
 
         const float radius = selected ? 8.0f : 6.0f;
+        if (object.isDoor && object.doorFootprintValid) {
+            const Vector2 c0 = CachedMapToScreen(context, object.doorCorners[0]);
+            const Vector2 c1 = CachedMapToScreen(context, object.doorCorners[1]);
+            const Vector2 c2 = CachedMapToScreen(context, object.doorCorners[2]);
+            const Vector2 c3 = CachedMapToScreen(context, object.doorCorners[3]);
+            const Color activeDoorLine = selected ? selectedFill : doorLine;
+            DrawTriangle(c0, c1, c2, selected ? WithAlpha(selectedFill, 76) : doorFill);
+            DrawTriangle(c0, c2, c3, selected ? WithAlpha(selectedFill, 76) : doorFill);
+            DrawLineEx(c0, c1, selected ? 3.5f : 2.5f, outline);
+            DrawLineEx(c1, c2, selected ? 3.5f : 2.5f, outline);
+            DrawLineEx(c2, c3, selected ? 3.5f : 2.5f, outline);
+            DrawLineEx(c3, c0, selected ? 3.5f : 2.5f, outline);
+            DrawLineEx(c0, c1, selected ? 2.0f : 1.5f, activeDoorLine);
+            DrawLineEx(c1, c2, selected ? 2.0f : 1.5f, activeDoorLine);
+            DrawLineEx(c2, c3, selected ? 2.0f : 1.5f, activeDoorLine);
+            DrawLineEx(c3, c0, selected ? 2.0f : 1.5f, activeDoorLine);
+            DrawLineEx(
+                    CachedMapToScreen(context, object.doorEndpointA),
+                    CachedMapToScreen(context, object.doorEndpointB),
+                    selected ? 3.0f : 2.0f,
+                    activeDoorLine);
+        }
+
         DrawCircleV(center, radius + 3.0f, outline);
         DrawCircleV(center, radius, fill);
 
-        const Vector2 direction{
-                std::cos(object.yawRadians),
-                std::sin(object.yawRadians)
-        };
-        const Vector2 tip{
-                center.x + direction.x * 18.0f,
-                center.y + direction.y * 18.0f
-        };
-        DrawLineEx(center, tip, selected ? 3.0f : 2.0f, fill);
-        DrawCircleV(tip, selected ? 3.5f : 3.0f, fill);
+        if (!object.isDoor) {
+            const Vector2 direction{
+                    std::cos(object.yawRadians),
+                    std::sin(object.yawRadians)
+            };
+            const Vector2 tip{
+                    center.x + direction.x * 18.0f,
+                    center.y + direction.y * 18.0f
+            };
+            DrawLineEx(center, tip, selected ? 3.0f : 2.0f, fill);
+            DrawCircleV(tip, selected ? 3.5f : 3.0f, fill);
+        }
 
         if (!object.definitionKnown) {
             DrawLineEx(

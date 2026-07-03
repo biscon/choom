@@ -277,6 +277,27 @@ void TestResolveSectorDoorAnchorUsesAuthoredDimensionsWhenPresent()
           "resolved door anchor preserves explicit authored dimensions");
 }
 
+void TestResolveSectorDoorAnchorToleratesStaleEndpointDiagnostics()
+{
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    game::SectorPlacedDoor door = MakeDoorOnPortal();
+    door.anchor.endpointAX = -999;
+    door.anchor.endpointAY = -999;
+    door.anchor.endpointBX = -888;
+    door.anchor.endpointBY = -888;
+
+    game::FindSectorTopologyVertex(map, 2)->x = 80;
+    game::FindSectorTopologyVertex(map, 3)->x = 80;
+
+    const game::SectorResolvedDoorAnchor resolved = game::ResolveSectorDoorAnchor(map, door);
+
+    Check(resolved.valid, "stale door endpoint diagnostics do not invalidate a stable portal anchor");
+    Check(resolved.diagnostic.empty(), "stale door endpoint diagnostics do not report a resolver warning");
+    Check(Near(resolved.endpointA, game::SectorCoordToWorldPosition2(80, 0))
+                  && Near(resolved.endpointB, game::SectorCoordToWorldPosition2(80, 64)),
+          "resolved door anchor uses current linedef vertices instead of stale endpoint diagnostics");
+}
+
 void TestSectorRuntimeObjectComponentsIterateAndDestroy()
 {
     engine::World world;
@@ -1331,6 +1352,78 @@ void TestSectorDoorDynamicCollisionIgnoresPortalBlockerState()
             "dynamic door crossing collision uses physical collider state rather than portal blocker state");
 }
 
+void TestSectorDoorDynamicPortalBlockerCollectionBuildsDirectedVisibilityKeys()
+{
+    engine::World closedWorld;
+    game::ReserveSectorRuntimeObjectWorld(closedWorld, 1);
+    AddDoorForDerivedState(
+            closedWorld,
+            game::SectorDoorMotionType::SlideVertical,
+            0.0f,
+            1.5f);
+    game::UpdateSectorDoorDerivedStateSystem(closedWorld);
+
+    std::vector<game::RuntimePortalDynamicBlocker> closedBlockers;
+    game::CollectSectorDoorDynamicPortalBlockers(closedWorld, closedBlockers);
+    Check(closedBlockers.size() == 2,
+          "closed door portal blocker collection emits both directed portal keys");
+    Check(closedBlockers[0].lineDefId == 2
+                  && closedBlockers[0].sideDefId == 2
+                  && closedBlockers[0].fromSectorId == 10
+                  && closedBlockers[0].toSectorId == 20
+                  && closedBlockers[0].blocksPortal,
+          "closed door portal blocker collection emits front-to-back key");
+    Check(closedBlockers[1].lineDefId == 2
+                  && closedBlockers[1].sideDefId == 8
+                  && closedBlockers[1].fromSectorId == 20
+                  && closedBlockers[1].toSectorId == 10
+                  && closedBlockers[1].blocksPortal,
+          "closed door portal blocker collection emits back-to-front key");
+
+    engine::World openWorld;
+    game::ReserveSectorRuntimeObjectWorld(openWorld, 1);
+    AddDoorForDerivedState(
+            openWorld,
+            game::SectorDoorMotionType::SlideVertical,
+            game::kSectorDoorPortalBlockEpsilon + 0.0001f,
+            1.5f);
+    game::UpdateSectorDoorDerivedStateSystem(openWorld);
+
+    std::vector<game::RuntimePortalDynamicBlocker> openBlockers;
+    game::CollectSectorDoorDynamicPortalBlockers(openWorld, openBlockers);
+    Check(openBlockers.empty(),
+          "partly open door portal blocker collection emits no visibility blockers");
+}
+
+void TestSpawnedDoorRuntimeUpdateRefreshesPortalBlockerCollection()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    game::SectorPlacedDoor door = MakeDoorOnPortal();
+    door.speed = 1.0f;
+    door.openDistance = 1.0f;
+    map.runtimeObjects.push_back(MakePlacedDoor(39, door));
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    std::vector<game::RuntimePortalDynamicBlocker> blockers;
+    game::CollectSectorDoorDynamicPortalBlockers(world, blockers);
+    Check(blockers.size() == 2,
+          "spawned closed door contributes directed portal visibility blockers");
+
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    world.Get<game::SectorDoorMotion>(entity).targetOpenFraction = 1.0f;
+    game::UpdateSectorRuntimeObjects(world, assets, state, map, 0.25f);
+
+    blockers.clear();
+    game::CollectSectorDoorDynamicPortalBlockers(world, blockers);
+    Check(blockers.empty(),
+          "spawned door stops contributing portal blockers after runtime motion opens it");
+}
+
 void TestSectorDoorDynamicCollisionAllowsVerticalNonOverlap()
 {
     const game::SectorCollisionMoveState moveState{
@@ -2229,6 +2322,7 @@ int main()
     TestResolveSectorDoorAnchorRejectsSectorMismatch();
     TestResolveSectorDoorAnchorRejectsZeroHeightOpening();
     TestResolveSectorDoorAnchorUsesAuthoredDimensionsWhenPresent();
+    TestResolveSectorDoorAnchorToleratesStaleEndpointDiagnostics();
     TestSectorRuntimeObjectComponentsIterateAndDestroy();
     TestSectorBillboardFrameUvsUseSourceRectangle();
     TestSectorBillboardFrameUvsPreserveFlippedSourceSigns();
@@ -2252,6 +2346,8 @@ int main()
     TestSectorDoorDynamicCollisionBlocksClosedDoor();
     TestSectorDoorDynamicCollisionBlocksThinDoorTunneling();
     TestSectorDoorDynamicCollisionIgnoresPortalBlockerState();
+    TestSectorDoorDynamicPortalBlockerCollectionBuildsDirectedVisibilityKeys();
+    TestSpawnedDoorRuntimeUpdateRefreshesPortalBlockerCollection();
     TestSectorDoorDynamicCollisionAllowsVerticalNonOverlap();
     TestSectorDoorDynamicCollisionAllowsPhysicallyClearCrossing();
     TestSectorDoorDynamicCollisionStartsInsideSafe();

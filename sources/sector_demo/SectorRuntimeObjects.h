@@ -6,6 +6,7 @@
 #include "engine/components/SpriteAnimator.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorLightmapTypes.h"
+#include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
@@ -49,6 +50,7 @@ struct SectorRuntimeObjectState {
     std::vector<SectorPlacedRuntimeObjectEntity> placedObjectEntities;
     std::vector<SectorDoorAnchorDiagnostic> doorAnchorDiagnostics;
     std::vector<SectorDynamicDoorCollider> dynamicDoorColliders;
+    std::vector<RuntimePortalDynamicBlocker> dynamicPortalBlockers;
     size_t placedObjectCount = 0;
     size_t spawnedObjectCount = 0;
     size_t skippedObjectCount = 0;
@@ -350,6 +352,10 @@ void UpdateSectorDoorDerivedStateSystem(engine::World& world);
 void CollectSectorDoorDynamicColliders(
         engine::World& world,
         std::vector<SectorDynamicDoorCollider>& colliders);
+
+void CollectSectorDoorDynamicPortalBlockers(
+        engine::World& world,
+        std::vector<RuntimePortalDynamicBlocker>& blockers);
 
 SectorCollisionMoveResult ResolveSectorDoorDynamicCollidersForPlayerMovement(
         const SectorCollisionMoveState& moveState,

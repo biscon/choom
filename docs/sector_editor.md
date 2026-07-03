@@ -83,6 +83,8 @@ views and maps to world Z for generated 3D geometry.
 - `Add Map Texture`: add or update a texture entry from a PNG under
   `assets/images`.
 - Billboard tool: place a generic authored billboard marker inside a sector.
+- Door tool: place a portal-attached procedural door on a valid two-sided
+  linedef.
 - `Bake Lightmaps`: bake topology static lights into the level lightmap atlas.
 - `3D Mode`: rebuild the 3D preview from the current in-memory topology map.
 
@@ -160,6 +162,13 @@ regardless of portal height passability. Middle textures do not independently
 block movement or add collision; middle texture plus `Blocks Player` is the
 intended grate/window/barrier workflow. One-sided walls already block. Projectile,
 sight, and monster blocking flags remain deferred.
+
+Runtime doors add a dynamic blocker layer after static topology movement. Closed
+or sufficiently closed door slabs block the player with a portal-aligned OBB
+footprint and vertical interval derived from the authored door size and current
+runtime transform. Open doors allow passage once their dynamic collider no
+longer blocks the crossing. Door collision uses ECS runtime door state; it does
+not rebuild generated render meshes or mutate sector heights.
 
 ## Sector Inspector
 
@@ -571,7 +580,7 @@ linedef/sidedef inspector. `Blocks Player` is available in the selected
 sidedef/linedef inspector for two-sided portals even when no middle texture is
 assigned.
 
-## Runtime ECS Objects And Billboards
+## Runtime ECS Objects, Billboards, And Doors
 
 Sector topology remains purpose-built non-ECS data. Vertices, linedefs,
 sidedefs, sectors, generated geometry, lightmap atlas data, static draw records,
@@ -594,6 +603,42 @@ discards pixels below the sprite alpha cutoff, and writes surviving pixels as
 opaque depth-writing pixels. Transparent particles, smoke, glass, spell effects,
 and sorting remain deferred to a later transparent render pass. Missing,
 failed, or not-ready assets are skipped safely.
+
+Doors are authored runtime objects with `kind: "door"` and a portal anchor to a
+two-sided linedef. The Door tool places a door only on a valid two-sided portal;
+one-sided wall placement is rejected with editor status instead of creating an
+invalid object. The saved anchor uses stable linedef, sidedef, and sector IDs,
+plus exact endpoint coordinates for diagnostics. Door slabs are procedural 3D
+runtime objects attached to the portal; the portal itself remains a zero-thick
+logical connection.
+
+Door dimensions are authored in runtime/world units. Width and height can derive
+from the resolved portal opening, while thickness and normal offset control the
+physical slab around the portal plane. Implemented V1 motion types are
+`slide_vertical`, `slide_left`, and `slide_right`. Door runtime state, including
+current open fraction, target open fraction, transform, collider, and portal
+visibility blocker state, lives in ECS. Authored `initialOpenFraction` remains a
+level default and is not rewritten by preview interaction.
+
+In 3D preview, doors render as opaque procedural box/slab geometry after static
+sector geometry. Door faces use one authored map texture ID for all faces, with
+procedural UVs from slab dimensions. Empty, missing, unloaded, or failed door
+textures fall back to the renderer default material instead of crashing. V1 does
+not support door frames, six-face materials, per-face UV editing, transparent
+glass doors, glTF/model doors, or dynamic sector-height doors.
+
+Door interaction is deliberately small. Authored `autoOpen` doors open as the
+player approaches and close when the player leaves the configured distance.
+Non-auto doors can be targeted and toggled with the Interact key `F` when the
+player is close enough. The selected-door inspector also exposes a runtime
+debug open/close target control when a spawned ECS door exists; that control
+changes only preview runtime state.
+
+Closed ECS doors also contribute dynamic portal visibility blockers. A closed
+door blocks traversal across its anchored portal for the preview visibility
+query, while partly open doors allow traversal conservatively. This is a dynamic
+overlay on the static portal visibility graph, so animating a door does not
+rebuild the graph or sector meshes.
 
 Billboard baked lighting samples the baked object-probe payload through the
 runtime object lighting component. The renderer uses a stable probe-derived
@@ -634,6 +679,16 @@ Aseprite frame durations, reverse playback, and pingpong playback are respected
 by the existing billboard runtime path where supported by the sprite animation
 asset parser.
 
+Selecting a door exposes Object ID, type, anchor status, line/sector pair,
+width, height, thickness, normal offset, motion type, open distance, speed,
+initial open fraction, texture status and picker, auto-open, auto-open distance,
+interaction distance, runtime debug target state, and Delete. Door diagnostics
+use compact secondary inspector text with wrapping so stale endpoints or invalid
+anchors remain readable. Door authored-field edits use the same runtime-object
+mutation path as billboards: they mark the document edited, invalidate the 2D
+topology render cache, and refresh spawned ECS objects when preview runtime is
+available. Runtime debug target changes do not mark the document dirty.
+
 Editing, moving, selecting a sprite, changing clips, toggling directional or
 playing state, or deleting a billboard mutates the authored placed-object list,
 marks the topology document edited, invalidates the 2D topology render cache,
@@ -651,9 +706,9 @@ assets that can be selected like any other Aseprite billboard asset. Legacy
 external maps containing only `definitionId: "goblin"` are not migrated into
 functional generic billboards by the editor. The old F5 temporary
 non-serialized spawn path has been removed; placed billboards are the runtime
-object authoring path. NPC AI/state machines, actor collision/physics, doors,
-object scripting, attached lights, 3D model rendering, and transparent
-alpha-blended sprites are still deferred.
+object authoring path. NPC AI/state machines, general actor
+collision/physics, object scripting, attached lights, 3D model rendering, and
+transparent alpha-blended sprites are still deferred.
 
 ## Baked Lightmaps
 
@@ -722,6 +777,10 @@ deferred.
 - No alpha-based middle texture collision, translucent glass, depth sorting,
   middle texture decals, middle emissive/tint/bloom controls, or middle
   Copy/Paste Material controls.
+- Door frames, hinged/swing doors, split doors, dynamic sector-height doors,
+  glTF/model doors, per-face door UV editing, door sound effects, locks, keys,
+  scripts, save-game door state, NPC/pathfinding integration, and door shadow
+  casting are deferred.
 - No normal maps, material maps, PBR material editing, or texture search UI.
 - Single fixed-size lightmap atlas; no multi-atlas packing.
 - No 3D geometry editing beyond texture and UV edits on generated surfaces.

@@ -74,7 +74,8 @@ public:
     void UpdateVisibilityDebug(
             int preferredStartSectorId = 0,
             float visibilitySeedRadiusWorld = 0.0f,
-            bool validateEyeY = false);
+            bool validateEyeY = false,
+            const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers = nullptr);
     const RuntimePortalVisibilityResult& VisibilityResult() const { return visibilityResult; }
     const std::string& PortalVisibilityDebugText() const { return portalVisibilityDebugText; }
     const std::string& VisibilityDebugText() const { return visibilityDebugText; }

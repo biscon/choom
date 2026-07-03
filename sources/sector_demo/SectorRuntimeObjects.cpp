@@ -1407,6 +1407,38 @@ void CollectSectorDoorDynamicColliders(
             });
 }
 
+void CollectSectorDoorDynamicPortalBlockers(
+        engine::World& world,
+        std::vector<RuntimePortalDynamicBlocker>& blockers)
+{
+    world.ForEach<SectorDoor, SectorDoorPortalBlocker>(
+            [&blockers](engine::Entity, SectorDoor& door, SectorDoorPortalBlocker& blocker) {
+                if (!door.enabled || !blocker.blocksPortal) {
+                    return;
+                }
+                if (blocker.lineDefId <= 0
+                        || blocker.frontSectorId <= 0
+                        || blocker.backSectorId <= 0
+                        || blocker.frontSideDefId <= 0
+                        || blocker.backSideDefId <= 0) {
+                    return;
+                }
+
+                blockers.push_back(RuntimePortalDynamicBlocker{
+                        blocker.lineDefId,
+                        blocker.frontSideDefId,
+                        blocker.frontSectorId,
+                        blocker.backSectorId,
+                        true});
+                blockers.push_back(RuntimePortalDynamicBlocker{
+                        blocker.lineDefId,
+                        blocker.backSideDefId,
+                        blocker.backSectorId,
+                        blocker.frontSectorId,
+                        true});
+            });
+}
+
 SectorCollisionMoveResult ResolveSectorDoorDynamicCollidersForPlayerMovement(
         const SectorCollisionMoveState& moveState,
         const SectorCollisionMoveResult& staticResult,

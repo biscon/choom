@@ -174,6 +174,33 @@ void TestRuntimeObjectInspectorHeightCountsBillboardRows()
           "aspect warning height includes text row and trailing gap");
 }
 
+void TestDoorInspectorHeightCountsCoreRows()
+{
+    const float rowH = 40.0f;
+    const float gap = 8.0f;
+    const float anchorStatusHeight = 44.0f;
+    const float textureStatusHeight = 20.0f;
+    const float height = game::SectorEditorDoorInspectorContentHeight(
+            rowH,
+            gap,
+            anchorStatusHeight,
+            textureStatusHeight);
+    const float expected =
+            38.0f
+            + 34.0f
+            + anchorStatusHeight + gap
+            + (rowH + gap) * 4.0f
+            + game::SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap
+            + (rowH + gap) * 3.0f
+            + (rowH + gap) * 4.0f
+            + textureStatusHeight + gap
+            + rowH + gap
+            + rowH + gap;
+
+    Check(Near(height, expected),
+          "door inspector height includes anchor, core fields, motion, interaction controls, texture status, picker, and delete");
+}
+
 } // namespace
 
 int main()
@@ -187,6 +214,7 @@ int main()
     TestTextureRowHeight();
     TestStackedOptionRow();
     TestRuntimeObjectInspectorHeightCountsBillboardRows();
+    TestDoorInspectorHeightCountsCoreRows();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorUiLayoutTests failure(s)\n";
