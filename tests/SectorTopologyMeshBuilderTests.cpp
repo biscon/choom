@@ -1296,7 +1296,7 @@ void TestDynamicPointLightReceiverBoundCandidateSelection()
           "dynamic light sphere overlap uses padded receiver bounds at boundaries");
 }
 
-void TestDoorReceiverBoundsAffectDirectLightsButNotShadowSlots()
+void TestDoorReceiverBoundsAffectDirectLightsAndShadowSlots()
 {
     const std::vector<game::SectorReceiverBounds> staticReceiverBounds = {
             Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
@@ -1342,7 +1342,16 @@ void TestDoorReceiverBoundsAffectDirectLightsButNotShadowSlots()
             1,
             shadowCasters);
     Check(shadowCasters.size() == 1 && shadowCasters[0].lightId == 20,
-            "spotlight shadow slot selection ignores door receiver bounds and keeps static receiver priority");
+            "static receiver bounds still select static-sector spotlight shadow slots");
+
+    game::SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+            selectedShadowLights,
+            visible,
+            combinedReceiverBounds,
+            1,
+            shadowCasters);
+    Check(shadowCasters.size() == 1 && shadowCasters[0].lightId == 10,
+            "door receiver bounds make door-only spotlights eligible for shadow slots");
 }
 
 void TestDynamicSpotLightRuntimeSourcePacking()
@@ -2137,7 +2146,7 @@ int main()
     TestBloomDrawRecordVisibilitySelection();
     TestDynamicPointLightVisibilityCandidateSelection();
     TestDynamicPointLightReceiverBoundCandidateSelection();
-    TestDoorReceiverBoundsAffectDirectLightsButNotShadowSlots();
+    TestDoorReceiverBoundsAffectDirectLightsAndShadowSlots();
     TestDynamicSpotLightRuntimeSourcePacking();
     TestDynamicSpotLightCandidateSelection();
     TestDynamicPointLightRankingAndPacking();

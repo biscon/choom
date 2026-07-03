@@ -222,6 +222,15 @@ private:
     int doorOpaqueDynamicLightDirectionsLoc = -1;
     int doorOpaqueDynamicLightInnerConeCosLoc = -1;
     int doorOpaqueDynamicLightOuterConeCosLoc = -1;
+    int doorOpaqueDynamicLightShadowSlotsLoc = -1;
+    std::array<int, MaxDynamicSpotLightShadowCasters> doorOpaqueShadowLightMatrixLocs = [] {
+        std::array<int, MaxDynamicSpotLightShadowCasters> locs{};
+        locs.fill(-1);
+        return locs;
+    }();
+    int doorOpaqueShadowBiasLoc = -1;
+    int doorOpaqueShadowStrengthLoc = -1;
+    int doorOpaqueShadowSoftnessLoc = -1;
     int doorOpaqueDynamicLightingClampLoc = -1;
     int doorOpaqueDebugModeLoc = -1;
     int doorOpaqueTintLoc = -1;

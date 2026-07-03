@@ -552,6 +552,16 @@ uniform vec3 dynamicLightDirections[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightingClamp;
+uniform int dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS];
+
+#define MAX_DYNAMIC_SHADOW_CASTERS 2
+uniform mat4 shadowLightMatrices[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform float shadowBias[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform sampler2D shadowMap0;
+uniform sampler2D shadowMap1;
+
 uniform int doorDebugMode;
 uniform vec4 doorTint;
 
@@ -564,10 +574,75 @@ uniform vec4 doorTint;
 
 out vec4 finalColor;
 
+const vec2 kPoissonDisk[12] = vec2[12](
+    vec2(-0.326, -0.406),
+    vec2(-0.840, -0.074),
+    vec2(-0.696,  0.457),
+    vec2(-0.203,  0.621),
+    vec2( 0.962, -0.195),
+    vec2( 0.473, -0.480),
+    vec2( 0.519,  0.767),
+    vec2( 0.185, -0.893),
+    vec2( 0.507,  0.064),
+    vec2( 0.896,  0.412),
+    vec2(-0.322, -0.933),
+    vec2(-0.792, -0.598)
+);
+
 vec3 SafeNormalize(vec3 value, vec3 fallback)
 {
     float lengthSq = dot(value, value);
     return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
+}
+
+float SampleShadowMap(int shadowSlot, vec2 uv)
+{
+    return shadowSlot == 0 ? texture(shadowMap0, uv).r : texture(shadowMap1, uv).r;
+}
+
+float DynamicSpotLightShadowVisibility(
+        int shadowSlot,
+        vec3 worldPosition,
+        vec3 worldNormal,
+        vec3 surfaceToLightDirection)
+{
+    if (shadowSlot < 0 || shadowSlot >= MAX_DYNAMIC_SHADOW_CASTERS) {
+        return 1.0;
+    }
+
+    vec4 lightClip = shadowLightMatrices[shadowSlot] * vec4(worldPosition, 1.0);
+    if (lightClip.w <= 0.0) {
+        return 1.0;
+    }
+
+    vec3 lightNdc = lightClip.xyz / lightClip.w;
+    vec3 shadowCoord = lightNdc * 0.5 + 0.5;
+    if (shadowCoord.x < 0.0 || shadowCoord.x > 1.0 ||
+            shadowCoord.y < 0.0 || shadowCoord.y > 1.0 ||
+            shadowCoord.z < 0.0 || shadowCoord.z > 1.0) {
+        return 1.0;
+    }
+
+    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap0, 0));
+    float normalLightDot = max(dot(
+            SafeNormalize(worldNormal, vec3(0.0, 1.0, 0.0)),
+            SafeNormalize(surfaceToLightDirection, vec3(0.0, 1.0, 0.0))), 0.0);
+    float effectiveBias = min(shadowBias[shadowSlot] * (1.0 + (1.0 - normalLightDot) * 2.0), 0.02);
+    float compareDepth = shadowCoord.z - effectiveBias;
+    float softness = clamp(shadowSoftness[shadowSlot], 0.0, 8.0);
+    if (softness <= 0.0) {
+        float shadowDepth = SampleShadowMap(shadowSlot, shadowCoord.xy);
+        return compareDepth <= shadowDepth ? 1.0 : 0.0;
+    }
+
+    vec2 radius = max(0.25, softness) * texelSize;
+    float visible = 0.0;
+    for (int i = 0; i < 12; ++i) {
+        vec2 sampleUv = clamp(shadowCoord.xy + kPoissonDisk[i] * radius, vec2(0.0), vec2(1.0));
+        float shadowDepth = SampleShadowMap(shadowSlot, sampleUv);
+        visible += compareDepth <= shadowDepth ? 1.0 : 0.0;
+    }
+    return visible / 12.0;
 }
 
 void main()
@@ -617,6 +692,15 @@ void main()
                 coneAtten = abs(innerConeCos - outerConeCos) > 0.0001
                         ? smoothstep(outerConeCos, innerConeCos, coneDot)
                         : step(innerConeCos, coneDot);
+                int shadowSlot = dynamicLightShadowSlots[i];
+                if (shadowSlot >= 0) {
+                    float visibility = DynamicSpotLightShadowVisibility(
+                            shadowSlot,
+                            fragWorldPosition,
+                            worldNormal,
+                            lightDirection);
+                    coneAtten *= mix(1.0, visibility, clamp(shadowStrength[shadowSlot], 0.0, 1.0));
+                }
             }
             dynamicDirect += dynamicLightColors[i] * dynamicLightIntensities[i] * atten * ndotl * coneAtten;
         }
@@ -1282,6 +1366,11 @@ bool LoadDoorOpaqueShader(
         int& dynamicLightDirectionsLoc,
         int& dynamicLightInnerConeCosLoc,
         int& dynamicLightOuterConeCosLoc,
+        int& dynamicLightShadowSlotsLoc,
+        std::array<int, MaxDynamicSpotLightShadowCasters>& shadowLightMatrixLocs,
+        int& shadowBiasLoc,
+        int& shadowStrengthLoc,
+        int& shadowSoftnessLoc,
         int& dynamicLightingClampLoc,
         int& debugModeLoc,
         int& tintLoc,
@@ -1300,6 +1389,11 @@ bool LoadDoorOpaqueShader(
         dynamicLightDirectionsLoc = -1;
         dynamicLightInnerConeCosLoc = -1;
         dynamicLightOuterConeCosLoc = -1;
+        dynamicLightShadowSlotsLoc = -1;
+        shadowLightMatrixLocs.fill(-1);
+        shadowBiasLoc = -1;
+        shadowStrengthLoc = -1;
+        shadowSoftnessLoc = -1;
         dynamicLightingClampLoc = -1;
         debugModeLoc = -1;
         tintLoc = -1;
@@ -1315,6 +1409,8 @@ bool LoadDoorOpaqueShader(
     shader.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(shader, "matModel");
     shader.locs[SHADER_LOC_MATRIX_NORMAL] = GetShaderLocation(shader, "matNormal");
     shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(shader, "texture0");
+    shader.locs[SHADER_LOC_MAP_ROUGHNESS] = GetShaderLocation(shader, "shadowMap0");
+    shader.locs[SHADER_LOC_MAP_OCCLUSION] = GetShaderLocation(shader, "shadowMap1");
     textureLoc = shader.locs[SHADER_LOC_MAP_DIFFUSE];
     dynamicLightCountLoc = GetShaderLocation(shader, "dynamicLightCount");
     dynamicLightPositionsLoc = GetShaderLocationArrayBase(shader, "dynamicLightPositions");
@@ -1325,6 +1421,13 @@ bool LoadDoorOpaqueShader(
     dynamicLightDirectionsLoc = GetShaderLocationArrayBase(shader, "dynamicLightDirections");
     dynamicLightInnerConeCosLoc = GetShaderLocationArrayBase(shader, "dynamicLightInnerConeCos");
     dynamicLightOuterConeCosLoc = GetShaderLocationArrayBase(shader, "dynamicLightOuterConeCos");
+    dynamicLightShadowSlotsLoc = GetShaderLocationArrayBase(shader, "dynamicLightShadowSlots");
+    for (std::size_t i = 0; i < MaxDynamicSpotLightShadowCasters; ++i) {
+        shadowLightMatrixLocs[i] = GetShaderLocationArrayElement(shader, "shadowLightMatrices", i);
+    }
+    shadowBiasLoc = GetShaderLocationArrayBase(shader, "shadowBias");
+    shadowStrengthLoc = GetShaderLocationArrayBase(shader, "shadowStrength");
+    shadowSoftnessLoc = GetShaderLocationArrayBase(shader, "shadowSoftness");
     dynamicLightingClampLoc = GetShaderLocation(shader, "dynamicLightingClamp");
     debugModeLoc = GetShaderLocation(shader, "doorDebugMode");
     tintLoc = GetShaderLocation(shader, "doorTint");
@@ -1763,6 +1866,11 @@ bool SectorMeshPreview::RebuildRendererResources(
                 doorOpaqueDynamicLightDirectionsLoc,
                 doorOpaqueDynamicLightInnerConeCosLoc,
                 doorOpaqueDynamicLightOuterConeCosLoc,
+                doorOpaqueDynamicLightShadowSlotsLoc,
+                doorOpaqueShadowLightMatrixLocs,
+                doorOpaqueShadowBiasLoc,
+                doorOpaqueShadowStrengthLoc,
+                doorOpaqueShadowSoftnessLoc,
                 doorOpaqueDynamicLightingClampLoc,
                 doorOpaqueDebugModeLoc,
                 doorOpaqueTintLoc,
@@ -1939,6 +2047,8 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
 
     if (doorOpaqueMaterialLoaded) {
         doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = doorOpaqueDefaultMaterialTexture;
+        doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
+        doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = Texture2D{};
         UnloadMaterial(doorOpaqueMaterial);
         doorOpaqueMaterial = Material{};
         doorOpaqueDefaultMaterialTexture = Texture2D{};
@@ -1953,6 +2063,11 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
         doorOpaqueDynamicLightDirectionsLoc = -1;
         doorOpaqueDynamicLightInnerConeCosLoc = -1;
         doorOpaqueDynamicLightOuterConeCosLoc = -1;
+        doorOpaqueDynamicLightShadowSlotsLoc = -1;
+        doorOpaqueShadowLightMatrixLocs.fill(-1);
+        doorOpaqueShadowBiasLoc = -1;
+        doorOpaqueShadowStrengthLoc = -1;
+        doorOpaqueShadowSoftnessLoc = -1;
         doorOpaqueDynamicLightingClampLoc = -1;
         doorOpaqueDebugModeLoc = -1;
         doorOpaqueTintLoc = -1;
@@ -2146,6 +2261,21 @@ void SectorMeshPreview::DrawRuntimeDoors(
             dynamicLightingEnabled,
             runtimeSeconds,
             dynamicPointLights);
+    const SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms =
+            PackSectorPreviewDynamicSpotLightShadowUniforms(
+                    dynamicPointLights,
+                    dynamicSpotLightShadowCasters,
+                    dynamicSpotLightShadowMatrices);
+    UploadDynamicSpotLightShadowUniforms(
+            doorOpaqueMaterial.shader,
+            doorOpaqueDynamicLightShadowSlotsLoc,
+            doorOpaqueShadowLightMatrixLocs,
+            doorOpaqueShadowBiasLoc,
+            doorOpaqueShadowStrengthLoc,
+            doorOpaqueShadowSoftnessLoc,
+            shadowUniforms);
+    doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = dynamicSpotLightShadowMaps[0].depth;
+    doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = dynamicSpotLightShadowMaps[1].depth;
     if (doorOpaqueDebugModeLoc >= 0) {
         const int debugMode = DoorLightingDebugModeShaderValue(doorLightingDebugMode);
         SetShaderValue(doorOpaqueMaterial.shader, doorOpaqueDebugModeLoc, &debugMode, SHADER_UNIFORM_INT);
@@ -2275,6 +2405,8 @@ void SectorMeshPreview::DrawRuntimeDoors(
         }
     }
     doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = doorOpaqueDefaultMaterialTexture;
+    doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
+    doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = Texture2D{};
     rlActiveTextureSlot(0);
     rlSetTexture(0);
     rlEnableColorBlend();
@@ -2961,7 +3093,7 @@ void SectorMeshPreview::UpdateVisibilityDebug(
     SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
             dynamicPointLights,
             visibilityResult,
-            meshes.sectorReceiverBounds,
+            directDynamicLightReceiverBounds,
             MaxDynamicSpotLightShadowCasters,
             dynamicSpotLightShadowCasters);
     BuildSectorPreviewDynamicSpotLightShadowMatrices(
