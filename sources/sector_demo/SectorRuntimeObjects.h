@@ -24,6 +24,10 @@ constexpr size_t kSectorRuntimeObjectInitialCapacity = 128;
 constexpr float kSectorBillboardDefaultAlphaCutoff = 0.5f;
 constexpr float kSectorDoorPortalBlockEpsilon = 0.001f;
 constexpr float kSectorDoorAutoOpenFallbackDistance = 2.0f;
+// Shadow-only aperture seal margins for procedural door spotlight casters.
+// These counter shadow bias peter-panning at closed doorway edges without changing visuals or collision.
+constexpr float kSectorDoorShadowCasterVerticalSealMarginWorld = 0.08f;
+constexpr float kSectorDoorShadowCasterHorizontalSealMarginWorld = 0.04f;
 
 struct SectorPlacedRuntimeObjectEntity {
     int placedObjectId = 0;
@@ -278,6 +282,11 @@ SectorDoorSlabMeshData BuildSectorDoorSlabMeshData(const SectorDoorRender& rende
 Matrix BuildSectorDoorSlabModelMatrix(
         const SectorObjectTransform& transform,
         const SectorDoorResolvedAnchor& anchor);
+
+Matrix BuildSectorDoorShadowCasterModelMatrix(
+        const SectorDoorShadowCaster& caster,
+        float visualWidth,
+        float visualHeight);
 
 Vector3 EvaluateSectorObjectAmbientCubeLighting(
         const BakedObjectLightingSample& sample,

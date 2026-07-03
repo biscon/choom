@@ -2243,7 +2243,6 @@ void SectorMeshPreview::PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWor
                     SectorDoor& door,
                     SectorDoorResolvedAnchor& anchor,
                     SectorDoorRender& render) {
-                const std::size_t casterBegin = runtimeDoorShadowCasters.size();
                 if (!AppendSectorDoorShadowCaster(
                             entity,
                             transform,
@@ -2255,22 +2254,21 @@ void SectorMeshPreview::PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWor
                     return;
                 }
 
-                const SectorDoorShadowCaster& caster = runtimeDoorShadowCasters[casterBegin];
                 DoorMeshCacheEntry& cacheEntry = doorMeshCache[door.placedObjectId];
                 cacheEntry.seenThisFrame = true;
                 const bool meshDirty = cacheEntry.mesh.vertexCount <= 0
-                        || cacheEntry.width != caster.width
-                        || cacheEntry.height != caster.height
-                        || cacheEntry.thickness != caster.thickness;
+                        || cacheEntry.width != render.width
+                        || cacheEntry.height != render.height
+                        || cacheEntry.thickness != render.thickness;
                 if (meshDirty) {
                     if (cacheEntry.mesh.vertexCount > 0) {
                         UnloadMesh(cacheEntry.mesh);
                     }
                     cacheEntry.meshData = BuildSectorDoorSlabMeshData(render);
                     cacheEntry.mesh = CreateDoorSlabMesh(cacheEntry.meshData);
-                    cacheEntry.width = caster.width;
-                    cacheEntry.height = caster.height;
-                    cacheEntry.thickness = caster.thickness;
+                    cacheEntry.width = render.width;
+                    cacheEntry.height = render.height;
+                    cacheEntry.thickness = render.thickness;
                 }
             });
 
@@ -2886,7 +2884,11 @@ void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
             if (cacheIt == doorMeshCache.end() || cacheIt->second.mesh.vertexCount <= 0) {
                 continue;
             }
-            DrawMesh(cacheIt->second.mesh, dynamicSpotLightShadowMaterial, caster.model);
+            const Matrix shadowModel = BuildSectorDoorShadowCasterModelMatrix(
+                    caster,
+                    cacheIt->second.width,
+                    cacheIt->second.height);
+            DrawMesh(cacheIt->second.mesh, dynamicSpotLightShadowMaterial, shadowModel);
         }
         dynamicSpotLightShadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = dynamicSpotLightShadowDefaultTexture;
         rlDisableDepthTest();

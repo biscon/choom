@@ -257,6 +257,34 @@ Matrix BuildSectorDoorSlabModelMatrix(
             0.0f, 0.0f, 0.0f, 1.0f};
 }
 
+Matrix BuildSectorDoorShadowCasterModelMatrix(
+        const SectorDoorShadowCaster& caster,
+        float visualWidth,
+        float visualHeight)
+{
+    Matrix model = caster.model;
+    if (visualWidth <= 0.0f
+            || visualHeight <= 0.0f
+            || caster.width <= 0.0f
+            || caster.height <= 0.0f
+            || !std::isfinite(visualWidth)
+            || !std::isfinite(visualHeight)
+            || !std::isfinite(caster.width)
+            || !std::isfinite(caster.height)) {
+        return model;
+    }
+
+    const float scaleX = caster.width / visualWidth;
+    const float scaleY = caster.height / visualHeight;
+    model.m0 *= scaleX;
+    model.m1 *= scaleX;
+    model.m2 *= scaleX;
+    model.m4 *= scaleY;
+    model.m5 *= scaleY;
+    model.m6 *= scaleY;
+    return model;
+}
+
 Vector3 EvaluateSectorObjectAmbientCubeLighting(
         const BakedObjectLightingSample& sample,
         Vector3 worldNormal)
@@ -464,8 +492,8 @@ bool AppendSectorDoorShadowCaster(
             entity,
             BuildSectorDoorSlabModelMatrix(transform, anchor),
             transform.position,
-            render.width,
-            render.height,
+            render.width + 2.0f * kSectorDoorShadowCasterHorizontalSealMarginWorld,
+            render.height + 2.0f * kSectorDoorShadowCasterVerticalSealMarginWorld,
             render.thickness});
     return true;
 }

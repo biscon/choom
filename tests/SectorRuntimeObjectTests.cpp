@@ -1418,16 +1418,46 @@ void TestSectorDoorShadowCasterCollectionIncludesValidDoor()
     game::CollectSectorDoorShadowCasters(world, casters);
     const game::SectorObjectTransform& transform = world.Get<game::SectorObjectTransform>(door);
     const game::SectorDoorRender& render = world.Get<game::SectorDoorRender>(door);
+    const game::SectorDoorCollider& collider = world.Get<game::SectorDoorCollider>(door);
+    const float expectedShadowWidth =
+            render.width + 2.0f * game::kSectorDoorShadowCasterHorizontalSealMarginWorld;
+    const float expectedShadowHeight =
+            render.height + 2.0f * game::kSectorDoorShadowCasterVerticalSealMarginWorld;
 
     Check(casters.size() == 1
                   && casters[0].placedObjectId == 1
                   && casters[0].entity == door
                   && Near(casters[0].position, transform.position)
                   && NearTranslation(casters[0].model, transform.position)
-                  && Near(casters[0].width, render.width)
-                  && Near(casters[0].height, render.height)
+                  && Near(casters[0].width, expectedShadowWidth)
+                  && Near(casters[0].height, expectedShadowHeight)
                   && Near(casters[0].thickness, render.thickness),
-            "door shadow caster collection includes a valid renderable procedural door");
+            "door shadow caster collection includes a valid renderable procedural door with seal margins");
+
+    const game::SectorDoorSlabMeshData visualMesh = game::BuildSectorDoorSlabMeshData(render);
+    const Matrix shadowModel = game::BuildSectorDoorShadowCasterModelMatrix(
+            casters[0],
+            render.width,
+            render.height);
+    Check(visualMesh.vertices.size() >= 8
+                  && Near(Vector3Distance(
+                                  Vector3Transform(visualMesh.vertices[0].position, shadowModel),
+                                  Vector3Transform(visualMesh.vertices[1].position, shadowModel)),
+                          expectedShadowWidth)
+                  && Near(Vector3Distance(
+                                  Vector3Transform(visualMesh.vertices[0].position, shadowModel),
+                                  Vector3Transform(visualMesh.vertices[3].position, shadowModel)),
+                          expectedShadowHeight)
+                  && Near(Vector3Distance(
+                                  Vector3Transform(visualMesh.vertices[0].position, shadowModel),
+                                  Vector3Transform(visualMesh.vertices[5].position, shadowModel)),
+                          render.thickness)
+                  && NearTranslation(shadowModel, transform.position),
+            "door shadow caster model expands local width and height only around the current slab center");
+    Check(Near(collider.halfExtents.x * 2.0f, render.width)
+                  && Near(collider.halfExtents.y * 2.0f, render.thickness)
+                  && Near(collider.top - collider.bottom, render.height),
+            "door shadow seal margins do not change visual render data or collision dimensions");
 }
 
 void TestSectorDoorShadowCasterCollectionSkipsNonRenderableDoors()
@@ -1506,7 +1536,13 @@ void TestSectorDoorShadowCasterUsesAnimatedTransform()
                           closedPosition.x + slideDirection.x * halfOpenOffset,
                           closedPosition.y,
                           closedPosition.z + slideDirection.z * halfOpenOffset})
-                  && NearTranslation(casters[0].model, casters[0].position),
+                  && NearTranslation(casters[0].model, casters[0].position)
+                  && Near(casters[0].width,
+                          world.Get<game::SectorDoorRender>(door).width
+                                  + 2.0f * game::kSectorDoorShadowCasterHorizontalSealMarginWorld)
+                  && Near(casters[0].height,
+                          world.Get<game::SectorDoorRender>(door).height
+                                  + 2.0f * game::kSectorDoorShadowCasterVerticalSealMarginWorld),
             "partially open door shadow caster uses current animated transform");
 
     motion.openFraction = 1.0f;
@@ -1520,6 +1556,7 @@ void TestSectorDoorShadowCasterUsesAnimatedTransform()
                           closedPosition.x + slideDirection.x * openOffset,
                           closedPosition.y,
                           closedPosition.z + slideDirection.z * openOffset})
+                  && NearTranslation(casters[0].model, casters[0].position)
                   && !Near(casters[0].position, closedPosition),
             "open door shadow caster moves away from the closed authoring anchor");
 }
