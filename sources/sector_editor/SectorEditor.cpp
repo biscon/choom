@@ -10658,6 +10658,8 @@ void SectorEditor::OpenPreviewSettingsModal()
     state.previewSettingsModal.draftSkySettings = NormalizeSectorTopologySkySettings(state.topologyMap.skySettings);
     state.previewSettingsModal.draftDirectionalLight =
             NormalizeSectorTopologyDirectionalLightSettings(state.topologyMap.directionalLight);
+    state.previewSettingsModal.draftLightmapSettings =
+            NormalizeSectorPreviewObjectProbeSettings(state.topologyMap.lightmapSettings);
 }
 
 void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
@@ -10674,6 +10676,8 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const SectorTopologyDirectionalLightSettings draftDirectionalLight =
             NormalizeSectorTopologyDirectionalLightSettings(
                     state.previewSettingsModal.draftDirectionalLight);
+    const SectorLightmapBakeSettings draftLightmapSettings =
+            NormalizeSectorPreviewObjectProbeSettings(state.previewSettingsModal.draftLightmapSettings);
     const bool previewChanged = !SamePreviewSettings(
             state.topologyMap.previewSettings,
             draftPreviewSettings);
@@ -10681,7 +10685,12 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const bool directionalChanged = !SameDirectionalLightSettings(
             state.topologyMap.directionalLight,
             draftDirectionalLight);
-    if (!previewChanged && !skyChanged && !directionalChanged) {
+    const SectorLightmapBakeSettings currentLightmapSettings =
+            NormalizeSectorPreviewObjectProbeSettings(state.topologyMap.lightmapSettings);
+    const bool objectProbeSettingsChanged =
+            currentLightmapSettings.objectProbeSpacingWorld != draftLightmapSettings.objectProbeSpacingWorld
+            || currentLightmapSettings.objectProbeHeightWorld != draftLightmapSettings.objectProbeHeightWorld;
+    if (!previewChanged && !skyChanged && !directionalChanged && !objectProbeSettingsChanged) {
         state.previewSettingsModal = SectorPreviewSettingsModalState{};
         statusText = "Preview settings unchanged";
         return;
@@ -10695,6 +10704,7 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     state.topologyMap.previewSettings = draftPreviewSettings;
     state.topologyMap.skySettings = draftSkySettings;
     state.topologyMap.directionalLight = draftDirectionalLight;
+    ApplySectorPreviewObjectProbeSettings(state.topologyMap, draftLightmapSettings);
     MarkTopologyDocumentEdited("Preview settings updated");
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
     if (skyChanged && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {

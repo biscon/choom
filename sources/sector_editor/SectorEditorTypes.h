@@ -323,6 +323,7 @@ struct SectorPreviewSettingsModalState {
     SectorFpsControllerConfig draftConfig;
     SectorTopologySkySettings draftSkySettings;
     SectorTopologyDirectionalLightSettings draftDirectionalLight;
+    SectorLightmapBakeSettings draftLightmapSettings;
     engine::UIFloatInputState walkSpeedInput;
     engine::UIFloatInputState runSpeedInput;
     engine::UIFloatInputState mouseSensitivityInput;
@@ -344,6 +345,8 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState lightDirectionYInput;
     engine::UIFloatInputState lightDirectionZInput;
     engine::UIFloatInputState lightIntensityInput;
+    engine::UIFloatInputState objectProbeSpacingInput;
+    engine::UIFloatInputState objectProbeHeightInput;
     engine::UIIntInputState lightColorRedInput;
     engine::UIIntInputState lightColorGreenInput;
     engine::UIIntInputState lightColorBlueInput;

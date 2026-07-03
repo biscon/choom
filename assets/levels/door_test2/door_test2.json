@@ -105,17 +105,32 @@
     "headBobStrength": 0.019999999552965164,
     "headBobFrequency": 2.0
   },
+  "directionalLight": {
+    "enabled": false,
+    "directionToLight": [
+      -0.38533732295036316,
+      0.8807710409164429,
+      -0.275240957736969
+    ],
+    "color": {
+      "r": 255,
+      "g": 244,
+      "b": 214,
+      "a": 255
+    },
+    "intensity": 1.0
+  },
   "bakedLightmap": {
     "path": "assets/levels/door_test2/door_test2.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "8edc0dee40338d64",
+    "sourceHash": "10c5cef559728acb",
     "objectProbes": {
       "path": "assets/levels/door_test2/door_test2.lightmap.object_probes.bin",
       "version": 1,
-      "sourceHash": "8edc0dee40338d64",
-      "count": 36,
-      "probeSpacingWorld": 4.0,
+      "sourceHash": "10c5cef559728acb",
+      "count": 630,
+      "probeSpacingWorld": 1.0,
       "probeHeightWorld": 1.2000000476837158,
       "format": "ambientCubeF32LE"
     }

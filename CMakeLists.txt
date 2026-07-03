@@ -277,8 +277,16 @@ if(BUILD_TESTING)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp
+            sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorTextureTypes.cpp
+            sources/sector_demo/SectorTopologyGeometry.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
     )
     target_include_directories(sector_editor_ui_layout_tests PRIVATE sources)
+    target_compile_definitions(sector_editor_ui_layout_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(sector_editor_ui_layout_tests PRIVATE raylib)
     add_test(NAME sector_editor_ui_layout COMMAND sector_editor_ui_layout_tests)
 endif()

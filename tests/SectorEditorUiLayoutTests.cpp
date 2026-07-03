@@ -1,4 +1,5 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/SectorEditorPreviewSettingsModal.h"
 
 #include <cmath>
 #include <iostream>
@@ -201,6 +202,56 @@ void TestDoorInspectorHeightCountsCoreRows()
           "door inspector height includes anchor, core fields, motion, interaction controls, texture status, picker, and delete");
 }
 
+void TestPreviewSettingsModalCopiesObjectProbeSettings()
+{
+    game::SectorTopologyMap map;
+    map.lightmapSettings.objectProbeSpacingWorld = 6.5f;
+    map.lightmapSettings.objectProbeHeightWorld = 2.25f;
+
+    game::SectorPreviewSettingsModalState modal;
+    modal.draftLightmapSettings =
+            game::NormalizeSectorPreviewObjectProbeSettings(map.lightmapSettings);
+
+    Check(Near(modal.draftLightmapSettings.objectProbeSpacingWorld, 6.5f),
+          "preview settings modal draft copies object probe spacing");
+    Check(Near(modal.draftLightmapSettings.objectProbeHeightWorld, 2.25f),
+          "preview settings modal draft copies object probe height");
+}
+
+void TestPreviewSettingsModalAppliesObjectProbeSettingsAndChangesHash()
+{
+    game::SectorTopologyMap map;
+    const std::string originalHash = game::ComputeSectorLightmapSourceHash(map);
+
+    game::SectorLightmapBakeSettings draft = map.lightmapSettings;
+    draft.objectProbeSpacingWorld = 5.5f;
+    draft.objectProbeHeightWorld = 1.6f;
+
+    const bool changed = game::ApplySectorPreviewObjectProbeSettings(map, draft);
+
+    Check(changed, "preview settings modal apply reports changed object probe settings");
+    Check(Near(map.lightmapSettings.objectProbeSpacingWorld, 5.5f),
+          "preview settings modal apply writes object probe spacing");
+    Check(Near(map.lightmapSettings.objectProbeHeightWorld, 1.6f),
+          "preview settings modal apply writes object probe height");
+    Check(game::ComputeSectorLightmapSourceHash(map) != originalHash,
+          "object probe settings update changes lightmap source hash");
+}
+
+void TestPreviewSettingsModalResetsObjectProbeDefaults()
+{
+    game::SectorPreviewSettingsModalState modal;
+    modal.draftLightmapSettings.objectProbeSpacingWorld = 9.0f;
+    modal.draftLightmapSettings.objectProbeHeightWorld = 3.0f;
+
+    game::ResetSectorPreviewSettingsModalLightingDefaults(modal);
+
+    Check(Near(modal.draftLightmapSettings.objectProbeSpacingWorld, 4.0f),
+          "preview settings modal reset restores default object probe spacing");
+    Check(Near(modal.draftLightmapSettings.objectProbeHeightWorld, 1.2f),
+          "preview settings modal reset restores default object probe height");
+}
+
 } // namespace
 
 int main()
@@ -215,6 +266,9 @@ int main()
     TestStackedOptionRow();
     TestRuntimeObjectInspectorHeightCountsBillboardRows();
     TestDoorInspectorHeightCountsCoreRows();
+    TestPreviewSettingsModalCopiesObjectProbeSettings();
+    TestPreviewSettingsModalAppliesObjectProbeSettingsAndChangesHash();
+    TestPreviewSettingsModalResetsObjectProbeDefaults();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorUiLayoutTests failure(s)\n";
