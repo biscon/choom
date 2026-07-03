@@ -7097,6 +7097,7 @@ void TestEditorDoorPlacementCreatesPortalAnchoredObject()
                   && !object.door.autoOpen,
           "door placement helper preserves authored door defaults");
 
+    map.runtimeObjects[0].door.normalOffset = 0.125f;
     const game::SectorEditorTopologyRenderCache cache =
             game::BuildSectorEditorTopologyRenderCache(
                     map,
@@ -7108,6 +7109,11 @@ void TestEditorDoorPlacementCreatesPortalAnchoredObject()
                   && cache.runtimeObjects[0].isDoor
                   && cache.runtimeObjects[0].doorFootprintValid,
           "2D render cache builds a drawable door footprint");
+    Check(Near(cache.runtimeObjects[0].map.x,
+               game::SectorCoordToVisibleAuthoring(64)
+                       + game::SectorWorldToAuthoringDistance(0.125f))
+                  && Near(cache.runtimeObjects[0].map.y, game::SectorCoordToVisibleAuthoring(32)),
+          "2D render cache offsets door footprint along the resolved front-to-back normal");
 }
 
 void TestEditorDoorPlacementRejectsOneSidedWall()

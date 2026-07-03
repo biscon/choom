@@ -34,6 +34,8 @@ constexpr float PreviewHeadBobFrequencyMax = 20.0f;
 constexpr float SkyVerticalScaleMin = 0.01f;
 constexpr float SkyVerticalScaleMax = 100.0f;
 constexpr float DirectionalLightMinLengthSqr = 0.000001f;
+constexpr float DoorAnchorSideProbeDistance = 0.001f;
+constexpr float DoorAnchorSideEpsilon = 0.000001f;
 
 float ClampFinite(float value, float fallback, float minValue, float maxValue)
 {
@@ -53,6 +55,21 @@ float SectorCoordToWorldDistanceLocal(SectorCoord value)
 Vector2 SectorCoordToWorldPosition2Local(SectorCoord x, SectorCoord y)
 {
     return Vector2{SectorCoordToWorldDistanceLocal(x), SectorCoordToWorldDistanceLocal(y)};
+}
+
+float SignedDistanceFromDirectedLine(Vector2 origin, Vector2 tangent, Vector2 point)
+{
+    return tangent.x * (point.y - origin.y) - tangent.y * (point.x - origin.x);
+}
+
+bool ProbeIsInsideDirectedSide(Vector2 origin, Vector2 tangent, Vector2 point)
+{
+    return SignedDistanceFromDirectedLine(origin, tangent, point) > DoorAnchorSideEpsilon;
+}
+
+bool ProbeIsOutsideDirectedSide(Vector2 origin, Vector2 tangent, Vector2 point)
+{
+    return SignedDistanceFromDirectedLine(origin, tangent, point) < -DoorAnchorSideEpsilon;
 }
 
 template<typename T>
@@ -587,11 +604,31 @@ SectorResolvedDoorAnchor ResolveSectorDoorAnchor(
             delta.x / resolved.portalWidth,
             delta.y / resolved.portalWidth
     };
-    resolved.normal = Vector2{resolved.tangent.y, -resolved.tangent.x};
     resolved.midpoint = Vector2{
             (resolved.endpointA.x + resolved.endpointB.x) * 0.5f,
             (resolved.endpointA.y + resolved.endpointB.y) * 0.5f
     };
+
+    // Front sidedefs use the linedef start->end direction; back sidedefs use end->start.
+    // A sidedef's sector lies on the positive side of that directed edge. Resolve and
+    // verify the door normal so positive normalOffset always moves front sector -> back sector.
+    Vector2 candidateNormal{resolved.tangent.y, -resolved.tangent.x};
+    const Vector2 backTangent{-resolved.tangent.x, -resolved.tangent.y};
+    const auto pointsTowardBack = [&](Vector2 normal) {
+        const Vector2 probe{
+                resolved.midpoint.x + normal.x * DoorAnchorSideProbeDistance,
+                resolved.midpoint.y + normal.y * DoorAnchorSideProbeDistance};
+        return ProbeIsOutsideDirectedSide(resolved.endpointA, resolved.tangent, probe)
+                && ProbeIsInsideDirectedSide(resolved.endpointB, backTangent, probe);
+    };
+    if (!pointsTowardBack(candidateNormal)) {
+        candidateNormal = Vector2{-candidateNormal.x, -candidateNormal.y};
+        if (!pointsTowardBack(candidateNormal)) {
+            return fail("door anchor normal could not be verified against portal front/back sides");
+        }
+    }
+    resolved.normal = candidateNormal;
+
     resolved.openBottom = SectorAuthoringToWorldDistance(std::max(frontSector->floorZ, backSector->floorZ));
     resolved.openTop = SectorAuthoringToWorldDistance(std::min(frontSector->ceilingZ, backSector->ceilingZ));
     if (!std::isfinite(resolved.openBottom)

@@ -77,6 +77,7 @@ struct SectorPlacedDoor {
     float width = 0.0f;
     float height = 0.0f;
     float thickness = 0.25f;
+    // Positive values move the closed slab from anchor.frontSectorId toward anchor.backSectorId.
     float normalOffset = 0.0f;
     SectorDoorMotionType motion = SectorDoorMotionType::SlideVertical;
     float openDistance = 0.0f;
@@ -101,6 +102,7 @@ struct SectorResolvedDoorAnchor {
     Vector2 endpointA = {};
     Vector2 endpointB = {};
     Vector2 midpoint = {};
+    // Tangent follows the portal front sidedef direction; normal points front sector -> back sector.
     Vector2 tangent = {1.0f, 0.0f};
     Vector2 normal = {0.0f, -1.0f};
 

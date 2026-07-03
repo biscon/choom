@@ -154,6 +154,7 @@ struct SectorDoorResolvedAnchor {
     Vector2 endpointA = {};
     Vector2 endpointB = {};
     Vector2 midpoint = {};
+    // Tangent is the resolved portal front-side direction; normal points front sector -> back sector.
     Vector2 tangent = {1.0f, 0.0f};
     Vector2 normal = {0.0f, -1.0f};
     float openBottom = 0.0f;
@@ -180,6 +181,7 @@ struct SectorDoorRender {
     float width = 0.0f;
     float height = 0.0f;
     float thickness = 0.25f;
+    // Positive values move the closed slab from the front sector toward the back sector.
     float normalOffset = 0.0f;
     std::string textureId;
     Color tint = WHITE;
