@@ -129,6 +129,133 @@ SectorDoorSlabGeometry BuildSectorDoorSlabGeometry(
             Vector3{leftBack.x, topY, leftBack.z}};
 }
 
+SectorDoorSlabMeshData BuildSectorDoorSlabMeshData(const SectorDoorRender& render)
+{
+    SectorDoorSlabMeshData data;
+    if (render.width <= 0.0f
+            || render.height <= 0.0f
+            || render.thickness <= 0.0f
+            || !std::isfinite(render.width)
+            || !std::isfinite(render.height)
+            || !std::isfinite(render.thickness)) {
+        return data;
+    }
+
+    data.vertices.reserve(24);
+    data.indices.reserve(36);
+
+    const float halfWidth = render.width * 0.5f;
+    const float halfHeight = render.height * 0.5f;
+    const float halfThickness = render.thickness * 0.5f;
+
+    const Vector3 bottomFrontLeft{-halfWidth, -halfHeight, halfThickness};
+    const Vector3 bottomFrontRight{halfWidth, -halfHeight, halfThickness};
+    const Vector3 bottomBackRight{halfWidth, -halfHeight, -halfThickness};
+    const Vector3 bottomBackLeft{-halfWidth, -halfHeight, -halfThickness};
+    const Vector3 topFrontLeft{-halfWidth, halfHeight, halfThickness};
+    const Vector3 topFrontRight{halfWidth, halfHeight, halfThickness};
+    const Vector3 topBackRight{halfWidth, halfHeight, -halfThickness};
+    const Vector3 topBackLeft{-halfWidth, halfHeight, -halfThickness};
+
+    const auto appendFace = [&data, tint = render.tint](
+            Vector3 normal,
+            Vector3 a,
+            Vector3 b,
+            Vector3 c,
+            Vector3 d,
+            float uScale,
+            float vScale) {
+        const uint16_t base = static_cast<uint16_t>(data.vertices.size());
+        data.vertices.push_back(SectorDoorSlabMeshVertex{a, normal, Vector2{0.0f, vScale}, tint});
+        data.vertices.push_back(SectorDoorSlabMeshVertex{b, normal, Vector2{uScale, vScale}, tint});
+        data.vertices.push_back(SectorDoorSlabMeshVertex{c, normal, Vector2{uScale, 0.0f}, tint});
+        data.vertices.push_back(SectorDoorSlabMeshVertex{d, normal, Vector2{0.0f, 0.0f}, tint});
+        data.indices.push_back(base + 0);
+        data.indices.push_back(base + 1);
+        data.indices.push_back(base + 2);
+        data.indices.push_back(base + 0);
+        data.indices.push_back(base + 2);
+        data.indices.push_back(base + 3);
+    };
+
+    appendFace(
+            Vector3{0.0f, 0.0f, 1.0f},
+            bottomFrontLeft,
+            bottomFrontRight,
+            topFrontRight,
+            topFrontLeft,
+            render.width,
+            render.height);
+    appendFace(
+            Vector3{0.0f, 0.0f, -1.0f},
+            bottomBackRight,
+            bottomBackLeft,
+            topBackLeft,
+            topBackRight,
+            render.width,
+            render.height);
+    appendFace(
+            Vector3{1.0f, 0.0f, 0.0f},
+            bottomFrontRight,
+            bottomBackRight,
+            topBackRight,
+            topFrontRight,
+            render.thickness,
+            render.height);
+    appendFace(
+            Vector3{-1.0f, 0.0f, 0.0f},
+            bottomBackLeft,
+            bottomFrontLeft,
+            topFrontLeft,
+            topBackLeft,
+            render.thickness,
+            render.height);
+    appendFace(
+            Vector3{0.0f, 1.0f, 0.0f},
+            topFrontLeft,
+            topFrontRight,
+            topBackRight,
+            topBackLeft,
+            render.width,
+            render.thickness);
+    appendFace(
+            Vector3{0.0f, -1.0f, 0.0f},
+            bottomBackLeft,
+            bottomBackRight,
+            bottomFrontRight,
+            bottomFrontLeft,
+            render.width,
+            render.thickness);
+
+    return data;
+}
+
+Matrix BuildSectorDoorSlabModelMatrix(
+        const SectorObjectTransform& transform,
+        const SectorDoorResolvedAnchor& anchor)
+{
+    Vector3 tangent = Vector3{anchor.tangent.x, 0.0f, anchor.tangent.y};
+    if (Vector3LengthSqr(tangent) <= 0.000001f) {
+        tangent = Vector3{1.0f, 0.0f, 0.0f};
+    } else {
+        tangent = Vector3Normalize(tangent);
+    }
+
+    Vector3 normal = Vector3{anchor.normal.x, 0.0f, anchor.normal.y};
+    if (Vector3LengthSqr(normal) <= 0.000001f) {
+        normal = Vector3{0.0f, 0.0f, -1.0f};
+    } else {
+        normal = Vector3Normalize(normal);
+    }
+
+    const Vector3 up = Vector3{0.0f, 1.0f, 0.0f};
+    return Matrix{
+            tangent.x, up.x, normal.x, transform.position.x,
+            tangent.y, up.y, normal.y, transform.position.y,
+            tangent.z, up.z, normal.z, transform.position.z,
+            0.0f, 0.0f, 0.0f, 1.0f};
+}
+
 namespace {
 
 constexpr const char* SectorRuntimeObjectAssetScopeName = "sector_runtime_objects";

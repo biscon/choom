@@ -50,8 +50,12 @@
         },
         "width": 3.0,
         "height": 3.0,
+        "motion": "slide_left",
         "openDistance": 3.0,
         "speed": 2.5,
+        "autoOpen": true,
+        "interactionDistance": 3.0,
+        "autoOpenDistance": 3.0,
         "textureId": "industrial_ceiling_1"
       },
       "position": [

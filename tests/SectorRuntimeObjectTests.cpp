@@ -53,6 +53,19 @@ bool IsFinite(Vector3 value)
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
+bool IsFinite(Vector2 value)
+{
+    return std::isfinite(value.x) && std::isfinite(value.y);
+}
+
+bool SameColor(Color actual, Color expected)
+{
+    return actual.r == expected.r
+            && actual.g == expected.g
+            && actual.b == expected.b
+            && actual.a == expected.a;
+}
+
 bool LoadJsonFile(const char* path, Json& outJson)
 {
     std::ifstream file(path, std::ios::binary);
@@ -822,6 +835,131 @@ void TestSectorDoorSlabGeometryIsFiniteAndStable()
         Check(Near(Vector3Distance(first.bottomFrontLeft, first.bottomBackLeft), 0.25f)
                       && Near(Vector3Distance(first.topFrontRight, first.topBackRight), 0.25f),
                 "door slab front and back faces stay separated by door thickness");
+    }
+}
+
+void TestSectorDoorSlabMeshDataHasStableAttributes()
+{
+    game::SectorDoorRender render;
+    render.width = 2.0f;
+    render.height = 1.5f;
+    render.thickness = 0.25f;
+    render.tint = Color{180, 210, 240, 255};
+
+    const game::SectorDoorSlabMeshData first = game::BuildSectorDoorSlabMeshData(render);
+    const game::SectorDoorSlabMeshData second = game::BuildSectorDoorSlabMeshData(render);
+
+    Check(first.vertices.size() == 24 && first.indices.size() == 36,
+            "door slab mesh emits duplicated face vertices and triangle indices");
+    Check(first.vertices.size() == second.vertices.size() && first.indices.size() == second.indices.size(),
+            "door slab mesh generation is stable for unchanged render data");
+
+    bool finiteAttributes = true;
+    bool stableAttributes = true;
+    bool colorsOwned = true;
+    for (size_t i = 0; i < first.vertices.size(); ++i) {
+        const game::SectorDoorSlabMeshVertex& vertex = first.vertices[i];
+        const game::SectorDoorSlabMeshVertex& stableVertex = second.vertices[i];
+        finiteAttributes = finiteAttributes
+                && IsFinite(vertex.position)
+                && IsFinite(vertex.normal)
+                && IsFinite(vertex.uv);
+        stableAttributes = stableAttributes
+                && Near(vertex.position, stableVertex.position)
+                && Near(vertex.normal, stableVertex.normal)
+                && Near(vertex.uv, stableVertex.uv)
+                && SameColor(vertex.color, stableVertex.color);
+        colorsOwned = colorsOwned && SameColor(vertex.color, render.tint);
+    }
+    Check(finiteAttributes, "door slab mesh positions normals and UVs are finite");
+    Check(stableAttributes, "door slab mesh vertex attributes are stable");
+    Check(colorsOwned, "door slab mesh stores tint in owned vertex colors");
+
+    bool indicesValid = true;
+    bool stableIndices = true;
+    for (size_t i = 0; i < first.indices.size(); ++i) {
+        indicesValid = indicesValid && first.indices[i] < first.vertices.size();
+        stableIndices = stableIndices && first.indices[i] == second.indices[i];
+    }
+    Check(indicesValid && stableIndices, "door slab mesh indices are valid and stable");
+
+    const Vector3 expectedNormals[6] = {
+            Vector3{0.0f, 0.0f, 1.0f},
+            Vector3{0.0f, 0.0f, -1.0f},
+            Vector3{1.0f, 0.0f, 0.0f},
+            Vector3{-1.0f, 0.0f, 0.0f},
+            Vector3{0.0f, 1.0f, 0.0f},
+            Vector3{0.0f, -1.0f, 0.0f}};
+    const Vector2 expectedUvMax[6] = {
+            Vector2{render.width, render.height},
+            Vector2{render.width, render.height},
+            Vector2{render.thickness, render.height},
+            Vector2{render.thickness, render.height},
+            Vector2{render.width, render.thickness},
+            Vector2{render.width, render.thickness}};
+    bool faceAttributesMatch = true;
+    for (size_t face = 0; face < 6; ++face) {
+        const size_t base = face * 4;
+        for (size_t corner = 0; corner < 4; ++corner) {
+            faceAttributesMatch = faceAttributesMatch
+                    && Near(first.vertices[base + corner].normal, expectedNormals[face]);
+        }
+        faceAttributesMatch = faceAttributesMatch
+                && Near(first.vertices[base + 0].uv, Vector2{0.0f, expectedUvMax[face].y})
+                && Near(first.vertices[base + 1].uv, expectedUvMax[face])
+                && Near(first.vertices[base + 2].uv, Vector2{expectedUvMax[face].x, 0.0f})
+                && Near(first.vertices[base + 3].uv, Vector2{0.0f, 0.0f});
+    }
+    Check(faceAttributesMatch, "door slab mesh duplicates expected per-face normals and UV scales");
+}
+
+void TestSectorDoorSlabModelMatrixPreservesResolvedBasis()
+{
+    for (float normalOffset : {0.0f, 0.25f}) {
+        engine::World world;
+        engine::AssetManager assets;
+        game::SectorRuntimeObjectState state;
+        game::SectorTopologyMap map = MakeDoorPortalMap();
+        game::SectorPlacedDoor door = MakeDoorOnPortal();
+        door.width = 2.0f;
+        door.height = 1.5f;
+        door.thickness = 0.25f;
+        door.normalOffset = normalOffset;
+        map.runtimeObjects.push_back(MakePlacedDoor(40, door));
+
+        game::RefreshSectorRuntimeObjectMapData(state, map);
+        game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+        Check(CountDoorObjects(world) == 1, "door model matrix fixture spawns one door entity");
+
+        const engine::Entity entity = state.placedObjectEntities[0].entity;
+        const game::SectorObjectTransform& transform = world.Get<game::SectorObjectTransform>(entity);
+        const game::SectorDoorResolvedAnchor& anchor = world.Get<game::SectorDoorResolvedAnchor>(entity);
+        const game::SectorDoorRender& render = world.Get<game::SectorDoorRender>(entity);
+        const Matrix model = game::BuildSectorDoorSlabModelMatrix(transform, anchor);
+
+        const Vector3 origin = Vector3Transform(Vector3{}, model);
+        const Vector3 localX = Vector3Subtract(Vector3Transform(Vector3{1.0f, 0.0f, 0.0f}, model), origin);
+        const Vector3 localY = Vector3Subtract(Vector3Transform(Vector3{0.0f, 1.0f, 0.0f}, model), origin);
+        const Vector3 localZ = Vector3Subtract(Vector3Transform(Vector3{0.0f, 0.0f, 1.0f}, model), origin);
+
+        Check(Near(origin, transform.position)
+                      && Near(localX, Vector3{anchor.tangent.x, 0.0f, anchor.tangent.y})
+                      && Near(localY, Vector3{0.0f, 1.0f, 0.0f})
+                      && Near(localZ, Vector3{anchor.normal.x, 0.0f, anchor.normal.y}),
+                "door slab model matrix maps local axes to resolved tangent up and normal basis");
+
+        const game::SectorDoorSlabMeshData mesh = game::BuildSectorDoorSlabMeshData(render);
+        const game::SectorDoorSlabGeometry slab = game::BuildSectorDoorSlabGeometry(transform, anchor, render);
+        Check(mesh.vertices.size() >= 8
+                      && Near(Vector3Transform(mesh.vertices[0].position, model), slab.bottomFrontLeft)
+                      && Near(Vector3Transform(mesh.vertices[1].position, model), slab.bottomFrontRight)
+                      && Near(Vector3Transform(mesh.vertices[2].position, model), slab.topFrontRight)
+                      && Near(Vector3Transform(mesh.vertices[3].position, model), slab.topFrontLeft)
+                      && Near(Vector3Transform(mesh.vertices[4].position, model), slab.bottomBackRight)
+                      && Near(Vector3Transform(mesh.vertices[5].position, model), slab.bottomBackLeft)
+                      && Near(Vector3Transform(mesh.vertices[6].position, model), slab.topBackLeft)
+                      && Near(Vector3Transform(mesh.vertices[7].position, model), slab.topBackRight),
+                "door slab model matrix matches existing world-space slab placement");
     }
 }
 
@@ -2403,6 +2541,8 @@ int main()
     TestSpawnPlacedDoorCopiesResolvedPayloadToEcs();
     TestSpawnPlacedDoorRefreshDoesNotDuplicate();
     TestSectorDoorSlabGeometryIsFiniteAndStable();
+    TestSectorDoorSlabMeshDataHasStableAttributes();
+    TestSectorDoorSlabModelMatrixPreservesResolvedBasis();
     TestSpawnPlacedDoorDerivesDefaultOpenDistance();
     TestSectorDoorMotionAdvancesOpenAndClosed();
     TestSectorDoorMotionClampsAndIgnoresZeroSpeed();

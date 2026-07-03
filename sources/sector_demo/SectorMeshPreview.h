@@ -115,6 +115,7 @@ private:
     void DrawSkyCylinder(const Texture2D& texture);
     void DrawRuntimeBillboards(engine::AssetManager& assets, engine::World& runtimeObjectWorld);
     void DrawRuntimeDoors(engine::AssetManager& assets, engine::World& runtimeObjectWorld);
+    void UnloadDoorMeshes();
     bool EnsureDynamicSpotLightShadowMapResources();
     void UnloadDynamicSpotLightShadowMapResources();
 
@@ -210,7 +211,20 @@ private:
     int doorOpaqueDynamicLightOuterConeCosLoc = -1;
     int doorOpaqueDynamicLightingClampLoc = -1;
     int doorOpaqueDebugModeLoc = -1;
+    int doorOpaqueBakedAmbientCubeLoc = -1;
     bool doorOpaqueShaderLoaded = false;
+    Material doorOpaqueMaterial = {};
+    Texture2D doorOpaqueDefaultMaterialTexture = {};
+    bool doorOpaqueMaterialLoaded = false;
+    struct DoorMeshCacheEntry {
+        Mesh mesh = {};
+        float width = 0.0f;
+        float height = 0.0f;
+        float thickness = 0.0f;
+        Color tint = WHITE;
+        bool seenThisFrame = false;
+    };
+    std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightSources;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;
     std::vector<SectorPreviewDynamicPointLightUniform> dynamicPointLights;

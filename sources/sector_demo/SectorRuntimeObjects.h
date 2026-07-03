@@ -12,6 +12,7 @@
 #include <raylib.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -217,6 +218,18 @@ struct SectorDoorSlabGeometry {
     Vector3 topBackLeft = {};
 };
 
+struct SectorDoorSlabMeshVertex {
+    Vector3 position = {};
+    Vector3 normal = {};
+    Vector2 uv = {};
+    Color color = WHITE;
+};
+
+struct SectorDoorSlabMeshData {
+    std::vector<SectorDoorSlabMeshVertex> vertices;
+    std::vector<uint16_t> indices;
+};
+
 struct SectorBillboardFrameUvs {
     Vector2 topLeft = {};
     Vector2 topRight = {};
@@ -246,6 +259,12 @@ SectorDoorSlabGeometry BuildSectorDoorSlabGeometry(
         const SectorObjectTransform& transform,
         const SectorDoorResolvedAnchor& anchor,
         const SectorDoorRender& render);
+
+SectorDoorSlabMeshData BuildSectorDoorSlabMeshData(const SectorDoorRender& render);
+
+Matrix BuildSectorDoorSlabModelMatrix(
+        const SectorObjectTransform& transform,
+        const SectorDoorResolvedAnchor& anchor);
 
 inline engine::SpriteAnimationHandle RequestSectorBillboardSpriteAnimation(
         engine::AssetManager& assets,
