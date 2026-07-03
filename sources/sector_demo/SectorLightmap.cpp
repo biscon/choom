@@ -1,6 +1,8 @@
 #include "sector_demo/SectorLightmap.h"
 
+#include "sector_demo/SectorColor.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
+#include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorUnits.h"
 
@@ -197,7 +199,7 @@ std::string HashToString(uint64_t hash)
 
 unsigned char FloatToByte(float value)
 {
-    return static_cast<unsigned char>(std::clamp(static_cast<int>(std::lround(value * 255.0f)), 0, 255));
+    return ClampColorByte(value * 255.0f);
 }
 
 float Cross2(Vector2 a, Vector2 b, Vector2 c)
@@ -341,11 +343,6 @@ bool RayIntersectsTriangle(
             outBarycentric0,
             outBarycentric1,
             outBarycentric2);
-}
-
-bool IsFinite(Vector3 value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
 uint32_t FloatToLittleEndianBits(float value)
@@ -724,7 +721,7 @@ bool BuildSectorLightmapBvh(
     }
 
     for (const BakeTriangle& tri : triangles) {
-        if (!IsFinite(tri.worldPosition0) || !IsFinite(tri.worldPosition1) || !IsFinite(tri.worldPosition2)) {
+        if (!IsFiniteVector3(tri.worldPosition0) || !IsFiniteVector3(tri.worldPosition1) || !IsFiniteVector3(tri.worldPosition2)) {
             outError = "Bake failed: invalid triangle data for lightmap BVH";
             return false;
         }
@@ -754,8 +751,8 @@ bool CastsAlphaTestLightmapOcclusion(const SectorGeneratedSurface& surface)
 bool IntersectRayAabb(const Ray& ray, const BakeAabb& bounds, float maxDistance, float& outEntryDistance)
 {
     if (maxDistance <= 0.0f || !std::isfinite(maxDistance)
-            || !IsFinite(ray.position) || !IsFinite(ray.direction)
-            || !IsFinite(bounds.min) || !IsFinite(bounds.max)) {
+            || !IsFiniteVector3(ray.position) || !IsFiniteVector3(ray.direction)
+            || !IsFiniteVector3(bounds.min) || !IsFiniteVector3(bounds.max)) {
         return false;
     }
 
@@ -1306,7 +1303,7 @@ float SmoothStep(float edge0, float edge1, float value)
         return value >= edge1 ? 1.0f : 0.0f;
     }
     const float t = std::clamp((value - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-    return t * t * (3.0f - 2.0f * t);
+    return std::isfinite(t) ? SmoothStep01(t) : t;
 }
 
 float ConeCosine(float degrees)
@@ -1316,11 +1313,7 @@ float ConeCosine(float degrees)
 
 Vector3 NormalizeOrFallback(Vector3 value, Vector3 fallback)
 {
-    const float lengthSq = Vector3LengthSqr(value);
-    if (lengthSq <= 0.00000001f || !std::isfinite(lengthSq)) {
-        return fallback;
-    }
-    return Vector3Scale(value, 1.0f / std::sqrt(lengthSq));
+    return NormalizeVector3OrFallback(value, fallback, 0.00000001f);
 }
 
 Vector3 EvaluateDirectLightSample(
@@ -2870,7 +2863,7 @@ bool BakeSectorBakedObjectLightProbeAmbientCubes(
 {
     outError.clear();
     for (const SectorBakedObjectLightProbe& probe : probes) {
-        if (!IsFinite(probe.position)) {
+        if (!IsFiniteVector3(probe.position)) {
             outError = "Object probe bake failed: non-finite probe position";
             return false;
         }
@@ -2981,12 +2974,12 @@ bool WriteSectorBakedObjectLightProbeSidecar(
     }
 
     for (const SectorBakedObjectLightProbe& probe : probes) {
-        if (!IsFinite(probe.position)) {
+        if (!IsFiniteVector3(probe.position)) {
             outError = "Object probe sidecar write failed: non-finite probe position";
             return false;
         }
         for (const Vector3& cubeFace : probe.ambientCube) {
-            if (!IsFinite(cubeFace)) {
+            if (!IsFiniteVector3(cubeFace)) {
                 outError = "Object probe sidecar write failed: non-finite ambient cube value";
                 return false;
             }
@@ -3129,7 +3122,7 @@ bool ReadSectorBakedObjectLightProbeSidecar(
             return false;
         }
         probe.sectorId = static_cast<int>(sectorId);
-        if (!IsFinite(probe.position)) {
+        if (!IsFiniteVector3(probe.position)) {
             outError = "Object probe sidecar read failed: non-finite probe position";
             return false;
         }
@@ -3138,7 +3131,7 @@ bool ReadSectorBakedObjectLightProbeSidecar(
                 outError = "Object probe sidecar read failed: truncated probe ambient cube";
                 return false;
             }
-            if (!IsFinite(cubeFace)) {
+            if (!IsFiniteVector3(cubeFace)) {
                 outError = "Object probe sidecar read failed: non-finite ambient cube value";
                 return false;
             }

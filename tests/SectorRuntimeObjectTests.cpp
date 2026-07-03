@@ -1,6 +1,7 @@
 #include "sector_demo/SectorRuntimeObjects.h"
 
 #include "sector_demo/SectorCollisionWorld.h"
+#include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
@@ -23,18 +24,6 @@ using Json = nlohmann::ordered_json;
 
 int failures = 0;
 constexpr float kExpectedDoorParkingEpsilonWorld = 0.01f;
-
-float SmootherStep01(float t)
-{
-    if (!std::isfinite(t)) {
-        t = 0.0f;
-    } else if (t < 0.0f) {
-        t = 0.0f;
-    } else if (t > 1.0f) {
-        t = 1.0f;
-    }
-    return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
-}
 
 float EffectiveDoorOpenDistance(float openDistance)
 {
@@ -74,16 +63,6 @@ bool NearTranslation(Matrix actual, Vector3 expected, float epsilon = 0.00001f)
     return Near(actual.m12, expected.x, epsilon)
             && Near(actual.m13, expected.y, epsilon)
             && Near(actual.m14, expected.z, epsilon);
-}
-
-bool IsFinite(Vector3 value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
-}
-
-bool IsFinite(Vector2 value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y);
 }
 
 size_t DoorMeshFaceIndex(game::SectorDoorFace face)
@@ -917,7 +896,7 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
             "valid placed door preserves door anchor diagnostic counts");
 
     const engine::Entity entity = state.placedObjectEntities[0].entity;
-    const float expectedMotionOffset = SmootherStep01(door.initialOpenFraction)
+    const float expectedMotionOffset = game::SmootherStep01(door.initialOpenFraction)
             * EffectiveDoorOpenDistance(door.openDistance);
     Check(world.IsAlive(entity), "valid placed door mapped entity is alive");
     Check(world.Has<game::SectorObjectTransform>(entity)
@@ -1066,16 +1045,16 @@ void TestSectorDoorSlabGeometryIsFiniteAndStable()
                 world.Get<game::SectorDoorResolvedAnchor>(entity),
                 world.Get<game::SectorDoorRender>(entity));
 
-        Check(IsFinite(first.tangent)
-                      && IsFinite(first.normal)
-                      && IsFinite(first.bottomFrontLeft)
-                      && IsFinite(first.bottomFrontRight)
-                      && IsFinite(first.bottomBackRight)
-                      && IsFinite(first.bottomBackLeft)
-                      && IsFinite(first.topFrontLeft)
-                      && IsFinite(first.topFrontRight)
-                      && IsFinite(first.topBackRight)
-                      && IsFinite(first.topBackLeft),
+        Check(game::IsFiniteVector3(first.tangent)
+                      && game::IsFiniteVector3(first.normal)
+                      && game::IsFiniteVector3(first.bottomFrontLeft)
+                      && game::IsFiniteVector3(first.bottomFrontRight)
+                      && game::IsFiniteVector3(first.bottomBackRight)
+                      && game::IsFiniteVector3(first.bottomBackLeft)
+                      && game::IsFiniteVector3(first.topFrontLeft)
+                      && game::IsFiniteVector3(first.topFrontRight)
+                      && game::IsFiniteVector3(first.topBackRight)
+                      && game::IsFiniteVector3(first.topBackLeft),
                 "door slab geometry produces finite basis and corners");
         Check(Near(first.tangent, second.tangent)
                       && Near(first.normal, second.normal)
@@ -1117,9 +1096,9 @@ void TestSectorDoorSlabMeshDataHasStableAttributes()
         const game::SectorDoorSlabMeshVertex& vertex = first.vertices[i];
         const game::SectorDoorSlabMeshVertex& stableVertex = second.vertices[i];
         finiteAttributes = finiteAttributes
-                && IsFinite(vertex.position)
-                && IsFinite(vertex.normal)
-                && IsFinite(vertex.uv);
+                && game::IsFiniteVector3(vertex.position)
+                && game::IsFiniteVector3(vertex.normal)
+                && game::IsFiniteVector2(vertex.uv);
         stableAttributes = stableAttributes
                 && Near(vertex.position, stableVertex.position)
                 && Near(vertex.normal, stableVertex.normal)
@@ -1596,7 +1575,7 @@ void TestSectorDoorReceiverBoundsUseAnimatedSlabGeometry()
     engine::World world;
     game::ReserveSectorRuntimeObjectWorld(world, 2);
     const float openDistance = 1.5f;
-    const float halfOpenOffset = SmootherStep01(0.5f) * EffectiveDoorOpenDistance(openDistance);
+    const float halfOpenOffset = game::SmootherStep01(0.5f) * EffectiveDoorOpenDistance(openDistance);
     const engine::Entity door = AddDoorForDerivedState(
             world,
             game::SectorDoorMotionType::SlideVertical,
@@ -1803,7 +1782,7 @@ void TestSectorDoorShadowCasterUsesAnimatedTransform()
     game::UpdateSectorDoorDerivedStateSystem(world);
     casters.clear();
     game::CollectSectorDoorShadowCasters(world, casters);
-    const float halfOpenOffset = SmootherStep01(0.5f) * EffectiveDoorOpenDistance(openDistance);
+    const float halfOpenOffset = game::SmootherStep01(0.5f) * EffectiveDoorOpenDistance(openDistance);
     Check(casters.size() == 1
                   && Near(casters[0].position, Vector3{
                           closedPosition.x + slideDirection.x * halfOpenOffset,
@@ -2283,9 +2262,9 @@ void TestSectorDoorDerivedStateUpdatesTransformAndCollider()
     game::ReserveSectorRuntimeObjectWorld(world, 7);
     const float verticalOpenDistance = 1.5f;
     const float verticalEffectiveOpenDistance = EffectiveDoorOpenDistance(verticalOpenDistance);
-    const float verticalQuarterOffset = SmootherStep01(0.25f) * verticalEffectiveOpenDistance;
-    const float verticalHalfOffset = SmootherStep01(0.5f) * verticalEffectiveOpenDistance;
-    const float verticalThreeQuarterOffset = SmootherStep01(0.75f) * verticalEffectiveOpenDistance;
+    const float verticalQuarterOffset = game::SmootherStep01(0.25f) * verticalEffectiveOpenDistance;
+    const float verticalHalfOffset = game::SmootherStep01(0.5f) * verticalEffectiveOpenDistance;
+    const float verticalThreeQuarterOffset = game::SmootherStep01(0.75f) * verticalEffectiveOpenDistance;
 
     const engine::Entity closed = AddDoorForDerivedState(
             world,
@@ -2390,7 +2369,7 @@ void TestSectorDoorDerivedStateUpdatesLeftSlideAndBlockerThreshold()
     engine::World world;
     game::ReserveSectorRuntimeObjectWorld(world, 3);
     const float leftOpenDistance = 0.5f;
-    const float leftHalfOffset = SmootherStep01(0.5f) * EffectiveDoorOpenDistance(leftOpenDistance);
+    const float leftHalfOffset = game::SmootherStep01(0.5f) * EffectiveDoorOpenDistance(leftOpenDistance);
 
     const engine::Entity leftHalf = AddDoorForDerivedState(
             world,
@@ -2475,7 +2454,7 @@ void TestSectorDoorDynamicColliderCollectionExcludesDisabledAndInvalidShapes()
     engine::World world;
     game::ReserveSectorRuntimeObjectWorld(world, 4);
     const float validOpenDistance = 0.5f;
-    const float validHalfOffset = SmootherStep01(0.5f) * EffectiveDoorOpenDistance(validOpenDistance);
+    const float validHalfOffset = game::SmootherStep01(0.5f) * EffectiveDoorOpenDistance(validOpenDistance);
 
     const engine::Entity disabledDoor = AddDoorForDerivedState(
             world,

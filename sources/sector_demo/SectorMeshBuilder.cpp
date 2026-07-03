@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorPortalVisibility.h"
 
 #include <raylib.h>
@@ -217,11 +218,6 @@ Mesh CreateMeshFromBatch(const SectorMeshBatchData& batch)
 
     UploadMesh(&mesh, false);
     return mesh;
-}
-
-bool IsFiniteVector3(Vector3 value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
 bool IsValidReceiverBounds(const SectorReceiverBounds& bounds)

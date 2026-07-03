@@ -1,5 +1,6 @@
 #include "sector_editor/SectorEditorHelpers.h"
 
+#include "sector_demo/SectorColor.h"
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
 #include "util/json.hpp"
@@ -951,12 +952,7 @@ bool SameTint(Vector3 a, Vector3 b)
 Color DecalTintPreviewColor(Vector3 tint)
 {
     const Vector3 clamped = ClampDecalTint(tint);
-    return Color{
-            static_cast<unsigned char>(std::lround(clamped.x * 255.0f)),
-            static_cast<unsigned char>(std::lround(clamped.y * 255.0f)),
-            static_cast<unsigned char>(std::lround(clamped.z * 255.0f)),
-            255
-    };
+    return UnitRgbToColor(clamped);
 }
 
 bool IsDefaultDecalLayer(const SectorTopologyDecalLayer& decal)

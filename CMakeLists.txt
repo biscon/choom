@@ -97,6 +97,13 @@ FetchContent_MakeAvailable(raylib)
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(sector_utility_tests
+            tests/SectorUtilityTests.cpp
+    )
+    target_include_directories(sector_utility_tests PRIVATE sources)
+    target_link_libraries(sector_utility_tests PRIVATE raylib)
+    add_test(NAME sector_utility COMMAND sector_utility_tests)
+
     add_executable(sector_topology_tests
             tests/SectorTopologyValidationTests.cpp
             sources/sector_demo/SectorTopologyMap.cpp

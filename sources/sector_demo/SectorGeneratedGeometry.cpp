@@ -1,5 +1,7 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 
+#include "sector_demo/SectorColor.h"
+#include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorUnits.h"
 #include "util/earcut.h"
@@ -47,24 +49,9 @@ Vector2 ApplyUvSettings(Vector2 baseUv, Vector2 uvScale, Vector2 uvOffset)
     };
 }
 
-unsigned char ClampColorByte(float value)
-{
-    return static_cast<unsigned char>(std::clamp(static_cast<int>(std::lround(value)), 0, 255));
-}
-
-bool IsFinite(Vector2 value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y);
-}
-
-bool IsFinite(Vector3 value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
-}
-
 bool IsUnitRgb(Vector3 value)
 {
-    return IsFinite(value)
+    return IsFiniteVector3(value)
             && value.x >= 0.0f && value.x <= 1.0f
             && value.y >= 0.0f && value.y <= 1.0f
             && value.z >= 0.0f && value.z <= 1.0f;
@@ -106,12 +93,12 @@ bool ValidateTopologyGeometryValues(
     for (const SectorTopologySector& sector : map.sectors) {
         if (!std::isfinite(sector.floorZ) || !std::isfinite(sector.ceilingZ)
             || !std::isfinite(sector.ambientIntensity)
-            || !IsFinite(sector.floorUv.scale) || !IsFinite(sector.floorUv.offset)
-            || !IsFinite(sector.ceilingUv.scale) || !IsFinite(sector.ceilingUv.offset)
-            || !IsFinite(sector.floorDecal.uv.scale) || !IsFinite(sector.floorDecal.uv.offset)
+            || !IsFiniteVector2(sector.floorUv.scale) || !IsFiniteVector2(sector.floorUv.offset)
+            || !IsFiniteVector2(sector.ceilingUv.scale) || !IsFiniteVector2(sector.ceilingUv.offset)
+            || !IsFiniteVector2(sector.floorDecal.uv.scale) || !IsFiniteVector2(sector.floorDecal.uv.offset)
             || !IsUnitFloat(sector.floorDecal.opacity)
             || !IsUnitRgb(sector.floorDecal.tint)
-            || !IsFinite(sector.ceilingDecal.uv.scale) || !IsFinite(sector.ceilingDecal.uv.offset)
+            || !IsFiniteVector2(sector.ceilingDecal.uv.scale) || !IsFiniteVector2(sector.ceilingDecal.uv.offset)
             || !IsUnitFloat(sector.ceilingDecal.opacity)
             || !IsUnitRgb(sector.ceilingDecal.tint)) {
             return SetTopologyError(
@@ -133,8 +120,8 @@ bool ValidateTopologyGeometryValues(
         const std::array<const SectorTopologyWallPartSettings*, 4> parts{
                 &sideDef.wall, &sideDef.lower, &sideDef.upper, &sideDef.middle};
         for (const SectorTopologyWallPartSettings* part : parts) {
-            if (!IsFinite(part->uv.scale) || !IsFinite(part->uv.offset)
-                || !IsFinite(part->decal.uv.scale) || !IsFinite(part->decal.uv.offset)
+            if (!IsFiniteVector2(part->uv.scale) || !IsFiniteVector2(part->uv.offset)
+                || !IsFiniteVector2(part->decal.uv.scale) || !IsFiniteVector2(part->decal.uv.offset)
                 || !IsUnitFloat(part->decal.opacity)
                 || !IsUnitRgb(part->decal.tint)) {
                 return SetTopologyError(

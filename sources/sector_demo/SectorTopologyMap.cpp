@@ -1,5 +1,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 
+#include "sector_demo/SectorMath.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -38,14 +40,6 @@ constexpr float SkyVerticalScaleMax = 100.0f;
 constexpr float DirectionalLightMinLengthSqr = 0.000001f;
 constexpr float DoorAnchorSideProbeDistance = 0.001f;
 constexpr float DoorAnchorSideEpsilon = 0.000001f;
-
-float ClampFinite(float value, float fallback, float minValue, float maxValue)
-{
-    if (!std::isfinite(value)) {
-        value = fallback;
-    }
-    return std::clamp(value, minValue, maxValue);
-}
 
 float SectorCoordToWorldDistanceLocal(SectorCoord value)
 {
@@ -132,65 +126,65 @@ SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings setti
     const SectorPreviewSettings defaults = DefaultSectorPreviewSettings();
     settings.walkSpeed = ClampFinite(
             settings.walkSpeed,
-            defaults.walkSpeed,
             PreviewWalkSpeedMin,
-            PreviewWalkSpeedMax);
+            PreviewWalkSpeedMax,
+            defaults.walkSpeed);
     settings.runSpeed = ClampFinite(
             settings.runSpeed,
-            defaults.runSpeed,
             PreviewRunSpeedMin,
-            PreviewRunSpeedMax);
+            PreviewRunSpeedMax,
+            defaults.runSpeed);
     settings.mouseSensitivity = ClampFinite(
             settings.mouseSensitivity,
-            defaults.mouseSensitivity,
             PreviewMouseSensitivityMin,
-            PreviewMouseSensitivityMax);
+            PreviewMouseSensitivityMax,
+            defaults.mouseSensitivity);
     settings.eyeHeight = ClampFinite(
             settings.eyeHeight,
-            defaults.eyeHeight,
             PreviewEyeHeightMin,
-            PreviewEyeHeightMax);
+            PreviewEyeHeightMax,
+            defaults.eyeHeight);
     settings.gravity = ClampFinite(
             settings.gravity,
-            defaults.gravity,
             PreviewGravityMin,
-            PreviewGravityMax);
+            PreviewGravityMax,
+            defaults.gravity);
     settings.playerRadius = ClampFinite(
             settings.playerRadius,
-            defaults.playerRadius,
             PreviewPlayerRadiusMin,
-            PreviewPlayerRadiusMax);
+            PreviewPlayerRadiusMax,
+            defaults.playerRadius);
     settings.playerHeight = ClampFinite(
             settings.playerHeight,
-            defaults.playerHeight,
             PreviewPlayerHeightMin,
-            PreviewPlayerHeightMax);
+            PreviewPlayerHeightMax,
+            defaults.playerHeight);
     settings.playerHeight = std::max(settings.playerHeight, settings.eyeHeight);
     settings.stepHeight = ClampFinite(
             settings.stepHeight,
-            defaults.stepHeight,
             PreviewStepHeightMin,
-            PreviewStepHeightMax);
+            PreviewStepHeightMax,
+            defaults.stepHeight);
     settings.jumpHeight = ClampFinite(
             settings.jumpHeight,
-            defaults.jumpHeight,
             PreviewJumpHeightMin,
-            PreviewJumpHeightMax);
+            PreviewJumpHeightMax,
+            defaults.jumpHeight);
     settings.headBobStrength = ClampFinite(
             settings.headBobStrength,
-            defaults.headBobStrength,
             PreviewHeadBobStrengthMin,
-            PreviewHeadBobStrengthMax);
+            PreviewHeadBobStrengthMax,
+            defaults.headBobStrength);
     settings.headBobFrequency = ClampFinite(
             settings.headBobFrequency,
-            defaults.headBobFrequency,
             PreviewHeadBobFrequencyMin,
-            PreviewHeadBobFrequencyMax);
+            PreviewHeadBobFrequencyMax,
+            defaults.headBobFrequency);
     settings.objectProbeDebugDrawMaxDistanceWorld = ClampFinite(
             settings.objectProbeDebugDrawMaxDistanceWorld,
-            defaults.objectProbeDebugDrawMaxDistanceWorld,
             PreviewObjectProbeDebugDrawMaxDistanceMin,
-            PreviewObjectProbeDebugDrawMaxDistanceMax);
+            PreviewObjectProbeDebugDrawMaxDistanceMax,
+            defaults.objectProbeDebugDrawMaxDistanceWorld);
     return settings;
 }
 
@@ -210,9 +204,9 @@ SectorTopologySkySettings NormalizeSectorTopologySkySettings(SectorTopologySkySe
     }
     settings.verticalScale = ClampFinite(
             settings.verticalScale,
-            defaults.verticalScale,
             SkyVerticalScaleMin,
-            SkyVerticalScaleMax);
+            SkyVerticalScaleMax,
+            defaults.verticalScale);
     settings.topColor.a = 255;
     return settings;
 }

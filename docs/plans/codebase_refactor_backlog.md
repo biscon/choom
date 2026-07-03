@@ -38,9 +38,9 @@ Task Type:
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | REF-001 | `[x]` | High | Current feature | Finish door UV/settings/layout smoke and checkpoint | Manual checkpoint | Medium | Close current work before refactors |
 | REF-002 | `[x]` | High | Utilities | Extract `SectorAssetPaths` | Codex task | Low | Strong quick win |
-| REF-003 | `[ ]` | Medium | Utilities | Extract finite/clamp/smoothstep helpers | Codex task | Low/Medium | Preserve per-call fallback behavior |
+| REF-003 | `[x]` | Medium | Utilities | Extract finite/clamp/smoothstep helpers | Codex task | Low/Medium | Preserve per-call fallback behavior |
 | REF-004 | `[ ]` | Medium | Utilities | Extract minimal bounds/AABB helpers | Codex task | Low/Medium | Keep BVH ray math local for now |
-| REF-005 | `[ ]` | Low | Utilities | Extract trivial color conversion helpers | Codex task | Low | Do not merge lighting evaluation |
+| REF-005 | `[x]` | Low | Utilities | Extract trivial color conversion helpers | Codex task | Low | Do not merge lighting evaluation |
 | REF-006 | `[ ]` | Low | Utilities | Evaluate tiny UV fit/span validation helper | Audit first | Medium | Avoid generic UV framework |
 | REF-007 | `[ ]` | Medium | Utilities | Extract lightmap bake report formatting | Codex task | Low | Behavior-preserving string/report split |
 | REF-008 | `[ ]` | High | Editor header | Move render-cache cached draw structs | Codex task | Low | Narrow `SectorEditorTypes.h` |
@@ -109,7 +109,7 @@ Task Type:
   lightmap call sites now use the shared helper with behavior intended to be
   preserved.
 
-#### REF-003 `[ ]` Extract finite/clamp/smoothstep helpers
+#### REF-003 `[x]` Extract finite/clamp/smoothstep helpers
 
 - Source/audit reference: "Math Helpers" and "Finite / Sanitize / Validation
   Helpers".
@@ -123,7 +123,13 @@ Task Type:
 - Risk: Low/Medium.
 - Suggested verification: targeted sector/controller/lightmap tests; confirm
   epsilon and fallback semantics are preserved.
-- Completion notes:
+- Completion notes: Completed by adding header-only
+  `sources/sector_demo/SectorMath.h` for finite checks, finite clamping,
+  vector normalization fallback, and 0..1 smoothstep helpers. Matching
+  controller, topology, generated-geometry, dynamic-light, lightmap, mesh,
+  door-runtime, and runtime-object test helpers now use the shared primitives
+  while edge-based smoothstep and door/collision wrappers keep local policy
+  visible.
 
 #### REF-004 `[ ]` Extract minimal bounds/AABB accumulation helpers
 
@@ -138,7 +144,7 @@ Task Type:
   tests/manual smoke where relevant.
 - Completion notes:
 
-#### REF-005 `[ ]` Extract trivial color conversion helpers
+#### REF-005 `[x]` Extract trivial color conversion helpers
 
 - Source/audit reference: "Lighting / Color Helpers".
 - Why it helps: removes repeated color byte/unit conversions without touching
@@ -149,7 +155,11 @@ Task Type:
 - Risk: Low.
 - Suggested verification: generated geometry and lightmap tests; visual smoke
   only if rendered colors are touched.
-- Completion notes:
+- Completion notes: Completed by adding header-only
+  `sources/sector_demo/SectorColor.h` for unit RGB, color-byte clamp, and
+  byte/unit color conversion helpers. Generated geometry, dynamic-light
+  selection, lightmap encoding, and decal preview color call sites now use the
+  shared helpers without merging lighting evaluation logic.
 
 #### REF-006 `[ ]` Evaluate tiny UV fit/span validation helper
 
