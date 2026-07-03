@@ -38,6 +38,16 @@ struct SectorEditorInspectorStackedOptionRowLayout {
     float height = 0.0f;
 };
 
+struct SectorEditorDoorTextureSettingsModalLayout {
+    Rectangle titleRect = {};
+    Rectangle faceButtonRects[6] = {};
+    Rectangle uvLabelRects[4] = {};
+    Rectangle uvInputRects[4] = {};
+    Rectangle actionButtonRects[6] = {};
+    Rectangle statusRect = {};
+    Rectangle doneButtonRect = {};
+};
+
 inline float SectorEditorInspectorTextureRowHeight()
 {
     return SectorEditorInspectorTextureActionHeight
@@ -204,7 +214,72 @@ inline float SectorEditorDoorInspectorContentHeight(
     height += textureStatusHeight + gap;
     height += rowH + gap;
     height += rowH + gap;
+    height += rowH + gap;
     return height;
+}
+
+inline SectorEditorDoorTextureSettingsModalLayout BuildSectorEditorDoorTextureSettingsModalLayout(
+        Rectangle modal,
+        float padding,
+        float gap)
+{
+    SectorEditorDoorTextureSettingsModalLayout layout;
+    const float contentW = std::max(0.0f, modal.width - padding * 2.0f);
+    float y = modal.y + 24.0f;
+
+    layout.titleRect = Rectangle{modal.x + padding, y, contentW, 38.0f};
+    y += 56.0f;
+
+    const float faceButtonH = 36.0f;
+    const float faceButtonW = (contentW - gap * 2.0f) / 3.0f;
+    for (int i = 0; i < 6; ++i) {
+        const int col = i % 3;
+        const int row = i / 3;
+        layout.faceButtonRects[i] = Rectangle{
+                modal.x + padding + static_cast<float>(col) * (faceButtonW + gap),
+                y + static_cast<float>(row) * (faceButtonH + gap),
+                faceButtonW,
+                faceButtonH};
+    }
+    y += faceButtonH * 2.0f + gap + 24.0f;
+
+    const float labelW = 116.0f;
+    const float inputW = 160.0f;
+    const float inputH = 36.0f;
+    for (int i = 0; i < 4; ++i) {
+        layout.uvLabelRects[i] = Rectangle{modal.x + padding, y, labelW, inputH};
+        layout.uvInputRects[i] = Rectangle{modal.x + padding + labelW + gap, y, inputW, inputH};
+        y += inputH + gap;
+    }
+    y += 8.0f;
+
+    const float actionButtonH = 36.0f;
+    const float actionButtonW = (contentW - gap * 2.0f) / 3.0f;
+    for (int i = 0; i < 6; ++i) {
+        const int col = i % 3;
+        const int row = i / 3;
+        layout.actionButtonRects[i] = Rectangle{
+                modal.x + padding + static_cast<float>(col) * (actionButtonW + gap),
+                y + static_cast<float>(row) * (actionButtonH + gap),
+                actionButtonW,
+                actionButtonH};
+    }
+    y += actionButtonH * 2.0f + gap + 18.0f;
+
+    const float doneW = 124.0f;
+    const float doneH = 38.0f;
+    layout.doneButtonRect = Rectangle{
+            modal.x + modal.width - padding - doneW,
+            modal.y + modal.height - padding - doneH,
+            doneW,
+            doneH};
+    layout.statusRect = Rectangle{
+            modal.x + padding,
+            y,
+            std::max(0.0f, layout.doneButtonRect.x - modal.x - padding - gap),
+            std::max(0.0f, layout.doneButtonRect.y - y),
+    };
+    return layout;
 }
 
 struct SectorEditorFloatInputResult {

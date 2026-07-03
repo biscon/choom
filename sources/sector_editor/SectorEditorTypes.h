@@ -317,6 +317,17 @@ struct DecalTintModalState {
     std::string errorMessage;
 };
 
+struct DoorTextureSettingsModalState {
+    bool open = false;
+    int runtimeObjectId = -1;
+    SectorDoorFace selectedFace = SectorDoorFace::Front;
+    engine::UIFloatInputState scaleUInput;
+    engine::UIFloatInputState scaleVInput;
+    engine::UIFloatInputState offsetUInput;
+    engine::UIFloatInputState offsetVInput;
+    std::string statusMessage;
+};
+
 struct SectorPreviewSettingsModalState {
     bool open = false;
     PreviewSettingsTab activeTab = PreviewSettingsTab::General;
@@ -659,6 +670,7 @@ struct SectorEditorState {
     LoadLevelModalState loadLevelModal;
     ConfirmationModalState confirmationModal;
     DecalTintModalState decalTintModal;
+    DoorTextureSettingsModalState doorTextureSettingsModal;
     SectorPreviewSettingsModalState previewSettingsModal;
 };
 

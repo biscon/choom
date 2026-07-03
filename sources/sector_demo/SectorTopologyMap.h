@@ -88,6 +88,7 @@ struct SectorPlacedDoor {
     float interactionDistance = 1.5f;
     float autoOpenDistance = 2.0f;
     std::string textureId;
+    SectorDoorFaceUvSet faceUvs;
 };
 
 struct SectorResolvedDoorAnchor {

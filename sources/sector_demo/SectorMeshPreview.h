@@ -247,6 +247,7 @@ private:
         float width = 0.0f;
         float height = 0.0f;
         float thickness = 0.0f;
+        SectorDoorFaceUvSet faceUvs;
         std::vector<Color> staticLightingColors;
         bool seenThisFrame = false;
     };

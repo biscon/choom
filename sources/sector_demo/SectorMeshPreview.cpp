@@ -2259,7 +2259,8 @@ void SectorMeshPreview::PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWor
                 const bool meshDirty = cacheEntry.mesh.vertexCount <= 0
                         || cacheEntry.width != render.width
                         || cacheEntry.height != render.height
-                        || cacheEntry.thickness != render.thickness;
+                        || cacheEntry.thickness != render.thickness
+                        || !SameSectorDoorFaceUvSet(cacheEntry.faceUvs, render.faceUvs);
                 if (meshDirty) {
                     if (cacheEntry.mesh.vertexCount > 0) {
                         UnloadMesh(cacheEntry.mesh);
@@ -2269,6 +2270,7 @@ void SectorMeshPreview::PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWor
                     cacheEntry.width = render.width;
                     cacheEntry.height = render.height;
                     cacheEntry.thickness = render.thickness;
+                    cacheEntry.faceUvs = render.faceUvs;
                 }
             });
 

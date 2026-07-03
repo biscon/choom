@@ -86,6 +86,73 @@ bool IsFinite(Vector2 value)
     return std::isfinite(value.x) && std::isfinite(value.y);
 }
 
+size_t DoorMeshFaceIndex(game::SectorDoorFace face)
+{
+    switch (face) {
+        case game::SectorDoorFace::Front:
+            return 0;
+        case game::SectorDoorFace::Back:
+            return 1;
+        case game::SectorDoorFace::Right:
+            return 2;
+        case game::SectorDoorFace::Left:
+            return 3;
+        case game::SectorDoorFace::Top:
+            return 4;
+        case game::SectorDoorFace::Bottom:
+            return 5;
+        case game::SectorDoorFace::Count:
+            break;
+    }
+    return 0;
+}
+
+Vector2 DoorMeshFaceUvSpan(const game::SectorDoorSlabMeshData& mesh, game::SectorDoorFace face)
+{
+    const size_t base = DoorMeshFaceIndex(face) * 4;
+    if (mesh.vertices.size() < base + 4) {
+        return Vector2{};
+    }
+
+    float minU = mesh.vertices[base].uv.x;
+    float maxU = mesh.vertices[base].uv.x;
+    float minV = mesh.vertices[base].uv.y;
+    float maxV = mesh.vertices[base].uv.y;
+    for (size_t i = 1; i < 4; ++i) {
+        const Vector2 uv = mesh.vertices[base + i].uv;
+        if (uv.x < minU) {
+            minU = uv.x;
+        }
+        if (uv.x > maxU) {
+            maxU = uv.x;
+        }
+        if (uv.y < minV) {
+            minV = uv.y;
+        }
+        if (uv.y > maxV) {
+            maxV = uv.y;
+        }
+    }
+    return Vector2{maxU - minU, maxV - minV};
+}
+
+bool DoorMeshFaceUvsMatch(
+        const game::SectorDoorSlabMeshData& actual,
+        const game::SectorDoorSlabMeshData& expected,
+        game::SectorDoorFace face)
+{
+    const size_t base = DoorMeshFaceIndex(face) * 4;
+    if (actual.vertices.size() < base + 4 || expected.vertices.size() < base + 4) {
+        return false;
+    }
+    for (size_t i = 0; i < 4; ++i) {
+        if (!Near(actual.vertices[base + i].uv, expected.vertices[base + i].uv)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool SameColor(Color actual, Color expected)
 {
     return actual.r == expected.r
@@ -1100,6 +1167,212 @@ void TestSectorDoorSlabMeshDataHasStableAttributes()
                 && Near(first.vertices[base + 3].uv, Vector2{0.0f, 0.0f});
     }
     Check(faceAttributesMatch, "door slab mesh duplicates expected per-face normals and UV scales");
+}
+
+void TestSectorDoorFaceUvsAffectOnlySelectedFace()
+{
+    game::SectorDoorRender baseRender;
+    baseRender.width = 2.0f;
+    baseRender.height = 1.5f;
+    baseRender.thickness = 0.25f;
+
+    game::SectorDoorRender editedRender = baseRender;
+    game::DoorFaceUv(editedRender.faceUvs, game::SectorDoorFace::Front).scale = {2.0f, 3.0f};
+    game::DoorFaceUv(editedRender.faceUvs, game::SectorDoorFace::Front).offset = {0.25f, 0.5f};
+
+    const game::SectorDoorSlabMeshData base = game::BuildSectorDoorSlabMeshData(baseRender);
+    const game::SectorDoorSlabMeshData edited = game::BuildSectorDoorSlabMeshData(editedRender);
+
+    Check(base.vertices.size() == edited.vertices.size() && base.indices.size() == edited.indices.size(),
+          "door UV edits preserve mesh vertex and index counts");
+
+    bool frontChanged = false;
+    bool otherFacesUnchanged = true;
+    bool positionsUnchanged = true;
+    bool normalsUnchanged = true;
+    for (size_t i = 0; i < base.vertices.size(); ++i) {
+        positionsUnchanged = positionsUnchanged && Near(base.vertices[i].position, edited.vertices[i].position);
+        normalsUnchanged = normalsUnchanged && Near(base.vertices[i].normal, edited.vertices[i].normal);
+        if (i < 4) {
+            frontChanged = frontChanged || !Near(base.vertices[i].uv, edited.vertices[i].uv);
+        } else {
+            otherFacesUnchanged = otherFacesUnchanged && Near(base.vertices[i].uv, edited.vertices[i].uv);
+        }
+    }
+
+    Check(frontChanged && otherFacesUnchanged,
+          "door face UV edits affect only the selected face vertices");
+    Check(positionsUnchanged && normalsUnchanged,
+          "door face UV edits do not change visual geometry positions or normals");
+    Check(Near(edited.vertices[0].uv, Vector2{0.25f, 5.0f})
+                  && Near(edited.vertices[1].uv, Vector2{4.25f, 5.0f})
+                  && Near(edited.vertices[2].uv, Vector2{4.25f, 0.5f})
+                  && Near(edited.vertices[3].uv, Vector2{0.25f, 0.5f}),
+          "door front face UV scale and offset are applied after base face dimensions");
+}
+
+void TestSectorDoorFaceUvHelpers()
+{
+    game::SectorDoorFaceUvSet uvs;
+    game::SectorDoorRender render;
+    render.width = 4.0f;
+    render.height = 2.0f;
+    render.thickness = 0.5f;
+
+    std::string error;
+    game::DoorFaceUv(uvs, game::SectorDoorFace::Front).scale = {2.0f, 3.0f};
+    game::DoorFaceUv(uvs, game::SectorDoorFace::Front).offset = {5.0f, 7.0f};
+    Check(game::FitSectorDoorFaceUv(
+                  uvs,
+                  game::SectorDoorFace::Front,
+                  game::SectorDoorUvFitMode::Width,
+                  render,
+                  &error)
+                  && Near(game::DoorFaceUv(uvs, game::SectorDoorFace::Front).scale, Vector2{0.25f, 3.0f})
+                  && Near(game::DoorFaceUv(uvs, game::SectorDoorFace::Front).offset, Vector2{0.0f, 7.0f}),
+          "door Fit Width changes only selected face U scale and offset");
+
+    game::DoorFaceUv(uvs, game::SectorDoorFace::Front).offset.x = 3.0f;
+    game::DoorFaceUv(uvs, game::SectorDoorFace::Front).offset.y = 4.0f;
+    Check(game::FitSectorDoorFaceUv(
+                  uvs,
+                  game::SectorDoorFace::Front,
+                  game::SectorDoorUvFitMode::Height,
+                  render,
+                  &error)
+                  && Near(game::DoorFaceUv(uvs, game::SectorDoorFace::Front).scale, Vector2{0.25f, 0.5f})
+                  && Near(game::DoorFaceUv(uvs, game::SectorDoorFace::Front).offset, Vector2{3.0f, 0.0f}),
+          "door Fit Height changes only selected face V scale and offset");
+
+    const game::SectorDoorFace fitFaces[] = {
+            game::SectorDoorFace::Front,
+            game::SectorDoorFace::Back,
+            game::SectorDoorFace::Left,
+            game::SectorDoorFace::Right,
+            game::SectorDoorFace::Top,
+            game::SectorDoorFace::Bottom};
+    bool fitBothSpansOnce = true;
+    bool fitBothOffsetsReset = true;
+    for (game::SectorDoorFace face : fitFaces) {
+        game::DoorFaceUv(uvs, face).scale = {2.0f, 3.0f};
+        game::DoorFaceUv(uvs, face).offset = {4.0f, 5.0f};
+        fitBothSpansOnce = fitBothSpansOnce
+                && game::FitSectorDoorFaceUv(uvs, face, game::SectorDoorUvFitMode::Both, render, &error);
+        const Vector2 baseUvSpan = game::SectorDoorFaceBaseUvSpan(render, face);
+        const game::SectorDoorFaceUv& uv = game::DoorFaceUv(uvs, face);
+        fitBothSpansOnce = fitBothSpansOnce
+                && Near(baseUvSpan.x * uv.scale.x, 1.0f)
+                && Near(baseUvSpan.y * uv.scale.y, 1.0f);
+        fitBothOffsetsReset = fitBothOffsetsReset && Near(uv.offset, Vector2{0.0f, 0.0f});
+    }
+    Check(fitBothSpansOnce,
+          "door Fit Both produces one final texture repeat on every face");
+    Check(fitBothOffsetsReset,
+          "door Fit Both resets both offsets on every face");
+
+    game::DoorFaceUv(uvs, game::SectorDoorFace::Front).scale = {2.0f, 3.0f};
+    game::DoorFaceUv(uvs, game::SectorDoorFace::Front).offset = {4.0f, 5.0f};
+    Check(game::CopySectorDoorFaceUv(uvs, game::SectorDoorFace::Front, game::SectorDoorFace::Back)
+                  && Near(game::DoorFaceUv(uvs, game::SectorDoorFace::Back).scale, Vector2{2.0f, 3.0f})
+                  && Near(game::DoorFaceUv(uvs, game::SectorDoorFace::Back).offset, Vector2{4.0f, 5.0f}),
+          "door Copy From Front copies front UVs to selected face");
+
+    Check(game::ApplySectorDoorFaceUvToAll(uvs, game::SectorDoorFace::Back)
+                  && Near(game::DoorFaceUv(uvs, game::SectorDoorFace::Bottom).scale, Vector2{2.0f, 3.0f})
+                  && Near(game::DoorFaceUv(uvs, game::SectorDoorFace::Left).offset, Vector2{4.0f, 5.0f}),
+          "door Apply To All copies selected UVs to every face");
+
+    Check(game::ResetSectorDoorFaceUv(uvs, game::SectorDoorFace::Back)
+                  && Near(game::DoorFaceUv(uvs, game::SectorDoorFace::Back).scale, Vector2{1.0f, 1.0f})
+                  && Near(game::DoorFaceUv(uvs, game::SectorDoorFace::Back).offset, Vector2{0.0f, 0.0f}),
+          "door Reset Face restores default scale and offset");
+}
+
+void TestSectorDoorFitBothMeshUvsSpanOnce()
+{
+    game::SectorDoorRender render;
+    render.width = 4.0f;
+    render.height = 2.0f;
+    render.thickness = 0.5f;
+
+    const game::SectorDoorSlabMeshData defaultMesh = game::BuildSectorDoorSlabMeshData(render);
+    Check(Near(DoorMeshFaceUvSpan(defaultMesh, game::SectorDoorFace::Front), Vector2{4.0f, 2.0f})
+                  && Near(DoorMeshFaceUvSpan(defaultMesh, game::SectorDoorFace::Right), Vector2{0.5f, 2.0f})
+                  && Near(DoorMeshFaceUvSpan(defaultMesh, game::SectorDoorFace::Top), Vector2{4.0f, 0.5f}),
+          "default door face UVs keep generated base spans");
+
+    const game::SectorDoorFace fitFaces[] = {
+            game::SectorDoorFace::Front,
+            game::SectorDoorFace::Back,
+            game::SectorDoorFace::Left,
+            game::SectorDoorFace::Right,
+            game::SectorDoorFace::Top,
+            game::SectorDoorFace::Bottom};
+    bool fittedFaceSpansOnce = true;
+    bool otherFacesUnchanged = true;
+    for (game::SectorDoorFace fittedFace : fitFaces) {
+        game::SectorDoorRender fittedRender = render;
+        std::string error;
+        fittedFaceSpansOnce = fittedFaceSpansOnce
+                && game::FitSectorDoorFaceUv(
+                        fittedRender.faceUvs,
+                        fittedFace,
+                        game::SectorDoorUvFitMode::Both,
+                        fittedRender,
+                        &error);
+        const game::SectorDoorSlabMeshData fittedMesh = game::BuildSectorDoorSlabMeshData(fittedRender);
+        fittedFaceSpansOnce = fittedFaceSpansOnce
+                && Near(DoorMeshFaceUvSpan(fittedMesh, fittedFace), Vector2{1.0f, 1.0f});
+        for (game::SectorDoorFace otherFace : fitFaces) {
+            if (game::SectorDoorFaceIndex(otherFace) == game::SectorDoorFaceIndex(fittedFace)) {
+                continue;
+            }
+            otherFacesUnchanged = otherFacesUnchanged
+                    && DoorMeshFaceUvsMatch(fittedMesh, defaultMesh, otherFace);
+        }
+    }
+
+    Check(fittedFaceSpansOnce,
+          "door Fit Both produces a final 1x1 UV span on each generated mesh face");
+    Check(otherFacesUnchanged,
+          "door Fit Both on one face leaves other generated mesh face UVs unchanged");
+}
+
+void TestSpawnPlacedDoorCopiesFaceUvsWithoutChangingPhysicalState()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    game::SectorPlacedDoor door = MakeDoorOnPortal();
+    door.width = 2.0f;
+    door.height = 1.5f;
+    door.thickness = 0.25f;
+    game::DoorFaceUv(door.faceUvs, game::SectorDoorFace::Top).scale = {3.0f, 4.0f};
+    game::DoorFaceUv(door.faceUvs, game::SectorDoorFace::Top).offset = {0.5f, 0.75f};
+    map.runtimeObjects.push_back(MakePlacedDoor(41, door));
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(CountDoorObjects(world) == 1, "door face UV fixture spawns one door entity");
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    const game::SectorDoorRender& render = world.Get<game::SectorDoorRender>(entity);
+    const game::SectorDoorCollider& collider = world.Get<game::SectorDoorCollider>(entity);
+    std::vector<game::SectorDoorShadowCaster> casters;
+    game::CollectSectorDoorShadowCasters(world, casters);
+
+    Check(Near(game::DoorFaceUv(render.faceUvs, game::SectorDoorFace::Top).scale, Vector2{3.0f, 4.0f})
+                  && Near(game::DoorFaceUv(render.faceUvs, game::SectorDoorFace::Top).offset, Vector2{0.5f, 0.75f}),
+          "spawned door render component copies authored face UVs");
+    Check(Near(render.width, 2.0f)
+                  && Near(render.height, 1.5f)
+                  && Near(render.thickness, 0.25f)
+                  && Near(collider.halfExtents, Vector2{1.0f, 0.125f})
+                  && casters.size() == 1
+                  && Near(casters[0].width, render.width + game::kSectorDoorShadowCasterHorizontalSealMarginWorld * 2.0f)
+                  && Near(casters[0].height, render.height + game::kSectorDoorShadowCasterVerticalSealMarginWorld * 2.0f),
+          "door face UVs do not change render dimensions collider dimensions or shadow caster margins");
 }
 
 void TestSectorDoorSlabModelMatrixPreservesResolvedBasis()
@@ -3348,6 +3621,10 @@ int main()
     TestSpawnPlacedDoorRefreshDoesNotDuplicate();
     TestSectorDoorSlabGeometryIsFiniteAndStable();
     TestSectorDoorSlabMeshDataHasStableAttributes();
+    TestSectorDoorFaceUvsAffectOnlySelectedFace();
+    TestSectorDoorFaceUvHelpers();
+    TestSectorDoorFitBothMeshUvsSpanOnce();
+    TestSpawnPlacedDoorCopiesFaceUvsWithoutChangingPhysicalState();
     TestSectorDoorSlabModelMatrixPreservesResolvedBasis();
     TestSectorDoorStaticLightingColorsSamplePerVertexProbes();
     TestSectorDoorStaticLightingColorsFallbackSafely();

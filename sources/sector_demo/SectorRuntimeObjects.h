@@ -199,6 +199,7 @@ struct SectorDoorRender {
     // Positive values move the closed slab from the front sector toward the back sector.
     float normalOffset = 0.0f;
     std::string textureId;
+    SectorDoorFaceUvSet faceUvs;
     Color tint = WHITE;
     bool visible = true;
 };
@@ -253,6 +254,38 @@ struct SectorBillboardFrameUvs {
     Vector2 bottomRight = {};
     Vector2 bottomLeft = {};
 };
+
+enum class SectorDoorUvFitMode {
+    Width,
+    Height,
+    Both
+};
+
+const char* SectorDoorFaceName(SectorDoorFace face);
+int SectorDoorFaceIndex(SectorDoorFace face);
+SectorDoorFace SectorDoorFaceFromIndex(int index);
+SectorDoorFaceUv& DoorFaceUv(SectorDoorFaceUvSet& uvs, SectorDoorFace face);
+const SectorDoorFaceUv& DoorFaceUv(const SectorDoorFaceUvSet& uvs, SectorDoorFace face);
+bool IsDefaultSectorDoorFaceUv(const SectorDoorFaceUv& uv);
+bool IsDefaultSectorDoorFaceUvSet(const SectorDoorFaceUvSet& uvs);
+bool SameSectorDoorFaceUv(const SectorDoorFaceUv& a, const SectorDoorFaceUv& b);
+bool SameSectorDoorFaceUvSet(const SectorDoorFaceUvSet& a, const SectorDoorFaceUvSet& b);
+bool IsValidSectorDoorUvScale(float scale);
+bool IsValidSectorDoorUvOffset(float offset);
+Vector2 SectorDoorFaceDimensions(const SectorDoorRender& render, SectorDoorFace face);
+Vector2 SectorDoorFaceBaseUvSpan(const SectorDoorRender& render, SectorDoorFace face);
+bool FitSectorDoorFaceUv(
+        SectorDoorFaceUvSet& uvs,
+        SectorDoorFace face,
+        SectorDoorUvFitMode mode,
+        const SectorDoorRender& render,
+        std::string* outError = nullptr);
+bool ResetSectorDoorFaceUv(SectorDoorFaceUvSet& uvs, SectorDoorFace face);
+bool CopySectorDoorFaceUv(
+        SectorDoorFaceUvSet& uvs,
+        SectorDoorFace source,
+        SectorDoorFace target);
+bool ApplySectorDoorFaceUvToAll(SectorDoorFaceUvSet& uvs, SectorDoorFace source);
 
 struct SectorBillboardQuad {
     Vector3 bottomLeft = {};

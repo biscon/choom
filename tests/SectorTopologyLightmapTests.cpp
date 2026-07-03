@@ -725,6 +725,26 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedDynamicSpotLight) == hash,
           "hash ignores dynamic spot light edits including shadow settings");
 
+    game::SectorTopologyMap doorUvMap = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
+    game::SectorPlacedRuntimeObject doorObject;
+    doorObject.id = 1;
+    doorObject.kind = "door";
+    doorObject.door.anchor.lineDefId = 2;
+    doorObject.door.anchor.frontSectorId = 10;
+    doorObject.door.anchor.backSectorId = 20;
+    doorObject.door.anchor.frontSideDefId = 2;
+    doorObject.door.anchor.backSideDefId = 8;
+    doorObject.door.anchor.endpointAX = 64;
+    doorObject.door.anchor.endpointAY = 0;
+    doorObject.door.anchor.endpointBX = 64;
+    doorObject.door.anchor.endpointBY = 64;
+    doorUvMap.runtimeObjects.push_back(doorObject);
+    const std::string doorUvHash = game::ComputeSectorLightmapSourceHash(doorUvMap);
+    doorUvMap.runtimeObjects[0].door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].scale = {2.0f, 3.0f};
+    doorUvMap.runtimeObjects[0].door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].offset = {0.25f, 0.5f};
+    Check(game::ComputeSectorLightmapSourceHash(doorUvMap) == doorUvHash,
+          "hash ignores procedural door face UV edits");
+
     game::SectorTopologyMap changedDirectional = base;
     changedDirectional.directionalLight.enabled = true;
     Check(game::ComputeSectorLightmapSourceHash(changedDirectional) != hash,

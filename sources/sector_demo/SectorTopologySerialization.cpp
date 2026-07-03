@@ -299,6 +299,56 @@ bool IsDefaultBillboardDirectionalClips(const SectorPlacedBillboard& billboard)
 
 const char* WriteSectorDoorMotionType(SectorDoorMotionType motion);
 
+constexpr const char* DoorFaceJsonNames[SectorDoorFaceCount] = {
+        "front",
+        "back",
+        "left",
+        "right",
+        "top",
+        "bottom"};
+
+bool IsValidDoorUvScale(float scale)
+{
+    return std::isfinite(scale)
+            && scale >= TopologyUvScaleMin
+            && scale <= TopologyUvScaleMax;
+}
+
+bool IsDefaultDoorFaceUv(const SectorDoorFaceUv& uv)
+{
+    return uv.scale.x == 1.0f
+            && uv.scale.y == 1.0f
+            && uv.offset.x == 0.0f
+            && uv.offset.y == 0.0f;
+}
+
+bool IsDefaultDoorFaceUvSet(const SectorDoorFaceUvSet& uvs)
+{
+    for (int i = 0; i < SectorDoorFaceCount; ++i) {
+        if (!IsDefaultDoorFaceUv(uvs.faces[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void ValidateDoorFaceUv(const SectorDoorFaceUv& uv, const std::string& context)
+{
+    if (!IsValidDoorUvScale(uv.scale.x) || !IsValidDoorUvScale(uv.scale.y)) {
+        Fail(context + ".scale values must be finite floats between 0.001 and 64");
+    }
+    if (!std::isfinite(uv.offset.x) || !std::isfinite(uv.offset.y)) {
+        Fail(context + ".offset values must be finite floats");
+    }
+}
+
+void ValidateDoorFaceUvSet(const SectorDoorFaceUvSet& uvs, const std::string& context)
+{
+    for (int i = 0; i < SectorDoorFaceCount; ++i) {
+        ValidateDoorFaceUv(uvs.faces[i], context + ".faceUvs." + DoorFaceJsonNames[i]);
+    }
+}
+
 void ValidatePlacedBillboard(const SectorPlacedBillboard& billboard, const std::string& context)
 {
     if (!std::isfinite(billboard.sizeWorld.x)
@@ -352,6 +402,7 @@ void ValidatePlacedDoorForSerialization(const SectorPlacedDoor& door, const std:
     if (door.interactionDistance <= 0.0f || door.autoOpenDistance <= 0.0f) {
         Fail(context + ".interactionDistance and .autoOpenDistance must be positive");
     }
+    ValidateDoorFaceUvSet(door.faceUvs, context);
     (void)WriteSectorDoorMotionType(door.motion);
 }
 
@@ -443,6 +494,41 @@ SectorDoorAnchor ReadSectorDoorAnchor(const Json& value, const std::string& cont
     return anchor;
 }
 
+SectorDoorFaceUv ReadDoorFaceUv(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+    SectorDoorFaceUv uv;
+    uv.scale = ReadVector2(RequireField(value, "scale", context), context + ".scale");
+    uv.offset = ReadVector2(RequireField(value, "offset", context), context + ".offset");
+    ValidateDoorFaceUv(uv, context);
+    return uv;
+}
+
+void ReadOptionalDoorFaceUvs(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        SectorDoorFaceUvSet& outUvs)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) {
+        outUvs = SectorDoorFaceUvSet{};
+        return;
+    }
+    if (!it->is_object()) {
+        Fail(context + "." + field + " must be an object");
+    }
+    outUvs = SectorDoorFaceUvSet{};
+    for (int i = 0; i < SectorDoorFaceCount; ++i) {
+        const auto faceIt = it->find(DoorFaceJsonNames[i]);
+        if (faceIt != it->end()) {
+            outUvs.faces[i] = ReadDoorFaceUv(*faceIt, context + "." + field + "." + DoorFaceJsonNames[i]);
+        }
+    }
+}
+
 SectorPlacedDoor ReadPlacedDoor(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -476,6 +562,7 @@ SectorPlacedDoor ReadPlacedDoor(const Json& value, const std::string& context)
             context,
             door.autoOpenDistance);
     door.textureId = ReadOptionalString(value, "textureId", context, door.textureId);
+    ReadOptionalDoorFaceUvs(value, "faceUvs", context, door.faceUvs);
     ValidatePlacedDoorForSerialization(door, context);
     return door;
 }
@@ -1096,6 +1183,29 @@ Json WriteSectorDoorAnchor(const SectorDoorAnchor& anchor)
     };
 }
 
+Json WriteDoorFaceUv(const SectorDoorFaceUv& uv, const std::string& context)
+{
+    ValidateDoorFaceUv(uv, context);
+    return Json{
+            {"scale", Json::array({uv.scale.x, uv.scale.y})},
+            {"offset", Json::array({uv.offset.x, uv.offset.y})}
+    };
+}
+
+Json WriteDoorFaceUvSet(const SectorDoorFaceUvSet& uvs, const std::string& context)
+{
+    ValidateDoorFaceUvSet(uvs, context);
+    Json value = Json::object();
+    for (int i = 0; i < SectorDoorFaceCount; ++i) {
+        if (!IsDefaultDoorFaceUv(uvs.faces[i])) {
+            value[DoorFaceJsonNames[i]] = WriteDoorFaceUv(
+                    uvs.faces[i],
+                    context + "." + DoorFaceJsonNames[i]);
+        }
+    }
+    return value;
+}
+
 Json WritePlacedDoor(const SectorPlacedDoor& door)
 {
     Json json{
@@ -1136,6 +1246,9 @@ Json WritePlacedDoor(const SectorPlacedDoor& door)
     }
     if (!door.textureId.empty()) {
         json["textureId"] = door.textureId;
+    }
+    if (!IsDefaultDoorFaceUvSet(door.faceUvs)) {
+        json["faceUvs"] = WriteDoorFaceUvSet(door.faceUvs, "door.faceUvs");
     }
     return json;
 }

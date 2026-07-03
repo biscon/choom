@@ -1129,6 +1129,10 @@ void TestRuntimeObjectsRoundTripAndValidation()
 
     SectorTopologyMap doorMap = MakeSquare();
     doorMap.runtimeObjects.push_back(MakeDoorRuntimeObject(30));
+    doorMap.runtimeObjects[0].door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].scale = {2.0f, 3.0f};
+    doorMap.runtimeObjects[0].door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].offset = {0.25f, 0.5f};
+    doorMap.runtimeObjects[0].door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Left)].scale = {4.0f, 5.0f};
+    doorMap.runtimeObjects[0].door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Left)].offset = {1.25f, 1.5f};
     const Json doorSaved = Json::parse(SaveText(doorMap));
     Check(doorSaved["runtimeObjects"][0]["kind"].get<std::string>() == "door"
                   && doorSaved["runtimeObjects"][0]["door"].is_object()
@@ -1158,6 +1162,16 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && Near(savedDoor["autoOpenDistance"].get<float>(), 2.5f)
                   && savedDoor["textureId"].get<std::string>() == "industrial_door",
           "door payload writes dimensions motion interaction fields and texture ID");
+    Check(savedDoor["faceUvs"]["front"]["scale"][0].get<float>() == 2.0f
+                  && savedDoor["faceUvs"]["front"]["scale"][1].get<float>() == 3.0f
+                  && savedDoor["faceUvs"]["front"]["offset"][0].get<float>() == 0.25f
+                  && savedDoor["faceUvs"]["front"]["offset"][1].get<float>() == 0.5f
+                  && savedDoor["faceUvs"]["left"]["scale"][0].get<float>() == 4.0f
+                  && !savedDoor["faceUvs"].contains("back")
+                  && !savedDoor["faceUvs"].contains("right")
+                  && !savedDoor["faceUvs"].contains("top")
+                  && !savedDoor["faceUvs"].contains("bottom"),
+          "door face UVs write non-default faces and omit default faces");
 
     SectorTopologyMap doorLoaded;
     Check(LoadText(doorSaved.dump(), doorLoaded, error), "door runtime object JSON loads");
@@ -1185,8 +1199,25 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && loadedDoor->door.autoOpen
                   && Near(loadedDoor->door.interactionDistance, 1.75f)
                   && Near(loadedDoor->door.autoOpenDistance, 2.5f)
-                  && loadedDoor->door.textureId == "industrial_door",
-          "door payload round-trips authored fields");
+                  && loadedDoor->door.textureId == "industrial_door"
+                  && Near(loadedDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].scale, Vector2{2.0f, 3.0f})
+                  && Near(loadedDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].offset, Vector2{0.25f, 0.5f})
+                  && Near(loadedDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Left)].scale, Vector2{4.0f, 5.0f})
+                  && Near(loadedDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Back)].scale, Vector2{1.0f, 1.0f})
+                  && Near(loadedDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Back)].offset, Vector2{0.0f, 0.0f}),
+          "door payload round-trips authored fields and face UVs");
+
+    Json oldDoorJson = doorSaved;
+    oldDoorJson["runtimeObjects"][0]["door"].erase("faceUvs");
+    SectorTopologyMap oldDoorLoaded;
+    Check(LoadText(oldDoorJson.dump(), oldDoorLoaded, error),
+          "old door JSON without face UVs loads");
+    const SectorPlacedRuntimeObject* loadedOldDoor =
+            game::FindSectorPlacedRuntimeObject(oldDoorLoaded, 30);
+    Check(loadedOldDoor != nullptr
+                  && Near(loadedOldDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].scale, Vector2{1.0f, 1.0f})
+                  && Near(loadedOldDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Bottom)].offset, Vector2{0.0f, 0.0f}),
+          "missing door face UVs load defaults");
 
     SectorTopologyMap defaultDoorMap = MakeSquare();
     SectorPlacedRuntimeObject defaultDoor = MakeDoorRuntimeObject(31);
@@ -1216,7 +1247,8 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && !savedDefaultDoor.contains("autoOpen")
                   && !savedDefaultDoor.contains("interactionDistance")
                   && !savedDefaultDoor.contains("autoOpenDistance")
-                  && !savedDefaultDoor.contains("textureId"),
+                  && !savedDefaultDoor.contains("textureId")
+                  && !savedDefaultDoor.contains("faceUvs"),
           "default door payload fields are omitted");
 
     SectorTopologyMap defaultDoorLoaded;
@@ -1330,6 +1362,22 @@ void TestRuntimeObjectsRoundTripAndValidation()
     invalidDoor = doorSaved;
     invalidDoor["runtimeObjects"][0]["door"]["textureId"] = 7;
     ExpectRejected(invalidDoor, "wrong-type door texture ID is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["faceUvs"] = "bad";
+    ExpectRejected(invalidDoor, "wrong-type door face UV container is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["faceUvs"]["front"]["scale"] = Json::array({0.0f, 1.0f});
+    ExpectRejected(invalidDoor, "zero door face UV scale is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["faceUvs"]["front"]["offset"] = Json::array({0.0f, "bad"});
+    ExpectRejected(invalidDoor, "wrong-type door face UV offset is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["faceUvs"]["front"]["scale"] = Json::array({65.0f, 1.0f});
+    ExpectRejected(invalidDoor, "out-of-range door face UV scale is rejected");
 
     invalidDoor = doorSaved;
     invalidDoor["runtimeObjects"][0].erase("door");

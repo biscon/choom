@@ -1,6 +1,7 @@
 #include "sector_demo/SectorRuntimeObjects.h"
 
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
@@ -16,6 +17,216 @@
 #include <raymath.h>
 
 namespace game {
+
+const char* SectorDoorFaceName(SectorDoorFace face)
+{
+    switch (face) {
+        case SectorDoorFace::Front:
+            return "Front";
+        case SectorDoorFace::Back:
+            return "Back";
+        case SectorDoorFace::Left:
+            return "Left";
+        case SectorDoorFace::Right:
+            return "Right";
+        case SectorDoorFace::Top:
+            return "Top";
+        case SectorDoorFace::Bottom:
+            return "Bottom";
+        case SectorDoorFace::Count:
+            break;
+    }
+    return "Unknown";
+}
+
+int SectorDoorFaceIndex(SectorDoorFace face)
+{
+    const int index = static_cast<int>(face);
+    return index >= 0 && index < SectorDoorFaceCount ? index : 0;
+}
+
+SectorDoorFace SectorDoorFaceFromIndex(int index)
+{
+    if (index < 0 || index >= SectorDoorFaceCount) {
+        return SectorDoorFace::Front;
+    }
+    return static_cast<SectorDoorFace>(index);
+}
+
+SectorDoorFaceUv& DoorFaceUv(SectorDoorFaceUvSet& uvs, SectorDoorFace face)
+{
+    return uvs.faces[SectorDoorFaceIndex(face)];
+}
+
+const SectorDoorFaceUv& DoorFaceUv(const SectorDoorFaceUvSet& uvs, SectorDoorFace face)
+{
+    return uvs.faces[SectorDoorFaceIndex(face)];
+}
+
+bool IsDefaultSectorDoorFaceUv(const SectorDoorFaceUv& uv)
+{
+    return uv.scale.x == 1.0f
+            && uv.scale.y == 1.0f
+            && uv.offset.x == 0.0f
+            && uv.offset.y == 0.0f;
+}
+
+bool IsDefaultSectorDoorFaceUvSet(const SectorDoorFaceUvSet& uvs)
+{
+    for (int i = 0; i < SectorDoorFaceCount; ++i) {
+        if (!IsDefaultSectorDoorFaceUv(uvs.faces[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool SameSectorDoorFaceUv(const SectorDoorFaceUv& a, const SectorDoorFaceUv& b)
+{
+    return a.scale.x == b.scale.x
+            && a.scale.y == b.scale.y
+            && a.offset.x == b.offset.x
+            && a.offset.y == b.offset.y;
+}
+
+bool SameSectorDoorFaceUvSet(const SectorDoorFaceUvSet& a, const SectorDoorFaceUvSet& b)
+{
+    for (int i = 0; i < SectorDoorFaceCount; ++i) {
+        if (!SameSectorDoorFaceUv(a.faces[i], b.faces[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsValidSectorDoorUvScale(float scale)
+{
+    return std::isfinite(scale)
+            && scale >= TopologyUvScaleMin
+            && scale <= TopologyUvScaleMax;
+}
+
+bool IsValidSectorDoorUvOffset(float offset)
+{
+    return std::isfinite(offset);
+}
+
+Vector2 SectorDoorFaceDimensions(const SectorDoorRender& render, SectorDoorFace face)
+{
+    switch (face) {
+        case SectorDoorFace::Front:
+        case SectorDoorFace::Back:
+            return Vector2{render.width, render.height};
+        case SectorDoorFace::Left:
+        case SectorDoorFace::Right:
+            return Vector2{render.thickness, render.height};
+        case SectorDoorFace::Top:
+        case SectorDoorFace::Bottom:
+            return Vector2{render.width, render.thickness};
+        case SectorDoorFace::Count:
+            break;
+    }
+    return Vector2{};
+}
+
+Vector2 SectorDoorFaceBaseUvSpan(const SectorDoorRender& render, SectorDoorFace face)
+{
+    return SectorDoorFaceDimensions(render, face);
+}
+
+bool FitSectorDoorFaceUv(
+        SectorDoorFaceUvSet& uvs,
+        SectorDoorFace face,
+        SectorDoorUvFitMode mode,
+        const SectorDoorRender& render,
+        std::string* outError)
+{
+    const Vector2 baseUvSpan = SectorDoorFaceBaseUvSpan(render, face);
+    if ((mode == SectorDoorUvFitMode::Width || mode == SectorDoorUvFitMode::Both)
+            && (!(baseUvSpan.x > 0.0f) || !std::isfinite(baseUvSpan.x))) {
+        if (outError != nullptr) {
+            *outError = "Fit width needs a positive finite base U span.";
+        }
+        return false;
+    }
+    if ((mode == SectorDoorUvFitMode::Height || mode == SectorDoorUvFitMode::Both)
+            && (!(baseUvSpan.y > 0.0f) || !std::isfinite(baseUvSpan.y))) {
+        if (outError != nullptr) {
+            *outError = "Fit height needs a positive finite base V span.";
+        }
+        return false;
+    }
+
+    SectorDoorFaceUv fitted = DoorFaceUv(uvs, face);
+    if (mode == SectorDoorUvFitMode::Width || mode == SectorDoorUvFitMode::Both) {
+        const float scale = 1.0f / baseUvSpan.x;
+        if (!IsValidSectorDoorUvScale(scale)) {
+            if (outError != nullptr) {
+                *outError = "Fit width requires a UV scale outside the editable range.";
+            }
+            return false;
+        }
+        fitted.scale.x = scale;
+        fitted.offset.x = 0.0f;
+    }
+    if (mode == SectorDoorUvFitMode::Height || mode == SectorDoorUvFitMode::Both) {
+        const float scale = 1.0f / baseUvSpan.y;
+        if (!IsValidSectorDoorUvScale(scale)) {
+            if (outError != nullptr) {
+                *outError = "Fit height requires a UV scale outside the editable range.";
+            }
+            return false;
+        }
+        fitted.scale.y = scale;
+        fitted.offset.y = 0.0f;
+    }
+
+    DoorFaceUv(uvs, face) = fitted;
+    if (outError != nullptr) {
+        outError->clear();
+    }
+    return true;
+}
+
+bool ResetSectorDoorFaceUv(SectorDoorFaceUvSet& uvs, SectorDoorFace face)
+{
+    SectorDoorFaceUv& uv = DoorFaceUv(uvs, face);
+    if (IsDefaultSectorDoorFaceUv(uv)) {
+        return false;
+    }
+    uv = SectorDoorFaceUv{};
+    return true;
+}
+
+bool CopySectorDoorFaceUv(
+        SectorDoorFaceUvSet& uvs,
+        SectorDoorFace source,
+        SectorDoorFace target)
+{
+    if (SectorDoorFaceIndex(source) == SectorDoorFaceIndex(target)) {
+        return false;
+    }
+    const SectorDoorFaceUv sourceUv = DoorFaceUv(uvs, source);
+    SectorDoorFaceUv& targetUv = DoorFaceUv(uvs, target);
+    if (SameSectorDoorFaceUv(sourceUv, targetUv)) {
+        return false;
+    }
+    targetUv = sourceUv;
+    return true;
+}
+
+bool ApplySectorDoorFaceUvToAll(SectorDoorFaceUvSet& uvs, SectorDoorFace source)
+{
+    const SectorDoorFaceUv sourceUv = DoorFaceUv(uvs, source);
+    bool changed = false;
+    for (int i = 0; i < SectorDoorFaceCount; ++i) {
+        if (!SameSectorDoorFaceUv(uvs.faces[i], sourceUv)) {
+            uvs.faces[i] = sourceUv;
+            changed = true;
+        }
+    }
+    return changed;
+}
 
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
@@ -164,13 +375,16 @@ SectorDoorSlabMeshData BuildSectorDoorSlabMeshData(const SectorDoorRender& rende
             Vector3 b,
             Vector3 c,
             Vector3 d,
-            float uScale,
-            float vScale) {
+            Vector2 baseUvSpan,
+            const SectorDoorFaceUv& uv) {
         const uint16_t base = static_cast<uint16_t>(data.vertices.size());
-        data.vertices.push_back(SectorDoorSlabMeshVertex{a, normal, Vector2{0.0f, vScale}, WHITE});
-        data.vertices.push_back(SectorDoorSlabMeshVertex{b, normal, Vector2{uScale, vScale}, WHITE});
-        data.vertices.push_back(SectorDoorSlabMeshVertex{c, normal, Vector2{uScale, 0.0f}, WHITE});
-        data.vertices.push_back(SectorDoorSlabMeshVertex{d, normal, Vector2{0.0f, 0.0f}, WHITE});
+        const auto transformUv = [&uv](float u, float v) {
+            return Vector2{u * uv.scale.x + uv.offset.x, v * uv.scale.y + uv.offset.y};
+        };
+        data.vertices.push_back(SectorDoorSlabMeshVertex{a, normal, transformUv(0.0f, baseUvSpan.y), WHITE});
+        data.vertices.push_back(SectorDoorSlabMeshVertex{b, normal, transformUv(baseUvSpan.x, baseUvSpan.y), WHITE});
+        data.vertices.push_back(SectorDoorSlabMeshVertex{c, normal, transformUv(baseUvSpan.x, 0.0f), WHITE});
+        data.vertices.push_back(SectorDoorSlabMeshVertex{d, normal, transformUv(0.0f, 0.0f), WHITE});
         data.indices.push_back(base + 0);
         data.indices.push_back(base + 1);
         data.indices.push_back(base + 2);
@@ -185,48 +399,48 @@ SectorDoorSlabMeshData BuildSectorDoorSlabMeshData(const SectorDoorRender& rende
             bottomFrontRight,
             topFrontRight,
             topFrontLeft,
-            render.width,
-            render.height);
+            SectorDoorFaceBaseUvSpan(render, SectorDoorFace::Front),
+            DoorFaceUv(render.faceUvs, SectorDoorFace::Front));
     appendFace(
             Vector3{0.0f, 0.0f, -1.0f},
             bottomBackRight,
             bottomBackLeft,
             topBackLeft,
             topBackRight,
-            render.width,
-            render.height);
+            SectorDoorFaceBaseUvSpan(render, SectorDoorFace::Back),
+            DoorFaceUv(render.faceUvs, SectorDoorFace::Back));
     appendFace(
             Vector3{1.0f, 0.0f, 0.0f},
             bottomFrontRight,
             bottomBackRight,
             topBackRight,
             topFrontRight,
-            render.thickness,
-            render.height);
+            SectorDoorFaceBaseUvSpan(render, SectorDoorFace::Right),
+            DoorFaceUv(render.faceUvs, SectorDoorFace::Right));
     appendFace(
             Vector3{-1.0f, 0.0f, 0.0f},
             bottomBackLeft,
             bottomFrontLeft,
             topFrontLeft,
             topBackLeft,
-            render.thickness,
-            render.height);
+            SectorDoorFaceBaseUvSpan(render, SectorDoorFace::Left),
+            DoorFaceUv(render.faceUvs, SectorDoorFace::Left));
     appendFace(
             Vector3{0.0f, 1.0f, 0.0f},
             topFrontLeft,
             topFrontRight,
             topBackRight,
             topBackLeft,
-            render.width,
-            render.thickness);
+            SectorDoorFaceBaseUvSpan(render, SectorDoorFace::Top),
+            DoorFaceUv(render.faceUvs, SectorDoorFace::Top));
     appendFace(
             Vector3{0.0f, -1.0f, 0.0f},
             bottomBackLeft,
             bottomBackRight,
             bottomFrontRight,
             bottomFrontLeft,
-            render.width,
-            render.thickness);
+            SectorDoorFaceBaseUvSpan(render, SectorDoorFace::Bottom),
+            DoorFaceUv(render.faceUvs, SectorDoorFace::Bottom));
 
     return data;
 }
@@ -1302,6 +1516,7 @@ void SpawnPlacedRuntimeObjects(
                     placedObject.door.thickness,
                     placedObject.door.normalOffset,
                     placedObject.door.textureId,
+                    placedObject.door.faceUvs,
                     WHITE,
                     true};
             const Vector3 worldPosition = Vector3Add(

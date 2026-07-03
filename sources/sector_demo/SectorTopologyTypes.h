@@ -32,6 +32,8 @@ constexpr float DynamicSpotLightDefaultShadowStrength = 1.0f;
 constexpr float DynamicSpotLightMinShadowSoftness = 0.0f;
 constexpr float DynamicSpotLightMaxShadowSoftness = 8.0f;
 constexpr float DynamicSpotLightDefaultShadowSoftness = 1.0f;
+constexpr float TopologyUvScaleMin = 0.001f;
+constexpr float TopologyUvScaleMax = 64.0f;
 
 inline float ClampDynamicLightFlickerSpeed(float value)
 {
@@ -77,6 +79,29 @@ enum class SectorTopologySideKind {
 struct SectorTopologyUvSettings {
     Vector2 scale = {1.0f, 1.0f};
     Vector2 offset = {0.0f, 0.0f};
+};
+
+struct SectorDoorFaceUv {
+    Vector2 scale = {1.0f, 1.0f};
+    Vector2 offset = {0.0f, 0.0f};
+};
+
+enum class SectorDoorFace {
+    // Front is the local +normal slab face. For anchored doors this is the side facing
+    // from anchor.frontSectorId toward anchor.backSectorId; Back is the opposite face.
+    Front = 0,
+    Back,
+    Left,
+    Right,
+    Top,
+    Bottom,
+    Count
+};
+
+inline constexpr int SectorDoorFaceCount = static_cast<int>(SectorDoorFace::Count);
+
+struct SectorDoorFaceUvSet {
+    SectorDoorFaceUv faces[SectorDoorFaceCount];
 };
 
 struct SectorTopologyDecalLayer {
