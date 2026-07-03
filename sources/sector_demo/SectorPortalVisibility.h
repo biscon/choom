@@ -34,6 +34,14 @@ struct RuntimeSectorVisibilityGraph {
     std::vector<RuntimePortalEdge> portals;
 };
 
+struct RuntimePortalDynamicBlocker {
+    int lineDefId = -1;
+    int sideDefId = -1;
+    int fromSectorId = -1;
+    int toSectorId = -1;
+    bool blocksPortal = false;
+};
+
 struct RuntimePortalVisibilityResult {
     int startSectorId = -1;
     std::vector<int> startSectorIds;
@@ -53,13 +61,15 @@ bool BuildRuntimeSectorVisibilityGraph(
 
 RuntimePortalVisibilityResult TraverseRuntimeSectorVisibility(
         const RuntimeSectorVisibilityGraph& graph,
-        int startSectorId);
+        int startSectorId,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers = nullptr);
 
 RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromPoint(
         const RuntimeSectorVisibilityGraph& graph,
         const SectorCollisionWorld* collisionWorld,
         Vector2 xz,
-        int preferredStartSectorId = 0);
+        int preferredStartSectorId = 0,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers = nullptr);
 
 RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
         const RuntimeSectorVisibilityGraph& graph,
@@ -71,7 +81,8 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
         size_t iterationCap = 0,
         float visibilitySeedRadiusWorld = 0.0f,
         float eyeYWorld = 0.0f,
-        bool validateEyeY = false);
+        bool validateEyeY = false,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers = nullptr);
 
 RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
         const RuntimeSectorVisibilityGraph& graph,
@@ -80,7 +91,12 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
         float horizontalFovRadians,
         const std::vector<int>& startSectorIds,
         int preferredStartSectorId = 0,
-        size_t iterationCap = 0);
+        size_t iterationCap = 0,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers = nullptr);
+
+bool IsRuntimePortalDynamicallyBlocked(
+        const RuntimePortalEdge& edge,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers);
 
 float ClampRuntimeVisibilitySeedRadiusWorld(float playerRadiusWorld);
 

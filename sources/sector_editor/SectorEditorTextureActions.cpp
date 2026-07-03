@@ -569,6 +569,11 @@ std::string CurrentTextureForPickerTarget(const SectorEditorState& state)
                 ? state.previewSettingsModal.draftSkySettings.textureId
                 : state.topologyMap.skySettings.textureId;
     }
+    if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDoor) {
+        const SectorPlacedRuntimeObject* object =
+                FindSectorPlacedRuntimeObject(state.topologyMap, state.texturePicker.runtimeObjectId);
+        return object != nullptr && object->kind == "door" ? object->door.textureId : std::string{};
+    }
 
     if (IsSidePickerTarget(state.texturePicker.topologyTargetKind)) {
         if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringSide) {
@@ -908,6 +913,32 @@ bool OpenMapSkyTexturePicker(SectorEditorState& state)
     return true;
 }
 
+bool OpenRuntimeDoorTexturePicker(SectorEditorState& state, int runtimeObjectId)
+{
+    TexturePickerState& picker = state.texturePicker;
+    const SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(state.topologyMap, runtimeObjectId);
+    if (object == nullptr || object->kind != "door") {
+        picker = TexturePickerState{};
+        return false;
+    }
+
+    picker.open = true;
+    picker.rebuildPreviewOnApply = false;
+    picker.topologyTargetKind = TopologyTexturePickerTargetKind::RuntimeDoor;
+    picker.topologyLayer = TopologyMaterialLayer::Base;
+    picker.topologySectorId = -1;
+    picker.topologyField = TopologySectorTextureField::None;
+    picker.topologySideDefId = -1;
+    picker.topologyWallPart = TopologyWallPart::Wall;
+    picker.authoringFaceAnchorId = -1;
+    picker.authoringLineId = -1;
+    picker.authoringSide = SectorTopologySideKind::Front;
+    picker.runtimeObjectId = runtimeObjectId;
+
+    PopulateTexturePickerOptions(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
+    return true;
+}
+
 SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(SectorEditorState& state)
 {
     SectorEditorTexturePickerApplyResult result;
@@ -928,6 +959,18 @@ SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(SectorEditorSta
                 && state.previewSettingsModal.draftSkySettings.textureId != selectedTexture) {
             state.previewSettingsModal.draftSkySettings.textureId = selectedTexture;
             state.previewSettingsModal.errorMessage.clear();
+        }
+        picker = TexturePickerState{};
+        return result;
+    }
+
+    if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDoor) {
+        SectorPlacedRuntimeObject* object =
+                FindSectorPlacedRuntimeObject(state.topologyMap, picker.runtimeObjectId);
+        if (object != nullptr && object->kind == "door" && object->door.textureId != selectedTexture) {
+            object->door.textureId = selectedTexture;
+            result.changed = true;
+            result.status = "Selected door texture.";
         }
         picker = TexturePickerState{};
         return result;

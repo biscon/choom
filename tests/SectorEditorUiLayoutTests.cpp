@@ -1,4 +1,5 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/SectorEditorPreviewSettingsModal.h"
 
 #include <cmath>
 #include <iostream>
@@ -26,6 +27,14 @@ bool Overlaps(Rectangle a, Rectangle b)
             && a.x + a.width > b.x
             && a.y < b.y + b.height
             && a.y + a.height > b.y;
+}
+
+bool Contains(Rectangle outer, Rectangle inner)
+{
+    return inner.x >= outer.x
+            && inner.y >= outer.y
+            && inner.x + inner.width <= outer.x + outer.width
+            && inner.y + inner.height <= outer.y + outer.height;
 }
 
 void TestTextureRowWithoutClear()
@@ -174,6 +183,132 @@ void TestRuntimeObjectInspectorHeightCountsBillboardRows()
           "aspect warning height includes text row and trailing gap");
 }
 
+void TestDoorInspectorHeightCountsCoreRows()
+{
+    const float rowH = 40.0f;
+    const float gap = 8.0f;
+    const float anchorStatusHeight = 44.0f;
+    const float textureStatusHeight = 20.0f;
+    const float height = game::SectorEditorDoorInspectorContentHeight(
+            rowH,
+            gap,
+            anchorStatusHeight,
+            textureStatusHeight);
+    const float expected =
+            38.0f
+            + 34.0f
+            + anchorStatusHeight + gap
+            + (rowH + gap) * 4.0f
+            + game::SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap
+            + (rowH + gap) * 3.0f
+            + (rowH + gap) * 4.0f
+            + textureStatusHeight + gap
+            + rowH + gap
+            + rowH + gap
+            + rowH + gap;
+
+    Check(Near(height, expected),
+          "door inspector height includes anchor, core fields, motion, interaction controls, texture status, texture buttons, and delete");
+}
+
+void TestDoorTextureSettingsModalLayoutDoesNotOverlap()
+{
+    const Rectangle modal{100.0f, 80.0f, 680.0f, 600.0f};
+    const game::SectorEditorDoorTextureSettingsModalLayout layout =
+            game::BuildSectorEditorDoorTextureSettingsModalLayout(modal, 26.0f, 10.0f);
+
+    Check(Contains(modal, layout.titleRect), "door texture modal title fits inside modal");
+    Check(Contains(modal, layout.statusRect), "door texture modal status fits inside modal");
+    Check(Contains(modal, layout.doneButtonRect), "door texture modal done button fits inside modal");
+
+    for (int i = 0; i < 6; ++i) {
+        Check(Contains(modal, layout.faceButtonRects[i]), "door texture modal face button fits inside modal");
+        Check(Contains(modal, layout.actionButtonRects[i]), "door texture modal action button fits inside modal");
+        for (int j = i + 1; j < 6; ++j) {
+            Check(!Overlaps(layout.faceButtonRects[i], layout.faceButtonRects[j]),
+                  "door texture modal face buttons do not overlap");
+            Check(!Overlaps(layout.actionButtonRects[i], layout.actionButtonRects[j]),
+                  "door texture modal action buttons do not overlap");
+        }
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        Check(Contains(modal, layout.uvLabelRects[i]), "door texture modal uv label fits inside modal");
+        Check(Contains(modal, layout.uvInputRects[i]), "door texture modal uv input fits inside modal");
+        Check(!Overlaps(layout.uvLabelRects[i], layout.uvInputRects[i]),
+              "door texture modal uv label does not overlap input");
+        for (int j = i + 1; j < 4; ++j) {
+            Check(!Overlaps(layout.uvInputRects[i], layout.uvInputRects[j]),
+                  "door texture modal uv inputs do not overlap");
+        }
+        for (int j = 0; j < 6; ++j) {
+            Check(!Overlaps(layout.faceButtonRects[j], layout.uvInputRects[i]),
+                  "door texture modal face buttons do not overlap uv inputs");
+            Check(!Overlaps(layout.actionButtonRects[j], layout.uvInputRects[i]),
+                  "door texture modal action buttons do not overlap uv inputs");
+        }
+    }
+
+    for (int i = 0; i < 6; ++i) {
+        Check(!Overlaps(layout.actionButtonRects[i], layout.statusRect),
+              "door texture modal action buttons do not overlap status");
+        Check(!Overlaps(layout.actionButtonRects[i], layout.doneButtonRect),
+              "door texture modal action buttons do not overlap done button");
+    }
+    Check(!Overlaps(layout.statusRect, layout.doneButtonRect),
+          "door texture modal status does not overlap done button");
+}
+
+void TestPreviewSettingsModalCopiesObjectProbeSettings()
+{
+    game::SectorTopologyMap map;
+    map.lightmapSettings.objectProbeSpacingWorld = 6.5f;
+    map.lightmapSettings.objectProbeHeightWorld = 2.25f;
+
+    game::SectorPreviewSettingsModalState modal;
+    modal.draftLightmapSettings =
+            game::NormalizeSectorPreviewObjectProbeSettings(map.lightmapSettings);
+
+    Check(Near(modal.draftLightmapSettings.objectProbeSpacingWorld, 6.5f),
+          "preview settings modal draft copies object probe spacing");
+    Check(Near(modal.draftLightmapSettings.objectProbeHeightWorld, 2.25f),
+          "preview settings modal draft copies object probe height");
+}
+
+void TestPreviewSettingsModalAppliesObjectProbeSettingsAndChangesHash()
+{
+    game::SectorTopologyMap map;
+    const std::string originalHash = game::ComputeSectorLightmapSourceHash(map);
+
+    game::SectorLightmapBakeSettings draft = map.lightmapSettings;
+    draft.objectProbeSpacingWorld = 5.5f;
+    draft.objectProbeHeightWorld = 1.6f;
+
+    const bool changed = game::ApplySectorPreviewObjectProbeSettings(map, draft);
+
+    Check(changed, "preview settings modal apply reports changed object probe settings");
+    Check(Near(map.lightmapSettings.objectProbeSpacingWorld, 5.5f),
+          "preview settings modal apply writes object probe spacing");
+    Check(Near(map.lightmapSettings.objectProbeHeightWorld, 1.6f),
+          "preview settings modal apply writes object probe height");
+    Check(game::ComputeSectorLightmapSourceHash(map) != originalHash,
+          "object probe settings update changes lightmap source hash");
+}
+
+void TestPreviewSettingsModalResetsObjectProbeDefaults()
+{
+    game::SectorPreviewSettingsModalState modal;
+    modal.draftLightmapSettings.objectProbeSpacingWorld = 9.0f;
+    modal.draftLightmapSettings.objectProbeHeightWorld = 3.0f;
+
+    game::ResetSectorPreviewSettingsModalLightingDefaults(modal);
+
+    Check(Near(modal.draftLightmapSettings.objectProbeSpacingWorld, 4.0f),
+          "preview settings modal reset restores default object probe spacing");
+    Check(Near(modal.draftLightmapSettings.objectProbeHeightWorld, 1.2f),
+          "preview settings modal reset restores default object probe height");
+}
+
 } // namespace
 
 int main()
@@ -187,6 +322,11 @@ int main()
     TestTextureRowHeight();
     TestStackedOptionRow();
     TestRuntimeObjectInspectorHeightCountsBillboardRows();
+    TestDoorInspectorHeightCountsCoreRows();
+    TestDoorTextureSettingsModalLayoutDoesNotOverlap();
+    TestPreviewSettingsModalCopiesObjectProbeSettings();
+    TestPreviewSettingsModalAppliesObjectProbeSettingsAndChangesHash();
+    TestPreviewSettingsModalResetsObjectProbeDefaults();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorUiLayoutTests failure(s)\n";

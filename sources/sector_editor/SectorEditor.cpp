@@ -140,6 +140,32 @@ Color ColorFromObjectProbeAmbientCube(const SectorBakedObjectLightProbe& probe)
             235};
 }
 
+bool ShouldDrawObjectProbeDebugMarker(
+        Vector3 referencePosition,
+        Vector3 probePosition,
+        float maxDistanceWorld)
+{
+    if (maxDistanceWorld <= 0.0f) {
+        return true;
+    }
+    const Vector3 delta = Vector3Subtract(probePosition, referencePosition);
+    return Vector3LengthSqr(delta) <= maxDistanceWorld * maxDistanceWorld;
+}
+
+size_t CountVisibleObjectProbeDebugMarkers(
+        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
+        Vector3 referencePosition,
+        float maxDistanceWorld)
+{
+    size_t count = 0;
+    for (const SectorBakedObjectLightProbe& probe : objectLightProbes.probes) {
+        if (ShouldDrawObjectProbeDebugMarker(referencePosition, probe.position, maxDistanceWorld)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 void UpdateCachedRuntimeObjectDraw(
         SectorEditorTopologyRenderCache& cache,
         const SectorPlacedRuntimeObject& object)
@@ -153,6 +179,8 @@ void UpdateCachedRuntimeObjectDraw(
         cached.map = Vector2{object.position.x, object.position.z};
         cached.yawRadians = object.yawRadians;
         cached.definitionKnown = object.kind == "billboard";
+        cached.isDoor = false;
+        cached.doorFootprintValid = false;
         return;
     }
 }
@@ -165,6 +193,13 @@ void ResetRuntimeObjectUiState(SectorEditorUiState& uiState)
     uiState.runtimeObjectYawInput = engine::UIFloatInputState{};
     uiState.runtimeObjectWidthInput = engine::UIFloatInputState{};
     uiState.runtimeObjectHeightInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectThicknessInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectNormalOffsetInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectOpenDistanceInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectSpeedInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectInitialOpenFractionInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectAutoOpenDistanceInput = engine::UIFloatInputState{};
+    uiState.runtimeObjectInteractionDistanceInput = engine::UIFloatInputState{};
     uiState.runtimeObjectOriginXInput = engine::UIFloatInputState{};
     uiState.runtimeObjectOriginYInput = engine::UIFloatInputState{};
 }
@@ -199,6 +234,32 @@ bool ResolveBillboardAspectFromAnimation(
 
     outAspect = frameSize.x / frameSize.y;
     return std::isfinite(outAspect) && outAspect > 0.0f;
+}
+
+int DoorMotionOptionIndex(SectorDoorMotionType motion)
+{
+    switch (motion) {
+        case SectorDoorMotionType::SlideVertical:
+            return 0;
+        case SectorDoorMotionType::SlideLeft:
+            return 1;
+        case SectorDoorMotionType::SlideRight:
+            return 2;
+    }
+    return 0;
+}
+
+SectorDoorMotionType DoorMotionFromOptionIndex(int index)
+{
+    switch (index) {
+        case 1:
+            return SectorDoorMotionType::SlideLeft;
+        case 2:
+            return SectorDoorMotionType::SlideRight;
+        case 0:
+        default:
+            return SectorDoorMotionType::SlideVertical;
+    }
 }
 
 int64_t CoordinateSequencePeriod(SectorCoord stepDelta, int64_t snapStep)
@@ -426,10 +487,37 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
     }
 
     if (state.mode == SectorEditorMode::Preview3D) {
-        UpdateSectorRuntimeObjects(context.world, assets, state.runtimeObjects, state.topologyMap, dt);
+        const Vector3 playerPosition = state.freeflyController.pose.position;
+        UpdateSectorRuntimeObjects(context.world, assets, state.runtimeObjects, state.topologyMap, dt, &playerPosition);
+        state.runtimeObjects.dynamicDoorColliders.clear();
+        CollectSectorDoorDynamicColliders(context.world, state.runtimeObjects.dynamicDoorColliders);
+        state.runtimeObjects.dynamicPortalBlockers.clear();
+        CollectSectorDoorDynamicPortalBlockers(context.world, state.runtimeObjects.dynamicPortalBlockers);
         preview.AdvanceRuntime(dt);
-        if (state.texturePicker.open || state.spritePicker.open || HasDocumentModalOpen()) {
+        const bool hasBlockingModal = state.texturePicker.open
+                || state.spritePicker.open
+                || HasDocumentModalOpen();
+        if (hasBlockingModal) {
             return;
+        }
+        const bool canInteractWithDoors = state.previewControlMode == SectorPreviewControlMode::Gameplay
+                && state.freeflyController.mouseLookEnabled
+                && !uiState.keyboardCaptured;
+        if (canInteractWithDoors) {
+            input.ForEachEvent(
+                    engine::InputEventType::KeyPressed,
+                    true,
+                    [this, &context](engine::InputEvent& event) {
+                        if (event.key.key != KEY_F) {
+                            return;
+                        }
+                        if (ToggleTargetedSectorDoorInteractionSystem(
+                                    context.world,
+                                    state.freeflyController.pose.position,
+                                    PreviewForwardFromPose(state.freeflyController.pose))) {
+                            engine::ConsumeEvent(event);
+                        }
+                    });
         }
         UpdatePreview3D(input, assets, dt);
         return;
@@ -499,11 +587,15 @@ void SectorEditor::RenderUI(
                 && !state.texturePicker.open
                 && !state.spritePicker.open
                 && !state.decalTintModal.open
+                && !state.doorTextureSettingsModal.open
                 && !state.previewSettingsModal.open) {
             DrawPreviewUvPanel(ui, config, input, assets, font);
         }
         if (state.decalTintModal.open) {
             DrawDecalTintModal(ui, config, input, assets, font);
+        }
+        if (state.doorTextureSettingsModal.open) {
+            DrawDoorTextureSettingsModal(ui, config, input, assets, font, smallFont);
         }
         if (state.previewSettingsModal.open) {
             DrawPreviewSettingsModal(ui, config, input, assets, font);
@@ -511,7 +603,11 @@ void SectorEditor::RenderUI(
         DrawTexturePickerModal(ui, config, input, assets, font);
         DrawSpritePickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = ui.focusedId != 0;
-        if (state.texturePicker.open || state.spritePicker.open || state.decalTintModal.open || state.previewSettingsModal.open) {
+        if (state.texturePicker.open
+                || state.spritePicker.open
+                || state.decalTintModal.open
+                || state.doorTextureSettingsModal.open
+                || state.previewSettingsModal.open) {
             uiState.keyboardCaptured = true;
         }
         engine::EndUI(ui, config, input, assets);
@@ -545,6 +641,12 @@ void SectorEditor::RenderUI(
     }
     if (state.decalTintModal.open) {
         DrawDecalTintModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (state.doorTextureSettingsModal.open) {
+        DrawDoorTextureSettingsModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -1139,6 +1241,12 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
 
                 if (state.currentTool == SectorEditorTool::RuntimeObject) {
                     AddRuntimeObjectAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
+                if (state.currentTool == SectorEditorTool::Door) {
+                    AddDoorAtPortal(event.mouseClick.releasePosition);
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -1834,6 +1942,10 @@ void SectorEditor::StartRuntimeObjectDrag(int objectId)
     if (object == nullptr) {
         return;
     }
+    if (object->kind == "door") {
+        statusText = "Door movement unavailable: doors stay anchored to portal lines";
+        return;
+    }
 
     SelectRuntimeObject(objectId);
     state.runtimeObjectDrag.active = true;
@@ -1981,6 +2093,12 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
         if (state.previewControlMode == SectorPreviewControlMode::FreeFly) {
             UpdateSectorFreeflyController(state.freeflyController, input, dt);
             preview.ApplyRendererPose(state.freeflyController.pose);
+            preview.UpdateVisibilityDebug(
+                    0,
+                    0.0f,
+                    false,
+                    &state.runtimeObjects.dynamicPortalBlockers,
+                    &engineContext->world);
         } else {
             const float previousVisualEyeY = preview.RendererPose().position.y;
             input.ForEachEvent(
@@ -2033,7 +2151,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             preview.UpdateVisibilityDebug(
                     state.fpsControllerState.currentSectorId,
                     ClampRuntimeVisibilitySeedRadiusWorld(normalizedVisibilityConfig.playerRadius),
-                    true);
+                    true,
+                    &state.runtimeObjects.dynamicPortalBlockers,
+                    &engineContext->world);
             state.freeflyController.pose = preview.RendererPose();
         }
         UpdatePreview3DSelection(input);
@@ -3145,6 +3265,36 @@ void SectorEditor::AddRuntimeObjectAt(Vector2 mapPoint)
     RefreshRuntimeObjectsAfterAuthoringEdit();
 }
 
+void SectorEditor::AddDoorAtPortal(Vector2 screenPoint)
+{
+    int lineDefId = -1;
+    int sideDefId = -1;
+    SectorTopologySideKind side = SectorTopologySideKind::Front;
+    bool preferredMissing = false;
+    if (!FindTopologyLineNearScreenPoint(
+                screenPoint,
+                ScreenToMap(screenPoint),
+                lineDefId,
+                sideDefId,
+                side,
+                preferredMissing)) {
+        statusText = "Door placement failed: click a two-sided portal";
+        return;
+    }
+
+    const SectorEditorAddDoorResult result = AddDoorToPortal(state.topologyMap, lineDefId);
+    if (!result.changed) {
+        if (!result.status.empty()) {
+            statusText = result.status;
+        }
+        return;
+    }
+
+    SelectRuntimeObject(result.objectId);
+    MarkTopologyDocumentEdited(result.status.c_str());
+    RefreshRuntimeObjectsAfterAuthoringEdit();
+}
+
 bool SectorEditor::DeleteSelectedRuntimeObject()
 {
     const SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
@@ -3613,12 +3763,18 @@ void SectorEditor::RenderPreview3DShadowMaps(engine::AssetManager& assets)
     if (state.mode != SectorEditorMode::Preview3D) {
         return;
     }
-    preview.RenderDynamicSpotLightShadowMaps(assets);
+    preview.RenderDynamicSpotLightShadowMaps(
+            assets,
+            engineContext != nullptr ? &engineContext->world : nullptr);
 }
 
 void SectorEditor::RenderPreview3DScene(engine::EngineContext& context)
 {
-    preview.DrawScene(context.assets, state.useBakedAmbientOcclusion, &context.world);
+    preview.DrawScene(
+            context.assets,
+            state.useBakedAmbientOcclusion,
+            &context.world,
+            SectorRuntimeDoorLightingContext{&state.runtimeObjects.objectLightProbes, &state.topologyMap});
 }
 
 void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
@@ -3806,8 +3962,14 @@ void SectorEditor::DrawPreviewObjectProbeOverlay() const
     }
 
     constexpr float MarkerRadius = 0.08f;
+    const Vector3 referencePosition = preview.RendererPose().position;
+    const float maxDistanceWorld = NormalizeSectorPreviewSettings(
+            state.topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
     BeginMode3D(preview.RenderCamera());
     for (const SectorBakedObjectLightProbe& probe : state.runtimeObjects.objectLightProbes.probes) {
+        if (!ShouldDrawObjectProbeDebugMarker(referencePosition, probe.position, maxDistanceWorld)) {
+            continue;
+        }
         const Color color = ColorFromObjectProbeAmbientCube(probe);
         DrawSphere(probe.position, MarkerRadius, color);
         DrawSphereWires(probe.position, MarkerRadius * 1.65f, 8, 8, Color{255, 255, 255, 155});
@@ -3831,7 +3993,7 @@ Rectangle SectorEditor::BuildPreviewOverlayInteractionRect() const
     constexpr float y = 32.0f;
     constexpr float width = 620.0f;
     constexpr float collapsedHeight = 78.0f;
-    constexpr float expandedHeight = 300.0f;
+    constexpr float expandedHeight = 390.0f;
     return Rectangle{
             x,
             y,
@@ -3971,7 +4133,43 @@ void SectorEditor::DrawPreviewOverlay(
                 addKeyValue("dynamic", preview.DynamicLightingEnabled() ? "on" : "off");
                 addKeyValue("AO", state.useBakedAmbientOcclusion ? "on" : "off");
                 addKeyValue("lightmap", preview.RendererLightmapStatusText());
-                addKeyValueStyled("render lights", preview.RenderDebugText(), smallConfig.mutedTextColor, true);
+                addKeyValue("door mode", SectorDoorLightingDebugModeName(preview.DoorLightingDebugMode()));
+                addKeyValue("selected dynamic", TextFormat(
+                        "%zu / %zu / %zu",
+                        preview.SelectedDynamicLights().size(),
+                        preview.DynamicLightCandidateCount(),
+                        preview.DynamicLightSourceCount()));
+                if (!preview.SelectedDynamicLightIds().empty()) {
+                    std::ostringstream ids;
+                    for (size_t i = 0; i < preview.SelectedDynamicLightIds().size(); ++i) {
+                        if (i > 0) {
+                            ids << ",";
+                        }
+                        ids << preview.SelectedDynamicLightIds()[i];
+                    }
+                    addKeyValue("selected ids", ids.str());
+                }
+                if (!preview.SelectedDynamicLights().empty()) {
+                    const SectorPreviewDynamicPointLightUniform& light = preview.SelectedDynamicLights().front();
+                    addKeyValue("first light", TextFormat(
+                            "%s id %d | intensity %.2f | radius %.2f | pos %.2f, %.2f, %.2f",
+                            light.kind == SectorPreviewDynamicLightKind::Spot ? "spot" : "point",
+                            light.lightId,
+                            light.intensity,
+                            light.radius,
+                            light.position.x,
+                            light.position.y,
+                            light.position.z));
+                }
+                addKeyValue("doors drawn now", TextFormat(
+                        "%zu / %zu, skipped %zu",
+                        preview.DoorDrawnCount(),
+                        preview.DoorConsideredCount(),
+                        preview.DoorSkippedCount()));
+                addKeyValue("doors authored/valid", TextFormat(
+                        "%zu / %zu",
+                        state.runtimeObjects.doorObjectCount,
+                        state.runtimeObjects.validDoorAnchorCount));
                 break;
             case PreviewDebugOverlayTab::Objects: {
                 const SectorRuntimeObjectState& objects = state.runtimeObjects;
@@ -4006,7 +4204,17 @@ void SectorEditor::DrawPreviewOverlay(
                         ? "none"
                         : state.runtimeObjects.objectProbeStatus.c_str();
                 addKeyValueStyled("status", objectProbeStatus, smallConfig.mutedTextColor, true);
-                addKeyValue("probe count", TextFormat("%zu", state.runtimeObjects.objectLightProbes.probes.size()));
+                const size_t totalProbeCount = state.runtimeObjects.objectLightProbes.probes.size();
+                addKeyValue("probe count", TextFormat("%zu", totalProbeCount));
+                if (state.showObjectProbeDebugOverlay) {
+                    const float maxDistanceWorld = NormalizeSectorPreviewSettings(
+                            state.topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
+                    const size_t visibleProbeCount = CountVisibleObjectProbeDebugMarkers(
+                            state.runtimeObjects.objectLightProbes,
+                            preview.RendererPose().position,
+                            maxDistanceWorld);
+                    addKeyValue("drawn", TextFormat("%zu / %zu", visibleProbeCount, totalProbeCount));
+                }
                 if (!state.runtimeObjects.objectSectorLookupWarning.empty()) {
                     addKeyValueStyled("lookup warning", state.runtimeObjects.objectSectorLookupWarning, Color{236, 92, 92, 245}, true);
                 }
@@ -4038,6 +4246,9 @@ void SectorEditor::DrawPreviewOverlay(
         contentH += gap;
     }
     if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
+        contentH += (rowH + 6.0f) * 2.0f;
+    }
+    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
         contentH += rowH + 6.0f;
     }
     if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
@@ -4150,6 +4361,54 @@ void SectorEditor::DrawPreviewOverlay(
     }
 
     float y = tabY + tabH + gap;
+    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
+        const char* doorModeOptions[] = {
+                "Normal",
+                "AlbedoOnly",
+                "BakedOnly",
+                "DynamicOnly",
+                "NormalVisualize",
+                "FlatColorNoTexture"};
+        const float labelW = 86.0f;
+        const Rectangle labelRect{panel.x + padding, y, labelW, rowH};
+        const Rectangle modeRect{panel.x + padding + labelW + gap, y, 220.0f, rowH};
+        int selectedMode = static_cast<int>(preview.DoorLightingDebugMode());
+        engine::Text(
+                smallConfig,
+                assets,
+                labelRect,
+                smallFont,
+                "Door Debug",
+                engine::UITextJustify::Left,
+                smallConfig.textColor);
+        if (mouseInteractive) {
+            if (engine::Option(
+                        ui,
+                        smallConfig,
+                        input,
+                        assets,
+                        "sector_editor_preview_door_lighting_debug_mode",
+                        modeRect,
+                        smallFont,
+                        doorModeOptions,
+                        sizeof(doorModeOptions) / sizeof(doorModeOptions[0]),
+                        selectedMode)) {
+                preview.SetDoorLightingDebugMode(static_cast<SectorDoorLightingDebugMode>(selectedMode));
+            }
+        } else {
+            DrawRectangleRec(modeRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(modeRect, config.borderThickness, config.borderColor);
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    modeRect,
+                    smallFont,
+                    SectorDoorLightingDebugModeName(preview.DoorLightingDebugMode()),
+                    engine::UITextJustify::Center,
+                    smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+    }
     if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
         const Rectangle checkboxRect{panel.x + padding, y, 240.0f, rowH};
         if (mouseInteractive) {
@@ -4191,6 +4450,66 @@ void SectorEditor::DrawPreviewOverlay(
                     smallFont,
                     "Show Object Probes",
                     engine::UITextJustify::Left,
+                    smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+
+        const float distanceLabelW = 144.0f;
+        const float distanceInputW = 104.0f;
+        const Rectangle distanceLabelRect{panel.x + padding, y, distanceLabelW, rowH};
+        const Rectangle distanceInputRect{
+                panel.x + padding + distanceLabelW + gap,
+                y,
+                distanceInputW,
+                rowH};
+        const SectorPreviewSettings normalizedPreviewSettings =
+                NormalizeSectorPreviewSettings(state.topologyMap.previewSettings);
+        if (mouseInteractive) {
+            const SectorEditorFloatInputResult distanceResult = DrawLabeledFloatInput(
+                    ui,
+                    smallConfig,
+                    input,
+                    assets,
+                    smallFont,
+                    "sector_editor_object_probe_debug_draw_max_distance",
+                    "Probe Draw Distance",
+                    distanceLabelRect,
+                    distanceInputRect,
+                    engine::UITextJustify::Left,
+                    normalizedPreviewSettings.objectProbeDebugDrawMaxDistanceWorld,
+                    uiState.objectProbeDebugDrawMaxDistanceInput,
+                    0.0f,
+                    512.0f,
+                    1);
+            if (distanceResult.changed) {
+                SectorPreviewSettings editedPreviewSettings = state.topologyMap.previewSettings;
+                editedPreviewSettings.objectProbeDebugDrawMaxDistanceWorld =
+                        distanceResult.finite
+                        ? distanceResult.value
+                        : normalizedPreviewSettings.objectProbeDebugDrawMaxDistanceWorld;
+                state.topologyMap.previewSettings =
+                        NormalizeSectorPreviewSettings(editedPreviewSettings);
+                MarkTopologyDocumentEdited("Object probe debug draw distance updated");
+            }
+        } else {
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    distanceLabelRect,
+                    smallFont,
+                    "Probe Draw Distance",
+                    engine::UITextJustify::Left,
+                    smallConfig.mutedTextColor);
+            DrawRectangleRec(distanceInputRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(distanceInputRect, config.borderThickness, config.borderColor);
+            const float distanceValue = normalizedPreviewSettings.objectProbeDebugDrawMaxDistanceWorld;
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    distanceInputRect,
+                    smallFont,
+                    distanceValue <= 0.0f ? "All" : TextFormat("%.1f", distanceValue),
+                    engine::UITextJustify::Center,
                     smallConfig.mutedTextColor);
         }
         y += rowH + 6.0f;
@@ -5385,7 +5704,7 @@ void SectorEditor::DrawToolsPanel(
     const float toolsContentH =
             sectionLabelH + rowsHeight(4)
             + separatorH + sectionLabelH + rowsHeight(2)
-            + separatorH + rowsHeight(5)
+            + separatorH + rowsHeight(6)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
             + separatorH + rowsHeight(1)
@@ -5498,6 +5817,8 @@ void SectorEditor::DrawToolsPanel(
             }
         } else if (tool == SectorEditorTool::RuntimeObject) {
             statusText = "Billboard: click inside a sector to place a billboard";
+        } else if (tool == SectorEditorTool::Door) {
+            statusText = "Door: click a two-sided portal line";
         }
     };
 
@@ -5518,6 +5839,7 @@ void SectorEditor::DrawToolsPanel(
     sectionLabel("Map objects");
     const SectorEditorTool mapTools[] = {
             SectorEditorTool::RuntimeObject,
+            SectorEditorTool::Door,
             SectorEditorTool::StaticLight,
             SectorEditorTool::StaticSpotLight,
             SectorEditorTool::DynamicLight,
@@ -5806,6 +6128,43 @@ void SectorEditor::DrawSectorsPanel(
                 return 42.0f;
             }
             const bool isBillboard = object->kind == "billboard";
+            const bool isDoor = object->kind == "door";
+            if (isDoor) {
+                const SectorResolvedDoorAnchor resolved = ResolveSectorDoorAnchor(state.topologyMap, object->door);
+                const std::string anchorStatus = resolved.valid
+                        ? TextFormat(
+                                "Anchor valid: line %d, sectors %d -> %d",
+                                object->door.anchor.lineDefId,
+                                object->door.anchor.frontSectorId,
+                                object->door.anchor.backSectorId)
+                        : TextFormat(
+                                "Anchor invalid: %s",
+                                resolved.diagnostic.empty()
+                                        ? "unable to resolve portal"
+                                        : resolved.diagnostic.c_str());
+                const float anchorStatusHeight = MeasureSectorEditorWrappedTextHeight(
+                        smallConfig,
+                        assets,
+                        smallFont,
+                        anchorStatus.c_str(),
+                        scrollContentW,
+                        2);
+                const bool textureMissing = !object->door.textureId.empty()
+                        && FindSectorTopologyTexture(state.topologyMap, object->door.textureId) == nullptr;
+                const std::string textureStatus = object->door.textureId.empty()
+                        ? "Texture: default material"
+                        : textureMissing
+                                ? TextFormat("Texture missing: %s", object->door.textureId.c_str())
+                                : TextFormat("Texture: %s", object->door.textureId.c_str());
+                const float textureStatusHeight = MeasureSectorEditorWrappedTextHeight(
+                        smallConfig,
+                        assets,
+                        smallFont,
+                        textureStatus.c_str(),
+                        scrollContentW,
+                        1);
+                return SectorEditorDoorInspectorContentHeight(rowH, gap, anchorStatusHeight, textureStatusHeight);
+            }
             const std::string spriteLabel = runtimeObjectSpriteLabel(*object);
             const float spriteLabelHeight = MeasureSectorEditorWrappedTextHeight(
                     smallConfig,
@@ -5961,16 +6320,480 @@ void SectorEditor::DrawSectorsPanel(
         y += 38.0f;
 
         const bool isBillboard = selectedObject->kind == "billboard";
+        const bool isDoor = selectedObject->kind == "door";
         engine::Text(
                 ui,
                 config,
                 assets,
                 Rectangle{0.0f, y, contentW, 30.0f},
                 font,
-                isBillboard ? "Type: Billboard" : "Type: Unsupported object",
+                isBillboard ? "Type: Billboard" : isDoor ? "Type: Door" : "Type: Unsupported object",
                 engine::UITextJustify::Left,
-                isBillboard ? config.mutedTextColor : config.invalidColor);
+                isBillboard || isDoor ? config.mutedTextColor : config.invalidColor);
         y += 34.0f;
+
+        if (isDoor) {
+            const SectorResolvedDoorAnchor resolved = ResolveSectorDoorAnchor(state.topologyMap, selectedObject->door);
+            const std::string anchorStatus = resolved.valid
+                    ? TextFormat(
+                            "Anchor valid: line %d, sectors %d -> %d",
+                            selectedObject->door.anchor.lineDefId,
+                            selectedObject->door.anchor.frontSectorId,
+                            selectedObject->door.anchor.backSectorId)
+                    : TextFormat(
+                            "Anchor invalid: %s",
+                            resolved.diagnostic.empty()
+                                    ? "unable to resolve portal"
+                                    : resolved.diagnostic.c_str());
+            const float anchorStatusHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    anchorStatus.c_str(),
+                    contentW,
+                    2);
+            engine::Text(
+                    ui,
+                    smallConfig,
+                    assets,
+                    Rectangle{0.0f, y, contentW, anchorStatusHeight},
+                    smallFont,
+                    anchorStatus.c_str(),
+                    engine::UITextJustify::Left,
+                    resolved.valid ? config.mutedTextColor : config.invalidColor,
+                    true);
+            y += anchorStatusHeight + gap;
+
+            auto drawDoorFloat =
+                    [&](const char* id,
+                        const char* label,
+                        float value,
+                        engine::UIFloatInputState& inputState,
+                        float minValue,
+                        float maxValue,
+                        int decimals,
+                        const std::function<bool(SectorPlacedDoor&, float)>& applyValue) {
+                        const float labelW = 104.0f;
+                        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                                ui,
+                                config,
+                                input,
+                                assets,
+                                font,
+                                id,
+                                label,
+                                Rectangle{0.0f, y, labelW, rowH},
+                                Rectangle{labelW + gap, y, std::max(0.0f, contentW - labelW - gap), rowH},
+                                engine::UITextJustify::Left,
+                                value,
+                                inputState,
+                                minValue,
+                                maxValue,
+                                decimals);
+                        if (result.changed && result.finite && result.value != value) {
+                            MutateSelectedRuntimeObject(
+                                    "Updated door properties",
+                                    [applyValue, value = result.value](SectorPlacedRuntimeObject& object) {
+                                        if (object.kind != "door") {
+                                            return false;
+                                        }
+                                        return applyValue(object.door, value);
+                                    });
+                        }
+                        y += rowH + gap;
+                    };
+
+            drawDoorFloat(
+                    "sector_editor_door_width",
+                    "Width",
+                    selectedObject->door.width,
+                    uiState.runtimeObjectWidthInput,
+                    0.0f,
+                    100000.0f,
+                    3,
+                    [](SectorPlacedDoor& door, float value) {
+                        const float width = std::max(0.0f, value);
+                        if (door.width == width) {
+                            return false;
+                        }
+                        door.width = width;
+                        return true;
+                    });
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            drawDoorFloat(
+                    "sector_editor_door_height",
+                    "Height",
+                    selectedObject->door.height,
+                    uiState.runtimeObjectHeightInput,
+                    0.0f,
+                    100000.0f,
+                    3,
+                    [](SectorPlacedDoor& door, float value) {
+                        const float height = std::max(0.0f, value);
+                        if (door.height == height) {
+                            return false;
+                        }
+                        door.height = height;
+                        return true;
+                    });
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            drawDoorFloat(
+                    "sector_editor_door_thickness",
+                    "Thickness",
+                    selectedObject->door.thickness,
+                    uiState.runtimeObjectThicknessInput,
+                    0.001f,
+                    100000.0f,
+                    3,
+                    [](SectorPlacedDoor& door, float value) {
+                        const float thickness = std::max(0.001f, value);
+                        if (door.thickness == thickness) {
+                            return false;
+                        }
+                        door.thickness = thickness;
+                        return true;
+                    });
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            drawDoorFloat(
+                    "sector_editor_door_normal_offset",
+                    "Offset",
+                    selectedObject->door.normalOffset,
+                    uiState.runtimeObjectNormalOffsetInput,
+                    -100000.0f,
+                    100000.0f,
+                    3,
+                    [](SectorPlacedDoor& door, float value) {
+                        if (door.normalOffset == value) {
+                            return false;
+                        }
+                        door.normalOffset = value;
+                        return true;
+                    });
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            const char* motionOptions[] = {
+                    "Slide Vertical",
+                    "Slide Left",
+                    "Slide Right"};
+            int motionIndex = DoorMotionOptionIndex(selectedObject->door.motion);
+            const int previousMotionIndex = motionIndex;
+            const SectorEditorInspectorStackedOptionRowLayout motionLayout =
+                    BuildSectorEditorInspectorStackedOptionRowLayout(y, contentW, rowH, gap);
+            engine::Text(
+                    ui,
+                    config,
+                    assets,
+                    motionLayout.labelRect,
+                    font,
+                    "Motion",
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor);
+            if (engine::Option(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_door_motion",
+                        motionLayout.fieldRect,
+                        font,
+                        motionOptions,
+                        3,
+                        motionIndex)
+                    && motionIndex != previousMotionIndex) {
+                const SectorDoorMotionType motion = DoorMotionFromOptionIndex(motionIndex);
+                MutateSelectedRuntimeObject(
+                        "Updated door motion",
+                        [motion](SectorPlacedRuntimeObject& object) {
+                            if (object.kind != "door" || object.door.motion == motion) {
+                                return false;
+                            }
+                            object.door.motion = motion;
+                            return true;
+                        });
+            }
+            y += motionLayout.height + gap;
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            drawDoorFloat(
+                    "sector_editor_door_open_distance",
+                    "Open Dist",
+                    selectedObject->door.openDistance,
+                    uiState.runtimeObjectOpenDistanceInput,
+                    0.0f,
+                    100000.0f,
+                    3,
+                    [](SectorPlacedDoor& door, float value) {
+                        const float distance = std::max(0.0f, value);
+                        if (door.openDistance == distance) {
+                            return false;
+                        }
+                        door.openDistance = distance;
+                        return true;
+                    });
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            drawDoorFloat(
+                    "sector_editor_door_speed",
+                    "Speed",
+                    selectedObject->door.speed,
+                    uiState.runtimeObjectSpeedInput,
+                    0.0f,
+                    100000.0f,
+                    3,
+                    [](SectorPlacedDoor& door, float value) {
+                        const float speed = std::max(0.0f, value);
+                        if (door.speed == speed) {
+                            return false;
+                        }
+                        door.speed = speed;
+                        return true;
+                    });
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            drawDoorFloat(
+                    "sector_editor_door_initial_open_fraction",
+                    "Initial",
+                    selectedObject->door.initialOpenFraction,
+                    uiState.runtimeObjectInitialOpenFractionInput,
+                    0.0f,
+                    1.0f,
+                    3,
+                    [](SectorPlacedDoor& door, float value) {
+                        const float fraction = Clamp(value, 0.0f, 1.0f);
+                        if (door.initialOpenFraction == fraction) {
+                            return false;
+                        }
+                        door.initialOpenFraction = fraction;
+                        return true;
+                    });
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            bool autoOpen = selectedObject->door.autoOpen;
+            if (engine::Checkbox(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_door_auto_open",
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font,
+                        "Auto Open",
+                        autoOpen)) {
+                MutateSelectedRuntimeObject(
+                        "Updated door auto-open",
+                        [autoOpen](SectorPlacedRuntimeObject& object) {
+                            if (object.kind != "door" || object.door.autoOpen == autoOpen) {
+                                return false;
+                            }
+                            object.door.autoOpen = autoOpen;
+                            return true;
+                        });
+            }
+            y += rowH + gap;
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            drawDoorFloat(
+                    "sector_editor_door_auto_open_distance",
+                    "Auto Dist",
+                    selectedObject->door.autoOpenDistance,
+                    uiState.runtimeObjectAutoOpenDistanceInput,
+                    0.001f,
+                    100000.0f,
+                    3,
+                    [](SectorPlacedDoor& door, float value) {
+                        const float distance = std::max(0.001f, value);
+                        if (door.autoOpenDistance == distance) {
+                            return false;
+                        }
+                        door.autoOpenDistance = distance;
+                        return true;
+                    });
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            drawDoorFloat(
+                    "sector_editor_door_interaction_distance",
+                    "Use Dist",
+                    selectedObject->door.interactionDistance,
+                    uiState.runtimeObjectInteractionDistanceInput,
+                    0.001f,
+                    100000.0f,
+                    3,
+                    [](SectorPlacedDoor& door, float value) {
+                        const float distance = std::max(0.001f, value);
+                        if (door.interactionDistance == distance) {
+                            return false;
+                        }
+                        door.interactionDistance = distance;
+                        return true;
+                    });
+            selectedObject = SelectedRuntimeObject();
+            if (selectedObject == nullptr) {
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+
+            SectorDoorMotion* runtimeDoorMotion = nullptr;
+            if (engineContext != nullptr) {
+                for (const SectorPlacedRuntimeObjectEntity& entry : state.runtimeObjects.placedObjectEntities) {
+                    if (entry.placedObjectId != selectedObject->id
+                            || !engineContext->world.IsAlive(entry.entity)
+                            || !engineContext->world.Has<SectorDoorMotion>(entry.entity)) {
+                        continue;
+                    }
+                    runtimeDoorMotion = &engineContext->world.Get<SectorDoorMotion>(entry.entity);
+                    break;
+                }
+            }
+
+            const bool runtimeTargetOpen = runtimeDoorMotion != nullptr
+                    && std::isfinite(runtimeDoorMotion->targetOpenFraction)
+                    && runtimeDoorMotion->targetOpenFraction > 0.5f;
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_door_debug_target",
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font,
+                        runtimeDoorMotion == nullptr
+                                ? "Runtime Target Unavailable"
+                                : (runtimeTargetOpen ? "Debug Target Close" : "Debug Target Open"))) {
+                if (runtimeDoorMotion != nullptr) {
+                    runtimeDoorMotion->targetOpenFraction = runtimeTargetOpen ? 0.0f : 1.0f;
+                    statusText = runtimeTargetOpen
+                            ? "Door debug runtime target: close"
+                            : "Door debug runtime target: open";
+                }
+            }
+            y += rowH + gap;
+
+            const bool textureMissing = !selectedObject->door.textureId.empty()
+                    && FindSectorTopologyTexture(state.topologyMap, selectedObject->door.textureId) == nullptr;
+            const std::string textureStatus = selectedObject->door.textureId.empty()
+                    ? "Texture: default material"
+                    : textureMissing
+                            ? TextFormat("Texture missing: %s", selectedObject->door.textureId.c_str())
+                            : TextFormat("Texture: %s", selectedObject->door.textureId.c_str());
+            const float textureStatusHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    textureStatus.c_str(),
+                    contentW,
+                    1);
+            engine::Text(
+                    ui,
+                    smallConfig,
+                    assets,
+                    Rectangle{0.0f, y, contentW, textureStatusHeight},
+                    smallFont,
+                    textureStatus.c_str(),
+                    engine::UITextJustify::Left,
+                    textureMissing ? config.invalidColor : config.mutedTextColor,
+                    true);
+            y += textureStatusHeight + gap;
+
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_door_pick_texture",
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font,
+                        "Pick Texture")) {
+                OpenSelectedDoorTexturePicker();
+            }
+            y += rowH + gap;
+
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_door_uv_settings",
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font,
+                        "UV Settings...")) {
+                OpenDoorTextureSettingsModal();
+            }
+            y += rowH + gap;
+
+            if (engine::Button(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        "sector_editor_delete_runtime_object",
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font,
+                        "Delete")) {
+                DeleteSelectedRuntimeObject();
+                engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+                engine::EndPanel(ui, config, panel);
+                return;
+            }
+            y += rowH + gap;
+
+            engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+            engine::EndPanel(ui, config, panel);
+            return;
+        }
 
         const std::string spriteLabel = runtimeObjectSpriteLabel(*selectedObject);
         const float spriteLabelHeight = MeasureSectorEditorWrappedTextHeight(
@@ -9339,6 +10162,241 @@ void SectorEditor::DrawDecalTintModal(
     state.decalTintModal = DecalTintModalState{};
 }
 
+void SectorEditor::DrawDoorTextureSettingsModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    DoorTextureSettingsModalState& modalState = state.doorTextureSettingsModal;
+    if (!modalState.open) {
+        return;
+    }
+
+    bool closeRequested = false;
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [&closeRequested](engine::InputEvent& event) {
+                if (event.key.key == KEY_ESCAPE) {
+                    closeRequested = true;
+                    engine::ConsumeEvent(event);
+                }
+            });
+
+    const SectorPlacedRuntimeObject* selectedObject = SelectedRuntimeObject();
+    if (selectedObject == nullptr
+            || selectedObject->kind != "door"
+            || selectedObject->id != modalState.runtimeObjectId) {
+        modalState.statusMessage = "Door texture settings target is no longer selected.";
+    }
+
+    DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
+    const Rectangle modal{
+            (EditorWidth - 680.0f) * 0.5f,
+            (EditorHeight - 600.0f) * 0.5f,
+            680.0f,
+            600.0f
+    };
+    constexpr float padding = 26.0f;
+    constexpr float gap = 10.0f;
+    const SectorEditorDoorTextureSettingsModalLayout layout =
+            BuildSectorEditorDoorTextureSettingsModalLayout(modal, padding, gap);
+    DrawRectangleRec(modal, Color{20, 24, 32, 248});
+    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
+
+    engine::Text(config, assets, layout.titleRect, font, "Door Texture Settings");
+
+    for (int i = 0; i < SectorDoorFaceCount; ++i) {
+        const SectorDoorFace face = SectorDoorFaceFromIndex(i);
+        const bool selected = SectorDoorFaceIndex(modalState.selectedFace) == i;
+        if (engine::ToolButton(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    TextFormat("sector_editor_door_uv_face_%d", i),
+                    layout.faceButtonRects[i],
+                    font,
+                    SectorDoorFaceName(face),
+                    selected)) {
+            if (!selected) {
+                modalState.selectedFace = face;
+                modalState.scaleUInput = engine::UIFloatInputState{};
+                modalState.scaleVInput = engine::UIFloatInputState{};
+                modalState.offsetUInput = engine::UIFloatInputState{};
+                modalState.offsetVInput = engine::UIFloatInputState{};
+                modalState.statusMessage.clear();
+            }
+        }
+    }
+
+    selectedObject = SelectedRuntimeObject();
+    const SectorDoorFaceUv selectedUv = selectedObject != nullptr
+                    && selectedObject->kind == "door"
+                    && selectedObject->id == modalState.runtimeObjectId
+            ? DoorFaceUv(selectedObject->door.faceUvs, modalState.selectedFace)
+            : SectorDoorFaceUv{};
+
+    auto drawUvFloat =
+            [&](const char* id,
+                const char* label,
+                float value,
+                engine::UIFloatInputState& inputState,
+                float minValue,
+                float maxValue,
+                int component,
+                int row) {
+                const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                        ui,
+                        config,
+                        input,
+                        assets,
+                        font,
+                        id,
+                        label,
+                        layout.uvLabelRects[row],
+                        layout.uvInputRects[row],
+                        engine::UITextJustify::Left,
+                        value,
+                        inputState,
+                        minValue,
+                        maxValue,
+                        3);
+                if (result.changed && result.value != value) {
+                    if (!result.finite) {
+                        modalState.statusMessage = "Door UV values must be finite.";
+                    } else if (!ApplySelectedDoorFaceUvValue(component, result.value)) {
+                        modalState.statusMessage = statusText.empty()
+                                ? "Door UV value unchanged."
+                                : statusText;
+                    } else {
+                        modalState.statusMessage = TextFormat(
+                                "Updated %s UV.",
+                                SectorDoorFaceName(modalState.selectedFace));
+                    }
+                }
+            };
+
+    drawUvFloat(
+            "sector_editor_door_uv_scale_u",
+            "UV Scale U",
+            selectedUv.scale.x,
+            modalState.scaleUInput,
+            TopologyUvScaleMin,
+            TopologyUvScaleMax,
+            0,
+            0);
+    drawUvFloat(
+            "sector_editor_door_uv_scale_v",
+            "UV Scale V",
+            selectedUv.scale.y,
+            modalState.scaleVInput,
+            TopologyUvScaleMin,
+            TopologyUvScaleMax,
+            1,
+            1);
+    drawUvFloat(
+            "sector_editor_door_uv_offset_u",
+            "UV Offset U",
+            selectedUv.offset.x,
+            modalState.offsetUInput,
+            -100000.0f,
+            100000.0f,
+            2,
+            2);
+    drawUvFloat(
+            "sector_editor_door_uv_offset_v",
+            "UV Offset V",
+            selectedUv.offset.y,
+            modalState.offsetVInput,
+            -100000.0f,
+            100000.0f,
+            3,
+            3);
+
+    const auto resetInputs = [&modalState]() {
+        modalState.scaleUInput = engine::UIFloatInputState{};
+        modalState.scaleVInput = engine::UIFloatInputState{};
+        modalState.offsetUInput = engine::UIFloatInputState{};
+        modalState.offsetVInput = engine::UIFloatInputState{};
+    };
+    auto actionButton = [&](const char* id, const char* label, Rectangle bounds, const std::function<bool()>& action) {
+        if (engine::Button(ui, config, input, assets, id, bounds, font, label)) {
+            if (action && action()) {
+                resetInputs();
+            } else if (modalState.statusMessage.empty() && !statusText.empty()) {
+                modalState.statusMessage = statusText;
+            }
+        }
+    };
+
+    actionButton(
+            "sector_editor_door_uv_fit_width",
+            "Fit Width",
+            layout.actionButtonRects[0],
+            [this]() { return ApplySelectedDoorFaceUvFit(SectorDoorUvFitMode::Width); });
+    actionButton(
+            "sector_editor_door_uv_fit_height",
+            "Fit Height",
+            layout.actionButtonRects[1],
+            [this]() { return ApplySelectedDoorFaceUvFit(SectorDoorUvFitMode::Height); });
+    actionButton(
+            "sector_editor_door_uv_fit_both",
+            "Fit Both",
+            layout.actionButtonRects[2],
+            [this]() { return ApplySelectedDoorFaceUvFit(SectorDoorUvFitMode::Both); });
+    actionButton(
+            "sector_editor_door_uv_reset_face",
+            "Reset Face",
+            layout.actionButtonRects[3],
+            [this]() { return ResetSelectedDoorFaceUv(); });
+    actionButton(
+            "sector_editor_door_uv_copy_front",
+            "Copy From Front",
+            layout.actionButtonRects[4],
+            [this]() { return CopySelectedDoorFaceUvFromFront(); });
+    actionButton(
+            "sector_editor_door_uv_apply_all",
+            "Apply To All",
+            layout.actionButtonRects[5],
+            [this]() { return ApplySelectedDoorFaceUvToAll(); });
+
+    if (!modalState.statusMessage.empty()) {
+        const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
+        engine::Text(
+                ui,
+                smallConfig,
+                assets,
+                layout.statusRect,
+                smallFont,
+                modalState.statusMessage.c_str(),
+                engine::UITextJustify::Left,
+                config.mutedTextColor,
+                true);
+    }
+
+    closeRequested = closeRequested || engine::Button(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_door_uv_done",
+            layout.doneButtonRect,
+            font,
+            "Done");
+
+    input.ForEachEvent(engine::InputEventType::Any, true, [](engine::InputEvent& event) {
+        engine::ConsumeEvent(event);
+    });
+
+    if (closeRequested) {
+        state.doorTextureSettingsModal = DoorTextureSettingsModalState{};
+    }
+}
+
 void SectorEditor::DrawPreviewSettingsModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -9557,6 +10615,7 @@ bool SectorEditor::LoadLevel(
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
     state.decalTintModal = DecalTintModalState{};
+    state.doorTextureSettingsModal = DoorTextureSettingsModalState{};
     ClearSelection();
     state.hoveredTopologyLightId = -1;
     state.hoveredTopologyStaticSpotLightId = -1;
@@ -9681,6 +10740,7 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
     state.decalTintModal = DecalTintModalState{};
+    state.doorTextureSettingsModal = DoorTextureSettingsModalState{};
     statusText = TextFormat("Saved authoring graph %s", savePlan.paths.jsonAssetPath.c_str());
     return true;
 }
@@ -9691,6 +10751,7 @@ bool SectorEditor::HasDocumentModalOpen() const
             || state.loadLevelModal.open
             || state.confirmationModal.open
             || state.decalTintModal.open
+            || state.doorTextureSettingsModal.open
             || state.previewSettingsModal.open;
 }
 
@@ -9966,6 +11027,8 @@ void SectorEditor::OpenPreviewSettingsModal()
     state.previewSettingsModal.draftSkySettings = NormalizeSectorTopologySkySettings(state.topologyMap.skySettings);
     state.previewSettingsModal.draftDirectionalLight =
             NormalizeSectorTopologyDirectionalLightSettings(state.topologyMap.directionalLight);
+    state.previewSettingsModal.draftLightmapSettings =
+            NormalizeSectorPreviewObjectProbeSettings(state.topologyMap.lightmapSettings);
 }
 
 void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
@@ -9976,12 +11039,17 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
 
     const SectorFpsControllerConfig draftConfig = NormalizeSectorFpsControllerConfig(
             state.previewSettingsModal.draftConfig);
-    const SectorPreviewSettings draftPreviewSettings = SectorPreviewSettingsFromFpsControllerConfig(draftConfig);
+    SectorPreviewSettings draftPreviewSettings = SectorPreviewSettingsFromFpsControllerConfig(draftConfig);
+    draftPreviewSettings.objectProbeDebugDrawMaxDistanceWorld =
+            NormalizeSectorPreviewSettings(
+                    state.topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
     const SectorTopologySkySettings draftSkySettings = NormalizeSectorTopologySkySettings(
             state.previewSettingsModal.draftSkySettings);
     const SectorTopologyDirectionalLightSettings draftDirectionalLight =
             NormalizeSectorTopologyDirectionalLightSettings(
                     state.previewSettingsModal.draftDirectionalLight);
+    const SectorLightmapBakeSettings draftLightmapSettings =
+            NormalizeSectorPreviewObjectProbeSettings(state.previewSettingsModal.draftLightmapSettings);
     const bool previewChanged = !SamePreviewSettings(
             state.topologyMap.previewSettings,
             draftPreviewSettings);
@@ -9989,7 +11057,12 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const bool directionalChanged = !SameDirectionalLightSettings(
             state.topologyMap.directionalLight,
             draftDirectionalLight);
-    if (!previewChanged && !skyChanged && !directionalChanged) {
+    const SectorLightmapBakeSettings currentLightmapSettings =
+            NormalizeSectorPreviewObjectProbeSettings(state.topologyMap.lightmapSettings);
+    const bool objectProbeSettingsChanged =
+            currentLightmapSettings.objectProbeSpacingWorld != draftLightmapSettings.objectProbeSpacingWorld
+            || currentLightmapSettings.objectProbeHeightWorld != draftLightmapSettings.objectProbeHeightWorld;
+    if (!previewChanged && !skyChanged && !directionalChanged && !objectProbeSettingsChanged) {
         state.previewSettingsModal = SectorPreviewSettingsModalState{};
         statusText = "Preview settings unchanged";
         return;
@@ -10003,6 +11076,7 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     state.topologyMap.previewSettings = draftPreviewSettings;
     state.topologyMap.skySettings = draftSkySettings;
     state.topologyMap.directionalLight = draftDirectionalLight;
+    ApplySectorPreviewObjectProbeSettings(state.topologyMap, draftLightmapSettings);
     MarkTopologyDocumentEdited("Preview settings updated");
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
     if (skyChanged && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
@@ -11850,8 +12924,227 @@ void SectorEditor::OpenMapSkyTexturePicker()
     }
 }
 
+void SectorEditor::OpenSelectedDoorTexturePicker()
+{
+    const SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
+    if (object == nullptr || object->kind != "door") {
+        statusText = "Select a door first.";
+        return;
+    }
+
+    if (!game::OpenRuntimeDoorTexturePicker(state, object->id)) {
+        statusText = "No door texture target";
+    }
+}
+
+void SectorEditor::OpenDoorTextureSettingsModal()
+{
+    const SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
+    if (object == nullptr || object->kind != "door") {
+        statusText = "Select a door first.";
+        return;
+    }
+
+    state.doorTextureSettingsModal = DoorTextureSettingsModalState{};
+    state.doorTextureSettingsModal.open = true;
+    state.doorTextureSettingsModal.runtimeObjectId = object->id;
+    state.doorTextureSettingsModal.selectedFace = SectorDoorFace::Front;
+}
+
+bool SectorEditor::ApplySelectedDoorFaceUvValue(int component, float value)
+{
+    DoorTextureSettingsModalState& modal = state.doorTextureSettingsModal;
+    if (!modal.open || state.selectedRuntimeObjectId != modal.runtimeObjectId) {
+        statusText = "Door UV target unavailable.";
+        return false;
+    }
+    if (!std::isfinite(value)) {
+        statusText = "Door UV values must be finite.";
+        return false;
+    }
+    if ((component == 0 || component == 1) && !IsValidSectorDoorUvScale(value)) {
+        statusText = "Door UV scale must be between 0.001 and 64.";
+        return false;
+    }
+
+    const SectorDoorFace face = modal.selectedFace;
+    const bool changed = MutateSelectedRuntimeObject(
+            TextFormat("Updated door %s UV", SectorDoorFaceName(face)),
+            [face, component, value](SectorPlacedRuntimeObject& object) {
+                if (object.kind != "door") {
+                    return false;
+                }
+                SectorDoorFaceUv& uv = DoorFaceUv(object.door.faceUvs, face);
+                float* target = nullptr;
+                switch (component) {
+                    case 0: target = &uv.scale.x; break;
+                    case 1: target = &uv.scale.y; break;
+                    case 2: target = &uv.offset.x; break;
+                    case 3: target = &uv.offset.y; break;
+                    default: break;
+                }
+                if (target == nullptr || *target == value) {
+                    return false;
+                }
+                *target = value;
+                return true;
+            });
+    return changed;
+}
+
+bool SectorEditor::ApplySelectedDoorFaceUvFit(SectorDoorUvFitMode mode)
+{
+    DoorTextureSettingsModalState& modal = state.doorTextureSettingsModal;
+    const SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
+    if (!modal.open
+            || object == nullptr
+            || object->kind != "door"
+            || object->id != modal.runtimeObjectId) {
+        modal.statusMessage = "Door UV target unavailable.";
+        statusText = modal.statusMessage;
+        return false;
+    }
+
+    const SectorResolvedDoorAnchor resolved = ResolveSectorDoorAnchor(state.topologyMap, object->door);
+    if (!resolved.valid) {
+        modal.statusMessage = "Fit needs a valid door anchor.";
+        statusText = modal.statusMessage;
+        return false;
+    }
+
+    const SectorDoorRender render{
+            resolved.width,
+            resolved.height,
+            object->door.thickness,
+            object->door.normalOffset,
+            object->door.textureId,
+            object->door.faceUvs,
+            WHITE,
+            true};
+    const SectorDoorFace face = modal.selectedFace;
+    const bool changed = MutateSelectedRuntimeObject(
+            TextFormat("Fit door %s UV", SectorDoorFaceName(face)),
+            [face, mode, render, &modal](SectorPlacedRuntimeObject& target) {
+                if (target.kind != "door") {
+                    return false;
+                }
+                std::string error;
+                const SectorDoorFaceUvSet before = target.door.faceUvs;
+                if (!FitSectorDoorFaceUv(target.door.faceUvs, face, mode, render, &error)) {
+                    modal.statusMessage = error;
+                    return false;
+                }
+                return !SameSectorDoorFaceUvSet(before, target.door.faceUvs);
+            });
+    if (changed) {
+        modal.statusMessage = TextFormat("Fit %s UV to one texture repeat.", SectorDoorFaceName(face));
+    } else if (modal.statusMessage.empty()) {
+        modal.statusMessage = "Door UV fit unchanged.";
+    }
+    statusText = modal.statusMessage;
+    return changed;
+}
+
+bool SectorEditor::ResetSelectedDoorFaceUv()
+{
+    DoorTextureSettingsModalState& modal = state.doorTextureSettingsModal;
+    if (!modal.open || state.selectedRuntimeObjectId != modal.runtimeObjectId) {
+        modal.statusMessage = "Door UV target unavailable.";
+        statusText = modal.statusMessage;
+        return false;
+    }
+    const SectorDoorFace face = modal.selectedFace;
+    const bool changed = MutateSelectedRuntimeObject(
+            TextFormat("Reset door %s UV", SectorDoorFaceName(face)),
+            [face](SectorPlacedRuntimeObject& object) {
+                return object.kind == "door" && ResetSectorDoorFaceUv(object.door.faceUvs, face);
+            });
+    modal.statusMessage = changed
+            ? TextFormat("Reset %s UV.", SectorDoorFaceName(face))
+            : "Door face UV already default.";
+    statusText = modal.statusMessage;
+    return changed;
+}
+
+bool SectorEditor::CopySelectedDoorFaceUvFromFront()
+{
+    DoorTextureSettingsModalState& modal = state.doorTextureSettingsModal;
+    if (!modal.open || state.selectedRuntimeObjectId != modal.runtimeObjectId) {
+        modal.statusMessage = "Door UV target unavailable.";
+        statusText = modal.statusMessage;
+        return false;
+    }
+    const SectorDoorFace face = modal.selectedFace;
+    const bool changed = MutateSelectedRuntimeObject(
+            TextFormat("Copied front UV to door %s", SectorDoorFaceName(face)),
+            [face](SectorPlacedRuntimeObject& object) {
+                return object.kind == "door"
+                        && CopySectorDoorFaceUv(object.door.faceUvs, SectorDoorFace::Front, face);
+            });
+    modal.statusMessage = changed
+            ? TextFormat("Copied Front UV to %s.", SectorDoorFaceName(face))
+            : "Copy From Front unchanged.";
+    statusText = modal.statusMessage;
+    return changed;
+}
+
+bool SectorEditor::ApplySelectedDoorFaceUvToAll()
+{
+    DoorTextureSettingsModalState& modal = state.doorTextureSettingsModal;
+    if (!modal.open || state.selectedRuntimeObjectId != modal.runtimeObjectId) {
+        modal.statusMessage = "Door UV target unavailable.";
+        statusText = modal.statusMessage;
+        return false;
+    }
+    const SectorDoorFace face = modal.selectedFace;
+    const bool changed = MutateSelectedRuntimeObject(
+            TextFormat("Applied door %s UV to all faces", SectorDoorFaceName(face)),
+            [face](SectorPlacedRuntimeObject& object) {
+                return object.kind == "door" && ApplySectorDoorFaceUvToAll(object.door.faceUvs, face);
+            });
+    modal.statusMessage = changed
+            ? TextFormat("Applied %s UV to all faces.", SectorDoorFaceName(face))
+            : "Apply To All unchanged.";
+    statusText = modal.statusMessage;
+    return changed;
+}
+
 void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
 {
+    if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDoor) {
+        TexturePickerState& picker = state.texturePicker;
+        if (!picker.open
+                || picker.selectedTextureIndex < 0
+                || picker.selectedTextureIndex >= static_cast<int>(picker.textureIds.size())) {
+            statusText = "Select a texture";
+            picker = TexturePickerState{};
+            return;
+        }
+
+        const int targetObjectId = picker.runtimeObjectId;
+        const std::string selectedTexture = picker.textureIds[static_cast<size_t>(picker.selectedTextureIndex)];
+        picker = TexturePickerState{};
+
+        if (state.selectedRuntimeObjectId != targetObjectId) {
+            statusText = "Door texture target unavailable";
+            return;
+        }
+
+        const bool changed = MutateSelectedRuntimeObject(
+                "Updated door texture",
+                [&selectedTexture](SectorPlacedRuntimeObject& object) {
+                    if (object.kind != "door" || object.door.textureId == selectedTexture) {
+                        return false;
+                    }
+                    object.door.textureId = selectedTexture;
+                    return true;
+                });
+        statusText = changed
+                ? TextFormat("Selected door texture %s", selectedTexture.c_str())
+                : "Door texture unchanged";
+        return;
+    }
+
     if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringFaceAnchor
             || state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringSide) {
         const SectorEditorTexturePickerApplyResult result =

@@ -36,6 +36,11 @@ constexpr float DefaultVisibilityDebugAspect = 16.0f / 9.0f;
 constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
 constexpr float DynamicLightingClamp = 4.0f;
 
+int DoorLightingDebugModeShaderValue(SectorDoorLightingDebugMode mode)
+{
+    return static_cast<int>(mode);
+}
+
 uint32_t BillboardPlaybackFrameCount(const engine::SpriteClip& clip)
 {
     if (clip.playback == engine::SpritePlaybackMode::PingPong && clip.frameCount > 1) {
@@ -181,6 +186,17 @@ void AppendBillboardRenderDebugText(std::string& renderDebugText, const std::str
     }
     if (!billboardText.empty() && !renderDebugText.empty()) {
         renderDebugText += " | " + billboardText;
+    }
+}
+
+void AppendDoorRenderDebugText(std::string& renderDebugText, const std::string& doorText)
+{
+    const size_t existing = renderDebugText.find(" | doors:");
+    if (existing != std::string::npos) {
+        renderDebugText.erase(existing);
+    }
+    if (!doorText.empty() && !renderDebugText.empty()) {
+        renderDebugText += " | " + doorText;
     }
 }
 
@@ -464,13 +480,14 @@ in vec3 vertexPosition;
 in vec2 vertexTexCoord;
 
 uniform mat4 lightViewProjection;
+uniform mat4 matModel;
 
 out vec2 fragTexCoord;
 
 void main()
 {
     fragTexCoord = vertexTexCoord;
-    gl_Position = lightViewProjection * vec4(vertexPosition, 1.0);
+    gl_Position = lightViewProjection * matModel * vec4(vertexPosition, 1.0);
 }
 )";
 
@@ -487,6 +504,218 @@ void main()
     if (alphaTest != 0 && texture(texture0, fragTexCoord).a < alphaCutoff) {
         discard;
     }
+}
+)";
+
+const char* SectorDoorOpaqueVs = R"(
+#version 330
+in vec3 vertexPosition;
+in vec3 vertexNormal;
+in vec2 vertexTexCoord;
+in vec4 vertexColor;
+
+uniform mat4 mvp;
+uniform mat4 matModel;
+uniform mat4 matNormal;
+
+out vec2 fragTexCoord;
+out vec3 fragWorldPosition;
+out vec3 fragWorldNormal;
+out vec4 fragColor;
+
+void main()
+{
+    fragTexCoord = vertexTexCoord;
+    fragWorldPosition = (matModel * vec4(vertexPosition, 1.0)).xyz;
+    fragWorldNormal = normalize((matNormal * vec4(vertexNormal, 0.0)).xyz);
+    fragColor = vertexColor;
+    gl_Position = mvp * vec4(vertexPosition, 1.0);
+}
+)";
+
+const char* SectorDoorOpaqueFs = R"(
+#version 330
+in vec2 fragTexCoord;
+in vec3 fragWorldPosition;
+in vec3 fragWorldNormal;
+in vec4 fragColor;
+
+uniform sampler2D texture0;
+
+#define MAX_DYNAMIC_LIGHTS 8
+uniform int dynamicLightCount;
+uniform vec3 dynamicLightPositions[MAX_DYNAMIC_LIGHTS];
+uniform vec3 dynamicLightColors[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightRadii[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightIntensities[MAX_DYNAMIC_LIGHTS];
+uniform int dynamicLightTypes[MAX_DYNAMIC_LIGHTS];
+uniform vec3 dynamicLightDirections[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
+uniform float dynamicLightingClamp;
+uniform int dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS];
+
+#define MAX_DYNAMIC_SHADOW_CASTERS 2
+uniform mat4 shadowLightMatrices[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform float shadowBias[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform sampler2D shadowMap0;
+uniform sampler2D shadowMap1;
+
+uniform int doorDebugMode;
+uniform vec4 doorTint;
+
+#define DOOR_DEBUG_NORMAL 0
+#define DOOR_DEBUG_ALBEDO_ONLY 1
+#define DOOR_DEBUG_BAKED_ONLY 2
+#define DOOR_DEBUG_DYNAMIC_ONLY 3
+#define DOOR_DEBUG_NORMAL_VISUALIZE 4
+#define DOOR_DEBUG_FLAT_COLOR_NO_TEXTURE 5
+
+out vec4 finalColor;
+
+const vec2 kPoissonDisk[12] = vec2[12](
+    vec2(-0.326, -0.406),
+    vec2(-0.840, -0.074),
+    vec2(-0.696,  0.457),
+    vec2(-0.203,  0.621),
+    vec2( 0.962, -0.195),
+    vec2( 0.473, -0.480),
+    vec2( 0.519,  0.767),
+    vec2( 0.185, -0.893),
+    vec2( 0.507,  0.064),
+    vec2( 0.896,  0.412),
+    vec2(-0.322, -0.933),
+    vec2(-0.792, -0.598)
+);
+
+vec3 SafeNormalize(vec3 value, vec3 fallback)
+{
+    float lengthSq = dot(value, value);
+    return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
+}
+
+float SampleShadowMap(int shadowSlot, vec2 uv)
+{
+    return shadowSlot == 0 ? texture(shadowMap0, uv).r : texture(shadowMap1, uv).r;
+}
+
+float DynamicSpotLightShadowVisibility(
+        int shadowSlot,
+        vec3 worldPosition,
+        vec3 worldNormal,
+        vec3 surfaceToLightDirection)
+{
+    if (shadowSlot < 0 || shadowSlot >= MAX_DYNAMIC_SHADOW_CASTERS) {
+        return 1.0;
+    }
+
+    vec4 lightClip = shadowLightMatrices[shadowSlot] * vec4(worldPosition, 1.0);
+    if (lightClip.w <= 0.0) {
+        return 1.0;
+    }
+
+    vec3 lightNdc = lightClip.xyz / lightClip.w;
+    vec3 shadowCoord = lightNdc * 0.5 + 0.5;
+    if (shadowCoord.x < 0.0 || shadowCoord.x > 1.0 ||
+            shadowCoord.y < 0.0 || shadowCoord.y > 1.0 ||
+            shadowCoord.z < 0.0 || shadowCoord.z > 1.0) {
+        return 1.0;
+    }
+
+    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap0, 0));
+    float normalLightDot = max(dot(
+            SafeNormalize(worldNormal, vec3(0.0, 1.0, 0.0)),
+            SafeNormalize(surfaceToLightDirection, vec3(0.0, 1.0, 0.0))), 0.0);
+    float effectiveBias = min(shadowBias[shadowSlot] * (1.0 + (1.0 - normalLightDot) * 2.0), 0.02);
+    float compareDepth = shadowCoord.z - effectiveBias;
+    float softness = clamp(shadowSoftness[shadowSlot], 0.0, 8.0);
+    if (softness <= 0.0) {
+        float shadowDepth = SampleShadowMap(shadowSlot, shadowCoord.xy);
+        return compareDepth <= shadowDepth ? 1.0 : 0.0;
+    }
+
+    vec2 radius = max(0.25, softness) * texelSize;
+    float visible = 0.0;
+    for (int i = 0; i < 12; ++i) {
+        vec2 sampleUv = clamp(shadowCoord.xy + kPoissonDisk[i] * radius, vec2(0.0), vec2(1.0));
+        float shadowDepth = SampleShadowMap(shadowSlot, sampleUv);
+        visible += compareDepth <= shadowDepth ? 1.0 : 0.0;
+    }
+    return visible / 12.0;
+}
+
+void main()
+{
+    vec3 worldNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
+    vec3 staticProbeLighting = clamp(fragColor.rgb, 0.0, 1.0);
+    vec3 tint = clamp(doorTint.rgb, 0.0, 1.0);
+
+    if (doorDebugMode == DOOR_DEBUG_NORMAL_VISUALIZE) {
+        finalColor = vec4(worldNormal * 0.5 + vec3(0.5), 1.0);
+        return;
+    }
+    if (doorDebugMode == DOOR_DEBUG_FLAT_COLOR_NO_TEXTURE) {
+        finalColor = vec4(0.18, 0.78, 0.92, 1.0);
+        return;
+    }
+    if (doorDebugMode == DOOR_DEBUG_BAKED_ONLY) {
+        finalColor = vec4(staticProbeLighting, 1.0);
+        return;
+    }
+    if (doorDebugMode == DOOR_DEBUG_ALBEDO_ONLY) {
+        vec4 sampled = texture(texture0, fragTexCoord);
+        finalColor = vec4(sampled.rgb, sampled.a);
+        return;
+    }
+
+    vec3 dynamicDirect = vec3(0.0);
+    for (int i = 0; i < dynamicLightCount && i < MAX_DYNAMIC_LIGHTS; ++i) {
+        float radius = dynamicLightRadii[i];
+        vec3 toLight = dynamicLightPositions[i] - fragWorldPosition;
+        float distanceSq = dot(toLight, toLight);
+        if (radius > 0.0 && distanceSq < radius * radius) {
+            float distanceToLight = sqrt(max(distanceSq, 0.0));
+            vec3 lightDirection = distanceToLight > 0.0001 ? toLight / distanceToLight : worldNormal;
+            float ndotl = max(dot(worldNormal, lightDirection), 0.0);
+            float atten = clamp(1.0 - distanceToLight / radius, 0.0, 1.0);
+            atten *= atten;
+            float coneAtten = 1.0;
+            if (dynamicLightTypes[i] == 1) {
+                vec3 spotDirection = SafeNormalize(dynamicLightDirections[i], vec3(0.0, -1.0, 0.0));
+                vec3 fragmentDirectionFromLight = distanceToLight > 0.0001
+                        ? -lightDirection
+                        : spotDirection;
+                float coneDot = dot(spotDirection, fragmentDirectionFromLight);
+                float innerConeCos = dynamicLightInnerConeCos[i];
+                float outerConeCos = dynamicLightOuterConeCos[i];
+                coneAtten = abs(innerConeCos - outerConeCos) > 0.0001
+                        ? smoothstep(outerConeCos, innerConeCos, coneDot)
+                        : step(innerConeCos, coneDot);
+                int shadowSlot = dynamicLightShadowSlots[i];
+                if (shadowSlot >= 0) {
+                    float visibility = DynamicSpotLightShadowVisibility(
+                            shadowSlot,
+                            fragWorldPosition,
+                            worldNormal,
+                            lightDirection);
+                    coneAtten *= mix(1.0, visibility, clamp(shadowStrength[shadowSlot], 0.0, 1.0));
+                }
+            }
+            dynamicDirect += dynamicLightColors[i] * dynamicLightIntensities[i] * atten * ndotl * coneAtten;
+        }
+    }
+
+    if (doorDebugMode == DOOR_DEBUG_DYNAMIC_ONLY) {
+        finalColor = vec4(clamp(dynamicDirect, 0.0, dynamicLightingClamp) / dynamicLightingClamp, 1.0);
+        return;
+    }
+
+    vec4 sampled = texture(texture0, fragTexCoord);
+    vec3 surfaceRgb = sampled.rgb;
+    vec3 lighting = clamp(staticProbeLighting + dynamicDirect, 0.0, dynamicLightingClamp);
+    finalColor = vec4(surfaceRgb * tint * lighting, sampled.a * doorTint.a);
 }
 )";
 
@@ -1117,12 +1346,94 @@ bool LoadDynamicSpotLightShadowMaterial(
     material.shader = shader;
     material.shader.locs[SHADER_LOC_VERTEX_POSITION] = GetShaderLocationAttrib(material.shader, "vertexPosition");
     material.shader.locs[SHADER_LOC_VERTEX_TEXCOORD01] = GetShaderLocationAttrib(material.shader, "vertexTexCoord");
+    material.shader.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(material.shader, "matModel");
     material.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(material.shader, "texture0");
     lightViewProjectionLoc = GetShaderLocation(material.shader, "lightViewProjection");
     alphaTestLoc = GetShaderLocation(material.shader, "alphaTest");
     alphaCutoffLoc = GetShaderLocation(material.shader, "alphaCutoff");
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
+    return true;
+}
+
+bool LoadDoorOpaqueShader(
+        Shader& shader,
+        int& textureLoc,
+        int& dynamicLightCountLoc,
+        int& dynamicLightPositionsLoc,
+        int& dynamicLightColorsLoc,
+        int& dynamicLightRadiiLoc,
+        int& dynamicLightIntensitiesLoc,
+        int& dynamicLightTypesLoc,
+        int& dynamicLightDirectionsLoc,
+        int& dynamicLightInnerConeCosLoc,
+        int& dynamicLightOuterConeCosLoc,
+        int& dynamicLightShadowSlotsLoc,
+        std::array<int, MaxDynamicSpotLightShadowCasters>& shadowLightMatrixLocs,
+        int& shadowBiasLoc,
+        int& shadowStrengthLoc,
+        int& shadowSoftnessLoc,
+        int& dynamicLightingClampLoc,
+        int& debugModeLoc,
+        int& tintLoc,
+        bool& shaderLoaded)
+{
+    shader = LoadShaderFromMemory(SectorDoorOpaqueVs, SectorDoorOpaqueFs);
+    if (shader.id == 0) {
+        shader = Shader{};
+        textureLoc = -1;
+        dynamicLightCountLoc = -1;
+        dynamicLightPositionsLoc = -1;
+        dynamicLightColorsLoc = -1;
+        dynamicLightRadiiLoc = -1;
+        dynamicLightIntensitiesLoc = -1;
+        dynamicLightTypesLoc = -1;
+        dynamicLightDirectionsLoc = -1;
+        dynamicLightInnerConeCosLoc = -1;
+        dynamicLightOuterConeCosLoc = -1;
+        dynamicLightShadowSlotsLoc = -1;
+        shadowLightMatrixLocs.fill(-1);
+        shadowBiasLoc = -1;
+        shadowStrengthLoc = -1;
+        shadowSoftnessLoc = -1;
+        dynamicLightingClampLoc = -1;
+        debugModeLoc = -1;
+        tintLoc = -1;
+        shaderLoaded = false;
+        return false;
+    }
+
+    shader.locs[SHADER_LOC_VERTEX_POSITION] = GetShaderLocationAttrib(shader, "vertexPosition");
+    shader.locs[SHADER_LOC_VERTEX_NORMAL] = GetShaderLocationAttrib(shader, "vertexNormal");
+    shader.locs[SHADER_LOC_VERTEX_TEXCOORD01] = GetShaderLocationAttrib(shader, "vertexTexCoord");
+    shader.locs[SHADER_LOC_VERTEX_COLOR] = GetShaderLocationAttrib(shader, "vertexColor");
+    shader.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(shader, "mvp");
+    shader.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(shader, "matModel");
+    shader.locs[SHADER_LOC_MATRIX_NORMAL] = GetShaderLocation(shader, "matNormal");
+    shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(shader, "texture0");
+    shader.locs[SHADER_LOC_MAP_ROUGHNESS] = GetShaderLocation(shader, "shadowMap0");
+    shader.locs[SHADER_LOC_MAP_OCCLUSION] = GetShaderLocation(shader, "shadowMap1");
+    textureLoc = shader.locs[SHADER_LOC_MAP_DIFFUSE];
+    dynamicLightCountLoc = GetShaderLocation(shader, "dynamicLightCount");
+    dynamicLightPositionsLoc = GetShaderLocationArrayBase(shader, "dynamicLightPositions");
+    dynamicLightColorsLoc = GetShaderLocationArrayBase(shader, "dynamicLightColors");
+    dynamicLightRadiiLoc = GetShaderLocationArrayBase(shader, "dynamicLightRadii");
+    dynamicLightIntensitiesLoc = GetShaderLocationArrayBase(shader, "dynamicLightIntensities");
+    dynamicLightTypesLoc = GetShaderLocationArrayBase(shader, "dynamicLightTypes");
+    dynamicLightDirectionsLoc = GetShaderLocationArrayBase(shader, "dynamicLightDirections");
+    dynamicLightInnerConeCosLoc = GetShaderLocationArrayBase(shader, "dynamicLightInnerConeCos");
+    dynamicLightOuterConeCosLoc = GetShaderLocationArrayBase(shader, "dynamicLightOuterConeCos");
+    dynamicLightShadowSlotsLoc = GetShaderLocationArrayBase(shader, "dynamicLightShadowSlots");
+    for (std::size_t i = 0; i < MaxDynamicSpotLightShadowCasters; ++i) {
+        shadowLightMatrixLocs[i] = GetShaderLocationArrayElement(shader, "shadowLightMatrices", i);
+    }
+    shadowBiasLoc = GetShaderLocationArrayBase(shader, "shadowBias");
+    shadowStrengthLoc = GetShaderLocationArrayBase(shader, "shadowStrength");
+    shadowSoftnessLoc = GetShaderLocationArrayBase(shader, "shadowSoftness");
+    dynamicLightingClampLoc = GetShaderLocation(shader, "dynamicLightingClamp");
+    debugModeLoc = GetShaderLocation(shader, "doorDebugMode");
+    tintLoc = GetShaderLocation(shader, "doorTint");
+    shaderLoaded = true;
     return true;
 }
 
@@ -1282,7 +1593,79 @@ Mesh CreateSkyCylinderMesh(const SectorSkyCylinderMeshData& data)
     return mesh;
 }
 
+Mesh CreateDoorSlabMesh(const SectorDoorSlabMeshData& data)
+{
+    Mesh mesh = {};
+    if (data.vertices.empty()
+            || data.vertices.size() > static_cast<size_t>(std::numeric_limits<int>::max())
+            || data.indices.empty()
+            || data.indices.size() % 3u != 0u
+            || data.indices.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        return mesh;
+    }
+
+    mesh.vertexCount = static_cast<int>(data.vertices.size());
+    mesh.triangleCount = static_cast<int>(data.indices.size() / 3u);
+    mesh.vertices = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 3 * sizeof(float))));
+    mesh.normals = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 3 * sizeof(float))));
+    mesh.texcoords = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 2 * sizeof(float))));
+    mesh.colors = static_cast<unsigned char*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 4 * sizeof(unsigned char))));
+    mesh.indices = static_cast<unsigned short*>(MemAlloc(static_cast<unsigned int>(data.indices.size() * sizeof(unsigned short))));
+
+    if (mesh.vertices == nullptr
+            || mesh.normals == nullptr
+            || mesh.texcoords == nullptr
+            || mesh.colors == nullptr
+            || mesh.indices == nullptr) {
+        std::fprintf(stderr, "[SectorDemo ERROR] Failed to allocate door slab mesh data\n");
+        UnloadMesh(mesh);
+        return Mesh{};
+    }
+
+    for (int i = 0; i < mesh.vertexCount; ++i) {
+        const SectorDoorSlabMeshVertex& vertex = data.vertices[static_cast<size_t>(i)];
+        mesh.vertices[i * 3 + 0] = vertex.position.x;
+        mesh.vertices[i * 3 + 1] = vertex.position.y;
+        mesh.vertices[i * 3 + 2] = vertex.position.z;
+        mesh.normals[i * 3 + 0] = vertex.normal.x;
+        mesh.normals[i * 3 + 1] = vertex.normal.y;
+        mesh.normals[i * 3 + 2] = vertex.normal.z;
+        mesh.texcoords[i * 2 + 0] = vertex.uv.x;
+        mesh.texcoords[i * 2 + 1] = vertex.uv.y;
+        mesh.colors[i * 4 + 0] = vertex.color.r;
+        mesh.colors[i * 4 + 1] = vertex.color.g;
+        mesh.colors[i * 4 + 2] = vertex.color.b;
+        mesh.colors[i * 4 + 3] = vertex.color.a;
+    }
+
+    for (size_t i = 0; i < data.indices.size(); ++i) {
+        mesh.indices[i] = data.indices[i];
+    }
+
+    UploadMesh(&mesh, false);
+    return mesh;
+}
+
 } // namespace
+
+const char* SectorDoorLightingDebugModeName(SectorDoorLightingDebugMode mode)
+{
+    switch (mode) {
+        case SectorDoorLightingDebugMode::Normal:
+            return "Normal";
+        case SectorDoorLightingDebugMode::AlbedoOnly:
+            return "AlbedoOnly";
+        case SectorDoorLightingDebugMode::BakedOnly:
+            return "BakedOnly";
+        case SectorDoorLightingDebugMode::DynamicOnly:
+            return "DynamicOnly";
+        case SectorDoorLightingDebugMode::NormalVisualize:
+            return "NormalVisualize";
+        case SectorDoorLightingDebugMode::FlatColorNoTexture:
+            return "FlatColorNoTexture";
+    }
+    return "Normal";
+}
 
 bool SectorMeshPreview::Rebuild(
         engine::AssetManager& assets,
@@ -1425,6 +1808,9 @@ bool SectorMeshPreview::RebuildRendererResources(
     dynamicSpotLightShadowCasters.reserve(MaxDynamicSpotLightShadowCasters);
     dynamicSpotLightShadowMatrices.clear();
     dynamicSpotLightShadowMatrices.reserve(MaxDynamicSpotLightShadowCasters);
+    doorMeshCache.reserve(kSectorRuntimeObjectInitialCapacity);
+    runtimeDoorShadowCasters.clear();
+    runtimeDoorShadowCasters.reserve(kSectorRuntimeObjectInitialCapacity);
     runtimeSeconds = 0.0f;
 
     if (!EnsureDynamicSpotLightShadowMapResources()) {
@@ -1472,6 +1858,36 @@ bool SectorMeshPreview::RebuildRendererResources(
         error = "Preview failed: could not load billboard cutout shader";
         return false;
     }
+
+    if (!LoadDoorOpaqueShader(
+                doorOpaqueShader,
+                doorOpaqueTextureLoc,
+                doorOpaqueDynamicLightCountLoc,
+                doorOpaqueDynamicLightPositionsLoc,
+                doorOpaqueDynamicLightColorsLoc,
+                doorOpaqueDynamicLightRadiiLoc,
+                doorOpaqueDynamicLightIntensitiesLoc,
+                doorOpaqueDynamicLightTypesLoc,
+                doorOpaqueDynamicLightDirectionsLoc,
+                doorOpaqueDynamicLightInnerConeCosLoc,
+                doorOpaqueDynamicLightOuterConeCosLoc,
+                doorOpaqueDynamicLightShadowSlotsLoc,
+                doorOpaqueShadowLightMatrixLocs,
+                doorOpaqueShadowBiasLoc,
+                doorOpaqueShadowStrengthLoc,
+                doorOpaqueShadowSoftnessLoc,
+                doorOpaqueDynamicLightingClampLoc,
+                doorOpaqueDebugModeLoc,
+                doorOpaqueTintLoc,
+                doorOpaqueShaderLoaded)) {
+        Shutdown(assets);
+        error = "Preview failed: could not load door opaque shader";
+        return false;
+    }
+    doorOpaqueMaterial = LoadMaterialDefault();
+    doorOpaqueDefaultMaterialTexture = doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture;
+    doorOpaqueMaterial.shader = doorOpaqueShader;
+    doorOpaqueMaterialLoaded = true;
 
     if (!LoadPreviewMaterial(
                 material,
@@ -1549,8 +1965,10 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     dynamicPointLightCandidates.clear();
     dynamicPointLights.clear();
     selectedDynamicPointLightIds.clear();
+    directDynamicLightReceiverBounds.clear();
     dynamicSpotLightShadowCasters.clear();
     dynamicSpotLightShadowMatrices.clear();
+    runtimeDoorShadowCasters.clear();
     runtimeSeconds = 0.0f;
     billboardRenderWarningPrinted = false;
     if (!initialized
@@ -1559,6 +1977,9 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
             && meshes.sectorDrawRecords.empty()
             && !materialLoaded
             && !billboardCutoutShaderLoaded
+            && !doorOpaqueShaderLoaded
+            && !doorOpaqueMaterialLoaded
+            && doorMeshCache.empty()
             && !dynamicSpotLightShadowMaterialLoaded
             && skyCylinderMesh.vertexCount <= 0
             && skyTopCapMesh.vertexCount <= 0
@@ -1569,6 +1990,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     UnloadBloomResources();
     UnloadDynamicSpotLightShadowMapResources();
     UnloadSkyCylinderMesh();
+    UnloadDoorMeshes();
     UnloadSectorMeshes(meshes);
     textureHandlesById.clear();
     lightmapTexture = engine::NullTextureHandle();
@@ -1629,6 +2051,36 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
         billboardCutoutShaderLoaded = false;
     }
 
+    if (doorOpaqueMaterialLoaded) {
+        doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = doorOpaqueDefaultMaterialTexture;
+        doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
+        doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = Texture2D{};
+        UnloadMaterial(doorOpaqueMaterial);
+        doorOpaqueMaterial = Material{};
+        doorOpaqueDefaultMaterialTexture = Texture2D{};
+        doorOpaqueShader = Shader{};
+        doorOpaqueTextureLoc = -1;
+        doorOpaqueDynamicLightCountLoc = -1;
+        doorOpaqueDynamicLightPositionsLoc = -1;
+        doorOpaqueDynamicLightColorsLoc = -1;
+        doorOpaqueDynamicLightRadiiLoc = -1;
+        doorOpaqueDynamicLightIntensitiesLoc = -1;
+        doorOpaqueDynamicLightTypesLoc = -1;
+        doorOpaqueDynamicLightDirectionsLoc = -1;
+        doorOpaqueDynamicLightInnerConeCosLoc = -1;
+        doorOpaqueDynamicLightOuterConeCosLoc = -1;
+        doorOpaqueDynamicLightShadowSlotsLoc = -1;
+        doorOpaqueShadowLightMatrixLocs.fill(-1);
+        doorOpaqueShadowBiasLoc = -1;
+        doorOpaqueShadowStrengthLoc = -1;
+        doorOpaqueShadowSoftnessLoc = -1;
+        doorOpaqueDynamicLightingClampLoc = -1;
+        doorOpaqueDebugModeLoc = -1;
+        doorOpaqueTintLoc = -1;
+        doorOpaqueMaterialLoaded = false;
+        doorOpaqueShaderLoaded = false;
+    }
+
     if (!engine::IsNull(assetScope)) {
         assets.UnloadScope(assetScope);
         assetScope = engine::NullAssetScopeHandle();
@@ -1647,16 +2099,18 @@ void SectorMeshPreview::AdvanceRuntime(float dt)
 void SectorMeshPreview::Render(
         engine::AssetManager& assets,
         bool useBakedAmbientOcclusion,
-        engine::World* runtimeObjectWorld)
+        engine::World* runtimeObjectWorld,
+        SectorRuntimeDoorLightingContext doorLighting)
 {
-    RenderDynamicSpotLightShadowMaps(assets);
-    DrawScene(assets, useBakedAmbientOcclusion, runtimeObjectWorld);
+    RenderDynamicSpotLightShadowMaps(assets, runtimeObjectWorld);
+    DrawScene(assets, useBakedAmbientOcclusion, runtimeObjectWorld, doorLighting);
 }
 
 void SectorMeshPreview::DrawScene(
         engine::AssetManager& assets,
         bool useBakedAmbientOcclusion,
-        engine::World* runtimeObjectWorld)
+        engine::World* runtimeObjectWorld,
+        SectorRuntimeDoorLightingContext doorLighting)
 {
     if (!initialized) {
         return;
@@ -1763,9 +2217,260 @@ void SectorMeshPreview::DrawScene(
         DrawMesh(batch.mesh, material, MatrixIdentity());
     }
     if (runtimeObjectWorld != nullptr) {
+        DrawRuntimeDoors(assets, *runtimeObjectWorld, doorLighting);
         DrawRuntimeBillboards(assets, *runtimeObjectWorld);
     }
     EndMode3D();
+}
+
+void SectorMeshPreview::PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld)
+{
+    for (auto& entry : doorMeshCache) {
+        entry.second.seenThisFrame = false;
+    }
+    runtimeDoorShadowCasters.clear();
+
+    runtimeObjectWorld.ForEach<
+            SectorObjectTransform,
+            SectorObject,
+            SectorDoor,
+            SectorDoorResolvedAnchor,
+            SectorDoorRender>(
+            [this](
+                    engine::Entity entity,
+                    SectorObjectTransform& transform,
+                    SectorObject& object,
+                    SectorDoor& door,
+                    SectorDoorResolvedAnchor& anchor,
+                    SectorDoorRender& render) {
+                if (!AppendSectorDoorShadowCaster(
+                            entity,
+                            transform,
+                            object,
+                            door,
+                            anchor,
+                            render,
+                            runtimeDoorShadowCasters)) {
+                    return;
+                }
+
+                DoorMeshCacheEntry& cacheEntry = doorMeshCache[door.placedObjectId];
+                cacheEntry.seenThisFrame = true;
+                const bool meshDirty = cacheEntry.mesh.vertexCount <= 0
+                        || cacheEntry.width != render.width
+                        || cacheEntry.height != render.height
+                        || cacheEntry.thickness != render.thickness
+                        || !SameSectorDoorFaceUvSet(cacheEntry.faceUvs, render.faceUvs);
+                if (meshDirty) {
+                    if (cacheEntry.mesh.vertexCount > 0) {
+                        UnloadMesh(cacheEntry.mesh);
+                    }
+                    cacheEntry.meshData = BuildSectorDoorSlabMeshData(render);
+                    cacheEntry.mesh = CreateDoorSlabMesh(cacheEntry.meshData);
+                    cacheEntry.width = render.width;
+                    cacheEntry.height = render.height;
+                    cacheEntry.thickness = render.thickness;
+                    cacheEntry.faceUvs = render.faceUvs;
+                }
+            });
+
+    for (auto it = doorMeshCache.begin(); it != doorMeshCache.end();) {
+        if (!it->second.seenThisFrame) {
+            if (it->second.mesh.vertexCount > 0) {
+                UnloadMesh(it->second.mesh);
+            }
+            it = doorMeshCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void SectorMeshPreview::DrawRuntimeDoors(
+        engine::AssetManager& assets,
+        engine::World& runtimeObjectWorld,
+        SectorRuntimeDoorLightingContext doorLighting)
+{
+    if (!doorOpaqueMaterialLoaded || !doorOpaqueShaderLoaded || doorOpaqueMaterial.shader.id == 0) {
+        doorConsideredCount = 0;
+        doorDrawnCount = 0;
+        doorSkippedCount = 0;
+        AppendDoorRenderDebugText(renderDebugText, "doors: shader unavailable");
+        return;
+    }
+
+    PrepareRuntimeDoorMeshes(runtimeObjectWorld);
+
+    size_t consideredCount = 0;
+    size_t drawnCount = 0;
+    size_t skippedCount = 0;
+    const SectorBakedObjectLightProbeRuntimeData emptyObjectLightProbes;
+    const SectorBakedObjectLightProbeRuntimeData& objectLightProbes =
+            doorLighting.objectLightProbes != nullptr
+            ? *doorLighting.objectLightProbes
+            : emptyObjectLightProbes;
+
+    rlDisableColorBlend();
+    rlDisableBackfaceCulling();
+    rlEnableDepthTest();
+    rlEnableDepthMask();
+    UploadDynamicPointLights(
+            doorOpaqueMaterial.shader,
+            doorOpaqueDynamicLightCountLoc,
+            doorOpaqueDynamicLightPositionsLoc,
+            doorOpaqueDynamicLightColorsLoc,
+            doorOpaqueDynamicLightRadiiLoc,
+            doorOpaqueDynamicLightIntensitiesLoc,
+            doorOpaqueDynamicLightTypesLoc,
+            doorOpaqueDynamicLightDirectionsLoc,
+            doorOpaqueDynamicLightInnerConeCosLoc,
+            doorOpaqueDynamicLightOuterConeCosLoc,
+            doorOpaqueDynamicLightingClampLoc,
+            dynamicLightingEnabled,
+            runtimeSeconds,
+            dynamicPointLights);
+    const SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms =
+            PackSectorPreviewDynamicSpotLightShadowUniforms(
+                    dynamicPointLights,
+                    dynamicSpotLightShadowCasters,
+                    dynamicSpotLightShadowMatrices);
+    UploadDynamicSpotLightShadowUniforms(
+            doorOpaqueMaterial.shader,
+            doorOpaqueDynamicLightShadowSlotsLoc,
+            doorOpaqueShadowLightMatrixLocs,
+            doorOpaqueShadowBiasLoc,
+            doorOpaqueShadowStrengthLoc,
+            doorOpaqueShadowSoftnessLoc,
+            shadowUniforms);
+    doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = dynamicSpotLightShadowMaps[0].depth;
+    doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = dynamicSpotLightShadowMaps[1].depth;
+    if (doorOpaqueDebugModeLoc >= 0) {
+        const int debugMode = DoorLightingDebugModeShaderValue(doorLightingDebugMode);
+        SetShaderValue(doorOpaqueMaterial.shader, doorOpaqueDebugModeLoc, &debugMode, SHADER_UNIFORM_INT);
+    }
+    if (doorOpaqueTextureLoc >= 0) {
+        const int diffuseTextureUnit = 0;
+        SetShaderValue(doorOpaqueMaterial.shader, doorOpaqueTextureLoc, &diffuseTextureUnit, SHADER_UNIFORM_INT);
+    }
+
+    runtimeObjectWorld.ForEach<
+            SectorObjectTransform,
+            SectorObject,
+            SectorDoor,
+            SectorDoorResolvedAnchor,
+            SectorDoorRender>(
+            [this,
+             &assets,
+             &consideredCount,
+             &drawnCount,
+             &skippedCount,
+             &objectLightProbes,
+             doorLighting](
+                    engine::Entity entity,
+                    SectorObjectTransform& transform,
+                    SectorObject& object,
+                    SectorDoor& door,
+                    SectorDoorResolvedAnchor& anchor,
+                    SectorDoorRender& render) {
+                ++consideredCount;
+                if (!object.visible || !door.enabled || !render.visible) {
+                    ++skippedCount;
+                    return;
+                }
+                if (render.width <= 0.0f || render.height <= 0.0f || render.thickness <= 0.0f) {
+                    ++skippedCount;
+                    return;
+                }
+
+                const engine::TextureHandle textureHandle = !render.textureId.empty()
+                        ? TextureForId(render.textureId)
+                        : engine::NullTextureHandle();
+                const Texture2D* texture = assets.GetTexture(textureHandle);
+                if (texture == nullptr) {
+                    texture = &defaultMaterialTexture;
+                }
+                if (texture == nullptr || texture->id == 0) {
+                    ++skippedCount;
+                    return;
+                }
+
+                auto cacheIt = doorMeshCache.find(door.placedObjectId);
+                if (cacheIt == doorMeshCache.end() || cacheIt->second.mesh.vertexCount <= 0) {
+                    ++skippedCount;
+                    return;
+                }
+                DoorMeshCacheEntry& cacheEntry = cacheIt->second;
+
+                if (!BuildSectorDoorStaticLightingColors(
+                            cacheEntry.meshData,
+                            transform,
+                            object,
+                            anchor,
+                            objectLightProbes,
+                            doorLighting.mapForFallback,
+                            cacheEntry.staticLightingColors)) {
+                    cacheEntry.staticLightingColors.assign(
+                            static_cast<size_t>(cacheEntry.mesh.vertexCount),
+                            WHITE);
+                }
+                if (cacheEntry.mesh.colors != nullptr
+                        && cacheEntry.staticLightingColors.size() == static_cast<size_t>(cacheEntry.mesh.vertexCount)) {
+                    for (int i = 0; i < cacheEntry.mesh.vertexCount; ++i) {
+                        const Color color = cacheEntry.staticLightingColors[static_cast<size_t>(i)];
+                        cacheEntry.mesh.colors[i * 4 + 0] = color.r;
+                        cacheEntry.mesh.colors[i * 4 + 1] = color.g;
+                        cacheEntry.mesh.colors[i * 4 + 2] = color.b;
+                        cacheEntry.mesh.colors[i * 4 + 3] = color.a;
+                    }
+                    UpdateMeshBuffer(
+                            cacheEntry.mesh,
+                            RL_DEFAULT_SHADER_ATTRIB_LOCATION_COLOR,
+                            cacheEntry.mesh.colors,
+                            cacheEntry.mesh.vertexCount * 4 * static_cast<int>(sizeof(unsigned char)),
+                            0);
+                }
+
+                if (doorOpaqueTintLoc >= 0) {
+                    const Vector4 tint{
+                            static_cast<float>(render.tint.r) / 255.0f,
+                            static_cast<float>(render.tint.g) / 255.0f,
+                            static_cast<float>(render.tint.b) / 255.0f,
+                            static_cast<float>(render.tint.a) / 255.0f};
+                    SetShaderValue(doorOpaqueMaterial.shader, doorOpaqueTintLoc, &tint, SHADER_UNIFORM_VEC4);
+                }
+
+                doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = *texture;
+                doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
+                DrawMesh(
+                        cacheEntry.mesh,
+                        doorOpaqueMaterial,
+                        BuildSectorDoorSlabModelMatrix(transform, anchor));
+                ++drawnCount;
+            });
+
+    doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = doorOpaqueDefaultMaterialTexture;
+    doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
+    doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = Texture2D{};
+    rlActiveTextureSlot(0);
+    rlSetTexture(0);
+    rlEnableColorBlend();
+    rlSetBlendMode(BLEND_ALPHA);
+    rlEnableDepthTest();
+    rlEnableDepthMask();
+    rlEnableBackfaceCulling();
+
+    doorConsideredCount = consideredCount;
+    doorDrawnCount = drawnCount;
+    doorSkippedCount = skippedCount;
+    AppendDoorRenderDebugText(
+            renderDebugText,
+            "doors: "
+                    + std::to_string(drawnCount)
+                    + " drawn / "
+                    + std::to_string(consideredCount)
+                    + " considered, "
+                    + std::to_string(skippedCount)
+                    + " skipped");
 }
 
 void SectorMeshPreview::DrawRuntimeBillboards(engine::AssetManager& assets, engine::World& runtimeObjectWorld)
@@ -2099,12 +2804,20 @@ void SectorMeshPreview::UnloadDynamicSpotLightShadowMapResources()
     }
 }
 
-void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(engine::AssetManager& assets)
+void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
+        engine::AssetManager& assets,
+        engine::World* runtimeObjectWorld)
 {
     if (!dynamicSpotLightShadowMaterialLoaded
             || dynamicSpotLightShadowLightViewProjectionLoc < 0
             || dynamicSpotLightShadowMatrices.empty()) {
         return;
+    }
+
+    if (runtimeObjectWorld != nullptr) {
+        PrepareRuntimeDoorMeshes(*runtimeObjectWorld);
+    } else {
+        runtimeDoorShadowCasters.clear();
     }
 
     for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : dynamicSpotLightShadowMatrices) {
@@ -2149,6 +2862,35 @@ void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(engine::AssetManager& a
                         SHADER_UNIFORM_FLOAT);
             }
             DrawMesh(batch.mesh, dynamicSpotLightShadowMaterial, MatrixIdentity());
+        }
+        const int doorAlphaTest = 0;
+        const float doorAlphaCutoff = 0.0f;
+        dynamicSpotLightShadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture =
+                dynamicSpotLightShadowDefaultTexture;
+        if (dynamicSpotLightShadowAlphaTestLoc >= 0) {
+            SetShaderValue(
+                    dynamicSpotLightShadowMaterial.shader,
+                    dynamicSpotLightShadowAlphaTestLoc,
+                    &doorAlphaTest,
+                    SHADER_UNIFORM_INT);
+        }
+        if (dynamicSpotLightShadowAlphaCutoffLoc >= 0) {
+            SetShaderValue(
+                    dynamicSpotLightShadowMaterial.shader,
+                    dynamicSpotLightShadowAlphaCutoffLoc,
+                    &doorAlphaCutoff,
+                    SHADER_UNIFORM_FLOAT);
+        }
+        for (const SectorDoorShadowCaster& caster : runtimeDoorShadowCasters) {
+            auto cacheIt = doorMeshCache.find(caster.placedObjectId);
+            if (cacheIt == doorMeshCache.end() || cacheIt->second.mesh.vertexCount <= 0) {
+                continue;
+            }
+            const Matrix shadowModel = BuildSectorDoorShadowCasterModelMatrix(
+                    caster,
+                    cacheIt->second.width,
+                    cacheIt->second.height);
+            DrawMesh(cacheIt->second.mesh, dynamicSpotLightShadowMaterial, shadowModel);
         }
         dynamicSpotLightShadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = dynamicSpotLightShadowDefaultTexture;
         rlDisableDepthTest();
@@ -2220,6 +2962,17 @@ void SectorMeshPreview::UnloadSkyCylinderMesh()
         skyDefaultMaterialTexture = Texture2D{};
         skyMaterialLoaded = false;
     }
+}
+
+void SectorMeshPreview::UnloadDoorMeshes()
+{
+    for (auto& entry : doorMeshCache) {
+        if (entry.second.mesh.vertexCount > 0) {
+            UnloadMesh(entry.second.mesh);
+            entry.second.mesh = Mesh{};
+        }
+    }
+    doorMeshCache.clear();
 }
 
 void SectorMeshPreview::DrawSkyCylinder(const Texture2D& texture)
@@ -2377,7 +3130,9 @@ void SectorMeshPreview::RefreshDynamicLightSources(const SectorTopologyMap& map)
 void SectorMeshPreview::UpdateVisibilityDebug(
         int preferredStartSectorId,
         float visibilitySeedRadiusWorld,
-        bool validateEyeY)
+        bool validateEyeY,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers,
+        engine::World* runtimeObjectWorld)
 {
     if (!visibilityGraphValid) {
         visibilityResult = RuntimePortalVisibilityResult{};
@@ -2395,21 +3150,23 @@ void SectorMeshPreview::UpdateVisibilityDebug(
                 0,
                 visibilitySeedRadiusWorld,
                 camera.position.y,
-                validateEyeY);
+                validateEyeY,
+                dynamicPortalBlockers);
     }
     portalVisibilityDebugText = FormatRuntimePortalVisibilityDebugText(visibilityResult);
     visibilityDebugText = portalVisibilityDebugText;
     const size_t visibleDrawRecordCount =
             CountSectorMeshDrawRecordsForVisibility(meshes.sectorDrawRecords, visibilityResult);
+    BuildDirectDynamicLightReceiverBounds(runtimeObjectWorld);
     CollectSectorPreviewDynamicPointLightCandidates(
             dynamicPointLightSources,
             visibilityResult,
-            meshes.sectorReceiverBounds,
+            directDynamicLightReceiverBounds,
             dynamicPointLightCandidates);
     SelectRankedSectorPreviewDynamicPointLights(
             dynamicPointLightCandidates,
             visibilityResult,
-            meshes.sectorReceiverBounds,
+            directDynamicLightReceiverBounds,
             static_cast<std::size_t>(MaxDynamicLights),
             dynamicPointLights,
             &selectedDynamicPointLightIds,
@@ -2417,7 +3174,7 @@ void SectorMeshPreview::UpdateVisibilityDebug(
     SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
             dynamicPointLights,
             visibilityResult,
-            meshes.sectorReceiverBounds,
+            directDynamicLightReceiverBounds,
             MaxDynamicSpotLightShadowCasters,
             dynamicSpotLightShadowCasters);
     BuildSectorPreviewDynamicSpotLightShadowMatrices(
@@ -2443,6 +3200,19 @@ void SectorMeshPreview::UpdateVisibilityDebug(
                     dynamicSpotLightShadowCasters);
     AppendBillboardRenderDebugText(renderDebugText, billboardRenderDebugText);
     visibilityDebugText += " | " + renderDebugText;
+}
+
+void SectorMeshPreview::BuildDirectDynamicLightReceiverBounds(engine::World* runtimeObjectWorld)
+{
+    directDynamicLightReceiverBounds.clear();
+    directDynamicLightReceiverBounds.reserve(meshes.sectorReceiverBounds.size());
+    directDynamicLightReceiverBounds.insert(
+            directDynamicLightReceiverBounds.end(),
+            meshes.sectorReceiverBounds.begin(),
+            meshes.sectorReceiverBounds.end());
+    if (runtimeObjectWorld != nullptr) {
+        CollectSectorDoorReceiverBounds(*runtimeObjectWorld, directDynamicLightReceiverBounds);
+    }
 }
 
 float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const

@@ -35,6 +35,7 @@ enum class SectorEditorTool {
     AuthoringInsertVertex,
     AuthoringMove,
     RuntimeObject,
+    Door,
     StaticLight,
     StaticSpotLight,
     DynamicLight,
@@ -98,7 +99,8 @@ enum class TopologyTexturePickerTargetKind {
     SideDef,
     AuthoringFaceAnchor,
     AuthoringSide,
-    MapSky
+    MapSky,
+    RuntimeDoor
 };
 
 enum class PreviewSettingsTab {
@@ -228,6 +230,7 @@ struct TexturePickerState {
     int authoringFaceAnchorId = -1;
     int authoringLineId = -1;
     SectorTopologySideKind authoringSide = SectorTopologySideKind::Front;
+    int runtimeObjectId = -1;
     int selectedTextureIndex = -1;
     engine::UIScrollState scroll;
     std::vector<std::string> textureIds;
@@ -314,12 +317,24 @@ struct DecalTintModalState {
     std::string errorMessage;
 };
 
+struct DoorTextureSettingsModalState {
+    bool open = false;
+    int runtimeObjectId = -1;
+    SectorDoorFace selectedFace = SectorDoorFace::Front;
+    engine::UIFloatInputState scaleUInput;
+    engine::UIFloatInputState scaleVInput;
+    engine::UIFloatInputState offsetUInput;
+    engine::UIFloatInputState offsetVInput;
+    std::string statusMessage;
+};
+
 struct SectorPreviewSettingsModalState {
     bool open = false;
     PreviewSettingsTab activeTab = PreviewSettingsTab::General;
     SectorFpsControllerConfig draftConfig;
     SectorTopologySkySettings draftSkySettings;
     SectorTopologyDirectionalLightSettings draftDirectionalLight;
+    SectorLightmapBakeSettings draftLightmapSettings;
     engine::UIFloatInputState walkSpeedInput;
     engine::UIFloatInputState runSpeedInput;
     engine::UIFloatInputState mouseSensitivityInput;
@@ -341,6 +356,8 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState lightDirectionYInput;
     engine::UIFloatInputState lightDirectionZInput;
     engine::UIFloatInputState lightIntensityInput;
+    engine::UIFloatInputState objectProbeSpacingInput;
+    engine::UIFloatInputState objectProbeHeightInput;
     engine::UIIntInputState lightColorRedInput;
     engine::UIIntInputState lightColorGreenInput;
     engine::UIIntInputState lightColorBlueInput;
@@ -483,6 +500,11 @@ struct CachedRuntimeObjectDraw {
     Vector2 map = {};
     float yawRadians = 0.0f;
     bool definitionKnown = false;
+    bool isDoor = false;
+    bool doorFootprintValid = false;
+    Vector2 doorCorners[4] = {};
+    Vector2 doorEndpointA = {};
+    Vector2 doorEndpointB = {};
 };
 
 struct CachedAuthoringVertexDraw {
@@ -648,6 +670,7 @@ struct SectorEditorState {
     LoadLevelModalState loadLevelModal;
     ConfirmationModalState confirmationModal;
     DecalTintModalState decalTintModal;
+    DoorTextureSettingsModalState doorTextureSettingsModal;
     SectorPreviewSettingsModalState previewSettingsModal;
 };
 
@@ -681,6 +704,7 @@ struct SectorEditorUiState {
     engine::UIFloatInputState ambientOcclusionStrengthInput;
     engine::UIFloatInputState indirectBounceRadiusInput;
     engine::UIFloatInputState indirectBounceStrengthInput;
+    engine::UIFloatInputState objectProbeDebugDrawMaxDistanceInput;
     engine::UIIntInputState lightRedInput;
     engine::UIIntInputState lightGreenInput;
     engine::UIIntInputState lightBlueInput;
@@ -690,6 +714,13 @@ struct SectorEditorUiState {
     engine::UIFloatInputState runtimeObjectYawInput;
     engine::UIFloatInputState runtimeObjectWidthInput;
     engine::UIFloatInputState runtimeObjectHeightInput;
+    engine::UIFloatInputState runtimeObjectThicknessInput;
+    engine::UIFloatInputState runtimeObjectNormalOffsetInput;
+    engine::UIFloatInputState runtimeObjectOpenDistanceInput;
+    engine::UIFloatInputState runtimeObjectSpeedInput;
+    engine::UIFloatInputState runtimeObjectInitialOpenFractionInput;
+    engine::UIFloatInputState runtimeObjectAutoOpenDistanceInput;
+    engine::UIFloatInputState runtimeObjectInteractionDistanceInput;
     engine::UIFloatInputState runtimeObjectOriginXInput;
     engine::UIFloatInputState runtimeObjectOriginYInput;
     engine::UIFloatInputState surface3DUvScaleUInput;

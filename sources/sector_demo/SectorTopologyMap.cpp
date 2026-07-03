@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <string>
+#include <utility>
 
 namespace game {
 namespace {
@@ -29,9 +31,13 @@ constexpr float PreviewHeadBobStrengthMin = 0.0f;
 constexpr float PreviewHeadBobStrengthMax = 0.25f;
 constexpr float PreviewHeadBobFrequencyMin = 0.0f;
 constexpr float PreviewHeadBobFrequencyMax = 20.0f;
+constexpr float PreviewObjectProbeDebugDrawMaxDistanceMin = 0.0f;
+constexpr float PreviewObjectProbeDebugDrawMaxDistanceMax = 512.0f;
 constexpr float SkyVerticalScaleMin = 0.01f;
 constexpr float SkyVerticalScaleMax = 100.0f;
 constexpr float DirectionalLightMinLengthSqr = 0.000001f;
+constexpr float DoorAnchorSideProbeDistance = 0.001f;
+constexpr float DoorAnchorSideEpsilon = 0.000001f;
 
 float ClampFinite(float value, float fallback, float minValue, float maxValue)
 {
@@ -39,6 +45,33 @@ float ClampFinite(float value, float fallback, float minValue, float maxValue)
         value = fallback;
     }
     return std::clamp(value, minValue, maxValue);
+}
+
+float SectorCoordToWorldDistanceLocal(SectorCoord value)
+{
+    return static_cast<float>(value)
+            / static_cast<float>(SectorCoordSubdivisions)
+            * kSectorWorldUnitsPerAuthoringUnit;
+}
+
+Vector2 SectorCoordToWorldPosition2Local(SectorCoord x, SectorCoord y)
+{
+    return Vector2{SectorCoordToWorldDistanceLocal(x), SectorCoordToWorldDistanceLocal(y)};
+}
+
+float SignedDistanceFromDirectedLine(Vector2 origin, Vector2 tangent, Vector2 point)
+{
+    return tangent.x * (point.y - origin.y) - tangent.y * (point.x - origin.x);
+}
+
+bool ProbeIsInsideDirectedSide(Vector2 origin, Vector2 tangent, Vector2 point)
+{
+    return SignedDistanceFromDirectedLine(origin, tangent, point) > DoorAnchorSideEpsilon;
+}
+
+bool ProbeIsOutsideDirectedSide(Vector2 origin, Vector2 tangent, Vector2 point)
+{
+    return SignedDistanceFromDirectedLine(origin, tangent, point) < -DoorAnchorSideEpsilon;
 }
 
 template<typename T>
@@ -153,6 +186,11 @@ SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings setti
             defaults.headBobFrequency,
             PreviewHeadBobFrequencyMin,
             PreviewHeadBobFrequencyMax);
+    settings.objectProbeDebugDrawMaxDistanceWorld = ClampFinite(
+            settings.objectProbeDebugDrawMaxDistanceWorld,
+            defaults.objectProbeDebugDrawMaxDistanceWorld,
+            PreviewObjectProbeDebugDrawMaxDistanceMin,
+            PreviewObjectProbeDebugDrawMaxDistanceMax);
     return settings;
 }
 
@@ -493,6 +531,129 @@ bool RemoveSectorPlacedRuntimeObject(SectorTopologyMap& map, int id)
 
     map.runtimeObjects.erase(found);
     return true;
+}
+
+SectorResolvedDoorAnchor ResolveSectorDoorAnchor(
+        const SectorTopologyMap& map,
+        const SectorPlacedDoor& door)
+{
+    SectorResolvedDoorAnchor resolved;
+
+    const SectorDoorAnchor& anchor = door.anchor;
+    resolved.lineDefId = anchor.lineDefId;
+    resolved.frontSectorId = anchor.frontSectorId;
+    resolved.backSectorId = anchor.backSectorId;
+    resolved.frontSideDefId = anchor.frontSideDefId;
+    resolved.backSideDefId = anchor.backSideDefId;
+    resolved.width = door.width;
+    resolved.height = door.height;
+
+    const auto fail = [&resolved](std::string diagnostic) {
+        resolved.valid = false;
+        resolved.diagnostic = std::move(diagnostic);
+        return resolved;
+    };
+
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, anchor.lineDefId);
+    if (lineDef == nullptr) {
+        return fail("door anchor linedef is missing");
+    }
+    if (!IsValidSectorTopologyId(lineDef->frontSideDefId)
+            || !IsValidSectorTopologyId(lineDef->backSideDefId)) {
+        return fail("door anchor linedef is not a two-sided portal");
+    }
+    if (lineDef->frontSideDefId != anchor.frontSideDefId
+            || lineDef->backSideDefId != anchor.backSideDefId) {
+        return fail("door anchor sidedef IDs no longer match the linedef");
+    }
+
+    const SectorTopologySideDef* frontSide = FindSectorTopologySideDef(map, lineDef->frontSideDefId);
+    const SectorTopologySideDef* backSide = FindSectorTopologySideDef(map, lineDef->backSideDefId);
+    if (frontSide == nullptr || backSide == nullptr) {
+        return fail("door anchor sidedef is missing");
+    }
+    if (frontSide->lineDefId != lineDef->id
+            || frontSide->side != SectorTopologySideKind::Front
+            || backSide->lineDefId != lineDef->id
+            || backSide->side != SectorTopologySideKind::Back) {
+        return fail("door anchor sidedefs are not the linedef front/back pair");
+    }
+    if (frontSide->sectorId != anchor.frontSectorId
+            || backSide->sectorId != anchor.backSectorId) {
+        return fail("door anchor sector pair no longer matches the portal");
+    }
+
+    const SectorTopologySector* frontSector = FindSectorTopologySector(map, frontSide->sectorId);
+    const SectorTopologySector* backSector = FindSectorTopologySector(map, backSide->sectorId);
+    if (frontSector == nullptr || backSector == nullptr) {
+        return fail("door anchor sector is missing");
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(map, *lineDef, start, end)) {
+        return fail("door anchor linedef vertex is missing");
+    }
+
+    resolved.endpointA = SectorCoordToWorldPosition2Local(start->x, start->y);
+    resolved.endpointB = SectorCoordToWorldPosition2Local(end->x, end->y);
+    const Vector2 delta{
+            resolved.endpointB.x - resolved.endpointA.x,
+            resolved.endpointB.y - resolved.endpointA.y
+    };
+    const float lengthSqr = delta.x * delta.x + delta.y * delta.y;
+    if (!std::isfinite(lengthSqr) || lengthSqr <= 0.0f) {
+        return fail("door anchor portal has zero length");
+    }
+
+    resolved.portalWidth = std::sqrt(lengthSqr);
+    resolved.tangent = Vector2{
+            delta.x / resolved.portalWidth,
+            delta.y / resolved.portalWidth
+    };
+    resolved.midpoint = Vector2{
+            (resolved.endpointA.x + resolved.endpointB.x) * 0.5f,
+            (resolved.endpointA.y + resolved.endpointB.y) * 0.5f
+    };
+
+    // Front sidedefs use the linedef start->end direction; back sidedefs use end->start.
+    // A sidedef's sector lies on the positive side of that directed edge. Resolve and
+    // verify the door normal so positive normalOffset always moves front sector -> back sector.
+    Vector2 candidateNormal{resolved.tangent.y, -resolved.tangent.x};
+    const Vector2 backTangent{-resolved.tangent.x, -resolved.tangent.y};
+    const auto pointsTowardBack = [&](Vector2 normal) {
+        const Vector2 probe{
+                resolved.midpoint.x + normal.x * DoorAnchorSideProbeDistance,
+                resolved.midpoint.y + normal.y * DoorAnchorSideProbeDistance};
+        return ProbeIsOutsideDirectedSide(resolved.endpointA, resolved.tangent, probe)
+                && ProbeIsInsideDirectedSide(resolved.endpointB, backTangent, probe);
+    };
+    if (!pointsTowardBack(candidateNormal)) {
+        candidateNormal = Vector2{-candidateNormal.x, -candidateNormal.y};
+        if (!pointsTowardBack(candidateNormal)) {
+            return fail("door anchor normal could not be verified against portal front/back sides");
+        }
+    }
+    resolved.normal = candidateNormal;
+
+    resolved.openBottom = SectorAuthoringToWorldDistance(std::max(frontSector->floorZ, backSector->floorZ));
+    resolved.openTop = SectorAuthoringToWorldDistance(std::min(frontSector->ceilingZ, backSector->ceilingZ));
+    if (!std::isfinite(resolved.openBottom)
+            || !std::isfinite(resolved.openTop)
+            || resolved.openBottom >= resolved.openTop) {
+        return fail("door anchor portal has no positive vertical opening");
+    }
+
+    resolved.portalHeight = resolved.openTop - resolved.openBottom;
+    if (resolved.width == 0.0f) {
+        resolved.width = resolved.portalWidth;
+    }
+    if (resolved.height == 0.0f) {
+        resolved.height = resolved.portalHeight;
+    }
+    resolved.valid = true;
+    resolved.diagnostic.clear();
+    return resolved;
 }
 
 const SectorTopologySideDef* FindOppositeSectorTopologySideDef(

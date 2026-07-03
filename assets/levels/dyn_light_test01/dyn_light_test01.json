@@ -11,6 +11,10 @@
       "path": "assets/images/floor.png",
       "filter": "anisotropic8x"
     },
+    "industrial_ceiling_1": {
+      "path": "assets/images/ceilings/industrial_ceiling_1.png",
+      "filter": "anisotropic8x"
+    },
     "step_wall": {
       "path": "assets/images/wall.png",
       "filter": "anisotropic8x"
@@ -24,6 +28,136 @@
       "filter": "anisotropic8x"
     }
   },
+  "runtimeObjects": [
+    {
+      "id": 1,
+      "kind": "door",
+      "door": {
+        "anchor": {
+          "lineDefId": 26,
+          "frontSectorId": 4,
+          "backSectorId": 5,
+          "frontSideDefId": 18,
+          "backSideDefId": 39,
+          "endpointA": [
+            640,
+            4224
+          ],
+          "endpointB": [
+            1024,
+            4224
+          ]
+        },
+        "width": 3.0,
+        "height": 3.0,
+        "openDistance": 3.0,
+        "autoOpen": true,
+        "textureId": "industrial_ceiling_1"
+      },
+      "position": [
+        52.0,
+        0.0,
+        264.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 2,
+      "kind": "door",
+      "door": {
+        "anchor": {
+          "lineDefId": 29,
+          "frontSectorId": 4,
+          "backSectorId": 9,
+          "frontSideDefId": 21,
+          "backSideDefId": 67,
+          "endpointA": [
+            1920,
+            4864
+          ],
+          "endpointB": [
+            1920,
+            5248
+          ]
+        },
+        "width": 3.0,
+        "height": 3.0,
+        "openDistance": 3.0,
+        "autoOpen": true,
+        "textureId": "industrial_ceiling_1"
+      },
+      "position": [
+        120.0,
+        0.0,
+        316.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 3,
+      "kind": "door",
+      "door": {
+        "anchor": {
+          "lineDefId": 6,
+          "frontSectorId": 1,
+          "backSectorId": 5,
+          "frontSideDefId": 6,
+          "backSideDefId": 37,
+          "endpointA": [
+            1024,
+            1664
+          ],
+          "endpointB": [
+            640,
+            1664
+          ]
+        },
+        "width": 3.0,
+        "height": 3.0,
+        "openDistance": 3.0,
+        "autoOpen": true,
+        "textureId": "industrial_ceiling_1"
+      },
+      "position": [
+        52.0,
+        0.0,
+        104.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 4,
+      "kind": "door",
+      "door": {
+        "anchor": {
+          "lineDefId": 3,
+          "frontSectorId": 1,
+          "backSectorId": 6,
+          "frontSideDefId": 3,
+          "backSideDefId": 45,
+          "endpointA": [
+            1792,
+            640
+          ],
+          "endpointB": [
+            1792,
+            1024
+          ]
+        },
+        "width": 3.0,
+        "height": 3.0,
+        "openDistance": 3.0,
+        "autoOpen": true,
+        "textureId": "industrial_ceiling_1"
+      },
+      "position": [
+        112.0,
+        0.0,
+        52.0
+      ],
+      "yawDegrees": 0.0
+    }
+  ],
   "staticLights": [
     {
       "id": 1,
@@ -43,6 +177,7 @@
       }
     }
   ],
+  "staticSpotLights": [],
   "dynamicPointLights": [
     {
       "id": 1,
@@ -114,9 +249,9 @@
     {
       "id": 5,
       "position": [
-        24.0,
+        48.0,
         14.399999618530273,
-        272.0
+        280.0
       ],
       "radius": 64.0,
       "intensity": 1.0,
@@ -276,14 +411,14 @@
     {
       "id": 1,
       "position": [
-        120.0,
+        136.0,
         22.73619270324707,
-        316.0
+        323.0
       ],
       "target": [
-        117.77891540527344,
+        129.0,
         -49.13074493408203,
-        311.29876708984375
+        320.0
       ],
       "range": 100.0,
       "intensity": 2.0,
@@ -293,15 +428,16 @@
         "b": 255,
         "a": 255
       },
-      "outerConeDegrees": 45.0,
-      "flicker": true
+      "outerConeDegrees": 45.0
     }
   ],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
     "ambientOcclusionStrength": 0.550000011920929,
     "indirectBounceRadius": 32.0,
-    "indirectBounceStrength": 0.20000000298023224
+    "indirectBounceStrength": 0.20000000298023224,
+    "objectProbeSpacingWorld": 4.0,
+    "objectProbeHeightWorld": 1.2000000476837158
   },
   "previewSettings": {
     "walkSpeed": 6.0,
@@ -335,7 +471,16 @@
     "path": "assets/levels/dyn_light_test01/dyn_light_test01.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "8b87a9e1c162f645"
+    "sourceHash": "9371f0da8b69ec14",
+    "objectProbes": {
+      "path": "assets/levels/dyn_light_test01/dyn_light_test01.lightmap.object_probes.bin",
+      "version": 1,
+      "sourceHash": "9371f0da8b69ec14",
+      "count": 62,
+      "probeSpacingWorld": 4.0,
+      "probeHeightWorld": 1.2000000476837158,
+      "format": "ambientCubeF32LE"
+    }
   },
   "authoringGraph": {
     "vertices": [

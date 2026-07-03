@@ -246,7 +246,7 @@ void DrawPreviewSettingsModal(
 
     auto drawLightingTab = [&]() {
         float contentY = 0.0f;
-        const float contentH = 9.0f * (rowH + gap) + 80.0f;
+        const float contentH = 11.0f * (rowH + gap) + 122.0f;
         engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
                 ui,
                 config,
@@ -297,6 +297,30 @@ void DrawPreviewSettingsModal(
         DrawColorSwatch(config, swatch, NormalizeSectorTopologyDirectionalLightSettings(modalState.draftDirectionalLight).color, 1.0f);
         contentY += 36.0f + gap;
 
+        contentY += 8.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, contentY, contentW, 34.0f}, font, "Object probes", engine::UITextJustify::Left, config.textColor);
+        contentY += 38.0f;
+        drawFloat(
+                contentY,
+                "sector_editor_preview_object_probe_spacing",
+                "Probe spacing",
+                modalState.draftLightmapSettings.objectProbeSpacingWorld,
+                modalState.objectProbeSpacingInput,
+                0.25f,
+                128.0f,
+                2);
+        drawFloat(
+                contentY,
+                "sector_editor_preview_object_probe_height",
+                "Probe height",
+                modalState.draftLightmapSettings.objectProbeHeightWorld,
+                modalState.objectProbeHeightInput,
+                0.0f,
+                16.0f,
+                2);
+        modalState.draftLightmapSettings =
+                NormalizeSectorPreviewObjectProbeSettings(modalState.draftLightmapSettings);
+
         engine::EndScrollArea(ui, config, input, scroll, modalState.lightingScroll);
     };
 
@@ -322,14 +346,7 @@ void DrawPreviewSettingsModal(
     const float buttonW = 132.0f;
     if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_reset", Rectangle{modal.x + 30.0f, buttonY, 176.0f, 44.0f}, font, "Reset Defaults")) {
         if (modalState.activeTab == PreviewSettingsTab::Lighting) {
-            modalState.draftDirectionalLight = DefaultSectorTopologyDirectionalLightSettings();
-            modalState.lightDirectionXInput = engine::UIFloatInputState{};
-            modalState.lightDirectionYInput = engine::UIFloatInputState{};
-            modalState.lightDirectionZInput = engine::UIFloatInputState{};
-            modalState.lightIntensityInput = engine::UIFloatInputState{};
-            modalState.lightColorRedInput = engine::UIIntInputState{};
-            modalState.lightColorGreenInput = engine::UIIntInputState{};
-            modalState.lightColorBlueInput = engine::UIIntInputState{};
+            ResetSectorPreviewSettingsModalLightingDefaults(modalState);
         } else if (modalState.activeTab == PreviewSettingsTab::Sky) {
             modalState.draftSkySettings = DefaultSectorTopologySkySettings();
             modalState.skyYawOffsetInput = engine::UIFloatInputState{};

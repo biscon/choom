@@ -1296,6 +1296,64 @@ void TestDynamicPointLightReceiverBoundCandidateSelection()
           "dynamic light sphere overlap uses padded receiver bounds at boundaries");
 }
 
+void TestDoorReceiverBoundsAffectDirectLightsAndShadowSlots()
+{
+    const std::vector<game::SectorReceiverBounds> staticReceiverBounds = {
+            Bounds(10, Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f})};
+    std::vector<game::SectorReceiverBounds> combinedReceiverBounds = staticReceiverBounds;
+    combinedReceiverBounds.push_back(
+            Bounds(10, Vector3{10.0f, 0.0f, 0.0f}, Vector3{11.0f, 2.0f, 1.0f}));
+
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10};
+
+    const std::vector<game::SectorPreviewDynamicPointLightSource> sources = {
+            LightSource(1, 20, Vector3{10.5f, 1.0f, 0.5f}, 0.75f)};
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates;
+    game::CollectSectorPreviewDynamicPointLightCandidates(sources, visible, staticReceiverBounds, candidates);
+    Check(!HasCandidateLightId(candidates, 1),
+            "door-only light is not a candidate with static receiver bounds alone");
+
+    game::CollectSectorPreviewDynamicPointLightCandidates(sources, visible, combinedReceiverBounds, candidates);
+    Check(HasCandidateLightId(candidates, 1),
+            "door-only light becomes a direct dynamic-light candidate with combined receiver bounds");
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    std::vector<int> selectedIds;
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            visible,
+            combinedReceiverBounds,
+            1,
+            selected,
+            &selectedIds);
+    Check(selectedIds.size() == 1 && selectedIds[0] == 1,
+            "door-only light is selected by direct dynamic-light ranking with combined receiver bounds");
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selectedShadowLights = {
+            ShadowSpotLightSource(10, 20, Vector3{10.5f, 1.0f, 0.5f}, 2.0f, 100.0f).light,
+            ShadowSpotLightSource(20, 10, Vector3{0.5f, 0.5f, 0.5f}, 2.0f, 1.0f).light};
+    std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> shadowCasters;
+    game::SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+            selectedShadowLights,
+            visible,
+            staticReceiverBounds,
+            1,
+            shadowCasters);
+    Check(shadowCasters.size() == 1 && shadowCasters[0].lightId == 20,
+            "static receiver bounds still select static-sector spotlight shadow slots");
+
+    game::SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+            selectedShadowLights,
+            visible,
+            combinedReceiverBounds,
+            1,
+            shadowCasters);
+    Check(shadowCasters.size() == 1 && shadowCasters[0].lightId == 10,
+            "door receiver bounds make door-only spotlights eligible for shadow slots");
+}
+
 void TestDynamicSpotLightRuntimeSourcePacking()
 {
     game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
@@ -1851,6 +1909,17 @@ void TestDynamicPointLightFlickerHelper()
 
 void TestDynamicPointLightFlickerEffectiveIntensity()
 {
+    game::SectorTopologyDynamicPointLight authoredDefaultLight;
+    authoredDefaultLight.id = 91;
+    game::SectorPreviewDynamicPointLightUniform defaultUniform;
+    Check(game::MakeSectorPreviewDynamicPointLightUniform(authoredDefaultLight, defaultUniform)
+                  && !defaultUniform.flicker
+                  && Near(defaultUniform.intensity, authoredDefaultLight.intensity),
+          "default authored dynamic point light has flicker disabled in preview uniform");
+    Check(Near(game::DynamicLightEffectiveUploadIntensity(defaultUniform, 0.0f), defaultUniform.intensity)
+                  && Near(game::DynamicLightEffectiveUploadIntensity(defaultUniform, 12.5f), defaultUniform.intensity),
+          "default authored dynamic point light upload intensity is stable across time");
+
     game::SectorPreviewDynamicPointLightUniform light;
     light.lightId = 12;
     light.intensity = 2.25f;
@@ -2077,6 +2146,7 @@ int main()
     TestBloomDrawRecordVisibilitySelection();
     TestDynamicPointLightVisibilityCandidateSelection();
     TestDynamicPointLightReceiverBoundCandidateSelection();
+    TestDoorReceiverBoundsAffectDirectLightsAndShadowSlots();
     TestDynamicSpotLightRuntimeSourcePacking();
     TestDynamicSpotLightCandidateSelection();
     TestDynamicPointLightRankingAndPacking();

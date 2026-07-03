@@ -145,6 +145,7 @@ bool OpenAuthoringSideTexturePickerById(
         TopologyWallPart wallPart,
         TopologyMaterialLayer layer);
 bool OpenMapSkyTexturePicker(SectorEditorState& state);
+bool OpenRuntimeDoorTexturePicker(SectorEditorState& state, int runtimeObjectId);
 std::string CurrentTextureForPickerTarget(const SectorEditorState& state);
 SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(SectorEditorState& state);
 SectorEditorTexturePickerApplyResult ApplyAuthoringTexturePickerSelection(SectorEditorState& state);

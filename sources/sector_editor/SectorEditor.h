@@ -199,6 +199,13 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawDoorTextureSettingsModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawPreviewSettingsModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -276,6 +283,12 @@ private:
     void InitializeGameplayVerticalState();
     void OpenPreviewSettingsModal();
     void ApplyPreviewSettingsModal(engine::AssetManager& assets);
+    void OpenDoorTextureSettingsModal();
+    bool ApplySelectedDoorFaceUvValue(int component, float value);
+    bool ApplySelectedDoorFaceUvFit(SectorDoorUvFitMode mode);
+    bool ResetSelectedDoorFaceUv();
+    bool CopySelectedDoorFaceUvFromFront();
+    bool ApplySelectedDoorFaceUvToAll();
     void RefreshDefaultTextures();
     void RefreshEditorTextureAssets(engine::AssetManager& assets);
     engine::TextureHandle EditorTextureHandleForId(const std::string& textureId) const;
@@ -377,6 +390,7 @@ private:
     void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer);
     void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer);
     void OpenMapSkyTexturePicker();
+    void OpenSelectedDoorTexturePicker();
     void OpenSelectedBillboardSpritePicker();
     void ApplySelectedBillboardSpritePickerSelection();
     void ApplyTexturePickerSelection(engine::AssetManager& assets);
@@ -394,6 +408,7 @@ private:
     bool DeleteDynamicSpotLightById(int topologyLightId);
     void AddDynamicSpotLightAt(Vector2 mapPoint);
     void AddRuntimeObjectAt(Vector2 mapPoint);
+    void AddDoorAtPortal(Vector2 screenPoint);
     bool DeleteSelectedRuntimeObject();
     bool DeleteRuntimeObjectById(int objectId);
     bool MutateSelectedRuntimeObject(

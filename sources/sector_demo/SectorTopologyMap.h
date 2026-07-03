@@ -23,6 +23,7 @@ struct SectorPreviewSettings {
     float jumpHeight = 0.6f;
     float headBobStrength = 0.020f;
     float headBobFrequency = 2.0f;
+    float objectProbeDebugDrawMaxDistanceWorld = 48.0f;
 };
 
 struct SectorTopologySkySettings {
@@ -54,6 +55,67 @@ struct SectorPlacedBillboard {
     bool playing = true;
 };
 
+enum class SectorDoorMotionType {
+    SlideVertical,
+    SlideLeft,
+    SlideRight
+};
+
+struct SectorDoorAnchor {
+    int lineDefId = 0;
+    int frontSectorId = 0;
+    int backSectorId = 0;
+    int frontSideDefId = 0;
+    int backSideDefId = 0;
+    SectorCoord endpointAX = 0;
+    SectorCoord endpointAY = 0;
+    SectorCoord endpointBX = 0;
+    SectorCoord endpointBY = 0;
+};
+
+struct SectorPlacedDoor {
+    SectorDoorAnchor anchor;
+    float width = 0.0f;
+    float height = 0.0f;
+    float thickness = 0.25f;
+    // Positive values move the closed slab from anchor.frontSectorId toward anchor.backSectorId.
+    float normalOffset = 0.0f;
+    SectorDoorMotionType motion = SectorDoorMotionType::SlideVertical;
+    float openDistance = 0.0f;
+    float speed = 1.5f;
+    float initialOpenFraction = 0.0f;
+    bool autoOpen = false;
+    float interactionDistance = 1.5f;
+    float autoOpenDistance = 2.0f;
+    std::string textureId;
+    SectorDoorFaceUvSet faceUvs;
+};
+
+struct SectorResolvedDoorAnchor {
+    bool valid = false;
+    std::string diagnostic;
+
+    int lineDefId = 0;
+    int frontSectorId = 0;
+    int backSectorId = 0;
+    int frontSideDefId = 0;
+    int backSideDefId = 0;
+
+    Vector2 endpointA = {};
+    Vector2 endpointB = {};
+    Vector2 midpoint = {};
+    // Tangent follows the portal front sidedef direction; normal points front sector -> back sector.
+    Vector2 tangent = {1.0f, 0.0f};
+    Vector2 normal = {0.0f, -1.0f};
+
+    float openBottom = 0.0f;
+    float openTop = 0.0f;
+    float portalWidth = 0.0f;
+    float portalHeight = 0.0f;
+    float width = 0.0f;
+    float height = 0.0f;
+};
+
 struct SectorPlacedRuntimeObject {
     int id = 0;
     std::string definitionId;
@@ -61,6 +123,7 @@ struct SectorPlacedRuntimeObject {
     float yawRadians = 0.0f;
     std::string kind;
     SectorPlacedBillboard billboard;
+    SectorPlacedDoor door;
 };
 
 struct SectorTopologyMap {
@@ -154,6 +217,10 @@ const SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(const SectorTopol
 SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
 
 bool RemoveSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
+
+SectorResolvedDoorAnchor ResolveSectorDoorAnchor(
+        const SectorTopologyMap& map,
+        const SectorPlacedDoor& door);
 
 const SectorTopologySideDef* FindOppositeSectorTopologySideDef(
         const SectorTopologyMap& map,

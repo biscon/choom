@@ -4983,6 +4983,38 @@ void TestEditorLegacyTopologyTexturePickerWritesLiveTopologyWithoutAuthoringGrap
     Check(!state.texturePicker.open, "legacy topology texture picker closes after apply");
 }
 
+void TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture()
+{
+    game::SectorEditorState state;
+    state.topologyMap.texturesById.emplace("old_door", game::SectorTextureDefinition{"old_door", "old_door.png"});
+    state.topologyMap.texturesById.emplace("new_door", game::SectorTextureDefinition{"new_door", "new_door.png"});
+
+    game::SectorPlacedRuntimeObject object;
+    object.id = 77;
+    object.kind = "door";
+    object.door.textureId = "old_door";
+    state.topologyMap.runtimeObjects.push_back(object);
+
+    Check(game::OpenRuntimeDoorTexturePicker(state, 77),
+          "runtime door texture picker opens for authored door");
+    Check(state.texturePicker.topologyTargetKind == game::TopologyTexturePickerTargetKind::RuntimeDoor,
+          "runtime door texture picker records door target kind");
+    Check(state.texturePicker.runtimeObjectId == 77,
+          "runtime door texture picker records target object id");
+    Check(game::CurrentTextureForPickerTarget(state) == "old_door",
+          "runtime door texture picker reads current authored door texture");
+
+    SelectTextureInPicker(state.texturePicker, "new_door");
+    const game::SectorEditorTexturePickerApplyResult result =
+            game::ApplyTexturePickerSelection(state);
+    const game::SectorPlacedRuntimeObject* editedObject =
+            game::FindSectorPlacedRuntimeObject(state.topologyMap, 77);
+    Check(result.changed, "runtime door texture picker reports texture change");
+    Check(editedObject != nullptr && editedObject->door.textureId == "new_door",
+          "runtime door texture picker writes selected texture to authored door");
+    Check(!state.texturePicker.open, "runtime door texture picker closes after apply");
+}
+
 void TestEditorMapTextureImportPreservesMapLevelRegistryOnly()
 {
     game::SectorEditorState state;
@@ -6956,6 +6988,12 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "runtime object tool help describes billboard placement");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::RuntimeObject),
           "runtime object placement remains available in graph-authoritative mode");
+    Check(TextContains(game::ToolName(game::SectorEditorTool::Door), "Door"),
+          "door tool label is exposed");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Door), "two-sided portal"),
+          "door tool help describes portal placement");
+    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::Door),
+          "door placement remains available in graph-authoritative mode");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::StaticLight),
           "static light placement remains available in graph-authoritative mode");
     Check(TextContains(game::ToolHelpText(game::SectorEditorTool::StaticLight), "place"),
@@ -7020,6 +7058,74 @@ void TestEditorBillboardPlacementCreatesGenericAuthoredObject()
                   && cache.runtimeObjects[0].definitionKnown
                   && cache.runtimeObjects[0].definitionId == "billboard",
           "2D render cache treats generic billboard markers as known drawable objects");
+}
+
+void TestEditorDoorPlacementCreatesPortalAnchoredObject()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    const game::SectorEditorAddDoorResult result =
+            game::AddDoorToPortal(map, 11);
+
+    Check(result.changed && result.objectId > 0, "door placement helper reports a new object");
+    Check(map.runtimeObjects.size() == 1, "door placement helper appends one runtime object");
+    if (map.runtimeObjects.empty()) {
+        return;
+    }
+
+    const game::SectorPlacedRuntimeObject& object = map.runtimeObjects.front();
+    Check(object.id == result.objectId, "door placement helper assigns the reported object ID");
+    Check(object.kind == "door" && object.definitionId.empty(),
+          "door placement helper writes generic door authored data");
+    Check(object.door.anchor.lineDefId == 11
+                  && object.door.anchor.frontSideDefId == 101
+                  && object.door.anchor.backSideDefId == 104
+                  && object.door.anchor.frontSectorId == 200
+                  && object.door.anchor.backSectorId == 201,
+          "door placement helper stores portal anchor IDs");
+    Check(object.door.anchor.endpointAX == 64
+                  && object.door.anchor.endpointAY == 0
+                  && object.door.anchor.endpointBX == 64
+                  && object.door.anchor.endpointBY == 64,
+          "door placement helper stores exact endpoint diagnostics");
+    Check(object.door.width > 0.0f && object.door.height > 0.0f,
+          "door placement helper writes explicit default dimensions from portal opening");
+    Check(Near(object.door.openDistance, object.door.height),
+          "door placement helper defaults vertical open distance to door height");
+    Check(object.door.thickness == 0.25f
+                  && object.door.motion == game::SectorDoorMotionType::SlideVertical
+                  && object.door.initialOpenFraction == 0.0f
+                  && !object.door.autoOpen,
+          "door placement helper preserves authored door defaults");
+
+    map.runtimeObjects[0].door.normalOffset = 0.125f;
+    const game::SectorEditorTopologyRenderCache cache =
+            game::BuildSectorEditorTopologyRenderCache(
+                    map,
+                    game::SectorAuthoringGraph{},
+                    game::SectorAuthoringDerivationResult{},
+                    1);
+    Check(cache.runtimeObjects.size() == 1
+                  && cache.runtimeObjects[0].definitionKnown
+                  && cache.runtimeObjects[0].isDoor
+                  && cache.runtimeObjects[0].doorFootprintValid,
+          "2D render cache builds a drawable door footprint");
+    Check(Near(cache.runtimeObjects[0].map.x,
+               game::SectorCoordToVisibleAuthoring(64)
+                       + game::SectorWorldToAuthoringDistance(0.125f))
+                  && Near(cache.runtimeObjects[0].map.y, game::SectorCoordToVisibleAuthoring(32)),
+          "2D render cache offsets door footprint along the resolved front-to-back normal");
+}
+
+void TestEditorDoorPlacementRejectsOneSidedWall()
+{
+    game::SectorTopologyMap map = MakeSingleSectorSquareMap();
+    const game::SectorEditorAddDoorResult result =
+            game::AddDoorToPortal(map, 10);
+
+    Check(!result.changed, "door placement rejects one-sided walls");
+    Check(map.runtimeObjects.empty(), "rejected door placement leaves runtime objects unchanged");
+    Check(result.status.find("two-sided portal") != std::string::npos,
+          "rejected door placement explains the portal requirement");
 }
 
 void TestEditorUnifiedSelectPickOrderingCyclingAndDragGate()
@@ -7754,6 +7860,7 @@ int main()
     TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen();
     TestEditorAuthoringTexturePickerRejectsStaleMapping();
     TestEditorLegacyTopologyTexturePickerWritesLiveTopologyWithoutAuthoringGraph();
+    TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture();
     TestEditorMapTextureImportPreservesMapLevelRegistryOnly();
     TestSpriteMetadataScannerFindsNestedJsonAndFrameTagClips();
     TestSpriteMetadataScannerFallsBackToFrameNamesAndDefaultClip();
@@ -7804,6 +7911,8 @@ int main()
     TestEditorAuthoringFailedRefreshDoesNotReplaceLastValidTopology();
     TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools();
     TestEditorBillboardPlacementCreatesGenericAuthoredObject();
+    TestEditorDoorPlacementCreatesPortalAnchoredObject();
+    TestEditorDoorPlacementRejectsOneSidedWall();
     TestEditorUnifiedSelectPickOrderingCyclingAndDragGate();
     TestEditorAuthoringLastValidTopologyIsNotPersisted();
     TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent();

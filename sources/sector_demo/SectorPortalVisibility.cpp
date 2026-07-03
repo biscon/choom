@@ -808,7 +808,8 @@ bool BuildRuntimeSectorVisibilityGraph(
 
 RuntimePortalVisibilityResult TraverseRuntimeSectorVisibility(
         const RuntimeSectorVisibilityGraph& graph,
-        int startSectorId)
+        int startSectorId,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers)
 {
     RuntimePortalVisibilityResult result;
     result.startSectorId = startSectorId;
@@ -859,6 +860,9 @@ RuntimePortalVisibilityResult TraverseRuntimeSectorVisibility(
             if (!edge.open) {
                 continue;
             }
+            if (IsRuntimePortalDynamicallyBlocked(edge, dynamicBlockers)) {
+                continue;
+            }
 
             result.traversedPortalLineDefIds.push_back(edge.lineDefId);
             if (visited.insert(edge.toSectorId).second) {
@@ -885,7 +889,8 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromPoint(
         const RuntimeSectorVisibilityGraph& graph,
         const SectorCollisionWorld* collisionWorld,
         Vector2 xz,
-        int preferredStartSectorId)
+        int preferredStartSectorId,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers)
 {
     int startSectorId = 0;
     if (FindRuntimeSectorVisibilityNode(graph, preferredStartSectorId) != nullptr) {
@@ -900,7 +905,7 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromPoint(
         return MakeFallbackResult(-1, "outside sectors; fallback draw all");
     }
 
-    return TraverseRuntimeSectorVisibility(graph, startSectorId);
+    return TraverseRuntimeSectorVisibility(graph, startSectorId, dynamicBlockers);
 }
 
 float ClampRuntimeVisibilitySeedRadiusWorld(float playerRadiusWorld)
@@ -918,7 +923,8 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
         float horizontalFovRadians,
         const std::vector<int>& startSectorIds,
         int preferredStartSectorId,
-        size_t iterationCap)
+        size_t iterationCap,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers)
 {
     RuntimePortalVisibilityResult result;
     result.mode = "view-aware portal traversal";
@@ -994,6 +1000,9 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
             if (!edge.open) {
                 continue;
             }
+            if (IsRuntimePortalDynamicallyBlocked(edge, dynamicBlockers)) {
+                continue;
+            }
 
             const PortalVisibilityTest portalVisibility =
                     TestPortalAgainstWindow(xz, normalizedForward, edge, item.window);
@@ -1049,7 +1058,8 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
         size_t iterationCap,
         float visibilitySeedRadiusWorld,
         float eyeYWorld,
-        bool validateEyeY)
+        bool validateEyeY,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers)
 {
     if (collisionWorld == nullptr
             && FindRuntimeSectorVisibilityNode(graph, preferredStartSectorId) == nullptr) {
@@ -1077,7 +1087,36 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
             horizontalFovRadians,
             seeds,
             preferredStartSectorId,
-            iterationCap);
+            iterationCap,
+            dynamicBlockers);
+}
+
+bool IsRuntimePortalDynamicallyBlocked(
+        const RuntimePortalEdge& edge,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers)
+{
+    if (dynamicBlockers == nullptr) {
+        return false;
+    }
+
+    for (const RuntimePortalDynamicBlocker& blocker : *dynamicBlockers) {
+        if (!blocker.blocksPortal || blocker.lineDefId != edge.lineDefId) {
+            continue;
+        }
+
+        if (blocker.sideDefId > 0 && blocker.sideDefId == edge.sideDefId) {
+            return true;
+        }
+
+        if (blocker.fromSectorId > 0
+                && blocker.toSectorId > 0
+                && blocker.fromSectorId == edge.fromSectorId
+                && blocker.toSectorId == edge.toSectorId) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 std::string FormatRuntimePortalVisibilityDebugText(

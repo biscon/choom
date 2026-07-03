@@ -235,6 +235,92 @@ SectorEditorAddBillboardResult AddBillboardToSector(
             TextFormat("Added billboard %d", objectId)};
 }
 
+SectorEditorAddDoorResult AddDoorToPortal(
+        SectorTopologyMap& map,
+        int lineDefId)
+{
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, lineDefId);
+    if (lineDef == nullptr) {
+        return SectorEditorAddDoorResult{
+                false,
+                -1,
+                "Door placement failed: click a two-sided portal"};
+    }
+
+    const SectorTopologySideDef* frontSideDef =
+            FindSectorTopologySideDef(map, lineDef->frontSideDefId);
+    const SectorTopologySideDef* backSideDef =
+            FindSectorTopologySideDef(map, lineDef->backSideDefId);
+    if (frontSideDef == nullptr || backSideDef == nullptr) {
+        return SectorEditorAddDoorResult{
+                false,
+                -1,
+                "Door placement failed: clicked line is not a two-sided portal"};
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(map, *lineDef, start, end)) {
+        return SectorEditorAddDoorResult{
+                false,
+                -1,
+                "Door placement failed: portal endpoints are invalid"};
+    }
+
+    const int objectId = AllocateSectorPlacedRuntimeObjectId(map);
+    if (!IsValidSectorTopologyId(objectId)) {
+        return SectorEditorAddDoorResult{
+                false,
+                -1,
+                "Door placement failed: no runtime object IDs available"};
+    }
+
+    SectorPlacedRuntimeObject object;
+    object.id = objectId;
+    object.kind = "door";
+    const Vector2 startMap = SectorTopologyVertexToMap(*start);
+    const Vector2 endMap = SectorTopologyVertexToMap(*end);
+    object.position = Vector3{
+            (startMap.x + endMap.x) * 0.5f,
+            0.0f,
+            (startMap.y + endMap.y) * 0.5f};
+    object.yawRadians = 0.0f;
+    object.door = SectorPlacedDoor{};
+    object.door.anchor.lineDefId = lineDef->id;
+    object.door.anchor.frontSectorId = frontSideDef->sectorId;
+    object.door.anchor.backSectorId = backSideDef->sectorId;
+    object.door.anchor.frontSideDefId = frontSideDef->id;
+    object.door.anchor.backSideDefId = backSideDef->id;
+    object.door.anchor.endpointAX = start->x;
+    object.door.anchor.endpointAY = start->y;
+    object.door.anchor.endpointBX = end->x;
+    object.door.anchor.endpointBY = end->y;
+
+    const SectorResolvedDoorAnchor resolved = ResolveSectorDoorAnchor(map, object.door);
+    if (!resolved.valid) {
+        return SectorEditorAddDoorResult{
+                false,
+                -1,
+                resolved.diagnostic.empty()
+                        ? "Door placement failed: portal cannot resolve a valid door anchor"
+                        : std::string{"Door placement failed: "} + resolved.diagnostic};
+    }
+
+    object.door.width = resolved.width;
+    object.door.height = resolved.height;
+    object.door.openDistance = resolved.height;
+    object.position = Vector3{
+            SectorWorldToAuthoringDistance(resolved.midpoint.x),
+            SectorWorldToAuthoringDistance(resolved.openBottom),
+            SectorWorldToAuthoringDistance(resolved.midpoint.y)};
+
+    map.runtimeObjects.push_back(std::move(object));
+    return SectorEditorAddDoorResult{
+            true,
+            objectId,
+            TextFormat("Added door %d", objectId)};
+}
+
 SectorEditorTopologyActionResult DeleteStaticLight(
         SectorTopologyMap& map,
         int lightId)
