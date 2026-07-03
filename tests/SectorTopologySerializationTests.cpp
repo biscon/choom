@@ -1444,6 +1444,7 @@ void TestPreviewSettingsRoundTripAndValidation()
     original.previewSettings.jumpHeight = 0.75f;
     original.previewSettings.headBobStrength = 0.08f;
     original.previewSettings.headBobFrequency = 10.5f;
+    original.previewSettings.objectProbeDebugDrawMaxDistanceWorld = 96.0f;
 
     const std::string text = SaveText(original);
     const Json saved = Json::parse(text);
@@ -1458,7 +1459,8 @@ void TestPreviewSettingsRoundTripAndValidation()
                   && Near(saved["previewSettings"]["stepHeight"].get<float>(), 0.5f)
                   && Near(saved["previewSettings"]["jumpHeight"].get<float>(), 0.75f)
                   && Near(saved["previewSettings"]["headBobStrength"].get<float>(), 0.08f)
-                  && Near(saved["previewSettings"]["headBobFrequency"].get<float>(), 10.5f),
+                  && Near(saved["previewSettings"]["headBobFrequency"].get<float>(), 10.5f)
+                  && Near(saved["previewSettings"]["objectProbeDebugDrawMaxDistanceWorld"].get<float>(), 96.0f),
           "preview settings values are serialized");
 
     SectorTopologyMap loaded;
@@ -1474,7 +1476,8 @@ void TestPreviewSettingsRoundTripAndValidation()
                   && Near(loaded.previewSettings.stepHeight, 0.5f)
                   && Near(loaded.previewSettings.jumpHeight, 0.75f)
                   && Near(loaded.previewSettings.headBobStrength, 0.08f)
-                  && Near(loaded.previewSettings.headBobFrequency, 10.5f),
+                  && Near(loaded.previewSettings.headBobFrequency, 10.5f)
+                  && Near(loaded.previewSettings.objectProbeDebugDrawMaxDistanceWorld, 96.0f),
           "preview settings round-trip");
 
     Json withoutGravity = saved;
@@ -1510,6 +1513,15 @@ void TestPreviewSettingsRoundTripAndValidation()
                   && Near(loaded.previewSettings.headBobFrequency, game::DefaultSectorPreviewSettings().headBobFrequency),
           "omitted headbob fields load defaults");
 
+    Json withoutObjectProbeDebugDistance = saved;
+    withoutObjectProbeDebugDistance["previewSettings"].erase("objectProbeDebugDrawMaxDistanceWorld");
+    Check(LoadText(withoutObjectProbeDebugDistance.dump(), loaded, error),
+          "omitted object probe debug draw distance field is accepted");
+    Check(Near(
+                  loaded.previewSettings.objectProbeDebugDrawMaxDistanceWorld,
+                  game::DefaultSectorPreviewSettings().objectProbeDebugDrawMaxDistanceWorld),
+          "omitted object probe debug draw distance loads default");
+
     Json withoutPreviewSettings = saved;
     withoutPreviewSettings.erase("previewSettings");
     SectorTopologyMap oldStyle;
@@ -1526,14 +1538,17 @@ void TestPreviewSettingsRoundTripAndValidation()
                   && Near(oldStyle.previewSettings.stepHeight, defaults.stepHeight)
                   && Near(oldStyle.previewSettings.jumpHeight, defaults.jumpHeight)
                   && Near(oldStyle.previewSettings.headBobStrength, defaults.headBobStrength)
-                  && Near(oldStyle.previewSettings.headBobFrequency, defaults.headBobFrequency),
+                  && Near(oldStyle.previewSettings.headBobFrequency, defaults.headBobFrequency)
+                  && Near(
+                          oldStyle.previewSettings.objectProbeDebugDrawMaxDistanceWorld,
+                          defaults.objectProbeDebugDrawMaxDistanceWorld),
           "omitted preview settings load defaults");
 
     Json invalid = saved;
     invalid["previewSettings"] = 4;
     ExpectRejected(invalid, "non-object preview settings are rejected");
 
-    const std::array<const char*, 11> fields{
+    const std::array<const char*, 12> fields{
             "walkSpeed",
             "runSpeed",
             "mouseSensitivity",
@@ -1544,7 +1559,8 @@ void TestPreviewSettingsRoundTripAndValidation()
             "stepHeight",
             "jumpHeight",
             "headBobStrength",
-            "headBobFrequency"
+            "headBobFrequency",
+            "objectProbeDebugDrawMaxDistanceWorld"
     };
     for (const char* field : fields) {
         invalid = saved;
@@ -1552,15 +1568,27 @@ void TestPreviewSettingsRoundTripAndValidation()
         ExpectRejected(invalid, "wrong-type preview settings field is rejected");
     }
 
+    const std::string marker = "\"__NONFINITE__\"";
+
     invalid = saved;
     invalid["previewSettings"]["gravity"] = "__NONFINITE__";
     std::string nonFiniteText = invalid.dump();
-    const std::string marker = "\"__NONFINITE__\"";
     const size_t markerPos = nonFiniteText.find(marker);
     Check(markerPos != std::string::npos, "non-finite preview settings marker exists");
     if (markerPos != std::string::npos) {
         nonFiniteText.replace(markerPos, marker.size(), "1e999");
         ExpectRejectedText(nonFiniteText, "non-finite preview settings field is rejected");
+    }
+
+    invalid = saved;
+    invalid["previewSettings"]["objectProbeDebugDrawMaxDistanceWorld"] = "__NONFINITE__";
+    nonFiniteText = invalid.dump();
+    const size_t objectProbeDebugDistanceMarkerPos = nonFiniteText.find(marker);
+    Check(objectProbeDebugDistanceMarkerPos != std::string::npos,
+          "non-finite object probe debug draw distance marker exists");
+    if (objectProbeDebugDistanceMarkerPos != std::string::npos) {
+        nonFiniteText.replace(objectProbeDebugDistanceMarkerPos, marker.size(), "1e999");
+        ExpectRejectedText(nonFiniteText, "non-finite object probe debug draw distance is rejected");
     }
 
     invalid = saved;
@@ -1605,6 +1633,7 @@ void TestPreviewSettingsRoundTripAndValidation()
     clamped["previewSettings"]["jumpHeight"] = 9.0f;
     clamped["previewSettings"]["headBobStrength"] = 9.0f;
     clamped["previewSettings"]["headBobFrequency"] = 99.0f;
+    clamped["previewSettings"]["objectProbeDebugDrawMaxDistanceWorld"] = 999.0f;
     Check(LoadText(clamped.dump(), loaded, error), "out-of-range preview settings load");
     Check(Near(loaded.previewSettings.walkSpeed, 0.1f)
                   && Near(loaded.previewSettings.runSpeed, 200.0f)
@@ -1616,18 +1645,22 @@ void TestPreviewSettingsRoundTripAndValidation()
                   && Near(loaded.previewSettings.stepHeight, 2.0f)
                   && Near(loaded.previewSettings.jumpHeight, 3.0f)
                   && Near(loaded.previewSettings.headBobStrength, 0.25f)
-                  && Near(loaded.previewSettings.headBobFrequency, 20.0f),
+                  && Near(loaded.previewSettings.headBobFrequency, 20.0f)
+                  && Near(loaded.previewSettings.objectProbeDebugDrawMaxDistanceWorld, 512.0f),
           "out-of-range preview settings clamp");
 
     clamped["previewSettings"]["gravity"] = 500.0f;
     clamped["previewSettings"]["jumpHeight"] = -5.0f;
     clamped["previewSettings"]["headBobStrength"] = -5.0f;
     clamped["previewSettings"]["headBobFrequency"] = -5.0f;
+    clamped["previewSettings"]["objectProbeDebugDrawMaxDistanceWorld"] = -5.0f;
     Check(LoadText(clamped.dump(), loaded, error), "high gravity preview settings load");
     Check(Near(loaded.previewSettings.gravity, 200.0f), "high gravity clamps");
     Check(Near(loaded.previewSettings.jumpHeight, 0.0f), "low jump height clamps");
     Check(Near(loaded.previewSettings.headBobStrength, 0.0f), "low headbob strength clamps");
     Check(Near(loaded.previewSettings.headBobFrequency, 0.0f), "low headbob frequency clamps");
+    Check(Near(loaded.previewSettings.objectProbeDebugDrawMaxDistanceWorld, 0.0f),
+          "low object probe debug draw distance clamps");
 }
 
 void TestSkySettingsRoundTripAndValidation()

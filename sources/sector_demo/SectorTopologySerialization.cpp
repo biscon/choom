@@ -796,6 +796,12 @@ SectorPreviewSettings ReadPreviewSettings(const Json& value, const std::string& 
     if (headBobFrequencyIt != value.end()) {
         settings.headBobFrequency = ReadFloat(value, "headBobFrequency", context);
     }
+    const auto objectProbeDebugDrawMaxDistanceWorldIt =
+            value.find("objectProbeDebugDrawMaxDistanceWorld");
+    if (objectProbeDebugDrawMaxDistanceWorldIt != value.end()) {
+        settings.objectProbeDebugDrawMaxDistanceWorld =
+                ReadFloat(value, "objectProbeDebugDrawMaxDistanceWorld", context);
+    }
     return NormalizeSectorPreviewSettings(settings);
 }
 
@@ -1295,6 +1301,9 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
     RequireFinite(settings.jumpHeight, "previewSettings.jumpHeight");
     RequireFinite(settings.headBobStrength, "previewSettings.headBobStrength");
     RequireFinite(settings.headBobFrequency, "previewSettings.headBobFrequency");
+    RequireFinite(
+            settings.objectProbeDebugDrawMaxDistanceWorld,
+            "previewSettings.objectProbeDebugDrawMaxDistanceWorld");
     const SectorPreviewSettings normalized = NormalizeSectorPreviewSettings(settings);
     return Json{
             {"walkSpeed", normalized.walkSpeed},
@@ -1307,7 +1316,9 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
             {"stepHeight", normalized.stepHeight},
             {"jumpHeight", normalized.jumpHeight},
             {"headBobStrength", normalized.headBobStrength},
-            {"headBobFrequency", normalized.headBobFrequency}
+            {"headBobFrequency", normalized.headBobFrequency},
+            {"objectProbeDebugDrawMaxDistanceWorld",
+             normalized.objectProbeDebugDrawMaxDistanceWorld}
     };
 }
 

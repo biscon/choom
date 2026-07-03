@@ -1130,7 +1130,9 @@ bool SamePreviewSettings(const SectorPreviewSettings& left, const SectorPreviewS
             && a.stepHeight == b.stepHeight
             && a.jumpHeight == b.jumpHeight
             && a.headBobStrength == b.headBobStrength
-            && a.headBobFrequency == b.headBobFrequency;
+            && a.headBobFrequency == b.headBobFrequency
+            && a.objectProbeDebugDrawMaxDistanceWorld
+                    == b.objectProbeDebugDrawMaxDistanceWorld;
 }
 
 float Cross(Vector2 a, Vector2 b, Vector2 c)

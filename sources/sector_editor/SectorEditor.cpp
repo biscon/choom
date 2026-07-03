@@ -140,6 +140,32 @@ Color ColorFromObjectProbeAmbientCube(const SectorBakedObjectLightProbe& probe)
             235};
 }
 
+bool ShouldDrawObjectProbeDebugMarker(
+        Vector3 referencePosition,
+        Vector3 probePosition,
+        float maxDistanceWorld)
+{
+    if (maxDistanceWorld <= 0.0f) {
+        return true;
+    }
+    const Vector3 delta = Vector3Subtract(probePosition, referencePosition);
+    return Vector3LengthSqr(delta) <= maxDistanceWorld * maxDistanceWorld;
+}
+
+size_t CountVisibleObjectProbeDebugMarkers(
+        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
+        Vector3 referencePosition,
+        float maxDistanceWorld)
+{
+    size_t count = 0;
+    for (const SectorBakedObjectLightProbe& probe : objectLightProbes.probes) {
+        if (ShouldDrawObjectProbeDebugMarker(referencePosition, probe.position, maxDistanceWorld)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 void UpdateCachedRuntimeObjectDraw(
         SectorEditorTopologyRenderCache& cache,
         const SectorPlacedRuntimeObject& object)
@@ -3920,8 +3946,14 @@ void SectorEditor::DrawPreviewObjectProbeOverlay() const
     }
 
     constexpr float MarkerRadius = 0.08f;
+    const Vector3 referencePosition = preview.RendererPose().position;
+    const float maxDistanceWorld = NormalizeSectorPreviewSettings(
+            state.topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
     BeginMode3D(preview.RenderCamera());
     for (const SectorBakedObjectLightProbe& probe : state.runtimeObjects.objectLightProbes.probes) {
+        if (!ShouldDrawObjectProbeDebugMarker(referencePosition, probe.position, maxDistanceWorld)) {
+            continue;
+        }
         const Color color = ColorFromObjectProbeAmbientCube(probe);
         DrawSphere(probe.position, MarkerRadius, color);
         DrawSphereWires(probe.position, MarkerRadius * 1.65f, 8, 8, Color{255, 255, 255, 155});
@@ -4156,7 +4188,17 @@ void SectorEditor::DrawPreviewOverlay(
                         ? "none"
                         : state.runtimeObjects.objectProbeStatus.c_str();
                 addKeyValueStyled("status", objectProbeStatus, smallConfig.mutedTextColor, true);
-                addKeyValue("probe count", TextFormat("%zu", state.runtimeObjects.objectLightProbes.probes.size()));
+                const size_t totalProbeCount = state.runtimeObjects.objectLightProbes.probes.size();
+                addKeyValue("probe count", TextFormat("%zu", totalProbeCount));
+                if (state.showObjectProbeDebugOverlay) {
+                    const float maxDistanceWorld = NormalizeSectorPreviewSettings(
+                            state.topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
+                    const size_t visibleProbeCount = CountVisibleObjectProbeDebugMarkers(
+                            state.runtimeObjects.objectLightProbes,
+                            preview.RendererPose().position,
+                            maxDistanceWorld);
+                    addKeyValue("drawn", TextFormat("%zu / %zu", visibleProbeCount, totalProbeCount));
+                }
                 if (!state.runtimeObjects.objectSectorLookupWarning.empty()) {
                     addKeyValueStyled("lookup warning", state.runtimeObjects.objectSectorLookupWarning, Color{236, 92, 92, 245}, true);
                 }
@@ -4188,7 +4230,7 @@ void SectorEditor::DrawPreviewOverlay(
         contentH += gap;
     }
     if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
-        contentH += rowH + 6.0f;
+        contentH += (rowH + 6.0f) * 2.0f;
     }
     if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
         contentH += rowH + 6.0f;
@@ -4392,6 +4434,66 @@ void SectorEditor::DrawPreviewOverlay(
                     smallFont,
                     "Show Object Probes",
                     engine::UITextJustify::Left,
+                    smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+
+        const float distanceLabelW = 144.0f;
+        const float distanceInputW = 104.0f;
+        const Rectangle distanceLabelRect{panel.x + padding, y, distanceLabelW, rowH};
+        const Rectangle distanceInputRect{
+                panel.x + padding + distanceLabelW + gap,
+                y,
+                distanceInputW,
+                rowH};
+        const SectorPreviewSettings normalizedPreviewSettings =
+                NormalizeSectorPreviewSettings(state.topologyMap.previewSettings);
+        if (mouseInteractive) {
+            const SectorEditorFloatInputResult distanceResult = DrawLabeledFloatInput(
+                    ui,
+                    smallConfig,
+                    input,
+                    assets,
+                    smallFont,
+                    "sector_editor_object_probe_debug_draw_max_distance",
+                    "Probe Draw Distance",
+                    distanceLabelRect,
+                    distanceInputRect,
+                    engine::UITextJustify::Left,
+                    normalizedPreviewSettings.objectProbeDebugDrawMaxDistanceWorld,
+                    uiState.objectProbeDebugDrawMaxDistanceInput,
+                    0.0f,
+                    512.0f,
+                    1);
+            if (distanceResult.changed) {
+                SectorPreviewSettings editedPreviewSettings = state.topologyMap.previewSettings;
+                editedPreviewSettings.objectProbeDebugDrawMaxDistanceWorld =
+                        distanceResult.finite
+                        ? distanceResult.value
+                        : normalizedPreviewSettings.objectProbeDebugDrawMaxDistanceWorld;
+                state.topologyMap.previewSettings =
+                        NormalizeSectorPreviewSettings(editedPreviewSettings);
+                MarkTopologyDocumentEdited("Object probe debug draw distance updated");
+            }
+        } else {
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    distanceLabelRect,
+                    smallFont,
+                    "Probe Draw Distance",
+                    engine::UITextJustify::Left,
+                    smallConfig.mutedTextColor);
+            DrawRectangleRec(distanceInputRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(distanceInputRect, config.borderThickness, config.borderColor);
+            const float distanceValue = normalizedPreviewSettings.objectProbeDebugDrawMaxDistanceWorld;
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    distanceInputRect,
+                    smallFont,
+                    distanceValue <= 0.0f ? "All" : TextFormat("%.1f", distanceValue),
+                    engine::UITextJustify::Center,
                     smallConfig.mutedTextColor);
         }
         y += rowH + 6.0f;
@@ -10670,7 +10772,10 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
 
     const SectorFpsControllerConfig draftConfig = NormalizeSectorFpsControllerConfig(
             state.previewSettingsModal.draftConfig);
-    const SectorPreviewSettings draftPreviewSettings = SectorPreviewSettingsFromFpsControllerConfig(draftConfig);
+    SectorPreviewSettings draftPreviewSettings = SectorPreviewSettingsFromFpsControllerConfig(draftConfig);
+    draftPreviewSettings.objectProbeDebugDrawMaxDistanceWorld =
+            NormalizeSectorPreviewSettings(
+                    state.topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
     const SectorTopologySkySettings draftSkySettings = NormalizeSectorTopologySkySettings(
             state.previewSettingsModal.draftSkySettings);
     const SectorTopologyDirectionalLightSettings draftDirectionalLight =

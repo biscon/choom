@@ -692,6 +692,7 @@ struct SectorEditorUiState {
     engine::UIFloatInputState ambientOcclusionStrengthInput;
     engine::UIFloatInputState indirectBounceRadiusInput;
     engine::UIFloatInputState indirectBounceStrengthInput;
+    engine::UIFloatInputState objectProbeDebugDrawMaxDistanceInput;
     engine::UIIntInputState lightRedInput;
     engine::UIIntInputState lightGreenInput;
     engine::UIIntInputState lightBlueInput;

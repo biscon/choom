@@ -31,6 +31,8 @@ constexpr float PreviewHeadBobStrengthMin = 0.0f;
 constexpr float PreviewHeadBobStrengthMax = 0.25f;
 constexpr float PreviewHeadBobFrequencyMin = 0.0f;
 constexpr float PreviewHeadBobFrequencyMax = 20.0f;
+constexpr float PreviewObjectProbeDebugDrawMaxDistanceMin = 0.0f;
+constexpr float PreviewObjectProbeDebugDrawMaxDistanceMax = 512.0f;
 constexpr float SkyVerticalScaleMin = 0.01f;
 constexpr float SkyVerticalScaleMax = 100.0f;
 constexpr float DirectionalLightMinLengthSqr = 0.000001f;
@@ -184,6 +186,11 @@ SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings setti
             defaults.headBobFrequency,
             PreviewHeadBobFrequencyMin,
             PreviewHeadBobFrequencyMax);
+    settings.objectProbeDebugDrawMaxDistanceWorld = ClampFinite(
+            settings.objectProbeDebugDrawMaxDistanceWorld,
+            defaults.objectProbeDebugDrawMaxDistanceWorld,
+            PreviewObjectProbeDebugDrawMaxDistanceMin,
+            PreviewObjectProbeDebugDrawMaxDistanceMax);
     return settings;
 }
 

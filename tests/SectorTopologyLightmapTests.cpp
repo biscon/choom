@@ -762,6 +762,10 @@ void TestSourceHashChanges()
     changedPreview.previewSettings.headBobFrequency = 12.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
           "hash ignores preview headbob frequency");
+    changedPreview = base;
+    changedPreview.previewSettings.objectProbeDebugDrawMaxDistanceWorld = 96.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
+          "hash ignores object probe debug draw distance");
 
     game::SectorTopologyMap changedSky = base;
     changedSky.skySettings.textureId = "storm_panorama";

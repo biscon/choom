@@ -103,7 +103,8 @@
     "stepHeight": 0.25,
     "jumpHeight": 0.6000000238418579,
     "headBobStrength": 0.019999999552965164,
-    "headBobFrequency": 2.0
+    "headBobFrequency": 2.0,
+    "objectProbeDebugDrawMaxDistanceWorld": 20.0
   },
   "directionalLight": {
     "enabled": false,
