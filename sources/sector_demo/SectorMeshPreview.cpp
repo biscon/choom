@@ -1866,6 +1866,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     dynamicPointLightCandidates.clear();
     dynamicPointLights.clear();
     selectedDynamicPointLightIds.clear();
+    directDynamicLightReceiverBounds.clear();
     dynamicSpotLightShadowCasters.clear();
     dynamicSpotLightShadowMatrices.clear();
     runtimeSeconds = 0.0f;
@@ -2899,7 +2900,8 @@ void SectorMeshPreview::UpdateVisibilityDebug(
         int preferredStartSectorId,
         float visibilitySeedRadiusWorld,
         bool validateEyeY,
-        const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers)
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers,
+        engine::World* runtimeObjectWorld)
 {
     if (!visibilityGraphValid) {
         visibilityResult = RuntimePortalVisibilityResult{};
@@ -2924,15 +2926,16 @@ void SectorMeshPreview::UpdateVisibilityDebug(
     visibilityDebugText = portalVisibilityDebugText;
     const size_t visibleDrawRecordCount =
             CountSectorMeshDrawRecordsForVisibility(meshes.sectorDrawRecords, visibilityResult);
+    BuildDirectDynamicLightReceiverBounds(runtimeObjectWorld);
     CollectSectorPreviewDynamicPointLightCandidates(
             dynamicPointLightSources,
             visibilityResult,
-            meshes.sectorReceiverBounds,
+            directDynamicLightReceiverBounds,
             dynamicPointLightCandidates);
     SelectRankedSectorPreviewDynamicPointLights(
             dynamicPointLightCandidates,
             visibilityResult,
-            meshes.sectorReceiverBounds,
+            directDynamicLightReceiverBounds,
             static_cast<std::size_t>(MaxDynamicLights),
             dynamicPointLights,
             &selectedDynamicPointLightIds,
@@ -2966,6 +2969,19 @@ void SectorMeshPreview::UpdateVisibilityDebug(
                     dynamicSpotLightShadowCasters);
     AppendBillboardRenderDebugText(renderDebugText, billboardRenderDebugText);
     visibilityDebugText += " | " + renderDebugText;
+}
+
+void SectorMeshPreview::BuildDirectDynamicLightReceiverBounds(engine::World* runtimeObjectWorld)
+{
+    directDynamicLightReceiverBounds.clear();
+    directDynamicLightReceiverBounds.reserve(meshes.sectorReceiverBounds.size());
+    directDynamicLightReceiverBounds.insert(
+            directDynamicLightReceiverBounds.end(),
+            meshes.sectorReceiverBounds.begin(),
+            meshes.sectorReceiverBounds.end());
+    if (runtimeObjectWorld != nullptr) {
+        CollectSectorDoorReceiverBounds(*runtimeObjectWorld, directDynamicLightReceiverBounds);
+    }
 }
 
 float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const

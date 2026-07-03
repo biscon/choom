@@ -2057,7 +2057,8 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     0,
                     0.0f,
                     false,
-                    &state.runtimeObjects.dynamicPortalBlockers);
+                    &state.runtimeObjects.dynamicPortalBlockers,
+                    &engineContext->world);
         } else {
             const float previousVisualEyeY = preview.RendererPose().position.y;
             input.ForEachEvent(
@@ -2111,7 +2112,8 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     state.fpsControllerState.currentSectorId,
                     ClampRuntimeVisibilitySeedRadiusWorld(normalizedVisibilityConfig.playerRadius),
                     true,
-                    &state.runtimeObjects.dynamicPortalBlockers);
+                    &state.runtimeObjects.dynamicPortalBlockers,
+                    &engineContext->world);
             state.freeflyController.pose = preview.RendererPose();
         }
         UpdatePreview3DSelection(input);

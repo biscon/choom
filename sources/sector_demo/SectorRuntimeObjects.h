@@ -18,6 +18,7 @@
 
 namespace game {
 
+struct SectorReceiverBounds;
 struct SectorBakedObjectLightProbeRuntimeData;
 constexpr size_t kSectorRuntimeObjectInitialCapacity = 128;
 constexpr float kSectorBillboardDefaultAlphaCutoff = 0.5f;
@@ -267,6 +268,18 @@ SectorDoorSlabMeshData BuildSectorDoorSlabMeshData(const SectorDoorRender& rende
 Matrix BuildSectorDoorSlabModelMatrix(
         const SectorObjectTransform& transform,
         const SectorDoorResolvedAnchor& anchor);
+
+bool AppendSectorDoorReceiverBounds(
+        const SectorObjectTransform& transform,
+        const SectorObject& object,
+        const SectorDoor& door,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render,
+        std::vector<SectorReceiverBounds>& outBounds);
+
+void CollectSectorDoorReceiverBounds(
+        engine::World& world,
+        std::vector<SectorReceiverBounds>& outBounds);
 
 inline engine::SpriteAnimationHandle RequestSectorBillboardSpriteAnimation(
         engine::AssetManager& assets,

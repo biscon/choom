@@ -1,6 +1,7 @@
 #include "sector_demo/SectorRuntimeObjects.h"
 
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
 
@@ -254,6 +255,104 @@ Matrix BuildSectorDoorSlabModelMatrix(
             tangent.y, up.y, normal.y, transform.position.y,
             tangent.z, up.z, normal.z, transform.position.z,
             0.0f, 0.0f, 0.0f, 1.0f};
+}
+
+bool AppendSectorDoorReceiverBounds(
+        const SectorObjectTransform& transform,
+        const SectorObject& object,
+        const SectorDoor& door,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render,
+        std::vector<SectorReceiverBounds>& outBounds)
+{
+    const auto isFiniteVector3 = [](Vector3 value) {
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+    };
+    const auto expandBounds = [](Vector3 point, Vector3& min, Vector3& max) {
+        min.x = std::min(min.x, point.x);
+        min.y = std::min(min.y, point.y);
+        min.z = std::min(min.z, point.z);
+        max.x = std::max(max.x, point.x);
+        max.y = std::max(max.y, point.y);
+        max.z = std::max(max.z, point.z);
+    };
+
+    if (!object.visible || !door.enabled || !render.visible) {
+        return false;
+    }
+    if (render.width <= 0.0f
+            || render.height <= 0.0f
+            || render.thickness <= 0.0f
+            || !std::isfinite(render.width)
+            || !std::isfinite(render.height)
+            || !std::isfinite(render.thickness)
+            || !isFiniteVector3(transform.position)) {
+        return false;
+    }
+
+    const SectorDoorSlabGeometry slab = BuildSectorDoorSlabGeometry(transform, anchor, render);
+    const Vector3 corners[] = {
+            slab.bottomFrontLeft,
+            slab.bottomFrontRight,
+            slab.bottomBackRight,
+            slab.bottomBackLeft,
+            slab.topFrontLeft,
+            slab.topFrontRight,
+            slab.topBackRight,
+            slab.topBackLeft};
+
+    Vector3 min = corners[0];
+    Vector3 max = corners[0];
+    for (const Vector3& corner : corners) {
+        if (!isFiniteVector3(corner)) {
+            return false;
+        }
+        expandBounds(corner, min, max);
+    }
+
+    const std::size_t beginIndex = outBounds.size();
+    const auto alreadyAppended = [&outBounds, beginIndex](int sectorId) {
+        for (std::size_t i = beginIndex; i < outBounds.size(); ++i) {
+            if (outBounds[i].sectorId == sectorId) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const auto appendForSector = [&](int sectorId) {
+        if (sectorId <= 0 || alreadyAppended(sectorId)) {
+            return;
+        }
+        outBounds.push_back(SectorReceiverBounds{sectorId, min, max});
+    };
+
+    appendForSector(anchor.frontSectorId);
+    appendForSector(anchor.backSectorId);
+    if (outBounds.size() == beginIndex) {
+        appendForSector(object.currentSectorId);
+    }
+    return outBounds.size() > beginIndex;
+}
+
+void CollectSectorDoorReceiverBounds(
+        engine::World& world,
+        std::vector<SectorReceiverBounds>& outBounds)
+{
+    world.ForEach<
+            SectorObjectTransform,
+            SectorObject,
+            SectorDoor,
+            SectorDoorResolvedAnchor,
+            SectorDoorRender>(
+            [&outBounds](
+                    engine::Entity,
+                    SectorObjectTransform& transform,
+                    SectorObject& object,
+                    SectorDoor& door,
+                    SectorDoorResolvedAnchor& anchor,
+                    SectorDoorRender& render) {
+                AppendSectorDoorReceiverBounds(transform, object, door, anchor, render, outBounds);
+            });
 }
 
 namespace {

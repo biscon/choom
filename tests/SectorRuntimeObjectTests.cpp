@@ -1,6 +1,7 @@
 #include "sector_demo/SectorRuntimeObjects.h"
 
 #include "sector_demo/SectorCollisionWorld.h"
+#include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
@@ -1120,6 +1121,94 @@ void TestSectorDoorSlabModelMatrixPreservesResolvedBasis()
                       && Near(Vector3Transform(mesh.vertices[7].position, model), slab.topBackRight),
                 "door slab model matrix matches existing world-space slab placement");
     }
+}
+
+engine::Entity AddDoorForDerivedState(
+        engine::World& world,
+        game::SectorDoorMotionType motionType,
+        float openFraction,
+        float openDistance);
+
+void TestSectorDoorReceiverBoundsUseAnimatedSlabGeometry()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    const engine::Entity door = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            0.0f,
+            1.5f);
+    world.Add(door, game::SectorObject{10, true});
+    game::UpdateSectorDoorDerivedStateSystem(world);
+
+    std::vector<game::SectorReceiverBounds> bounds;
+    game::CollectSectorDoorReceiverBounds(world, bounds);
+    Check(bounds.size() == 2
+                  && bounds[0].sectorId == 10
+                  && bounds[1].sectorId == 20,
+            "door receiver bounds are appended for both portal sectors");
+    Check(bounds.size() >= 2
+                  && Near(bounds[0].min, Vector3{0.5f, 0.5f, -0.75f})
+                  && Near(bounds[0].max, Vector3{0.75f, 2.0f, 1.25f})
+                  && Near(bounds[1].min, bounds[0].min)
+                  && Near(bounds[1].max, bounds[0].max),
+            "door receiver bounds cover the current slab AABB including vertical extent");
+
+    game::SectorDoorMotion& motion = world.Get<game::SectorDoorMotion>(door);
+    motion.openFraction = 0.5f;
+    motion.targetOpenFraction = 0.5f;
+    game::UpdateSectorDoorDerivedStateSystem(world);
+
+    bounds.clear();
+    game::CollectSectorDoorReceiverBounds(world, bounds);
+    Check(bounds.size() == 2
+                  && Near(bounds[0].min, Vector3{0.5f, 1.25f, -0.75f})
+                  && Near(bounds[0].max, Vector3{0.75f, 2.75f, 1.25f}),
+            "door receiver bounds update after animated door transform changes");
+}
+
+void TestSectorDoorReceiverBoundsSkipNonRenderableDoors()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
+
+    const engine::Entity hiddenObject = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            0.0f,
+            1.5f);
+    world.Add(hiddenObject, game::SectorObject{10, false});
+
+    const engine::Entity disabledDoor = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            0.0f,
+            1.5f);
+    world.Add(disabledDoor, game::SectorObject{10, true});
+    world.Get<game::SectorDoor>(disabledDoor).enabled = false;
+
+    const engine::Entity hiddenRender = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            0.0f,
+            1.5f);
+    world.Add(hiddenRender, game::SectorObject{10, true});
+    world.Get<game::SectorDoorRender>(hiddenRender).visible = false;
+
+    const engine::Entity invalidShape = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            0.0f,
+            1.5f);
+    world.Add(invalidShape, game::SectorObject{10, true});
+    world.Get<game::SectorDoorRender>(invalidShape).width = 0.0f;
+
+    game::UpdateSectorDoorDerivedStateSystem(world);
+
+    std::vector<game::SectorReceiverBounds> bounds;
+    game::CollectSectorDoorReceiverBounds(world, bounds);
+    Check(bounds.empty(),
+            "door receiver bounds skip hidden disabled render-hidden and invalid-shape doors");
 }
 
 void TestSpawnPlacedDoorDerivesDefaultOpenDistance()
@@ -2861,6 +2950,8 @@ int main()
     TestSectorDoorSlabGeometryIsFiniteAndStable();
     TestSectorDoorSlabMeshDataHasStableAttributes();
     TestSectorDoorSlabModelMatrixPreservesResolvedBasis();
+    TestSectorDoorReceiverBoundsUseAnimatedSlabGeometry();
+    TestSectorDoorReceiverBoundsSkipNonRenderableDoors();
     TestSectorDoorHorizontalSlideMotionUsesResolvedTangent();
     TestSpawnPlacedDoorDerivesDefaultOpenDistance();
     TestSectorDoorMotionAdvancesOpenAndClosed();

@@ -86,7 +86,8 @@ public:
             int preferredStartSectorId = 0,
             float visibilitySeedRadiusWorld = 0.0f,
             bool validateEyeY = false,
-            const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers = nullptr);
+            const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers = nullptr,
+            engine::World* runtimeObjectWorld = nullptr);
     const RuntimePortalVisibilityResult& VisibilityResult() const { return visibilityResult; }
     const std::string& PortalVisibilityDebugText() const { return portalVisibilityDebugText; }
     const std::string& VisibilityDebugText() const { return visibilityDebugText; }
@@ -115,6 +116,7 @@ private:
     void DrawSkyCylinder(const Texture2D& texture);
     void DrawRuntimeBillboards(engine::AssetManager& assets, engine::World& runtimeObjectWorld);
     void DrawRuntimeDoors(engine::AssetManager& assets, engine::World& runtimeObjectWorld);
+    void BuildDirectDynamicLightReceiverBounds(engine::World* runtimeObjectWorld);
     void UnloadDoorMeshes();
     bool EnsureDynamicSpotLightShadowMapResources();
     void UnloadDynamicSpotLightShadowMapResources();
@@ -229,6 +231,7 @@ private:
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;
     std::vector<SectorPreviewDynamicPointLightUniform> dynamicPointLights;
     std::vector<int> selectedDynamicPointLightIds;
+    std::vector<SectorReceiverBounds> directDynamicLightReceiverBounds;
     std::vector<SectorPreviewDynamicSpotLightShadowCaster> dynamicSpotLightShadowCasters;
     std::vector<SectorPreviewDynamicSpotLightShadowMatrix> dynamicSpotLightShadowMatrices;
     std::array<RenderTexture2D, MaxDynamicSpotLightShadowCasters> dynamicSpotLightShadowMaps{};
