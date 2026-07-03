@@ -22,6 +22,7 @@ namespace {
 using Json = nlohmann::ordered_json;
 
 int failures = 0;
+constexpr float kExpectedDoorParkingEpsilonWorld = 0.01f;
 
 void Check(bool condition, const char* description)
 {
@@ -1657,7 +1658,7 @@ engine::Entity AddHorizontalDoorForDerivedState(
 void TestSectorDoorDerivedStateUpdatesTransformAndCollider()
 {
     engine::World world;
-    game::ReserveSectorRuntimeObjectWorld(world, 3);
+    game::ReserveSectorRuntimeObjectWorld(world, 5);
 
     const engine::Entity closed = AddDoorForDerivedState(
             world,
@@ -1669,11 +1670,21 @@ void TestSectorDoorDerivedStateUpdatesTransformAndCollider()
             game::SectorDoorMotionType::SlideVertical,
             0.5f,
             1.5f);
+    const engine::Entity verticalOpen = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            1.0f,
+            1.5f);
     const engine::Entity rightOpen = AddDoorForDerivedState(
             world,
             game::SectorDoorMotionType::SlideRight,
             1.0f,
             0.5f);
+    const engine::Entity tinyOpenDistance = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            1.0f,
+            kExpectedDoorParkingEpsilonWorld * 0.5f);
 
     game::UpdateSectorDoorDerivedStateSystem(world);
 
@@ -1681,8 +1692,15 @@ void TestSectorDoorDerivedStateUpdatesTransformAndCollider()
             "closed door derived transform is centered on the portal slab");
     Check(Near(world.Get<game::SectorObjectTransform>(verticalHalf).position, Vector3{0.625f, 2.0f, 0.25f}),
             "vertical slide derived transform moves up by open fraction and distance");
-    Check(Near(world.Get<game::SectorObjectTransform>(rightOpen).position, Vector3{0.625f, 1.25f, 0.75f}),
-            "right slide derived transform moves along positive tangent");
+    Check(Near(world.Get<game::SectorObjectTransform>(verticalOpen).position,
+                  Vector3{0.625f, 2.75f - kExpectedDoorParkingEpsilonWorld, 0.25f}),
+            "fully open vertical slide derived transform parks just inside the open distance");
+    Check(Near(world.Get<game::SectorObjectTransform>(rightOpen).position,
+                  Vector3{0.625f, 1.25f, 0.75f - kExpectedDoorParkingEpsilonWorld}),
+            "fully open right slide derived transform parks just inside the open distance");
+    Check(Near(world.Get<game::SectorObjectTransform>(tinyOpenDistance).position,
+                  Vector3{0.625f, 1.25f + kExpectedDoorParkingEpsilonWorld * 0.5f, 0.25f}),
+            "fully open door with tiny open distance does not park below zero translation");
 
     const game::SectorDoorCollider& collider = world.Get<game::SectorDoorCollider>(verticalHalf);
     Check(collider.enabled
@@ -1709,10 +1727,12 @@ void TestSectorDoorHorizontalSlideMotionUsesResolvedTangent()
 
     game::UpdateSectorDoorDerivedStateSystem(world);
 
-    Check(Near(world.Get<game::SectorObjectTransform>(leftOpen).position, Vector3{0.5f, 0.5f, 0.5f}),
-          "horizontal slide-left door moves along negative resolved tangent");
-    Check(Near(world.Get<game::SectorObjectTransform>(rightOpen).position, Vector3{0.0f, 0.5f, 0.5f}),
-          "horizontal slide-right door moves along positive resolved tangent");
+    Check(Near(world.Get<game::SectorObjectTransform>(leftOpen).position,
+                  Vector3{0.5f - kExpectedDoorParkingEpsilonWorld, 0.5f, 0.5f}),
+          "fully open horizontal slide-left door parks just inside negative resolved tangent");
+    Check(Near(world.Get<game::SectorObjectTransform>(rightOpen).position,
+                  Vector3{kExpectedDoorParkingEpsilonWorld, 0.5f, 0.5f}),
+          "fully open horizontal slide-right door parks just inside positive resolved tangent");
     Check(Near(world.Get<game::SectorDoorCollider>(leftOpen).normal, Vector2{0.0f, 1.0f})
                   && Near(world.Get<game::SectorDoorCollider>(rightOpen).normal, Vector2{0.0f, 1.0f}),
           "horizontal slide doors keep collider normals from the resolved front-to-back basis");
@@ -1795,8 +1815,8 @@ void TestSectorDoorDynamicColliderCollectionIncludesEnabledDoorShapes()
                 "dynamic door collider snapshot stores OBB footprint and vertical interval");
     }
     Check(openCollider != nullptr
-                  && Near(openCollider->bottom, 2.0f)
-                  && Near(openCollider->top, 3.5f),
+                  && Near(openCollider->bottom, 2.0f - kExpectedDoorParkingEpsilonWorld)
+                  && Near(openCollider->top, 3.5f - kExpectedDoorParkingEpsilonWorld),
             "fully open dynamic door collider snapshot uses current moved vertical interval");
 }
 

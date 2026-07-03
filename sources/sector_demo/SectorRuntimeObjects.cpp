@@ -360,6 +360,9 @@ namespace {
 constexpr const char* SectorRuntimeObjectAssetScopeName = "sector_runtime_objects";
 constexpr float DoorInteractionFacingDotThreshold = 0.5f;
 constexpr float DoorDynamicCollisionEpsilon = 0.0001f;
+// Park fully-open sliding slabs just inside the exact open distance to avoid coplanar z-fighting.
+constexpr float kSectorDoorOpenParkingEpsilonWorld = 0.01f;
+constexpr float kSectorDoorOpenParkingThreshold = 0.999f;
 
 uint32_t FindClipIndexInAsset(const engine::SpriteAnimationAsset& asset, const char* name)
 {
@@ -891,7 +894,12 @@ Vector3 DoorMotionOffset(
     const float openDistance = motion.openDistance > 0.0f && std::isfinite(motion.openDistance)
             ? motion.openDistance
             : 0.0f;
-    const float offset = openFraction * openDistance;
+    float offset = openFraction * openDistance;
+    if (openDistance > 0.0f && openFraction >= kSectorDoorOpenParkingThreshold) {
+        offset = openDistance > kSectorDoorOpenParkingEpsilonWorld
+                ? openDistance - kSectorDoorOpenParkingEpsilonWorld
+                : openDistance;
+    }
     const Vector2 tangent = NormalizedOrFallback(anchor.tangent, Vector2{1.0f, 0.0f});
 
     switch (motion.motion) {
