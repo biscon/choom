@@ -182,6 +182,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorLightmapReport.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp

@@ -42,7 +42,7 @@ Task Type:
 | REF-004 | `[x]` | Medium | Utilities | Extract minimal bounds/AABB helpers | Codex task | Low/Medium | Keep BVH ray math local for now |
 | REF-005 | `[x]` | Low | Utilities | Extract trivial color conversion helpers | Codex task | Low | Do not merge lighting evaluation |
 | REF-006 | `[ ]` | Low | Utilities | Evaluate tiny UV fit/span validation helper | Audit first | Medium | Avoid generic UV framework |
-| REF-007 | `[ ]` | Medium | Utilities | Extract lightmap bake report formatting | Codex task | Low | Behavior-preserving string/report split |
+| REF-007 | `[x]` | Medium | Utilities | Extract lightmap bake report formatting | Codex task | Low | Behavior-preserving string/report split |
 | REF-008 | `[ ]` | High | Editor header | Move render-cache cached draw structs | Codex task | Low | Narrow `SectorEditorTypes.h` |
 | REF-009 | `[ ]` | Medium | Editor header | Split editor modal state types | Codex task | Medium | Include churn likely |
 | REF-010 | `[ ]` | Medium | Editor header | Split selection/picking/drag state types | Codex task | Medium | Keep behavior unchanged |
@@ -179,7 +179,7 @@ Task Type:
   smoke and relevant tests.
 - Completion notes:
 
-#### REF-007 `[ ]` Extract lightmap bake report formatting
+#### REF-007 `[x]` Extract lightmap bake report formatting
 
 - Source/audit reference: quick win 4 and `SectorLightmap.cpp:3842`.
 - Why it helps: trims a low-risk formatting concern from the heavy lightmap
@@ -188,7 +188,10 @@ Task Type:
 - Suggested task type: Codex task.
 - Risk: Low.
 - Suggested verification: lightmap tests and any report string assertions.
-- Completion notes:
+- Completion notes: Completed by moving lightmap bake report formatting and
+  printing into `SectorLightmapReport.h/.cpp`; public report function names stay
+  compatible through `SectorLightmap.h`, and report output was intended to remain
+  unchanged.
 
 ### 3. Editor Header / Include Blast Radius
 
