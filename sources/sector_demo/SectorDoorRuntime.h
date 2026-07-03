@@ -1,0 +1,272 @@
+#pragma once
+
+#include "engine/ecs/World.h"
+#include "sector_demo/SectorCollisionWorld.h"
+#include "sector_demo/SectorLightmapTypes.h"
+#include "sector_demo/SectorPortalVisibility.h"
+#include "sector_demo/SectorTopologyMap.h"
+
+#include <raylib.h>
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace game {
+
+struct SectorObject;
+struct SectorObjectTransform;
+struct SectorReceiverBounds;
+struct SectorBakedObjectLightProbeRuntimeData;
+
+constexpr float kSectorDoorPortalBlockEpsilon = 0.001f;
+constexpr float kSectorDoorAutoOpenFallbackDistance = 2.0f;
+// Shadow-only aperture seal margins for procedural door spotlight casters.
+// These counter shadow bias peter-panning at closed doorway edges without changing visuals or collision.
+constexpr float kSectorDoorShadowCasterVerticalSealMarginWorld = 0.08f;
+constexpr float kSectorDoorShadowCasterHorizontalSealMarginWorld = 0.04f;
+
+struct SectorDynamicDoorCollider {
+    int placedObjectId = 0;
+    engine::Entity entity = engine::NullEntity();
+    Vector2 center = {};
+    Vector2 tangent = {1.0f, 0.0f};
+    Vector2 normal = {0.0f, -1.0f};
+    Vector2 halfExtents = {};
+    float bottom = 0.0f;
+    float top = 0.0f;
+};
+
+struct SectorDoorShadowCaster {
+    int placedObjectId = 0;
+    engine::Entity entity = engine::NullEntity();
+    Matrix model = {};
+    Vector3 position = {};
+    float width = 0.0f;
+    float height = 0.0f;
+    float thickness = 0.0f;
+};
+
+struct SectorDoor {
+    int placedObjectId = 0;
+    bool enabled = true;
+};
+
+struct SectorDoorResolvedAnchor {
+    int lineDefId = 0;
+    int frontSectorId = 0;
+    int backSectorId = 0;
+    int frontSideDefId = 0;
+    int backSideDefId = 0;
+    Vector2 endpointA = {};
+    Vector2 endpointB = {};
+    Vector2 midpoint = {};
+    // Tangent is the resolved portal front-side direction; normal points front sector -> back sector.
+    Vector2 tangent = {1.0f, 0.0f};
+    Vector2 normal = {0.0f, -1.0f};
+    float openBottom = 0.0f;
+    float openTop = 0.0f;
+    float portalWidth = 0.0f;
+    float portalHeight = 0.0f;
+};
+
+struct SectorDoorMotion {
+    SectorDoorMotionType motion = SectorDoorMotionType::SlideVertical;
+    float openFraction = 0.0f;
+    float targetOpenFraction = 0.0f;
+    float openDistance = 0.0f;
+    float speed = 1.5f;
+};
+
+struct SectorDoorInteraction {
+    bool autoOpen = false;
+    float interactionDistance = 1.5f;
+    float autoOpenDistance = kSectorDoorAutoOpenFallbackDistance;
+};
+
+struct SectorDoorRender {
+    float width = 0.0f;
+    float height = 0.0f;
+    float thickness = 0.25f;
+    // Positive values move the closed slab from the front sector toward the back sector.
+    float normalOffset = 0.0f;
+    std::string textureId;
+    SectorDoorFaceUvSet faceUvs;
+    Color tint = WHITE;
+    bool visible = true;
+};
+
+struct SectorDoorCollider {
+    Vector2 center = {};
+    Vector2 tangent = {1.0f, 0.0f};
+    Vector2 normal = {0.0f, -1.0f};
+    Vector2 halfExtents = {};
+    float bottom = 0.0f;
+    float top = 0.0f;
+    bool enabled = true;
+};
+
+struct SectorDoorPortalBlocker {
+    int lineDefId = 0;
+    int frontSectorId = 0;
+    int backSectorId = 0;
+    int frontSideDefId = 0;
+    int backSideDefId = 0;
+    bool blocksPortal = true;
+};
+
+struct SectorDoorSlabGeometry {
+    Vector3 tangent = {1.0f, 0.0f, 0.0f};
+    Vector3 normal = {0.0f, 0.0f, -1.0f};
+    Vector3 bottomFrontLeft = {};
+    Vector3 bottomFrontRight = {};
+    Vector3 bottomBackRight = {};
+    Vector3 bottomBackLeft = {};
+    Vector3 topFrontLeft = {};
+    Vector3 topFrontRight = {};
+    Vector3 topBackRight = {};
+    Vector3 topBackLeft = {};
+};
+
+struct SectorDoorSlabMeshVertex {
+    Vector3 position = {};
+    Vector3 normal = {};
+    Vector2 uv = {};
+    Color color = WHITE;
+};
+
+struct SectorDoorSlabMeshData {
+    std::vector<SectorDoorSlabMeshVertex> vertices;
+    std::vector<uint16_t> indices;
+};
+
+enum class SectorDoorUvFitMode {
+    Width,
+    Height,
+    Both
+};
+
+const char* SectorDoorFaceName(SectorDoorFace face);
+int SectorDoorFaceIndex(SectorDoorFace face);
+SectorDoorFace SectorDoorFaceFromIndex(int index);
+SectorDoorFaceUv& DoorFaceUv(SectorDoorFaceUvSet& uvs, SectorDoorFace face);
+const SectorDoorFaceUv& DoorFaceUv(const SectorDoorFaceUvSet& uvs, SectorDoorFace face);
+bool IsDefaultSectorDoorFaceUv(const SectorDoorFaceUv& uv);
+bool IsDefaultSectorDoorFaceUvSet(const SectorDoorFaceUvSet& uvs);
+bool SameSectorDoorFaceUv(const SectorDoorFaceUv& a, const SectorDoorFaceUv& b);
+bool SameSectorDoorFaceUvSet(const SectorDoorFaceUvSet& a, const SectorDoorFaceUvSet& b);
+bool IsValidSectorDoorUvScale(float scale);
+bool IsValidSectorDoorUvOffset(float offset);
+Vector2 SectorDoorFaceDimensions(const SectorDoorRender& render, SectorDoorFace face);
+Vector2 SectorDoorFaceBaseUvSpan(const SectorDoorRender& render, SectorDoorFace face);
+bool FitSectorDoorFaceUv(
+        SectorDoorFaceUvSet& uvs,
+        SectorDoorFace face,
+        SectorDoorUvFitMode mode,
+        const SectorDoorRender& render,
+        std::string* outError = nullptr);
+bool ResetSectorDoorFaceUv(SectorDoorFaceUvSet& uvs, SectorDoorFace face);
+bool CopySectorDoorFaceUv(
+        SectorDoorFaceUvSet& uvs,
+        SectorDoorFace source,
+        SectorDoorFace target);
+bool ApplySectorDoorFaceUvToAll(SectorDoorFaceUvSet& uvs, SectorDoorFace source);
+
+SectorDoorSlabGeometry BuildSectorDoorSlabGeometry(
+        const SectorObjectTransform& transform,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render);
+
+SectorDoorSlabMeshData BuildSectorDoorSlabMeshData(const SectorDoorRender& render);
+
+Matrix BuildSectorDoorSlabModelMatrix(
+        const SectorObjectTransform& transform,
+        const SectorDoorResolvedAnchor& anchor);
+
+Matrix BuildSectorDoorShadowCasterModelMatrix(
+        const SectorDoorShadowCaster& caster,
+        float visualWidth,
+        float visualHeight);
+
+Vector3 EvaluateSectorObjectAmbientCubeLighting(
+        const BakedObjectLightingSample& sample,
+        Vector3 worldNormal);
+
+bool BuildSectorDoorStaticLightingColors(
+        const SectorDoorSlabMeshData& meshData,
+        const SectorObjectTransform& transform,
+        const SectorObject& object,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
+        const SectorTopologyMap* mapForFallback,
+        std::vector<Color>& outColors);
+
+bool AppendSectorDoorReceiverBounds(
+        const SectorObjectTransform& transform,
+        const SectorObject& object,
+        const SectorDoor& door,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render,
+        std::vector<SectorReceiverBounds>& outBounds);
+
+void CollectSectorDoorReceiverBounds(
+        engine::World& world,
+        std::vector<SectorReceiverBounds>& outBounds);
+
+bool AppendSectorDoorShadowCaster(
+        engine::Entity entity,
+        const SectorObjectTransform& transform,
+        const SectorObject& object,
+        const SectorDoor& door,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render,
+        std::vector<SectorDoorShadowCaster>& outCasters);
+
+void CollectSectorDoorShadowCasters(
+        engine::World& world,
+        std::vector<SectorDoorShadowCaster>& outCasters);
+
+float SectorDoorResolvedOpenDistance(
+        const SectorResolvedDoorAnchor& resolved,
+        const SectorPlacedDoor& door);
+
+float SectorDoorAnchorYawRadians(const SectorResolvedDoorAnchor& resolved);
+
+Vector3 SectorDoorMotionOffset(
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorMotion& motion);
+
+Vector3 SectorDoorClosedCenter(
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render);
+
+SectorDoorResolvedAnchor ToSectorRuntimeDoorAnchor(const SectorResolvedDoorAnchor& resolved);
+
+void UpdateSectorDoorAutoOpenSystem(
+        engine::World& world,
+        const Vector3& playerPosition);
+
+bool ToggleTargetedSectorDoorInteractionSystem(
+        engine::World& world,
+        const Vector3& playerPosition,
+        const Vector3& playerForward);
+
+void AdvanceSectorDoorMotionSystem(engine::World& world, float dt);
+
+void UpdateSectorDoorDerivedStateSystem(engine::World& world);
+
+void CollectSectorDoorDynamicColliders(
+        engine::World& world,
+        std::vector<SectorDynamicDoorCollider>& colliders);
+
+void CollectSectorDoorDynamicPortalBlockers(
+        engine::World& world,
+        std::vector<RuntimePortalDynamicBlocker>& blockers);
+
+SectorCollisionMoveResult ResolveSectorDoorDynamicCollidersForPlayerMovement(
+        const SectorCollisionMoveState& moveState,
+        const SectorCollisionMoveResult& staticResult,
+        const SectorCollisionMoveConfig& config,
+        const std::vector<SectorDynamicDoorCollider>& colliders);
+
+} // namespace game

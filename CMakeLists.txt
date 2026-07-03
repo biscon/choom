@@ -254,6 +254,8 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorBillboardRuntime.cpp
+            sources/sector_demo/SectorDoorRuntime.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
