@@ -80,20 +80,22 @@ void SectorDemo::Update(engine::EngineContext& context, float dt)
                 preview.ToggleDynamicLightingEnabled();
                 engine::ConsumeEvent(event);
             });
-    input.ForEachEvent(
-            engine::InputEventType::KeyPressed,
-            true,
-            [this, &context, &playerPosition](engine::InputEvent& event) {
-                if (event.key.key != KEY_F) {
-                    return;
-                }
-                if (ToggleTargetedSectorDoorInteractionSystem(
-                            context.world,
-                            playerPosition,
-                            HorizontalForwardFromYaw(freeflyController.pose.yawRadians))) {
-                    engine::ConsumeEvent(event);
-                }
-            });
+    if (freeflyController.mouseLookEnabled) {
+        input.ForEachEvent(
+                engine::InputEventType::KeyPressed,
+                true,
+                [this, &context, &playerPosition](engine::InputEvent& event) {
+                    if (event.key.key != KEY_F) {
+                        return;
+                    }
+                    if (ToggleTargetedSectorDoorInteractionSystem(
+                                context.world,
+                                playerPosition,
+                                HorizontalForwardFromYaw(freeflyController.pose.yawRadians))) {
+                        engine::ConsumeEvent(event);
+                    }
+                });
+    }
     UpdateSectorRuntimeObjects(context.world, context.assets, runtimeObjects, topologyMap, dt, &playerPosition);
     preview.AdvanceRuntime(dt);
 

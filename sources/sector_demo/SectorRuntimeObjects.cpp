@@ -838,6 +838,41 @@ SectorDoorResolvedAnchor ToRuntimeDoorAnchor(const SectorResolvedDoorAnchor& res
     return anchor;
 }
 
+Vector2 StableDoorInteractionPointXZ(
+        const SectorDoorResolvedAnchor& anchor,
+        Vector2 playerPosition)
+{
+    const Vector2 a = anchor.endpointA;
+    const Vector2 b = anchor.endpointB;
+    if (!IsFinite(a) || !IsFinite(b)) {
+        return IsFinite(anchor.midpoint) ? anchor.midpoint : Vector2{};
+    }
+
+    const Vector2 ab = Subtract(b, a);
+    const float lengthSq = Dot(ab, ab);
+    if (lengthSq <= DoorDynamicCollisionEpsilon || !std::isfinite(lengthSq)) {
+        return IsFinite(anchor.midpoint) ? anchor.midpoint : a;
+    }
+
+    const float t = Clamp(Dot(Subtract(playerPosition, a), ab) / lengthSq, 0.0f, 1.0f);
+    return Add(a, Scale(ab, t));
+}
+
+Vector2 StableDoorFacingPointXZ(
+        const SectorDoorResolvedAnchor& anchor,
+        Vector2 playerPosition,
+        Vector2 closestPoint)
+{
+    if (Vector2LengthSqr(Subtract(closestPoint, playerPosition)) > DoorDynamicCollisionEpsilon) {
+        return closestPoint;
+    }
+    if (IsFinite(anchor.midpoint)
+            && Vector2LengthSqr(Subtract(anchor.midpoint, playerPosition)) > DoorDynamicCollisionEpsilon) {
+        return anchor.midpoint;
+    }
+    return closestPoint;
+}
+
 } // namespace
 
 void EnsureSectorRuntimeObjectWorldReserved(
@@ -1360,11 +1395,11 @@ void UpdateSectorDoorAutoOpenSystem(engine::World& world, const Vector3& playerP
         return;
     }
 
-    world.ForEach<SectorObjectTransform, SectorDoor, SectorDoorMotion, SectorDoorInteraction>(
+    world.ForEach<SectorDoor, SectorDoorResolvedAnchor, SectorDoorMotion, SectorDoorInteraction>(
             [&playerPosition](
                     engine::Entity,
-                    SectorObjectTransform& transform,
                     SectorDoor& door,
+                    SectorDoorResolvedAnchor& anchor,
                     SectorDoorMotion& motion,
                     SectorDoorInteraction& interaction) {
                 if (!door.enabled || !interaction.autoOpen) {
@@ -1375,9 +1410,10 @@ void UpdateSectorDoorAutoOpenSystem(engine::World& world, const Vector3& playerP
                                 && std::isfinite(interaction.autoOpenDistance)
                         ? interaction.autoOpenDistance
                         : kSectorDoorAutoOpenFallbackDistance;
-                const float dx = playerPosition.x - transform.position.x;
-                const float dz = playerPosition.z - transform.position.z;
-                const float distanceSq = dx * dx + dz * dz;
+                const Vector2 playerXZ{playerPosition.x, playerPosition.z};
+                const Vector2 target = StableDoorInteractionPointXZ(anchor, playerXZ);
+                const Vector2 toTarget = Subtract(target, playerXZ);
+                const float distanceSq = Vector2LengthSqr(toTarget);
                 motion.targetOpenFraction = distanceSq <= distance * distance ? 1.0f : 0.0f;
             });
 }
@@ -1402,11 +1438,11 @@ bool ToggleTargetedSectorDoorInteractionSystem(
     bool found = false;
     float bestDistanceSq = std::numeric_limits<float>::max();
 
-    world.ForEach<SectorObjectTransform, SectorDoor, SectorDoorMotion, SectorDoorInteraction>(
+    world.ForEach<SectorDoor, SectorDoorResolvedAnchor, SectorDoorMotion, SectorDoorInteraction>(
             [&playerPosition, &forward, &bestEntity, &found, &bestDistanceSq](
                     engine::Entity entity,
-                    SectorObjectTransform& transform,
                     SectorDoor& door,
+                    SectorDoorResolvedAnchor& anchor,
                     SectorDoorMotion&,
                     SectorDoorInteraction& interaction) {
                 if (!door.enabled || interaction.autoOpen) {
@@ -1417,17 +1453,22 @@ bool ToggleTargetedSectorDoorInteractionSystem(
                                 && std::isfinite(interaction.interactionDistance)
                         ? interaction.interactionDistance
                         : 1.5f;
-                const Vector2 toDoor{
-                        transform.position.x - playerPosition.x,
-                        transform.position.z - playerPosition.z};
+                const Vector2 playerXZ{playerPosition.x, playerPosition.z};
+                const Vector2 target = StableDoorInteractionPointXZ(anchor, playerXZ);
+                const Vector2 toDoor = Subtract(target, playerXZ);
                 const float distanceSq = Vector2LengthSqr(toDoor);
-                if (distanceSq > distance * distance || distanceSq <= 0.000001f) {
+                if (distanceSq > distance * distance) {
                     return;
                 }
 
-                const Vector2 directionToDoor = Vector2Scale(toDoor, 1.0f / std::sqrt(distanceSq));
-                if (Vector2DotProduct(forward, directionToDoor) < DoorInteractionFacingDotThreshold) {
-                    return;
+                const Vector2 facingPoint = StableDoorFacingPointXZ(anchor, playerXZ, target);
+                const Vector2 toFacingPoint = Subtract(facingPoint, playerXZ);
+                const float facingDistanceSq = Vector2LengthSqr(toFacingPoint);
+                if (facingDistanceSq > DoorDynamicCollisionEpsilon) {
+                    const Vector2 directionToDoor = Vector2Scale(toFacingPoint, 1.0f / std::sqrt(facingDistanceSq));
+                    if (Vector2DotProduct(forward, directionToDoor) < DoorInteractionFacingDotThreshold) {
+                        return;
+                    }
                 }
 
                 if (distanceSq < bestDistanceSq) {

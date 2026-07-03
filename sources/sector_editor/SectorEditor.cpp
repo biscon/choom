@@ -468,23 +468,31 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         state.runtimeObjects.dynamicPortalBlockers.clear();
         CollectSectorDoorDynamicPortalBlockers(context.world, state.runtimeObjects.dynamicPortalBlockers);
         preview.AdvanceRuntime(dt);
-        if (state.texturePicker.open || state.spritePicker.open || HasDocumentModalOpen()) {
+        const bool hasBlockingModal = state.texturePicker.open
+                || state.spritePicker.open
+                || HasDocumentModalOpen();
+        if (hasBlockingModal) {
             return;
         }
-        input.ForEachEvent(
-                engine::InputEventType::KeyPressed,
-                true,
-                [this, &context](engine::InputEvent& event) {
-                    if (event.key.key != KEY_F) {
-                        return;
-                    }
-                    if (ToggleTargetedSectorDoorInteractionSystem(
-                                context.world,
-                                state.freeflyController.pose.position,
-                                PreviewForwardFromPose(state.freeflyController.pose))) {
-                        engine::ConsumeEvent(event);
-                    }
-                });
+        const bool canInteractWithDoors = state.previewControlMode == SectorPreviewControlMode::Gameplay
+                && state.freeflyController.mouseLookEnabled
+                && !uiState.keyboardCaptured;
+        if (canInteractWithDoors) {
+            input.ForEachEvent(
+                    engine::InputEventType::KeyPressed,
+                    true,
+                    [this, &context](engine::InputEvent& event) {
+                        if (event.key.key != KEY_F) {
+                            return;
+                        }
+                        if (ToggleTargetedSectorDoorInteractionSystem(
+                                    context.world,
+                                    state.freeflyController.pose.position,
+                                    PreviewForwardFromPose(state.freeflyController.pose))) {
+                            engine::ConsumeEvent(event);
+                        }
+                    });
+        }
         UpdatePreview3D(input, assets, dt);
         return;
     }

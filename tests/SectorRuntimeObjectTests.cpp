@@ -1069,6 +1069,26 @@ void TestSectorDoorMotionClampsAndIgnoresZeroSpeed()
             "door motion ignores invalid negative dt");
 }
 
+game::SectorDoorResolvedAnchor MakeInteractionAnchor(Vector2 midpoint)
+{
+    game::SectorDoorResolvedAnchor anchor;
+    anchor.lineDefId = 2;
+    anchor.frontSectorId = 10;
+    anchor.backSectorId = 20;
+    anchor.frontSideDefId = 2;
+    anchor.backSideDefId = 8;
+    anchor.endpointA = Vector2{midpoint.x, midpoint.y - 0.5f};
+    anchor.endpointB = Vector2{midpoint.x, midpoint.y + 0.5f};
+    anchor.midpoint = midpoint;
+    anchor.tangent = Vector2{0.0f, 1.0f};
+    anchor.normal = Vector2{1.0f, 0.0f};
+    anchor.openBottom = 0.0f;
+    anchor.openTop = 2.0f;
+    anchor.portalWidth = 1.0f;
+    anchor.portalHeight = 2.0f;
+    return anchor;
+}
+
 void TestSectorDoorAutoOpenSetsTargetFromPlayerRange()
 {
     engine::World world;
@@ -1077,6 +1097,7 @@ void TestSectorDoorAutoOpenSetsTargetFromPlayerRange()
     const engine::Entity autoDoor = world.CreateEntity();
     world.Add(autoDoor, game::SectorObjectTransform{Vector3{1.0f, 0.0f, 1.0f}, 0.0f});
     world.Add(autoDoor, game::SectorDoor{1, true});
+    world.Add(autoDoor, MakeInteractionAnchor(Vector2{1.0f, 1.0f}));
     world.Add(autoDoor, game::SectorDoorMotion{
             game::SectorDoorMotionType::SlideVertical,
             0.0f,
@@ -1088,6 +1109,7 @@ void TestSectorDoorAutoOpenSetsTargetFromPlayerRange()
     const engine::Entity manualDoor = world.CreateEntity();
     world.Add(manualDoor, game::SectorObjectTransform{Vector3{1.0f, 0.0f, 1.0f}, 0.0f});
     world.Add(manualDoor, game::SectorDoor{2, true});
+    world.Add(manualDoor, MakeInteractionAnchor(Vector2{1.0f, 1.0f}));
     world.Add(manualDoor, game::SectorDoorMotion{
             game::SectorDoorMotionType::SlideVertical,
             0.0f,
@@ -1117,6 +1139,7 @@ void TestSectorDoorAutoOpenIgnoresDisabledAndInvalidPlayerPosition()
     const engine::Entity disabledDoor = world.CreateEntity();
     world.Add(disabledDoor, game::SectorObjectTransform{Vector3{1.0f, 0.0f, 1.0f}, 0.0f});
     world.Add(disabledDoor, game::SectorDoor{1, false});
+    world.Add(disabledDoor, MakeInteractionAnchor(Vector2{1.0f, 1.0f}));
     world.Add(disabledDoor, game::SectorDoorMotion{
             game::SectorDoorMotionType::SlideVertical,
             0.0f,
@@ -1145,6 +1168,7 @@ void TestSectorDoorInteractTogglesNearestManualDoorInFront()
     const engine::Entity farther = world.CreateEntity();
     world.Add(farther, game::SectorObjectTransform{Vector3{1.25f, 0.0f, 0.0f}, 0.0f});
     world.Add(farther, game::SectorDoor{1, true});
+    world.Add(farther, MakeInteractionAnchor(Vector2{1.25f, 0.0f}));
     world.Add(farther, game::SectorDoorMotion{
             game::SectorDoorMotionType::SlideVertical,
             0.0f,
@@ -1156,6 +1180,7 @@ void TestSectorDoorInteractTogglesNearestManualDoorInFront()
     const engine::Entity nearest = world.CreateEntity();
     world.Add(nearest, game::SectorObjectTransform{Vector3{0.75f, 0.0f, 0.0f}, 0.0f});
     world.Add(nearest, game::SectorDoor{2, true});
+    world.Add(nearest, MakeInteractionAnchor(Vector2{0.75f, 0.0f}));
     world.Add(nearest, game::SectorDoorMotion{
             game::SectorDoorMotionType::SlideVertical,
             0.0f,
@@ -1167,6 +1192,7 @@ void TestSectorDoorInteractTogglesNearestManualDoorInFront()
     const engine::Entity autoDoor = world.CreateEntity();
     world.Add(autoDoor, game::SectorObjectTransform{Vector3{0.5f, 0.0f, 0.0f}, 0.0f});
     world.Add(autoDoor, game::SectorDoor{3, true});
+    world.Add(autoDoor, MakeInteractionAnchor(Vector2{0.5f, 0.0f}));
     world.Add(autoDoor, game::SectorDoorMotion{
             game::SectorDoorMotionType::SlideVertical,
             0.0f,
@@ -1197,6 +1223,7 @@ void TestSectorDoorInteractRequiresFacingAndTogglesClosed()
     const engine::Entity door = world.CreateEntity();
     world.Add(door, game::SectorObjectTransform{Vector3{1.0f, 0.0f, 0.0f}, 0.0f});
     world.Add(door, game::SectorDoor{1, true});
+    world.Add(door, MakeInteractionAnchor(Vector2{1.0f, 0.0f}));
     world.Add(door, game::SectorDoorMotion{
             game::SectorDoorMotionType::SlideVertical,
             0.75f,
@@ -1218,6 +1245,65 @@ void TestSectorDoorInteractRequiresFacingAndTogglesClosed()
             Vector3{1.0f, 0.0f, 0.0f});
     Check(toggled && Near(world.Get<game::SectorDoorMotion>(door).targetOpenFraction, 0.0f),
             "manual door interaction closes a targeted open door");
+}
+
+void TestSectorSideSlidingDoorInteractUsesStablePortalAnchor()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+
+    const engine::Entity door = world.CreateEntity();
+    world.Add(door, game::SectorObjectTransform{Vector3{1.0f, 0.0f, 6.0f}, 0.0f});
+    world.Add(door, game::SectorDoor{1, true});
+    world.Add(door, MakeInteractionAnchor(Vector2{1.0f, 0.0f}));
+    world.Add(door, game::SectorDoorMotion{
+            game::SectorDoorMotionType::SlideRight,
+            1.0f,
+            1.0f,
+            6.0f,
+            1.0f});
+    world.Add(door, game::SectorDoorInteraction{false, 1.5f, 2.0f});
+
+    const bool closed = game::ToggleTargetedSectorDoorInteractionSystem(
+            world,
+            Vector3{0.0f, 0.0f, 0.0f},
+            Vector3{1.0f, 0.0f, 0.0f});
+    Check(closed && Near(world.Get<game::SectorDoorMotion>(door).targetOpenFraction, 0.0f),
+            "side-sliding door closes from doorway even after slab center moved away");
+
+    world.Get<game::SectorDoorMotion>(door).openFraction = 0.0f;
+    const bool opened = game::ToggleTargetedSectorDoorInteractionSystem(
+            world,
+            Vector3{0.0f, 0.0f, 0.0f},
+            Vector3{1.0f, 0.0f, 0.0f});
+    Check(opened && Near(world.Get<game::SectorDoorMotion>(door).targetOpenFraction, 1.0f),
+            "side-sliding door opens from the same stable doorway target");
+}
+
+void TestSectorSideSlidingDoorAutoOpenUsesStablePortalAnchor()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+
+    const engine::Entity door = world.CreateEntity();
+    world.Add(door, game::SectorObjectTransform{Vector3{1.0f, 0.0f, 6.0f}, 0.0f});
+    world.Add(door, game::SectorDoor{1, true});
+    world.Add(door, MakeInteractionAnchor(Vector2{1.0f, 0.0f}));
+    world.Add(door, game::SectorDoorMotion{
+            game::SectorDoorMotionType::SlideLeft,
+            1.0f,
+            0.0f,
+            6.0f,
+            1.0f});
+    world.Add(door, game::SectorDoorInteraction{true, 1.5f, 1.25f});
+
+    game::UpdateSectorDoorAutoOpenSystem(world, Vector3{0.25f, 0.0f, 0.0f});
+    Check(Near(world.Get<game::SectorDoorMotion>(door).targetOpenFraction, 1.0f),
+            "side-sliding auto-open uses doorway proximity instead of moved slab center");
+
+    game::UpdateSectorDoorAutoOpenSystem(world, Vector3{3.0f, 0.0f, 0.0f});
+    Check(Near(world.Get<game::SectorDoorMotion>(door).targetOpenFraction, 0.0f),
+            "side-sliding auto-open closes when player leaves stable doorway range");
 }
 
 game::SectorDoorResolvedAnchor MakeRuntimeDoorAnchorForDerivedState()
@@ -2550,6 +2636,8 @@ int main()
     TestSectorDoorAutoOpenIgnoresDisabledAndInvalidPlayerPosition();
     TestSectorDoorInteractTogglesNearestManualDoorInFront();
     TestSectorDoorInteractRequiresFacingAndTogglesClosed();
+    TestSectorSideSlidingDoorInteractUsesStablePortalAnchor();
+    TestSectorSideSlidingDoorAutoOpenUsesStablePortalAnchor();
     TestSectorDoorDerivedStateUpdatesTransformAndCollider();
     TestSectorDoorDerivedStateUpdatesLeftSlideAndBlockerThreshold();
     TestSectorDoorDynamicColliderCollectionIncludesEnabledDoorShapes();
