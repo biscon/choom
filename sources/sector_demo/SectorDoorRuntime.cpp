@@ -1,5 +1,6 @@
 #include "sector_demo/SectorDoorRuntime.h"
 
+#include "sector_demo/SectorBounds.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorMeshTypes.h"
@@ -511,18 +512,6 @@ bool AppendSectorDoorReceiverBounds(
         const SectorDoorRender& render,
         std::vector<SectorReceiverBounds>& outBounds)
 {
-    const auto isFiniteVector3 = [](Vector3 value) {
-        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
-    };
-    const auto expandBounds = [](Vector3 point, Vector3& min, Vector3& max) {
-        min.x = std::min(min.x, point.x);
-        min.y = std::min(min.y, point.y);
-        min.z = std::min(min.z, point.z);
-        max.x = std::max(max.x, point.x);
-        max.y = std::max(max.y, point.y);
-        max.z = std::max(max.z, point.z);
-    };
-
     if (!object.visible || !door.enabled || !render.visible) {
         return false;
     }
@@ -532,7 +521,7 @@ bool AppendSectorDoorReceiverBounds(
             || !std::isfinite(render.width)
             || !std::isfinite(render.height)
             || !std::isfinite(render.thickness)
-            || !isFiniteVector3(transform.position)) {
+            || !IsFiniteVector3(transform.position)) {
         return false;
     }
 
@@ -547,13 +536,12 @@ bool AppendSectorDoorReceiverBounds(
             slab.topBackRight,
             slab.topBackLeft};
 
-    Vector3 min = corners[0];
-    Vector3 max = corners[0];
+    SectorAabb3 bounds = SectorAabb3FromPoint(corners[0]);
     for (const Vector3& corner : corners) {
-        if (!isFiniteVector3(corner)) {
+        if (!IsFiniteVector3(corner)) {
             return false;
         }
-        expandBounds(corner, min, max);
+        ExpandSectorAabb3(bounds, corner);
     }
 
     const std::size_t beginIndex = outBounds.size();
@@ -569,7 +557,7 @@ bool AppendSectorDoorReceiverBounds(
         if (sectorId <= 0 || alreadyAppended(sectorId)) {
             return;
         }
-        outBounds.push_back(SectorReceiverBounds{sectorId, min, max});
+        outBounds.push_back(SectorReceiverBounds{sectorId, bounds.min, bounds.max});
     };
 
     appendForSector(anchor.frontSectorId);

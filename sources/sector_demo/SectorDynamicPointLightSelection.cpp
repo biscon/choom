@@ -1,5 +1,6 @@
 #include "sector_demo/SectorDynamicPointLightSelection.h"
 
+#include "sector_demo/SectorBounds.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorColor.h"
 #include "sector_demo/SectorMath.h"
@@ -57,20 +58,22 @@ float DistanceSq(Vector3 a, Vector3 b)
 
 Vector3 ClampToBounds(Vector3 value, const SectorReceiverBounds& bounds)
 {
-    return Vector3{
-            std::clamp(value.x, bounds.min.x - ReceiverBoundsPadding, bounds.max.x + ReceiverBoundsPadding),
-            std::clamp(value.y, bounds.min.y - ReceiverBoundsPadding, bounds.max.y + ReceiverBoundsPadding),
-            std::clamp(value.z, bounds.min.z - ReceiverBoundsPadding, bounds.max.z + ReceiverBoundsPadding)};
+    const SectorAabb3 paddedBounds{
+            Vector3{
+                    bounds.min.x - ReceiverBoundsPadding,
+                    bounds.min.y - ReceiverBoundsPadding,
+                    bounds.min.z - ReceiverBoundsPadding},
+            Vector3{
+                    bounds.max.x + ReceiverBoundsPadding,
+                    bounds.max.y + ReceiverBoundsPadding,
+                    bounds.max.z + ReceiverBoundsPadding}};
+    return ClosestPointOnSectorAabb3(paddedBounds, value);
 }
 
 bool IsValidReceiverBounds(const SectorReceiverBounds& bounds)
 {
     return bounds.sectorId > 0
-            && IsFiniteVector3(bounds.min)
-            && IsFiniteVector3(bounds.max)
-            && bounds.min.x <= bounds.max.x
-            && bounds.min.y <= bounds.max.y
-            && bounds.min.z <= bounds.max.z;
+            && IsValidSectorAabb3(SectorAabb3{bounds.min, bounds.max});
 }
 
 bool ShouldUseAllReceiverBounds(const RuntimePortalVisibilityResult& visibility)

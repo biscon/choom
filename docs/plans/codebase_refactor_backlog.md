@@ -39,7 +39,7 @@ Task Type:
 | REF-001 | `[x]` | High | Current feature | Finish door UV/settings/layout smoke and checkpoint | Manual checkpoint | Medium | Close current work before refactors |
 | REF-002 | `[x]` | High | Utilities | Extract `SectorAssetPaths` | Codex task | Low | Strong quick win |
 | REF-003 | `[x]` | Medium | Utilities | Extract finite/clamp/smoothstep helpers | Codex task | Low/Medium | Preserve per-call fallback behavior |
-| REF-004 | `[ ]` | Medium | Utilities | Extract minimal bounds/AABB helpers | Codex task | Low/Medium | Keep BVH ray math local for now |
+| REF-004 | `[x]` | Medium | Utilities | Extract minimal bounds/AABB helpers | Codex task | Low/Medium | Keep BVH ray math local for now |
 | REF-005 | `[x]` | Low | Utilities | Extract trivial color conversion helpers | Codex task | Low | Do not merge lighting evaluation |
 | REF-006 | `[ ]` | Low | Utilities | Evaluate tiny UV fit/span validation helper | Audit first | Medium | Avoid generic UV framework |
 | REF-007 | `[ ]` | Medium | Utilities | Extract lightmap bake report formatting | Codex task | Low | Behavior-preserving string/report split |
@@ -131,7 +131,7 @@ Task Type:
   while edge-based smoothstep and door/collision wrappers keep local policy
   visible.
 
-#### REF-004 `[ ]` Extract minimal bounds/AABB accumulation helpers
+#### REF-004 `[x]` Extract minimal bounds/AABB accumulation helpers
 
 - Source/audit reference: "Bounds / Collision / AABB Helpers".
 - Why it helps: centralizes simple Vector3 bounds validity/expansion logic.
@@ -142,7 +142,13 @@ Task Type:
 - Risk: Low/Medium.
 - Suggested verification: mesh builder, runtime object, and dynamic lighting
   tests/manual smoke where relevant.
-- Completion notes:
+- Completion notes: Completed by adding header-only
+  `sources/sector_demo/SectorBounds.h` for minimal `Vector3` AABB validity,
+  expansion, center/extents, and closest-point primitives. Mesh-builder
+  receiver accumulation, dynamic-light receiver validity/clamping primitives,
+  door receiver slab bounds accumulation, and preview geometry bounds now use
+  the shared helpers. Lightmap BVH/raycast AABBs and domain-specific receiver
+  selection padding/scoring remain local.
 
 #### REF-005 `[x]` Extract trivial color conversion helpers
 

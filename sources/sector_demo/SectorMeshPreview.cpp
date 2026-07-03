@@ -2,6 +2,7 @@
 
 #include "engine/assets/TextureLoadFlags.h"
 #include "sector_demo/SectorAssetPaths.h"
+#include "sector_demo/SectorBounds.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshBuilder.h"
 #include "sector_demo/SectorPortalVisibility.h"
@@ -1516,26 +1517,16 @@ bool LoadBillboardCutoutShader(
 
 bool ComputeGeometryBounds(const SectorGeneratedGeometry& geometry, Vector3& outMin, Vector3& outMax)
 {
-    outMin = Vector3{
-            std::numeric_limits<float>::max(),
-            std::numeric_limits<float>::max(),
-            std::numeric_limits<float>::max()};
-    outMax = Vector3{
-            -std::numeric_limits<float>::max(),
-            -std::numeric_limits<float>::max(),
-            -std::numeric_limits<float>::max()};
+    SectorAabb3 bounds = EmptySectorAabb3();
     bool found = false;
     for (const SectorGeneratedSurface& surface : geometry.surfaces) {
         for (const SectorGeneratedVertex& vertex : surface.vertices) {
-            outMin.x = std::min(outMin.x, vertex.position.x);
-            outMin.y = std::min(outMin.y, vertex.position.y);
-            outMin.z = std::min(outMin.z, vertex.position.z);
-            outMax.x = std::max(outMax.x, vertex.position.x);
-            outMax.y = std::max(outMax.y, vertex.position.y);
-            outMax.z = std::max(outMax.z, vertex.position.z);
+            ExpandSectorAabb3(bounds, vertex.position);
             found = true;
         }
     }
+    outMin = bounds.min;
+    outMax = bounds.max;
     return found;
 }
 
