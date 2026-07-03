@@ -87,6 +87,48 @@ SectorBillboardQuad BuildSectorBillboardQuad(
     return SectorBillboardQuad{bottomLeft, bottomRight, topRight, topLeft};
 }
 
+SectorDoorSlabGeometry BuildSectorDoorSlabGeometry(
+        const SectorObjectTransform& transform,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render)
+{
+    Vector3 tangent = Vector3{anchor.tangent.x, 0.0f, anchor.tangent.y};
+    if (Vector3LengthSqr(tangent) <= 0.000001f) {
+        tangent = Vector3{1.0f, 0.0f, 0.0f};
+    } else {
+        tangent = Vector3Normalize(tangent);
+    }
+
+    Vector3 normal = Vector3{anchor.normal.x, 0.0f, anchor.normal.y};
+    if (Vector3LengthSqr(normal) <= 0.000001f) {
+        normal = Vector3{0.0f, 0.0f, -1.0f};
+    } else {
+        normal = Vector3Normalize(normal);
+    }
+
+    const Vector3 tangentHalf = Vector3Scale(tangent, render.width * 0.5f);
+    const Vector3 normalHalf = Vector3Scale(normal, render.thickness * 0.5f);
+    const float bottomY = transform.position.y - render.height * 0.5f;
+    const float topY = transform.position.y + render.height * 0.5f;
+
+    const Vector3 leftFront = Vector3Add(Vector3Subtract(transform.position, tangentHalf), normalHalf);
+    const Vector3 rightFront = Vector3Add(Vector3Add(transform.position, tangentHalf), normalHalf);
+    const Vector3 rightBack = Vector3Subtract(Vector3Add(transform.position, tangentHalf), normalHalf);
+    const Vector3 leftBack = Vector3Subtract(Vector3Subtract(transform.position, tangentHalf), normalHalf);
+
+    return SectorDoorSlabGeometry{
+            tangent,
+            normal,
+            Vector3{leftFront.x, bottomY, leftFront.z},
+            Vector3{rightFront.x, bottomY, rightFront.z},
+            Vector3{rightBack.x, bottomY, rightBack.z},
+            Vector3{leftBack.x, bottomY, leftBack.z},
+            Vector3{leftFront.x, topY, leftFront.z},
+            Vector3{rightFront.x, topY, rightFront.z},
+            Vector3{rightBack.x, topY, rightBack.z},
+            Vector3{leftBack.x, topY, leftBack.z}};
+}
+
 namespace {
 
 constexpr const char* SectorRuntimeObjectAssetScopeName = "sector_runtime_objects";

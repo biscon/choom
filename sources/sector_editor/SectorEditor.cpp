@@ -3931,7 +3931,7 @@ Rectangle SectorEditor::BuildPreviewOverlayInteractionRect() const
     constexpr float y = 32.0f;
     constexpr float width = 620.0f;
     constexpr float collapsedHeight = 78.0f;
-    constexpr float expandedHeight = 300.0f;
+    constexpr float expandedHeight = 390.0f;
     return Rectangle{
             x,
             y,
@@ -4071,7 +4071,43 @@ void SectorEditor::DrawPreviewOverlay(
                 addKeyValue("dynamic", preview.DynamicLightingEnabled() ? "on" : "off");
                 addKeyValue("AO", state.useBakedAmbientOcclusion ? "on" : "off");
                 addKeyValue("lightmap", preview.RendererLightmapStatusText());
-                addKeyValueStyled("render lights", preview.RenderDebugText(), smallConfig.mutedTextColor, true);
+                addKeyValue("door mode", SectorDoorLightingDebugModeName(preview.DoorLightingDebugMode()));
+                addKeyValue("selected dynamic", TextFormat(
+                        "%zu / %zu / %zu",
+                        preview.SelectedDynamicLights().size(),
+                        preview.DynamicLightCandidateCount(),
+                        preview.DynamicLightSourceCount()));
+                if (!preview.SelectedDynamicLightIds().empty()) {
+                    std::ostringstream ids;
+                    for (size_t i = 0; i < preview.SelectedDynamicLightIds().size(); ++i) {
+                        if (i > 0) {
+                            ids << ",";
+                        }
+                        ids << preview.SelectedDynamicLightIds()[i];
+                    }
+                    addKeyValue("selected ids", ids.str());
+                }
+                if (!preview.SelectedDynamicLights().empty()) {
+                    const SectorPreviewDynamicPointLightUniform& light = preview.SelectedDynamicLights().front();
+                    addKeyValue("first light", TextFormat(
+                            "%s id %d | intensity %.2f | radius %.2f | pos %.2f, %.2f, %.2f",
+                            light.kind == SectorPreviewDynamicLightKind::Spot ? "spot" : "point",
+                            light.lightId,
+                            light.intensity,
+                            light.radius,
+                            light.position.x,
+                            light.position.y,
+                            light.position.z));
+                }
+                addKeyValue("doors drawn now", TextFormat(
+                        "%zu / %zu, skipped %zu",
+                        preview.DoorDrawnCount(),
+                        preview.DoorConsideredCount(),
+                        preview.DoorSkippedCount()));
+                addKeyValue("doors authored/valid", TextFormat(
+                        "%zu / %zu",
+                        state.runtimeObjects.doorObjectCount,
+                        state.runtimeObjects.validDoorAnchorCount));
                 break;
             case PreviewDebugOverlayTab::Objects: {
                 const SectorRuntimeObjectState& objects = state.runtimeObjects;
@@ -4138,6 +4174,9 @@ void SectorEditor::DrawPreviewOverlay(
         contentH += gap;
     }
     if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
+        contentH += rowH + 6.0f;
+    }
+    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
         contentH += rowH + 6.0f;
     }
     if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
@@ -4250,6 +4289,54 @@ void SectorEditor::DrawPreviewOverlay(
     }
 
     float y = tabY + tabH + gap;
+    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
+        const char* doorModeOptions[] = {
+                "Normal",
+                "AlbedoOnly",
+                "BakedOnly",
+                "DynamicOnly",
+                "NormalVisualize",
+                "FlatColorNoTexture"};
+        const float labelW = 86.0f;
+        const Rectangle labelRect{panel.x + padding, y, labelW, rowH};
+        const Rectangle modeRect{panel.x + padding + labelW + gap, y, 220.0f, rowH};
+        int selectedMode = static_cast<int>(preview.DoorLightingDebugMode());
+        engine::Text(
+                smallConfig,
+                assets,
+                labelRect,
+                smallFont,
+                "Door Debug",
+                engine::UITextJustify::Left,
+                smallConfig.textColor);
+        if (mouseInteractive) {
+            if (engine::Option(
+                        ui,
+                        smallConfig,
+                        input,
+                        assets,
+                        "sector_editor_preview_door_lighting_debug_mode",
+                        modeRect,
+                        smallFont,
+                        doorModeOptions,
+                        sizeof(doorModeOptions) / sizeof(doorModeOptions[0]),
+                        selectedMode)) {
+                preview.SetDoorLightingDebugMode(static_cast<SectorDoorLightingDebugMode>(selectedMode));
+            }
+        } else {
+            DrawRectangleRec(modeRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(modeRect, config.borderThickness, config.borderColor);
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    modeRect,
+                    smallFont,
+                    SectorDoorLightingDebugModeName(preview.DoorLightingDebugMode()),
+                    engine::UITextJustify::Center,
+                    smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+    }
     if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
         const Rectangle checkboxRect{panel.x + padding, y, 240.0f, rowH};
         if (mouseInteractive) {

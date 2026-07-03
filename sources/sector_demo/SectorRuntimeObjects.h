@@ -204,6 +204,19 @@ struct SectorDoorPortalBlocker {
     bool blocksPortal = true;
 };
 
+struct SectorDoorSlabGeometry {
+    Vector3 tangent = {1.0f, 0.0f, 0.0f};
+    Vector3 normal = {0.0f, 0.0f, -1.0f};
+    Vector3 bottomFrontLeft = {};
+    Vector3 bottomFrontRight = {};
+    Vector3 bottomBackRight = {};
+    Vector3 bottomBackLeft = {};
+    Vector3 topFrontLeft = {};
+    Vector3 topFrontRight = {};
+    Vector3 topBackRight = {};
+    Vector3 topBackLeft = {};
+};
+
 struct SectorBillboardFrameUvs {
     Vector2 topLeft = {};
     Vector2 topRight = {};
@@ -228,6 +241,11 @@ SectorBillboardQuad BuildSectorBillboardQuad(
         Vector2 sizeWorld,
         Vector2 originNormalized,
         Vector3 cameraRight);
+
+SectorDoorSlabGeometry BuildSectorDoorSlabGeometry(
+        const SectorObjectTransform& transform,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render);
 
 inline engine::SpriteAnimationHandle RequestSectorBillboardSpriteAnimation(
         engine::AssetManager& assets,

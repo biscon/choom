@@ -1851,6 +1851,17 @@ void TestDynamicPointLightFlickerHelper()
 
 void TestDynamicPointLightFlickerEffectiveIntensity()
 {
+    game::SectorTopologyDynamicPointLight authoredDefaultLight;
+    authoredDefaultLight.id = 91;
+    game::SectorPreviewDynamicPointLightUniform defaultUniform;
+    Check(game::MakeSectorPreviewDynamicPointLightUniform(authoredDefaultLight, defaultUniform)
+                  && !defaultUniform.flicker
+                  && Near(defaultUniform.intensity, authoredDefaultLight.intensity),
+          "default authored dynamic point light has flicker disabled in preview uniform");
+    Check(Near(game::DynamicLightEffectiveUploadIntensity(defaultUniform, 0.0f), defaultUniform.intensity)
+                  && Near(game::DynamicLightEffectiveUploadIntensity(defaultUniform, 12.5f), defaultUniform.intensity),
+          "default authored dynamic point light upload intensity is stable across time");
+
     game::SectorPreviewDynamicPointLightUniform light;
     light.lightId = 12;
     light.intensity = 2.25f;

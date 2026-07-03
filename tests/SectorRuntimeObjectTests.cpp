@@ -14,6 +14,8 @@
 #include <utility>
 #include <vector>
 
+#include <raymath.h>
+
 namespace {
 
 using Json = nlohmann::ordered_json;
@@ -44,6 +46,11 @@ bool Near(Vector2 actual, Vector2 expected, float epsilon = 0.00001f)
 {
     return Near(actual.x, expected.x, epsilon)
             && Near(actual.y, expected.y, epsilon);
+}
+
+bool IsFinite(Vector3 value)
+{
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
 bool LoadJsonFile(const char* path, Json& outJson)
@@ -753,6 +760,69 @@ void TestSpawnPlacedDoorRefreshDoesNotDuplicate()
     Check(Near(world.Get<game::SectorDoorMotion>(secondEntity).openFraction, 1.0f)
                   && Near(world.Get<game::SectorDoorMotion>(secondEntity).targetOpenFraction, 1.0f),
             "placed door spawn refresh uses edited authored initial fraction");
+}
+
+void TestSectorDoorSlabGeometryIsFiniteAndStable()
+{
+    const auto SpawnDoorWithNormalOffset = [](float normalOffset,
+                                               engine::World& world,
+                                               engine::AssetManager& assets,
+                                               game::SectorRuntimeObjectState& state) {
+        game::SectorTopologyMap map = MakeDoorPortalMap();
+        game::SectorPlacedDoor door = MakeDoorOnPortal();
+        door.width = 2.0f;
+        door.height = 1.5f;
+        door.thickness = 0.25f;
+        door.normalOffset = normalOffset;
+        map.runtimeObjects.push_back(MakePlacedDoor(39, door));
+
+        game::RefreshSectorRuntimeObjectMapData(state, map);
+        game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    };
+
+    for (float normalOffset : {0.0f, 0.25f}) {
+        engine::World world;
+        engine::AssetManager assets;
+        game::SectorRuntimeObjectState state;
+        SpawnDoorWithNormalOffset(normalOffset, world, assets, state);
+        Check(CountDoorObjects(world) == 1, "slab geometry fixture spawns one door entity");
+
+        const engine::Entity entity = state.placedObjectEntities[0].entity;
+        const game::SectorDoorSlabGeometry first = game::BuildSectorDoorSlabGeometry(
+                world.Get<game::SectorObjectTransform>(entity),
+                world.Get<game::SectorDoorResolvedAnchor>(entity),
+                world.Get<game::SectorDoorRender>(entity));
+        const game::SectorDoorSlabGeometry second = game::BuildSectorDoorSlabGeometry(
+                world.Get<game::SectorObjectTransform>(entity),
+                world.Get<game::SectorDoorResolvedAnchor>(entity),
+                world.Get<game::SectorDoorRender>(entity));
+
+        Check(IsFinite(first.tangent)
+                      && IsFinite(first.normal)
+                      && IsFinite(first.bottomFrontLeft)
+                      && IsFinite(first.bottomFrontRight)
+                      && IsFinite(first.bottomBackRight)
+                      && IsFinite(first.bottomBackLeft)
+                      && IsFinite(first.topFrontLeft)
+                      && IsFinite(first.topFrontRight)
+                      && IsFinite(first.topBackRight)
+                      && IsFinite(first.topBackLeft),
+                "door slab geometry produces finite basis and corners");
+        Check(Near(first.tangent, second.tangent)
+                      && Near(first.normal, second.normal)
+                      && Near(first.bottomFrontLeft, second.bottomFrontLeft)
+                      && Near(first.bottomFrontRight, second.bottomFrontRight)
+                      && Near(first.bottomBackRight, second.bottomBackRight)
+                      && Near(first.bottomBackLeft, second.bottomBackLeft)
+                      && Near(first.topFrontLeft, second.topFrontLeft)
+                      && Near(first.topFrontRight, second.topFrontRight)
+                      && Near(first.topBackRight, second.topBackRight)
+                      && Near(first.topBackLeft, second.topBackLeft),
+                "door slab geometry is stable for unchanged door state");
+        Check(Near(Vector3Distance(first.bottomFrontLeft, first.bottomBackLeft), 0.25f)
+                      && Near(Vector3Distance(first.topFrontRight, first.topBackRight), 0.25f),
+                "door slab front and back faces stay separated by door thickness");
+    }
 }
 
 void TestSpawnPlacedDoorDerivesDefaultOpenDistance()
@@ -2332,6 +2402,7 @@ int main()
     TestSpawnPlacedRuntimeObjectSkipsInvalidDoorAnchorWithDiagnostics();
     TestSpawnPlacedDoorCopiesResolvedPayloadToEcs();
     TestSpawnPlacedDoorRefreshDoesNotDuplicate();
+    TestSectorDoorSlabGeometryIsFiniteAndStable();
     TestSpawnPlacedDoorDerivesDefaultOpenDistance();
     TestSectorDoorMotionAdvancesOpenAndClosed();
     TestSectorDoorMotionClampsAndIgnoresZeroSpeed();

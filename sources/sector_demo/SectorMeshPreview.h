@@ -24,6 +24,17 @@ namespace game {
 
 struct SectorTopologyMap;
 
+enum class SectorDoorLightingDebugMode {
+    Normal = 0,
+    AlbedoOnly = 1,
+    BakedOnly = 2,
+    DynamicOnly = 3,
+    NormalVisualize = 4,
+    FlatColorNoTexture = 5
+};
+
+const char* SectorDoorLightingDebugModeName(SectorDoorLightingDebugMode mode);
+
 class SectorMeshPreview {
 public:
     bool Rebuild(
@@ -83,6 +94,15 @@ public:
     bool DynamicLightingEnabled() const { return dynamicLightingEnabled; }
     void SetDynamicLightingEnabled(bool enabled) { dynamicLightingEnabled = enabled; }
     void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
+    SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorLightingDebugMode; }
+    void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorLightingDebugMode = mode; }
+    const std::vector<SectorPreviewDynamicPointLightUniform>& SelectedDynamicLights() const { return dynamicPointLights; }
+    const std::vector<int>& SelectedDynamicLightIds() const { return selectedDynamicPointLightIds; }
+    size_t DynamicLightCandidateCount() const { return dynamicPointLightCandidates.size(); }
+    size_t DynamicLightSourceCount() const { return dynamicPointLightSources.size(); }
+    size_t DoorConsideredCount() const { return doorConsideredCount; }
+    size_t DoorDrawnCount() const { return doorDrawnCount; }
+    size_t DoorSkippedCount() const { return doorSkippedCount; }
 
 private:
     static std::string ResolveAssetPath(const std::string& path);
@@ -177,6 +197,20 @@ private:
     int billboardCutoutShadowMap1Loc = -1;
     int billboardCutoutDynamicLightingClampLoc = -1;
     bool billboardCutoutShaderLoaded = false;
+    Shader doorOpaqueShader = {};
+    int doorOpaqueTextureLoc = -1;
+    int doorOpaqueDynamicLightCountLoc = -1;
+    int doorOpaqueDynamicLightPositionsLoc = -1;
+    int doorOpaqueDynamicLightColorsLoc = -1;
+    int doorOpaqueDynamicLightRadiiLoc = -1;
+    int doorOpaqueDynamicLightIntensitiesLoc = -1;
+    int doorOpaqueDynamicLightTypesLoc = -1;
+    int doorOpaqueDynamicLightDirectionsLoc = -1;
+    int doorOpaqueDynamicLightInnerConeCosLoc = -1;
+    int doorOpaqueDynamicLightOuterConeCosLoc = -1;
+    int doorOpaqueDynamicLightingClampLoc = -1;
+    int doorOpaqueDebugModeLoc = -1;
+    bool doorOpaqueShaderLoaded = false;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightSources;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;
     std::vector<SectorPreviewDynamicPointLightUniform> dynamicPointLights;
@@ -192,6 +226,7 @@ private:
     int dynamicSpotLightShadowAlphaCutoffLoc = -1;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
+    SectorDoorLightingDebugMode doorLightingDebugMode = SectorDoorLightingDebugMode::Normal;
     bool billboardRenderWarningPrinted = false;
     size_t billboardConsideredCount = 0;
     size_t billboardDrawnCount = 0;
