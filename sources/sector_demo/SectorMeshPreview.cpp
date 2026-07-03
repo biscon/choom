@@ -1,6 +1,7 @@
 #include "sector_demo/SectorMeshPreview.h"
 
 #include "engine/assets/TextureLoadFlags.h"
+#include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshBuilder.h"
 #include "sector_demo/SectorPortalVisibility.h"
@@ -994,12 +995,6 @@ void UnloadDepthOnlyRenderTexture(RenderTexture2D& target)
     target = RenderTexture2D{};
 }
 
-bool StartsWith(const std::string& value, const char* prefix)
-{
-    const std::string prefixString(prefix);
-    return value.compare(0, prefixString.size(), prefixString) == 0;
-}
-
 int GetShaderLocationArrayBase(Shader shader, const char* name)
 {
     const int location = GetShaderLocation(shader, name);
@@ -1729,7 +1724,7 @@ bool SectorMeshPreview::RebuildRendererResources(
         }
 
         const SectorTextureDefinition& texture = it->second;
-        const std::string resolvedPath = ResolveAssetPath(texture.path);
+        const std::string resolvedPath = ResolveSectorAssetPath(texture.path);
         engine::TextureHandle handle = assets.RequestTexture(
                 assetScope,
                 texture.id.c_str(),
@@ -1776,7 +1771,7 @@ bool SectorMeshPreview::RebuildRendererResources(
     }
 
     if (useLightmapLayout) {
-        const std::string resolvedPath = ResolveAssetPath(map.bakedLightmap.path);
+        const std::string resolvedPath = ResolveSectorAssetPath(map.bakedLightmap.path);
         lightmapTexture = assets.RequestTexture(
                 assetScope,
                 "sector_lightmap_atlas",
@@ -3233,15 +3228,6 @@ const char* SectorMeshPreview::LightmapStatusText() const
 const char* SectorMeshPreview::RendererLightmapStatusText() const
 {
     return SectorLightmapStatusText(static_cast<SectorLightmapStatus>(lightmapStatus));
-}
-
-std::string SectorMeshPreview::ResolveAssetPath(const std::string& path)
-{
-    if (StartsWith(path, "assets/")) {
-        return std::string(ASSETS_PATH) + path.substr(7);
-    }
-
-    return path;
 }
 
 engine::TextureHandle SectorMeshPreview::TextureForId(const std::string& textureId) const

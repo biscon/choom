@@ -92,7 +92,7 @@ Task Type:
 
 ### 2. Low-Risk Utility Extractions
 
-#### REF-002 `[ ]` Extract `SectorAssetPaths`
+#### REF-002 `[x]` Extract `SectorAssetPaths`
 
 - Source/audit reference: "Asset / Path Helpers" and quick win 1.
 - Why it helps: removes duplicated `assets/` prefix/path resolution logic
@@ -103,7 +103,11 @@ Task Type:
 - Risk: Low.
 - Suggested verification: lightmap, runtime-object, serialization tests, full
   build when practical.
-- Completion notes:
+- Completion notes: Completed by adding
+  `sources/sector_demo/SectorAssetPaths.h/.cpp` for shared `assets/` path
+  detection, resolution, and asset-relative filesystem conversion. Preview and
+  lightmap call sites now use the shared helper with behavior intended to be
+  preserved.
 
 #### REF-003 `[ ]` Extract finite/clamp/smoothstep helpers
 
@@ -409,7 +413,7 @@ Task Type:
   hash semantics are unchanged.
 - Completion notes:
 
-#### REF-026 `[ ]` Extract or reuse `SectorAssetPaths` in lightmap
+#### REF-026 `[x]` Extract or reuse `SectorAssetPaths` in lightmap
 
 - Source/audit reference: asset/path helper duplication.
 - Why it helps: keeps lightmap asset lookup consistent with preview and other
@@ -419,7 +423,10 @@ Task Type:
 - Risk: Low.
 - Suggested verification: lightmap tests and asset path regression cases if
   available.
-- Completion notes:
+- Completion notes: Completed by replacing lightmap-local texture/lightmap/probe
+  asset path resolution with `SectorAssetPaths`. Lightmap sidecar extension
+  derivation remains local because it is sidecar-specific behavior, not generic
+  asset path resolution.
 
 #### REF-027 `[ ]` Audit BVH/raycast/light evaluation extraction candidates before implementation
 

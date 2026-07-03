@@ -69,6 +69,30 @@ bool SameVector(Vector3 a, Vector3 b)
     return Near(a.x, b.x) && Near(a.y, b.y) && Near(a.z, b.z);
 }
 
+void TestSectorAssetPathHelpers()
+{
+    Check(game::IsSectorAssetsPath("assets/textures/wall.png"), "asset path helper detects assets prefix");
+    Check(!game::IsSectorAssetsPath("textures/wall.png"), "asset path helper ignores non-assets relative path");
+    Check(!game::IsSectorAssetsPath("/tmp/assets/textures/wall.png"), "asset path helper ignores absolute path");
+
+    Check(game::ResolveSectorAssetPath("").empty(), "empty asset path resolves to empty path");
+    Check(game::ResolveSectorAssetPath("textures/wall.png") == "textures/wall.png",
+          "non-assets relative path resolves unchanged");
+    Check(game::ResolveSectorAssetPath("/tmp/wall.png") == "/tmp/wall.png",
+          "absolute asset path resolves unchanged");
+    Check(game::ResolveSectorAssetPath("assets/wall.png") == std::string(ASSETS_PATH) + "wall.png",
+          "assets path resolves under ASSETS_PATH");
+    Check(game::ResolveSectorAssetPath("assets/textures/wall.png") == std::string(ASSETS_PATH) + "textures/wall.png",
+          "nested assets path resolves without double prefix");
+
+    const std::filesystem::path assetRoot = std::filesystem::path(ASSETS_PATH);
+    const std::filesystem::path nestedAsset = assetRoot / "levels" / "test" / "test.lightmap.png";
+    Check(game::MakeSectorAssetRelativePath(nestedAsset.generic_string()) == "assets/levels/test/test.lightmap.png",
+          "asset-root filesystem path converts to project-relative asset path");
+    Check(game::MakeSectorAssetRelativePath("/tmp/outside.lightmap.png") == "/tmp/outside.lightmap.png",
+          "filesystem path outside asset root stays unchanged");
+}
+
 bool FiniteVector(Vector3 value)
 {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
@@ -2297,6 +2321,7 @@ void TestObjectLightProbeAmbientAndDegenerateFiniteOutput()
 
 int main()
 {
+    TestSectorAssetPathHelpers();
     TestObjectLightProbeSidecarRoundTrip();
     TestObjectLightProbeSidecarRejectsInvalidFiles();
     TestObjectLightProbeRuntimeDataLoadsAndBuildsSectorRanges();

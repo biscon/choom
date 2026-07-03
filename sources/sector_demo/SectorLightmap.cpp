@@ -151,23 +151,6 @@ constexpr uint32_t kSectorLightmapProgressChunk = 512;
 constexpr float Pi = 3.14159265358979323846f;
 constexpr char kObjectProbeSidecarMagic[4] = {'S', 'O', 'P', 'B'};
 
-bool StartsWith(const std::string& value, const char* prefix)
-{
-    const std::string prefixString(prefix);
-    return value.size() >= prefixString.size() && value.compare(0, prefixString.size(), prefixString) == 0;
-}
-
-std::string ResolveLightmapTexturePath(const std::string& path)
-{
-#ifdef ASSETS_PATH
-    if (StartsWith(path, "assets/")) {
-        return std::string(ASSETS_PATH) + path.substr(7);
-    }
-#endif
-
-    return path;
-}
-
 bool RayIntersectsTriangle(
         Vector3 origin,
         Vector3 direction,
@@ -2635,7 +2618,7 @@ const SectorLightmapAlphaMaskCache::AlphaMask& SectorLightmapAlphaMaskCache::Loa
         return masksByKey.emplace(key, std::move(mask)).first->second;
     }
 
-    const std::string resolvedPath = ResolveLightmapTexturePath(textureIt->second.path);
+    const std::string resolvedPath = ResolveSectorAssetPath(textureIt->second.path);
     Image image = LoadImage(resolvedPath.c_str());
     if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
         TraceLog(LOG_WARNING,
@@ -3292,27 +3275,6 @@ BakedObjectLightingSample SampleBakedObjectLighting(
     }
 
     return MakeNeutralObjectLightingSample();
-}
-
-std::string ResolveSectorAssetPath(const std::string& path)
-{
-    const std::string prefix = "assets/";
-    if (path.compare(0, prefix.size(), prefix) == 0) {
-        return std::string(ASSETS_PATH) + path.substr(prefix.size());
-    }
-    return path;
-}
-
-std::string MakeSectorAssetRelativePath(const std::string& path)
-{
-    const std::filesystem::path assetsRoot = std::filesystem::path(ASSETS_PATH).lexically_normal();
-    const std::filesystem::path absolute = std::filesystem::path(path).lexically_normal();
-    std::error_code ec;
-    const std::filesystem::path relative = std::filesystem::relative(absolute, assetsRoot, ec);
-    if (!ec && !relative.empty() && relative.native().find("..") != 0) {
-        return std::string{"assets/"} + relative.generic_string();
-    }
-    return std::filesystem::path(path).generic_string();
 }
 
 std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath)

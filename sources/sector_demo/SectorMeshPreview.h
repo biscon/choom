@@ -116,7 +116,6 @@ public:
     size_t DoorSkippedCount() const { return doorSkippedCount; }
 
 private:
-    static std::string ResolveAssetPath(const std::string& path);
     engine::TextureHandle TextureForId(const std::string& textureId) const;
     void UpdateCamera();
     bool EnsureBloomResources(int sceneWidth, int sceneHeight);

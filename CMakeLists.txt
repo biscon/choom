@@ -114,6 +114,7 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorTextureActions.cpp
             sources/sector_editor/SectorEditorTopologyActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
+            sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
@@ -171,6 +172,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_lightmap_tests
             tests/SectorTopologyLightmapTests.cpp
+            sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
@@ -186,6 +188,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_creation_tests
             tests/SectorTopologyCreationTests.cpp
+            sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
@@ -251,6 +254,7 @@ if(BUILD_TESTING)
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
             sources/engine/assets/TextureAssets.cpp
+            sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
@@ -279,6 +283,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp
+            sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
