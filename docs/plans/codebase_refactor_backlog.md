@@ -37,7 +37,7 @@ Task Type:
 | ID | Status | Priority | Area | Item | Task Type | Risk | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | REF-001 | `[x]` | High | Current feature | Finish door UV/settings/layout smoke and checkpoint | Manual checkpoint | Medium | Close current work before refactors |
-| REF-002 | `[ ]` | High | Utilities | Extract `SectorAssetPaths` | Codex task | Low | Strong quick win |
+| REF-002 | `[x]` | High | Utilities | Extract `SectorAssetPaths` | Codex task | Low | Strong quick win |
 | REF-003 | `[ ]` | Medium | Utilities | Extract finite/clamp/smoothstep helpers | Codex task | Low/Medium | Preserve per-call fallback behavior |
 | REF-004 | `[ ]` | Medium | Utilities | Extract minimal bounds/AABB helpers | Codex task | Low/Medium | Keep BVH ray math local for now |
 | REF-005 | `[ ]` | Low | Utilities | Extract trivial color conversion helpers | Codex task | Low | Do not merge lighting evaluation |
@@ -61,7 +61,7 @@ Task Type:
 | REF-023 | `[ ]` | Medium | Editor god file | Extract remaining modal draw flows | Codex task | Medium | Keep boundaries narrow |
 | REF-024 | `[ ]` | High | Editor god file | Review direct `state.topologyMap` mutations | Audit first | Medium | Cache invalidation audit |
 | REF-025 | `[ ]` | Medium | Lightmap/probes | Extract object probe sidecar IO | Codex task | Medium | Preserve sidecar/status behavior |
-| REF-026 | `[ ]` | Medium | Lightmap/probes | Extract or reuse `SectorAssetPaths` in lightmap | Codex task | Low | Pair with REF-002 if possible |
+| REF-026 | `[x]` | Medium | Lightmap/probes | Extract or reuse `SectorAssetPaths` in lightmap | Codex task | Low | Pair with REF-002 if possible |
 | REF-027 | `[ ]` | Medium | Lightmap/probes | Audit BVH/raycast/light evaluation extraction candidates | Audit first | Medium/High | Needs audit first |
 | REF-028 | `[ ]` | High | Lightmap/probes | Keep source hash semantics explicit and tested | Manual checkpoint | High | Required around lightmap edits |
 | REF-029 | `[ ]` | Medium | Build/tests | Audit explicit test target source lists after splits | Audit first | Medium | CMake source list maintenance |
