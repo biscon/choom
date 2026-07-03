@@ -69,6 +69,13 @@ bool Near(Vector2 actual, Vector2 expected, float epsilon = 0.00001f)
             && Near(actual.y, expected.y, epsilon);
 }
 
+bool NearTranslation(Matrix actual, Vector3 expected, float epsilon = 0.00001f)
+{
+    return Near(actual.m12, expected.x, epsilon)
+            && Near(actual.m13, expected.y, epsilon)
+            && Near(actual.m14, expected.z, epsilon);
+}
+
 bool IsFinite(Vector3 value)
 {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
@@ -1393,6 +1400,128 @@ void TestSectorDoorReceiverBoundsSkipNonRenderableDoors()
     game::CollectSectorDoorReceiverBounds(world, bounds);
     Check(bounds.empty(),
             "door receiver bounds skip hidden disabled render-hidden and invalid-shape doors");
+}
+
+void TestSectorDoorShadowCasterCollectionIncludesValidDoor()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const engine::Entity door = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            0.0f,
+            1.5f);
+    world.Add(door, game::SectorObject{10, true});
+    game::UpdateSectorDoorDerivedStateSystem(world);
+
+    std::vector<game::SectorDoorShadowCaster> casters;
+    game::CollectSectorDoorShadowCasters(world, casters);
+    const game::SectorObjectTransform& transform = world.Get<game::SectorObjectTransform>(door);
+    const game::SectorDoorRender& render = world.Get<game::SectorDoorRender>(door);
+
+    Check(casters.size() == 1
+                  && casters[0].placedObjectId == 1
+                  && casters[0].entity == door
+                  && Near(casters[0].position, transform.position)
+                  && NearTranslation(casters[0].model, transform.position)
+                  && Near(casters[0].width, render.width)
+                  && Near(casters[0].height, render.height)
+                  && Near(casters[0].thickness, render.thickness),
+            "door shadow caster collection includes a valid renderable procedural door");
+}
+
+void TestSectorDoorShadowCasterCollectionSkipsNonRenderableDoors()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
+
+    const engine::Entity hiddenObject = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            0.0f,
+            1.5f);
+    world.Add(hiddenObject, game::SectorObject{10, false});
+
+    const engine::Entity disabledDoor = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            0.0f,
+            1.5f);
+    world.Add(disabledDoor, game::SectorObject{10, true});
+    world.Get<game::SectorDoor>(disabledDoor).enabled = false;
+
+    const engine::Entity hiddenRender = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            0.0f,
+            1.5f);
+    world.Add(hiddenRender, game::SectorObject{10, true});
+    world.Get<game::SectorDoorRender>(hiddenRender).visible = false;
+
+    const engine::Entity invalidShape = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            0.0f,
+            1.5f);
+    world.Add(invalidShape, game::SectorObject{10, true});
+    world.Get<game::SectorDoorRender>(invalidShape).height = 0.0f;
+
+    game::UpdateSectorDoorDerivedStateSystem(world);
+
+    std::vector<game::SectorDoorShadowCaster> casters;
+    game::CollectSectorDoorShadowCasters(world, casters);
+    Check(casters.empty(),
+            "door shadow caster collection skips hidden disabled render-hidden and invalid-shape doors");
+}
+
+void TestSectorDoorShadowCasterUsesAnimatedTransform()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const float openDistance = 1.5f;
+    const engine::Entity door = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideRight,
+            0.0f,
+            openDistance);
+    world.Add(door, game::SectorObject{10, true});
+    game::UpdateSectorDoorDerivedStateSystem(world);
+
+    std::vector<game::SectorDoorShadowCaster> casters;
+    game::CollectSectorDoorShadowCasters(world, casters);
+    Check(casters.size() == 1, "closed door contributes one shadow caster");
+    const Vector3 closedPosition = casters.empty() ? Vector3{} : casters[0].position;
+    const game::SectorDoorResolvedAnchor& anchor = world.Get<game::SectorDoorResolvedAnchor>(door);
+    const Vector3 slideDirection{anchor.tangent.x, 0.0f, anchor.tangent.y};
+
+    game::SectorDoorMotion& motion = world.Get<game::SectorDoorMotion>(door);
+    motion.openFraction = 0.5f;
+    motion.targetOpenFraction = 0.5f;
+    game::UpdateSectorDoorDerivedStateSystem(world);
+    casters.clear();
+    game::CollectSectorDoorShadowCasters(world, casters);
+    const float halfOpenOffset = SmootherStep01(0.5f) * EffectiveDoorOpenDistance(openDistance);
+    Check(casters.size() == 1
+                  && Near(casters[0].position, Vector3{
+                          closedPosition.x + slideDirection.x * halfOpenOffset,
+                          closedPosition.y,
+                          closedPosition.z + slideDirection.z * halfOpenOffset})
+                  && NearTranslation(casters[0].model, casters[0].position),
+            "partially open door shadow caster uses current animated transform");
+
+    motion.openFraction = 1.0f;
+    motion.targetOpenFraction = 1.0f;
+    game::UpdateSectorDoorDerivedStateSystem(world);
+    casters.clear();
+    game::CollectSectorDoorShadowCasters(world, casters);
+    const float openOffset = EffectiveDoorOpenDistance(openDistance);
+    Check(casters.size() == 1
+                  && Near(casters[0].position, Vector3{
+                          closedPosition.x + slideDirection.x * openOffset,
+                          closedPosition.y,
+                          closedPosition.z + slideDirection.z * openOffset})
+                  && !Near(casters[0].position, closedPosition),
+            "open door shadow caster moves away from the closed authoring anchor");
 }
 
 void TestSpawnPlacedDoorDerivesDefaultOpenDistance()
@@ -3188,6 +3317,9 @@ int main()
     TestSectorDoorStaticLightingColorsDoNotMutateGeometry();
     TestSectorDoorReceiverBoundsUseAnimatedSlabGeometry();
     TestSectorDoorReceiverBoundsSkipNonRenderableDoors();
+    TestSectorDoorShadowCasterCollectionIncludesValidDoor();
+    TestSectorDoorShadowCasterCollectionSkipsNonRenderableDoors();
+    TestSectorDoorShadowCasterUsesAnimatedTransform();
     TestSectorDoorHorizontalSlideMotionUsesResolvedTangent();
     TestSpawnPlacedDoorDerivesDefaultOpenDistance();
     TestSectorDoorMotionAdvancesOpenAndClosed();

@@ -62,7 +62,9 @@ public:
             bool useBakedAmbientOcclusion = true,
             engine::World* runtimeObjectWorld = nullptr,
             SectorRuntimeDoorLightingContext doorLighting = {});
-    void RenderDynamicSpotLightShadowMaps(engine::AssetManager& assets);
+    void RenderDynamicSpotLightShadowMaps(
+            engine::AssetManager& assets,
+            engine::World* runtimeObjectWorld = nullptr);
     void DrawScene(
             engine::AssetManager& assets,
             bool useBakedAmbientOcclusion = true,
@@ -127,6 +129,7 @@ private:
             engine::AssetManager& assets,
             engine::World& runtimeObjectWorld,
             SectorRuntimeDoorLightingContext doorLighting);
+    void PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld);
     void BuildDirectDynamicLightReceiverBounds(engine::World* runtimeObjectWorld);
     void UnloadDoorMeshes();
     bool EnsureDynamicSpotLightShadowMapResources();
@@ -248,6 +251,7 @@ private:
         bool seenThisFrame = false;
     };
     std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;
+    std::vector<SectorDoorShadowCaster> runtimeDoorShadowCasters;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightSources;
     std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;
     std::vector<SectorPreviewDynamicPointLightUniform> dynamicPointLights;

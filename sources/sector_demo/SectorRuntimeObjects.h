@@ -47,6 +47,16 @@ struct SectorDynamicDoorCollider {
     float top = 0.0f;
 };
 
+struct SectorDoorShadowCaster {
+    int placedObjectId = 0;
+    engine::Entity entity = engine::NullEntity();
+    Matrix model = {};
+    Vector3 position = {};
+    float width = 0.0f;
+    float height = 0.0f;
+    float thickness = 0.0f;
+};
+
 struct SectorRuntimeObjectState {
     engine::AssetScopeHandle runtimeObjectAssetScope = engine::NullAssetScopeHandle();
     std::vector<SectorPlacedRuntimeObjectEntity> placedObjectEntities;
@@ -293,6 +303,19 @@ bool AppendSectorDoorReceiverBounds(
 void CollectSectorDoorReceiverBounds(
         engine::World& world,
         std::vector<SectorReceiverBounds>& outBounds);
+
+bool AppendSectorDoorShadowCaster(
+        engine::Entity entity,
+        const SectorObjectTransform& transform,
+        const SectorObject& object,
+        const SectorDoor& door,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render,
+        std::vector<SectorDoorShadowCaster>& outCasters);
+
+void CollectSectorDoorShadowCasters(
+        engine::World& world,
+        std::vector<SectorDoorShadowCaster>& outCasters);
 
 inline engine::SpriteAnimationHandle RequestSectorBillboardSpriteAnimation(
         engine::AssetManager& assets,

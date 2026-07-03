@@ -433,6 +433,64 @@ void CollectSectorDoorReceiverBounds(
             });
 }
 
+bool AppendSectorDoorShadowCaster(
+        engine::Entity entity,
+        const SectorObjectTransform& transform,
+        const SectorObject& object,
+        const SectorDoor& door,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render,
+        std::vector<SectorDoorShadowCaster>& outCasters)
+{
+    const auto isFiniteVector3 = [](Vector3 value) {
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+    };
+
+    if (!object.visible || !door.enabled || !render.visible) {
+        return false;
+    }
+    if (render.width <= 0.0f
+            || render.height <= 0.0f
+            || render.thickness <= 0.0f
+            || !std::isfinite(render.width)
+            || !std::isfinite(render.height)
+            || !std::isfinite(render.thickness)
+            || !isFiniteVector3(transform.position)) {
+        return false;
+    }
+
+    outCasters.push_back(SectorDoorShadowCaster{
+            door.placedObjectId,
+            entity,
+            BuildSectorDoorSlabModelMatrix(transform, anchor),
+            transform.position,
+            render.width,
+            render.height,
+            render.thickness});
+    return true;
+}
+
+void CollectSectorDoorShadowCasters(
+        engine::World& world,
+        std::vector<SectorDoorShadowCaster>& outCasters)
+{
+    world.ForEach<
+            SectorObjectTransform,
+            SectorObject,
+            SectorDoor,
+            SectorDoorResolvedAnchor,
+            SectorDoorRender>(
+            [&outCasters](
+                    engine::Entity entity,
+                    SectorObjectTransform& transform,
+                    SectorObject& object,
+                    SectorDoor& door,
+                    SectorDoorResolvedAnchor& anchor,
+                    SectorDoorRender& render) {
+                AppendSectorDoorShadowCaster(entity, transform, object, door, anchor, render, outCasters);
+            });
+}
+
 namespace {
 
 constexpr const char* SectorRuntimeObjectAssetScopeName = "sector_runtime_objects";

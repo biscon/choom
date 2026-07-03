@@ -51,6 +51,7 @@
         "width": 12.0,
         "height": 3.0,
         "openDistance": 3.0,
+        "speed": 0.75,
         "interactionDistance": 3.0,
         "textureId": "industrial_ceiling_1"
       },
@@ -69,17 +70,17 @@
     {
       "id": 1,
       "position": [
-        128.0,
-        14.399999618530273,
-        64.0
+        169.2962188720703,
+        22.061124801635742,
+        91.7791748046875
       ],
       "target": [
-        208.0,
-        8.0,
-        64.0
+        239.1409454345703,
+        -17.45566749572754,
+        90.73143005371094
       ],
       "range": 100.0,
-      "intensity": 2.0,
+      "intensity": 3.0,
       "color": {
         "r": 255,
         "g": 255,
@@ -129,12 +130,12 @@
     "intensity": 1.0
   },
   "bakedLightmap": {
-    "path": "assets/levels/door_test2/door_test2.lightmap.png",
+    "path": "assets/levels/door_test3/door_test3.lightmap.png",
     "width": 2048,
     "height": 2048,
     "sourceHash": "b6fa4b117dcb1387",
     "objectProbes": {
-      "path": "assets/levels/door_test2/door_test2.lightmap.object_probes.bin",
+      "path": "assets/levels/door_test3/door_test3.lightmap.object_probes.bin",
       "version": 1,
       "sourceHash": "b6fa4b117dcb1387",
       "count": 630,

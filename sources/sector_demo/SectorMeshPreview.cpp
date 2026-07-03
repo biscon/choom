@@ -480,13 +480,14 @@ in vec3 vertexPosition;
 in vec2 vertexTexCoord;
 
 uniform mat4 lightViewProjection;
+uniform mat4 matModel;
 
 out vec2 fragTexCoord;
 
 void main()
 {
     fragTexCoord = vertexTexCoord;
-    gl_Position = lightViewProjection * vec4(vertexPosition, 1.0);
+    gl_Position = lightViewProjection * matModel * vec4(vertexPosition, 1.0);
 }
 )";
 
@@ -1345,6 +1346,7 @@ bool LoadDynamicSpotLightShadowMaterial(
     material.shader = shader;
     material.shader.locs[SHADER_LOC_VERTEX_POSITION] = GetShaderLocationAttrib(material.shader, "vertexPosition");
     material.shader.locs[SHADER_LOC_VERTEX_TEXCOORD01] = GetShaderLocationAttrib(material.shader, "vertexTexCoord");
+    material.shader.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(material.shader, "matModel");
     material.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(material.shader, "texture0");
     lightViewProjectionLoc = GetShaderLocation(material.shader, "lightViewProjection");
     alphaTestLoc = GetShaderLocation(material.shader, "alphaTest");
@@ -1806,6 +1808,9 @@ bool SectorMeshPreview::RebuildRendererResources(
     dynamicSpotLightShadowCasters.reserve(MaxDynamicSpotLightShadowCasters);
     dynamicSpotLightShadowMatrices.clear();
     dynamicSpotLightShadowMatrices.reserve(MaxDynamicSpotLightShadowCasters);
+    doorMeshCache.reserve(kSectorRuntimeObjectInitialCapacity);
+    runtimeDoorShadowCasters.clear();
+    runtimeDoorShadowCasters.reserve(kSectorRuntimeObjectInitialCapacity);
     runtimeSeconds = 0.0f;
 
     if (!EnsureDynamicSpotLightShadowMapResources()) {
@@ -1963,6 +1968,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     directDynamicLightReceiverBounds.clear();
     dynamicSpotLightShadowCasters.clear();
     dynamicSpotLightShadowMatrices.clear();
+    runtimeDoorShadowCasters.clear();
     runtimeSeconds = 0.0f;
     billboardRenderWarningPrinted = false;
     if (!initialized
@@ -2096,7 +2102,7 @@ void SectorMeshPreview::Render(
         engine::World* runtimeObjectWorld,
         SectorRuntimeDoorLightingContext doorLighting)
 {
-    RenderDynamicSpotLightShadowMaps(assets);
+    RenderDynamicSpotLightShadowMaps(assets, runtimeObjectWorld);
     DrawScene(assets, useBakedAmbientOcclusion, runtimeObjectWorld, doorLighting);
 }
 
@@ -2217,6 +2223,69 @@ void SectorMeshPreview::DrawScene(
     EndMode3D();
 }
 
+void SectorMeshPreview::PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld)
+{
+    for (auto& entry : doorMeshCache) {
+        entry.second.seenThisFrame = false;
+    }
+    runtimeDoorShadowCasters.clear();
+
+    runtimeObjectWorld.ForEach<
+            SectorObjectTransform,
+            SectorObject,
+            SectorDoor,
+            SectorDoorResolvedAnchor,
+            SectorDoorRender>(
+            [this](
+                    engine::Entity entity,
+                    SectorObjectTransform& transform,
+                    SectorObject& object,
+                    SectorDoor& door,
+                    SectorDoorResolvedAnchor& anchor,
+                    SectorDoorRender& render) {
+                const std::size_t casterBegin = runtimeDoorShadowCasters.size();
+                if (!AppendSectorDoorShadowCaster(
+                            entity,
+                            transform,
+                            object,
+                            door,
+                            anchor,
+                            render,
+                            runtimeDoorShadowCasters)) {
+                    return;
+                }
+
+                const SectorDoorShadowCaster& caster = runtimeDoorShadowCasters[casterBegin];
+                DoorMeshCacheEntry& cacheEntry = doorMeshCache[door.placedObjectId];
+                cacheEntry.seenThisFrame = true;
+                const bool meshDirty = cacheEntry.mesh.vertexCount <= 0
+                        || cacheEntry.width != caster.width
+                        || cacheEntry.height != caster.height
+                        || cacheEntry.thickness != caster.thickness;
+                if (meshDirty) {
+                    if (cacheEntry.mesh.vertexCount > 0) {
+                        UnloadMesh(cacheEntry.mesh);
+                    }
+                    cacheEntry.meshData = BuildSectorDoorSlabMeshData(render);
+                    cacheEntry.mesh = CreateDoorSlabMesh(cacheEntry.meshData);
+                    cacheEntry.width = caster.width;
+                    cacheEntry.height = caster.height;
+                    cacheEntry.thickness = caster.thickness;
+                }
+            });
+
+    for (auto it = doorMeshCache.begin(); it != doorMeshCache.end();) {
+        if (!it->second.seenThisFrame) {
+            if (it->second.mesh.vertexCount > 0) {
+                UnloadMesh(it->second.mesh);
+            }
+            it = doorMeshCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 void SectorMeshPreview::DrawRuntimeDoors(
         engine::AssetManager& assets,
         engine::World& runtimeObjectWorld,
@@ -2230,12 +2299,11 @@ void SectorMeshPreview::DrawRuntimeDoors(
         return;
     }
 
+    PrepareRuntimeDoorMeshes(runtimeObjectWorld);
+
     size_t consideredCount = 0;
     size_t drawnCount = 0;
     size_t skippedCount = 0;
-    for (auto& entry : doorMeshCache) {
-        entry.second.seenThisFrame = false;
-    }
     const SectorBakedObjectLightProbeRuntimeData emptyObjectLightProbes;
     const SectorBakedObjectLightProbeRuntimeData& objectLightProbes =
             doorLighting.objectLightProbes != nullptr
@@ -2326,26 +2394,12 @@ void SectorMeshPreview::DrawRuntimeDoors(
                     return;
                 }
 
-                DoorMeshCacheEntry& cacheEntry = doorMeshCache[door.placedObjectId];
-                cacheEntry.seenThisFrame = true;
-                const bool meshDirty = cacheEntry.mesh.vertexCount <= 0
-                        || cacheEntry.width != render.width
-                        || cacheEntry.height != render.height
-                        || cacheEntry.thickness != render.thickness;
-                if (meshDirty) {
-                    if (cacheEntry.mesh.vertexCount > 0) {
-                        UnloadMesh(cacheEntry.mesh);
-                    }
-                    cacheEntry.meshData = BuildSectorDoorSlabMeshData(render);
-                    cacheEntry.mesh = CreateDoorSlabMesh(cacheEntry.meshData);
-                    cacheEntry.width = render.width;
-                    cacheEntry.height = render.height;
-                    cacheEntry.thickness = render.thickness;
-                }
-                if (cacheEntry.mesh.vertexCount <= 0) {
+                auto cacheIt = doorMeshCache.find(door.placedObjectId);
+                if (cacheIt == doorMeshCache.end() || cacheIt->second.mesh.vertexCount <= 0) {
                     ++skippedCount;
                     return;
                 }
+                DoorMeshCacheEntry& cacheEntry = cacheIt->second;
 
                 if (!BuildSectorDoorStaticLightingColors(
                             cacheEntry.meshData,
@@ -2394,16 +2448,6 @@ void SectorMeshPreview::DrawRuntimeDoors(
                 ++drawnCount;
             });
 
-    for (auto it = doorMeshCache.begin(); it != doorMeshCache.end();) {
-        if (!it->second.seenThisFrame) {
-            if (it->second.mesh.vertexCount > 0) {
-                UnloadMesh(it->second.mesh);
-            }
-            it = doorMeshCache.erase(it);
-        } else {
-            ++it;
-        }
-    }
     doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = doorOpaqueDefaultMaterialTexture;
     doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
     doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = Texture2D{};
@@ -2760,12 +2804,20 @@ void SectorMeshPreview::UnloadDynamicSpotLightShadowMapResources()
     }
 }
 
-void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(engine::AssetManager& assets)
+void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
+        engine::AssetManager& assets,
+        engine::World* runtimeObjectWorld)
 {
     if (!dynamicSpotLightShadowMaterialLoaded
             || dynamicSpotLightShadowLightViewProjectionLoc < 0
             || dynamicSpotLightShadowMatrices.empty()) {
         return;
+    }
+
+    if (runtimeObjectWorld != nullptr) {
+        PrepareRuntimeDoorMeshes(*runtimeObjectWorld);
+    } else {
+        runtimeDoorShadowCasters.clear();
     }
 
     for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : dynamicSpotLightShadowMatrices) {
@@ -2810,6 +2862,31 @@ void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(engine::AssetManager& a
                         SHADER_UNIFORM_FLOAT);
             }
             DrawMesh(batch.mesh, dynamicSpotLightShadowMaterial, MatrixIdentity());
+        }
+        const int doorAlphaTest = 0;
+        const float doorAlphaCutoff = 0.0f;
+        dynamicSpotLightShadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture =
+                dynamicSpotLightShadowDefaultTexture;
+        if (dynamicSpotLightShadowAlphaTestLoc >= 0) {
+            SetShaderValue(
+                    dynamicSpotLightShadowMaterial.shader,
+                    dynamicSpotLightShadowAlphaTestLoc,
+                    &doorAlphaTest,
+                    SHADER_UNIFORM_INT);
+        }
+        if (dynamicSpotLightShadowAlphaCutoffLoc >= 0) {
+            SetShaderValue(
+                    dynamicSpotLightShadowMaterial.shader,
+                    dynamicSpotLightShadowAlphaCutoffLoc,
+                    &doorAlphaCutoff,
+                    SHADER_UNIFORM_FLOAT);
+        }
+        for (const SectorDoorShadowCaster& caster : runtimeDoorShadowCasters) {
+            auto cacheIt = doorMeshCache.find(caster.placedObjectId);
+            if (cacheIt == doorMeshCache.end() || cacheIt->second.mesh.vertexCount <= 0) {
+                continue;
+            }
+            DrawMesh(cacheIt->second.mesh, dynamicSpotLightShadowMaterial, caster.model);
         }
         dynamicSpotLightShadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = dynamicSpotLightShadowDefaultTexture;
         rlDisableDepthTest();

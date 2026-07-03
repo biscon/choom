@@ -3749,7 +3749,9 @@ void SectorEditor::RenderPreview3DShadowMaps(engine::AssetManager& assets)
     if (state.mode != SectorEditorMode::Preview3D) {
         return;
     }
-    preview.RenderDynamicSpotLightShadowMaps(assets);
+    preview.RenderDynamicSpotLightShadowMaps(
+            assets,
+            engineContext != nullptr ? &engineContext->world : nullptr);
 }
 
 void SectorEditor::RenderPreview3DScene(engine::EngineContext& context)
