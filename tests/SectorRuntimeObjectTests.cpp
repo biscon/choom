@@ -24,6 +24,25 @@ using Json = nlohmann::ordered_json;
 int failures = 0;
 constexpr float kExpectedDoorParkingEpsilonWorld = 0.01f;
 
+float SmootherStep01(float t)
+{
+    if (!std::isfinite(t)) {
+        t = 0.0f;
+    } else if (t < 0.0f) {
+        t = 0.0f;
+    } else if (t > 1.0f) {
+        t = 1.0f;
+    }
+    return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+}
+
+float EffectiveDoorOpenDistance(float openDistance)
+{
+    return openDistance > kExpectedDoorParkingEpsilonWorld
+            ? openDistance - kExpectedDoorParkingEpsilonWorld
+            : openDistance;
+}
+
 void Check(bool condition, const char* description)
 {
     if (!condition) {
@@ -824,6 +843,8 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
             "valid placed door preserves door anchor diagnostic counts");
 
     const engine::Entity entity = state.placedObjectEntities[0].entity;
+    const float expectedMotionOffset = SmootherStep01(door.initialOpenFraction)
+            * EffectiveDoorOpenDistance(door.openDistance);
     Check(world.IsAlive(entity), "valid placed door mapped entity is alive");
     Check(world.Has<game::SectorObjectTransform>(entity)
                   && world.Has<game::SectorObject>(entity)
@@ -842,7 +863,7 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
             "valid placed door does not add billboard components");
 
     const game::SectorObjectTransform& transform = world.Get<game::SectorObjectTransform>(entity);
-    Check(Near(transform.position, Vector3{0.625f, 1.25f, 0.6875f}),
+    Check(Near(transform.position, Vector3{0.625f, 1.25f, 0.25f + expectedMotionOffset}),
             "valid placed door transform uses resolved slab center, normal offset, and initial motion");
     Check(Near(transform.yawRadians, 1.57079637f),
             "valid placed door transform yaw follows portal tangent");
@@ -893,7 +914,7 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
 
     const game::SectorDoorCollider& collider = world.Get<game::SectorDoorCollider>(entity);
     Check(collider.enabled
-                  && Near(collider.center, Vector2{0.625f, 0.6875f})
+                  && Near(collider.center, Vector2{0.625f, 0.25f + expectedMotionOffset})
                   && Near(collider.tangent, Vector2{0.0f, 1.0f})
                   && Near(collider.normal, Vector2{1.0f, 0.0f})
                   && Near(collider.halfExtents, Vector2{1.0f, 0.1875f})
@@ -1134,11 +1155,13 @@ void TestSectorDoorReceiverBoundsUseAnimatedSlabGeometry()
 {
     engine::World world;
     game::ReserveSectorRuntimeObjectWorld(world, 2);
+    const float openDistance = 1.5f;
+    const float halfOpenOffset = SmootherStep01(0.5f) * EffectiveDoorOpenDistance(openDistance);
     const engine::Entity door = AddDoorForDerivedState(
             world,
             game::SectorDoorMotionType::SlideVertical,
             0.0f,
-            1.5f);
+            openDistance);
     world.Add(door, game::SectorObject{10, true});
     game::UpdateSectorDoorDerivedStateSystem(world);
 
@@ -1163,8 +1186,8 @@ void TestSectorDoorReceiverBoundsUseAnimatedSlabGeometry()
     bounds.clear();
     game::CollectSectorDoorReceiverBounds(world, bounds);
     Check(bounds.size() == 2
-                  && Near(bounds[0].min, Vector3{0.5f, 1.25f, -0.75f})
-                  && Near(bounds[0].max, Vector3{0.75f, 2.75f, 1.25f}),
+                  && Near(bounds[0].min, Vector3{0.5f, 0.5f + halfOpenOffset, -0.75f})
+                  && Near(bounds[0].max, Vector3{0.75f, 2.0f + halfOpenOffset, 1.25f}),
             "door receiver bounds update after animated door transform changes");
 }
 
@@ -1658,23 +1681,38 @@ engine::Entity AddHorizontalDoorForDerivedState(
 void TestSectorDoorDerivedStateUpdatesTransformAndCollider()
 {
     engine::World world;
-    game::ReserveSectorRuntimeObjectWorld(world, 5);
+    game::ReserveSectorRuntimeObjectWorld(world, 7);
+    const float verticalOpenDistance = 1.5f;
+    const float verticalEffectiveOpenDistance = EffectiveDoorOpenDistance(verticalOpenDistance);
+    const float verticalQuarterOffset = SmootherStep01(0.25f) * verticalEffectiveOpenDistance;
+    const float verticalHalfOffset = SmootherStep01(0.5f) * verticalEffectiveOpenDistance;
+    const float verticalThreeQuarterOffset = SmootherStep01(0.75f) * verticalEffectiveOpenDistance;
 
     const engine::Entity closed = AddDoorForDerivedState(
             world,
             game::SectorDoorMotionType::SlideVertical,
             0.0f,
-            1.5f);
+            verticalOpenDistance);
+    const engine::Entity verticalQuarter = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            0.25f,
+            verticalOpenDistance);
     const engine::Entity verticalHalf = AddDoorForDerivedState(
             world,
             game::SectorDoorMotionType::SlideVertical,
             0.5f,
-            1.5f);
+            verticalOpenDistance);
+    const engine::Entity verticalThreeQuarter = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            0.75f,
+            verticalOpenDistance);
     const engine::Entity verticalOpen = AddDoorForDerivedState(
             world,
             game::SectorDoorMotionType::SlideVertical,
             1.0f,
-            1.5f);
+            verticalOpenDistance);
     const engine::Entity rightOpen = AddDoorForDerivedState(
             world,
             game::SectorDoorMotionType::SlideRight,
@@ -1690,8 +1728,18 @@ void TestSectorDoorDerivedStateUpdatesTransformAndCollider()
 
     Check(Near(world.Get<game::SectorObjectTransform>(closed).position, Vector3{0.625f, 1.25f, 0.25f}),
             "closed door derived transform is centered on the portal slab");
-    Check(Near(world.Get<game::SectorObjectTransform>(verticalHalf).position, Vector3{0.625f, 2.0f, 0.25f}),
-            "vertical slide derived transform moves up by open fraction and distance");
+    Check(Near(world.Get<game::SectorObjectTransform>(verticalQuarter).position,
+                  Vector3{0.625f, 1.25f + verticalQuarterOffset, 0.25f})
+                  && verticalQuarterOffset < 0.25f * verticalEffectiveOpenDistance,
+            "quarter-open vertical slide eases in below linear distance");
+    Check(Near(world.Get<game::SectorObjectTransform>(verticalHalf).position,
+                  Vector3{0.625f, 1.25f + verticalHalfOffset, 0.25f}),
+            "half-open vertical slide reaches half the effective open distance");
+    Check(Near(world.Get<game::SectorObjectTransform>(verticalThreeQuarter).position,
+                  Vector3{0.625f, 1.25f + verticalThreeQuarterOffset, 0.25f})
+                  && verticalThreeQuarterOffset > 0.75f * verticalEffectiveOpenDistance
+                  && verticalThreeQuarterOffset < verticalEffectiveOpenDistance,
+            "three-quarter-open vertical slide eases out above linear distance below final offset");
     Check(Near(world.Get<game::SectorObjectTransform>(verticalOpen).position,
                   Vector3{0.625f, 2.75f - kExpectedDoorParkingEpsilonWorld, 0.25f}),
             "fully open vertical slide derived transform parks just inside the open distance");
@@ -1708,8 +1756,8 @@ void TestSectorDoorDerivedStateUpdatesTransformAndCollider()
                   && Near(collider.tangent, Vector2{0.0f, 1.0f})
                   && Near(collider.normal, Vector2{1.0f, 0.0f})
                   && Near(collider.halfExtents, Vector2{1.0f, 0.125f})
-                  && Near(collider.bottom, 1.25f)
-                  && Near(collider.top, 2.75f),
+                  && Near(collider.bottom, 0.5f + verticalHalfOffset)
+                  && Near(collider.top, 2.0f + verticalHalfOffset),
             "door derived collider stores current OBB footprint and vertical interval");
 }
 
@@ -1742,12 +1790,14 @@ void TestSectorDoorDerivedStateUpdatesLeftSlideAndBlockerThreshold()
 {
     engine::World world;
     game::ReserveSectorRuntimeObjectWorld(world, 3);
+    const float leftOpenDistance = 0.5f;
+    const float leftHalfOffset = SmootherStep01(0.5f) * EffectiveDoorOpenDistance(leftOpenDistance);
 
     const engine::Entity leftHalf = AddDoorForDerivedState(
             world,
             game::SectorDoorMotionType::SlideLeft,
             0.5f,
-            0.5f);
+            leftOpenDistance);
     const engine::Entity epsilonClosed = AddDoorForDerivedState(
             world,
             game::SectorDoorMotionType::SlideVertical,
@@ -1761,7 +1811,8 @@ void TestSectorDoorDerivedStateUpdatesLeftSlideAndBlockerThreshold()
 
     game::UpdateSectorDoorDerivedStateSystem(world);
 
-    Check(Near(world.Get<game::SectorObjectTransform>(leftHalf).position, Vector3{0.625f, 1.25f, 0.0f}),
+    Check(Near(world.Get<game::SectorObjectTransform>(leftHalf).position,
+                  Vector3{0.625f, 1.25f, 0.25f - leftHalfOffset}),
             "left slide derived transform moves along negative tangent");
     Check(world.Get<game::SectorDoorPortalBlocker>(epsilonClosed).blocksPortal,
             "door portal blocker remains closed at epsilon threshold");
@@ -1824,6 +1875,8 @@ void TestSectorDoorDynamicColliderCollectionExcludesDisabledAndInvalidShapes()
 {
     engine::World world;
     game::ReserveSectorRuntimeObjectWorld(world, 4);
+    const float validOpenDistance = 0.5f;
+    const float validHalfOffset = SmootherStep01(0.5f) * EffectiveDoorOpenDistance(validOpenDistance);
 
     const engine::Entity disabledDoor = AddDoorForDerivedState(
             world,
@@ -1844,7 +1897,7 @@ void TestSectorDoorDynamicColliderCollectionExcludesDisabledAndInvalidShapes()
             world,
             game::SectorDoorMotionType::SlideRight,
             0.5f,
-            0.5f);
+            validOpenDistance);
 
     game::UpdateSectorDoorDerivedStateSystem(world);
     world.Get<game::SectorDoor>(disabledDoor).enabled = false;
@@ -1859,7 +1912,7 @@ void TestSectorDoorDynamicColliderCollectionExcludesDisabledAndInvalidShapes()
             "dynamic door collider collection excludes disabled doors, disabled colliders, and invalid shapes");
     Check(!colliders.empty()
                   && colliders[0].entity == validDoor
-                  && Near(colliders[0].center, Vector2{0.625f, 0.5f})
+                  && Near(colliders[0].center, Vector2{0.625f, 0.25f + validHalfOffset})
                   && Near(colliders[0].bottom, 0.5f)
                   && Near(colliders[0].top, 2.0f),
             "dynamic door collider collection keeps the valid current collider snapshot");

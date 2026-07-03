@@ -362,7 +362,6 @@ constexpr float DoorInteractionFacingDotThreshold = 0.5f;
 constexpr float DoorDynamicCollisionEpsilon = 0.0001f;
 // Park fully-open sliding slabs just inside the exact open distance to avoid coplanar z-fighting.
 constexpr float kSectorDoorOpenParkingEpsilonWorld = 0.01f;
-constexpr float kSectorDoorOpenParkingThreshold = 0.999f;
 
 uint32_t FindClipIndexInAsset(const engine::SpriteAnimationAsset& asset, const char* name)
 {
@@ -714,6 +713,12 @@ Vector2 Scale(Vector2 value, float scale)
     return Vector2{value.x * scale, value.y * scale};
 }
 
+float SmootherStep01(float t)
+{
+    t = std::isfinite(t) ? Clamp(t, 0.0f, 1.0f) : 0.0f;
+    return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+}
+
 bool PlayerVerticalIntervalOverlapsDoor(
         const SectorCollisionMoveState& moveState,
         const SectorCollisionMoveConfig& config,
@@ -894,12 +899,10 @@ Vector3 DoorMotionOffset(
     const float openDistance = motion.openDistance > 0.0f && std::isfinite(motion.openDistance)
             ? motion.openDistance
             : 0.0f;
-    float offset = openFraction * openDistance;
-    if (openDistance > 0.0f && openFraction >= kSectorDoorOpenParkingThreshold) {
-        offset = openDistance > kSectorDoorOpenParkingEpsilonWorld
-                ? openDistance - kSectorDoorOpenParkingEpsilonWorld
-                : openDistance;
-    }
+    const float effectiveOpenDistance = openDistance > kSectorDoorOpenParkingEpsilonWorld
+            ? openDistance - kSectorDoorOpenParkingEpsilonWorld
+            : openDistance;
+    const float offset = SmootherStep01(openFraction) * effectiveOpenDistance;
     const Vector2 tangent = NormalizedOrFallback(anchor.tangent, Vector2{1.0f, 0.0f});
 
     switch (motion.motion) {
