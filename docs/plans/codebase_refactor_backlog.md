@@ -44,7 +44,7 @@ Task Type:
 | REF-006 | `[ ]` | Low | Utilities | Evaluate tiny UV fit/span validation helper | Audit first | Medium | Avoid generic UV framework |
 | REF-007 | `[x]` | Medium | Utilities | Extract lightmap bake report formatting | Codex task | Low | Behavior-preserving string/report split |
 | REF-008 | `[x]` | High | Editor header | Move render-cache cached draw structs | Codex task | Low | Narrow `SectorEditorTypes.h` |
-| REF-009 | `[ ]` | Medium | Editor header | Split editor modal state types | Codex task | Medium | Include churn likely |
+| REF-009 | `[x]` | Medium | Editor header | Split editor modal state types | Codex task | Medium | Include churn likely |
 | REF-010 | `[ ]` | Medium | Editor header | Split selection/picking/drag state types | Codex task | Medium | Keep behavior unchanged |
 | REF-011 | `[ ]` | Medium | Editor header | Split preview/runtime/lightmap async state types | Codex task | Medium | Watch test source lists |
 | REF-012 | `[ ]` | Medium | Editor header | Review remaining dependencies after splits | Audit first | Low | Needs post-split include review |
@@ -210,7 +210,7 @@ Task Type:
   into `SectorEditorTopologyRenderCacheTypes.h`; `SectorEditorTypes.h` still
   includes the new header as a compatibility umbrella.
 
-#### REF-009 `[ ]` Split editor modal state types
+#### REF-009 `[x]` Split editor modal state types
 
 - Source/audit reference: `SectorEditorTypes.h` broad state inventory and UI
   modal helper pressure.
@@ -221,7 +221,10 @@ Task Type:
 - Risk: Medium.
 - Suggested verification: full build, editor UI tests if available, manual modal
   smoke when behavior changes are possible.
-- Completion notes:
+- Completion notes: Completed by moving modal/picker state into
+  `SectorEditorModalTypes.h` and shared passive surface target types into
+  `SectorEditorSurfaceTypes.h`; `SectorEditorTypes.h` still includes the new
+  headers as a compatibility umbrella.
 
 #### REF-010 `[ ]` Split selection/picking/drag state types
 
