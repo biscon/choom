@@ -7,6 +7,7 @@
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorPreviewBillboardRenderer.h"
+#include "sector_demo/SectorPreviewBloom.h"
 #include "sector_demo/SectorPreviewSkyRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
@@ -120,9 +121,6 @@ public:
 private:
     engine::TextureHandle TextureForId(const std::string& textureId) const;
     void UpdateCamera();
-    bool EnsureBloomResources(int sceneWidth, int sceneHeight);
-    void UnloadBloomResources();
-    void RenderBloomSource(engine::AssetManager& assets);
     SectorPreviewBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
     void DrawRuntimeDoors(
             engine::AssetManager& assets,
@@ -179,6 +177,7 @@ private:
     int shadowSoftnessLoc = -1;
     int dynamicLightingClampLoc = -1;
     SectorPreviewSkyRenderer skyRenderer;
+    SectorPreviewBloom bloomRenderer;
     SectorPreviewBillboardRenderer billboardRenderer;
     Shader doorOpaqueShader = {};
     int doorOpaqueTextureLoc = -1;
@@ -239,28 +238,6 @@ private:
     size_t doorConsideredCount = 0;
     size_t doorDrawnCount = 0;
     size_t doorSkippedCount = 0;
-    Material bloomSourceMaterial = {};
-    Texture2D bloomDefaultMaterialTexture = {};
-    bool bloomSourceMaterialLoaded = false;
-    int bloomHasDecalLoc = -1;
-    int bloomDecalOpacityLoc = -1;
-    int bloomDecalEmissiveLoc = -1;
-    int bloomDecalTintLoc = -1;
-    int bloomDecalIntensityLoc = -1;
-    Shader blurShader = {};
-    Shader compositeShader = {};
-    int blurTexelSizeLoc = -1;
-    int blurDirectionLoc = -1;
-    int compositeStrengthLoc = -1;
-    int compositeBloomTextureLoc = -1;
-    RenderTexture2D bloomSceneCopy = {};
-    RenderTexture2D bloomSource = {};
-    RenderTexture2D bloomBlurA = {};
-    RenderTexture2D bloomBlurB = {};
-    int bloomSceneWidth = 0;
-    int bloomSceneHeight = 0;
-    int bloomTargetWidth = 0;
-    int bloomTargetHeight = 0;
     int lightmapStatus = 0;
     bool initialized = false;
     size_t sectorCount = 0;

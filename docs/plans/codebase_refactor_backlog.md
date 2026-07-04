@@ -53,7 +53,7 @@ Task Type:
 | REF-014 | `[ ]` | High | Mesh preview | Extract dynamic lighting/shadow internals | Runner plan | Medium/High | Needs manual render smoke |
 | REF-015 | `[ ]` | High | Mesh preview | Extract runtime door renderer / mesh cache helper | Runner plan | Medium/High | Door lighting/shadow risk |
 | REF-016 | `[x]` | Medium | Mesh preview | Extract runtime billboard renderer helper | Codex task | Medium | Completed; helper owns billboard shader/draw path |
-| REF-017 | `[~]` | Medium | Mesh preview | Extract sky/bloom helpers | Codex task | Medium | GPU resource lifetime sensitive |
+| REF-017 | `[x]` | Medium | Mesh preview | Extract sky/bloom helpers | Codex task | Medium | GPU resource lifetime sensitive |
 | REF-018 | `[ ]` | Medium | Mesh preview | Review remaining facade and ownership | Audit first | Low | Post-extraction checkpoint |
 | REF-019 | `[ ]` | High | Editor god file | Audit remaining `SectorEditor.cpp` seams | Audit first | Low | Do after current feature work |
 | REF-020 | `[ ]` | Medium | Editor god file | Extract texture/material action or inspector code | Codex task | Medium | Preserve document/cache paths |
@@ -362,7 +362,7 @@ Task Type:
   - `SectorMeshPreview` remains the public facade and still owns/injects dynamic
     light selection, spotlight shadow packing, and shadow map resources.
 
-#### REF-017 `[~]` Extract sky/bloom helpers
+#### REF-017 `[x]` Extract sky/bloom helpers
 
 - Source/audit reference: `SectorMeshPreview` mixed sky/bloom/resource
   responsibilities.
@@ -377,10 +377,13 @@ Task Type:
 - Completion notes:
   - Added `SectorPreviewSkyRenderer.h/.cpp` for sky cylinder/top-cap mesh,
     material, texture handle, yaw, top-cap color, draw, and unload ownership.
+  - Added `SectorPreviewBloom.h/.cpp` for bloom source material, bloom shaders,
+    scene-copy/source/blur render targets, emissive source draw, blur, composite,
+    resize, and unload ownership.
   - `SectorMeshPreview` remains the public facade and still owns the asset
     scope plus topology texture requests.
-  - Bloom remains to be extracted separately before REF-017 can be marked
-    complete.
+  - Dynamic lighting, doors, billboards, and static scene rendering remain
+    separate and were not moved by this task.
 
 #### REF-018 `[ ]` Review remaining `SectorMeshPreview` facade and ownership after extractions
 
