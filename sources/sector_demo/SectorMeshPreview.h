@@ -6,6 +6,7 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
+#include "sector_demo/SectorPreviewBillboardRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
 
@@ -123,7 +124,7 @@ private:
     void RenderBloomSource(engine::AssetManager& assets);
     void UnloadSkyCylinderMesh();
     void DrawSkyCylinder(const Texture2D& texture);
-    void DrawRuntimeBillboards(engine::AssetManager& assets, engine::World& runtimeObjectWorld);
+    SectorPreviewBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
     void DrawRuntimeDoors(
             engine::AssetManager& assets,
             engine::World& runtimeObjectWorld,
@@ -141,7 +142,6 @@ private:
     std::string portalVisibilityDebugText;
     std::string visibilityDebugText;
     std::string renderDebugText;
-    std::string billboardRenderDebugText;
     SectorCollisionWorld visibilityLookupWorld;
     bool visibilityGraphValid = false;
     bool visibilityLookupWorldValid = false;
@@ -187,32 +187,7 @@ private:
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
     int dynamicLightingClampLoc = -1;
-    Shader billboardCutoutShader = {};
-    int billboardCutoutTextureLoc = -1;
-    int billboardCutoutAlphaCutoffLoc = -1;
-    int billboardCutoutBakedLightingLoc = -1;
-    int billboardCutoutDynamicLightCountLoc = -1;
-    int billboardCutoutDynamicLightPositionsLoc = -1;
-    int billboardCutoutDynamicLightColorsLoc = -1;
-    int billboardCutoutDynamicLightRadiiLoc = -1;
-    int billboardCutoutDynamicLightIntensitiesLoc = -1;
-    int billboardCutoutDynamicLightTypesLoc = -1;
-    int billboardCutoutDynamicLightDirectionsLoc = -1;
-    int billboardCutoutDynamicLightInnerConeCosLoc = -1;
-    int billboardCutoutDynamicLightOuterConeCosLoc = -1;
-    int billboardCutoutDynamicLightShadowSlotsLoc = -1;
-    std::array<int, MaxDynamicSpotLightShadowCasters> billboardCutoutShadowLightMatrixLocs = [] {
-        std::array<int, MaxDynamicSpotLightShadowCasters> locs{};
-        locs.fill(-1);
-        return locs;
-    }();
-    int billboardCutoutShadowBiasLoc = -1;
-    int billboardCutoutShadowStrengthLoc = -1;
-    int billboardCutoutShadowSoftnessLoc = -1;
-    int billboardCutoutShadowMap0Loc = -1;
-    int billboardCutoutShadowMap1Loc = -1;
-    int billboardCutoutDynamicLightingClampLoc = -1;
-    bool billboardCutoutShaderLoaded = false;
+    SectorPreviewBillboardRenderer billboardRenderer;
     Shader doorOpaqueShader = {};
     int doorOpaqueTextureLoc = -1;
     int doorOpaqueDynamicLightCountLoc = -1;
@@ -269,10 +244,6 @@ private:
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
     SectorDoorLightingDebugMode doorLightingDebugMode = SectorDoorLightingDebugMode::Normal;
-    bool billboardRenderWarningPrinted = false;
-    size_t billboardConsideredCount = 0;
-    size_t billboardDrawnCount = 0;
-    size_t billboardSkippedCount = 0;
     size_t doorConsideredCount = 0;
     size_t doorDrawnCount = 0;
     size_t doorSkippedCount = 0;

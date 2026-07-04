@@ -52,7 +52,7 @@ Task Type:
 | REF-013 | `[x]` | High | Mesh preview | Audit `SectorMeshPreview` extraction seams | Audit first | Medium | Completed; see audit report |
 | REF-014 | `[ ]` | High | Mesh preview | Extract dynamic lighting/shadow internals | Runner plan | Medium/High | Needs manual render smoke |
 | REF-015 | `[ ]` | High | Mesh preview | Extract runtime door renderer / mesh cache helper | Runner plan | Medium/High | Door lighting/shadow risk |
-| REF-016 | `[ ]` | Medium | Mesh preview | Extract runtime billboard renderer helper | Codex task | Medium | Keep facade stable |
+| REF-016 | `[x]` | Medium | Mesh preview | Extract runtime billboard renderer helper | Codex task | Medium | Completed; helper owns billboard shader/draw path |
 | REF-017 | `[ ]` | Medium | Mesh preview | Extract sky/bloom helpers | Codex task | Medium | GPU resource lifetime sensitive |
 | REF-018 | `[ ]` | Medium | Mesh preview | Review remaining facade and ownership | Audit first | Low | Post-extraction checkpoint |
 | REF-019 | `[ ]` | High | Editor god file | Audit remaining `SectorEditor.cpp` seams | Audit first | Low | Do after current feature work |
@@ -344,7 +344,7 @@ Task Type:
   doors, door lighting, and dynamic shadows.
 - Completion notes:
 
-#### REF-016 `[ ]` Extract runtime billboard renderer helper
+#### REF-016 `[x]` Extract runtime billboard renderer helper
 
 - Source/audit reference: `SectorMeshPreview` mixed responsibility notes.
 - Why it helps: moves ECS billboard draw traversal behind a focused helper
@@ -356,6 +356,11 @@ Task Type:
 - Suggested verification: runtime object tests and manual billboard preview
   smoke.
 - Completion notes:
+  - Added `SectorPreviewBillboardRenderer.h/.cpp` for billboard cutout shader
+    ownership, shader uniform locations, ECS billboard traversal, draw counters,
+    and missing/failed sprite warning state.
+  - `SectorMeshPreview` remains the public facade and still owns/injects dynamic
+    light selection, spotlight shadow packing, and shadow map resources.
 
 #### REF-017 `[ ]` Extract sky/bloom helpers
 
