@@ -6,6 +6,7 @@
 #include <raylib.h>
 
 #include <array>
+#include <cstddef>
 #include <vector>
 
 namespace engine {
@@ -97,6 +98,13 @@ public:
     size_t SourceCount() const { return sources.size(); }
     size_t CandidateCount() const { return candidates.size(); }
     SectorPreviewDynamicSpotLightShadowUniforms PackShadowUniforms() const;
+    bool EnsureShadowMapResources();
+    void UnloadShadowMapResources();
+    bool HasShadowMapResources() const;
+    RenderTexture2D* ShadowMap(std::size_t index);
+    const RenderTexture2D* ShadowMap(std::size_t index) const;
+    const Texture2D* ShadowMapDepthTexture(std::size_t index) const;
+    SectorPreviewDynamicShadowMapTextures BuildShadowMapTextures() const;
 
 private:
     void ReserveSelectionBuffers();
@@ -111,6 +119,7 @@ private:
     std::vector<SectorReceiverBounds> receiverBounds;
     std::vector<SectorPreviewDynamicSpotLightShadowCaster> shadowCasters;
     std::vector<SectorPreviewDynamicSpotLightShadowMatrix> shadowMatrices;
+    std::array<RenderTexture2D, MaxDynamicSpotLightShadowCasters> shadowMaps{};
 };
 
 } // namespace game

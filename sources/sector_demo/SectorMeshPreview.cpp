@@ -539,43 +539,6 @@ void main()
 }
 )";
 
-RenderTexture2D LoadDepthOnlyRenderTexture(int width, int height)
-{
-    RenderTexture2D target{};
-    target.id = rlLoadFramebuffer();
-    target.texture.width = width;
-    target.texture.height = height;
-
-    if (target.id <= 0) {
-        return target;
-    }
-
-    rlEnableFramebuffer(target.id);
-    target.depth.id = rlLoadTextureDepth(width, height, false);
-    target.depth.width = width;
-    target.depth.height = height;
-    target.depth.format = 19;
-    target.depth.mipmaps = 1;
-    rlFramebufferAttach(target.id, target.depth.id, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
-
-    if (!rlFramebufferComplete(target.id)) {
-        rlDisableFramebuffer();
-        rlUnloadFramebuffer(target.id);
-        return RenderTexture2D{};
-    }
-
-    rlDisableFramebuffer();
-    return target;
-}
-
-void UnloadDepthOnlyRenderTexture(RenderTexture2D& target)
-{
-    if (target.id > 0) {
-        rlUnloadFramebuffer(target.id);
-    }
-    target = RenderTexture2D{};
-}
-
 int GetShaderLocationArrayBase(Shader shader, const char* name)
 {
     const int location = GetShaderLocation(shader, name);
@@ -1060,7 +1023,7 @@ bool SectorMeshPreview::RebuildRendererResources(
     runtimeDoorShadowCasters.reserve(kSectorRuntimeObjectInitialCapacity);
     runtimeSeconds = 0.0f;
 
-    if (!EnsureDynamicSpotLightShadowMapResources()) {
+    if (!dynamicLightState.EnsureShadowMapResources()) {
         Shutdown(assets);
         error = "Preview failed: could not create dynamic spotlight shadow maps";
         return false;
@@ -1199,13 +1162,14 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
             && !doorOpaqueShaderLoaded
             && !doorOpaqueMaterialLoaded
             && doorMeshCache.empty()
+            && !dynamicLightState.HasShadowMapResources()
             && !dynamicSpotLightShadowMaterialLoaded
             && !skyRenderer.IsLoaded()) {
         return;
     }
 
     bloomRenderer.Shutdown();
-    UnloadDynamicSpotLightShadowMapResources();
+    dynamicLightState.UnloadShadowMapResources();
     skyRenderer.Shutdown();
     UnloadDoorMeshes();
     UnloadSectorMeshes(meshes);
@@ -1315,8 +1279,10 @@ void SectorMeshPreview::DrawScene(
     material.maps[MATERIAL_MAP_SPECULAR].texture = (lightmap != nullptr)
             ? *lightmap
             : Texture2D{};
-    material.maps[MATERIAL_MAP_ROUGHNESS].texture = dynamicSpotLightShadowMaps[0].depth;
-    material.maps[MATERIAL_MAP_OCCLUSION].texture = dynamicSpotLightShadowMaps[1].depth;
+    const Texture2D* shadowMap0 = dynamicLightState.ShadowMapDepthTexture(0);
+    const Texture2D* shadowMap1 = dynamicLightState.ShadowMapDepthTexture(1);
+    material.maps[MATERIAL_MAP_ROUGHNESS].texture = shadowMap0 != nullptr ? *shadowMap0 : Texture2D{};
+    material.maps[MATERIAL_MAP_OCCLUSION].texture = shadowMap1 != nullptr ? *shadowMap1 : Texture2D{};
     if (useLightmapLoc >= 0) {
         SetShaderValue(material.shader, useLightmapLoc, &useLightmap, SHADER_UNIFORM_FLOAT);
     }
@@ -1523,8 +1489,10 @@ void SectorMeshPreview::DrawRuntimeDoors(
     shadowLocations.shadowStrength = doorOpaqueShadowStrengthLoc;
     shadowLocations.shadowSoftness = doorOpaqueShadowSoftnessLoc;
     UploadSectorPreviewDynamicSpotLightShadowUniforms(doorOpaqueMaterial.shader, shadowLocations, shadowUniforms);
-    doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = dynamicSpotLightShadowMaps[0].depth;
-    doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = dynamicSpotLightShadowMaps[1].depth;
+    const Texture2D* shadowMap0 = dynamicLightState.ShadowMapDepthTexture(0);
+    const Texture2D* shadowMap1 = dynamicLightState.ShadowMapDepthTexture(1);
+    doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = shadowMap0 != nullptr ? *shadowMap0 : Texture2D{};
+    doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = shadowMap1 != nullptr ? *shadowMap1 : Texture2D{};
     if (doorOpaqueDebugModeLoc >= 0) {
         const int debugMode = DoorLightingDebugModeShaderValue(doorLightingDebugMode);
         SetShaderValue(doorOpaqueMaterial.shader, doorOpaqueDebugModeLoc, &debugMode, SHADER_UNIFORM_INT);
@@ -1662,12 +1630,7 @@ SectorPreviewBillboardDynamicLightContext SectorMeshPreview::BuildBillboardDynam
             : 0;
     context.dynamicLightingClamp = DynamicLightingClamp;
     context.shadowUniforms = dynamicLightState.PackShadowUniforms();
-    context.shadowMaps.shadowMap0 = dynamicSpotLightShadowMaps[0].depth.id != 0
-            ? &dynamicSpotLightShadowMaps[0].depth
-            : nullptr;
-    context.shadowMaps.shadowMap1 = dynamicSpotLightShadowMaps[1].depth.id != 0
-            ? &dynamicSpotLightShadowMaps[1].depth
-            : nullptr;
+    context.shadowMaps = dynamicLightState.BuildShadowMapTextures();
 
     for (int i = 0; i < context.dynamicLightCount; ++i) {
         const SectorPreviewDynamicPointLightUniform& light =
@@ -1687,34 +1650,6 @@ SectorPreviewBillboardDynamicLightContext SectorMeshPreview::BuildBillboardDynam
     return context;
 }
 
-bool SectorMeshPreview::EnsureDynamicSpotLightShadowMapResources()
-{
-    for (RenderTexture2D& shadowMap : dynamicSpotLightShadowMaps) {
-        if (shadowMap.id != 0 && shadowMap.depth.id != 0) {
-            continue;
-        }
-
-        shadowMap = LoadDepthOnlyRenderTexture(
-                DynamicSpotLightShadowMapResolution,
-                DynamicSpotLightShadowMapResolution);
-        if (shadowMap.id == 0 || shadowMap.depth.id == 0) {
-            UnloadDynamicSpotLightShadowMapResources();
-            return false;
-        }
-        SetTextureFilter(shadowMap.depth, TEXTURE_FILTER_POINT);
-        SetTextureWrap(shadowMap.depth, TEXTURE_WRAP_CLAMP);
-    }
-
-    return true;
-}
-
-void SectorMeshPreview::UnloadDynamicSpotLightShadowMapResources()
-{
-    for (RenderTexture2D& shadowMap : dynamicSpotLightShadowMaps) {
-        UnloadDepthOnlyRenderTexture(shadowMap);
-    }
-}
-
 void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
         engine::AssetManager& assets,
         engine::World* runtimeObjectWorld)
@@ -1732,17 +1667,19 @@ void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
     }
 
     for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : dynamicLightState.ShadowMatrices()) {
-        if (matrix.shadowSlot < 0
-                || static_cast<std::size_t>(matrix.shadowSlot) >= dynamicSpotLightShadowMaps.size()) {
+        if (matrix.shadowSlot < 0) {
             continue;
         }
 
-        RenderTexture2D& shadowMap = dynamicSpotLightShadowMaps[static_cast<std::size_t>(matrix.shadowSlot)];
-        if (shadowMap.id == 0 || shadowMap.depth.id == 0) {
+        RenderTexture2D* shadowMap = dynamicLightState.ShadowMap(static_cast<std::size_t>(matrix.shadowSlot));
+        if (shadowMap == nullptr) {
+            continue;
+        }
+        if (shadowMap->id == 0 || shadowMap->depth.id == 0) {
             continue;
         }
 
-        BeginTextureMode(shadowMap);
+        BeginTextureMode(*shadowMap);
         ClearBackground(WHITE);
         rlEnableDepthTest();
         if (dynamicSpotLightShadowLightViewProjectionLoc >= 0) {

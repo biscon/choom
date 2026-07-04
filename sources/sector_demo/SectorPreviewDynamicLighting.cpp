@@ -4,12 +4,50 @@
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <algorithm>
+#include <rlgl.h>
 
 namespace game {
 
 namespace {
 
 constexpr float DynamicLightingClamp = 4.0f;
+
+RenderTexture2D LoadDepthOnlyRenderTexture(int width, int height)
+{
+    RenderTexture2D target{};
+    target.id = rlLoadFramebuffer();
+    target.texture.width = width;
+    target.texture.height = height;
+
+    if (target.id <= 0) {
+        return target;
+    }
+
+    rlEnableFramebuffer(target.id);
+    target.depth.id = rlLoadTextureDepth(width, height, false);
+    target.depth.width = width;
+    target.depth.height = height;
+    target.depth.format = 19;
+    target.depth.mipmaps = 1;
+    rlFramebufferAttach(target.id, target.depth.id, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
+
+    if (!rlFramebufferComplete(target.id)) {
+        rlDisableFramebuffer();
+        rlUnloadFramebuffer(target.id);
+        return RenderTexture2D{};
+    }
+
+    rlDisableFramebuffer();
+    return target;
+}
+
+void UnloadDepthOnlyRenderTexture(RenderTexture2D& target)
+{
+    if (target.id > 0) {
+        rlUnloadFramebuffer(target.id);
+    }
+    target = RenderTexture2D{};
+}
 
 } // namespace
 
@@ -241,6 +279,77 @@ void SectorPreviewDynamicLighting::UpdateSelection(
 SectorPreviewDynamicSpotLightShadowUniforms SectorPreviewDynamicLighting::PackShadowUniforms() const
 {
     return PackSectorPreviewDynamicSpotLightShadowUniforms(selectedLights, shadowCasters, shadowMatrices);
+}
+
+bool SectorPreviewDynamicLighting::EnsureShadowMapResources()
+{
+    for (RenderTexture2D& shadowMap : shadowMaps) {
+        if (shadowMap.id != 0 && shadowMap.depth.id != 0) {
+            continue;
+        }
+
+        shadowMap = LoadDepthOnlyRenderTexture(
+                DynamicSpotLightShadowMapResolution,
+                DynamicSpotLightShadowMapResolution);
+        if (shadowMap.id == 0 || shadowMap.depth.id == 0) {
+            UnloadShadowMapResources();
+            return false;
+        }
+        SetTextureFilter(shadowMap.depth, TEXTURE_FILTER_POINT);
+        SetTextureWrap(shadowMap.depth, TEXTURE_WRAP_CLAMP);
+    }
+
+    return true;
+}
+
+void SectorPreviewDynamicLighting::UnloadShadowMapResources()
+{
+    for (RenderTexture2D& shadowMap : shadowMaps) {
+        UnloadDepthOnlyRenderTexture(shadowMap);
+    }
+}
+
+bool SectorPreviewDynamicLighting::HasShadowMapResources() const
+{
+    for (const RenderTexture2D& shadowMap : shadowMaps) {
+        if (shadowMap.id != 0 || shadowMap.depth.id != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+RenderTexture2D* SectorPreviewDynamicLighting::ShadowMap(std::size_t index)
+{
+    if (index >= shadowMaps.size()) {
+        return nullptr;
+    }
+    return &shadowMaps[index];
+}
+
+const RenderTexture2D* SectorPreviewDynamicLighting::ShadowMap(std::size_t index) const
+{
+    if (index >= shadowMaps.size()) {
+        return nullptr;
+    }
+    return &shadowMaps[index];
+}
+
+const Texture2D* SectorPreviewDynamicLighting::ShadowMapDepthTexture(std::size_t index) const
+{
+    const RenderTexture2D* shadowMap = ShadowMap(index);
+    if (shadowMap == nullptr || shadowMap->depth.id == 0) {
+        return nullptr;
+    }
+    return &shadowMap->depth;
+}
+
+SectorPreviewDynamicShadowMapTextures SectorPreviewDynamicLighting::BuildShadowMapTextures() const
+{
+    SectorPreviewDynamicShadowMapTextures textures;
+    textures.shadowMap0 = ShadowMapDepthTexture(0);
+    textures.shadowMap1 = ShadowMapDepthTexture(1);
+    return textures;
 }
 
 void SectorPreviewDynamicLighting::ReserveSelectionBuffers()

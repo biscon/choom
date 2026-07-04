@@ -59,13 +59,13 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_04",
       "title": "Move Shadow Map Resource Ownership And Lifetime",
       "type": "phase",
-      "status": "Planned"
+      "status": "Completed"
     },
     {
       "id": "phase_05",
       "title": "Move Dynamic Spotlight Shadow Map Render Orchestration",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Planned"
     },
     {
       "id": "phase_06",
@@ -91,8 +91,8 @@ When an agent is asked to execute this plan, it must:
 | Phase 1: Introduce Shared Draw And Upload Context Types | Completed | 2026-07-04 | Added shared dynamic-light shader-location, shadow-map texture, and billboard upload context structs; ownership remains in `SectorMeshPreview`. |
 | Phase 2: Move Pure CPU Selection And Packing Buffers | Completed | 2026-07-04 | Added helper-owned CPU dynamic-light state for sources, candidates, selected lights/IDs, receiver bounds, shadow casters, shadow matrices, and shadow uniform packing. |
 | Phase 3: Move Uniform Upload Helpers | Completed | 2026-07-04 | Moved sector, door, and billboard dynamic light/shadow uniform upload helpers into `SectorPreviewDynamicLighting`; shader locations, uniform names, texture bindings, and render order are unchanged. |
-| Phase 4: Move Shadow Map Resource Ownership And Lifetime | Planned |  | Move shadow map resources late, after CPU/upload behavior is stable. |
-| Phase 5: Move Dynamic Spotlight Shadow Map Render Orchestration | Not Started |  | Delegate shadow pass internals without changing render order. |
+| Phase 4: Move Shadow Map Resource Ownership And Lifetime | Completed | 2026-07-04 | Moved dynamic spotlight shadow map render textures, depth-only allocation, filter/wrap setup, partial-failure cleanup, and custom unload into `SectorPreviewDynamicLighting`; shadow material and render orchestration remain in `SectorMeshPreview`. |
+| Phase 5: Move Dynamic Spotlight Shadow Map Render Orchestration | Planned |  | Delegate shadow pass internals without changing render order. |
 | Phase 6: Integrate Facade Cleanup | Not Started |  | Remove moved internals from `SectorMeshPreview` while preserving its public facade. |
 | Phase 7: Verification Docs And Backlog Update | Not Started |  | Close implementation verification and update REF-014 backlog state only after implementation is done. |
 
@@ -316,6 +316,40 @@ Behavior notes:
 * Rendering, shader uniform upload values, shader formulas/names, max counts, dynamic light ranking, flicker, bias/softness/strength, shadow map resources/lifetime, render order, debug text, build/test behavior changed: no.
 * Disabled dynamic lighting still uploads an effective zero dynamic-light count through the shared upload helper.
 * Sector and door texture binding remain material-slot based; billboard shadow-map texture binding remains explicit sampler upload based.
+* Lightmap source-hash behavior changed: no.
+* Topology cache behavior changed: no.
+* Collision, sector lookup, physics changed: no.
+* ECS ownership changed: no.
+* Manual render smoke performed: no; not performed in this pass.
+
+### Phase 4: Move Shadow Map Resource Ownership And Lifetime
+
+Status: Completed
+Date: 2026-07-04
+
+Summary:
+
+* Moved helper-owned dynamic spotlight shadow map render textures into `SectorPreviewDynamicLighting`.
+* Moved depth-only render texture load/unload helpers, allocation at `DynamicSpotLightShadowMapResolution`, point filtering, clamp wrapping, and partial-failure cleanup into the helper.
+* Added narrow helper accessors for render targets used by the still-facade-owned shadow pass and depth textures used by sector, door, and billboard receiving paths.
+* Kept the dynamic spotlight shadow material in `SectorMeshPreview` because it is still used by the phase_05 shadow render orchestration loop.
+
+Verification results:
+
+* `cmake --build cmake-build-debug -j2`: passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_runtime_object|sector_light|sector_topology|sector_editor|sector_authoring"`: passed, 9/9 tests.
+* `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 15/15 tests.
+* `git diff --check`: passed with no output.
+* `git diff --stat`: passed; tracked diff reported this plan plus `SectorMeshPreview.*` and `SectorPreviewDynamicLighting.*`.
+* `git status --short`: passed; reported modified plan/source files only.
+
+Behavior notes:
+
+* Source code changed: yes.
+* Runtime behavior changed: no intended behavior change.
+* Shadow map resource ownership/lifetime changed internally; resolution, depth-only setup, depth format, point filtering, clamp wrapping, partial-failure cleanup, custom framebuffer unload, shutdown ordering, render order, shader behavior, uniform upload behavior, dynamic light selection, debug text, and build/test behavior changed: no.
+* `SectorMeshPreview::ShutdownRendererResources()` remains the high-level shutdown caller and now checks helper-owned shadow map resources before the early return.
+* The dynamic spotlight shadow material stayed in `SectorMeshPreview`; material lifetime and shader locations did not move in this phase.
 * Lightmap source-hash behavior changed: no.
 * Topology cache behavior changed: no.
 * Collision, sector lookup, physics changed: no.

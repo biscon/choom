@@ -132,8 +132,6 @@ private:
             SectorRuntimeDoorLightingContext doorLighting);
     void PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld);
     void UnloadDoorMeshes();
-    bool EnsureDynamicSpotLightShadowMapResources();
-    void UnloadDynamicSpotLightShadowMapResources();
 
     SectorMeshBuildResult meshes;
     SectorGeneratedGeometry generatedGeometry;
@@ -222,7 +220,6 @@ private:
     std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;
     std::vector<SectorDoorShadowCaster> runtimeDoorShadowCasters;
     SectorPreviewDynamicLighting dynamicLightState;
-    std::array<RenderTexture2D, MaxDynamicSpotLightShadowCasters> dynamicSpotLightShadowMaps{};
     Material dynamicSpotLightShadowMaterial = {};
     Texture2D dynamicSpotLightShadowDefaultTexture = {};
     bool dynamicSpotLightShadowMaterialLoaded = false;
