@@ -1,7 +1,9 @@
 #pragma once
 
 #include "engine/ui/UI.h"
+#include "sector_editor/SectorEditorLightmapAsyncTypes.h"
 #include "sector_editor/SectorEditorModalTypes.h"
+#include "sector_editor/SectorEditorPreviewTypes.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorSurfaceTypes.h"
 #include "sector_editor/SectorEditorTopologyRenderCacheTypes.h"
@@ -9,8 +11,6 @@
 #include "sector_demo/SectorAuthoringGraph.h"
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorFreeflyController.h"
-#include "sector_demo/SectorLightmap.h"
-#include "sector_demo/SectorMeshPreview.h"
 #include "sector_demo/SectorPointTypes.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTextureTypes.h"
@@ -20,12 +20,9 @@
 
 #include <raylib.h>
 
-#include <atomic>
 #include <cstdint>
-#include <mutex>
 #include <optional>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -51,22 +48,6 @@ enum class SectorEditorMode {
     Preview3D
 };
 
-enum class SectorPreviewControlMode {
-    FreeFly,
-    Gameplay
-};
-
-enum class PreviewDebugOverlayTab {
-    None,
-    View,
-    Render,
-    Visibility,
-    Lighting,
-    Objects,
-    Probes,
-    Controls
-};
-
 enum class SectorEditorAuthoringDerivationState {
     InvalidNoDerived,
     ValidCurrent,
@@ -90,23 +71,6 @@ struct TopologyMaterialPayload {
     TopologySurfaceEditTargetKind kind = TopologySurfaceEditTargetKind::None;
     std::string textureId;
     SectorTopologyUvSettings uv;
-};
-
-enum class SpotLightPilotKind {
-    None,
-    Static,
-    Dynamic
-};
-
-struct SpotLightPilotState {
-    bool active = false;
-    SpotLightPilotKind kind = SpotLightPilotKind::None;
-    int lightId = -1;
-    Vector3 originalPosition = {};
-    Vector3 originalTarget = {};
-    SectorViewPose originalPreviewPose = {};
-    bool originalMouseLookEnabled = true;
-    float targetDistanceWorld = 4.0f;
 };
 
 struct SectorEditorState {
@@ -294,42 +258,6 @@ struct SectorEditorUiState {
     int idBufferLightIndex = -1;
     std::string idEditError;
     bool keyboardCaptured = false;
-};
-
-struct SectorLightmapBakeAsyncResult {
-    bool succeeded = false;
-    bool cancelled = false;
-    std::string errorMessage;
-    std::string bakeReportText;
-    SectorLightmapBakeResult bakeResult;
-    std::string expectedSourceHash;
-    uint64_t sourceMapRevision = 0;
-    std::string finalOutputPath;
-    std::string temporaryOutputPath;
-};
-
-struct LightmapBakeProgress {
-    std::atomic<SectorLightmapBakePhase> phase{SectorLightmapBakePhase::Idle};
-    std::atomic<uint32_t> completedWork{0};
-    std::atomic<uint32_t> totalWork{0};
-    std::atomic<bool> cancelRequested{false};
-    std::atomic<bool> running{false};
-};
-
-struct LightmapBakeAsyncState {
-    std::thread worker;
-    LightmapBakeProgress progress;
-    bool modalOpen = false;
-    bool awaitingAcknowledgement = false;
-    bool cancelButtonPressed = false;
-    double startTimeSeconds = 0.0;
-    double completedTimeSeconds = 0.0;
-    std::string terminalMessage;
-    bool terminalSuccess = false;
-    bool terminalCancelled = false;
-    std::string temporaryOutputPath;
-    std::mutex resultMutex;
-    std::optional<SectorLightmapBakeAsyncResult> pendingResult;
 };
 
 } // namespace game

@@ -46,7 +46,7 @@ Task Type:
 | REF-008 | `[x]` | High | Editor header | Move render-cache cached draw structs | Codex task | Low | Narrow `SectorEditorTypes.h` |
 | REF-009 | `[x]` | Medium | Editor header | Split editor modal state types | Codex task | Medium | Include churn likely |
 | REF-010 | `[x]` | Medium | Editor header | Split selection/picking/drag state types | Codex task | Medium | Keep behavior unchanged |
-| REF-011 | `[ ]` | Medium | Editor header | Split preview/runtime/lightmap async state types | Codex task | Medium | Watch test source lists |
+| REF-011 | `[x]` | Medium | Editor header | Split preview/runtime/lightmap async state types | Codex task | Medium | Watch test source lists |
 | REF-012 | `[ ]` | Medium | Editor header | Review remaining dependencies after splits | Audit first | Low | Needs post-split include review |
 | REF-013 | `[ ]` | High | Mesh preview | Audit `SectorMeshPreview` extraction seams | Audit first | Medium | Do before source edits |
 | REF-014 | `[ ]` | High | Mesh preview | Extract dynamic lighting/shadow internals | Runner plan | Medium/High | Needs manual render smoke |
@@ -246,7 +246,7 @@ Task Type:
   the later preview/runtime split; `TopologyMaterialPayload` remains there as
   material clipboard/editing payload rather than selection/picking/drag state.
 
-#### REF-011 `[ ]` Split preview/runtime/lightmap async state types
+#### REF-011 `[x]` Split preview/runtime/lightmap async state types
 
 - Source/audit reference: `SectorEditorTypes.h:561-675` and lightmap async
   ownership notes.
@@ -257,7 +257,12 @@ Task Type:
 - Risk: Medium.
 - Suggested verification: full build, full `ctest`, manual preview/lightmap
   smoke where touched.
-- Completion notes:
+- Completion notes: Completed by moving passive preview control/debug overlay
+  and spotlight pilot state types into `SectorEditorPreviewTypes.h`, and async
+  lightmap bake result/progress/state types into
+  `SectorEditorLightmapAsyncTypes.h`. `SectorEditorTypes.h` still includes both
+  headers as a compatibility umbrella. Broad editor state and backend-owned
+  runtime object state remain in `SectorEditorTypes.h`.
 
 #### REF-012 `[ ]` Review remaining `SectorEditorTypes.h` dependencies after the splits
 
