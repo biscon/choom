@@ -13,6 +13,39 @@ namespace {
 
 constexpr float DynamicLightingClamp = 4.0f;
 
+const char* SectorSpotLightShadowVs = R"(
+#version 330
+in vec3 vertexPosition;
+in vec2 vertexTexCoord;
+
+uniform mat4 lightViewProjection;
+uniform mat4 matModel;
+
+out vec2 fragTexCoord;
+
+void main()
+{
+    fragTexCoord = vertexTexCoord;
+    gl_Position = lightViewProjection * matModel * vec4(vertexPosition, 1.0);
+}
+)";
+
+const char* SectorSpotLightShadowFs = R"(
+#version 330
+in vec2 fragTexCoord;
+
+uniform sampler2D texture0;
+uniform int alphaTest;
+uniform float alphaCutoff;
+
+void main()
+{
+    if (alphaTest != 0 && texture(texture0, fragTexCoord).a < alphaCutoff) {
+        discard;
+    }
+}
+)";
+
 RenderTexture2D LoadDepthOnlyRenderTexture(int width, int height)
 {
     RenderTexture2D target{};
@@ -320,6 +353,54 @@ bool SectorPreviewDynamicLighting::HasShadowMapResources() const
     return false;
 }
 
+bool SectorPreviewDynamicLighting::LoadShadowMaterial()
+{
+    shadowMaterial = LoadMaterialDefault();
+    Shader shader = LoadShaderFromMemory(SectorSpotLightShadowVs, SectorSpotLightShadowFs);
+    if (shader.id == 0) {
+        UnloadMaterial(shadowMaterial);
+        shadowMaterial = Material{};
+        return false;
+    }
+    shadowMaterial.shader = shader;
+    shadowMaterial.shader.locs[SHADER_LOC_VERTEX_POSITION] =
+            GetShaderLocationAttrib(shadowMaterial.shader, "vertexPosition");
+    shadowMaterial.shader.locs[SHADER_LOC_VERTEX_TEXCOORD01] =
+            GetShaderLocationAttrib(shadowMaterial.shader, "vertexTexCoord");
+    shadowMaterial.shader.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(shadowMaterial.shader, "matModel");
+    shadowMaterial.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(shadowMaterial.shader, "texture0");
+    shadowLightViewProjectionLoc = GetShaderLocation(shadowMaterial.shader, "lightViewProjection");
+    shadowAlphaTestLoc = GetShaderLocation(shadowMaterial.shader, "alphaTest");
+    shadowAlphaCutoffLoc = GetShaderLocation(shadowMaterial.shader, "alphaCutoff");
+    shadowDefaultTexture = shadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture;
+    shadowMaterialLoaded = true;
+    return true;
+}
+
+void SectorPreviewDynamicLighting::UnloadShadowMaterial()
+{
+    if (!shadowMaterialLoaded) {
+        return;
+    }
+
+    shadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = shadowDefaultTexture;
+    UnloadMaterial(shadowMaterial);
+    shadowMaterial = Material{};
+    shadowDefaultTexture = Texture2D{};
+    shadowMaterialLoaded = false;
+    shadowLightViewProjectionLoc = -1;
+    shadowAlphaTestLoc = -1;
+    shadowAlphaCutoffLoc = -1;
+}
+
+bool SectorPreviewDynamicLighting::IsShadowRenderReady() const
+{
+    return shadowMaterialLoaded
+            && shadowMaterial.shader.id != 0
+            && shadowLightViewProjectionLoc >= 0
+            && !shadowMatrices.empty();
+}
+
 RenderTexture2D* SectorPreviewDynamicLighting::ShadowMap(std::size_t index)
 {
     if (index >= shadowMaps.size()) {
@@ -357,8 +438,7 @@ void SectorPreviewDynamicLighting::RenderShadowMaps(
         const SectorPreviewDynamicSpotLightShadowRenderContext& context)
 {
     if (context.assets == nullptr
-            || context.material == nullptr
-            || context.lightViewProjectionLoc < 0
+            || !IsShadowRenderReady()
             || context.sectorDrawRecords == nullptr
             || shadowMatrices.empty()) {
         return;
@@ -381,8 +461,8 @@ void SectorPreviewDynamicLighting::RenderShadowMaps(
         ClearBackground(WHITE);
         rlEnableDepthTest();
         SetShaderValueMatrix(
-                context.material->shader,
-                context.lightViewProjectionLoc,
+                shadowMaterial.shader,
+                shadowLightViewProjectionLoc,
                 matrix.lightViewProjection);
         for (const SectorMeshBatch& batch : *context.sectorDrawRecords) {
             const int alphaTest = batch.alphaTest ? 1 : 0;
@@ -391,39 +471,39 @@ void SectorPreviewDynamicLighting::RenderShadowMaps(
             if (batch.alphaTest && context.textureResolver != nullptr) {
                 texture = context.textureResolver(context.userData, *context.assets, batch.textureId);
             }
-            context.material->maps[MATERIAL_MAP_DIFFUSE].texture = (texture != nullptr)
+            shadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = (texture != nullptr)
                     ? *texture
-                    : context.defaultTexture;
-            if (context.alphaTestLoc >= 0) {
+                    : shadowDefaultTexture;
+            if (shadowAlphaTestLoc >= 0) {
                 SetShaderValue(
-                        context.material->shader,
-                        context.alphaTestLoc,
+                        shadowMaterial.shader,
+                        shadowAlphaTestLoc,
                         &alphaTest,
                         SHADER_UNIFORM_INT);
             }
-            if (context.alphaCutoffLoc >= 0) {
+            if (shadowAlphaCutoffLoc >= 0) {
                 SetShaderValue(
-                        context.material->shader,
-                        context.alphaCutoffLoc,
+                        shadowMaterial.shader,
+                        shadowAlphaCutoffLoc,
                         &alphaCutoff,
                         SHADER_UNIFORM_FLOAT);
             }
-            DrawMesh(batch.mesh, *context.material, MatrixIdentity());
+            DrawMesh(batch.mesh, shadowMaterial, MatrixIdentity());
         }
         const int doorAlphaTest = 0;
         const float doorAlphaCutoff = 0.0f;
-        context.material->maps[MATERIAL_MAP_DIFFUSE].texture = context.defaultTexture;
-        if (context.alphaTestLoc >= 0) {
+        shadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = shadowDefaultTexture;
+        if (shadowAlphaTestLoc >= 0) {
             SetShaderValue(
-                    context.material->shader,
-                    context.alphaTestLoc,
+                    shadowMaterial.shader,
+                    shadowAlphaTestLoc,
                     &doorAlphaTest,
                     SHADER_UNIFORM_INT);
         }
-        if (context.alphaCutoffLoc >= 0) {
+        if (shadowAlphaCutoffLoc >= 0) {
             SetShaderValue(
-                    context.material->shader,
-                    context.alphaCutoffLoc,
+                    shadowMaterial.shader,
+                    shadowAlphaCutoffLoc,
                     &doorAlphaCutoff,
                     SHADER_UNIFORM_FLOAT);
         }
@@ -443,10 +523,10 @@ void SectorPreviewDynamicLighting::RenderShadowMaps(
                         caster,
                         doorWidth,
                         doorHeight);
-                DrawMesh(*doorMesh, *context.material, shadowModel);
+                DrawMesh(*doorMesh, shadowMaterial, shadowModel);
             }
         }
-        context.material->maps[MATERIAL_MAP_DIFFUSE].texture = context.defaultTexture;
+        shadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = shadowDefaultTexture;
         rlDisableDepthTest();
         EndTextureMode();
     }

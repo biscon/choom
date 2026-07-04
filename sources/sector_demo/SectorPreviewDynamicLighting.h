@@ -32,13 +32,8 @@ struct SectorPreviewDynamicSpotLightShadowRenderContext {
             float& outHeight);
 
     engine::AssetManager* assets = nullptr;
-    Material* material = nullptr;
-    Texture2D defaultTexture = {};
     const std::vector<SectorMeshBatch>* sectorDrawRecords = nullptr;
     const std::vector<SectorDoorShadowCaster>* doorShadowCasters = nullptr;
-    int lightViewProjectionLoc = -1;
-    int alphaTestLoc = -1;
-    int alphaCutoffLoc = -1;
     void* userData = nullptr;
     TextureResolver textureResolver = nullptr;
     DoorMeshResolver doorMeshResolver = nullptr;
@@ -128,6 +123,10 @@ public:
     bool EnsureShadowMapResources();
     void UnloadShadowMapResources();
     bool HasShadowMapResources() const;
+    bool LoadShadowMaterial();
+    void UnloadShadowMaterial();
+    bool HasShadowMaterial() const { return shadowMaterialLoaded; }
+    bool IsShadowRenderReady() const;
     RenderTexture2D* ShadowMap(std::size_t index);
     const RenderTexture2D* ShadowMap(std::size_t index) const;
     const Texture2D* ShadowMapDepthTexture(std::size_t index) const;
@@ -148,6 +147,12 @@ private:
     std::vector<SectorPreviewDynamicSpotLightShadowCaster> shadowCasters;
     std::vector<SectorPreviewDynamicSpotLightShadowMatrix> shadowMatrices;
     std::array<RenderTexture2D, MaxDynamicSpotLightShadowCasters> shadowMaps{};
+    Material shadowMaterial = {};
+    Texture2D shadowDefaultTexture = {};
+    bool shadowMaterialLoaded = false;
+    int shadowLightViewProjectionLoc = -1;
+    int shadowAlphaTestLoc = -1;
+    int shadowAlphaCutoffLoc = -1;
 };
 
 } // namespace game

@@ -229,12 +229,6 @@ private:
     std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;
     std::vector<SectorDoorShadowCaster> runtimeDoorShadowCasters;
     SectorPreviewDynamicLighting dynamicLightState;
-    Material dynamicSpotLightShadowMaterial = {};
-    Texture2D dynamicSpotLightShadowDefaultTexture = {};
-    bool dynamicSpotLightShadowMaterialLoaded = false;
-    int dynamicSpotLightShadowLightViewProjectionLoc = -1;
-    int dynamicSpotLightShadowAlphaTestLoc = -1;
-    int dynamicSpotLightShadowAlphaCutoffLoc = -1;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
     SectorDoorLightingDebugMode doorLightingDebugMode = SectorDoorLightingDebugMode::Normal;

@@ -294,39 +294,6 @@ void main()
 }
 )";
 
-const char* SectorSpotLightShadowVs = R"(
-#version 330
-in vec3 vertexPosition;
-in vec2 vertexTexCoord;
-
-uniform mat4 lightViewProjection;
-uniform mat4 matModel;
-
-out vec2 fragTexCoord;
-
-void main()
-{
-    fragTexCoord = vertexTexCoord;
-    gl_Position = lightViewProjection * matModel * vec4(vertexPosition, 1.0);
-}
-)";
-
-const char* SectorSpotLightShadowFs = R"(
-#version 330
-in vec2 fragTexCoord;
-
-uniform sampler2D texture0;
-uniform int alphaTest;
-uniform float alphaCutoff;
-
-void main()
-{
-    if (alphaTest != 0 && texture(texture0, fragTexCoord).a < alphaCutoff) {
-        discard;
-    }
-}
-)";
-
 const char* SectorDoorOpaqueVs = R"(
 #version 330
 in vec3 vertexPosition;
@@ -709,34 +676,6 @@ bool LoadPreviewMaterial(
     return true;
 }
 
-bool LoadDynamicSpotLightShadowMaterial(
-        Material& material,
-        Texture2D& defaultMaterialTexture,
-        bool& materialLoaded,
-        int& lightViewProjectionLoc,
-        int& alphaTestLoc,
-        int& alphaCutoffLoc)
-{
-    material = LoadMaterialDefault();
-    Shader shader = LoadShaderFromMemory(SectorSpotLightShadowVs, SectorSpotLightShadowFs);
-    if (shader.id == 0) {
-        UnloadMaterial(material);
-        material = Material{};
-        return false;
-    }
-    material.shader = shader;
-    material.shader.locs[SHADER_LOC_VERTEX_POSITION] = GetShaderLocationAttrib(material.shader, "vertexPosition");
-    material.shader.locs[SHADER_LOC_VERTEX_TEXCOORD01] = GetShaderLocationAttrib(material.shader, "vertexTexCoord");
-    material.shader.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(material.shader, "matModel");
-    material.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(material.shader, "texture0");
-    lightViewProjectionLoc = GetShaderLocation(material.shader, "lightViewProjection");
-    alphaTestLoc = GetShaderLocation(material.shader, "alphaTest");
-    alphaCutoffLoc = GetShaderLocation(material.shader, "alphaCutoff");
-    defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
-    materialLoaded = true;
-    return true;
-}
-
 bool LoadDoorOpaqueShader(
         Shader& shader,
         int& textureLoc,
@@ -1029,13 +968,7 @@ bool SectorMeshPreview::RebuildRendererResources(
         return false;
     }
 
-    if (!LoadDynamicSpotLightShadowMaterial(
-                dynamicSpotLightShadowMaterial,
-                dynamicSpotLightShadowDefaultTexture,
-                dynamicSpotLightShadowMaterialLoaded,
-                dynamicSpotLightShadowLightViewProjectionLoc,
-                dynamicSpotLightShadowAlphaTestLoc,
-                dynamicSpotLightShadowAlphaCutoffLoc)) {
+    if (!dynamicLightState.LoadShadowMaterial()) {
         Shutdown(assets);
         error = "Preview failed: could not load dynamic spotlight shadow shader";
         return false;
@@ -1163,12 +1096,13 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
             && !doorOpaqueMaterialLoaded
             && doorMeshCache.empty()
             && !dynamicLightState.HasShadowMapResources()
-            && !dynamicSpotLightShadowMaterialLoaded
+            && !dynamicLightState.HasShadowMaterial()
             && !skyRenderer.IsLoaded()) {
         return;
     }
 
     bloomRenderer.Shutdown();
+    dynamicLightState.UnloadShadowMaterial();
     dynamicLightState.UnloadShadowMapResources();
     skyRenderer.Shutdown();
     UnloadDoorMeshes();
@@ -1190,17 +1124,6 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
         shadowBiasLoc = -1;
         shadowStrengthLoc = -1;
         shadowSoftnessLoc = -1;
-    }
-
-    if (dynamicSpotLightShadowMaterialLoaded) {
-        dynamicSpotLightShadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = dynamicSpotLightShadowDefaultTexture;
-        UnloadMaterial(dynamicSpotLightShadowMaterial);
-        dynamicSpotLightShadowMaterial = Material{};
-        dynamicSpotLightShadowDefaultTexture = Texture2D{};
-        dynamicSpotLightShadowMaterialLoaded = false;
-        dynamicSpotLightShadowLightViewProjectionLoc = -1;
-        dynamicSpotLightShadowAlphaTestLoc = -1;
-        dynamicSpotLightShadowAlphaCutoffLoc = -1;
     }
 
     billboardRenderer.Shutdown();
@@ -1654,9 +1577,7 @@ void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
         engine::AssetManager& assets,
         engine::World* runtimeObjectWorld)
 {
-    if (!dynamicSpotLightShadowMaterialLoaded
-            || dynamicSpotLightShadowLightViewProjectionLoc < 0
-            || dynamicLightState.ShadowMatrices().empty()) {
+    if (!dynamicLightState.IsShadowRenderReady()) {
         return;
     }
 
@@ -1668,13 +1589,8 @@ void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
 
     SectorPreviewDynamicSpotLightShadowRenderContext context;
     context.assets = &assets;
-    context.material = &dynamicSpotLightShadowMaterial;
-    context.defaultTexture = dynamicSpotLightShadowDefaultTexture;
     context.sectorDrawRecords = &meshes.sectorDrawRecords;
     context.doorShadowCasters = &runtimeDoorShadowCasters;
-    context.lightViewProjectionLoc = dynamicSpotLightShadowLightViewProjectionLoc;
-    context.alphaTestLoc = dynamicSpotLightShadowAlphaTestLoc;
-    context.alphaCutoffLoc = dynamicSpotLightShadowAlphaCutoffLoc;
     context.userData = this;
     context.textureResolver = &SectorMeshPreview::ResolveShadowCasterTexture;
     context.doorMeshResolver = &SectorMeshPreview::ResolveDoorShadowCasterMesh;

@@ -71,13 +71,13 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_06",
       "title": "Integrate Facade Cleanup",
       "type": "phase",
-      "status": "Planned"
+      "status": "Completed"
     },
     {
       "id": "phase_07",
       "title": "Verification Docs And Backlog Update",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Planned"
     }
   ]
 }
@@ -93,8 +93,8 @@ When an agent is asked to execute this plan, it must:
 | Phase 3: Move Uniform Upload Helpers | Completed | 2026-07-04 | Moved sector, door, and billboard dynamic light/shadow uniform upload helpers into `SectorPreviewDynamicLighting`; shader locations, uniform names, texture bindings, and render order are unchanged. |
 | Phase 4: Move Shadow Map Resource Ownership And Lifetime | Completed | 2026-07-04 | Moved dynamic spotlight shadow map render textures, depth-only allocation, filter/wrap setup, partial-failure cleanup, and custom unload into `SectorPreviewDynamicLighting`; shadow material and render orchestration remain in `SectorMeshPreview`. |
 | Phase 5: Move Dynamic Spotlight Shadow Map Render Orchestration | Completed | 2026-07-04 | Moved shadow-map begin/clear/draw/end loops into `SectorPreviewDynamicLighting`; `SectorMeshPreview` still owns the public facade, shadow material, and runtime door mesh preparation. |
-| Phase 6: Integrate Facade Cleanup | Planned |  | Remove moved internals from `SectorMeshPreview` while preserving its public facade. |
-| Phase 7: Verification Docs And Backlog Update | Not Started |  | Close implementation verification and update REF-014 backlog state only after implementation is done. |
+| Phase 6: Integrate Facade Cleanup | Completed | 2026-07-04 | Moved dynamic spotlight shadow material/shader ownership and readiness checks into `SectorPreviewDynamicLighting`; `SectorMeshPreview` keeps the public facade and high-level sequencing. |
+| Phase 7: Verification Docs And Backlog Update | Planned |  | Close implementation verification and update REF-014 backlog state only after implementation is done. |
 
 ## Execution Tracking Rules
 
@@ -385,6 +385,40 @@ Behavior notes:
 * Shadow pass render orchestration moved internally; shadow material ownership, shader locations, shadow map resources, sector mesh ownership, door mesh cache ownership, dynamic light selection, debug text, and main scene render order changed: no.
 * Alpha-test handling, alpha cutoff upload, static sector caster drawing, runtime door caster drawing, door model matrix behavior, `BeginTextureMode()`, `ClearBackground(WHITE)`, depth-test enable/disable, and `EndTextureMode()` behavior changed: no.
 * Door renderer extraction remains out of scope.
+* Lightmap source-hash behavior changed: no.
+* Topology cache behavior changed: no.
+* Collision, sector lookup, physics changed: no.
+* ECS ownership changed: no.
+* Manual render smoke performed: no; not performed in this pass.
+
+### Phase 6: Integrate Facade Cleanup
+
+Status: Completed
+Date: 2026-07-04
+
+Summary:
+
+* Moved dynamic spotlight shadow material/shader ownership, shader-location lookup, readiness checks, and unload logic from `SectorMeshPreview` into `SectorPreviewDynamicLighting`.
+* Removed the moved dynamic spotlight shadow material members and private load helper from `SectorMeshPreview`.
+* Kept `SectorMeshPreview::RenderDynamicSpotLightShadowMaps()` as the public facade; it still prepares runtime door meshes before delegating the shadow render pass.
+
+Verification results:
+
+* `cmake --build cmake-build-debug -j2`: passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_runtime_object|sector_light|sector_topology|sector_editor|sector_authoring"`: passed, 9/9 tests.
+* `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 15/15 tests.
+* `git diff --check`: passed with no output.
+* `git diff --stat`: passed; tracked diff reported this plan plus `SectorMeshPreview.*` and `SectorPreviewDynamicLighting.*`.
+* `git status --short`: passed; reported modified plan/source files only.
+* `python3 tools/plan_executor.py docs/plans/sector_preview_dynamic_lighting_refactor_plan.md --status`: passed; next selected item is `phase_07` with status `Planned`.
+
+Behavior notes:
+
+* Source code changed: yes.
+* Runtime behavior changed: no intended behavior change.
+* Final ownership split: `SectorPreviewDynamicLighting` owns dynamic light CPU state, dynamic spotlight shadow map resources, dynamic spotlight shadow material/shader state, shadow uniform packing, uploads, and shadow render internals; `SectorMeshPreview` owns the public facade, static sector meshes/material, door mesh cache, billboard/sky/bloom renderers, runtime sequencing, and debug text composition.
+* `SectorMeshPreview` public API and debug accessors remain stable.
+* Shader formulas/names, max counts, dynamic light ranking, hysteresis, flicker, bias/softness/strength, shadow map resolution/filter/wrap/setup, alpha-test behavior, door caster model matrices, and render order changed: no.
 * Lightmap source-hash behavior changed: no.
 * Topology cache behavior changed: no.
 * Collision, sector lookup, physics changed: no.
