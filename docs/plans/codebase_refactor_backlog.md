@@ -49,7 +49,7 @@ Task Type:
 | REF-011 | `[x]` | Medium | Editor header | Split preview/runtime/lightmap async state types | Codex task | Medium | Watch test source lists |
 | REF-012 | `[x]` | Medium | Editor header | Review remaining dependencies after splits | Audit first | Low | Completed; see audit report |
 | REF-038 | `[x]` | Low | Editor header | Direct include cleanup after REF-012 | Codex task | Low/Medium | Removed obvious redundant umbrella includes |
-| REF-013 | `[ ]` | High | Mesh preview | Audit `SectorMeshPreview` extraction seams | Audit first | Medium | Do before source edits |
+| REF-013 | `[x]` | High | Mesh preview | Audit `SectorMeshPreview` extraction seams | Audit first | Medium | Completed; see audit report |
 | REF-014 | `[ ]` | High | Mesh preview | Extract dynamic lighting/shadow internals | Runner plan | Medium/High | Needs manual render smoke |
 | REF-015 | `[ ]` | High | Mesh preview | Extract runtime door renderer / mesh cache helper | Runner plan | Medium/High | Door lighting/shadow risk |
 | REF-016 | `[ ]` | Medium | Mesh preview | Extract runtime billboard renderer helper | Codex task | Medium | Keep facade stable |
@@ -301,7 +301,7 @@ Task Type:
 
 ### 4. SectorMeshPreview Renderer Landfill
 
-#### REF-013 `[ ]` Audit `SectorMeshPreview` extraction seams before touching source
+#### REF-013 `[x]` Audit `SectorMeshPreview` extraction seams before touching source
 
 - Source/audit reference: `SectorMeshPreview` landfill and renderer/runtime
   coupling sections.
@@ -313,6 +313,9 @@ Task Type:
 - Risk: Medium.
 - Suggested verification: documentation/audit output only.
 - Completion notes:
+  - Completed in `docs/audit/sector_mesh_preview_extraction_audit.md`.
+  - Conclusion: billboard and sky are the safest first extraction seams; dynamic
+    lighting/shadows and door rendering need dedicated runner plans.
 
 #### REF-014 `[ ]` Extract dynamic lighting/shadow internals
 
