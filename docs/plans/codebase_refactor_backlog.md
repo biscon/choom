@@ -43,7 +43,7 @@ Task Type:
 | REF-005 | `[x]` | Low | Utilities | Extract trivial color conversion helpers | Codex task | Low | Do not merge lighting evaluation |
 | REF-006 | `[ ]` | Low | Utilities | Evaluate tiny UV fit/span validation helper | Audit first | Medium | Avoid generic UV framework |
 | REF-007 | `[x]` | Medium | Utilities | Extract lightmap bake report formatting | Codex task | Low | Behavior-preserving string/report split |
-| REF-008 | `[ ]` | High | Editor header | Move render-cache cached draw structs | Codex task | Low | Narrow `SectorEditorTypes.h` |
+| REF-008 | `[x]` | High | Editor header | Move render-cache cached draw structs | Codex task | Low | Narrow `SectorEditorTypes.h` |
 | REF-009 | `[ ]` | Medium | Editor header | Split editor modal state types | Codex task | Medium | Include churn likely |
 | REF-010 | `[ ]` | Medium | Editor header | Split selection/picking/drag state types | Codex task | Medium | Keep behavior unchanged |
 | REF-011 | `[ ]` | Medium | Editor header | Split preview/runtime/lightmap async state types | Codex task | Medium | Watch test source lists |
@@ -195,7 +195,7 @@ Task Type:
 
 ### 3. Editor Header / Include Blast Radius
 
-#### REF-008 `[ ]` Move topology render-cache cached draw structs out of `SectorEditorTypes.h`
+#### REF-008 `[x]` Move topology render-cache cached draw structs out of `SectorEditorTypes.h`
 
 - Source/audit reference: quick win 3 and `SectorEditorTypes.h` god-header
   section.
@@ -206,7 +206,9 @@ Task Type:
 - Suggested task type: Codex task.
 - Risk: Low.
 - Suggested verification: full build and editor-related tests.
-- Completion notes:
+- Completion notes: Completed by moving topology render-cache cached draw types
+  into `SectorEditorTopologyRenderCacheTypes.h`; `SectorEditorTypes.h` still
+  includes the new header as a compatibility umbrella.
 
 #### REF-009 `[ ]` Split editor modal state types
 
