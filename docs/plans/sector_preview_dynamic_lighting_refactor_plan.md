@@ -77,7 +77,7 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_07",
       "title": "Verification Docs And Backlog Update",
       "type": "phase",
-      "status": "Planned"
+      "status": "Completed"
     }
   ]
 }
@@ -94,7 +94,7 @@ When an agent is asked to execute this plan, it must:
 | Phase 4: Move Shadow Map Resource Ownership And Lifetime | Completed | 2026-07-04 | Moved dynamic spotlight shadow map render textures, depth-only allocation, filter/wrap setup, partial-failure cleanup, and custom unload into `SectorPreviewDynamicLighting`; shadow material and render orchestration remain in `SectorMeshPreview`. |
 | Phase 5: Move Dynamic Spotlight Shadow Map Render Orchestration | Completed | 2026-07-04 | Moved shadow-map begin/clear/draw/end loops into `SectorPreviewDynamicLighting`; `SectorMeshPreview` still owns the public facade, shadow material, and runtime door mesh preparation. |
 | Phase 6: Integrate Facade Cleanup | Completed | 2026-07-04 | Moved dynamic spotlight shadow material/shader ownership and readiness checks into `SectorPreviewDynamicLighting`; `SectorMeshPreview` keeps the public facade and high-level sequencing. |
-| Phase 7: Verification Docs And Backlog Update | Planned |  | Close implementation verification and update REF-014 backlog state only after implementation is done. |
+| Phase 7: Verification Docs And Backlog Update | Completed | 2026-07-04 | Final automated verification passed and REF-014 backlog state was marked complete; manual visual smoke was not performed. |
 
 ## Execution Tracking Rules
 
@@ -424,6 +424,45 @@ Behavior notes:
 * Collision, sector lookup, physics changed: no.
 * ECS ownership changed: no.
 * Manual render smoke performed: no; not performed in this pass.
+
+### Phase 7: Verification Docs And Backlog Update
+
+Status: Completed
+Date: 2026-07-04
+
+Summary:
+
+* Completed final closeout verification after Phases 1 through 6 were recorded as completed.
+* Updated REF-014 in `docs/plans/codebase_refactor_backlog.md` using the existing backlog completion style.
+* This phase was documentation/backlog-only and did not change source code, shaders, CMake, tests, or runtime behavior.
+
+Verification results:
+
+* `python3 tools/plan_executor.py docs/plans/sector_preview_dynamic_lighting_refactor_plan.md --status`: passed before closeout; selected item was `phase_07` with status `Planned`.
+* `cmake --build cmake-build-debug -j2`: passed; ninja reported no work to do.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_runtime_object|sector_light|sector_topology|sector_editor|sector_authoring"`: passed, 9/9 tests.
+* `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 15/15 tests.
+* `git diff --check`: passed with no output before closeout edits.
+* `git diff --stat`: passed with no tracked diff output before closeout edits.
+* `git status --short`: passed with no output before closeout edits.
+* `python3 tools/plan_executor.py docs/plans/sector_preview_dynamic_lighting_refactor_plan.md --status`: passed after closeout edits; plan reported no unfinished items.
+* `git diff --check`: passed with no output after closeout edits.
+* `git diff --stat`: passed after closeout edits; reported only this plan and `docs/plans/codebase_refactor_backlog.md`.
+* `git status --short`: passed after closeout edits; reported only this plan and `docs/plans/codebase_refactor_backlog.md` as modified.
+
+Behavior notes:
+
+* Source code changed in this phase: no.
+* Source code changed in previous implementation phases: yes; Phases 1 through 6 extracted dynamic lighting and dynamic spotlight shadow internals behind `SectorPreviewDynamicLighting`.
+* Runtime behavior changed in this phase: no.
+* Rendering, shader uniform upload, resource lifetime, light selection, debug text, render order, and build/test behavior changed in this phase: no.
+* Lightmap source-hash behavior changed: no.
+* Topology cache behavior changed: no.
+* Collision, sector lookup, physics changed: no.
+* ECS ownership changed: no.
+* Manual render smoke performed: no; not performed during closeout, so visual-rendering smoke remains a manual follow-up risk.
+* REF-014 backlog status: completed.
+* REF-015, REF-018, and later backlog items were not completed by this phase.
 
 ## Phase 0: Baseline Audit And Behavior Contract
 

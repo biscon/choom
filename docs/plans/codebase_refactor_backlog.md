@@ -50,7 +50,7 @@ Task Type:
 | REF-012 | `[x]` | Medium | Editor header | Review remaining dependencies after splits | Audit first | Low | Completed; see audit report |
 | REF-038 | `[x]` | Low | Editor header | Direct include cleanup after REF-012 | Codex task | Low/Medium | Removed obvious redundant umbrella includes |
 | REF-013 | `[x]` | High | Mesh preview | Audit `SectorMeshPreview` extraction seams | Audit first | Medium | Completed; see audit report |
-| REF-014 | `[ ]` | High | Mesh preview | Extract dynamic lighting/shadow internals | Runner plan | Medium/High | Needs manual render smoke |
+| REF-014 | `[x]` | High | Mesh preview | Extract dynamic lighting/shadow internals | Runner plan | Medium/High | Completed; manual render smoke still recommended |
 | REF-015 | `[ ]` | High | Mesh preview | Extract runtime door renderer / mesh cache helper | Runner plan | Medium/High | Door lighting/shadow risk |
 | REF-016 | `[x]` | Medium | Mesh preview | Extract runtime billboard renderer helper | Codex task | Medium | Completed; helper owns billboard shader/draw path |
 | REF-017 | `[x]` | Medium | Mesh preview | Extract sky/bloom helpers | Codex task | Medium | GPU resource lifetime sensitive |
@@ -317,7 +317,7 @@ Task Type:
   - Conclusion: billboard and sky are the safest first extraction seams; dynamic
     lighting/shadows and door rendering need dedicated runner plans.
 
-#### REF-014 `[ ]` Extract dynamic lighting/shadow internals
+#### REF-014 `[x]` Extract dynamic lighting/shadow internals
 
 - Source/audit reference: medium refactor 2 and dynamic receiver bounds notes.
 - Why it helps: isolates point/spot selection, shadow maps, shader uniforms,
@@ -330,8 +330,15 @@ Task Type:
   preview smoke for lights and shadows.
 - Completion notes:
   - Dedicated runner plan created at
-    `docs/plans/sector_preview_dynamic_lighting_refactor_plan.md`; REF-014
-    remains not started until implementation phases are executed.
+    `docs/plans/sector_preview_dynamic_lighting_refactor_plan.md`.
+  - Completed by extracting dynamic light CPU state, uniform uploads, dynamic
+    spotlight shadow map resources, shadow material ownership, and shadow render
+    internals into `SectorPreviewDynamicLighting` while keeping
+    `SectorMeshPreview` as the public facade and high-level sequencing owner.
+  - Final automated closeout verification passed on 2026-07-04: build, targeted
+    sector tests, and full `ctest`. Manual 3D preview smoke was not performed,
+    so visual smoke for dynamic lights, spotlight shadows, doors, and billboards
+    remains recommended.
 
 #### REF-015 `[ ]` Extract runtime door renderer / mesh cache helper
 
