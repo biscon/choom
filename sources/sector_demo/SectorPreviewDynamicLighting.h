@@ -61,6 +61,23 @@ struct SectorPreviewBillboardDynamicLightContext {
     float dynamicLightingClamp = 4.0f;
 };
 
+void UploadSectorPreviewDynamicPointLights(
+        Shader shader,
+        const SectorPreviewDynamicLightShaderLocations& locations,
+        bool dynamicLightingEnabled,
+        float runtimeSeconds,
+        const std::vector<SectorPreviewDynamicPointLightUniform>& lights);
+
+void UploadSectorPreviewDynamicPointLights(
+        Shader shader,
+        const SectorPreviewDynamicLightShaderLocations& locations,
+        const SectorPreviewBillboardDynamicLightContext& context);
+
+void UploadSectorPreviewDynamicSpotLightShadowUniforms(
+        Shader shader,
+        const SectorPreviewDynamicSpotLightShadowShaderLocations& locations,
+        const SectorPreviewDynamicSpotLightShadowUniforms& uniforms);
+
 class SectorPreviewDynamicLighting {
 public:
     void Reset();

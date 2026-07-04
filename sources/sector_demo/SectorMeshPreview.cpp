@@ -593,131 +593,6 @@ int GetShaderLocationArrayElement(Shader shader, const char* name, std::size_t i
     return GetShaderLocation(shader, indexedName.c_str());
 }
 
-void UploadDynamicPointLights(
-        Shader shader,
-        int dynamicLightCountLoc,
-        int dynamicLightPositionsLoc,
-        int dynamicLightColorsLoc,
-        int dynamicLightRadiiLoc,
-        int dynamicLightIntensitiesLoc,
-        int dynamicLightTypesLoc,
-        int dynamicLightDirectionsLoc,
-        int dynamicLightInnerConeCosLoc,
-        int dynamicLightOuterConeCosLoc,
-        int dynamicLightingClampLoc,
-        bool dynamicLightingEnabled,
-        float runtimeSeconds,
-        const std::vector<SectorPreviewDynamicPointLightUniform>& lights)
-{
-    const int lightCount = dynamicLightingEnabled
-            ? static_cast<int>(std::min(lights.size(), static_cast<size_t>(MaxDynamicLights)))
-            : 0;
-    if (dynamicLightCountLoc >= 0) {
-        SetShaderValue(shader, dynamicLightCountLoc, &lightCount, SHADER_UNIFORM_INT);
-    }
-    if (dynamicLightingClampLoc >= 0) {
-        const float clampValue = DynamicLightingClamp;
-        SetShaderValue(shader, dynamicLightingClampLoc, &clampValue, SHADER_UNIFORM_FLOAT);
-    }
-    if (lightCount <= 0) {
-        return;
-    }
-
-    std::array<Vector3, MaxDynamicLights> positions{};
-    std::array<Vector3, MaxDynamicLights> colors{};
-    std::array<float, MaxDynamicLights> radii{};
-    std::array<float, MaxDynamicLights> intensities{};
-    std::array<int, MaxDynamicLights> types{};
-    std::array<Vector3, MaxDynamicLights> directions{};
-    std::array<float, MaxDynamicLights> innerConeCos{};
-    std::array<float, MaxDynamicLights> outerConeCos{};
-    for (int i = 0; i < lightCount; ++i) {
-        positions[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].position;
-        colors[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].color;
-        radii[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].radius;
-        intensities[static_cast<size_t>(i)] = DynamicLightEffectiveUploadIntensity(
-                lights[static_cast<size_t>(i)],
-                runtimeSeconds);
-        types[static_cast<size_t>(i)] = static_cast<int>(lights[static_cast<size_t>(i)].kind);
-        directions[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].direction;
-        innerConeCos[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].innerConeCos;
-        outerConeCos[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].outerConeCos;
-    }
-
-    if (dynamicLightPositionsLoc >= 0) {
-        SetShaderValueV(shader, dynamicLightPositionsLoc, positions.data(), SHADER_UNIFORM_VEC3, lightCount);
-    }
-    if (dynamicLightColorsLoc >= 0) {
-        SetShaderValueV(shader, dynamicLightColorsLoc, colors.data(), SHADER_UNIFORM_VEC3, lightCount);
-    }
-    if (dynamicLightRadiiLoc >= 0) {
-        SetShaderValueV(shader, dynamicLightRadiiLoc, radii.data(), SHADER_UNIFORM_FLOAT, lightCount);
-    }
-    if (dynamicLightIntensitiesLoc >= 0) {
-        SetShaderValueV(shader, dynamicLightIntensitiesLoc, intensities.data(), SHADER_UNIFORM_FLOAT, lightCount);
-    }
-    if (dynamicLightTypesLoc >= 0) {
-        SetShaderValueV(shader, dynamicLightTypesLoc, types.data(), SHADER_UNIFORM_INT, lightCount);
-    }
-    if (dynamicLightDirectionsLoc >= 0) {
-        SetShaderValueV(shader, dynamicLightDirectionsLoc, directions.data(), SHADER_UNIFORM_VEC3, lightCount);
-    }
-    if (dynamicLightInnerConeCosLoc >= 0) {
-        SetShaderValueV(shader, dynamicLightInnerConeCosLoc, innerConeCos.data(), SHADER_UNIFORM_FLOAT, lightCount);
-    }
-    if (dynamicLightOuterConeCosLoc >= 0) {
-        SetShaderValueV(shader, dynamicLightOuterConeCosLoc, outerConeCos.data(), SHADER_UNIFORM_FLOAT, lightCount);
-    }
-}
-
-void UploadDynamicSpotLightShadowUniforms(
-        Shader shader,
-        int dynamicLightShadowSlotsLoc,
-        const std::array<int, MaxDynamicSpotLightShadowCasters>& shadowLightMatrixLocs,
-        int shadowBiasLoc,
-        int shadowStrengthLoc,
-        int shadowSoftnessLoc,
-        const SectorPreviewDynamicSpotLightShadowUniforms& uniforms)
-{
-    if (dynamicLightShadowSlotsLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                dynamicLightShadowSlotsLoc,
-                uniforms.dynamicLightShadowSlots.data(),
-                SHADER_UNIFORM_INT,
-                static_cast<int>(MaxDynamicLights));
-    }
-    for (std::size_t i = 0; i < MaxDynamicSpotLightShadowCasters; ++i) {
-        if (shadowLightMatrixLocs[i] >= 0) {
-            SetShaderValueMatrix(shader, shadowLightMatrixLocs[i], uniforms.shadowLightMatrices[i]);
-        }
-    }
-    if (shadowBiasLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                shadowBiasLoc,
-                uniforms.shadowBias.data(),
-                SHADER_UNIFORM_FLOAT,
-                static_cast<int>(MaxDynamicSpotLightShadowCasters));
-    }
-    if (shadowStrengthLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                shadowStrengthLoc,
-                uniforms.shadowStrength.data(),
-                SHADER_UNIFORM_FLOAT,
-                static_cast<int>(MaxDynamicSpotLightShadowCasters));
-    }
-    if (shadowSoftnessLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                shadowSoftnessLoc,
-                uniforms.shadowSoftness.data(),
-                SHADER_UNIFORM_FLOAT,
-                static_cast<int>(MaxDynamicSpotLightShadowCasters));
-    }
-}
-
 std::string FormatDynamicLightDebugText(
         bool dynamicLightingEnabled,
         size_t selectedCount,
@@ -1448,31 +1323,32 @@ void SectorMeshPreview::DrawScene(
     if (useBakedAmbientOcclusionLoc >= 0) {
         SetShaderValue(material.shader, useBakedAmbientOcclusionLoc, &useAo, SHADER_UNIFORM_FLOAT);
     }
-    UploadDynamicPointLights(
+    SectorPreviewDynamicLightShaderLocations dynamicLightLocations;
+    dynamicLightLocations.dynamicLightCount = dynamicLightCountLoc;
+    dynamicLightLocations.dynamicLightPositions = dynamicLightPositionsLoc;
+    dynamicLightLocations.dynamicLightColors = dynamicLightColorsLoc;
+    dynamicLightLocations.dynamicLightRadii = dynamicLightRadiiLoc;
+    dynamicLightLocations.dynamicLightIntensities = dynamicLightIntensitiesLoc;
+    dynamicLightLocations.dynamicLightTypes = dynamicLightTypesLoc;
+    dynamicLightLocations.dynamicLightDirections = dynamicLightDirectionsLoc;
+    dynamicLightLocations.dynamicLightInnerConeCos = dynamicLightInnerConeCosLoc;
+    dynamicLightLocations.dynamicLightOuterConeCos = dynamicLightOuterConeCosLoc;
+    dynamicLightLocations.dynamicLightingClamp = dynamicLightingClampLoc;
+    UploadSectorPreviewDynamicPointLights(
             material.shader,
-            dynamicLightCountLoc,
-            dynamicLightPositionsLoc,
-            dynamicLightColorsLoc,
-            dynamicLightRadiiLoc,
-            dynamicLightIntensitiesLoc,
-            dynamicLightTypesLoc,
-            dynamicLightDirectionsLoc,
-            dynamicLightInnerConeCosLoc,
-            dynamicLightOuterConeCosLoc,
-            dynamicLightingClampLoc,
+            dynamicLightLocations,
             dynamicLightingEnabled,
             runtimeSeconds,
             dynamicLightState.SelectedLights());
     const SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms =
             dynamicLightState.PackShadowUniforms();
-    UploadDynamicSpotLightShadowUniforms(
-            material.shader,
-            dynamicLightShadowSlotsLoc,
-            shadowLightMatrixLocs,
-            shadowBiasLoc,
-            shadowStrengthLoc,
-            shadowSoftnessLoc,
-            shadowUniforms);
+    SectorPreviewDynamicSpotLightShadowShaderLocations shadowLocations;
+    shadowLocations.dynamicLightShadowSlots = dynamicLightShadowSlotsLoc;
+    shadowLocations.shadowLightMatrices = shadowLightMatrixLocs;
+    shadowLocations.shadowBias = shadowBiasLoc;
+    shadowLocations.shadowStrength = shadowStrengthLoc;
+    shadowLocations.shadowSoftness = shadowSoftnessLoc;
+    UploadSectorPreviewDynamicSpotLightShadowUniforms(material.shader, shadowLocations, shadowUniforms);
     for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
         if (!ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)) {
             continue;
@@ -1621,31 +1497,32 @@ void SectorMeshPreview::DrawRuntimeDoors(
     rlDisableBackfaceCulling();
     rlEnableDepthTest();
     rlEnableDepthMask();
-    UploadDynamicPointLights(
+    SectorPreviewDynamicLightShaderLocations dynamicLightLocations;
+    dynamicLightLocations.dynamicLightCount = doorOpaqueDynamicLightCountLoc;
+    dynamicLightLocations.dynamicLightPositions = doorOpaqueDynamicLightPositionsLoc;
+    dynamicLightLocations.dynamicLightColors = doorOpaqueDynamicLightColorsLoc;
+    dynamicLightLocations.dynamicLightRadii = doorOpaqueDynamicLightRadiiLoc;
+    dynamicLightLocations.dynamicLightIntensities = doorOpaqueDynamicLightIntensitiesLoc;
+    dynamicLightLocations.dynamicLightTypes = doorOpaqueDynamicLightTypesLoc;
+    dynamicLightLocations.dynamicLightDirections = doorOpaqueDynamicLightDirectionsLoc;
+    dynamicLightLocations.dynamicLightInnerConeCos = doorOpaqueDynamicLightInnerConeCosLoc;
+    dynamicLightLocations.dynamicLightOuterConeCos = doorOpaqueDynamicLightOuterConeCosLoc;
+    dynamicLightLocations.dynamicLightingClamp = doorOpaqueDynamicLightingClampLoc;
+    UploadSectorPreviewDynamicPointLights(
             doorOpaqueMaterial.shader,
-            doorOpaqueDynamicLightCountLoc,
-            doorOpaqueDynamicLightPositionsLoc,
-            doorOpaqueDynamicLightColorsLoc,
-            doorOpaqueDynamicLightRadiiLoc,
-            doorOpaqueDynamicLightIntensitiesLoc,
-            doorOpaqueDynamicLightTypesLoc,
-            doorOpaqueDynamicLightDirectionsLoc,
-            doorOpaqueDynamicLightInnerConeCosLoc,
-            doorOpaqueDynamicLightOuterConeCosLoc,
-            doorOpaqueDynamicLightingClampLoc,
+            dynamicLightLocations,
             dynamicLightingEnabled,
             runtimeSeconds,
             dynamicLightState.SelectedLights());
     const SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms =
             dynamicLightState.PackShadowUniforms();
-    UploadDynamicSpotLightShadowUniforms(
-            doorOpaqueMaterial.shader,
-            doorOpaqueDynamicLightShadowSlotsLoc,
-            doorOpaqueShadowLightMatrixLocs,
-            doorOpaqueShadowBiasLoc,
-            doorOpaqueShadowStrengthLoc,
-            doorOpaqueShadowSoftnessLoc,
-            shadowUniforms);
+    SectorPreviewDynamicSpotLightShadowShaderLocations shadowLocations;
+    shadowLocations.dynamicLightShadowSlots = doorOpaqueDynamicLightShadowSlotsLoc;
+    shadowLocations.shadowLightMatrices = doorOpaqueShadowLightMatrixLocs;
+    shadowLocations.shadowBias = doorOpaqueShadowBiasLoc;
+    shadowLocations.shadowStrength = doorOpaqueShadowStrengthLoc;
+    shadowLocations.shadowSoftness = doorOpaqueShadowSoftnessLoc;
+    UploadSectorPreviewDynamicSpotLightShadowUniforms(doorOpaqueMaterial.shader, shadowLocations, shadowUniforms);
     doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = dynamicSpotLightShadowMaps[0].depth;
     doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = dynamicSpotLightShadowMaps[1].depth;
     if (doorOpaqueDebugModeLoc >= 0) {

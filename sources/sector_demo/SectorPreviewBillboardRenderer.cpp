@@ -361,144 +361,6 @@ Vector3 BakedBillboardLighting(const SectorObjectLighting* lighting)
             1.0f / 5.0f);
 }
 
-void UploadDynamicPointLights(
-        Shader shader,
-        int dynamicLightCountLoc,
-        int dynamicLightPositionsLoc,
-        int dynamicLightColorsLoc,
-        int dynamicLightRadiiLoc,
-        int dynamicLightIntensitiesLoc,
-        int dynamicLightTypesLoc,
-        int dynamicLightDirectionsLoc,
-        int dynamicLightInnerConeCosLoc,
-        int dynamicLightOuterConeCosLoc,
-        int dynamicLightingClampLoc,
-        const SectorPreviewBillboardDynamicLightContext& context)
-{
-    if (dynamicLightCountLoc >= 0) {
-        SetShaderValue(shader, dynamicLightCountLoc, &context.dynamicLightCount, SHADER_UNIFORM_INT);
-    }
-    if (dynamicLightingClampLoc >= 0) {
-        SetShaderValue(shader, dynamicLightingClampLoc, &context.dynamicLightingClamp, SHADER_UNIFORM_FLOAT);
-    }
-    if (context.dynamicLightCount <= 0) {
-        return;
-    }
-
-    if (dynamicLightPositionsLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                dynamicLightPositionsLoc,
-                context.dynamicLightPositions.data(),
-                SHADER_UNIFORM_VEC3,
-                context.dynamicLightCount);
-    }
-    if (dynamicLightColorsLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                dynamicLightColorsLoc,
-                context.dynamicLightColors.data(),
-                SHADER_UNIFORM_VEC3,
-                context.dynamicLightCount);
-    }
-    if (dynamicLightRadiiLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                dynamicLightRadiiLoc,
-                context.dynamicLightRadii.data(),
-                SHADER_UNIFORM_FLOAT,
-                context.dynamicLightCount);
-    }
-    if (dynamicLightIntensitiesLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                dynamicLightIntensitiesLoc,
-                context.dynamicLightIntensities.data(),
-                SHADER_UNIFORM_FLOAT,
-                context.dynamicLightCount);
-    }
-    if (dynamicLightTypesLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                dynamicLightTypesLoc,
-                context.dynamicLightTypes.data(),
-                SHADER_UNIFORM_INT,
-                context.dynamicLightCount);
-    }
-    if (dynamicLightDirectionsLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                dynamicLightDirectionsLoc,
-                context.dynamicLightDirections.data(),
-                SHADER_UNIFORM_VEC3,
-                context.dynamicLightCount);
-    }
-    if (dynamicLightInnerConeCosLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                dynamicLightInnerConeCosLoc,
-                context.dynamicLightInnerConeCos.data(),
-                SHADER_UNIFORM_FLOAT,
-                context.dynamicLightCount);
-    }
-    if (dynamicLightOuterConeCosLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                dynamicLightOuterConeCosLoc,
-                context.dynamicLightOuterConeCos.data(),
-                SHADER_UNIFORM_FLOAT,
-                context.dynamicLightCount);
-    }
-}
-
-void UploadDynamicSpotLightShadowUniforms(
-        Shader shader,
-        int dynamicLightShadowSlotsLoc,
-        const std::array<int, MaxDynamicSpotLightShadowCasters>& shadowLightMatrixLocs,
-        int shadowBiasLoc,
-        int shadowStrengthLoc,
-        int shadowSoftnessLoc,
-        const SectorPreviewDynamicSpotLightShadowUniforms& uniforms)
-{
-    if (dynamicLightShadowSlotsLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                dynamicLightShadowSlotsLoc,
-                uniforms.dynamicLightShadowSlots.data(),
-                SHADER_UNIFORM_INT,
-                static_cast<int>(MaxDynamicLights));
-    }
-    for (std::size_t i = 0; i < MaxDynamicSpotLightShadowCasters; ++i) {
-        if (shadowLightMatrixLocs[i] >= 0) {
-            SetShaderValueMatrix(shader, shadowLightMatrixLocs[i], uniforms.shadowLightMatrices[i]);
-        }
-    }
-    if (shadowBiasLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                shadowBiasLoc,
-                uniforms.shadowBias.data(),
-                SHADER_UNIFORM_FLOAT,
-                static_cast<int>(MaxDynamicSpotLightShadowCasters));
-    }
-    if (shadowStrengthLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                shadowStrengthLoc,
-                uniforms.shadowStrength.data(),
-                SHADER_UNIFORM_FLOAT,
-                static_cast<int>(MaxDynamicSpotLightShadowCasters));
-    }
-    if (shadowSoftnessLoc >= 0) {
-        SetShaderValueV(
-                shader,
-                shadowSoftnessLoc,
-                uniforms.shadowSoftness.data(),
-                SHADER_UNIFORM_FLOAT,
-                static_cast<int>(MaxDynamicSpotLightShadowCasters));
-    }
-}
-
 } // namespace
 
 bool SectorPreviewBillboardRenderer::Load()
@@ -625,26 +487,27 @@ void SectorPreviewBillboardRenderer::Draw(
     rlEnableDepthMask();
     BeginShaderMode(cutoutShader);
 
-    UploadDynamicPointLights(
+    SectorPreviewDynamicLightShaderLocations dynamicLightLocations;
+    dynamicLightLocations.dynamicLightCount = dynamicLightCountLoc;
+    dynamicLightLocations.dynamicLightPositions = dynamicLightPositionsLoc;
+    dynamicLightLocations.dynamicLightColors = dynamicLightColorsLoc;
+    dynamicLightLocations.dynamicLightRadii = dynamicLightRadiiLoc;
+    dynamicLightLocations.dynamicLightIntensities = dynamicLightIntensitiesLoc;
+    dynamicLightLocations.dynamicLightTypes = dynamicLightTypesLoc;
+    dynamicLightLocations.dynamicLightDirections = dynamicLightDirectionsLoc;
+    dynamicLightLocations.dynamicLightInnerConeCos = dynamicLightInnerConeCosLoc;
+    dynamicLightLocations.dynamicLightOuterConeCos = dynamicLightOuterConeCosLoc;
+    dynamicLightLocations.dynamicLightingClamp = dynamicLightingClampLoc;
+    UploadSectorPreviewDynamicPointLights(cutoutShader, dynamicLightLocations, dynamicLightContext);
+    SectorPreviewDynamicSpotLightShadowShaderLocations shadowLocations;
+    shadowLocations.dynamicLightShadowSlots = dynamicLightShadowSlotsLoc;
+    shadowLocations.shadowLightMatrices = shadowLightMatrixLocs;
+    shadowLocations.shadowBias = shadowBiasLoc;
+    shadowLocations.shadowStrength = shadowStrengthLoc;
+    shadowLocations.shadowSoftness = shadowSoftnessLoc;
+    UploadSectorPreviewDynamicSpotLightShadowUniforms(
             cutoutShader,
-            dynamicLightCountLoc,
-            dynamicLightPositionsLoc,
-            dynamicLightColorsLoc,
-            dynamicLightRadiiLoc,
-            dynamicLightIntensitiesLoc,
-            dynamicLightTypesLoc,
-            dynamicLightDirectionsLoc,
-            dynamicLightInnerConeCosLoc,
-            dynamicLightOuterConeCosLoc,
-            dynamicLightingClampLoc,
-            dynamicLightContext);
-    UploadDynamicSpotLightShadowUniforms(
-            cutoutShader,
-            dynamicLightShadowSlotsLoc,
-            shadowLightMatrixLocs,
-            shadowBiasLoc,
-            shadowStrengthLoc,
-            shadowSoftnessLoc,
+            shadowLocations,
             dynamicLightContext.shadowUniforms);
     if (shadowMap0Loc >= 0
             && dynamicLightContext.shadowMaps.shadowMap0 != nullptr

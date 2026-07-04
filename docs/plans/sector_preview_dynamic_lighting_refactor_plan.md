@@ -53,13 +53,13 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_03",
       "title": "Move Uniform Upload Helpers",
       "type": "phase",
-      "status": "Planned"
+      "status": "Completed"
     },
     {
       "id": "phase_04",
       "title": "Move Shadow Map Resource Ownership And Lifetime",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Planned"
     },
     {
       "id": "phase_05",
@@ -90,8 +90,8 @@ When an agent is asked to execute this plan, it must:
 | Phase 0: Baseline Audit And Behavior Contract | Completed | 2026-07-04 | Documentation-only audit completed; behavior contract now names current symbols, ownership, upload paths, render order, and lifetime boundaries. |
 | Phase 1: Introduce Shared Draw And Upload Context Types | Completed | 2026-07-04 | Added shared dynamic-light shader-location, shadow-map texture, and billboard upload context structs; ownership remains in `SectorMeshPreview`. |
 | Phase 2: Move Pure CPU Selection And Packing Buffers | Completed | 2026-07-04 | Added helper-owned CPU dynamic-light state for sources, candidates, selected lights/IDs, receiver bounds, shadow casters, shadow matrices, and shadow uniform packing. |
-| Phase 3: Move Uniform Upload Helpers | Planned |  | Move upload helpers while preserving shader locations and names. |
-| Phase 4: Move Shadow Map Resource Ownership And Lifetime | Not Started |  | Move shadow map resources late, after CPU/upload behavior is stable. |
+| Phase 3: Move Uniform Upload Helpers | Completed | 2026-07-04 | Moved sector, door, and billboard dynamic light/shadow uniform upload helpers into `SectorPreviewDynamicLighting`; shader locations, uniform names, texture bindings, and render order are unchanged. |
+| Phase 4: Move Shadow Map Resource Ownership And Lifetime | Planned |  | Move shadow map resources late, after CPU/upload behavior is stable. |
 | Phase 5: Move Dynamic Spotlight Shadow Map Render Orchestration | Not Started |  | Delegate shadow pass internals without changing render order. |
 | Phase 6: Integrate Facade Cleanup | Not Started |  | Remove moved internals from `SectorMeshPreview` while preserving its public facade. |
 | Phase 7: Verification Docs And Backlog Update | Not Started |  | Close implementation verification and update REF-014 backlog state only after implementation is done. |
@@ -141,14 +141,14 @@ Current dynamic lighting and shadow behavior to preserve:
 * Direct receiver bounds are rebuilt by `BuildDirectDynamicLightReceiverBounds()` from `meshes.sectorReceiverBounds` and append runtime door receiver bounds via `CollectSectorDoorReceiverBounds()` only when a runtime world is supplied.
 * `RefreshDynamicLightSources()` and rebuild setup both call `BuildSectorPreviewDynamicPointLightSources()` using `visibilityLookupWorld` when valid, reserve candidate/selected/shadow buffers, and then refresh selection/debug state.
 * Dynamic light selection must preserve ranking, hysteresis, previous selected ID behavior, max dynamic light count, and selected-ID debug output. The current call intentionally passes `&selectedDynamicPointLightIds` as both previous-ID input and selected-ID output.
-* Dynamic light upload must preserve `UploadDynamicPointLights()` behavior in `SectorMeshPreview.cpp` and `SectorPreviewBillboardRenderer.cpp`, including disabled-light zero count, `DynamicLightingClamp`, `DynamicLightEffectiveUploadIntensity()`, flicker, and `runtimeSeconds`.
+* Dynamic light upload must preserve the shared `UploadSectorPreviewDynamicPointLights()` behavior in `SectorPreviewDynamicLighting.cpp`, including disabled-light zero count, `DynamicLightingClamp`, `DynamicLightEffectiveUploadIntensity()`, flicker, and `runtimeSeconds`.
 * Dynamic spotlight shadow selection must preserve the max shadow caster count from `MaxDynamicSpotLightShadowCasters`, selected-light-only eligibility, priority/score/stable-ID ordering, slot assignment, bias, strength, and softness packing through `PackSectorPreviewDynamicSpotLightShadowUniforms()`.
 * Shadow maps are currently depth-only render textures using `DynamicSpotLightShadowMapResolution` and `LoadDepthOnlyRenderTexture()`. `EnsureDynamicSpotLightShadowMapResources()` creates missing maps, requires both framebuffer and depth texture IDs, calls `SetTextureFilter(..., TEXTURE_FILTER_POINT)` and `SetTextureWrap(..., TEXTURE_WRAP_CLAMP)`, and unloads all shadow maps on partial failure through `UnloadDynamicSpotLightShadowMapResources()`.
 * Shadow map unload currently uses the custom `UnloadDepthOnlyRenderTexture()` helper, which unloads the framebuffer ID and resets the whole `RenderTexture2D`; this custom teardown must be preserved unless Phase 4 proves a mechanical helper move requires local naming changes only.
 * Shadow map rendering remains in `RenderDynamicSpotLightShadowMaps()`: it returns early without a loaded shadow material, valid `lightViewProjection` location, or shadow matrices; it prepares runtime door meshes only when a runtime world is supplied; it renders each valid matrix to the matrix's assigned shadow slot with `BeginTextureMode()`, `ClearBackground(WHITE)`, depth test enabled, static sector `meshes.sectorDrawRecords`, per-batch alpha-test texture/cutoff state, then runtime door shadow casters with alpha test disabled and `BuildSectorDoorShadowCasterModelMatrix()`.
 * Main scene order remains `Render()` shadow pass first, then `DrawScene()` with `BeginMode3D(camera)`, sky via `skyRenderer.Draw()`, static sectors, runtime doors through `DrawRuntimeDoors()`, runtime billboards through `billboardRenderer.Draw()`, then `EndMode3D()`. Caller-owned overlays and bloom remain outside the dynamic-light helper path as currently sequenced.
 * Sector and door shaders bind dynamic spotlight shadow maps through `MATERIAL_MAP_ROUGHNESS` / `shadowMap0` and `MATERIAL_MAP_OCCLUSION` / `shadowMap1`; billboard upload uses explicit `SetShaderValueTexture()` for `shadowMap0` and `shadowMap1`.
-* Sector and door dynamic light uploads use `UploadDynamicPointLights()` and `UploadDynamicSpotLightShadowUniforms()` in `SectorMeshPreview.cpp`; billboard upload uses same-named local helpers in `SectorPreviewBillboardRenderer.cpp` fed by `SectorPreviewBillboardDynamicLightContext` built in `SectorMeshPreview::BuildBillboardDynamicLightContext()`.
+* Sector, door, and billboard dynamic light uploads use shared `UploadSectorPreviewDynamicPointLights()` and `UploadSectorPreviewDynamicSpotLightShadowUniforms()` helpers in `SectorPreviewDynamicLighting.cpp`; billboard upload is fed by `SectorPreviewBillboardDynamicLightContext` built in `SectorMeshPreview::BuildBillboardDynamicLightContext()`.
 * Sector, door, and billboard shader uniform names, location arrays, sampler assumptions, and upload layout must remain unchanged, including array-base lookup fallback through `GetShaderLocationArrayBase()` and per-matrix element lookup through `GetShaderLocationArrayElement()`.
 * Existing debug render modes must continue to isolate baked-only, dynamic-only, normal, albedo-only, normal-visualize, and flat-color-no-texture terms in the same way.
 * Missing, failed, or not-ready textures and shadow maps must not crash rendering.
@@ -283,6 +283,39 @@ Behavior notes:
 * Public selected dynamic light accessors are preserved and now forward to the helper-owned CPU state.
 * Shadow maps and dynamic spotlight shadow pass rendering remain controlled by `SectorMeshPreview`.
 * Direct receiver bounds still start from sector receiver bounds and append runtime door receiver bounds only when a runtime world is supplied.
+* Lightmap source-hash behavior changed: no.
+* Topology cache behavior changed: no.
+* Collision, sector lookup, physics changed: no.
+* ECS ownership changed: no.
+* Manual render smoke performed: no; not performed in this pass.
+
+### Phase 3: Move Uniform Upload Helpers
+
+Status: Completed
+Date: 2026-07-04
+
+Summary:
+
+* Moved the sector/door dynamic point-light upload helper and dynamic spotlight shadow uniform upload helper into `SectorPreviewDynamicLighting`.
+* Moved the billboard dynamic point-light and spotlight shadow uniform upload path to the same shared helpers using the Phase 1 location/context structs.
+* Kept sector and door shadow-map receiving through material slots, and kept billboard shadow-map receiving through explicit texture uniforms.
+
+Verification results:
+
+* `cmake --build cmake-build-debug -j2`: passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_runtime_object|sector_light|sector_topology|sector_editor|sector_authoring"`: passed, 9/9 tests.
+* `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 15/15 tests.
+* `git diff --check`: passed with no output.
+* `git diff --stat`: passed; tracked diff reported this plan plus `SectorMeshPreview.cpp`, `SectorPreviewBillboardRenderer.cpp`, and `SectorPreviewDynamicLighting.*`.
+* `git status --short`: passed; reported modified plan/source files only.
+
+Behavior notes:
+
+* Source code changed: yes.
+* Runtime behavior changed: no intended behavior change.
+* Rendering, shader uniform upload values, shader formulas/names, max counts, dynamic light ranking, flicker, bias/softness/strength, shadow map resources/lifetime, render order, debug text, build/test behavior changed: no.
+* Disabled dynamic lighting still uploads an effective zero dynamic-light count through the shared upload helper.
+* Sector and door texture binding remain material-slot based; billboard shadow-map texture binding remains explicit sampler upload based.
 * Lightmap source-hash behavior changed: no.
 * Topology cache behavior changed: no.
 * Collision, sector lookup, physics changed: no.
