@@ -1,10 +1,9 @@
 #pragma once
 
-#include "sector_demo/SectorDynamicPointLightSelection.h"
+#include "sector_demo/SectorPreviewDynamicLighting.h"
 
 #include <raylib.h>
 
-#include <array>
 #include <cstddef>
 #include <string>
 
@@ -14,22 +13,6 @@ class World;
 }
 
 namespace game {
-
-struct SectorPreviewBillboardDynamicLightContext {
-    int dynamicLightCount = 0;
-    std::array<Vector3, MaxDynamicLights> dynamicLightPositions{};
-    std::array<Vector3, MaxDynamicLights> dynamicLightColors{};
-    std::array<float, MaxDynamicLights> dynamicLightRadii{};
-    std::array<float, MaxDynamicLights> dynamicLightIntensities{};
-    std::array<int, MaxDynamicLights> dynamicLightTypes{};
-    std::array<Vector3, MaxDynamicLights> dynamicLightDirections{};
-    std::array<float, MaxDynamicLights> dynamicLightInnerConeCos{};
-    std::array<float, MaxDynamicLights> dynamicLightOuterConeCos{};
-    SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms{};
-    const Texture2D* shadowMap0 = nullptr;
-    const Texture2D* shadowMap1 = nullptr;
-    float dynamicLightingClamp = 4.0f;
-};
 
 class SectorPreviewBillboardRenderer {
 public:

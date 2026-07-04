@@ -646,11 +646,15 @@ void SectorPreviewBillboardRenderer::Draw(
             shadowStrengthLoc,
             shadowSoftnessLoc,
             dynamicLightContext.shadowUniforms);
-    if (shadowMap0Loc >= 0 && dynamicLightContext.shadowMap0 != nullptr && dynamicLightContext.shadowMap0->id != 0) {
-        SetShaderValueTexture(cutoutShader, shadowMap0Loc, *dynamicLightContext.shadowMap0);
+    if (shadowMap0Loc >= 0
+            && dynamicLightContext.shadowMaps.shadowMap0 != nullptr
+            && dynamicLightContext.shadowMaps.shadowMap0->id != 0) {
+        SetShaderValueTexture(cutoutShader, shadowMap0Loc, *dynamicLightContext.shadowMaps.shadowMap0);
     }
-    if (shadowMap1Loc >= 0 && dynamicLightContext.shadowMap1 != nullptr && dynamicLightContext.shadowMap1->id != 0) {
-        SetShaderValueTexture(cutoutShader, shadowMap1Loc, *dynamicLightContext.shadowMap1);
+    if (shadowMap1Loc >= 0
+            && dynamicLightContext.shadowMaps.shadowMap1 != nullptr
+            && dynamicLightContext.shadowMaps.shadowMap1->id != 0) {
+        SetShaderValueTexture(cutoutShader, shadowMap1Loc, *dynamicLightContext.shadowMaps.shadowMap1);
     }
 
     runtimeObjectWorld.ForEach<SectorObjectTransform, SectorObject, SectorBillboardSprite, SectorBillboardAnimator>(

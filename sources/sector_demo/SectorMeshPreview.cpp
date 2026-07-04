@@ -1811,10 +1811,10 @@ SectorPreviewBillboardDynamicLightContext SectorMeshPreview::BuildBillboardDynam
             dynamicPointLights,
             dynamicSpotLightShadowCasters,
             dynamicSpotLightShadowMatrices);
-    context.shadowMap0 = dynamicSpotLightShadowMaps[0].depth.id != 0
+    context.shadowMaps.shadowMap0 = dynamicSpotLightShadowMaps[0].depth.id != 0
             ? &dynamicSpotLightShadowMaps[0].depth
             : nullptr;
-    context.shadowMap1 = dynamicSpotLightShadowMaps[1].depth.id != 0
+    context.shadowMaps.shadowMap1 = dynamicSpotLightShadowMaps[1].depth.id != 0
             ? &dynamicSpotLightShadowMaps[1].depth
             : nullptr;
 

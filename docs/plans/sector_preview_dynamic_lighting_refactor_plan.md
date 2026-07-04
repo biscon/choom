@@ -41,13 +41,13 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_01",
       "title": "Introduce Shared Draw And Upload Context Types",
       "type": "phase",
-      "status": "Planned"
+      "status": "Completed"
     },
     {
       "id": "phase_02",
       "title": "Move Pure CPU Selection And Packing Buffers",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Planned"
     },
     {
       "id": "phase_03",
@@ -88,8 +88,8 @@ When an agent is asked to execute this plan, it must:
 | Phase / Pass | Status | Date | Notes |
 | --- | --- | --- | --- |
 | Phase 0: Baseline Audit And Behavior Contract | Completed | 2026-07-04 | Documentation-only audit completed; behavior contract now names current symbols, ownership, upload paths, render order, and lifetime boundaries. |
-| Phase 1: Introduce Shared Draw And Upload Context Types | Planned |  | Add types only; no ownership move. |
-| Phase 2: Move Pure CPU Selection And Packing Buffers | Not Started |  | Move or wrap CPU dynamic-light state behind the helper. |
+| Phase 1: Introduce Shared Draw And Upload Context Types | Completed | 2026-07-04 | Added shared dynamic-light shader-location, shadow-map texture, and billboard upload context structs; ownership remains in `SectorMeshPreview`. |
+| Phase 2: Move Pure CPU Selection And Packing Buffers | Planned |  | Move or wrap CPU dynamic-light state behind the helper. |
 | Phase 3: Move Uniform Upload Helpers | Not Started |  | Move upload helpers while preserving shader locations and names. |
 | Phase 4: Move Shadow Map Resource Ownership And Lifetime | Not Started |  | Move shadow map resources late, after CPU/upload behavior is stable. |
 | Phase 5: Move Dynamic Spotlight Shadow Map Render Orchestration | Not Started |  | Delegate shadow pass internals without changing render order. |
@@ -221,6 +221,38 @@ Behavior notes:
 * Collision, sector lookup, physics changed: no.
 * ECS ownership changed: no.
 * Manual render smoke performed: no; not required for this documentation-only audit phase.
+
+### Phase 1: Introduce Shared Draw And Upload Context Types
+
+Status: Completed
+Date: 2026-07-04
+
+Summary:
+
+* Added `sources/sector_demo/SectorPreviewDynamicLighting.h` and `.cpp` as the shared dynamic-lighting module boundary for later phases.
+* Added `SectorPreviewDynamicLightShaderLocations`, `SectorPreviewDynamicSpotLightShadowShaderLocations`, `SectorPreviewDynamicShadowMapTextures`, and moved `SectorPreviewBillboardDynamicLightContext` into the shared header.
+* Threaded the grouped billboard shadow-map texture context through existing local billboard call sites as a mechanical no-op.
+* Kept dynamic-light CPU buffers, selected IDs, shadow matrices, shadow map resources, shadow materials, shader locations, and all ownership in `SectorMeshPreview`.
+
+Verification results:
+
+* `cmake --build cmake-build-debug -j2`: passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_runtime_object|sector_light|sector_topology|sector_editor|sector_authoring"`: passed, 9/9 tests.
+* `ctest --test-dir cmake-build-debug --output-on-failure`: initial concurrent run failed while another CTest command was using the same fixed `/tmp/sector_*` test paths; rerun by itself passed, 15/15 tests.
+* `git diff --check`: passed with no output.
+* `git diff --stat`: passed; tracked diff reported this plan plus `SectorMeshPreview.*` and `SectorPreviewBillboardRenderer.*`, with new untracked `SectorPreviewDynamicLighting.*` files reported by status.
+* `git status --short`: passed; reported modified plan/source files and untracked `sources/sector_demo/SectorPreviewDynamicLighting.cpp` / `.h`.
+
+Behavior notes:
+
+* Source code changed: yes.
+* Runtime behavior changed: no intended behavior change.
+* Rendering, shader uniform upload values, shader formulas/names, max counts, dynamic light ranking, flicker, bias/softness/strength, shadow map resources/lifetime, render order, debug text, build/test behavior changed: no.
+* Lightmap source-hash behavior changed: no.
+* Topology cache behavior changed: no.
+* Collision, sector lookup, physics changed: no.
+* ECS ownership changed: no.
+* Manual render smoke performed: no; not applicable because this pass only introduced shared context types and mechanical context field threading.
 
 ## Phase 0: Baseline Audit And Behavior Contract
 

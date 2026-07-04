@@ -8,6 +8,7 @@
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorPreviewBillboardRenderer.h"
 #include "sector_demo/SectorPreviewBloom.h"
+#include "sector_demo/SectorPreviewDynamicLighting.h"
 #include "sector_demo/SectorPreviewSkyRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
