@@ -48,6 +48,7 @@ Task Type:
 | REF-010 | `[x]` | Medium | Editor header | Split selection/picking/drag state types | Codex task | Medium | Keep behavior unchanged |
 | REF-011 | `[x]` | Medium | Editor header | Split preview/runtime/lightmap async state types | Codex task | Medium | Watch test source lists |
 | REF-012 | `[x]` | Medium | Editor header | Review remaining dependencies after splits | Audit first | Low | Completed; see audit report |
+| REF-038 | `[x]` | Low | Editor header | Direct include cleanup after REF-012 | Codex task | Low/Medium | Removed obvious redundant umbrella includes |
 | REF-013 | `[ ]` | High | Mesh preview | Audit `SectorMeshPreview` extraction seams | Audit first | Medium | Do before source edits |
 | REF-014 | `[ ]` | High | Mesh preview | Extract dynamic lighting/shadow internals | Runner plan | Medium/High | Needs manual render smoke |
 | REF-015 | `[ ]` | High | Mesh preview | Extract runtime door renderer / mesh cache helper | Runner plan | Medium/High | Door lighting/shadow risk |
@@ -276,6 +277,27 @@ Task Type:
   `docs/audit/sector_editor_types_dependency_audit.md`; the split materially
   reduced `SectorEditorTypes.h`, and the next sensible step is optional direct
   include cleanup rather than another immediate broad split.
+
+#### REF-038 `[x]` Direct include cleanup after REF-012
+
+- Source/audit reference:
+  `docs/audit/sector_editor_types_dependency_audit.md` recommended a small
+  direct include cleanup after REF-008 through REF-012.
+- Why it helps: proves selected public editor headers can use narrow split
+  headers without dragging in the compatibility umbrella.
+- Likely files: selected editor public headers and this backlog entry.
+- Suggested task type: Codex task.
+- Risk: Low/Medium.
+- Suggested verification: build, targeted editor/sector tests, full `ctest`,
+  and diff checks.
+- Completion notes: Removed redundant `SectorEditorTypes.h` includes from
+  `SectorEditorLightmapModal.h` and `SectorEditorPreviewSettingsModal.h`, using
+  existing narrow modal/lightmap async headers plus an explicit topology map
+  include. Left `SectorEditorTopologyRenderCache.h`,
+  `SectorEditorMaterialActions.h`, and `SectorEditorHelpers.h` unchanged
+  because they still expose small tool/material types that remain in
+  `SectorEditorTypes.h`. `SectorEditorTypes.h` remains the compatibility
+  umbrella.
 
 ### 4. SectorMeshPreview Renderer Landfill
 

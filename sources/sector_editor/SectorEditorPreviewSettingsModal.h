@@ -4,7 +4,7 @@
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorModalTypes.h"
-#include "sector_editor/SectorEditorTypes.h"
+#include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
 
