@@ -47,13 +47,13 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_02",
       "title": "Move Pure CPU Selection And Packing Buffers",
       "type": "phase",
-      "status": "Planned"
+      "status": "Completed"
     },
     {
       "id": "phase_03",
       "title": "Move Uniform Upload Helpers",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Planned"
     },
     {
       "id": "phase_04",
@@ -89,8 +89,8 @@ When an agent is asked to execute this plan, it must:
 | --- | --- | --- | --- |
 | Phase 0: Baseline Audit And Behavior Contract | Completed | 2026-07-04 | Documentation-only audit completed; behavior contract now names current symbols, ownership, upload paths, render order, and lifetime boundaries. |
 | Phase 1: Introduce Shared Draw And Upload Context Types | Completed | 2026-07-04 | Added shared dynamic-light shader-location, shadow-map texture, and billboard upload context structs; ownership remains in `SectorMeshPreview`. |
-| Phase 2: Move Pure CPU Selection And Packing Buffers | Planned |  | Move or wrap CPU dynamic-light state behind the helper. |
-| Phase 3: Move Uniform Upload Helpers | Not Started |  | Move upload helpers while preserving shader locations and names. |
+| Phase 2: Move Pure CPU Selection And Packing Buffers | Completed | 2026-07-04 | Added helper-owned CPU dynamic-light state for sources, candidates, selected lights/IDs, receiver bounds, shadow casters, shadow matrices, and shadow uniform packing. |
+| Phase 3: Move Uniform Upload Helpers | Planned |  | Move upload helpers while preserving shader locations and names. |
 | Phase 4: Move Shadow Map Resource Ownership And Lifetime | Not Started |  | Move shadow map resources late, after CPU/upload behavior is stable. |
 | Phase 5: Move Dynamic Spotlight Shadow Map Render Orchestration | Not Started |  | Delegate shadow pass internals without changing render order. |
 | Phase 6: Integrate Facade Cleanup | Not Started |  | Remove moved internals from `SectorMeshPreview` while preserving its public facade. |
@@ -253,6 +253,41 @@ Behavior notes:
 * Collision, sector lookup, physics changed: no.
 * ECS ownership changed: no.
 * Manual render smoke performed: no; not applicable because this pass only introduced shared context types and mechanical context field threading.
+
+### Phase 2: Move Pure CPU Selection And Packing Buffers
+
+Status: Completed
+Date: 2026-07-04
+
+Summary:
+
+* Added `SectorPreviewDynamicLighting` helper-owned CPU state for dynamic light sources, candidates, selected uniforms, selected IDs, direct receiver bounds, spotlight shadow casters, and spotlight shadow matrices.
+* Moved source rebuild, selection buffer reserve/clear, receiver-bound collection, ranked light/shadow-caster selection, shadow matrix building, and packed shadow uniform access behind the helper.
+* Preserved `SectorMeshPreview` as the public facade for debug accessors, visibility debug update, shader uploads, shadow map resources, shadow material lifetime, and shadow pass rendering.
+
+Verification results:
+
+* `cmake --build cmake-build-debug -j2`: passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_runtime_object|sector_light|sector_topology|sector_editor|sector_authoring"`: passed, 9/9 tests.
+* `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 15/15 tests.
+* `git diff --check`: passed with no output.
+* `git diff --stat`: passed; tracked diff reported this plan plus `SectorMeshPreview.*` and `SectorPreviewDynamicLighting.*`.
+* `git status --short`: passed; reported modified plan/source files only.
+
+Behavior notes:
+
+* Source code changed: yes.
+* Runtime behavior changed: no intended behavior change.
+* Rendering, shader uniform upload values, shader formulas/names, max counts, dynamic light ranking, hysteresis, previous selected ID handling, flicker, bias/softness/strength, shadow map resources/lifetime, render order, build/test behavior changed: no.
+* `UpdateVisibilityDebug()` still composes the same visibility/render debug text through `SectorMeshPreview`, using helper accessors for selected lights, counts, IDs, and shadow casters.
+* Public selected dynamic light accessors are preserved and now forward to the helper-owned CPU state.
+* Shadow maps and dynamic spotlight shadow pass rendering remain controlled by `SectorMeshPreview`.
+* Direct receiver bounds still start from sector receiver bounds and append runtime door receiver bounds only when a runtime world is supplied.
+* Lightmap source-hash behavior changed: no.
+* Topology cache behavior changed: no.
+* Collision, sector lookup, physics changed: no.
+* ECS ownership changed: no.
+* Manual render smoke performed: no; not performed in this pass.
 
 ## Phase 0: Baseline Audit And Behavior Contract
 

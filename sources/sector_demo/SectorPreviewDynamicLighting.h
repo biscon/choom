@@ -1,12 +1,20 @@
 #pragma once
 
 #include "sector_demo/SectorDynamicPointLightSelection.h"
+#include "sector_demo/SectorMeshTypes.h"
 
 #include <raylib.h>
 
 #include <array>
+#include <vector>
+
+namespace engine {
+class World;
+}
 
 namespace game {
+
+struct SectorTopologyMap;
 
 struct SectorPreviewDynamicLightShaderLocations {
     int dynamicLightCount = -1;
@@ -51,6 +59,41 @@ struct SectorPreviewBillboardDynamicLightContext {
     SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms{};
     SectorPreviewDynamicShadowMapTextures shadowMaps{};
     float dynamicLightingClamp = 4.0f;
+};
+
+class SectorPreviewDynamicLighting {
+public:
+    void Reset();
+    void RebuildSources(const SectorTopologyMap& map, const SectorCollisionWorld* sectorLookupWorld);
+    void UpdateSelection(
+            const RuntimePortalVisibilityResult& visibility,
+            const std::vector<SectorReceiverBounds>& sectorReceiverBounds,
+            engine::World* runtimeObjectWorld);
+
+    const std::vector<SectorPreviewDynamicPointLightSource>& Sources() const { return sources; }
+    const std::vector<SectorPreviewDynamicPointLightSource>& Candidates() const { return candidates; }
+    const std::vector<SectorPreviewDynamicPointLightUniform>& SelectedLights() const { return selectedLights; }
+    const std::vector<int>& SelectedLightIds() const { return selectedLightIds; }
+    const std::vector<SectorPreviewDynamicSpotLightShadowCaster>& ShadowCasters() const { return shadowCasters; }
+    const std::vector<SectorPreviewDynamicSpotLightShadowMatrix>& ShadowMatrices() const { return shadowMatrices; }
+
+    size_t SourceCount() const { return sources.size(); }
+    size_t CandidateCount() const { return candidates.size(); }
+    SectorPreviewDynamicSpotLightShadowUniforms PackShadowUniforms() const;
+
+private:
+    void ReserveSelectionBuffers();
+    void BuildReceiverBounds(
+            const std::vector<SectorReceiverBounds>& sectorReceiverBounds,
+            engine::World* runtimeObjectWorld);
+
+    std::vector<SectorPreviewDynamicPointLightSource> sources;
+    std::vector<SectorPreviewDynamicPointLightSource> candidates;
+    std::vector<SectorPreviewDynamicPointLightUniform> selectedLights;
+    std::vector<int> selectedLightIds;
+    std::vector<SectorReceiverBounds> receiverBounds;
+    std::vector<SectorPreviewDynamicSpotLightShadowCaster> shadowCasters;
+    std::vector<SectorPreviewDynamicSpotLightShadowMatrix> shadowMatrices;
 };
 
 } // namespace game

@@ -111,10 +111,13 @@ public:
     void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
     SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorLightingDebugMode; }
     void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorLightingDebugMode = mode; }
-    const std::vector<SectorPreviewDynamicPointLightUniform>& SelectedDynamicLights() const { return dynamicPointLights; }
-    const std::vector<int>& SelectedDynamicLightIds() const { return selectedDynamicPointLightIds; }
-    size_t DynamicLightCandidateCount() const { return dynamicPointLightCandidates.size(); }
-    size_t DynamicLightSourceCount() const { return dynamicPointLightSources.size(); }
+    const std::vector<SectorPreviewDynamicPointLightUniform>& SelectedDynamicLights() const
+    {
+        return dynamicLightState.SelectedLights();
+    }
+    const std::vector<int>& SelectedDynamicLightIds() const { return dynamicLightState.SelectedLightIds(); }
+    size_t DynamicLightCandidateCount() const { return dynamicLightState.CandidateCount(); }
+    size_t DynamicLightSourceCount() const { return dynamicLightState.SourceCount(); }
     size_t DoorConsideredCount() const { return doorConsideredCount; }
     size_t DoorDrawnCount() const { return doorDrawnCount; }
     size_t DoorSkippedCount() const { return doorSkippedCount; }
@@ -128,7 +131,6 @@ private:
             engine::World& runtimeObjectWorld,
             SectorRuntimeDoorLightingContext doorLighting);
     void PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld);
-    void BuildDirectDynamicLightReceiverBounds(engine::World* runtimeObjectWorld);
     void UnloadDoorMeshes();
     bool EnsureDynamicSpotLightShadowMapResources();
     void UnloadDynamicSpotLightShadowMapResources();
@@ -219,13 +221,7 @@ private:
     };
     std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;
     std::vector<SectorDoorShadowCaster> runtimeDoorShadowCasters;
-    std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightSources;
-    std::vector<SectorPreviewDynamicPointLightSource> dynamicPointLightCandidates;
-    std::vector<SectorPreviewDynamicPointLightUniform> dynamicPointLights;
-    std::vector<int> selectedDynamicPointLightIds;
-    std::vector<SectorReceiverBounds> directDynamicLightReceiverBounds;
-    std::vector<SectorPreviewDynamicSpotLightShadowCaster> dynamicSpotLightShadowCasters;
-    std::vector<SectorPreviewDynamicSpotLightShadowMatrix> dynamicSpotLightShadowMatrices;
+    SectorPreviewDynamicLighting dynamicLightState;
     std::array<RenderTexture2D, MaxDynamicSpotLightShadowCasters> dynamicSpotLightShadowMaps{};
     Material dynamicSpotLightShadowMaterial = {};
     Texture2D dynamicSpotLightShadowDefaultTexture = {};

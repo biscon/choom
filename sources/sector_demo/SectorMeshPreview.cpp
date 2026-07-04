@@ -1177,20 +1177,9 @@ bool SectorMeshPreview::RebuildRendererResources(
         return false;
     }
 
-    BuildSectorPreviewDynamicPointLightSources(
+    dynamicLightState.RebuildSources(
             map,
-            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
-            dynamicPointLightSources);
-    dynamicPointLightCandidates.clear();
-    dynamicPointLightCandidates.reserve(dynamicPointLightSources.size());
-    dynamicPointLights.clear();
-    dynamicPointLights.reserve(MaxDynamicLights);
-    selectedDynamicPointLightIds.clear();
-    selectedDynamicPointLightIds.reserve(MaxDynamicLights);
-    dynamicSpotLightShadowCasters.clear();
-    dynamicSpotLightShadowCasters.reserve(MaxDynamicSpotLightShadowCasters);
-    dynamicSpotLightShadowMatrices.clear();
-    dynamicSpotLightShadowMatrices.reserve(MaxDynamicSpotLightShadowCasters);
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
     doorMeshCache.reserve(kSectorRuntimeObjectInitialCapacity);
     runtimeDoorShadowCasters.clear();
     runtimeDoorShadowCasters.reserve(kSectorRuntimeObjectInitialCapacity);
@@ -1322,13 +1311,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     visibilityLookupWorld = SectorCollisionWorld{};
     visibilityGraphValid = false;
     visibilityLookupWorldValid = false;
-    dynamicPointLightSources.clear();
-    dynamicPointLightCandidates.clear();
-    dynamicPointLights.clear();
-    selectedDynamicPointLightIds.clear();
-    directDynamicLightReceiverBounds.clear();
-    dynamicSpotLightShadowCasters.clear();
-    dynamicSpotLightShadowMatrices.clear();
+    dynamicLightState.Reset();
     runtimeDoorShadowCasters.clear();
     runtimeSeconds = 0.0f;
     if (!initialized
@@ -1479,12 +1462,9 @@ void SectorMeshPreview::DrawScene(
             dynamicLightingClampLoc,
             dynamicLightingEnabled,
             runtimeSeconds,
-            dynamicPointLights);
+            dynamicLightState.SelectedLights());
     const SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms =
-            PackSectorPreviewDynamicSpotLightShadowUniforms(
-                    dynamicPointLights,
-                    dynamicSpotLightShadowCasters,
-                    dynamicSpotLightShadowMatrices);
+            dynamicLightState.PackShadowUniforms();
     UploadDynamicSpotLightShadowUniforms(
             material.shader,
             dynamicLightShadowSlotsLoc,
@@ -1655,12 +1635,9 @@ void SectorMeshPreview::DrawRuntimeDoors(
             doorOpaqueDynamicLightingClampLoc,
             dynamicLightingEnabled,
             runtimeSeconds,
-            dynamicPointLights);
+            dynamicLightState.SelectedLights());
     const SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms =
-            PackSectorPreviewDynamicSpotLightShadowUniforms(
-                    dynamicPointLights,
-                    dynamicSpotLightShadowCasters,
-                    dynamicSpotLightShadowMatrices);
+            dynamicLightState.PackShadowUniforms();
     UploadDynamicSpotLightShadowUniforms(
             doorOpaqueMaterial.shader,
             doorOpaqueDynamicLightShadowSlotsLoc,
@@ -1804,13 +1781,10 @@ SectorPreviewBillboardDynamicLightContext SectorMeshPreview::BuildBillboardDynam
 {
     SectorPreviewBillboardDynamicLightContext context;
     context.dynamicLightCount = dynamicLightingEnabled
-            ? static_cast<int>(std::min(dynamicPointLights.size(), static_cast<size_t>(MaxDynamicLights)))
+            ? static_cast<int>(std::min(dynamicLightState.SelectedLights().size(), static_cast<size_t>(MaxDynamicLights)))
             : 0;
     context.dynamicLightingClamp = DynamicLightingClamp;
-    context.shadowUniforms = PackSectorPreviewDynamicSpotLightShadowUniforms(
-            dynamicPointLights,
-            dynamicSpotLightShadowCasters,
-            dynamicSpotLightShadowMatrices);
+    context.shadowUniforms = dynamicLightState.PackShadowUniforms();
     context.shadowMaps.shadowMap0 = dynamicSpotLightShadowMaps[0].depth.id != 0
             ? &dynamicSpotLightShadowMaps[0].depth
             : nullptr;
@@ -1819,7 +1793,8 @@ SectorPreviewBillboardDynamicLightContext SectorMeshPreview::BuildBillboardDynam
             : nullptr;
 
     for (int i = 0; i < context.dynamicLightCount; ++i) {
-        const SectorPreviewDynamicPointLightUniform& light = dynamicPointLights[static_cast<size_t>(i)];
+        const SectorPreviewDynamicPointLightUniform& light =
+                dynamicLightState.SelectedLights()[static_cast<size_t>(i)];
         context.dynamicLightPositions[static_cast<size_t>(i)] = light.position;
         context.dynamicLightColors[static_cast<size_t>(i)] = light.color;
         context.dynamicLightRadii[static_cast<size_t>(i)] = light.radius;
@@ -1869,7 +1844,7 @@ void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
 {
     if (!dynamicSpotLightShadowMaterialLoaded
             || dynamicSpotLightShadowLightViewProjectionLoc < 0
-            || dynamicSpotLightShadowMatrices.empty()) {
+            || dynamicLightState.ShadowMatrices().empty()) {
         return;
     }
 
@@ -1879,7 +1854,7 @@ void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
         runtimeDoorShadowCasters.clear();
     }
 
-    for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : dynamicSpotLightShadowMatrices) {
+    for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : dynamicLightState.ShadowMatrices()) {
         if (matrix.shadowSlot < 0
                 || static_cast<std::size_t>(matrix.shadowSlot) >= dynamicSpotLightShadowMaps.size()) {
             continue;
@@ -2011,20 +1986,9 @@ void SectorMeshPreview::ApplyRendererPose(const SectorViewPose& pose)
 
 void SectorMeshPreview::RefreshDynamicLightSources(const SectorTopologyMap& map)
 {
-    BuildSectorPreviewDynamicPointLightSources(
+    dynamicLightState.RebuildSources(
             map,
-            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
-            dynamicPointLightSources);
-    dynamicPointLightCandidates.clear();
-    dynamicPointLightCandidates.reserve(dynamicPointLightSources.size());
-    dynamicPointLights.clear();
-    dynamicPointLights.reserve(MaxDynamicLights);
-    selectedDynamicPointLightIds.clear();
-    selectedDynamicPointLightIds.reserve(MaxDynamicLights);
-    dynamicSpotLightShadowCasters.clear();
-    dynamicSpotLightShadowCasters.reserve(MaxDynamicSpotLightShadowCasters);
-    dynamicSpotLightShadowMatrices.clear();
-    dynamicSpotLightShadowMatrices.reserve(MaxDynamicSpotLightShadowCasters);
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
     UpdateVisibilityDebug();
 }
 
@@ -2058,30 +2022,7 @@ void SectorMeshPreview::UpdateVisibilityDebug(
     visibilityDebugText = portalVisibilityDebugText;
     const size_t visibleDrawRecordCount =
             CountSectorMeshDrawRecordsForVisibility(meshes.sectorDrawRecords, visibilityResult);
-    BuildDirectDynamicLightReceiverBounds(runtimeObjectWorld);
-    CollectSectorPreviewDynamicPointLightCandidates(
-            dynamicPointLightSources,
-            visibilityResult,
-            directDynamicLightReceiverBounds,
-            dynamicPointLightCandidates);
-    SelectRankedSectorPreviewDynamicPointLights(
-            dynamicPointLightCandidates,
-            visibilityResult,
-            directDynamicLightReceiverBounds,
-            static_cast<std::size_t>(MaxDynamicLights),
-            dynamicPointLights,
-            &selectedDynamicPointLightIds,
-            &selectedDynamicPointLightIds);
-    SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
-            dynamicPointLights,
-            visibilityResult,
-            directDynamicLightReceiverBounds,
-            MaxDynamicSpotLightShadowCasters,
-            dynamicSpotLightShadowCasters);
-    BuildSectorPreviewDynamicSpotLightShadowMatrices(
-            dynamicPointLights,
-            dynamicSpotLightShadowCasters,
-            dynamicSpotLightShadowMatrices);
+    dynamicLightState.UpdateSelection(visibilityResult, meshes.sectorReceiverBounds, runtimeObjectWorld);
     renderDebugText = "draw records: "
             + std::to_string(visibleDrawRecordCount)
             + " / "
@@ -2089,31 +2030,18 @@ void SectorMeshPreview::UpdateVisibilityDebug(
     renderDebugText += " | "
             + FormatDynamicLightDebugText(
                     dynamicLightingEnabled,
-                    dynamicPointLights.size(),
-                    dynamicPointLightCandidates.size(),
-                    dynamicPointLightSources.size(),
-                    selectedDynamicPointLightIds);
+                    dynamicLightState.SelectedLights().size(),
+                    dynamicLightState.CandidateCount(),
+                    dynamicLightState.SourceCount(),
+                    dynamicLightState.SelectedLightIds());
     renderDebugText += " | "
             + FormatDynamicSpotLightShadowDebugText(
-                    dynamicSpotLightShadowCasters.size(),
-                    CountDynamicSpotLightShadowCandidates(dynamicPointLights),
+                    dynamicLightState.ShadowCasters().size(),
+                    CountDynamicSpotLightShadowCandidates(dynamicLightState.SelectedLights()),
                     MaxDynamicSpotLightShadowCasters,
-                    dynamicSpotLightShadowCasters);
+                    dynamicLightState.ShadowCasters());
     AppendBillboardRenderDebugText(renderDebugText, billboardRenderer.DebugText());
     visibilityDebugText += " | " + renderDebugText;
-}
-
-void SectorMeshPreview::BuildDirectDynamicLightReceiverBounds(engine::World* runtimeObjectWorld)
-{
-    directDynamicLightReceiverBounds.clear();
-    directDynamicLightReceiverBounds.reserve(meshes.sectorReceiverBounds.size());
-    directDynamicLightReceiverBounds.insert(
-            directDynamicLightReceiverBounds.end(),
-            meshes.sectorReceiverBounds.begin(),
-            meshes.sectorReceiverBounds.end());
-    if (runtimeObjectWorld != nullptr) {
-        CollectSectorDoorReceiverBounds(*runtimeObjectWorld, directDynamicLightReceiverBounds);
-    }
 }
 
 float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const
