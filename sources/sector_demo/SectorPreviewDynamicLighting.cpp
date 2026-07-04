@@ -4,6 +4,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <algorithm>
+#include <raymath.h>
 #include <rlgl.h>
 
 namespace game {
@@ -350,6 +351,105 @@ SectorPreviewDynamicShadowMapTextures SectorPreviewDynamicLighting::BuildShadowM
     textures.shadowMap0 = ShadowMapDepthTexture(0);
     textures.shadowMap1 = ShadowMapDepthTexture(1);
     return textures;
+}
+
+void SectorPreviewDynamicLighting::RenderShadowMaps(
+        const SectorPreviewDynamicSpotLightShadowRenderContext& context)
+{
+    if (context.assets == nullptr
+            || context.material == nullptr
+            || context.lightViewProjectionLoc < 0
+            || context.sectorDrawRecords == nullptr
+            || shadowMatrices.empty()) {
+        return;
+    }
+
+    for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : shadowMatrices) {
+        if (matrix.shadowSlot < 0) {
+            continue;
+        }
+
+        RenderTexture2D* shadowMap = ShadowMap(static_cast<std::size_t>(matrix.shadowSlot));
+        if (shadowMap == nullptr) {
+            continue;
+        }
+        if (shadowMap->id == 0 || shadowMap->depth.id == 0) {
+            continue;
+        }
+
+        BeginTextureMode(*shadowMap);
+        ClearBackground(WHITE);
+        rlEnableDepthTest();
+        SetShaderValueMatrix(
+                context.material->shader,
+                context.lightViewProjectionLoc,
+                matrix.lightViewProjection);
+        for (const SectorMeshBatch& batch : *context.sectorDrawRecords) {
+            const int alphaTest = batch.alphaTest ? 1 : 0;
+            const float alphaCutoff = batch.alphaCutoff;
+            const Texture2D* texture = nullptr;
+            if (batch.alphaTest && context.textureResolver != nullptr) {
+                texture = context.textureResolver(context.userData, *context.assets, batch.textureId);
+            }
+            context.material->maps[MATERIAL_MAP_DIFFUSE].texture = (texture != nullptr)
+                    ? *texture
+                    : context.defaultTexture;
+            if (context.alphaTestLoc >= 0) {
+                SetShaderValue(
+                        context.material->shader,
+                        context.alphaTestLoc,
+                        &alphaTest,
+                        SHADER_UNIFORM_INT);
+            }
+            if (context.alphaCutoffLoc >= 0) {
+                SetShaderValue(
+                        context.material->shader,
+                        context.alphaCutoffLoc,
+                        &alphaCutoff,
+                        SHADER_UNIFORM_FLOAT);
+            }
+            DrawMesh(batch.mesh, *context.material, MatrixIdentity());
+        }
+        const int doorAlphaTest = 0;
+        const float doorAlphaCutoff = 0.0f;
+        context.material->maps[MATERIAL_MAP_DIFFUSE].texture = context.defaultTexture;
+        if (context.alphaTestLoc >= 0) {
+            SetShaderValue(
+                    context.material->shader,
+                    context.alphaTestLoc,
+                    &doorAlphaTest,
+                    SHADER_UNIFORM_INT);
+        }
+        if (context.alphaCutoffLoc >= 0) {
+            SetShaderValue(
+                    context.material->shader,
+                    context.alphaCutoffLoc,
+                    &doorAlphaCutoff,
+                    SHADER_UNIFORM_FLOAT);
+        }
+        if (context.doorShadowCasters != nullptr && context.doorMeshResolver != nullptr) {
+            for (const SectorDoorShadowCaster& caster : *context.doorShadowCasters) {
+                float doorWidth = 0.0f;
+                float doorHeight = 0.0f;
+                const Mesh* doorMesh = context.doorMeshResolver(
+                        context.userData,
+                        caster,
+                        doorWidth,
+                        doorHeight);
+                if (doorMesh == nullptr || doorMesh->vertexCount <= 0) {
+                    continue;
+                }
+                const Matrix shadowModel = BuildSectorDoorShadowCasterModelMatrix(
+                        caster,
+                        doorWidth,
+                        doorHeight);
+                DrawMesh(*doorMesh, *context.material, shadowModel);
+            }
+        }
+        context.material->maps[MATERIAL_MAP_DIFFUSE].texture = context.defaultTexture;
+        rlDisableDepthTest();
+        EndTextureMode();
+    }
 }
 
 void SectorPreviewDynamicLighting::ReserveSelectionBuffers()

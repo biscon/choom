@@ -1666,84 +1666,19 @@ void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
         runtimeDoorShadowCasters.clear();
     }
 
-    for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : dynamicLightState.ShadowMatrices()) {
-        if (matrix.shadowSlot < 0) {
-            continue;
-        }
-
-        RenderTexture2D* shadowMap = dynamicLightState.ShadowMap(static_cast<std::size_t>(matrix.shadowSlot));
-        if (shadowMap == nullptr) {
-            continue;
-        }
-        if (shadowMap->id == 0 || shadowMap->depth.id == 0) {
-            continue;
-        }
-
-        BeginTextureMode(*shadowMap);
-        ClearBackground(WHITE);
-        rlEnableDepthTest();
-        if (dynamicSpotLightShadowLightViewProjectionLoc >= 0) {
-            SetShaderValueMatrix(
-                    dynamicSpotLightShadowMaterial.shader,
-                    dynamicSpotLightShadowLightViewProjectionLoc,
-                    matrix.lightViewProjection);
-        }
-        for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
-            const int alphaTest = batch.alphaTest ? 1 : 0;
-            const float alphaCutoff = batch.alphaCutoff;
-            const Texture2D* texture = batch.alphaTest ? assets.GetTexture(TextureForId(batch.textureId)) : nullptr;
-            dynamicSpotLightShadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = (texture != nullptr)
-                    ? *texture
-                    : dynamicSpotLightShadowDefaultTexture;
-            if (dynamicSpotLightShadowAlphaTestLoc >= 0) {
-                SetShaderValue(
-                        dynamicSpotLightShadowMaterial.shader,
-                        dynamicSpotLightShadowAlphaTestLoc,
-                        &alphaTest,
-                        SHADER_UNIFORM_INT);
-            }
-            if (dynamicSpotLightShadowAlphaCutoffLoc >= 0) {
-                SetShaderValue(
-                        dynamicSpotLightShadowMaterial.shader,
-                        dynamicSpotLightShadowAlphaCutoffLoc,
-                        &alphaCutoff,
-                        SHADER_UNIFORM_FLOAT);
-            }
-            DrawMesh(batch.mesh, dynamicSpotLightShadowMaterial, MatrixIdentity());
-        }
-        const int doorAlphaTest = 0;
-        const float doorAlphaCutoff = 0.0f;
-        dynamicSpotLightShadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture =
-                dynamicSpotLightShadowDefaultTexture;
-        if (dynamicSpotLightShadowAlphaTestLoc >= 0) {
-            SetShaderValue(
-                    dynamicSpotLightShadowMaterial.shader,
-                    dynamicSpotLightShadowAlphaTestLoc,
-                    &doorAlphaTest,
-                    SHADER_UNIFORM_INT);
-        }
-        if (dynamicSpotLightShadowAlphaCutoffLoc >= 0) {
-            SetShaderValue(
-                    dynamicSpotLightShadowMaterial.shader,
-                    dynamicSpotLightShadowAlphaCutoffLoc,
-                    &doorAlphaCutoff,
-                    SHADER_UNIFORM_FLOAT);
-        }
-        for (const SectorDoorShadowCaster& caster : runtimeDoorShadowCasters) {
-            auto cacheIt = doorMeshCache.find(caster.placedObjectId);
-            if (cacheIt == doorMeshCache.end() || cacheIt->second.mesh.vertexCount <= 0) {
-                continue;
-            }
-            const Matrix shadowModel = BuildSectorDoorShadowCasterModelMatrix(
-                    caster,
-                    cacheIt->second.width,
-                    cacheIt->second.height);
-            DrawMesh(cacheIt->second.mesh, dynamicSpotLightShadowMaterial, shadowModel);
-        }
-        dynamicSpotLightShadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = dynamicSpotLightShadowDefaultTexture;
-        rlDisableDepthTest();
-        EndTextureMode();
-    }
+    SectorPreviewDynamicSpotLightShadowRenderContext context;
+    context.assets = &assets;
+    context.material = &dynamicSpotLightShadowMaterial;
+    context.defaultTexture = dynamicSpotLightShadowDefaultTexture;
+    context.sectorDrawRecords = &meshes.sectorDrawRecords;
+    context.doorShadowCasters = &runtimeDoorShadowCasters;
+    context.lightViewProjectionLoc = dynamicSpotLightShadowLightViewProjectionLoc;
+    context.alphaTestLoc = dynamicSpotLightShadowAlphaTestLoc;
+    context.alphaCutoffLoc = dynamicSpotLightShadowAlphaCutoffLoc;
+    context.userData = this;
+    context.textureResolver = &SectorMeshPreview::ResolveShadowCasterTexture;
+    context.doorMeshResolver = &SectorMeshPreview::ResolveDoorShadowCasterMesh;
+    dynamicLightState.RenderShadowMaps(context);
 }
 
 void SectorMeshPreview::UnloadDoorMeshes()
@@ -1886,6 +1821,39 @@ engine::TextureHandle SectorMeshPreview::TextureForId(const std::string& texture
     }
 
     return it->second;
+}
+
+const Texture2D* SectorMeshPreview::ResolveShadowCasterTexture(
+        void* userData,
+        engine::AssetManager& assets,
+        const std::string& textureId)
+{
+    const SectorMeshPreview* preview = static_cast<const SectorMeshPreview*>(userData);
+    if (preview == nullptr) {
+        return nullptr;
+    }
+    return assets.GetTexture(preview->TextureForId(textureId));
+}
+
+const Mesh* SectorMeshPreview::ResolveDoorShadowCasterMesh(
+        void* userData,
+        const SectorDoorShadowCaster& caster,
+        float& outWidth,
+        float& outHeight)
+{
+    const SectorMeshPreview* preview = static_cast<const SectorMeshPreview*>(userData);
+    if (preview == nullptr) {
+        return nullptr;
+    }
+
+    const auto cacheIt = preview->doorMeshCache.find(caster.placedObjectId);
+    if (cacheIt == preview->doorMeshCache.end() || cacheIt->second.mesh.vertexCount <= 0) {
+        return nullptr;
+    }
+
+    outWidth = cacheIt->second.width;
+    outHeight = cacheIt->second.height;
+    return &cacheIt->second.mesh;
 }
 
 void SectorMeshPreview::UpdateCamera()

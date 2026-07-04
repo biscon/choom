@@ -65,13 +65,13 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_05",
       "title": "Move Dynamic Spotlight Shadow Map Render Orchestration",
       "type": "phase",
-      "status": "Planned"
+      "status": "Completed"
     },
     {
       "id": "phase_06",
       "title": "Integrate Facade Cleanup",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Planned"
     },
     {
       "id": "phase_07",
@@ -92,8 +92,8 @@ When an agent is asked to execute this plan, it must:
 | Phase 2: Move Pure CPU Selection And Packing Buffers | Completed | 2026-07-04 | Added helper-owned CPU dynamic-light state for sources, candidates, selected lights/IDs, receiver bounds, shadow casters, shadow matrices, and shadow uniform packing. |
 | Phase 3: Move Uniform Upload Helpers | Completed | 2026-07-04 | Moved sector, door, and billboard dynamic light/shadow uniform upload helpers into `SectorPreviewDynamicLighting`; shader locations, uniform names, texture bindings, and render order are unchanged. |
 | Phase 4: Move Shadow Map Resource Ownership And Lifetime | Completed | 2026-07-04 | Moved dynamic spotlight shadow map render textures, depth-only allocation, filter/wrap setup, partial-failure cleanup, and custom unload into `SectorPreviewDynamicLighting`; shadow material and render orchestration remain in `SectorMeshPreview`. |
-| Phase 5: Move Dynamic Spotlight Shadow Map Render Orchestration | Planned |  | Delegate shadow pass internals without changing render order. |
-| Phase 6: Integrate Facade Cleanup | Not Started |  | Remove moved internals from `SectorMeshPreview` while preserving its public facade. |
+| Phase 5: Move Dynamic Spotlight Shadow Map Render Orchestration | Completed | 2026-07-04 | Moved shadow-map begin/clear/draw/end loops into `SectorPreviewDynamicLighting`; `SectorMeshPreview` still owns the public facade, shadow material, and runtime door mesh preparation. |
+| Phase 6: Integrate Facade Cleanup | Planned |  | Remove moved internals from `SectorMeshPreview` while preserving its public facade. |
 | Phase 7: Verification Docs And Backlog Update | Not Started |  | Close implementation verification and update REF-014 backlog state only after implementation is done. |
 
 ## Execution Tracking Rules
@@ -350,6 +350,41 @@ Behavior notes:
 * Shadow map resource ownership/lifetime changed internally; resolution, depth-only setup, depth format, point filtering, clamp wrapping, partial-failure cleanup, custom framebuffer unload, shutdown ordering, render order, shader behavior, uniform upload behavior, dynamic light selection, debug text, and build/test behavior changed: no.
 * `SectorMeshPreview::ShutdownRendererResources()` remains the high-level shutdown caller and now checks helper-owned shadow map resources before the early return.
 * The dynamic spotlight shadow material stayed in `SectorMeshPreview`; material lifetime and shader locations did not move in this phase.
+* Lightmap source-hash behavior changed: no.
+* Topology cache behavior changed: no.
+* Collision, sector lookup, physics changed: no.
+* ECS ownership changed: no.
+* Manual render smoke performed: no; not performed in this pass.
+
+### Phase 5: Move Dynamic Spotlight Shadow Map Render Orchestration
+
+Status: Completed
+Date: 2026-07-04
+
+Summary:
+
+* Added `SectorPreviewDynamicSpotLightShadowRenderContext` for the existing shadow material, sector draw records, door shadow caster list, shader locations, and narrow texture/door mesh resolver callbacks.
+* Moved the dynamic spotlight shadow-map begin/clear/draw/end loop into `SectorPreviewDynamicLighting::RenderShadowMaps()`.
+* Kept `SectorMeshPreview::RenderDynamicSpotLightShadowMaps()` as the public facade and kept `PrepareRuntimeDoorMeshes()` owned and sequenced by `SectorMeshPreview` before delegation.
+* Kept door mesh cache ownership in `SectorMeshPreview`; door renderer extraction remains out of scope.
+
+Verification results:
+
+* `cmake --build cmake-build-debug -j2`: passed.
+* `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_runtime_object|sector_light|sector_topology|sector_editor|sector_authoring"`: passed, 9/9 tests.
+* `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 15/15 tests.
+* `git diff --check`: passed with no output.
+* `git diff --stat`: passed; tracked diff reported this plan plus `SectorMeshPreview.*` and `SectorPreviewDynamicLighting.*`.
+* `git status --short`: passed; reported modified plan/source files only.
+* `python3 tools/plan_executor.py docs/plans/sector_preview_dynamic_lighting_refactor_plan.md --status`: passed; next selected item is `phase_06` with status `Planned`.
+
+Behavior notes:
+
+* Source code changed: yes.
+* Runtime behavior changed: no intended behavior change.
+* Shadow pass render orchestration moved internally; shadow material ownership, shader locations, shadow map resources, sector mesh ownership, door mesh cache ownership, dynamic light selection, debug text, and main scene render order changed: no.
+* Alpha-test handling, alpha cutoff upload, static sector caster drawing, runtime door caster drawing, door model matrix behavior, `BeginTextureMode()`, `ClearBackground(WHITE)`, depth-test enable/disable, and `EndTextureMode()` behavior changed: no.
+* Door renderer extraction remains out of scope.
 * Lightmap source-hash behavior changed: no.
 * Topology cache behavior changed: no.
 * Collision, sector lookup, physics changed: no.

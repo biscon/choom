@@ -7,15 +7,42 @@
 
 #include <array>
 #include <cstddef>
+#include <string>
 #include <vector>
 
 namespace engine {
+class AssetManager;
 class World;
 }
 
 namespace game {
 
 struct SectorTopologyMap;
+struct SectorDoorShadowCaster;
+
+struct SectorPreviewDynamicSpotLightShadowRenderContext {
+    using TextureResolver = const Texture2D* (*)(
+            void* userData,
+            engine::AssetManager& assets,
+            const std::string& textureId);
+    using DoorMeshResolver = const Mesh* (*)(
+            void* userData,
+            const SectorDoorShadowCaster& caster,
+            float& outWidth,
+            float& outHeight);
+
+    engine::AssetManager* assets = nullptr;
+    Material* material = nullptr;
+    Texture2D defaultTexture = {};
+    const std::vector<SectorMeshBatch>* sectorDrawRecords = nullptr;
+    const std::vector<SectorDoorShadowCaster>* doorShadowCasters = nullptr;
+    int lightViewProjectionLoc = -1;
+    int alphaTestLoc = -1;
+    int alphaCutoffLoc = -1;
+    void* userData = nullptr;
+    TextureResolver textureResolver = nullptr;
+    DoorMeshResolver doorMeshResolver = nullptr;
+};
 
 struct SectorPreviewDynamicLightShaderLocations {
     int dynamicLightCount = -1;
@@ -105,6 +132,7 @@ public:
     const RenderTexture2D* ShadowMap(std::size_t index) const;
     const Texture2D* ShadowMapDepthTexture(std::size_t index) const;
     SectorPreviewDynamicShadowMapTextures BuildShadowMapTextures() const;
+    void RenderShadowMaps(const SectorPreviewDynamicSpotLightShadowRenderContext& context);
 
 private:
     void ReserveSelectionBuffers();
