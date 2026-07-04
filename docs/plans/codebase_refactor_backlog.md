@@ -47,7 +47,7 @@ Task Type:
 | REF-009 | `[x]` | Medium | Editor header | Split editor modal state types | Codex task | Medium | Include churn likely |
 | REF-010 | `[x]` | Medium | Editor header | Split selection/picking/drag state types | Codex task | Medium | Keep behavior unchanged |
 | REF-011 | `[x]` | Medium | Editor header | Split preview/runtime/lightmap async state types | Codex task | Medium | Watch test source lists |
-| REF-012 | `[ ]` | Medium | Editor header | Review remaining dependencies after splits | Audit first | Low | Needs post-split include review |
+| REF-012 | `[x]` | Medium | Editor header | Review remaining dependencies after splits | Audit first | Low | Completed; see audit report |
 | REF-013 | `[ ]` | High | Mesh preview | Audit `SectorMeshPreview` extraction seams | Audit first | Medium | Do before source edits |
 | REF-014 | `[ ]` | High | Mesh preview | Extract dynamic lighting/shadow internals | Runner plan | Medium/High | Needs manual render smoke |
 | REF-015 | `[ ]` | High | Mesh preview | Extract runtime door renderer / mesh cache helper | Runner plan | Medium/High | Door lighting/shadow risk |
@@ -264,7 +264,7 @@ Task Type:
   headers as a compatibility umbrella. Broad editor state and backend-owned
   runtime object state remain in `SectorEditorTypes.h`.
 
-#### REF-012 `[ ]` Review remaining `SectorEditorTypes.h` dependencies after the splits
+#### REF-012 `[x]` Review remaining `SectorEditorTypes.h` dependencies after the splits
 
 - Source/audit reference: include graph high fan-out/fan-in notes.
 - Why it helps: confirms the split actually reduced include blast radius.
@@ -272,7 +272,10 @@ Task Type:
 - Suggested task type: Audit first.
 - Risk: Low.
 - Suggested verification: include/fan-out review, build, no behavior changes.
-- Completion notes:
+- Completion notes: Completed in
+  `docs/audit/sector_editor_types_dependency_audit.md`; the split materially
+  reduced `SectorEditorTypes.h`, and the next sensible step is optional direct
+  include cleanup rather than another immediate broad split.
 
 ### 4. SectorMeshPreview Renderer Landfill
 
