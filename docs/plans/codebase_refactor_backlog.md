@@ -329,6 +329,9 @@ Task Type:
 - Suggested verification: build, runtime object/dynamic light tests, manual 3D
   preview smoke for lights and shadows.
 - Completion notes:
+  - Dedicated runner plan created at
+    `docs/plans/sector_preview_dynamic_lighting_refactor_plan.md`; REF-014
+    remains not started until implementation phases are executed.
 
 #### REF-015 `[ ]` Extract runtime door renderer / mesh cache helper
 
