@@ -7,6 +7,7 @@
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorPreviewBillboardRenderer.h"
+#include "sector_demo/SectorPreviewSkyRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
 
@@ -122,8 +123,6 @@ private:
     bool EnsureBloomResources(int sceneWidth, int sceneHeight);
     void UnloadBloomResources();
     void RenderBloomSource(engine::AssetManager& assets);
-    void UnloadSkyCylinderMesh();
-    void DrawSkyCylinder(const Texture2D& texture);
     SectorPreviewBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
     void DrawRuntimeDoors(
             engine::AssetManager& assets,
@@ -147,18 +146,10 @@ private:
     bool visibilityLookupWorldValid = false;
     std::unordered_map<std::string, engine::TextureHandle> textureHandlesById;
     engine::TextureHandle lightmapTexture = engine::NullTextureHandle();
-    engine::TextureHandle skyTextureHandle = engine::NullTextureHandle();
     engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();
     Material material = {};
     Texture2D defaultMaterialTexture = {};
     bool materialLoaded = false;
-    Mesh skyCylinderMesh = {};
-    Mesh skyTopCapMesh = {};
-    Material skyMaterial = {};
-    Texture2D skyDefaultMaterialTexture = {};
-    float skyYawOffsetDegrees = 0.0f;
-    Color skyTopCapColor = Color{95, 165, 235, 255};
-    bool skyMaterialLoaded = false;
     int useLightmapLoc = -1;
     int useBakedAmbientOcclusionLoc = -1;
     int hasLightmapLoc = -1;
@@ -187,6 +178,7 @@ private:
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
     int dynamicLightingClampLoc = -1;
+    SectorPreviewSkyRenderer skyRenderer;
     SectorPreviewBillboardRenderer billboardRenderer;
     Shader doorOpaqueShader = {};
     int doorOpaqueTextureLoc = -1;
