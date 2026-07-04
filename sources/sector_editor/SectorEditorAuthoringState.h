@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sector_editor/SectorEditorMaterialActions.h"
+#include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
 
 #include <functional>

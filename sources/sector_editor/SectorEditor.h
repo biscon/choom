@@ -5,6 +5,7 @@
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
+#include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_demo/SectorMeshPreview.h"

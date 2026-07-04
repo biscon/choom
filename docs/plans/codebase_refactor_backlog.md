@@ -45,7 +45,7 @@ Task Type:
 | REF-007 | `[x]` | Medium | Utilities | Extract lightmap bake report formatting | Codex task | Low | Behavior-preserving string/report split |
 | REF-008 | `[x]` | High | Editor header | Move render-cache cached draw structs | Codex task | Low | Narrow `SectorEditorTypes.h` |
 | REF-009 | `[x]` | Medium | Editor header | Split editor modal state types | Codex task | Medium | Include churn likely |
-| REF-010 | `[ ]` | Medium | Editor header | Split selection/picking/drag state types | Codex task | Medium | Keep behavior unchanged |
+| REF-010 | `[x]` | Medium | Editor header | Split selection/picking/drag state types | Codex task | Medium | Keep behavior unchanged |
 | REF-011 | `[ ]` | Medium | Editor header | Split preview/runtime/lightmap async state types | Codex task | Medium | Watch test source lists |
 | REF-012 | `[ ]` | Medium | Editor header | Review remaining dependencies after splits | Audit first | Low | Needs post-split include review |
 | REF-013 | `[ ]` | High | Mesh preview | Audit `SectorMeshPreview` extraction seams | Audit first | Medium | Do before source edits |
@@ -226,7 +226,7 @@ Task Type:
   `SectorEditorSurfaceTypes.h`; `SectorEditorTypes.h` still includes the new
   headers as a compatibility umbrella.
 
-#### REF-010 `[ ]` Split selection/picking/drag state types
+#### REF-010 `[x]` Split selection/picking/drag state types
 
 - Source/audit reference: `SectorEditorTypes.h` broad editor state and
   `SectorEditor.cpp` god-file sections.
@@ -238,7 +238,13 @@ Task Type:
 - Risk: Medium.
 - Suggested verification: full build, topology editor selection/drag smoke if
   behavior changes are possible.
-- Completion notes:
+- Completion notes: Completed by moving passive selection, picking, hover,
+  drag, canvas-interaction, and 3D surface hit/ref types into
+  `SectorEditorSelectionTypes.h`; `SectorEditorTypes.h` still includes the new
+  header as a compatibility umbrella. `SpotLightPilotState` remains in
+  `SectorEditorTypes.h` because it stores preview pose state and belongs with
+  the later preview/runtime split; `TopologyMaterialPayload` remains there as
+  material clipboard/editing payload rather than selection/picking/drag state.
 
 #### REF-011 `[ ]` Split preview/runtime/lightmap async state types
 
