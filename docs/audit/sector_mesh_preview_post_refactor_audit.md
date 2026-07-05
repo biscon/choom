@@ -16,6 +16,10 @@ Top 5 findings:
 
 Recommendation: proceed with a mechanical Preview-to-Renderer terminology rename now. Defer static scene renderer extraction and any full facade rewrite.
 
+Completion note: REF-039 completed the mechanical renderer terminology rename
+and moved the renderer facade/helpers under `sources/sector_demo/renderer/`.
+Historical evidence below still uses the pre-REF-039 names.
+
 ## Scope And Method
 
 Inspected files:

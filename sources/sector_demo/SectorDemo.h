@@ -4,7 +4,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "sector_demo/SectorFreeflyController.h"
-#include "sector_demo/SectorMeshPreview.h"
+#include "sector_demo/renderer/SectorMeshRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTopologyMap.h"
 
@@ -20,7 +20,7 @@ public:
     void RenderOverlay(engine::AssetManager& assets);
 
 private:
-    SectorMeshPreview preview;
+    SectorMeshRenderer preview;
     SectorRuntimeObjectState runtimeObjects;
     SectorTopologyMap topologyMap;
     SectorFreeflyControllerState freeflyController;

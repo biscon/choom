@@ -17,7 +17,7 @@ namespace game {
 
 struct RuntimePortalVisibilityResult;
 
-class SectorPreviewBloom {
+class SectorBloomRenderer {
 public:
     void Shutdown();
     void ApplyEmissiveDecalBloomToScene(

@@ -12,7 +12,7 @@ namespace game {
 
 struct SectorTopologyMap;
 
-class SectorPreviewSkyRenderer {
+class SectorSkyRenderer {
 public:
     void Rebuild(const SectorTopologyMap& map, engine::TextureHandle textureHandle);
     void Shutdown();

@@ -3,7 +3,7 @@
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorMeshTypes.h"
-#include "sector_demo/SectorPreviewDynamicLighting.h"
+#include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 
 #include <raylib.h>
 
@@ -40,13 +40,13 @@ struct SectorRuntimeDoorLightingContext {
     const SectorTopologyMap* mapForFallback = nullptr;
 };
 
-struct SectorPreviewDoorRenderStats {
+struct SectorDoorRenderStats {
     size_t considered = 0;
     size_t drawn = 0;
     size_t skipped = 0;
 };
 
-struct SectorPreviewDoorTextureResolver {
+struct SectorDoorTextureResolver {
     using ResolveFn = const Texture2D* (*)(
             void* userData,
             engine::AssetManager& assets,
@@ -56,26 +56,26 @@ struct SectorPreviewDoorTextureResolver {
     ResolveFn resolve = nullptr;
 };
 
-struct SectorPreviewDoorDynamicLightContext {
+struct SectorDoorDynamicLightContext {
     bool enabled = true;
     float runtimeSeconds = 0.0f;
     const std::vector<SectorPreviewDynamicPointLightUniform>* selectedLights = nullptr;
     SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms{};
-    SectorPreviewDynamicShadowMapTextures shadowMaps{};
+    SectorDynamicShadowMapTextures shadowMaps{};
     float lightingClamp = 4.0f;
 };
 
-struct SectorPreviewDoorDrawContext {
+struct SectorDoorDrawContext {
     engine::AssetManager* assets = nullptr;
     engine::World* runtimeObjectWorld = nullptr;
     SectorRuntimeDoorLightingContext lighting;
-    SectorPreviewDoorDynamicLightContext dynamicLighting;
-    SectorPreviewDoorTextureResolver textureResolver;
+    SectorDoorDynamicLightContext dynamicLighting;
+    SectorDoorTextureResolver textureResolver;
     const Texture2D* defaultMaterialTexture = nullptr;
     std::string* renderDebugText = nullptr;
 };
 
-struct SectorPreviewDoorOpaqueShaderLocations {
+struct SectorDoorOpaqueShaderLocations {
     int texture = -1;
     int dynamicLightCount = -1;
     int dynamicLightPositions = -1;
@@ -100,7 +100,7 @@ struct SectorPreviewDoorOpaqueShaderLocations {
     int tint = -1;
 };
 
-class SectorPreviewDoorRenderer {
+class SectorDoorRenderer {
 public:
     struct DoorMeshCacheEntry {
         Mesh mesh = {};
@@ -116,9 +116,9 @@ public:
     void ReserveRuntimeDoorCapacity(size_t capacity);
     bool LoadOpaqueResources();
     void ShutdownOpaqueResources();
-    void Draw(const SectorPreviewDoorDrawContext& context);
+    void Draw(const SectorDoorDrawContext& context);
     void PrepareShadowRenderContext(
-            SectorPreviewDynamicSpotLightShadowRenderContext& context,
+            SectorDynamicSpotLightShadowRenderContext& context,
             engine::World* runtimeObjectWorld);
     void ClearPreparedShadowCasters();
     void UnloadDoorMeshes();
@@ -131,11 +131,11 @@ public:
     }
     Material& OpaqueMaterial() { return opaqueMaterial; }
     const Texture2D& OpaqueDefaultMaterialTexture() const { return opaqueDefaultMaterialTexture; }
-    const SectorPreviewDoorOpaqueShaderLocations& OpaqueShaderLocations() const { return opaqueShaderLocations; }
+    const SectorDoorOpaqueShaderLocations& OpaqueShaderLocations() const { return opaqueShaderLocations; }
     SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorLightingDebugMode; }
     void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorLightingDebugMode = mode; }
     int DoorLightingDebugModeShaderValue() const { return static_cast<int>(doorLightingDebugMode); }
-    const SectorPreviewDoorRenderStats& RenderStats() const { return renderStats; }
+    const SectorDoorRenderStats& RenderStats() const { return renderStats; }
 
 private:
     void ResetOpaqueShaderLocations();
@@ -156,13 +156,13 @@ private:
     std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;
     std::vector<SectorDoorShadowCaster> runtimeDoorShadowCasters;
     Shader opaqueShader = {};
-    SectorPreviewDoorOpaqueShaderLocations opaqueShaderLocations;
+    SectorDoorOpaqueShaderLocations opaqueShaderLocations;
     bool opaqueShaderLoaded = false;
     Material opaqueMaterial = {};
     Texture2D opaqueDefaultMaterialTexture = {};
     bool opaqueMaterialLoaded = false;
     SectorDoorLightingDebugMode doorLightingDebugMode = SectorDoorLightingDebugMode::Normal;
-    SectorPreviewDoorRenderStats renderStats;
+    SectorDoorRenderStats renderStats;
 };
 
 } // namespace game

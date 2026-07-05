@@ -1,4 +1,4 @@
-#include "sector_demo/SectorPreviewBloom.h"
+#include "sector_demo/renderer/SectorBloomRenderer.h"
 
 #include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorMeshBuilder.h"
@@ -187,7 +187,7 @@ bool LoadBloomSourceMaterial(
 
 } // namespace
 
-void SectorPreviewBloom::Shutdown()
+void SectorBloomRenderer::Shutdown()
 {
     if (sourceMaterialLoaded) {
         sourceMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = defaultMaterialTexture;
@@ -237,7 +237,7 @@ void SectorPreviewBloom::Shutdown()
     targetHeight = 0;
 }
 
-void SectorPreviewBloom::ApplyEmissiveDecalBloomToScene(
+void SectorBloomRenderer::ApplyEmissiveDecalBloomToScene(
         engine::AssetManager& assets,
         bool previewInitialized,
         const Camera3D& camera,
@@ -331,7 +331,7 @@ void SectorPreviewBloom::ApplyEmissiveDecalBloomToScene(
     EndTextureMode();
 }
 
-bool SectorPreviewBloom::IsLoaded() const
+bool SectorBloomRenderer::IsLoaded() const
 {
     return sourceMaterialLoaded
             || IsShaderValid(blurShader)
@@ -342,7 +342,7 @@ bool SectorPreviewBloom::IsLoaded() const
             || blurB.texture.id != 0;
 }
 
-bool SectorPreviewBloom::EnsureResources(int sceneWidthValue, int sceneHeightValue)
+bool SectorBloomRenderer::EnsureResources(int sceneWidthValue, int sceneHeightValue)
 {
     if (sceneWidthValue <= 0 || sceneHeightValue <= 0) {
         return false;
@@ -415,7 +415,7 @@ bool SectorPreviewBloom::EnsureResources(int sceneWidthValue, int sceneHeightVal
             && blurB.texture.id != 0;
 }
 
-void SectorPreviewBloom::RenderBloomSource(
+void SectorBloomRenderer::RenderBloomSource(
         engine::AssetManager& assets,
         const Camera3D& camera,
         const std::vector<SectorMeshBatch>& sectorDrawRecords,
@@ -465,7 +465,7 @@ void SectorPreviewBloom::RenderBloomSource(
     EndMode3D();
 }
 
-engine::TextureHandle SectorPreviewBloom::TextureForId(
+engine::TextureHandle SectorBloomRenderer::TextureForId(
         const std::unordered_map<std::string, engine::TextureHandle>& textureHandlesById,
         const std::string& textureId) const
 {

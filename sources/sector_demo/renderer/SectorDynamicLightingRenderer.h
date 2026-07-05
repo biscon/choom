@@ -20,7 +20,7 @@ namespace game {
 struct SectorTopologyMap;
 struct SectorDoorShadowCaster;
 
-struct SectorPreviewDynamicSpotLightShadowRenderContext {
+struct SectorDynamicSpotLightShadowRenderContext {
     using TextureResolver = const Texture2D* (*)(
             void* userData,
             engine::AssetManager& assets,
@@ -40,7 +40,7 @@ struct SectorPreviewDynamicSpotLightShadowRenderContext {
     DoorMeshResolver doorMeshResolver = nullptr;
 };
 
-struct SectorPreviewDynamicLightShaderLocations {
+struct SectorDynamicLightShaderLocations {
     int dynamicLightCount = -1;
     int dynamicLightPositions = -1;
     int dynamicLightColors = -1;
@@ -53,7 +53,7 @@ struct SectorPreviewDynamicLightShaderLocations {
     int dynamicLightingClamp = -1;
 };
 
-struct SectorPreviewDynamicSpotLightShadowShaderLocations {
+struct SectorDynamicSpotLightShadowShaderLocations {
     int dynamicLightShadowSlots = -1;
     std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrices = [] {
         std::array<int, MaxDynamicSpotLightShadowCasters> locs{};
@@ -65,12 +65,12 @@ struct SectorPreviewDynamicSpotLightShadowShaderLocations {
     int shadowSoftness = -1;
 };
 
-struct SectorPreviewDynamicShadowMapTextures {
+struct SectorDynamicShadowMapTextures {
     const Texture2D* shadowMap0 = nullptr;
     const Texture2D* shadowMap1 = nullptr;
 };
 
-struct SectorPreviewBillboardDynamicLightContext {
+struct SectorBillboardDynamicLightContext {
     int dynamicLightCount = 0;
     std::array<Vector3, MaxDynamicLights> dynamicLightPositions{};
     std::array<Vector3, MaxDynamicLights> dynamicLightColors{};
@@ -81,28 +81,28 @@ struct SectorPreviewBillboardDynamicLightContext {
     std::array<float, MaxDynamicLights> dynamicLightInnerConeCos{};
     std::array<float, MaxDynamicLights> dynamicLightOuterConeCos{};
     SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms{};
-    SectorPreviewDynamicShadowMapTextures shadowMaps{};
+    SectorDynamicShadowMapTextures shadowMaps{};
     float dynamicLightingClamp = 4.0f;
 };
 
-void UploadSectorPreviewDynamicPointLights(
+void UploadSectorRendererDynamicPointLights(
         Shader shader,
-        const SectorPreviewDynamicLightShaderLocations& locations,
+        const SectorDynamicLightShaderLocations& locations,
         bool dynamicLightingEnabled,
         float runtimeSeconds,
         const std::vector<SectorPreviewDynamicPointLightUniform>& lights);
 
-void UploadSectorPreviewDynamicPointLights(
+void UploadSectorRendererDynamicPointLights(
         Shader shader,
-        const SectorPreviewDynamicLightShaderLocations& locations,
-        const SectorPreviewBillboardDynamicLightContext& context);
+        const SectorDynamicLightShaderLocations& locations,
+        const SectorBillboardDynamicLightContext& context);
 
-void UploadSectorPreviewDynamicSpotLightShadowUniforms(
+void UploadSectorRendererDynamicSpotLightShadowUniforms(
         Shader shader,
-        const SectorPreviewDynamicSpotLightShadowShaderLocations& locations,
+        const SectorDynamicSpotLightShadowShaderLocations& locations,
         const SectorPreviewDynamicSpotLightShadowUniforms& uniforms);
 
-class SectorPreviewDynamicLighting {
+class SectorDynamicLightingRenderer {
 public:
     void Reset();
     void RebuildSources(const SectorTopologyMap& map, const SectorCollisionWorld* sectorLookupWorld);
@@ -131,8 +131,8 @@ public:
     RenderTexture2D* ShadowMap(std::size_t index);
     const RenderTexture2D* ShadowMap(std::size_t index) const;
     const Texture2D* ShadowMapDepthTexture(std::size_t index) const;
-    SectorPreviewDynamicShadowMapTextures BuildShadowMapTextures() const;
-    void RenderShadowMaps(const SectorPreviewDynamicSpotLightShadowRenderContext& context);
+    SectorDynamicShadowMapTextures BuildShadowMapTextures() const;
+    void RenderShadowMaps(const SectorDynamicSpotLightShadowRenderContext& context);
 
 private:
     void ReserveSelectionBuffers();

@@ -1,4 +1,4 @@
-#include "sector_demo/SectorPreviewBillboardRenderer.h"
+#include "sector_demo/renderer/SectorBillboardRenderer.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/assets/SpriteAnimationAssets.h"
@@ -363,7 +363,7 @@ Vector3 BakedBillboardLighting(const SectorObjectLighting* lighting)
 
 } // namespace
 
-bool SectorPreviewBillboardRenderer::Load()
+bool SectorBillboardRenderer::Load()
 {
     cutoutShader = LoadShaderFromMemory(SectorBillboardCutoutVs, SectorBillboardCutoutFs);
     if (cutoutShader.id == 0) {
@@ -423,7 +423,7 @@ bool SectorPreviewBillboardRenderer::Load()
     return true;
 }
 
-void SectorPreviewBillboardRenderer::Shutdown()
+void SectorBillboardRenderer::Shutdown()
 {
     if (shaderLoaded) {
         UnloadShader(cutoutShader);
@@ -452,7 +452,7 @@ void SectorPreviewBillboardRenderer::Shutdown()
     shaderLoaded = false;
 }
 
-void SectorPreviewBillboardRenderer::ResetDebugState()
+void SectorBillboardRenderer::ResetDebugState()
 {
     renderDebugText.clear();
     warningPrinted = false;
@@ -461,11 +461,11 @@ void SectorPreviewBillboardRenderer::ResetDebugState()
     skippedCount = 0;
 }
 
-void SectorPreviewBillboardRenderer::Draw(
+void SectorBillboardRenderer::Draw(
         engine::AssetManager& assets,
         engine::World& runtimeObjectWorld,
         const Camera3D& camera,
-        const SectorPreviewBillboardDynamicLightContext& dynamicLightContext,
+        const SectorBillboardDynamicLightContext& dynamicLightContext,
         std::string& debugText)
 {
     if (!shaderLoaded || cutoutShader.id == 0) {
@@ -487,7 +487,7 @@ void SectorPreviewBillboardRenderer::Draw(
     rlEnableDepthMask();
     BeginShaderMode(cutoutShader);
 
-    SectorPreviewDynamicLightShaderLocations dynamicLightLocations;
+    SectorDynamicLightShaderLocations dynamicLightLocations;
     dynamicLightLocations.dynamicLightCount = dynamicLightCountLoc;
     dynamicLightLocations.dynamicLightPositions = dynamicLightPositionsLoc;
     dynamicLightLocations.dynamicLightColors = dynamicLightColorsLoc;
@@ -498,14 +498,14 @@ void SectorPreviewBillboardRenderer::Draw(
     dynamicLightLocations.dynamicLightInnerConeCos = dynamicLightInnerConeCosLoc;
     dynamicLightLocations.dynamicLightOuterConeCos = dynamicLightOuterConeCosLoc;
     dynamicLightLocations.dynamicLightingClamp = dynamicLightingClampLoc;
-    UploadSectorPreviewDynamicPointLights(cutoutShader, dynamicLightLocations, dynamicLightContext);
-    SectorPreviewDynamicSpotLightShadowShaderLocations shadowLocations;
+    UploadSectorRendererDynamicPointLights(cutoutShader, dynamicLightLocations, dynamicLightContext);
+    SectorDynamicSpotLightShadowShaderLocations shadowLocations;
     shadowLocations.dynamicLightShadowSlots = dynamicLightShadowSlotsLoc;
     shadowLocations.shadowLightMatrices = shadowLightMatrixLocs;
     shadowLocations.shadowBias = shadowBiasLoc;
     shadowLocations.shadowStrength = shadowStrengthLoc;
     shadowLocations.shadowSoftness = shadowSoftnessLoc;
-    UploadSectorPreviewDynamicSpotLightShadowUniforms(
+    UploadSectorRendererDynamicSpotLightShadowUniforms(
             cutoutShader,
             shadowLocations,
             dynamicLightContext.shadowUniforms);
@@ -552,7 +552,7 @@ void SectorPreviewBillboardRenderer::Draw(
                     ++frameSkippedCount;
                     if (!warningPrinted && (engine::IsNull(sprite.animation) || assets.HasFailed(sprite.animation))) {
                         std::fprintf(stderr,
-                                "[SectorMeshPreview WARNING] Skipping billboard sprite with missing or failed animation asset\n");
+                                "[SectorMeshRenderer WARNING] Skipping billboard sprite with missing or failed animation asset\n");
                         warningPrinted = true;
                     }
                     return;

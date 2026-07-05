@@ -1,4 +1,4 @@
-#include "sector_demo/SectorPreviewSkyRenderer.h"
+#include "sector_demo/renderer/SectorSkyRenderer.h"
 
 #include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorSkyCylinder.h"
@@ -66,7 +66,7 @@ Mesh CreateSkyCylinderMesh(const SectorSkyCylinderMeshData& data)
 
 } // namespace
 
-void SectorPreviewSkyRenderer::Rebuild(const SectorTopologyMap& map, engine::TextureHandle textureHandle)
+void SectorSkyRenderer::Rebuild(const SectorTopologyMap& map, engine::TextureHandle textureHandle)
 {
     Shutdown();
 
@@ -97,7 +97,7 @@ void SectorPreviewSkyRenderer::Rebuild(const SectorTopologyMap& map, engine::Tex
     }
 }
 
-void SectorPreviewSkyRenderer::Shutdown()
+void SectorSkyRenderer::Shutdown()
 {
     if (skyCylinderMesh.vertexCount > 0) {
         UnloadMesh(skyCylinderMesh);
@@ -122,7 +122,7 @@ void SectorPreviewSkyRenderer::Shutdown()
     skyTopCapColor = DefaultSectorTopologySkySettings().topColor;
 }
 
-void SectorPreviewSkyRenderer::Draw(engine::AssetManager& assets, const Camera3D& camera)
+void SectorSkyRenderer::Draw(engine::AssetManager& assets, const Camera3D& camera)
 {
     const Texture2D* skyTexture = assets.GetTexture(skyTextureHandle);
     if (skyTexture != nullptr
@@ -133,14 +133,14 @@ void SectorPreviewSkyRenderer::Draw(engine::AssetManager& assets, const Camera3D
     }
 }
 
-bool SectorPreviewSkyRenderer::IsLoaded() const
+bool SectorSkyRenderer::IsLoaded() const
 {
     return skyCylinderMesh.vertexCount > 0
             || skyTopCapMesh.vertexCount > 0
             || skyMaterialLoaded;
 }
 
-void SectorPreviewSkyRenderer::DrawSkyCylinder(const Texture2D& texture, const Camera3D& camera)
+void SectorSkyRenderer::DrawSkyCylinder(const Texture2D& texture, const Camera3D& camera)
 {
     const Matrix transform = MatrixMultiply(
             MatrixRotateY(skyYawOffsetDegrees * DEG2RAD),

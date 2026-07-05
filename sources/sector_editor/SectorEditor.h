@@ -9,7 +9,7 @@
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTypes.h"
-#include "sector_demo/SectorMeshPreview.h"
+#include "sector_demo/renderer/SectorMeshRenderer.h"
 
 #include <raylib.h>
 
@@ -431,7 +431,7 @@ private:
     LightmapBakeAsyncState lightmapBake;
     Rectangle canvasRect = {};
     std::string statusText;
-    SectorMeshPreview preview;
+    SectorMeshRenderer preview;
     engine::EngineContext* engineContext = nullptr;
     bool initialized = false;
 };

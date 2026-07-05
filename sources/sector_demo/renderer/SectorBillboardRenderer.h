@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sector_demo/SectorPreviewDynamicLighting.h"
+#include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 
 #include <raylib.h>
 
@@ -14,7 +14,7 @@ class World;
 
 namespace game {
 
-class SectorPreviewBillboardRenderer {
+class SectorBillboardRenderer {
 public:
     bool Load();
     void Shutdown();
@@ -24,7 +24,7 @@ public:
             engine::AssetManager& assets,
             engine::World& runtimeObjectWorld,
             const Camera3D& camera,
-            const SectorPreviewBillboardDynamicLightContext& dynamicLightContext,
+            const SectorBillboardDynamicLightContext& dynamicLightContext,
             std::string& renderDebugText);
 
     bool IsLoaded() const { return shaderLoaded; }

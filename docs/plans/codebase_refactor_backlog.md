@@ -74,7 +74,7 @@ Task Type:
 | REF-035 | `[>]` | Deferred | UI | Split `UI.cpp` without a UI-specific reason | Defer | Medium | Not a current dependency problem |
 | REF-036 | `[>]` | Deferred | Editor state | Full document-state vs preview-state rewrite | Defer | High | Needs dedicated plan if revived |
 | REF-037 | `[>]` | Deferred | Mesh preview | Full `SectorMeshPreview` facade rewrite | Defer | High | Needs dedicated plan if revived |
-| REF-039 | `[ ]` | Medium | Mesh preview | Renderer terminology rename and renderer subdirectory move | Codex task | Medium | Mechanical rename plus renderer file move after extraction campaign |
+| REF-039 | `[x]` | Medium | Mesh preview | Renderer terminology rename and renderer subdirectory move | Codex task | Medium | Completed; renderer files moved under `sector_demo/renderer` |
 
 ## Backlog
 
@@ -425,7 +425,7 @@ Task Type:
     deferred extraction candidate, but no blocking ownership issue was found
     before the renderer terminology rename.
 
-#### REF-039 `[ ]` Renderer terminology rename and renderer subdirectory move
+#### REF-039 `[x]` Renderer terminology rename and renderer subdirectory move
 
 - Source/audit reference:
   `docs/audit/sector_mesh_preview_post_refactor_audit.md`.
@@ -447,7 +447,7 @@ Task Type:
   - `SectorPreviewDoorRenderer.h/.cpp` -> `renderer/SectorDoorRenderer.h/.cpp`
 - Suggested task type: Codex task unless future inspection shows the move needs
   a plan.
-- Status: Not Started.
+- Status: Completed.
 - Risk: Medium because the change is mechanical but creates broad include/file
   churn.
 - Suggested verification: build, full `ctest`, `git diff --check`, and manual
@@ -469,6 +469,16 @@ Task Type:
   - Main app source glob should likely pick up moved `.cpp` files, but explicit
     test targets must be checked.
 - Completion notes:
+  - Moved the renderer facade and helper implementation files into
+    `sources/sector_demo/renderer/` and renamed them to `Sector*Renderer`
+    terminology.
+  - Updated renderer-owned type names, helper context names, upload helper
+    names, and include paths while preserving editor preview workflow naming.
+  - Behavior intended unchanged: shader code, resource ownership, render order,
+    ECS lifecycle, topology/editor cache behavior, lightmap source-hash behavior,
+    collision/physics, and serialization/schema were not intentionally changed.
+  - CMake did not require manual source-list edits; the app source glob picked
+    up the moved renderer files during the build.
 
 ### 5. SectorEditor.cpp God File
 

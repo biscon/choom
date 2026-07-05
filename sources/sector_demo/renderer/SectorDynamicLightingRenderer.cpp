@@ -1,4 +1,4 @@
-#include "sector_demo/SectorPreviewDynamicLighting.h"
+#include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorTopologyMap.h"
@@ -85,9 +85,9 @@ void UnloadDepthOnlyRenderTexture(RenderTexture2D& target)
 
 } // namespace
 
-void UploadSectorPreviewDynamicPointLights(
+void UploadSectorRendererDynamicPointLights(
         Shader shader,
-        const SectorPreviewDynamicLightShaderLocations& locations,
+        const SectorDynamicLightShaderLocations& locations,
         bool dynamicLightingEnabled,
         float runtimeSeconds,
         const std::vector<SectorPreviewDynamicPointLightUniform>& lights)
@@ -95,11 +95,11 @@ void UploadSectorPreviewDynamicPointLights(
     const int lightCount = dynamicLightingEnabled
             ? static_cast<int>(std::min(lights.size(), static_cast<size_t>(MaxDynamicLights)))
             : 0;
-    SectorPreviewBillboardDynamicLightContext context;
+    SectorBillboardDynamicLightContext context;
     context.dynamicLightCount = lightCount;
     context.dynamicLightingClamp = DynamicLightingClamp;
     if (lightCount <= 0) {
-        UploadSectorPreviewDynamicPointLights(shader, locations, context);
+        UploadSectorRendererDynamicPointLights(shader, locations, context);
         return;
     }
 
@@ -132,13 +132,13 @@ void UploadSectorPreviewDynamicPointLights(
     context.dynamicLightDirections = directions;
     context.dynamicLightInnerConeCos = innerConeCos;
     context.dynamicLightOuterConeCos = outerConeCos;
-    UploadSectorPreviewDynamicPointLights(shader, locations, context);
+    UploadSectorRendererDynamicPointLights(shader, locations, context);
 }
 
-void UploadSectorPreviewDynamicPointLights(
+void UploadSectorRendererDynamicPointLights(
         Shader shader,
-        const SectorPreviewDynamicLightShaderLocations& locations,
-        const SectorPreviewBillboardDynamicLightContext& context)
+        const SectorDynamicLightShaderLocations& locations,
+        const SectorBillboardDynamicLightContext& context)
 {
     if (locations.dynamicLightCount >= 0) {
         SetShaderValue(shader, locations.dynamicLightCount, &context.dynamicLightCount, SHADER_UNIFORM_INT);
@@ -216,9 +216,9 @@ void UploadSectorPreviewDynamicPointLights(
     }
 }
 
-void UploadSectorPreviewDynamicSpotLightShadowUniforms(
+void UploadSectorRendererDynamicSpotLightShadowUniforms(
         Shader shader,
-        const SectorPreviewDynamicSpotLightShadowShaderLocations& locations,
+        const SectorDynamicSpotLightShadowShaderLocations& locations,
         const SectorPreviewDynamicSpotLightShadowUniforms& uniforms)
 {
     if (locations.dynamicLightShadowSlots >= 0) {
@@ -260,7 +260,7 @@ void UploadSectorPreviewDynamicSpotLightShadowUniforms(
     }
 }
 
-void SectorPreviewDynamicLighting::Reset()
+void SectorDynamicLightingRenderer::Reset()
 {
     sources.clear();
     candidates.clear();
@@ -271,7 +271,7 @@ void SectorPreviewDynamicLighting::Reset()
     shadowMatrices.clear();
 }
 
-void SectorPreviewDynamicLighting::RebuildSources(
+void SectorDynamicLightingRenderer::RebuildSources(
         const SectorTopologyMap& map,
         const SectorCollisionWorld* sectorLookupWorld)
 {
@@ -279,7 +279,7 @@ void SectorPreviewDynamicLighting::RebuildSources(
     ReserveSelectionBuffers();
 }
 
-void SectorPreviewDynamicLighting::UpdateSelection(
+void SectorDynamicLightingRenderer::UpdateSelection(
         const RuntimePortalVisibilityResult& visibility,
         const std::vector<SectorReceiverBounds>& sectorReceiverBounds,
         engine::World* runtimeObjectWorld)
@@ -310,12 +310,12 @@ void SectorPreviewDynamicLighting::UpdateSelection(
             shadowMatrices);
 }
 
-SectorPreviewDynamicSpotLightShadowUniforms SectorPreviewDynamicLighting::PackShadowUniforms() const
+SectorPreviewDynamicSpotLightShadowUniforms SectorDynamicLightingRenderer::PackShadowUniforms() const
 {
     return PackSectorPreviewDynamicSpotLightShadowUniforms(selectedLights, shadowCasters, shadowMatrices);
 }
 
-bool SectorPreviewDynamicLighting::EnsureShadowMapResources()
+bool SectorDynamicLightingRenderer::EnsureShadowMapResources()
 {
     for (RenderTexture2D& shadowMap : shadowMaps) {
         if (shadowMap.id != 0 && shadowMap.depth.id != 0) {
@@ -336,14 +336,14 @@ bool SectorPreviewDynamicLighting::EnsureShadowMapResources()
     return true;
 }
 
-void SectorPreviewDynamicLighting::UnloadShadowMapResources()
+void SectorDynamicLightingRenderer::UnloadShadowMapResources()
 {
     for (RenderTexture2D& shadowMap : shadowMaps) {
         UnloadDepthOnlyRenderTexture(shadowMap);
     }
 }
 
-bool SectorPreviewDynamicLighting::HasShadowMapResources() const
+bool SectorDynamicLightingRenderer::HasShadowMapResources() const
 {
     for (const RenderTexture2D& shadowMap : shadowMaps) {
         if (shadowMap.id != 0 || shadowMap.depth.id != 0) {
@@ -353,7 +353,7 @@ bool SectorPreviewDynamicLighting::HasShadowMapResources() const
     return false;
 }
 
-bool SectorPreviewDynamicLighting::LoadShadowMaterial()
+bool SectorDynamicLightingRenderer::LoadShadowMaterial()
 {
     shadowMaterial = LoadMaterialDefault();
     Shader shader = LoadShaderFromMemory(SectorSpotLightShadowVs, SectorSpotLightShadowFs);
@@ -377,7 +377,7 @@ bool SectorPreviewDynamicLighting::LoadShadowMaterial()
     return true;
 }
 
-void SectorPreviewDynamicLighting::UnloadShadowMaterial()
+void SectorDynamicLightingRenderer::UnloadShadowMaterial()
 {
     if (!shadowMaterialLoaded) {
         return;
@@ -393,7 +393,7 @@ void SectorPreviewDynamicLighting::UnloadShadowMaterial()
     shadowAlphaCutoffLoc = -1;
 }
 
-bool SectorPreviewDynamicLighting::IsShadowRenderReady() const
+bool SectorDynamicLightingRenderer::IsShadowRenderReady() const
 {
     return shadowMaterialLoaded
             && shadowMaterial.shader.id != 0
@@ -401,7 +401,7 @@ bool SectorPreviewDynamicLighting::IsShadowRenderReady() const
             && !shadowMatrices.empty();
 }
 
-RenderTexture2D* SectorPreviewDynamicLighting::ShadowMap(std::size_t index)
+RenderTexture2D* SectorDynamicLightingRenderer::ShadowMap(std::size_t index)
 {
     if (index >= shadowMaps.size()) {
         return nullptr;
@@ -409,7 +409,7 @@ RenderTexture2D* SectorPreviewDynamicLighting::ShadowMap(std::size_t index)
     return &shadowMaps[index];
 }
 
-const RenderTexture2D* SectorPreviewDynamicLighting::ShadowMap(std::size_t index) const
+const RenderTexture2D* SectorDynamicLightingRenderer::ShadowMap(std::size_t index) const
 {
     if (index >= shadowMaps.size()) {
         return nullptr;
@@ -417,7 +417,7 @@ const RenderTexture2D* SectorPreviewDynamicLighting::ShadowMap(std::size_t index
     return &shadowMaps[index];
 }
 
-const Texture2D* SectorPreviewDynamicLighting::ShadowMapDepthTexture(std::size_t index) const
+const Texture2D* SectorDynamicLightingRenderer::ShadowMapDepthTexture(std::size_t index) const
 {
     const RenderTexture2D* shadowMap = ShadowMap(index);
     if (shadowMap == nullptr || shadowMap->depth.id == 0) {
@@ -426,16 +426,16 @@ const Texture2D* SectorPreviewDynamicLighting::ShadowMapDepthTexture(std::size_t
     return &shadowMap->depth;
 }
 
-SectorPreviewDynamicShadowMapTextures SectorPreviewDynamicLighting::BuildShadowMapTextures() const
+SectorDynamicShadowMapTextures SectorDynamicLightingRenderer::BuildShadowMapTextures() const
 {
-    SectorPreviewDynamicShadowMapTextures textures;
+    SectorDynamicShadowMapTextures textures;
     textures.shadowMap0 = ShadowMapDepthTexture(0);
     textures.shadowMap1 = ShadowMapDepthTexture(1);
     return textures;
 }
 
-void SectorPreviewDynamicLighting::RenderShadowMaps(
-        const SectorPreviewDynamicSpotLightShadowRenderContext& context)
+void SectorDynamicLightingRenderer::RenderShadowMaps(
+        const SectorDynamicSpotLightShadowRenderContext& context)
 {
     if (context.assets == nullptr
             || !IsShadowRenderReady()
@@ -532,7 +532,7 @@ void SectorPreviewDynamicLighting::RenderShadowMaps(
     }
 }
 
-void SectorPreviewDynamicLighting::ReserveSelectionBuffers()
+void SectorDynamicLightingRenderer::ReserveSelectionBuffers()
 {
     candidates.clear();
     candidates.reserve(sources.size());
@@ -546,7 +546,7 @@ void SectorPreviewDynamicLighting::ReserveSelectionBuffers()
     shadowMatrices.reserve(MaxDynamicSpotLightShadowCasters);
 }
 
-void SectorPreviewDynamicLighting::BuildReceiverBounds(
+void SectorDynamicLightingRenderer::BuildReceiverBounds(
         const std::vector<SectorReceiverBounds>& sectorReceiverBounds,
         engine::World* runtimeObjectWorld)
 {

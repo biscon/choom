@@ -1,4 +1,4 @@
-#include "sector_demo/SectorMeshPreview.h"
+#include "sector_demo/renderer/SectorMeshRenderer.h"
 
 #include "engine/assets/TextureLoadFlags.h"
 #include "sector_demo/SectorAssetPaths.h"
@@ -464,7 +464,7 @@ bool ComputeGeometryBounds(const SectorGeneratedGeometry& geometry, Vector3& out
 
 } // namespace
 
-bool SectorMeshPreview::Rebuild(
+bool SectorMeshRenderer::Rebuild(
         engine::AssetManager& assets,
         const SectorTopologyMap& map,
         const char* scopeName,
@@ -473,7 +473,7 @@ bool SectorMeshPreview::Rebuild(
     return RebuildRendererResources(assets, map, scopeName, error);
 }
 
-bool SectorMeshPreview::RebuildRendererResources(
+bool SectorMeshRenderer::RebuildRendererResources(
         engine::AssetManager& assets,
         const SectorTopologyMap& map,
         const char* scopeName,
@@ -657,12 +657,12 @@ bool SectorMeshPreview::RebuildRendererResources(
     return true;
 }
 
-void SectorMeshPreview::Shutdown(engine::AssetManager& assets)
+void SectorMeshRenderer::Shutdown(engine::AssetManager& assets)
 {
     ShutdownRendererResources(assets);
 }
 
-void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
+void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
 {
     generatedGeometry = {};
     visibilityGraph = {};
@@ -728,14 +728,14 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     initialized = false;
 }
 
-void SectorMeshPreview::AdvanceRuntime(float dt)
+void SectorMeshRenderer::AdvanceRuntime(float dt)
 {
     if (std::isfinite(dt) && dt > 0.0f) {
         runtimeSeconds += dt;
     }
 }
 
-void SectorMeshPreview::Render(
+void SectorMeshRenderer::Render(
         engine::AssetManager& assets,
         bool useBakedAmbientOcclusion,
         engine::World* runtimeObjectWorld,
@@ -745,7 +745,7 @@ void SectorMeshPreview::Render(
     DrawScene(assets, useBakedAmbientOcclusion, runtimeObjectWorld, doorLighting);
 }
 
-void SectorMeshPreview::DrawScene(
+void SectorMeshRenderer::DrawScene(
         engine::AssetManager& assets,
         bool useBakedAmbientOcclusion,
         engine::World* runtimeObjectWorld,
@@ -774,7 +774,7 @@ void SectorMeshPreview::DrawScene(
     if (useBakedAmbientOcclusionLoc >= 0) {
         SetShaderValue(material.shader, useBakedAmbientOcclusionLoc, &useAo, SHADER_UNIFORM_FLOAT);
     }
-    SectorPreviewDynamicLightShaderLocations dynamicLightLocations;
+    SectorDynamicLightShaderLocations dynamicLightLocations;
     dynamicLightLocations.dynamicLightCount = dynamicLightCountLoc;
     dynamicLightLocations.dynamicLightPositions = dynamicLightPositionsLoc;
     dynamicLightLocations.dynamicLightColors = dynamicLightColorsLoc;
@@ -785,7 +785,7 @@ void SectorMeshPreview::DrawScene(
     dynamicLightLocations.dynamicLightInnerConeCos = dynamicLightInnerConeCosLoc;
     dynamicLightLocations.dynamicLightOuterConeCos = dynamicLightOuterConeCosLoc;
     dynamicLightLocations.dynamicLightingClamp = dynamicLightingClampLoc;
-    UploadSectorPreviewDynamicPointLights(
+    UploadSectorRendererDynamicPointLights(
             material.shader,
             dynamicLightLocations,
             dynamicLightingEnabled,
@@ -793,13 +793,13 @@ void SectorMeshPreview::DrawScene(
             dynamicLightState.SelectedLights());
     const SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms =
             dynamicLightState.PackShadowUniforms();
-    SectorPreviewDynamicSpotLightShadowShaderLocations shadowLocations;
+    SectorDynamicSpotLightShadowShaderLocations shadowLocations;
     shadowLocations.dynamicLightShadowSlots = dynamicLightShadowSlotsLoc;
     shadowLocations.shadowLightMatrices = shadowLightMatrixLocs;
     shadowLocations.shadowBias = shadowBiasLoc;
     shadowLocations.shadowStrength = shadowStrengthLoc;
     shadowLocations.shadowSoftness = shadowSoftnessLoc;
-    UploadSectorPreviewDynamicSpotLightShadowUniforms(material.shader, shadowLocations, shadowUniforms);
+    UploadSectorRendererDynamicSpotLightShadowUniforms(material.shader, shadowLocations, shadowUniforms);
     for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
         if (!ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)) {
             continue;
@@ -850,7 +850,7 @@ void SectorMeshPreview::DrawScene(
         DrawMesh(batch.mesh, material, MatrixIdentity());
     }
     if (runtimeObjectWorld != nullptr) {
-        SectorPreviewDoorDrawContext doorDrawContext;
+        SectorDoorDrawContext doorDrawContext;
         doorDrawContext.assets = &assets;
         doorDrawContext.runtimeObjectWorld = runtimeObjectWorld;
         doorDrawContext.lighting = doorLighting;
@@ -861,20 +861,20 @@ void SectorMeshPreview::DrawScene(
         doorDrawContext.dynamicLighting.shadowMaps = dynamicLightState.BuildShadowMapTextures();
         doorDrawContext.dynamicLighting.lightingClamp = DynamicLightingClamp;
         doorDrawContext.textureResolver.userData = this;
-        doorDrawContext.textureResolver.resolve = &SectorMeshPreview::ResolveShadowCasterTexture;
+        doorDrawContext.textureResolver.resolve = &SectorMeshRenderer::ResolveShadowCasterTexture;
         doorDrawContext.defaultMaterialTexture = &defaultMaterialTexture;
         doorDrawContext.renderDebugText = &renderDebugText;
         doorRenderer.Draw(doorDrawContext);
 
-        const SectorPreviewBillboardDynamicLightContext billboardLightContext = BuildBillboardDynamicLightContext();
+        const SectorBillboardDynamicLightContext billboardLightContext = BuildBillboardDynamicLightContext();
         billboardRenderer.Draw(assets, *runtimeObjectWorld, camera, billboardLightContext, renderDebugText);
     }
     EndMode3D();
 }
 
-SectorPreviewBillboardDynamicLightContext SectorMeshPreview::BuildBillboardDynamicLightContext() const
+SectorBillboardDynamicLightContext SectorMeshRenderer::BuildBillboardDynamicLightContext() const
 {
-    SectorPreviewBillboardDynamicLightContext context;
+    SectorBillboardDynamicLightContext context;
     context.dynamicLightCount = dynamicLightingEnabled
             ? static_cast<int>(std::min(dynamicLightState.SelectedLights().size(), static_cast<size_t>(MaxDynamicLights)))
             : 0;
@@ -900,7 +900,7 @@ SectorPreviewBillboardDynamicLightContext SectorMeshPreview::BuildBillboardDynam
     return context;
 }
 
-void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
+void SectorMeshRenderer::RenderDynamicSpotLightShadowMaps(
         engine::AssetManager& assets,
         engine::World* runtimeObjectWorld)
 {
@@ -908,21 +908,21 @@ void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
         return;
     }
 
-    SectorPreviewDynamicSpotLightShadowRenderContext context;
+    SectorDynamicSpotLightShadowRenderContext context;
     context.assets = &assets;
     context.sectorDrawRecords = &meshes.sectorDrawRecords;
     context.userData = this;
-    context.textureResolver = &SectorMeshPreview::ResolveShadowCasterTexture;
+    context.textureResolver = &SectorMeshRenderer::ResolveShadowCasterTexture;
     doorRenderer.PrepareShadowRenderContext(context, runtimeObjectWorld);
     dynamicLightState.RenderShadowMaps(context);
 }
 
-void SectorMeshPreview::ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
+void SectorMeshRenderer::ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
 {
     ApplyEmissiveDecalBloomToScene(assets, sceneTarget);
 }
 
-void SectorMeshPreview::ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
+void SectorMeshRenderer::ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
 {
     bloomRenderer.ApplyEmissiveDecalBloomToScene(
             assets,
@@ -934,22 +934,22 @@ void SectorMeshPreview::ApplyEmissiveDecalBloomToScene(engine::AssetManager& ass
             sceneTarget);
 }
 
-SectorViewPose SectorMeshPreview::Pose() const
+SectorViewPose SectorMeshRenderer::Pose() const
 {
     return RendererPose();
 }
 
-SectorViewPose SectorMeshPreview::RendererPose() const
+SectorViewPose SectorMeshRenderer::RendererPose() const
 {
     return SectorViewPose{position, yawRadians, pitchRadians};
 }
 
-void SectorMeshPreview::ApplyPose(const SectorViewPose& pose)
+void SectorMeshRenderer::ApplyPose(const SectorViewPose& pose)
 {
     ApplyRendererPose(pose);
 }
 
-void SectorMeshPreview::ApplyRendererPose(const SectorViewPose& pose)
+void SectorMeshRenderer::ApplyRendererPose(const SectorViewPose& pose)
 {
     position = pose.position;
     yawRadians = pose.yawRadians;
@@ -958,7 +958,7 @@ void SectorMeshPreview::ApplyRendererPose(const SectorViewPose& pose)
     UpdateVisibilityDebug();
 }
 
-void SectorMeshPreview::RefreshDynamicLightSources(const SectorTopologyMap& map)
+void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map)
 {
     dynamicLightState.RebuildSources(
             map,
@@ -966,7 +966,7 @@ void SectorMeshPreview::RefreshDynamicLightSources(const SectorTopologyMap& map)
     UpdateVisibilityDebug();
 }
 
-void SectorMeshPreview::UpdateVisibilityDebug(
+void SectorMeshRenderer::UpdateVisibilityDebug(
         int preferredStartSectorId,
         float visibilitySeedRadiusWorld,
         bool validateEyeY,
@@ -1018,27 +1018,27 @@ void SectorMeshPreview::UpdateVisibilityDebug(
     visibilityDebugText += " | " + renderDebugText;
 }
 
-float SectorMeshPreview::AssetProgress(engine::AssetManager& assets) const
+float SectorMeshRenderer::AssetProgress(engine::AssetManager& assets) const
 {
     return RendererAssetProgress(assets);
 }
 
-float SectorMeshPreview::RendererAssetProgress(engine::AssetManager& assets) const
+float SectorMeshRenderer::RendererAssetProgress(engine::AssetManager& assets) const
 {
     return engine::IsNull(assetScope) ? 1.0f : assets.GetScopeProgress(assetScope);
 }
 
-const char* SectorMeshPreview::LightmapStatusText() const
+const char* SectorMeshRenderer::LightmapStatusText() const
 {
     return RendererLightmapStatusText();
 }
 
-const char* SectorMeshPreview::RendererLightmapStatusText() const
+const char* SectorMeshRenderer::RendererLightmapStatusText() const
 {
     return SectorLightmapStatusText(static_cast<SectorLightmapStatus>(lightmapStatus));
 }
 
-engine::TextureHandle SectorMeshPreview::TextureForId(const std::string& textureId) const
+engine::TextureHandle SectorMeshRenderer::TextureForId(const std::string& textureId) const
 {
     const auto it = textureHandlesById.find(textureId);
     if (it == textureHandlesById.end()) {
@@ -1048,19 +1048,19 @@ engine::TextureHandle SectorMeshPreview::TextureForId(const std::string& texture
     return it->second;
 }
 
-const Texture2D* SectorMeshPreview::ResolveShadowCasterTexture(
+const Texture2D* SectorMeshRenderer::ResolveShadowCasterTexture(
         void* userData,
         engine::AssetManager& assets,
         const std::string& textureId)
 {
-    const SectorMeshPreview* preview = static_cast<const SectorMeshPreview*>(userData);
+    const SectorMeshRenderer* preview = static_cast<const SectorMeshRenderer*>(userData);
     if (preview == nullptr) {
         return nullptr;
     }
     return assets.GetTexture(preview->TextureForId(textureId));
 }
 
-void SectorMeshPreview::UpdateCamera()
+void SectorMeshRenderer::UpdateCamera()
 {
     const float cosPitch = std::cos(pitchRadians);
     const Vector3 look{

@@ -6,11 +6,11 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
-#include "sector_demo/SectorPreviewBillboardRenderer.h"
-#include "sector_demo/SectorPreviewBloom.h"
-#include "sector_demo/SectorPreviewDoorRenderer.h"
-#include "sector_demo/SectorPreviewDynamicLighting.h"
-#include "sector_demo/SectorPreviewSkyRenderer.h"
+#include "sector_demo/renderer/SectorBillboardRenderer.h"
+#include "sector_demo/renderer/SectorBloomRenderer.h"
+#include "sector_demo/renderer/SectorDoorRenderer.h"
+#include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
+#include "sector_demo/renderer/SectorSkyRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
 
@@ -30,7 +30,7 @@ namespace game {
 struct SectorTopologyMap;
 struct SectorBakedObjectLightProbeRuntimeData;
 
-class SectorMeshPreview {
+class SectorMeshRenderer {
 public:
     bool Rebuild(
             engine::AssetManager& assets,
@@ -110,7 +110,7 @@ public:
 private:
     engine::TextureHandle TextureForId(const std::string& textureId) const;
     void UpdateCamera();
-    SectorPreviewBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
+    SectorBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
     static const Texture2D* ResolveShadowCasterTexture(
             void* userData,
             engine::AssetManager& assets,
@@ -160,11 +160,11 @@ private:
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
     int dynamicLightingClampLoc = -1;
-    SectorPreviewSkyRenderer skyRenderer;
-    SectorPreviewBloom bloomRenderer;
-    SectorPreviewBillboardRenderer billboardRenderer;
-    SectorPreviewDoorRenderer doorRenderer;
-    SectorPreviewDynamicLighting dynamicLightState;
+    SectorSkyRenderer skyRenderer;
+    SectorBloomRenderer bloomRenderer;
+    SectorBillboardRenderer billboardRenderer;
+    SectorDoorRenderer doorRenderer;
+    SectorDynamicLightingRenderer dynamicLightState;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
     int lightmapStatus = 0;

@@ -1,4 +1,4 @@
-#include "sector_demo/SectorPreviewDoorRenderer.h"
+#include "sector_demo/renderer/SectorDoorRenderer.h"
 
 #include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorRuntimeObjects.h"
@@ -327,19 +327,19 @@ const char* SectorDoorLightingDebugModeName(SectorDoorLightingDebugMode mode)
     return "Normal";
 }
 
-void SectorPreviewDoorRenderer::ReserveRuntimeDoorCapacity(size_t capacity)
+void SectorDoorRenderer::ReserveRuntimeDoorCapacity(size_t capacity)
 {
     doorMeshCache.reserve(capacity);
     runtimeDoorShadowCasters.clear();
     runtimeDoorShadowCasters.reserve(capacity);
 }
 
-void SectorPreviewDoorRenderer::ResetOpaqueShaderLocations()
+void SectorDoorRenderer::ResetOpaqueShaderLocations()
 {
-    opaqueShaderLocations = SectorPreviewDoorOpaqueShaderLocations{};
+    opaqueShaderLocations = SectorDoorOpaqueShaderLocations{};
 }
 
-bool SectorPreviewDoorRenderer::LoadOpaqueResources()
+bool SectorDoorRenderer::LoadOpaqueResources()
 {
     opaqueShader = LoadShaderFromMemory(SectorDoorOpaqueVs, SectorDoorOpaqueFs);
     if (opaqueShader.id == 0) {
@@ -389,7 +389,7 @@ bool SectorPreviewDoorRenderer::LoadOpaqueResources()
     return true;
 }
 
-void SectorPreviewDoorRenderer::ShutdownOpaqueResources()
+void SectorDoorRenderer::ShutdownOpaqueResources()
 {
     if (opaqueMaterialLoaded) {
         opaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = opaqueDefaultMaterialTexture;
@@ -405,7 +405,7 @@ void SectorPreviewDoorRenderer::ShutdownOpaqueResources()
     }
 }
 
-void SectorPreviewDoorRenderer::PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld)
+void SectorDoorRenderer::PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld)
 {
     for (auto& entry : doorMeshCache) {
         entry.second.seenThisFrame = false;
@@ -468,7 +468,7 @@ void SectorPreviewDoorRenderer::PrepareRuntimeDoorMeshes(engine::World& runtimeO
     }
 }
 
-void SectorPreviewDoorRenderer::Draw(const SectorPreviewDoorDrawContext& context)
+void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
 {
     if (!IsOpaqueReady()) {
         renderStats = {};
@@ -484,7 +484,7 @@ void SectorPreviewDoorRenderer::Draw(const SectorPreviewDoorDrawContext& context
 
     Material& doorOpaqueMaterial = OpaqueMaterial();
     const Texture2D& doorOpaqueDefaultMaterialTexture = OpaqueDefaultMaterialTexture();
-    const SectorPreviewDoorOpaqueShaderLocations& doorOpaqueLocations = OpaqueShaderLocations();
+    const SectorDoorOpaqueShaderLocations& doorOpaqueLocations = OpaqueShaderLocations();
     PrepareRuntimeDoorMeshes(*context.runtimeObjectWorld);
 
     size_t consideredCount = 0;
@@ -500,7 +500,7 @@ void SectorPreviewDoorRenderer::Draw(const SectorPreviewDoorDrawContext& context
     rlDisableBackfaceCulling();
     rlEnableDepthTest();
     rlEnableDepthMask();
-    SectorPreviewDynamicLightShaderLocations dynamicLightLocations;
+    SectorDynamicLightShaderLocations dynamicLightLocations;
     dynamicLightLocations.dynamicLightCount = doorOpaqueLocations.dynamicLightCount;
     dynamicLightLocations.dynamicLightPositions = doorOpaqueLocations.dynamicLightPositions;
     dynamicLightLocations.dynamicLightColors = doorOpaqueLocations.dynamicLightColors;
@@ -516,19 +516,19 @@ void SectorPreviewDoorRenderer::Draw(const SectorPreviewDoorDrawContext& context
             context.dynamicLighting.selectedLights != nullptr
             ? *context.dynamicLighting.selectedLights
             : emptyDynamicLights;
-    UploadSectorPreviewDynamicPointLights(
+    UploadSectorRendererDynamicPointLights(
             doorOpaqueMaterial.shader,
             dynamicLightLocations,
             context.dynamicLighting.enabled,
             context.dynamicLighting.runtimeSeconds,
             selectedDynamicLights);
-    SectorPreviewDynamicSpotLightShadowShaderLocations shadowLocations;
+    SectorDynamicSpotLightShadowShaderLocations shadowLocations;
     shadowLocations.dynamicLightShadowSlots = doorOpaqueLocations.dynamicLightShadowSlots;
     shadowLocations.shadowLightMatrices = doorOpaqueLocations.shadowLightMatrices;
     shadowLocations.shadowBias = doorOpaqueLocations.shadowBias;
     shadowLocations.shadowStrength = doorOpaqueLocations.shadowStrength;
     shadowLocations.shadowSoftness = doorOpaqueLocations.shadowSoftness;
-    UploadSectorPreviewDynamicSpotLightShadowUniforms(
+    UploadSectorRendererDynamicSpotLightShadowUniforms(
             doorOpaqueMaterial.shader,
             shadowLocations,
             context.dynamicLighting.shadowUniforms);
@@ -673,8 +673,8 @@ void SectorPreviewDoorRenderer::Draw(const SectorPreviewDoorDrawContext& context
     }
 }
 
-void SectorPreviewDoorRenderer::PrepareShadowRenderContext(
-        SectorPreviewDynamicSpotLightShadowRenderContext& context,
+void SectorDoorRenderer::PrepareShadowRenderContext(
+        SectorDynamicSpotLightShadowRenderContext& context,
         engine::World* runtimeObjectWorld)
 {
     if (runtimeObjectWorld != nullptr) {
@@ -685,15 +685,15 @@ void SectorPreviewDoorRenderer::PrepareShadowRenderContext(
 
     context.doorShadowCasters = &ShadowCasters();
     context.doorMeshResolverUserData = this;
-    context.doorMeshResolver = &SectorPreviewDoorRenderer::ResolveDoorShadowCasterMesh;
+    context.doorMeshResolver = &SectorDoorRenderer::ResolveDoorShadowCasterMesh;
 }
 
-void SectorPreviewDoorRenderer::ClearPreparedShadowCasters()
+void SectorDoorRenderer::ClearPreparedShadowCasters()
 {
     runtimeDoorShadowCasters.clear();
 }
 
-void SectorPreviewDoorRenderer::UnloadDoorMeshes()
+void SectorDoorRenderer::UnloadDoorMeshes()
 {
     for (auto& entry : doorMeshCache) {
         if (entry.second.mesh.vertexCount > 0) {
@@ -705,7 +705,7 @@ void SectorPreviewDoorRenderer::UnloadDoorMeshes()
     runtimeDoorShadowCasters.clear();
 }
 
-SectorPreviewDoorRenderer::DoorMeshCacheEntry* SectorPreviewDoorRenderer::FindMutableDoorMesh(int placedObjectId)
+SectorDoorRenderer::DoorMeshCacheEntry* SectorDoorRenderer::FindMutableDoorMesh(int placedObjectId)
 {
     auto cacheIt = doorMeshCache.find(placedObjectId);
     if (cacheIt == doorMeshCache.end()) {
@@ -714,7 +714,7 @@ SectorPreviewDoorRenderer::DoorMeshCacheEntry* SectorPreviewDoorRenderer::FindMu
     return &cacheIt->second;
 }
 
-const SectorPreviewDoorRenderer::DoorMeshCacheEntry* SectorPreviewDoorRenderer::FindDoorMesh(int placedObjectId) const
+const SectorDoorRenderer::DoorMeshCacheEntry* SectorDoorRenderer::FindDoorMesh(int placedObjectId) const
 {
     const auto cacheIt = doorMeshCache.find(placedObjectId);
     if (cacheIt == doorMeshCache.end()) {
@@ -723,7 +723,7 @@ const SectorPreviewDoorRenderer::DoorMeshCacheEntry* SectorPreviewDoorRenderer::
     return &cacheIt->second;
 }
 
-const Mesh* SectorPreviewDoorRenderer::ResolveDoorShadowCasterMesh(
+const Mesh* SectorDoorRenderer::ResolveDoorShadowCasterMesh(
         const SectorDoorShadowCaster& caster,
         float& outWidth,
         float& outHeight) const
@@ -738,13 +738,13 @@ const Mesh* SectorPreviewDoorRenderer::ResolveDoorShadowCasterMesh(
     return &cacheEntry->mesh;
 }
 
-const Mesh* SectorPreviewDoorRenderer::ResolveDoorShadowCasterMesh(
+const Mesh* SectorDoorRenderer::ResolveDoorShadowCasterMesh(
         void* userData,
         const SectorDoorShadowCaster& caster,
         float& outWidth,
         float& outHeight)
 {
-    const SectorPreviewDoorRenderer* renderer = static_cast<const SectorPreviewDoorRenderer*>(userData);
+    const SectorDoorRenderer* renderer = static_cast<const SectorDoorRenderer*>(userData);
     if (renderer == nullptr) {
         return nullptr;
     }
