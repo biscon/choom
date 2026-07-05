@@ -1,5 +1,9 @@
 #pragma once
 
+#include "sector_editor/SectorEditorModalTypes.h"
+#include "sector_editor/SectorEditorPreviewTypes.h"
+#include "sector_editor/SectorEditorSelectionTypes.h"
+#include "sector_editor/SectorEditorSurfaceTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 

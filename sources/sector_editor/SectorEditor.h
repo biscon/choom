@@ -4,10 +4,12 @@
 #include "engine/EngineContext.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "sector_editor/SectorEditorLightmapAsyncTypes.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
+#include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTypes.h"
-#include "sector_demo/SectorMeshPreview.h"
+#include "sector_demo/renderer/SectorMeshRenderer.h"
 
 #include <raylib.h>
 
@@ -429,7 +431,7 @@ private:
     LightmapBakeAsyncState lightmapBake;
     Rectangle canvasRect = {};
     std::string statusText;
-    SectorMeshPreview preview;
+    SectorMeshRenderer preview;
     engine::EngineContext* engineContext = nullptr;
     bool initialized = false;
 };

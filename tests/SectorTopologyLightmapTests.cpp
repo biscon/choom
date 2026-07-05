@@ -69,6 +69,134 @@ bool SameVector(Vector3 a, Vector3 b)
     return Near(a.x, b.x) && Near(a.y, b.y) && Near(a.z, b.z);
 }
 
+void TestLightmapBakeReportFormatting()
+{
+    game::SectorLightmapBakeResult result;
+    result.width = 16;
+    result.height = 8;
+    result.validChartTexels = 32;
+    result.allocatedChartRectanglePixels = 64;
+    result.staticGeometryTriangles = 12;
+    result.bvhNodes = 7;
+    result.bvhLeaves = 4;
+    result.bvhLeafTriangleLimit = 8;
+    result.bvhAverageTrianglesPerLeaf = 3.25;
+    result.bvhMaxTrianglesInLeaf = 6;
+    result.staticLightCount = 5;
+    result.staticSpotLightCount = 2;
+    result.objectProbes.count = 9;
+    result.objectProbes.path = "assets/levels/test.lightmap.object_probes.bin";
+    result.objectProbePlacementDiagnostics = 1;
+    result.directHardShadowStats = game::SectorLightmapRaycastStats{10, 20, 5, 30, 4, 1};
+    result.softShadowSourceStats = game::SectorLightmapRaycastStats{20, 40, 8, 50, 6, 2};
+    result.ambientOcclusionStats = game::SectorLightmapRaycastStats{0, 0, 0, 0, 0, 0};
+    result.indirectBounceStats = game::SectorLightmapRaycastStats{5, 12, 3, 15, 2, 3};
+    result.layoutSeconds = 0.11;
+    result.bvhBuildSeconds = 0.22;
+    result.directLightingSeconds = 1.23;
+    result.ambientOcclusionSeconds = 2.34;
+    result.indirectBounceSeconds = 3.45;
+    result.objectProbeBakeSeconds = 0.44;
+    result.objectProbeSidecarWriteSeconds = 0.55;
+    result.gutterExportSeconds = 0.66;
+    result.totalBakeSeconds = 9.99;
+
+    const std::string expected =
+            "Lightmap bake report\n"
+            "  Atlas: 16 x 8\n"
+            "  Atlas pixels: 128\n"
+            "  Valid chart texels: 32\n"
+            "  Valid atlas occupancy: 25.00%\n"
+            "  Allocated chart rectangle pixels: 64\n"
+            "  Chart rectangle occupancy: 50.00%\n"
+            "  Chart payload efficiency: 50.00%\n"
+            "  Static geometry triangles: 12\n"
+            "  BVH nodes: 7\n"
+            "  BVH leaves: 4\n"
+            "  BVH leaf triangle limit: 8\n"
+            "  Average triangles per leaf: 3.25\n"
+            "  Max triangles in leaf: 6\n"
+            "  Static lights: 5 (3 point, 2 spot)\n"
+            "\n"
+            "  Object light probes: 9\n"
+            "  Object probe placement diagnostics: 1\n"
+            "  Object probe sidecar: assets/levels/test.lightmap.object_probes.bin\n"
+            "\n"
+            "  Direct hard-shadow rays: 10\n"
+            "    AABB tests: 20\n"
+            "    AABB hits: 5\n"
+            "    Triangle tests: 30\n"
+            "    Triangle hits: 4\n"
+            "    Logical source-surface self hits ignored: 1\n"
+            "    Average triangle tests/ray: 3.00\n"
+            "\n"
+            "  Soft-shadow source rays: 20\n"
+            "    AABB tests: 40\n"
+            "    AABB hits: 8\n"
+            "    Triangle tests: 50\n"
+            "    Triangle hits: 6\n"
+            "    Logical source-surface self hits ignored: 2\n"
+            "    Average triangle tests/ray: 2.50\n"
+            "\n"
+            "  AO rays: 0\n"
+            "    AABB tests: 0\n"
+            "    AABB hits: 0\n"
+            "    Triangle tests: 0\n"
+            "    Triangle hits: 0\n"
+            "    Logical source-surface self hits ignored: 0\n"
+            "    Average triangle tests/ray: 0.00\n"
+            "\n"
+            "  Indirect bounce rays: 5\n"
+            "    AABB tests: 12\n"
+            "    AABB hits: 3\n"
+            "    Triangle tests: 15\n"
+            "    Triangle hits: 2\n"
+            "    Logical source-surface self hits ignored: 3\n"
+            "    Average triangle tests/ray: 3.00\n"
+            "\n"
+            "  Total rays: 35\n"
+            "  Total triangle tests: 95\n"
+            "  Total logical source-surface self hits ignored: 6\n"
+            "  Average triangle tests/ray: 2.71\n"
+            "\n"
+            "  Layout: 0.11s\n"
+            "  BVH build: 0.22s\n"
+            "  Direct lighting: 1.23s\n"
+            "  AO: 2.34s\n"
+            "  Indirect bounce: 3.45s\n"
+            "  Object probe bake: 0.44s\n"
+            "  Object probe sidecar write: 0.55s\n"
+            "  Gutter dilation/export: 0.66s\n"
+            "  Total bake: 9.99s";
+
+    Check(game::FormatSectorLightmapBakeReport(result) == expected,
+          "lightmap bake report formatting remains exact");
+}
+
+void TestSectorAssetPathHelpers()
+{
+    Check(game::IsSectorAssetsPath("assets/textures/wall.png"), "asset path helper detects assets prefix");
+    Check(!game::IsSectorAssetsPath("textures/wall.png"), "asset path helper ignores non-assets relative path");
+    Check(!game::IsSectorAssetsPath("/tmp/assets/textures/wall.png"), "asset path helper ignores absolute path");
+
+    Check(game::ResolveSectorAssetPath("").empty(), "empty asset path resolves to empty path");
+    Check(game::ResolveSectorAssetPath("textures/wall.png") == "textures/wall.png",
+          "non-assets relative path resolves unchanged");
+    Check(game::ResolveSectorAssetPath("/tmp/wall.png") == "/tmp/wall.png",
+          "absolute asset path resolves unchanged");
+    Check(game::ResolveSectorAssetPath("assets/wall.png") == std::string(ASSETS_PATH) + "wall.png",
+          "assets path resolves under ASSETS_PATH");
+    Check(game::ResolveSectorAssetPath("assets/textures/wall.png") == std::string(ASSETS_PATH) + "textures/wall.png",
+          "nested assets path resolves without double prefix");
+
+    const std::filesystem::path assetRoot = std::filesystem::path(ASSETS_PATH);
+    const std::filesystem::path nestedAsset = assetRoot / "levels" / "test" / "test.lightmap.png";
+    Check(game::MakeSectorAssetRelativePath(nestedAsset.generic_string()) == "assets/levels/test/test.lightmap.png",
+          "asset-root filesystem path converts to project-relative asset path");
+    Check(game::MakeSectorAssetRelativePath("/tmp/outside.lightmap.png") == "/tmp/outside.lightmap.png",
+          "filesystem path outside asset root stays unchanged");
+}
+
 bool FiniteVector(Vector3 value)
 {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
@@ -2297,6 +2425,8 @@ void TestObjectLightProbeAmbientAndDegenerateFiniteOutput()
 
 int main()
 {
+    TestLightmapBakeReportFormatting();
+    TestSectorAssetPathHelpers();
     TestObjectLightProbeSidecarRoundTrip();
     TestObjectLightProbeSidecarRejectsInvalidFiles();
     TestObjectLightProbeRuntimeDataLoadsAndBuildsSectorRanges();

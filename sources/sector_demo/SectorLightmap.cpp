@@ -1,6 +1,8 @@
 #include "sector_demo/SectorLightmap.h"
 
+#include "sector_demo/SectorColor.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
+#include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorUnits.h"
 
@@ -17,7 +19,6 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
-#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -151,23 +152,6 @@ constexpr uint32_t kSectorLightmapProgressChunk = 512;
 constexpr float Pi = 3.14159265358979323846f;
 constexpr char kObjectProbeSidecarMagic[4] = {'S', 'O', 'P', 'B'};
 
-bool StartsWith(const std::string& value, const char* prefix)
-{
-    const std::string prefixString(prefix);
-    return value.size() >= prefixString.size() && value.compare(0, prefixString.size(), prefixString) == 0;
-}
-
-std::string ResolveLightmapTexturePath(const std::string& path)
-{
-#ifdef ASSETS_PATH
-    if (StartsWith(path, "assets/")) {
-        return std::string(ASSETS_PATH) + path.substr(7);
-    }
-#endif
-
-    return path;
-}
-
 bool RayIntersectsTriangle(
         Vector3 origin,
         Vector3 direction,
@@ -214,7 +198,7 @@ std::string HashToString(uint64_t hash)
 
 unsigned char FloatToByte(float value)
 {
-    return static_cast<unsigned char>(std::clamp(static_cast<int>(std::lround(value * 255.0f)), 0, 255));
+    return ClampColorByte(value * 255.0f);
 }
 
 float Cross2(Vector2 a, Vector2 b, Vector2 c)
@@ -358,11 +342,6 @@ bool RayIntersectsTriangle(
             outBarycentric0,
             outBarycentric1,
             outBarycentric2);
-}
-
-bool IsFinite(Vector3 value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
 uint32_t FloatToLittleEndianBits(float value)
@@ -741,7 +720,7 @@ bool BuildSectorLightmapBvh(
     }
 
     for (const BakeTriangle& tri : triangles) {
-        if (!IsFinite(tri.worldPosition0) || !IsFinite(tri.worldPosition1) || !IsFinite(tri.worldPosition2)) {
+        if (!IsFiniteVector3(tri.worldPosition0) || !IsFiniteVector3(tri.worldPosition1) || !IsFiniteVector3(tri.worldPosition2)) {
             outError = "Bake failed: invalid triangle data for lightmap BVH";
             return false;
         }
@@ -771,8 +750,8 @@ bool CastsAlphaTestLightmapOcclusion(const SectorGeneratedSurface& surface)
 bool IntersectRayAabb(const Ray& ray, const BakeAabb& bounds, float maxDistance, float& outEntryDistance)
 {
     if (maxDistance <= 0.0f || !std::isfinite(maxDistance)
-            || !IsFinite(ray.position) || !IsFinite(ray.direction)
-            || !IsFinite(bounds.min) || !IsFinite(bounds.max)) {
+            || !IsFiniteVector3(ray.position) || !IsFiniteVector3(ray.direction)
+            || !IsFiniteVector3(bounds.min) || !IsFiniteVector3(bounds.max)) {
         return false;
     }
 
@@ -1323,7 +1302,7 @@ float SmoothStep(float edge0, float edge1, float value)
         return value >= edge1 ? 1.0f : 0.0f;
     }
     const float t = std::clamp((value - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-    return t * t * (3.0f - 2.0f * t);
+    return std::isfinite(t) ? SmoothStep01(t) : t;
 }
 
 float ConeCosine(float degrees)
@@ -1333,11 +1312,7 @@ float ConeCosine(float degrees)
 
 Vector3 NormalizeOrFallback(Vector3 value, Vector3 fallback)
 {
-    const float lengthSq = Vector3LengthSqr(value);
-    if (lengthSq <= 0.00000001f || !std::isfinite(lengthSq)) {
-        return fallback;
-    }
-    return Vector3Scale(value, 1.0f / std::sqrt(lengthSq));
+    return NormalizeVector3OrFallback(value, fallback, 0.00000001f);
 }
 
 Vector3 EvaluateDirectLightSample(
@@ -2635,7 +2610,7 @@ const SectorLightmapAlphaMaskCache::AlphaMask& SectorLightmapAlphaMaskCache::Loa
         return masksByKey.emplace(key, std::move(mask)).first->second;
     }
 
-    const std::string resolvedPath = ResolveLightmapTexturePath(textureIt->second.path);
+    const std::string resolvedPath = ResolveSectorAssetPath(textureIt->second.path);
     Image image = LoadImage(resolvedPath.c_str());
     if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
         TraceLog(LOG_WARNING,
@@ -2887,7 +2862,7 @@ bool BakeSectorBakedObjectLightProbeAmbientCubes(
 {
     outError.clear();
     for (const SectorBakedObjectLightProbe& probe : probes) {
-        if (!IsFinite(probe.position)) {
+        if (!IsFiniteVector3(probe.position)) {
             outError = "Object probe bake failed: non-finite probe position";
             return false;
         }
@@ -2998,12 +2973,12 @@ bool WriteSectorBakedObjectLightProbeSidecar(
     }
 
     for (const SectorBakedObjectLightProbe& probe : probes) {
-        if (!IsFinite(probe.position)) {
+        if (!IsFiniteVector3(probe.position)) {
             outError = "Object probe sidecar write failed: non-finite probe position";
             return false;
         }
         for (const Vector3& cubeFace : probe.ambientCube) {
-            if (!IsFinite(cubeFace)) {
+            if (!IsFiniteVector3(cubeFace)) {
                 outError = "Object probe sidecar write failed: non-finite ambient cube value";
                 return false;
             }
@@ -3146,7 +3121,7 @@ bool ReadSectorBakedObjectLightProbeSidecar(
             return false;
         }
         probe.sectorId = static_cast<int>(sectorId);
-        if (!IsFinite(probe.position)) {
+        if (!IsFiniteVector3(probe.position)) {
             outError = "Object probe sidecar read failed: non-finite probe position";
             return false;
         }
@@ -3155,7 +3130,7 @@ bool ReadSectorBakedObjectLightProbeSidecar(
                 outError = "Object probe sidecar read failed: truncated probe ambient cube";
                 return false;
             }
-            if (!IsFinite(cubeFace)) {
+            if (!IsFiniteVector3(cubeFace)) {
                 outError = "Object probe sidecar read failed: non-finite ambient cube value";
                 return false;
             }
@@ -3292,27 +3267,6 @@ BakedObjectLightingSample SampleBakedObjectLighting(
     }
 
     return MakeNeutralObjectLightingSample();
-}
-
-std::string ResolveSectorAssetPath(const std::string& path)
-{
-    const std::string prefix = "assets/";
-    if (path.compare(0, prefix.size(), prefix) == 0) {
-        return std::string(ASSETS_PATH) + path.substr(prefix.size());
-    }
-    return path;
-}
-
-std::string MakeSectorAssetRelativePath(const std::string& path)
-{
-    const std::filesystem::path assetsRoot = std::filesystem::path(ASSETS_PATH).lexically_normal();
-    const std::filesystem::path absolute = std::filesystem::path(path).lexically_normal();
-    std::error_code ec;
-    const std::filesystem::path relative = std::filesystem::relative(absolute, assetsRoot, ec);
-    if (!ec && !relative.empty() && relative.native().find("..") != 0) {
-        return std::string{"assets/"} + relative.generic_string();
-    }
-    return std::filesystem::path(path).generic_string();
 }
 
 std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath)
@@ -3837,108 +3791,6 @@ bool BakeSectorLightmap(
         outResult.objectProbes.sourceHash = input.expectedSourceHash;
     }
     return true;
-}
-
-std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& result)
-{
-    const double atlasPixels = static_cast<double>(result.width) * static_cast<double>(result.height);
-    const double validAtlasOccupancy = atlasPixels > 0.0
-            ? (static_cast<double>(result.validChartTexels) / atlasPixels) * 100.0
-            : 0.0;
-    const double chartRectangleOccupancy = atlasPixels > 0.0
-            ? (static_cast<double>(result.allocatedChartRectanglePixels) / atlasPixels) * 100.0
-            : 0.0;
-    const double chartPayloadEfficiency = result.allocatedChartRectanglePixels > 0
-            ? (static_cast<double>(result.validChartTexels) / static_cast<double>(result.allocatedChartRectanglePixels)) * 100.0
-            : 0.0;
-    const auto averageTriangleTestsPerRay = [](const SectorLightmapRaycastStats& stats) {
-        return stats.raysCast > 0
-                ? static_cast<double>(stats.triangleTests) / static_cast<double>(stats.raysCast)
-                : 0.0;
-    };
-    const uint64_t totalRays = result.directHardShadowStats.raysCast
-            + result.softShadowSourceStats.raysCast
-            + result.ambientOcclusionStats.raysCast
-            + result.indirectBounceStats.raysCast;
-    const uint64_t totalTriangleTests = result.directHardShadowStats.triangleTests
-            + result.softShadowSourceStats.triangleTests
-            + result.ambientOcclusionStats.triangleTests
-            + result.indirectBounceStats.triangleTests;
-    const uint64_t totalLogicalSelfHitsIgnored = result.directHardShadowStats.logicalSelfHitsIgnored
-            + result.softShadowSourceStats.logicalSelfHitsIgnored
-            + result.ambientOcclusionStats.logicalSelfHitsIgnored
-            + result.indirectBounceStats.logicalSelfHitsIgnored;
-    const double totalAverageTriangleTestsPerRay = totalRays > 0
-            ? static_cast<double>(totalTriangleTests) / static_cast<double>(totalRays)
-            : 0.0;
-
-    std::ostringstream report;
-    report << "Lightmap bake report\n";
-    report << TextFormat("  Atlas: %d x %d\n", result.width, result.height);
-    report << TextFormat("  Atlas pixels: %llu\n", static_cast<unsigned long long>(static_cast<uint64_t>(result.width) * static_cast<uint64_t>(result.height)));
-    report << TextFormat("  Valid chart texels: %d\n", result.validChartTexels);
-    report << TextFormat("  Valid atlas occupancy: %.2f%%\n", validAtlasOccupancy);
-    report << TextFormat("  Allocated chart rectangle pixels: %d\n", result.allocatedChartRectanglePixels);
-    report << TextFormat("  Chart rectangle occupancy: %.2f%%\n", chartRectangleOccupancy);
-    report << TextFormat("  Chart payload efficiency: %.2f%%\n", chartPayloadEfficiency);
-    report << TextFormat("  Static geometry triangles: %d\n", result.staticGeometryTriangles);
-    report << TextFormat("  BVH nodes: %d\n", result.bvhNodes);
-    report << TextFormat("  BVH leaves: %d\n", result.bvhLeaves);
-    report << TextFormat("  BVH leaf triangle limit: %d\n", result.bvhLeafTriangleLimit);
-    report << TextFormat("  Average triangles per leaf: %.2f\n", result.bvhAverageTrianglesPerLeaf);
-    report << TextFormat("  Max triangles in leaf: %d\n", result.bvhMaxTrianglesInLeaf);
-    report << TextFormat(
-            "  Static lights: %d (%d point, %d spot)\n\n",
-            result.staticLightCount,
-            result.staticLightCount - result.staticSpotLightCount,
-            result.staticSpotLightCount);
-    report << TextFormat("  Object light probes: %d\n", result.objectProbes.count);
-    report << TextFormat("  Object probe placement diagnostics: %d\n", result.objectProbePlacementDiagnostics);
-    if (!result.objectProbes.path.empty()) {
-        report << TextFormat("  Object probe sidecar: %s\n", result.objectProbes.path.c_str());
-    }
-    report << "\n";
-    auto appendRayStats = [&](const char* label, const SectorLightmapRaycastStats& stats) {
-        report << TextFormat("  %s: %llu\n", label, static_cast<unsigned long long>(stats.raysCast));
-        report << TextFormat("    AABB tests: %llu\n", static_cast<unsigned long long>(stats.aabbTests));
-        report << TextFormat("    AABB hits: %llu\n", static_cast<unsigned long long>(stats.aabbHits));
-        report << TextFormat("    Triangle tests: %llu\n", static_cast<unsigned long long>(stats.triangleTests));
-        report << TextFormat("    Triangle hits: %llu\n", static_cast<unsigned long long>(stats.triangleHits));
-        report << TextFormat("    Logical source-surface self hits ignored: %llu\n", static_cast<unsigned long long>(stats.logicalSelfHitsIgnored));
-        report << TextFormat("    Average triangle tests/ray: %.2f\n", averageTriangleTestsPerRay(stats));
-    };
-    appendRayStats("Direct hard-shadow rays", result.directHardShadowStats);
-    report << "\n";
-    appendRayStats("Soft-shadow source rays", result.softShadowSourceStats);
-    report << "\n";
-    appendRayStats("AO rays", result.ambientOcclusionStats);
-    report << "\n";
-    appendRayStats("Indirect bounce rays", result.indirectBounceStats);
-    report << "\n";
-    report << TextFormat("  Total rays: %llu\n", static_cast<unsigned long long>(totalRays));
-    report << TextFormat("  Total triangle tests: %llu\n", static_cast<unsigned long long>(totalTriangleTests));
-    report << TextFormat("  Total logical source-surface self hits ignored: %llu\n", static_cast<unsigned long long>(totalLogicalSelfHitsIgnored));
-    report << TextFormat("  Average triangle tests/ray: %.2f\n\n", totalAverageTriangleTestsPerRay);
-    report << TextFormat("  Layout: %.2fs\n", result.layoutSeconds);
-    report << TextFormat("  BVH build: %.2fs\n", result.bvhBuildSeconds);
-    report << TextFormat("  Direct lighting: %.2fs\n", result.directLightingSeconds);
-    report << TextFormat("  AO: %.2fs\n", result.ambientOcclusionSeconds);
-    report << TextFormat("  Indirect bounce: %.2fs\n", result.indirectBounceSeconds);
-    report << TextFormat("  Object probe bake: %.2fs\n", result.objectProbeBakeSeconds);
-    report << TextFormat("  Object probe sidecar write: %.2fs\n", result.objectProbeSidecarWriteSeconds);
-    report << TextFormat("  Gutter dilation/export: %.2fs\n", result.gutterExportSeconds);
-    report << TextFormat("  Total bake: %.2fs", result.totalBakeSeconds);
-    return report.str();
-}
-
-void PrintSectorLightmapBakeReport(const SectorLightmapBakeResult& result)
-{
-    const std::string report = FormatSectorLightmapBakeReport(result);
-    std::istringstream stream(report);
-    std::string line;
-    while (std::getline(stream, line)) {
-        TraceLog(LOG_INFO, "%s", line.c_str());
-    }
 }
 
 std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)

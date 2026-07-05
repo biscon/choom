@@ -1,6 +1,8 @@
 #include "sector_demo/SectorDoorRuntime.h"
 
+#include "sector_demo/SectorBounds.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTopologyMap.h"
@@ -510,18 +512,6 @@ bool AppendSectorDoorReceiverBounds(
         const SectorDoorRender& render,
         std::vector<SectorReceiverBounds>& outBounds)
 {
-    const auto isFiniteVector3 = [](Vector3 value) {
-        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
-    };
-    const auto expandBounds = [](Vector3 point, Vector3& min, Vector3& max) {
-        min.x = std::min(min.x, point.x);
-        min.y = std::min(min.y, point.y);
-        min.z = std::min(min.z, point.z);
-        max.x = std::max(max.x, point.x);
-        max.y = std::max(max.y, point.y);
-        max.z = std::max(max.z, point.z);
-    };
-
     if (!object.visible || !door.enabled || !render.visible) {
         return false;
     }
@@ -531,7 +521,7 @@ bool AppendSectorDoorReceiverBounds(
             || !std::isfinite(render.width)
             || !std::isfinite(render.height)
             || !std::isfinite(render.thickness)
-            || !isFiniteVector3(transform.position)) {
+            || !IsFiniteVector3(transform.position)) {
         return false;
     }
 
@@ -546,13 +536,12 @@ bool AppendSectorDoorReceiverBounds(
             slab.topBackRight,
             slab.topBackLeft};
 
-    Vector3 min = corners[0];
-    Vector3 max = corners[0];
+    SectorAabb3 bounds = SectorAabb3FromPoint(corners[0]);
     for (const Vector3& corner : corners) {
-        if (!isFiniteVector3(corner)) {
+        if (!IsFiniteVector3(corner)) {
             return false;
         }
-        expandBounds(corner, min, max);
+        ExpandSectorAabb3(bounds, corner);
     }
 
     const std::size_t beginIndex = outBounds.size();
@@ -568,7 +557,7 @@ bool AppendSectorDoorReceiverBounds(
         if (sectorId <= 0 || alreadyAppended(sectorId)) {
             return;
         }
-        outBounds.push_back(SectorReceiverBounds{sectorId, min, max});
+        outBounds.push_back(SectorReceiverBounds{sectorId, bounds.min, bounds.max});
     };
 
     appendForSector(anchor.frontSectorId);
@@ -693,18 +682,7 @@ namespace {
 
 Vector2 NormalizedOrFallback(Vector2 value, Vector2 fallback)
 {
-    const float lengthSquared = value.x * value.x + value.y * value.y;
-    if (lengthSquared <= 0.000001f || !std::isfinite(lengthSquared)) {
-        return fallback;
-    }
-
-    const float invLength = 1.0f / std::sqrt(lengthSquared);
-    return Vector2{value.x * invLength, value.y * invLength};
-}
-
-bool IsFinite(Vector2 value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y);
+    return NormalizeVector2OrFallback(value, fallback, 0.000001f);
 }
 
 float Abs(float value)
@@ -735,12 +713,6 @@ Vector2 Subtract(Vector2 a, Vector2 b)
 Vector2 Scale(Vector2 value, float scale)
 {
     return Vector2{value.x * scale, value.y * scale};
-}
-
-float SmootherStep01(float t)
-{
-    t = std::isfinite(t) ? Clamp(t, 0.0f, 1.0f) : 0.0f;
-    return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
 }
 
 bool PlayerVerticalIntervalOverlapsDoor(
@@ -982,14 +954,14 @@ Vector2 StableDoorInteractionPointXZ(
 {
     const Vector2 a = anchor.endpointA;
     const Vector2 b = anchor.endpointB;
-    if (!IsFinite(a) || !IsFinite(b)) {
-        return IsFinite(anchor.midpoint) ? anchor.midpoint : Vector2{};
+    if (!IsFiniteVector2(a) || !IsFiniteVector2(b)) {
+        return IsFiniteVector2(anchor.midpoint) ? anchor.midpoint : Vector2{};
     }
 
     const Vector2 ab = Subtract(b, a);
     const float lengthSq = Dot(ab, ab);
     if (lengthSq <= DoorDynamicCollisionEpsilon || !std::isfinite(lengthSq)) {
-        return IsFinite(anchor.midpoint) ? anchor.midpoint : a;
+        return IsFiniteVector2(anchor.midpoint) ? anchor.midpoint : a;
     }
 
     const float t = Clamp(Dot(Subtract(playerPosition, a), ab) / lengthSq, 0.0f, 1.0f);
@@ -1004,7 +976,7 @@ Vector2 StableDoorFacingPointXZ(
     if (Vector2LengthSqr(Subtract(closestPoint, playerPosition)) > DoorDynamicCollisionEpsilon) {
         return closestPoint;
     }
-    if (IsFinite(anchor.midpoint)
+    if (IsFiniteVector2(anchor.midpoint)
             && Vector2LengthSqr(Subtract(anchor.midpoint, playerPosition)) > DoorDynamicCollisionEpsilon) {
         return anchor.midpoint;
     }
@@ -1217,10 +1189,10 @@ void CollectSectorDoorDynamicColliders(
                 if (!door.enabled || !collider.enabled) {
                     return;
                 }
-                if (!IsFinite(collider.center)
-                        || !IsFinite(collider.tangent)
-                        || !IsFinite(collider.normal)
-                        || !IsFinite(collider.halfExtents)
+                if (!IsFiniteVector2(collider.center)
+                        || !IsFiniteVector2(collider.tangent)
+                        || !IsFiniteVector2(collider.normal)
+                        || !IsFiniteVector2(collider.halfExtents)
                         || !std::isfinite(collider.bottom)
                         || !std::isfinite(collider.top)
                         || collider.halfExtents.x <= 0.0f
@@ -1295,16 +1267,16 @@ SectorCollisionMoveResult ResolveSectorDoorDynamicCollidersForPlayerMovement(
     config.stepHeight = std::clamp(config.stepHeight, 0.0f, 64.0f);
     config.maxIterations = std::clamp(config.maxIterations, 1, 16);
 
-    if (!IsFinite(result.positionXZ) || !IsFinite(moveState.positionXZ) || colliders.empty()) {
+    if (!IsFiniteVector2(result.positionXZ) || !IsFiniteVector2(moveState.positionXZ) || colliders.empty()) {
         return result;
     }
 
     bool hitDynamicDoor = false;
     for (const SectorDynamicDoorCollider& collider : colliders) {
-        if (!IsFinite(collider.center)
-                || !IsFinite(collider.tangent)
-                || !IsFinite(collider.normal)
-                || !IsFinite(collider.halfExtents)
+        if (!IsFiniteVector2(collider.center)
+                || !IsFiniteVector2(collider.tangent)
+                || !IsFiniteVector2(collider.normal)
+                || !IsFiniteVector2(collider.halfExtents)
                 || !std::isfinite(collider.bottom)
                 || !std::isfinite(collider.top)
                 || collider.halfExtents.x <= 0.0f
@@ -1330,10 +1302,10 @@ SectorCollisionMoveResult ResolveSectorDoorDynamicCollidersForPlayerMovement(
     for (int iteration = 0; iteration < config.maxIterations; ++iteration) {
         bool changed = false;
         for (const SectorDynamicDoorCollider& collider : colliders) {
-            if (!IsFinite(collider.center)
-                    || !IsFinite(collider.tangent)
-                    || !IsFinite(collider.normal)
-                    || !IsFinite(collider.halfExtents)
+            if (!IsFiniteVector2(collider.center)
+                    || !IsFiniteVector2(collider.tangent)
+                    || !IsFiniteVector2(collider.normal)
+                    || !IsFiniteVector2(collider.halfExtents)
                     || !std::isfinite(collider.bottom)
                     || !std::isfinite(collider.top)
                     || collider.halfExtents.x <= 0.0f

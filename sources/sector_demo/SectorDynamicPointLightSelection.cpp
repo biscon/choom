@@ -1,6 +1,9 @@
 #include "sector_demo/SectorDynamicPointLightSelection.h"
 
+#include "sector_demo/SectorBounds.h"
 #include "sector_demo/SectorCollisionWorld.h"
+#include "sector_demo/SectorColor.h"
+#include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorTopologyTypes.h"
 #include "sector_demo/SectorUnits.h"
@@ -35,19 +38,6 @@ struct ScoredDynamicSpotLightShadowCandidate {
     float score = -1.0f;
 };
 
-bool IsFiniteVector3(Vector3 value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
-}
-
-Vector3 ColorToUnitRgb(Color color)
-{
-    return Vector3{
-            static_cast<float>(color.r) / 255.0f,
-            static_cast<float>(color.g) / 255.0f,
-            static_cast<float>(color.b) / 255.0f};
-}
-
 bool ContainsSectorId(const std::vector<int>& sectorIds, int sectorId)
 {
     return std::find(sectorIds.begin(), sectorIds.end(), sectorId) != sectorIds.end();
@@ -68,20 +58,22 @@ float DistanceSq(Vector3 a, Vector3 b)
 
 Vector3 ClampToBounds(Vector3 value, const SectorReceiverBounds& bounds)
 {
-    return Vector3{
-            std::clamp(value.x, bounds.min.x - ReceiverBoundsPadding, bounds.max.x + ReceiverBoundsPadding),
-            std::clamp(value.y, bounds.min.y - ReceiverBoundsPadding, bounds.max.y + ReceiverBoundsPadding),
-            std::clamp(value.z, bounds.min.z - ReceiverBoundsPadding, bounds.max.z + ReceiverBoundsPadding)};
+    const SectorAabb3 paddedBounds{
+            Vector3{
+                    bounds.min.x - ReceiverBoundsPadding,
+                    bounds.min.y - ReceiverBoundsPadding,
+                    bounds.min.z - ReceiverBoundsPadding},
+            Vector3{
+                    bounds.max.x + ReceiverBoundsPadding,
+                    bounds.max.y + ReceiverBoundsPadding,
+                    bounds.max.z + ReceiverBoundsPadding}};
+    return ClosestPointOnSectorAabb3(paddedBounds, value);
 }
 
 bool IsValidReceiverBounds(const SectorReceiverBounds& bounds)
 {
     return bounds.sectorId > 0
-            && IsFiniteVector3(bounds.min)
-            && IsFiniteVector3(bounds.max)
-            && bounds.min.x <= bounds.max.x
-            && bounds.min.y <= bounds.max.y
-            && bounds.min.z <= bounds.max.z;
+            && IsValidSectorAabb3(SectorAabb3{bounds.min, bounds.max});
 }
 
 bool ShouldUseAllReceiverBounds(const RuntimePortalVisibilityResult& visibility)
@@ -138,20 +130,7 @@ float DynamicPointLightBrightness(Vector3 color)
 
 Vector3 NormalizeOrFallback(Vector3 value, Vector3 fallback)
 {
-    const float lengthSq = value.x * value.x + value.y * value.y + value.z * value.z;
-    if (lengthSq <= 0.00000001f || !std::isfinite(lengthSq)) {
-        return fallback;
-    }
-    const float invLength = 1.0f / std::sqrt(lengthSq);
-    return Vector3{value.x * invLength, value.y * invLength, value.z * invLength};
-}
-
-bool IsFiniteMatrix(Matrix matrix)
-{
-    return std::isfinite(matrix.m0) && std::isfinite(matrix.m1) && std::isfinite(matrix.m2) && std::isfinite(matrix.m3)
-            && std::isfinite(matrix.m4) && std::isfinite(matrix.m5) && std::isfinite(matrix.m6) && std::isfinite(matrix.m7)
-            && std::isfinite(matrix.m8) && std::isfinite(matrix.m9) && std::isfinite(matrix.m10) && std::isfinite(matrix.m11)
-            && std::isfinite(matrix.m12) && std::isfinite(matrix.m13) && std::isfinite(matrix.m14) && std::isfinite(matrix.m15);
+    return NormalizeVector3OrFallback(value, fallback, 0.00000001f);
 }
 
 Vector3 SpotlightShadowUpVector(Vector3 direction)
@@ -276,7 +255,7 @@ float SmoothStep(float edge0, float edge1, float value)
         return value < edge1 ? 0.0f : 1.0f;
     }
     const float t = std::clamp((value - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-    return t * t * (3.0f - 2.0f * t);
+    return std::isfinite(t) ? SmoothStep01(t) : t;
 }
 
 } // namespace

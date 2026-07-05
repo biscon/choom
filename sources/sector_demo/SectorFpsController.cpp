@@ -1,5 +1,7 @@
 #include "sector_demo/SectorFpsController.h"
 
+#include "sector_demo/SectorMath.h"
+
 #include <raymath.h>
 
 #include <algorithm>
@@ -24,14 +26,6 @@ constexpr float LandingDipRecoveryRate = 7.0f;
 constexpr float LandingDipCurvePower = 2.25f;
 constexpr float LandingDipOffsetEpsilon = 0.0001f;
 constexpr float TwoPi = 6.28318530717958647692f;
-
-float ClampFinite(float value, float fallback, float minValue, float maxValue)
-{
-    if (!std::isfinite(value)) {
-        value = fallback;
-    }
-    return std::clamp(value, minValue, maxValue);
-}
 
 } // namespace
 
@@ -96,7 +90,7 @@ SectorPreviewSettings SectorPreviewSettingsFromFpsControllerConfig(
 
 float ClampSectorFpsPitch(float pitchRadians)
 {
-    return ClampFinite(pitchRadians, 0.0f, -PitchLimitRadians, PitchLimitRadians);
+    return ClampFinite(pitchRadians, -PitchLimitRadians, PitchLimitRadians, 0.0f);
 }
 
 Vector3 SectorFpsControllerEyePosition(

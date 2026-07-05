@@ -5,17 +5,17 @@
 
 namespace game {
 
-class SectorMeshPreview;
+class SectorMeshRenderer;
 
 SectorViewPose ActiveSectorEditorPreviewPose(
         const SectorEditorState& state,
-        const SectorMeshPreview& preview);
+        const SectorMeshRenderer& preview);
 void ApplySectorEditorGameplayPoseToPreview(
         const SectorEditorState& state,
-        SectorMeshPreview& preview);
+        SectorMeshRenderer& preview);
 bool ToggleSectorEditorPreviewControlMode(
         SectorEditorState& state,
-        SectorMeshPreview& preview);
+        SectorMeshRenderer& preview);
 bool RebuildSectorEditorCollisionWorld(SectorEditorState& state);
 SectorFpsVerticalContext BuildSectorEditorGameplayVerticalContext(
         const SectorEditorState& state);

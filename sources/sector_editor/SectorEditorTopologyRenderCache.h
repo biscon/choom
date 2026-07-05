@@ -1,5 +1,7 @@
 #pragma once
 
+#include "sector_editor/SectorEditorSelectionTypes.h"
+#include "sector_editor/SectorEditorTopologyRenderCacheTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
 
 #include <raylib.h>

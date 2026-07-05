@@ -3,7 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
-#include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/SectorEditorLightmapAsyncTypes.h"
 
 #include <raylib.h>
 

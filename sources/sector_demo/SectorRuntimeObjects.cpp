@@ -1,5 +1,6 @@
 #include "sector_demo/SectorRuntimeObjects.h"
 
+#include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorTopologyMap.h"

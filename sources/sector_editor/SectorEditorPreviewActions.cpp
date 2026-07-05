@@ -2,7 +2,7 @@
 
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_demo/SectorFpsController.h"
-#include "sector_demo/SectorMeshPreview.h"
+#include "sector_demo/renderer/SectorMeshRenderer.h"
 
 #include <raymath.h>
 
@@ -38,7 +38,7 @@ void ResetPreviewCollisionAndVisualState(SectorEditorState& state)
 
 SectorViewPose ActiveSectorEditorPreviewPose(
         const SectorEditorState& state,
-        const SectorMeshPreview& preview)
+        const SectorMeshRenderer& preview)
 {
     if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
         return SectorFpsControllerVisualPose(
@@ -54,7 +54,7 @@ SectorViewPose ActiveSectorEditorPreviewPose(
 
 void ApplySectorEditorGameplayPoseToPreview(
         const SectorEditorState& state,
-        SectorMeshPreview& preview)
+        SectorMeshRenderer& preview)
 {
     preview.ApplyRendererPose(SectorFpsControllerVisualPose(
             state.fpsControllerState,
@@ -66,7 +66,7 @@ void ApplySectorEditorGameplayPoseToPreview(
 
 bool ToggleSectorEditorPreviewControlMode(
         SectorEditorState& state,
-        SectorMeshPreview& preview)
+        SectorMeshRenderer& preview)
 {
     if (state.mode != SectorEditorMode::Preview3D || !preview.IsRendererReady()) {
         return false;

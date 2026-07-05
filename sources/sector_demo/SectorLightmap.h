@@ -1,6 +1,8 @@
 #pragma once
 
+#include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
+#include "sector_demo/SectorLightmapReport.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
@@ -228,8 +230,6 @@ bool BakeSectorLightmap(
         SectorLightmapBakeResult& outResult,
         std::string& outError);
 
-std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& result);
-void PrintSectorLightmapBakeReport(const SectorLightmapBakeResult& result);
 std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map);
 SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map);
 SectorLightmapStatus GetSectorBakedObjectLightProbeStatus(const SectorTopologyMap& map);
@@ -258,9 +258,7 @@ BakedObjectLightingSample SampleBakedObjectLighting(
         Vector3 worldPosition,
         int preferredSectorId,
         const SectorTopologyMap* mapForFallback);
-std::string ResolveSectorAssetPath(const std::string& path);
 std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath);
 std::string MakeSectorObjectProbeSidecarPathForLightmapPath(const std::string& lightmapPath);
-std::string MakeSectorAssetRelativePath(const std::string& path);
 
 } // namespace game

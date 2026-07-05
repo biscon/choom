@@ -97,6 +97,13 @@ FetchContent_MakeAvailable(raylib)
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(sector_utility_tests
+            tests/SectorUtilityTests.cpp
+    )
+    target_include_directories(sector_utility_tests PRIVATE sources)
+    target_link_libraries(sector_utility_tests PRIVATE raylib)
+    add_test(NAME sector_utility COMMAND sector_utility_tests)
+
     add_executable(sector_topology_tests
             tests/SectorTopologyValidationTests.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -114,6 +121,7 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorTextureActions.cpp
             sources/sector_editor/SectorEditorTopologyActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
+            sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
@@ -171,8 +179,10 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_lightmap_tests
             tests/SectorTopologyLightmapTests.cpp
+            sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorLightmapReport.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -186,6 +196,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_creation_tests
             tests/SectorTopologyCreationTests.cpp
+            sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
@@ -251,6 +262,7 @@ if(BUILD_TESTING)
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
             sources/engine/assets/TextureAssets.cpp
+            sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
@@ -279,6 +291,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp
+            sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sector_editor/SectorEditorModalTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
 
 #include <filesystem>

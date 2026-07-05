@@ -1,7 +1,9 @@
 #include "sector_demo/SectorMeshBuilder.h"
 
+#include "sector_demo/SectorBounds.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorPortalVisibility.h"
 
 #include <raylib.h>
@@ -219,19 +221,10 @@ Mesh CreateMeshFromBatch(const SectorMeshBatchData& batch)
     return mesh;
 }
 
-bool IsFiniteVector3(Vector3 value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
-}
-
 bool IsValidReceiverBounds(const SectorReceiverBounds& bounds)
 {
     return bounds.sectorId > 0
-            && IsFiniteVector3(bounds.min)
-            && IsFiniteVector3(bounds.max)
-            && bounds.min.x <= bounds.max.x
-            && bounds.min.y <= bounds.max.y
-            && bounds.min.z <= bounds.max.z;
+            && IsValidSectorAabb3(SectorAabb3{bounds.min, bounds.max});
 }
 
 void AccumulateReceiverBounds(
@@ -245,32 +238,25 @@ void AccumulateReceiverBounds(
 
     const auto existing = boundIndexBySectorId.find(batch.sectorId);
     if (existing == boundIndexBySectorId.end()) {
+        const SectorAabb3 emptyBounds = EmptySectorAabb3();
         SectorReceiverBounds sectorBounds;
         sectorBounds.sectorId = batch.sectorId;
-        sectorBounds.min = Vector3{
-                std::numeric_limits<float>::max(),
-                std::numeric_limits<float>::max(),
-                std::numeric_limits<float>::max()};
-        sectorBounds.max = Vector3{
-                -std::numeric_limits<float>::max(),
-                -std::numeric_limits<float>::max(),
-                -std::numeric_limits<float>::max()};
+        sectorBounds.min = emptyBounds.min;
+        sectorBounds.max = emptyBounds.max;
         bounds.push_back(sectorBounds);
         boundIndexBySectorId.emplace(batch.sectorId, bounds.size() - 1u);
     }
 
     SectorReceiverBounds& sectorBounds = bounds[boundIndexBySectorId[batch.sectorId]];
+    SectorAabb3 accumulatedBounds{sectorBounds.min, sectorBounds.max};
     for (const SectorMeshBatchVertex& vertex : batch.vertices) {
         if (!IsFiniteVector3(vertex.position)) {
             continue;
         }
-        sectorBounds.min.x = std::min(sectorBounds.min.x, vertex.position.x);
-        sectorBounds.min.y = std::min(sectorBounds.min.y, vertex.position.y);
-        sectorBounds.min.z = std::min(sectorBounds.min.z, vertex.position.z);
-        sectorBounds.max.x = std::max(sectorBounds.max.x, vertex.position.x);
-        sectorBounds.max.y = std::max(sectorBounds.max.y, vertex.position.y);
-        sectorBounds.max.z = std::max(sectorBounds.max.z, vertex.position.z);
+        ExpandSectorAabb3(accumulatedBounds, vertex.position);
     }
+    sectorBounds.min = accumulatedBounds.min;
+    sectorBounds.max = accumulatedBounds.max;
 }
 
 SectorMeshBatchDataResult BuildSectorMeshBatchDataInternal(
