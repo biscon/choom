@@ -64,7 +64,13 @@ Task Type:
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
-| REF-043 | `[~]` | Medium | Editor architecture | Authoring tool module contract and migration series | Codex task | Medium/High | REF-043a adds v0 tool contract and Line tool pilot; rectangle, insert vertex, and select remain |
+| REF-043 | `[~]` | Medium | Editor architecture | Authoring tool module contract and migration series | Codex task | Medium/High | REF-043a-c migrated Line, Rectangle, and Insert Vertex; Select waits for selection/manipulation services |
+| REF-047 | `[x]` | High | Editor architecture | Selection service and manipulation provider contract | Audit first | Low | Completed; Select is the frontend for selection/manipulation, not just another authoring tool |
+| REF-048 | `[ ]` | High | Editor architecture | Add passive SelectionTarget and provider type definitions | Codex task | Low/Medium | No behavior changes; shared vocabulary before service extraction |
+| REF-049 | `[ ]` | High | Editor architecture | Extract Selection service helpers | Codex task | Medium | Preserve current selected state fields, stale cleanup, and UI reset behavior |
+| REF-050 | `[ ]` | High | Editor architecture | Add Manipulation service shell | Codex task | Medium | Own generic drag lifecycle while delegating existing movement paths first |
+| REF-051 | `[ ]` | Medium | Editor architecture | Pilot first move provider | Codex task | Medium | Prefer placed-object/billboard provider; preserve door movement refusal |
+| REF-052 | `[ ]` | High | Editor architecture | Migrate Select tool using services/providers | Codex task | High | Do after Selection service, Manipulation service shell, and provider pilot |
 | REF-044 | `[ ]` | Medium | Editor architecture | Migrate material/sidedef/decal editing into `tools/materials/` | Audit first | Medium/High | Preserve material mutation/cache/preview rebuild paths |
 | REF-045 | `[ ]` | Medium | Editor architecture | Audit lights/source-hash-sensitive tool migration | Audit first | High | Static lights, directional light, and object probe settings affect source hash |
 | REF-046 | `[ ]` | Low | Editor architecture | Audit preview tool/module migration | Audit first | High | Keep renderer resource orchestration central |
@@ -705,14 +711,19 @@ Task Type:
   - REF-043a: Minimal authoring tool contract and Line tool pilot.
   - REF-043b: Rectangle tool migration.
   - REF-043c: Insert Vertex tool migration.
-  - REF-043d: Selection service and manipulation provider contract.
-  - REF-043e: Select tool migration using the selection/manipulation contract.
+  - REF-047: Selection service and manipulation provider contract.
+  - REF-048: Passive `SelectionTarget` and provider type definitions.
+  - REF-049: Selection service extraction.
+  - REF-050: Manipulation service shell.
+  - REF-051: First move provider pilot.
+  - REF-052: Select tool migration using services/providers.
 - Notes:
   - Keep current "Authoring Line" terminology until a rename task is explicitly
     scoped.
-  - Select migration should wait for a Selection service and Manipulation
-    provider contract.
-  - Select is both an active tool and the frontend for selection/move behavior.
+  - Select migration should wait for Selection service extraction and a
+    Manipulation provider contract.
+  - Select is not just another authoring tool; it is the frontend for
+    selection/manipulation behavior.
   - Do not migrate Select as a giant switch over movable types.
 - Completion notes:
   - REF-043a added a minimal tool module descriptor/lookup.
@@ -723,9 +734,120 @@ Task Type:
     `tools/insert_vertex/`.
   - REF-043c registered Insert Vertex in `FindSectorEditorToolModule()`.
   - `SectorEditor` uses module dispatch for Line, Rectangle, and Insert Vertex.
+  - REF-047 completed the Selection service and Manipulation provider contract
+    report.
   - Legacy fallback remains for Select.
   - No behavior changes intended.
-  - REF-043 remains open for selection/manipulation design and Select migration.
+  - REF-043 remains open for selection/manipulation implementation and Select
+    migration.
+
+#### REF-047 `[x]` Selection service and manipulation provider contract
+
+- Source/audit reference:
+  `docs/audit/sector_editor_selection_manipulation_contract.md`.
+- Why it helps: prevents Select migration from becoming a giant switch over all
+  selectable/movable primitives.
+- Likely files: audit/backlog documentation only.
+- Suggested task type: Audit first.
+- Risk: Low.
+- Suggested verification: `git diff --check`, `git diff --stat`,
+  `git status --short`.
+- Notes:
+  - Selection should own selected IDs/state transitions/queries.
+  - Manipulation should own generic drag transaction lifecycle and provider
+    dispatch.
+  - Select should own mouse behavior, pick cycling, and initiating
+    manipulation.
+- Completion notes:
+  - Completed in
+    `docs/audit/sector_editor_selection_manipulation_contract.md`.
+  - Recommended first implementation task: add passive `SelectionTarget` and
+    provider/capability type definitions only.
+
+#### REF-048 `[ ]` Add passive SelectionTarget and provider type definitions
+
+- Source/audit reference:
+  `docs/audit/sector_editor_selection_manipulation_contract.md`.
+- Why it helps: gives selection, picking, and manipulation code one target
+  vocabulary before behavior migration.
+- Likely files: `SectorEditorSelectionTypes.h` or a new narrow selection
+  provider header.
+- Suggested task type: Codex task.
+- Risk: Low/Medium.
+- Suggested verification: build, ctest, `git diff --check`.
+- Notes:
+  - No behavior changes.
+  - Preserve existing selection state fields during this slice.
+- Completion notes:
+
+#### REF-049 `[ ]` Extract Selection service helpers
+
+- Source/audit reference:
+  `docs/audit/sector_editor_selection_manipulation_contract.md`.
+- Why it helps: centralizes clear/select/query/stale cleanup before Select
+  migration.
+- Likely files: new selection service files, `SectorEditor.cpp/.h`.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, and manual
+  selection smoke for topology, authoring, runtime object, light, and surface
+  targets.
+- Notes:
+  - Preserve current selected state fields and UI reset behavior.
+  - Keep object-specific movement out of the Selection service.
+- Completion notes:
+
+#### REF-050 `[ ]` Add Manipulation service shell
+
+- Source/audit reference:
+  `docs/audit/sector_editor_selection_manipulation_contract.md`.
+- Why it helps: separates generic drag transaction lifecycle from Select input
+  behavior.
+- Likely files: new manipulation service files, select input glue.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, and manual drag
+  finish/cancel smoke for current movable targets.
+- Notes:
+  - Initially delegate to existing drag functions.
+  - Do not move object-specific mutation logic into the service.
+- Completion notes:
+
+#### REF-051 `[ ]` Pilot first move provider
+
+- Source/audit reference:
+  `docs/audit/sector_editor_selection_manipulation_contract.md`.
+- Why it helps: proves the provider contract on one bounded movement family.
+- Likely files: `tools/placed_objects/`, `tools/billboards/`, manipulation
+  service glue.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, and manual
+  billboard move/cancel plus door refusal smoke.
+- Notes:
+  - Prefer placed-object/billboard movement because its drag code already has a
+    callback context.
+  - Preserve the current door movement refusal status text.
+- Completion notes:
+
+#### REF-052 `[ ]` Migrate Select tool using services/providers
+
+- Source/audit reference:
+  `docs/audit/sector_editor_selection_manipulation_contract.md`.
+- Why it helps: finishes Select migration without making Select own
+  object-specific movement.
+- Likely files: `tools/select/`, Selection service, Manipulation service,
+  `SectorEditor.cpp/.h`.
+- Suggested task type: Codex task.
+- Risk: High.
+- Suggested verification: build, ctest, `git diff --check`, and manual smoke
+  for pick cycling, hover, clear selection, drag threshold, movable targets, and
+  selectable-only targets.
+- Notes:
+  - Do after REF-048 through REF-051.
+  - Select should call services/providers rather than switching over every
+    primitive.
+- Completion notes:
 
 #### REF-044 `[ ]` Migrate material/sidedef/decal editing into `tools/materials/`
 
