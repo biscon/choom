@@ -11,6 +11,7 @@
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/SectorEditorRuntimeObjectActions.h"
+#include "sector_editor/SectorEditorRuntimeObjectDrag.h"
 #include "sector_editor/SectorEditorRuntimeObjectInspector.h"
 #include "sector_editor/SectorEditorRuntimeObjectModals.h"
 #include "sector_editor/SectorEditorSectorInspector.h"
@@ -1881,93 +1882,26 @@ void SectorEditor::CancelLightDrag(const char* message)
 
 void SectorEditor::StartRuntimeObjectDrag(int objectId)
 {
-    const SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(state.topologyMap, objectId);
-    if (object == nullptr) {
-        return;
-    }
-    if (object->kind == "door") {
-        statusText = "Door movement unavailable: doors stay anchored to portal lines";
-        return;
-    }
-
-    SelectRuntimeObject(objectId);
-    state.runtimeObjectDrag.active = true;
-    state.runtimeObjectDrag.objectId = objectId;
-    state.runtimeObjectDrag.originalPosition = object->position;
-    state.runtimeObjectDrag.snappedPosition = object->position;
-    statusText = TextFormat("Moving object %d", objectId);
+    SectorEditorRuntimeObjectDragContext dragContext = BuildRuntimeObjectDragContext();
+    StartSectorEditorRuntimeObjectDrag(dragContext, objectId);
 }
 
 void SectorEditor::UpdateRuntimeObjectDrag(engine::Input& input)
 {
-    if (!state.runtimeObjectDrag.active) {
-        return;
-    }
-
-    SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
-            state.topologyMap,
-            state.runtimeObjectDrag.objectId);
-    if (object == nullptr) {
-        state.runtimeObjectDrag = RuntimeObjectDragState{};
-        return;
-    }
-
-    const Vector2 snapped = SnapMapPoint(ScreenToMap(input.MousePosition()));
-    state.runtimeObjectDrag.snappedPosition = Vector3{
-            snapped.x,
-            state.runtimeObjectDrag.originalPosition.y,
-            snapped.y};
-    object->position = state.runtimeObjectDrag.snappedPosition;
-    UpdateCachedRuntimeObjectDraw(state.topologyRenderCache, *object);
-    statusText = TextFormat("Moving object %d", object->id);
+    SectorEditorRuntimeObjectDragContext dragContext = BuildRuntimeObjectDragContext();
+    UpdateSectorEditorRuntimeObjectDrag(dragContext, input.MousePosition());
 }
 
 void SectorEditor::FinishRuntimeObjectDrag()
 {
-    if (!state.runtimeObjectDrag.active) {
-        return;
-    }
-
-    const int objectId = state.runtimeObjectDrag.objectId;
-    const Vector3 original = state.runtimeObjectDrag.originalPosition;
-    state.runtimeObjectDrag = RuntimeObjectDragState{};
-
-    SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(state.topologyMap, objectId);
-    if (object == nullptr) {
-        return;
-    }
-
-    SelectRuntimeObject(objectId);
-    const bool moved = std::fabs(object->position.x - original.x) > GeometryEpsilon
-            || std::fabs(object->position.z - original.z) > GeometryEpsilon;
-    if (!moved) {
-        object->position = original;
-        UpdateCachedRuntimeObjectDraw(state.topologyRenderCache, *object);
-        statusText = TextFormat("Object %d unchanged", objectId);
-        return;
-    }
-
-    MarkTopologyDocumentEdited(TextFormat("Moved object %d", objectId));
-    RefreshRuntimeObjectsAfterAuthoringEdit();
+    SectorEditorRuntimeObjectDragContext dragContext = BuildRuntimeObjectDragContext();
+    FinishSectorEditorRuntimeObjectDrag(dragContext);
 }
 
 void SectorEditor::CancelRuntimeObjectDrag(const char* message)
 {
-    if (state.runtimeObjectDrag.active) {
-        SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
-                state.topologyMap,
-                state.runtimeObjectDrag.objectId);
-        if (object != nullptr) {
-            object->position = state.runtimeObjectDrag.originalPosition;
-            UpdateCachedRuntimeObjectDraw(state.topologyRenderCache, *object);
-            SelectRuntimeObject(object->id);
-        }
-    }
-
-    state.runtimeObjectDrag = RuntimeObjectDragState{};
-    if (message != nullptr && message[0] != '\0') {
-        statusText = message;
-    }
+    SectorEditorRuntimeObjectDragContext dragContext = BuildRuntimeObjectDragContext();
+    CancelSectorEditorRuntimeObjectDrag(dragContext, message);
 }
 
 void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt)
@@ -3187,6 +3121,31 @@ void SectorEditor::AddDynamicSpotLightAt(Vector2 mapPoint)
     finish.changed = true;
     finish.status = result.status;
     FinishTopologyActionResult(finish);
+}
+
+SectorEditorRuntimeObjectDragContext SectorEditor::BuildRuntimeObjectDragContext()
+{
+    return SectorEditorRuntimeObjectDragContext{
+            state,
+            statusText,
+            [this](Vector2 screenPoint) {
+                return ScreenToMap(screenPoint);
+            },
+            [this](Vector2 mapPoint) {
+                return SnapMapPoint(mapPoint);
+            },
+            [this](int objectId) {
+                SelectRuntimeObject(objectId);
+            },
+            [this](const SectorPlacedRuntimeObject& object) {
+                UpdateCachedRuntimeObjectDraw(state.topologyRenderCache, object);
+            },
+            [this](const char* status) {
+                MarkTopologyDocumentEdited(status);
+            },
+            [this]() {
+                RefreshRuntimeObjectsAfterAuthoringEdit();
+            }};
 }
 
 SectorEditorRuntimeObjectActionContext SectorEditor::BuildRuntimeObjectActionContext()

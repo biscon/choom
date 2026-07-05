@@ -518,7 +518,7 @@ Task Type:
     `FinishTopologyMaterialMutation()` / cache invalidation paths.
 - Completion notes:
 
-#### REF-021 `[ ]` Extract runtime object inspector/actions
+#### REF-021 `[x]` Extract runtime object inspector/actions
 
 - Source/audit reference: editor responsibilities and runtime object split
   notes.
@@ -545,6 +545,9 @@ Task Type:
   - REF-021c progress: extracted non-drag runtime object action wrappers into
     `SectorEditorRuntimeObjectActions.*`. REF-021 remains open for runtime
     object drag as a future slice.
+  - REF-021d progress: extracted runtime object drag helpers into
+    `SectorEditorRuntimeObjectDrag.*`. REF-021 is now complete for the planned
+    runtime object inspector, modal/action, non-drag action, and drag slices.
 
 #### REF-022 `[ ]` Extract light/static-light/object-probe inspector/actions
 
