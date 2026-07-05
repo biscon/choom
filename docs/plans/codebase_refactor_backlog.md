@@ -588,6 +588,9 @@ Task Type:
     lives in `SectorEditorTextureModals.*`; no source move was needed.
     `SectorEditor.cpp` retains only wrapper/context/callback wiring and texture
     action/import ownership.
+  - REF-023c progress: extracted the decal tint modal draw flow into
+    `SectorEditorMaterialModals.*`. `SectorEditor.cpp` retains only
+    wrapper/context/callback wiring and material mutation ownership.
 
 #### REF-024 `[ ]` Review direct `state.topologyMap` mutation sites and cache invalidation paths
 

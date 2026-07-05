@@ -9,6 +9,7 @@
 #include "sector_editor/SectorEditorLightInspector.h"
 #include "sector_editor/SectorEditorLightmapModal.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
+#include "sector_editor/SectorEditorMaterialModals.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/SectorEditorRuntimeObjectActions.h"
@@ -8550,139 +8551,29 @@ void SectorEditor::DrawDecalTintModal(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
-    DecalTintModalState& modalState = state.decalTintModal;
-    if (!modalState.open) {
-        return;
-    }
-
-    bool okayRequested = false;
-    bool cancelRequested = false;
-    input.ForEachEvent(
-            engine::InputEventType::KeyPressed,
-            true,
-            [&okayRequested, &cancelRequested](engine::InputEvent& event) {
-                if (event.key.key == KEY_ESCAPE) {
-                    cancelRequested = true;
-                    engine::ConsumeEvent(event);
-                }
+    const SectorEditorDecalTintModalCallbacks callbacks{
+            [this]() { state.decalTintModal = DecalTintModalState{}; },
+            [this](TopologySurfaceEditTarget target) {
+                return IsValidTopologySurfaceEditTarget(target);
+            },
+            [this](TopologySurfaceEditTarget target) {
+                return DecalForSurface(target);
+            },
+            [this, &assets](TopologySurfaceEditTarget target, Vector3 tint) {
+                return ApplySurfaceDecalTint(target, tint, &assets);
             }
-    );
-
-    DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
-    const Rectangle modal{
-            (EditorWidth - 560.0f) * 0.5f,
-            (EditorHeight - 390.0f) * 0.5f,
-            560.0f,
-            390.0f
     };
-    DrawRectangleRec(modal, Color{20, 24, 32, 248});
-    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
-
-    float y = modal.y + 22.0f;
-    engine::Text(config, assets, Rectangle{modal.x + 26.0f, y, modal.width - 52.0f, 42.0f}, font, "Decal Tint");
-    y += 58.0f;
-
-    const float labelW = 72.0f;
-    const float inputW = 120.0f;
-    const float inputH = 38.0f;
-    const float gap = 12.0f;
-    auto drawFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState) {
-        const SectorEditorTintFloatInputResult result = DrawNormalizedTintFloatInput(
-                ui,
-                config,
-                input,
-                assets,
-                font,
-                id,
-                label,
-                Rectangle{modal.x + 28.0f, y, labelW, inputH},
-                Rectangle{modal.x + 28.0f + labelW, y, inputW, inputH},
-                engine::UITextJustify::Left,
-                value,
-                inputState);
-        if (result.finite) {
-            value = result.value;
-        }
-        if (result.changed) {
-            if (!result.finite) {
-                modalState.errorMessage = "Tint values must be finite.";
-            } else {
-                modalState.errorMessage.clear();
-            }
-        }
-        y += inputH + gap;
-    };
-
-    drawFloat("sector_editor_decal_tint_r", "R", modalState.tint.x, modalState.redInput);
-    drawFloat("sector_editor_decal_tint_g", "G", modalState.tint.y, modalState.greenInput);
-    drawFloat("sector_editor_decal_tint_b", "B", modalState.tint.z, modalState.blueInput);
-
-    const Rectangle swatch{modal.x + 270.0f, modal.y + 88.0f, 210.0f, 124.0f};
-    DrawColorSwatch(config, swatch, DecalTintPreviewColor(modalState.tint), config.borderThickness);
-    engine::Text(
+    SectorEditorDecalTintModalContext context{
+            ui,
             config,
+            input,
             assets,
-            Rectangle{swatch.x, swatch.y + swatch.height + 10.0f, swatch.width, 26.0f},
             font,
-            "Preview",
-            engine::UITextJustify::Center,
-            config.mutedTextColor);
-
-    if (!modalState.errorMessage.empty()) {
-        engine::Text(
-                config,
-                assets,
-                Rectangle{modal.x + 28.0f, modal.y + 250.0f, modal.width - 56.0f, 34.0f},
-                font,
-                modalState.errorMessage.c_str(),
-                engine::UITextJustify::Left,
-                config.invalidColor);
-    }
-
-    const float buttonY = modal.y + modal.height - 66.0f;
-    const float buttonW = 124.0f;
-    if (engine::Button(ui, config, input, assets, "sector_editor_decal_tint_reset", Rectangle{modal.x + 28.0f, buttonY, buttonW, 44.0f}, font, "Reset White")) {
-        modalState.tint = Vector3{1.0f, 1.0f, 1.0f};
-        modalState.redInput = engine::UIFloatInputState{};
-        modalState.greenInput = engine::UIFloatInputState{};
-        modalState.blueInput = engine::UIFloatInputState{};
-        modalState.errorMessage.clear();
-    }
-    okayRequested = okayRequested || engine::Button(ui, config, input, assets, "sector_editor_decal_tint_ok", Rectangle{modal.x + modal.width - buttonW * 2.0f - 38.0f, buttonY, buttonW, 44.0f}, font, "OK");
-    cancelRequested = cancelRequested || engine::Button(ui, config, input, assets, "sector_editor_decal_tint_cancel", Rectangle{modal.x + modal.width - buttonW - 26.0f, buttonY, buttonW, 44.0f}, font, "Cancel");
-
-    input.ForEachEvent(engine::InputEventType::Any, true, [](engine::InputEvent& event) {
-        engine::ConsumeEvent(event);
-    });
-
-    if (cancelRequested) {
-        state.decalTintModal = DecalTintModalState{};
-        return;
-    }
-    if (!okayRequested) {
-        return;
-    }
-    if (!IsValidDecalTint(modalState.tint)) {
-        modalState.errorMessage = "Tint values must be between 0 and 1.";
-        statusText = modalState.errorMessage;
-        return;
-    }
-
-    const TopologySurfaceEditTarget target = modalState.target;
-    const SectorTopologyDecalLayer* decal = DecalForSurface(target);
-    if (!IsValidTopologySurfaceEditTarget(target) || decal == nullptr || decal->textureId.empty()) {
-        modalState.errorMessage = "Decal target is no longer valid.";
-        statusText = modalState.errorMessage;
-        return;
-    }
-
-    const Vector3 tint = modalState.tint;
-    const bool changed = !SameTint(decal->tint, tint);
-    if (changed && !ApplySurfaceDecalTint(target, tint, &assets)) {
-        modalState.errorMessage = statusText.empty() ? "Could not set decal tint." : statusText;
-        return;
-    }
-    state.decalTintModal = DecalTintModalState{};
+            state.decalTintModal,
+            statusText,
+            callbacks
+    };
+    DrawSectorEditorDecalTintModal(context);
 }
 
 void SectorEditor::DrawDoorTextureSettingsModal(
