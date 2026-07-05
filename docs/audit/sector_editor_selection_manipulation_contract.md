@@ -309,7 +309,7 @@ Phase 1: Add passive `SelectionTarget` and provider type definitions.
 - Manual smoke: not required if no behavior changes.
 - Task type: Codex task.
 - REF-048 note: passive target/provider definitions were added in
-  `sources/sector_editor/SectorEditorSelectionTarget.h`; no behavior was
+  `sources/sector_editor/selection/SectorEditorSelectionTarget.h`; no behavior was
   migrated.
 
 Phase 2: Extract Selection service helpers.
@@ -323,6 +323,10 @@ Phase 2: Extract Selection service helpers.
 - Manual smoke: select sector, sidedef, authoring line/vertex/face, runtime
   object, all light kinds, clear with Escape.
 - Task type: Codex task after Phase 1.
+- REF-049 note: selection helpers were extracted into
+  `sources/sector_editor/selection/SectorEditorSelectionService.h/.cpp`;
+  current selected state fields remain the source of truth, and no Select
+  migration or provider dispatch was performed.
 
 Phase 3: Add Manipulation service shell.
 

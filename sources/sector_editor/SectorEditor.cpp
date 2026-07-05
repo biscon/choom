@@ -5,6 +5,7 @@
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/document/SectorEditorDocumentActions.h"
 #include "sector_editor/document/SectorEditorDocumentModals.h"
+#include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorLightInspector.h"
 #include "sector_editor/SectorEditorLightmapModal.h"
@@ -190,25 +191,6 @@ void UpdateCachedRuntimeObjectDraw(
         cached.doorFootprintValid = false;
         return;
     }
-}
-
-void ResetRuntimeObjectUiState(SectorEditorUiState& uiState)
-{
-    uiState.runtimeObjectXInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectYInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectZInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectYawInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectWidthInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectHeightInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectThicknessInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectNormalOffsetInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectOpenDistanceInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectSpeedInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectInitialOpenFractionInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectAutoOpenDistanceInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectInteractionDistanceInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectOriginXInput = engine::UIFloatInputState{};
-    uiState.runtimeObjectOriginYInput = engine::UIFloatInputState{};
 }
 
 int64_t CoordinateSequencePeriod(SectorCoord stepDelta, int64_t snapStep)
@@ -2356,216 +2338,176 @@ bool SectorEditor::ToCanonicalSectorPoint(
     return true;
 }
 
+SectorEditorSelectionServiceContext SectorEditor::BuildSelectionServiceContext()
+{
+    SectorEditorSelectionServiceContext context{
+            state,
+            uiState,
+            &statusText,
+            this,
+            [](void* userData, const char* message) {
+                static_cast<SectorEditor*>(userData)->CancelSpotLightPilot(message);
+            }};
+    return context;
+}
+
 SectorTopologySector* SectorEditor::SelectedTopologySector()
 {
-    if (state.topologySelectionKind != TopologySelectionKind::Sector) {
-        return nullptr;
-    }
-    return FindSectorTopologySector(state.topologyMap, state.selectedTopologySectorId);
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    return SelectedSectorEditorTopologySector(context);
 }
 
 const SectorTopologySector* SectorEditor::SelectedTopologySector() const
 {
-    if (state.topologySelectionKind != TopologySelectionKind::Sector) {
-        return nullptr;
-    }
-    return FindSectorTopologySector(state.topologyMap, state.selectedTopologySectorId);
+    SectorEditorSelectionServiceContext context{
+            const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorUiState&>(uiState),
+            nullptr,
+            nullptr,
+            nullptr};
+    return SelectedSectorEditorTopologySector(context);
 }
 
 SectorTopologyVertex* SectorEditor::SelectedTopologyVertex()
 {
-    if (state.topologySelectionKind != TopologySelectionKind::Vertex) {
-        return nullptr;
-    }
-    return FindSectorTopologyVertex(state.topologyMap, state.selectedTopologyVertexId);
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    return SelectedSectorEditorTopologyVertex(context);
 }
 
 const SectorTopologyVertex* SectorEditor::SelectedTopologyVertex() const
 {
-    if (state.topologySelectionKind != TopologySelectionKind::Vertex) {
-        return nullptr;
-    }
-    return FindSectorTopologyVertex(state.topologyMap, state.selectedTopologyVertexId);
+    SectorEditorSelectionServiceContext context{
+            const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorUiState&>(uiState),
+            nullptr,
+            nullptr,
+            nullptr};
+    return SelectedSectorEditorTopologyVertex(context);
 }
 
 SectorTopologySideDef* SectorEditor::SelectedTopologySideDef()
 {
-    if (state.topologySelectionKind != TopologySelectionKind::SideDef) {
-        return nullptr;
-    }
-    return FindSectorTopologySideDef(state.topologyMap, state.selectedTopologySideDefId);
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    return SelectedSectorEditorTopologySideDef(context);
 }
 
 const SectorTopologySideDef* SectorEditor::SelectedTopologySideDef() const
 {
-    if (state.topologySelectionKind != TopologySelectionKind::SideDef) {
-        return nullptr;
-    }
-    return FindSectorTopologySideDef(state.topologyMap, state.selectedTopologySideDefId);
+    SectorEditorSelectionServiceContext context{
+            const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorUiState&>(uiState),
+            nullptr,
+            nullptr,
+            nullptr};
+    return SelectedSectorEditorTopologySideDef(context);
 }
 
 SectorTopologyLineDef* SectorEditor::SelectedTopologyLineDef()
 {
-    if (state.topologySelectionKind != TopologySelectionKind::LineDef
-            && state.topologySelectionKind != TopologySelectionKind::SideDef) {
-        return nullptr;
-    }
-    return FindSectorTopologyLineDef(state.topologyMap, state.selectedTopologyLineDefId);
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    return SelectedSectorEditorTopologyLineDef(context);
 }
 
 const SectorTopologyLineDef* SectorEditor::SelectedTopologyLineDef() const
 {
-    if (state.topologySelectionKind != TopologySelectionKind::LineDef
-            && state.topologySelectionKind != TopologySelectionKind::SideDef) {
-        return nullptr;
-    }
-    return FindSectorTopologyLineDef(state.topologyMap, state.selectedTopologyLineDefId);
+    SectorEditorSelectionServiceContext context{
+            const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorUiState&>(uiState),
+            nullptr,
+            nullptr,
+            nullptr};
+    return SelectedSectorEditorTopologyLineDef(context);
 }
 
 SectorTopologyStaticPointLight* SectorEditor::SelectedTopologyLight()
 {
-    if (state.topologySelectionKind != TopologySelectionKind::StaticLight) {
-        return nullptr;
-    }
-    return FindSectorTopologyStaticLight(state.topologyMap, state.selectedTopologyLightId);
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    return SelectedSectorEditorTopologyLight(context);
 }
 
 const SectorTopologyStaticPointLight* SectorEditor::SelectedTopologyLight() const
 {
-    if (state.topologySelectionKind != TopologySelectionKind::StaticLight) {
-        return nullptr;
-    }
-    return FindSectorTopologyStaticLight(state.topologyMap, state.selectedTopologyLightId);
+    SectorEditorSelectionServiceContext context{
+            const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorUiState&>(uiState),
+            nullptr,
+            nullptr,
+            nullptr};
+    return SelectedSectorEditorTopologyLight(context);
 }
 
 SectorTopologyStaticSpotLight* SectorEditor::SelectedTopologyStaticSpotLight()
 {
-    if (state.topologySelectionKind != TopologySelectionKind::StaticSpotLight) {
-        return nullptr;
-    }
-    return FindSectorTopologyStaticSpotLight(state.topologyMap, state.selectedTopologyStaticSpotLightId);
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    return SelectedSectorEditorTopologyStaticSpotLight(context);
 }
 
 const SectorTopologyStaticSpotLight* SectorEditor::SelectedTopologyStaticSpotLight() const
 {
-    if (state.topologySelectionKind != TopologySelectionKind::StaticSpotLight) {
-        return nullptr;
-    }
-    return FindSectorTopologyStaticSpotLight(state.topologyMap, state.selectedTopologyStaticSpotLightId);
+    SectorEditorSelectionServiceContext context{
+            const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorUiState&>(uiState),
+            nullptr,
+            nullptr,
+            nullptr};
+    return SelectedSectorEditorTopologyStaticSpotLight(context);
 }
 
 SectorTopologyDynamicPointLight* SectorEditor::SelectedTopologyDynamicLight()
 {
-    if (state.topologySelectionKind != TopologySelectionKind::DynamicLight) {
-        return nullptr;
-    }
-    return FindSectorTopologyDynamicLight(state.topologyMap, state.selectedTopologyDynamicLightId);
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    return SelectedSectorEditorTopologyDynamicLight(context);
 }
 
 const SectorTopologyDynamicPointLight* SectorEditor::SelectedTopologyDynamicLight() const
 {
-    if (state.topologySelectionKind != TopologySelectionKind::DynamicLight) {
-        return nullptr;
-    }
-    return FindSectorTopologyDynamicLight(state.topologyMap, state.selectedTopologyDynamicLightId);
+    SectorEditorSelectionServiceContext context{
+            const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorUiState&>(uiState),
+            nullptr,
+            nullptr,
+            nullptr};
+    return SelectedSectorEditorTopologyDynamicLight(context);
 }
 
 SectorTopologyDynamicSpotLight* SectorEditor::SelectedTopologyDynamicSpotLight()
 {
-    if (state.topologySelectionKind != TopologySelectionKind::DynamicSpotLight) {
-        return nullptr;
-    }
-    return FindSectorTopologyDynamicSpotLight(state.topologyMap, state.selectedTopologyDynamicSpotLightId);
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    return SelectedSectorEditorTopologyDynamicSpotLight(context);
 }
 
 const SectorTopologyDynamicSpotLight* SectorEditor::SelectedTopologyDynamicSpotLight() const
 {
-    if (state.topologySelectionKind != TopologySelectionKind::DynamicSpotLight) {
-        return nullptr;
-    }
-    return FindSectorTopologyDynamicSpotLight(state.topologyMap, state.selectedTopologyDynamicSpotLightId);
+    SectorEditorSelectionServiceContext context{
+            const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorUiState&>(uiState),
+            nullptr,
+            nullptr,
+            nullptr};
+    return SelectedSectorEditorTopologyDynamicSpotLight(context);
 }
 
 SectorPlacedRuntimeObject* SectorEditor::SelectedRuntimeObject()
 {
-    return FindSectorPlacedRuntimeObject(state.topologyMap, state.selectedRuntimeObjectId);
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    return SelectedSectorEditorRuntimeObject(context);
 }
 
 const SectorPlacedRuntimeObject* SectorEditor::SelectedRuntimeObject() const
 {
-    return FindSectorPlacedRuntimeObject(state.topologyMap, state.selectedRuntimeObjectId);
+    SectorEditorSelectionServiceContext context{
+            const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorUiState&>(uiState),
+            nullptr,
+            nullptr,
+            nullptr};
+    return SelectedSectorEditorRuntimeObject(context);
 }
 
 void SectorEditor::ClearStaleTopologySelection()
 {
-    bool stale = false;
-    if (state.topologySelectionKind == TopologySelectionKind::Sector) {
-        stale = state.selectedTopologySectorId < 0
-                || FindSectorTopologySector(state.topologyMap, state.selectedTopologySectorId) == nullptr;
-    } else if (state.topologySelectionKind == TopologySelectionKind::Vertex) {
-        stale = state.selectedTopologyVertexId < 0
-                || FindSectorTopologyVertex(state.topologyMap, state.selectedTopologyVertexId) == nullptr;
-    } else if (state.topologySelectionKind == TopologySelectionKind::SideDef) {
-        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
-                state.topologyMap,
-                state.selectedTopologySideDefId);
-        const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
-                state.topologyMap,
-                state.selectedTopologyLineDefId);
-        stale = sideDef == nullptr
-                || lineDef == nullptr
-                || sideDef->lineDefId != lineDef->id;
-        if (!stale) {
-            state.selectedTopologyWallPart = ValidTopologyWallPartForSideDef(
-                    state.topologyMap,
-                    sideDef,
-                    state.selectedTopologyWallPart);
-        }
-    } else if (state.topologySelectionKind == TopologySelectionKind::LineDef) {
-        stale = state.selectedTopologyLineDefId < 0
-                || FindSectorTopologyLineDef(state.topologyMap, state.selectedTopologyLineDefId) == nullptr;
-        if (!stale && state.selectedTopologyWallPart == TopologyWallPart::Middle) {
-            state.selectedTopologyWallPart = TopologyWallPart::Wall;
-        }
-    } else if (state.topologySelectionKind == TopologySelectionKind::StaticLight) {
-        stale = state.selectedTopologyLightId < 0
-                || FindSectorTopologyStaticLight(state.topologyMap, state.selectedTopologyLightId) == nullptr;
-    } else if (state.topologySelectionKind == TopologySelectionKind::StaticSpotLight) {
-        stale = state.selectedTopologyStaticSpotLightId < 0
-                || FindSectorTopologyStaticSpotLight(
-                        state.topologyMap,
-                        state.selectedTopologyStaticSpotLightId) == nullptr;
-    } else if (state.topologySelectionKind == TopologySelectionKind::DynamicLight) {
-        stale = state.selectedTopologyDynamicLightId < 0
-                || FindSectorTopologyDynamicLight(state.topologyMap, state.selectedTopologyDynamicLightId) == nullptr;
-    } else if (state.topologySelectionKind == TopologySelectionKind::DynamicSpotLight) {
-        stale = state.selectedTopologyDynamicSpotLightId < 0
-                || FindSectorTopologyDynamicSpotLight(
-                        state.topologyMap,
-                        state.selectedTopologyDynamicSpotLightId) == nullptr;
-    }
-    if (state.selectedRuntimeObjectId >= 0
-            && FindSectorPlacedRuntimeObject(state.topologyMap, state.selectedRuntimeObjectId) == nullptr) {
-        state.selectedRuntimeObjectId = -1;
-    }
-
-    if (stale) {
-        CancelSpotLightPilot(nullptr);
-        state.topologySelectionKind = TopologySelectionKind::None;
-        state.selectedTopologySectorId = -1;
-        state.selectedTopologyVertexId = -1;
-        state.selectedTopologySideDefId = -1;
-        state.selectedTopologyLineDefId = -1;
-        state.selectedTopologyLightId = -1;
-        state.selectedTopologyStaticSpotLightId = -1;
-        state.selectedTopologyDynamicLightId = -1;
-        state.selectedTopologyDynamicSpotLightId = -1;
-        state.selectedTopologySideKind = SectorTopologySideKind::Front;
-        uiState.idBufferSectorIndex = -1;
-        uiState.idBufferLightIndex = -1;
-        SyncSelectedSectorIdBuffer();
-        SyncSelectedLightIdBuffer();
-    }
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    ClearStaleSectorEditorTopologySelection(context);
 }
 
 void SectorEditor::MarkTopologyDocumentEdited(const char* status)
@@ -2699,54 +2641,14 @@ void SectorEditor::ClearTransientTopologyEditStateAfterGeometryChange()
 
 void SectorEditor::SyncSelectedSectorIdBuffer()
 {
-    const SectorTopologySector* sector = SelectedTopologySector();
-    if (sector == nullptr) {
-        uiState.selectedSectorIdBuffer[0] = '\0';
-        uiState.idBufferSectorIndex = -1;
-        uiState.idEditError.clear();
-        return;
-    }
-
-    if (uiState.idBufferSectorIndex == state.selectedTopologySectorId) {
-        return;
-    }
-
-    std::snprintf(
-            uiState.selectedSectorIdBuffer,
-            sizeof(uiState.selectedSectorIdBuffer),
-            "%s",
-            sector->name.c_str());
-    uiState.idBufferSectorIndex = state.selectedTopologySectorId;
-    uiState.idEditError.clear();
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SyncSectorEditorSelectedSectorIdBuffer(context);
 }
 
 void SectorEditor::SyncSelectedLightIdBuffer()
 {
-    const SectorTopologyStaticPointLight* light = SelectedTopologyLight();
-    const SectorTopologyStaticSpotLight* staticSpotLight = SelectedTopologyStaticSpotLight();
-    const SectorTopologyDynamicPointLight* dynamicLight = SelectedTopologyDynamicLight();
-    const SectorTopologyDynamicSpotLight* dynamicSpotLight = SelectedTopologyDynamicSpotLight();
-    if (light == nullptr && staticSpotLight == nullptr && dynamicLight == nullptr && dynamicSpotLight == nullptr) {
-        uiState.selectedLightIdBuffer[0] = '\0';
-        uiState.idBufferLightIndex = -1;
-        if (state.topologySelectionKind == TopologySelectionKind::None) {
-            uiState.idEditError.clear();
-        }
-        return;
-    }
-
-    const int lightId = light != nullptr
-            ? light->id
-            : (staticSpotLight != nullptr
-                    ? staticSpotLight->id
-                    : (dynamicLight != nullptr ? dynamicLight->id : dynamicSpotLight->id));
-    if (uiState.idBufferLightIndex == lightId) {
-        return;
-    }
-
-    std::snprintf(uiState.selectedLightIdBuffer, sizeof(uiState.selectedLightIdBuffer), "%d", lightId);
-    uiState.idBufferLightIndex = lightId;
-    uiState.idEditError.clear();
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SyncSectorEditorSelectedLightIdBuffer(context);
 }
 
 bool SectorEditor::TryRenameSelectedTopologySector()
@@ -9634,116 +9536,20 @@ bool SectorEditor::FindAuthoringSelectionNearScreenPoint(
 
 void SectorEditor::SelectTopologySector(int sectorId)
 {
-    if (FindSectorTopologySector(state.topologyMap, sectorId) == nullptr) {
-        ClearSelection();
-        return;
-    }
-
-    CancelSpotLightPilot(nullptr);
-    state.topologySelectionKind = TopologySelectionKind::Sector;
-    state.selectedTopologySectorId = sectorId;
-    state.selectedTopologyVertexId = -1;
-    state.selectedTopologySideDefId = -1;
-    state.selectedTopologyLineDefId = -1;
-    state.selectedTopologyLightId = -1;
-    state.selectedTopologyStaticSpotLightId = -1;
-    state.selectedTopologyDynamicLightId = -1;
-    state.selectedTopologyDynamicSpotLightId = -1;
-    state.runtimeObjectDrag = RuntimeObjectDragState{};
-    state.selectedRuntimeObjectId = -1;
-    state.selectedTopologySideKind = SectorTopologySideKind::Front;
-    state.inspectedTopologyVertexId = -1;
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ClearSectorEditorAuthoringSelection(state);
-    ResetSurface3DUiState();
-    uiState.idBufferLightIndex = -1;
-    uiState.inspectorScroll.offset = Vector2{};
-    uiState.floorInput = engine::UIFloatInputState{};
-    uiState.ceilingInput = engine::UIFloatInputState{};
-    uiState.ambientIntensityInput = engine::UIFloatInputState{};
-    uiState.ambientRedInput = engine::UIIntInputState{};
-    uiState.ambientGreenInput = engine::UIIntInputState{};
-    uiState.ambientBlueInput = engine::UIIntInputState{};
-    for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-    SyncSelectedSectorIdBuffer();
-    SyncSelectedLightIdBuffer();
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SelectSectorEditorTopologySector(context, sectorId);
 }
 
 void SectorEditor::SelectTopologyVertex(int vertexId)
 {
-    const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
-    if (vertex == nullptr) {
-        ClearSelection();
-        return;
-    }
-
-    CancelSpotLightPilot(nullptr);
-    state.topologySelectionKind = TopologySelectionKind::Vertex;
-    state.selectedTopologySectorId = -1;
-    state.selectedTopologyVertexId = vertex->id;
-    state.selectedTopologySideDefId = -1;
-    state.selectedTopologyLineDefId = -1;
-    state.selectedTopologyLightId = -1;
-    state.selectedTopologyStaticSpotLightId = -1;
-    state.selectedTopologyDynamicLightId = -1;
-    state.selectedTopologyDynamicSpotLightId = -1;
-    state.selectedRuntimeObjectId = -1;
-    state.selectedTopologySideKind = SectorTopologySideKind::Front;
-    state.inspectedTopologyVertexId = vertex->id;
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ClearSectorEditorAuthoringSelection(state);
-    ResetSurface3DUiState();
-    uiState.idBufferLightIndex = -1;
-    uiState.inspectorScroll.offset = Vector2{};
-    SyncSelectedSectorIdBuffer();
-    SyncSelectedLightIdBuffer();
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SelectSectorEditorTopologyVertex(context, vertexId);
 }
 
 void SectorEditor::SelectTopologySideDef(int sideDefId, TopologyWallPart wallPart)
 {
-    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, sideDefId);
-    if (sideDef == nullptr) {
-        ClearSelection();
-        return;
-    }
-    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, sideDef->lineDefId);
-    if (lineDef == nullptr) {
-        ClearSelection();
-        return;
-    }
-
-    CancelSpotLightPilot(nullptr);
-    state.topologySelectionKind = TopologySelectionKind::SideDef;
-    state.selectedTopologySectorId = -1;
-    state.selectedTopologyVertexId = -1;
-    state.selectedTopologySideDefId = sideDef->id;
-    state.selectedTopologyLineDefId = lineDef->id;
-    state.selectedTopologyLightId = -1;
-    state.selectedTopologyStaticSpotLightId = -1;
-    state.selectedTopologyDynamicLightId = -1;
-    state.selectedTopologyDynamicSpotLightId = -1;
-    state.selectedRuntimeObjectId = -1;
-    state.selectedTopologySideKind = sideDef->side;
-    state.selectedTopologyWallPart = ValidTopologyWallPartForSideDef(
-            state.topologyMap,
-            sideDef,
-            wallPart);
-    state.inspectedTopologyVertexId = -1;
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ClearSectorEditorAuthoringSelection(state);
-    ResetSurface3DUiState();
-    uiState.idBufferLightIndex = -1;
-    uiState.inspectorScroll.offset = Vector2{};
-    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-    SyncSelectedSectorIdBuffer();
-    SyncSelectedLightIdBuffer();
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SelectSectorEditorTopologySideDef(context, sideDefId, wallPart);
 }
 
 void SectorEditor::SelectTopologyLineDef(
@@ -9751,410 +9557,100 @@ void SectorEditor::SelectTopologyLineDef(
         SectorTopologySideKind side,
         TopologyWallPart wallPart)
 {
-    if (FindSectorTopologyLineDef(state.topologyMap, lineDefId) == nullptr) {
-        ClearSelection();
-        return;
-    }
-
-    CancelSpotLightPilot(nullptr);
-    state.topologySelectionKind = TopologySelectionKind::LineDef;
-    state.selectedTopologySectorId = -1;
-    state.selectedTopologyVertexId = -1;
-    state.selectedTopologySideDefId = -1;
-    state.selectedTopologyLineDefId = lineDefId;
-    state.selectedTopologyLightId = -1;
-    state.selectedTopologyStaticSpotLightId = -1;
-    state.selectedTopologyDynamicLightId = -1;
-    state.selectedTopologyDynamicSpotLightId = -1;
-    state.selectedRuntimeObjectId = -1;
-    state.selectedTopologySideKind = side;
-    state.selectedTopologyWallPart = wallPart == TopologyWallPart::Middle
-            ? TopologyWallPart::Wall
-            : wallPart;
-    state.inspectedTopologyVertexId = -1;
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ClearSectorEditorAuthoringSelection(state);
-    ResetSurface3DUiState();
-    uiState.idBufferLightIndex = -1;
-    uiState.inspectorScroll.offset = Vector2{};
-    for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
-    SyncSelectedSectorIdBuffer();
-    SyncSelectedLightIdBuffer();
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SelectSectorEditorTopologyLineDef(context, lineDefId, side, wallPart);
 }
 
 void SectorEditor::SelectTopologyLight(int topologyLightId)
 {
-    if (FindSectorTopologyStaticLight(state.topologyMap, topologyLightId) == nullptr) {
-        ClearSelection();
-        return;
-    }
-
-    CancelSpotLightPilot(nullptr);
-    state.selectedTopologyLightId = topologyLightId;
-    state.selectedTopologyStaticSpotLightId = -1;
-    state.selectedTopologyDynamicLightId = -1;
-    state.selectedTopologyDynamicSpotLightId = -1;
-    state.topologySelectionKind = TopologySelectionKind::StaticLight;
-    state.selectedTopologySectorId = -1;
-    state.selectedTopologyVertexId = -1;
-    state.selectedTopologySideDefId = -1;
-    state.selectedTopologyLineDefId = -1;
-    state.selectedRuntimeObjectId = -1;
-    state.selectedTopologySideKind = SectorTopologySideKind::Front;
-    state.inspectedTopologyVertexId = -1;
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ClearSectorEditorAuthoringSelection(state);
-    ResetSurface3DUiState();
-    uiState.inspectorScroll.offset = Vector2{};
-    uiState.lightXInput = engine::UIFloatInputState{};
-    uiState.lightYInput = engine::UIFloatInputState{};
-    uiState.lightZInput = engine::UIFloatInputState{};
-    uiState.lightTargetXInput = engine::UIFloatInputState{};
-    uiState.lightTargetYInput = engine::UIFloatInputState{};
-    uiState.lightTargetZInput = engine::UIFloatInputState{};
-    uiState.lightIntensityInput = engine::UIFloatInputState{};
-    uiState.lightRadiusInput = engine::UIFloatInputState{};
-    uiState.lightInnerConeInput = engine::UIFloatInputState{};
-    uiState.lightOuterConeInput = engine::UIFloatInputState{};
-    uiState.lightSourceRadiusInput = engine::UIFloatInputState{};
-    uiState.lightRedInput = engine::UIIntInputState{};
-    uiState.lightGreenInput = engine::UIIntInputState{};
-    uiState.lightBlueInput = engine::UIIntInputState{};
-    SyncSelectedLightIdBuffer();
-    SyncSelectedSectorIdBuffer();
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SelectSectorEditorTopologyLight(context, topologyLightId);
 }
 
 void SectorEditor::SelectTopologyStaticSpotLight(int topologyLightId)
 {
-    if (FindSectorTopologyStaticSpotLight(state.topologyMap, topologyLightId) == nullptr) {
-        ClearSelection();
-        return;
-    }
-
-    if (state.spotLightPilot.active
-            && (state.spotLightPilot.kind != SpotLightPilotKind::Static
-                    || state.spotLightPilot.lightId != topologyLightId)) {
-        CancelSpotLightPilot(nullptr);
-    }
-    state.selectedTopologyStaticSpotLightId = topologyLightId;
-    state.selectedTopologyLightId = -1;
-    state.selectedTopologyDynamicLightId = -1;
-    state.selectedTopologyDynamicSpotLightId = -1;
-    state.topologySelectionKind = TopologySelectionKind::StaticSpotLight;
-    state.selectedTopologySectorId = -1;
-    state.selectedTopologyVertexId = -1;
-    state.selectedTopologySideDefId = -1;
-    state.selectedTopologyLineDefId = -1;
-    state.selectedRuntimeObjectId = -1;
-    state.selectedTopologySideKind = SectorTopologySideKind::Front;
-    state.inspectedTopologyVertexId = -1;
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ClearSectorEditorAuthoringSelection(state);
-    ResetSurface3DUiState();
-    uiState.inspectorScroll.offset = Vector2{};
-    uiState.lightXInput = engine::UIFloatInputState{};
-    uiState.lightYInput = engine::UIFloatInputState{};
-    uiState.lightZInput = engine::UIFloatInputState{};
-    uiState.lightTargetXInput = engine::UIFloatInputState{};
-    uiState.lightTargetYInput = engine::UIFloatInputState{};
-    uiState.lightTargetZInput = engine::UIFloatInputState{};
-    uiState.lightIntensityInput = engine::UIFloatInputState{};
-    uiState.lightRadiusInput = engine::UIFloatInputState{};
-    uiState.lightInnerConeInput = engine::UIFloatInputState{};
-    uiState.lightOuterConeInput = engine::UIFloatInputState{};
-    uiState.lightSourceRadiusInput = engine::UIFloatInputState{};
-    uiState.lightRedInput = engine::UIIntInputState{};
-    uiState.lightGreenInput = engine::UIIntInputState{};
-    uiState.lightBlueInput = engine::UIIntInputState{};
-    SyncSelectedLightIdBuffer();
-    SyncSelectedSectorIdBuffer();
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SelectSectorEditorTopologyStaticSpotLight(context, topologyLightId);
 }
 
 void SectorEditor::SelectTopologyDynamicLight(int topologyLightId)
 {
-    if (FindSectorTopologyDynamicLight(state.topologyMap, topologyLightId) == nullptr) {
-        ClearSelection();
-        return;
-    }
-
-    CancelSpotLightPilot(nullptr);
-    state.selectedTopologyDynamicLightId = topologyLightId;
-    state.selectedTopologyLightId = -1;
-    state.selectedTopologyStaticSpotLightId = -1;
-    state.selectedTopologyDynamicSpotLightId = -1;
-    state.topologySelectionKind = TopologySelectionKind::DynamicLight;
-    state.selectedTopologySectorId = -1;
-    state.selectedTopologyVertexId = -1;
-    state.selectedTopologySideDefId = -1;
-    state.selectedTopologyLineDefId = -1;
-    state.selectedRuntimeObjectId = -1;
-    state.selectedTopologySideKind = SectorTopologySideKind::Front;
-    state.inspectedTopologyVertexId = -1;
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ClearSectorEditorAuthoringSelection(state);
-    ResetSurface3DUiState();
-    uiState.inspectorScroll.offset = Vector2{};
-    uiState.lightXInput = engine::UIFloatInputState{};
-    uiState.lightYInput = engine::UIFloatInputState{};
-    uiState.lightZInput = engine::UIFloatInputState{};
-    uiState.lightTargetXInput = engine::UIFloatInputState{};
-    uiState.lightTargetYInput = engine::UIFloatInputState{};
-    uiState.lightTargetZInput = engine::UIFloatInputState{};
-    uiState.lightIntensityInput = engine::UIFloatInputState{};
-    uiState.lightRadiusInput = engine::UIFloatInputState{};
-    uiState.lightSourceRadiusInput = engine::UIFloatInputState{};
-    uiState.lightInnerConeInput = engine::UIFloatInputState{};
-    uiState.lightOuterConeInput = engine::UIFloatInputState{};
-    uiState.lightRedInput = engine::UIIntInputState{};
-    uiState.lightGreenInput = engine::UIIntInputState{};
-    uiState.lightBlueInput = engine::UIIntInputState{};
-    SyncSelectedLightIdBuffer();
-    SyncSelectedSectorIdBuffer();
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SelectSectorEditorTopologyDynamicLight(context, topologyLightId);
 }
 
 void SectorEditor::SelectTopologyDynamicSpotLight(int topologyLightId)
 {
-    if (FindSectorTopologyDynamicSpotLight(state.topologyMap, topologyLightId) == nullptr) {
-        ClearSelection();
-        return;
-    }
-
-    if (state.spotLightPilot.active
-            && (state.spotLightPilot.kind != SpotLightPilotKind::Dynamic
-                    || state.spotLightPilot.lightId != topologyLightId)) {
-        CancelSpotLightPilot(nullptr);
-    }
-    state.selectedTopologyDynamicSpotLightId = topologyLightId;
-    state.selectedTopologyLightId = -1;
-    state.selectedTopologyStaticSpotLightId = -1;
-    state.selectedTopologyDynamicLightId = -1;
-    state.topologySelectionKind = TopologySelectionKind::DynamicSpotLight;
-    state.selectedTopologySectorId = -1;
-    state.selectedTopologyVertexId = -1;
-    state.selectedTopologySideDefId = -1;
-    state.selectedTopologyLineDefId = -1;
-    state.selectedRuntimeObjectId = -1;
-    state.selectedTopologySideKind = SectorTopologySideKind::Front;
-    state.inspectedTopologyVertexId = -1;
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ClearSectorEditorAuthoringSelection(state);
-    ResetSurface3DUiState();
-    uiState.inspectorScroll.offset = Vector2{};
-    uiState.lightXInput = engine::UIFloatInputState{};
-    uiState.lightYInput = engine::UIFloatInputState{};
-    uiState.lightZInput = engine::UIFloatInputState{};
-    uiState.lightTargetXInput = engine::UIFloatInputState{};
-    uiState.lightTargetYInput = engine::UIFloatInputState{};
-    uiState.lightTargetZInput = engine::UIFloatInputState{};
-    uiState.lightIntensityInput = engine::UIFloatInputState{};
-    uiState.lightRadiusInput = engine::UIFloatInputState{};
-    uiState.lightSourceRadiusInput = engine::UIFloatInputState{};
-    uiState.lightInnerConeInput = engine::UIFloatInputState{};
-    uiState.lightOuterConeInput = engine::UIFloatInputState{};
-    uiState.lightFlickerSpeedInput = engine::UIFloatInputState{};
-    uiState.lightFlickerAmountInput = engine::UIFloatInputState{};
-    uiState.lightRedInput = engine::UIIntInputState{};
-    uiState.lightGreenInput = engine::UIIntInputState{};
-    uiState.lightBlueInput = engine::UIIntInputState{};
-    SyncSelectedLightIdBuffer();
-    SyncSelectedSectorIdBuffer();
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SelectSectorEditorTopologyDynamicSpotLight(context, topologyLightId);
 }
 
 void SectorEditor::SelectRuntimeObject(int objectId)
 {
-    if (FindSectorPlacedRuntimeObject(state.topologyMap, objectId) == nullptr) {
-        ClearSelection();
-        return;
-    }
-
-    ClearSelection();
-    state.selectedRuntimeObjectId = objectId;
-    ResetSurface3DUiState();
-    ResetRuntimeObjectUiState(uiState);
-    uiState.inspectorScroll.offset = Vector2{};
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SelectSectorEditorRuntimeObject(context, objectId);
 }
 
 void SectorEditor::SelectSurface3D(SectorSurfaceRef surface)
 {
-    const TopologySurfaceEditTarget target = TopologyEditTargetForSurface(surface);
-    if (!IsValidSurfaceRef(surface) || !IsValidTopologySurfaceEditTarget(target)) {
-        state.selectedSurface3D = SectorSurfaceRef{};
-        state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-        return;
-    }
-    SectorEditorAuthoringSurfaceTarget authoringTarget;
-    const bool hasAuthoringGraph = HasAuthoringGraphData();
-    if (hasAuthoringGraph) {
-        std::string unavailableStatus;
-        if (!ResolveSectorEditorAuthoringSurfaceTarget(
-                    state,
-                    surface,
-                    authoringTarget,
-                    &unavailableStatus)) {
-            state.selectedSurface3D = SectorSurfaceRef{};
-            state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-            statusText = unavailableStatus;
-            return;
-        }
-    }
-
-    if (!SameSurfaceRef(state.selectedSurface3D, surface)) {
-        ResetSurface3DUiState();
-    }
-
-    if (IsWallSurface(surface.kind)) {
-        SelectTopologySideDef(
-                surface.topologySideDefId,
-                SurfaceKindToTopologyWallPart(surface.kind));
-    } else {
-        SelectTopologySector(surface.topologySectorId);
-    }
-    if (hasAuthoringGraph) {
-        const SectorAuthoringSelectionTarget authoringSelection =
-                MakeSectorEditorAuthoringSelectionTargetForSurfaceTarget(authoringTarget);
-        if (authoringSelection.kind == SectorAuthoringSelectionKind::Line) {
-            SelectSectorEditorAuthoringLine(state, authoringSelection.lineId);
-        } else if (authoringSelection.kind == SectorAuthoringSelectionKind::FaceAnchor) {
-            SelectSectorEditorAuthoringFaceAnchor(state, authoringSelection.faceAnchorId);
-        }
-    }
-    state.selectedSurface3D = surface;
-    state.selectedTopologySurface3D = target;
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SelectSectorEditorSurface3D(context, surface);
 }
 
 bool SectorEditor::IsValidSurfaceRef(SectorSurfaceRef surface) const
 {
-    if (surface.kind == SectorSurfaceKind::None) {
-        return false;
-    }
-
-    if (IsWallSurface(surface.kind)) {
-        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(
-                state.topologyMap,
-                surface.topologySideDefId);
-        if (sideDef == nullptr
-                || sideDef->lineDefId != surface.topologyLineDefId
-                || sideDef->side != surface.topologySide) {
-            return false;
-        }
-        return surface.kind != SectorSurfaceKind::Middle
-                || IsTopologyMiddleEligible(state.topologyMap, sideDef);
-    }
-    return FindSectorTopologySector(state.topologyMap, surface.topologySectorId) != nullptr;
+    SectorEditorSelectionServiceContext context{
+            const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorUiState&>(uiState),
+            nullptr,
+            nullptr,
+            nullptr};
+    return IsValidSectorEditorSurfaceRef(context, surface);
 }
 
 bool SectorEditor::SameSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b) const
 {
-    return a.kind == b.kind
-            && a.topologySectorId == b.topologySectorId
-            && a.topologyLineDefId == b.topologyLineDefId
-            && a.topologySideDefId == b.topologySideDefId
-            && a.topologySide == b.topologySide;
+    return SameSectorEditorSurfaceRef(a, b);
 }
 
 TopologySurfaceEditTarget SectorEditor::TopologyEditTargetForSurface(SectorSurfaceRef surface) const
 {
-    TopologySurfaceEditTarget target;
-    target.kind = SurfaceKindToTopologyEditTargetKind(surface.kind);
-    target.sectorId = surface.topologySectorId;
-    target.lineDefId = surface.topologyLineDefId;
-    target.sideDefId = surface.topologySideDefId;
-    target.side = surface.topologySide;
-    return target;
+    return SectorEditorTopologyEditTargetForSurface(surface);
 }
 
 bool SectorEditor::IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget target) const
 {
-    return game::IsValidMaterialSurfaceTarget(state.topologyMap, target);
+    SectorEditorSelectionServiceContext context{
+            const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorUiState&>(uiState),
+            nullptr,
+            nullptr,
+            nullptr};
+    return IsValidSectorEditorTopologySurfaceEditTarget(context, target);
 }
 
 void SectorEditor::ResetSurface3DUiState()
 {
-    uiState.surface3DUvScaleUInput = engine::UIFloatInputState{};
-    uiState.surface3DUvScaleVInput = engine::UIFloatInputState{};
-    uiState.surface3DUvOffsetUInput = engine::UIFloatInputState{};
-    uiState.surface3DUvOffsetVInput = engine::UIFloatInputState{};
-    uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
-    uiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    ResetSectorEditorSurface3DUiState(context);
 }
 
 void SectorEditor::ClearTopologySelectionOnly()
 {
-    CancelSpotLightPilot(nullptr);
-    state.selectDragArm = SelectDragArmState{};
-    state.lightDrag = LightDragState{};
-    state.runtimeObjectDrag = RuntimeObjectDragState{};
-    state.topologySelectionKind = TopologySelectionKind::None;
-    state.selectedTopologySectorId = -1;
-    state.selectedTopologyVertexId = -1;
-    state.selectedTopologySideDefId = -1;
-    state.selectedTopologyLineDefId = -1;
-    state.selectedTopologyLightId = -1;
-    state.selectedTopologyStaticSpotLightId = -1;
-    state.selectedTopologyDynamicLightId = -1;
-    state.selectedTopologyDynamicSpotLightId = -1;
-    state.selectedRuntimeObjectId = -1;
-    state.selectedTopologySideKind = SectorTopologySideKind::Front;
-    state.inspectedTopologyVertexId = -1;
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ResetSurface3DUiState();
-    ResetRuntimeObjectUiState(uiState);
-    uiState.idBufferSectorIndex = -1;
-    uiState.idBufferLightIndex = -1;
-    SyncSelectedSectorIdBuffer();
-    SyncSelectedLightIdBuffer();
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    ClearSectorEditorTopologySelectionOnly(context);
 }
 
 void SectorEditor::ClearSelection()
 {
-    CancelSpotLightPilot(nullptr);
-    state.selectDragArm = SelectDragArmState{};
-    state.authoringVertexDrag = AuthoringVertexDragState{};
-    state.topologySelectionKind = TopologySelectionKind::None;
-    state.selectedTopologySectorId = -1;
-    state.selectedTopologyVertexId = -1;
-    state.selectedTopologySideDefId = -1;
-    state.selectedTopologyLineDefId = -1;
-    state.selectedTopologyLightId = -1;
-    state.selectedTopologyStaticSpotLightId = -1;
-    state.selectedTopologyDynamicLightId = -1;
-    state.selectedTopologyDynamicSpotLightId = -1;
-    state.runtimeObjectDrag = RuntimeObjectDragState{};
-    state.selectedRuntimeObjectId = -1;
-    state.selectedTopologySideKind = SectorTopologySideKind::Front;
-    state.inspectedTopologyVertexId = -1;
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-    ClearSectorEditorAuthoringSelection(state);
-    ResetSurface3DUiState();
-    uiState.ambientIntensityInput = engine::UIFloatInputState{};
-    uiState.ambientRedInput = engine::UIIntInputState{};
-    uiState.ambientGreenInput = engine::UIIntInputState{};
-    uiState.ambientBlueInput = engine::UIIntInputState{};
-    ResetRuntimeObjectUiState(uiState);
-    uiState.inspectorScroll.offset = Vector2{};
-    SyncSelectedSectorIdBuffer();
-    SyncSelectedLightIdBuffer();
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    ClearSectorEditorSelection(context);
 }
 
 void SectorEditor::SelectAuthoringLine(int lineId)
 {
-    if (FindSectorAuthoringLine(state.authoringGraph, lineId) == nullptr) {
-        ClearSelection();
-        return;
-    }
-
-    ClearSelection();
-    SelectSectorEditorAuthoringLine(state, lineId);
-    uiState.inspectorScroll.offset = Vector2{};
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SelectSectorEditorAuthoringLineTarget(context, lineId);
 }
 
 bool SectorEditor::DeleteSelectedAuthoringLine()
@@ -10171,35 +9667,14 @@ bool SectorEditor::DeleteSelectedAuthoringLine()
 
 void SectorEditor::SelectAuthoringVertex(int vertexId)
 {
-    if (FindSectorAuthoringVertex(state.authoringGraph, vertexId) == nullptr) {
-        ClearSelection();
-        return;
-    }
-
-    ClearSelection();
-    SelectSectorEditorAuthoringVertex(state, vertexId);
-    uiState.inspectorScroll.offset = Vector2{};
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SelectSectorEditorAuthoringVertexTarget(context, vertexId);
 }
 
 void SectorEditor::SelectAuthoringFaceAnchor(int faceAnchorId)
 {
-    if (FindSectorAuthoringFaceAnchor(state.authoringGraph, faceAnchorId) == nullptr) {
-        ClearSelection();
-        return;
-    }
-
-    ClearSelection();
-    SelectSectorEditorAuthoringFaceAnchor(state, faceAnchorId);
-    uiState.inspectorScroll.offset = Vector2{};
-    uiState.floorInput = engine::UIFloatInputState{};
-    uiState.ceilingInput = engine::UIFloatInputState{};
-    uiState.ambientIntensityInput = engine::UIFloatInputState{};
-    uiState.ambientRedInput = engine::UIIntInputState{};
-    uiState.ambientGreenInput = engine::UIIntInputState{};
-    uiState.ambientBlueInput = engine::UIIntInputState{};
-    for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
-        inputState = engine::UIFloatInputState{};
-    }
+    SectorEditorSelectionServiceContext context = BuildSelectionServiceContext();
+    SelectSectorEditorAuthoringFaceAnchorTarget(context, faceAnchorId);
 }
 
 bool SectorEditor::DeleteSelectedAuthoringVertex()

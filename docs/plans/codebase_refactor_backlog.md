@@ -67,7 +67,7 @@ Task Type:
 | REF-043 | `[~]` | Medium | Editor architecture | Authoring tool module contract and migration series | Codex task | Medium/High | REF-043a-c migrated Line, Rectangle, and Insert Vertex; Select waits for selection/manipulation services |
 | REF-047 | `[x]` | High | Editor architecture | Selection service and manipulation provider contract | Audit first | Low | Completed; Select is the frontend for selection/manipulation, not just another authoring tool |
 | REF-048 | `[x]` | High | Editor architecture | Add passive SelectionTarget and provider type definitions | Codex task | Low/Medium | No behavior changes; shared vocabulary before service extraction |
-| REF-049 | `[ ]` | High | Editor architecture | Extract Selection service helpers | Codex task | Medium | Preserve current selected state fields, stale cleanup, and UI reset behavior |
+| REF-049 | `[x]` | High | Editor architecture | Extract Selection service helpers | Codex task | Medium | Preserve current selected state fields, stale cleanup, and UI reset behavior |
 | REF-050 | `[ ]` | High | Editor architecture | Add Manipulation service shell | Codex task | Medium | Own generic drag lifecycle while delegating existing movement paths first |
 | REF-051 | `[ ]` | Medium | Editor architecture | Pilot first move provider | Codex task | Medium | Prefer placed-object/billboard provider; preserve door movement refusal |
 | REF-052 | `[ ]` | High | Editor architecture | Migrate Select tool using services/providers | Codex task | High | Do after Selection service, Manipulation service shell, and provider pilot |
@@ -780,12 +780,12 @@ Task Type:
   - Preserve existing selection state fields during this slice.
 - Completion notes:
   - Added passive `SectorEditorSelectionTarget` and provider/capability type
-    definitions in `sources/sector_editor/SectorEditorSelectionTarget.h`.
+    definitions in `sources/sector_editor/selection/SectorEditorSelectionTarget.h`.
   - No behavior migration was performed.
   - Current selected state fields are preserved.
   - Future REF-049/050/051/052 work will use these definitions.
 
-#### REF-049 `[ ]` Extract Selection service helpers
+#### REF-049 `[x]` Extract Selection service helpers
 
 - Source/audit reference:
   `docs/audit/sector_editor_selection_manipulation_contract.md`.
@@ -801,6 +801,14 @@ Task Type:
   - Preserve current selected state fields and UI reset behavior.
   - Keep object-specific movement out of the Selection service.
 - Completion notes:
+  - Extracted selection service helpers into
+    `sources/sector_editor/selection/SectorEditorSelectionService.h/.cpp`.
+  - Moved passive SelectionTarget definitions to
+    `sources/sector_editor/selection/SectorEditorSelectionTarget.h`.
+  - Current selected state fields remain preserved as the source of truth.
+  - Select tool input/pick/drag behavior was not migrated.
+  - Manipulation service and providers remain future work.
+  - No behavior changes intended.
 
 #### REF-050 `[ ]` Add Manipulation service shell
 
