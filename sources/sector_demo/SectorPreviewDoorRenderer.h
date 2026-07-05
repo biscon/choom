@@ -56,30 +56,6 @@ struct SectorPreviewDoorTextureResolver {
     ResolveFn resolve = nullptr;
 };
 
-struct SectorPreviewDoorMeshResolver {
-    using ResolveFn = const Mesh* (*)(
-            void* userData,
-            const SectorDoorShadowCaster& caster,
-            float& outWidth,
-            float& outHeight);
-
-    void* userData = nullptr;
-    ResolveFn resolve = nullptr;
-};
-
-struct SectorPreviewDoorPreparationContext {
-    engine::World* runtimeObjectWorld = nullptr;
-    std::vector<SectorDoorShadowCaster>* shadowCasters = nullptr;
-};
-
-struct SectorPreviewDoorResourceContext {
-    Shader* opaqueShader = nullptr;
-    Material* opaqueMaterial = nullptr;
-    Texture2D* defaultMaterialTexture = nullptr;
-    bool* opaqueShaderLoaded = nullptr;
-    bool* opaqueMaterialLoaded = nullptr;
-};
-
 struct SectorPreviewDoorDynamicLightContext {
     bool enabled = true;
     float runtimeSeconds = 0.0f;
@@ -97,12 +73,6 @@ struct SectorPreviewDoorDrawContext {
     SectorPreviewDoorTextureResolver textureResolver;
     const Texture2D* defaultMaterialTexture = nullptr;
     std::string* renderDebugText = nullptr;
-};
-
-struct SectorPreviewDoorShadowCasterContext {
-    const std::vector<SectorDoorShadowCaster>* shadowCasters = nullptr;
-    SectorPreviewDoorTextureResolver textureResolver;
-    SectorPreviewDoorMeshResolver meshResolver;
 };
 
 struct SectorPreviewDoorOpaqueShaderLocations {
@@ -146,8 +116,10 @@ public:
     void ReserveRuntimeDoorCapacity(size_t capacity);
     bool LoadOpaqueResources();
     void ShutdownOpaqueResources();
-    void PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld);
     void Draw(const SectorPreviewDoorDrawContext& context);
+    void PrepareShadowRenderContext(
+            SectorPreviewDynamicSpotLightShadowRenderContext& context,
+            engine::World* runtimeObjectWorld);
     void ClearPreparedShadowCasters();
     void UnloadDoorMeshes();
 
@@ -164,10 +136,13 @@ public:
     void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorLightingDebugMode = mode; }
     int DoorLightingDebugModeShaderValue() const { return static_cast<int>(doorLightingDebugMode); }
     const SectorPreviewDoorRenderStats& RenderStats() const { return renderStats; }
+
+private:
+    void ResetOpaqueShaderLocations();
+    void PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld);
+    const std::vector<SectorDoorShadowCaster>& ShadowCasters() const { return runtimeDoorShadowCasters; }
     DoorMeshCacheEntry* FindMutableDoorMesh(int placedObjectId);
     const DoorMeshCacheEntry* FindDoorMesh(int placedObjectId) const;
-    const std::vector<SectorDoorShadowCaster>& ShadowCasters() const { return runtimeDoorShadowCasters; }
-
     const Mesh* ResolveDoorShadowCasterMesh(
             const SectorDoorShadowCaster& caster,
             float& outWidth,
@@ -177,9 +152,6 @@ public:
             const SectorDoorShadowCaster& caster,
             float& outWidth,
             float& outHeight);
-
-private:
-    void ResetOpaqueShaderLocations();
 
     std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;
     std::vector<SectorDoorShadowCaster> runtimeDoorShadowCasters;

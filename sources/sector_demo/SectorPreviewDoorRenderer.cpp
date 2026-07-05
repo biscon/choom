@@ -673,6 +673,21 @@ void SectorPreviewDoorRenderer::Draw(const SectorPreviewDoorDrawContext& context
     }
 }
 
+void SectorPreviewDoorRenderer::PrepareShadowRenderContext(
+        SectorPreviewDynamicSpotLightShadowRenderContext& context,
+        engine::World* runtimeObjectWorld)
+{
+    if (runtimeObjectWorld != nullptr) {
+        PrepareRuntimeDoorMeshes(*runtimeObjectWorld);
+    } else {
+        ClearPreparedShadowCasters();
+    }
+
+    context.doorShadowCasters = &ShadowCasters();
+    context.doorMeshResolverUserData = this;
+    context.doorMeshResolver = &SectorPreviewDoorRenderer::ResolveDoorShadowCasterMesh;
+}
+
 void SectorPreviewDoorRenderer::ClearPreparedShadowCasters()
 {
     runtimeDoorShadowCasters.clear();

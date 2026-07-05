@@ -111,10 +111,6 @@ private:
     engine::TextureHandle TextureForId(const std::string& textureId) const;
     void UpdateCamera();
     SectorPreviewBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
-    void DrawRuntimeDoors(
-            engine::AssetManager& assets,
-            engine::World& runtimeObjectWorld,
-            SectorRuntimeDoorLightingContext doorLighting);
     static const Texture2D* ResolveShadowCasterTexture(
             void* userData,
             engine::AssetManager& assets,

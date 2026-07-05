@@ -850,33 +850,26 @@ void SectorMeshPreview::DrawScene(
         DrawMesh(batch.mesh, material, MatrixIdentity());
     }
     if (runtimeObjectWorld != nullptr) {
-        DrawRuntimeDoors(assets, *runtimeObjectWorld, doorLighting);
+        SectorPreviewDoorDrawContext doorDrawContext;
+        doorDrawContext.assets = &assets;
+        doorDrawContext.runtimeObjectWorld = runtimeObjectWorld;
+        doorDrawContext.lighting = doorLighting;
+        doorDrawContext.dynamicLighting.enabled = dynamicLightingEnabled;
+        doorDrawContext.dynamicLighting.runtimeSeconds = runtimeSeconds;
+        doorDrawContext.dynamicLighting.selectedLights = &dynamicLightState.SelectedLights();
+        doorDrawContext.dynamicLighting.shadowUniforms = dynamicLightState.PackShadowUniforms();
+        doorDrawContext.dynamicLighting.shadowMaps = dynamicLightState.BuildShadowMapTextures();
+        doorDrawContext.dynamicLighting.lightingClamp = DynamicLightingClamp;
+        doorDrawContext.textureResolver.userData = this;
+        doorDrawContext.textureResolver.resolve = &SectorMeshPreview::ResolveShadowCasterTexture;
+        doorDrawContext.defaultMaterialTexture = &defaultMaterialTexture;
+        doorDrawContext.renderDebugText = &renderDebugText;
+        doorRenderer.Draw(doorDrawContext);
+
         const SectorPreviewBillboardDynamicLightContext billboardLightContext = BuildBillboardDynamicLightContext();
         billboardRenderer.Draw(assets, *runtimeObjectWorld, camera, billboardLightContext, renderDebugText);
     }
     EndMode3D();
-}
-
-void SectorMeshPreview::DrawRuntimeDoors(
-        engine::AssetManager& assets,
-        engine::World& runtimeObjectWorld,
-        SectorRuntimeDoorLightingContext doorLighting)
-{
-    SectorPreviewDoorDrawContext context;
-    context.assets = &assets;
-    context.runtimeObjectWorld = &runtimeObjectWorld;
-    context.lighting = doorLighting;
-    context.dynamicLighting.enabled = dynamicLightingEnabled;
-    context.dynamicLighting.runtimeSeconds = runtimeSeconds;
-    context.dynamicLighting.selectedLights = &dynamicLightState.SelectedLights();
-    context.dynamicLighting.shadowUniforms = dynamicLightState.PackShadowUniforms();
-    context.dynamicLighting.shadowMaps = dynamicLightState.BuildShadowMapTextures();
-    context.dynamicLighting.lightingClamp = DynamicLightingClamp;
-    context.textureResolver.userData = this;
-    context.textureResolver.resolve = &SectorMeshPreview::ResolveShadowCasterTexture;
-    context.defaultMaterialTexture = &defaultMaterialTexture;
-    context.renderDebugText = &renderDebugText;
-    doorRenderer.Draw(context);
 }
 
 SectorPreviewBillboardDynamicLightContext SectorMeshPreview::BuildBillboardDynamicLightContext() const
@@ -915,20 +908,12 @@ void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
         return;
     }
 
-    if (runtimeObjectWorld != nullptr) {
-        doorRenderer.PrepareRuntimeDoorMeshes(*runtimeObjectWorld);
-    } else {
-        doorRenderer.ClearPreparedShadowCasters();
-    }
-
     SectorPreviewDynamicSpotLightShadowRenderContext context;
     context.assets = &assets;
     context.sectorDrawRecords = &meshes.sectorDrawRecords;
-    context.doorShadowCasters = &doorRenderer.ShadowCasters();
     context.userData = this;
-    context.doorMeshResolverUserData = &doorRenderer;
     context.textureResolver = &SectorMeshPreview::ResolveShadowCasterTexture;
-    context.doorMeshResolver = &SectorPreviewDoorRenderer::ResolveDoorShadowCasterMesh;
+    doorRenderer.PrepareShadowRenderContext(context, runtimeObjectWorld);
     dynamicLightState.RenderShadowMaps(context);
 }
 
