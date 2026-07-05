@@ -584,6 +584,10 @@ Task Type:
     flows into `SectorEditorDocumentModals.*`. REF-023 remains open for other
     modal slices such as add-map-texture, decal tint, and preview overlay/UV
     panel flows.
+  - REF-023b progress: verified that the add-map-texture modal draw flow already
+    lives in `SectorEditorTextureModals.*`; no source move was needed.
+    `SectorEditor.cpp` retains only wrapper/context/callback wiring and texture
+    action/import ownership.
 
 #### REF-024 `[ ]` Review direct `state.topologyMap` mutation sites and cache invalidation paths
 
