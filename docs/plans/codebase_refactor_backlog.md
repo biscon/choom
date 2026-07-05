@@ -536,6 +536,9 @@ Task Type:
   - Suggested first post-audit implementation item: extract the runtime object
     inspector draw body into a focused module.
 - Completion notes:
+  - REF-021a progress: extracted the runtime object inspector draw body into
+    `SectorEditorRuntimeObjectInspector.*`. REF-021 remains open for runtime
+    object actions/drag and door texture settings modal/action slices.
 
 #### REF-022 `[ ]` Extract light/static-light/object-probe inspector/actions
 
