@@ -232,6 +232,10 @@ Expected wrappers left in `SectorEditor.cpp`: a small `DrawTopologySideDefInspec
 
 ## Recommended Follow-Up Tasks
 
+- REF-055 completion note: the SideDef/material/decal inspector was extracted
+  into `sources/sector_editor/tools/materials/`; material picker routing,
+  preview UV panel extraction, and material wrapper cleanup remain follow-up
+  tasks.
 - Extract material-specific texture picker open/current/apply routing after REF-055, keeping generic catalog/import in texture modules.
 - Audit/extract preview UV panel or unify 2D sidedef and 3D surface material UI.
 - Extract authoring material inspector rows from `DrawSectorsPanel()` if still line-count-heavy after sidedef extraction.
@@ -246,7 +250,7 @@ Required updates made:
 
 - REF-054 exists and is marked complete.
 - REF-054 completion notes point to this report, recommend REF-055 scope, and record expected line-count reduction.
-- REF-055 exists as an unchecked implementation item and says: Extract SideDef/material/decal inspector into `tools/materials/`.
+- REF-055 is now completed: Extract SideDef/material/decal inspector into `tools/materials/`.
 - REF-044 remains an umbrella item that points to the REF-054/REF-055 materials migration series instead of a vague stale item.
 - No unrelated backlog items were marked complete.
 

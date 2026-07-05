@@ -63,7 +63,7 @@ Task Type:
 | REF-023 | `[ ]` | Low | Editor god file | Extract remaining modal draw flows | Codex task | Medium | Most obvious modal draw bodies have moved; remaining work is feature-specific routing |
 | REF-024 | `[ ]` | High | Editor god file | Review direct `state.topologyMap` mutations | Audit first | Medium | First-pass map exists in REF-019 audit; keep for narrower follow-up |
 | REF-054 | `[x]` | High | Editor god file | Audit materials/sidedef/decal extraction boundary | Audit first | Medium | Completed; report recommends callback-based REF-055 inspector extraction |
-| REF-055 | `[ ]` | High | Editor god file | Extract SideDef/material/decal inspector into `tools/materials/` | Codex task | Medium/High | Preserve material finish paths, cache invalidation, and preview rebuild |
+| REF-055 | `[x]` | High | Editor god file | Extract SideDef/material/decal inspector into `tools/materials/` | Codex task | Medium/High | Completed; inspector moved to tools/materials while finish wrappers stayed central |
 | REF-056 | `[ ]` | Medium | Editor god file | Audit preview overlay and preview UV/material panel extraction | Audit first | Medium/High | Decide material-vs-preview ownership before moving line-count-heavy UI |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
@@ -698,7 +698,7 @@ Task Type:
     lightmap source-hash behavior, collision, and preview behavior were not
     changed by this audit.
 
-#### REF-055 `[ ]` Extract SideDef/material/decal inspector into `tools/materials/`
+#### REF-055 `[x]` Extract SideDef/material/decal inspector into `tools/materials/`
 
 - Source/audit reference: REF-053 and
   `docs/audit/sector_editor_materials_boundary_audit.md`.
@@ -726,6 +726,17 @@ Task Type:
     this task unless a later implementation explicitly re-scopes the work.
   - Expected `SectorEditor.cpp` reduction: roughly 600-740 lines.
 - Completion notes:
+  - Completed by extracting the topology SideDef/material/decal inspector into
+    `sources/sector_editor/tools/materials/SectorEditorMaterialInspector.h/.cpp`
+    with a state/UI/callback context and no concrete `SectorEditor`
+    dependency.
+  - `SectorEditor.cpp` now keeps a small callback wrapper for
+    `DrawTopologySideDefInspector()`; actual line count dropped from 10,551 to
+    9,936, a net reduction of 615 lines.
+  - Material finish wrappers remain in `SectorEditor.cpp`.
+  - `ApplyTexturePickerSelection()` remains in `SectorEditor.cpp`.
+  - `DrawPreviewUvPanel()` remains in `SectorEditor.cpp`.
+  - No behavior changes were intended.
 
 #### REF-056 `[ ]` Audit preview overlay and preview UV/material panel extraction
 
@@ -1041,8 +1052,9 @@ Task Type:
 - Completion notes:
   - REF-054 completed the materials/sidedef/decal boundary audit at
     `docs/audit/sector_editor_materials_boundary_audit.md`.
-  - REF-055 remains the next unchecked implementation slice for moving the
-    SideDef/material/decal inspector into `tools/materials/`.
+  - REF-055 extracted the SideDef/material/decal inspector into
+    `tools/materials/`; follow-up material picker routing, preview UV panel, and
+    wrapper cleanup tasks remain open under this umbrella.
 
 #### REF-045 `[ ]` Audit lights/source-hash-sensitive tool migration
 
