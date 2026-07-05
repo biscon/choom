@@ -327,6 +327,10 @@ Phase 2: Extract Selection service helpers.
   `sources/sector_editor/selection/SectorEditorSelectionService.h/.cpp`;
   current selected state fields remain the source of truth, and no Select
   migration or provider dispatch was performed.
+- REF-050 note: a manipulation service shell was added in
+  `sources/sector_editor/selection/SectorEditorManipulationService.h/.cpp`.
+  Existing drag implementations remain the source of behavior, and provider
+  dispatch remains future work.
 
 Phase 3: Add Manipulation service shell.
 

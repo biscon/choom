@@ -8,6 +8,7 @@
 #include "sector_editor/SectorEditorMaterialActions.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectActions.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectDrag.h"
+#include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
@@ -295,6 +296,7 @@ private:
     void RefreshAddMapTexturePreview(engine::AssetManager& assets);
     bool ValidateAddMapTextureId(std::string& error) const;
     bool AddSelectedMapTexture(engine::AssetManager& assets);
+    SectorEditorManipulationServiceContext BuildManipulationServiceContext();
     SectorEditorSelectionServiceContext BuildSelectionServiceContext();
     SectorTopologySector* SelectedTopologySector();
     const SectorTopologySector* SelectedTopologySector() const;

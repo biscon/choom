@@ -68,7 +68,7 @@ Task Type:
 | REF-047 | `[x]` | High | Editor architecture | Selection service and manipulation provider contract | Audit first | Low | Completed; Select is the frontend for selection/manipulation, not just another authoring tool |
 | REF-048 | `[x]` | High | Editor architecture | Add passive SelectionTarget and provider type definitions | Codex task | Low/Medium | No behavior changes; shared vocabulary before service extraction |
 | REF-049 | `[x]` | High | Editor architecture | Extract Selection service helpers | Codex task | Medium | Preserve current selected state fields, stale cleanup, and UI reset behavior |
-| REF-050 | `[ ]` | High | Editor architecture | Add Manipulation service shell | Codex task | Medium | Own generic drag lifecycle while delegating existing movement paths first |
+| REF-050 | `[x]` | High | Editor architecture | Add Manipulation service shell | Codex task | Medium | Own generic drag lifecycle while delegating existing movement paths first |
 | REF-051 | `[ ]` | Medium | Editor architecture | Pilot first move provider | Codex task | Medium | Prefer placed-object/billboard provider; preserve door movement refusal |
 | REF-052 | `[ ]` | High | Editor architecture | Migrate Select tool using services/providers | Codex task | High | Do after Selection service, Manipulation service shell, and provider pilot |
 | REF-044 | `[ ]` | Medium | Editor architecture | Migrate material/sidedef/decal editing into `tools/materials/` | Audit first | Medium/High | Preserve material mutation/cache/preview rebuild paths |
@@ -810,7 +810,7 @@ Task Type:
   - Manipulation service and providers remain future work.
   - No behavior changes intended.
 
-#### REF-050 `[ ]` Add Manipulation service shell
+#### REF-050 `[x]` Add Manipulation service shell
 
 - Source/audit reference:
   `docs/audit/sector_editor_selection_manipulation_contract.md`.
@@ -825,6 +825,13 @@ Task Type:
   - Initially delegate to existing drag functions.
   - Do not move object-specific mutation logic into the service.
 - Completion notes:
+  - Added the Manipulation service shell in
+    `sources/sector_editor/selection/SectorEditorManipulationService.h/.cpp`.
+  - Current drag state fields remain preserved as the source of truth.
+  - Existing movement implementations still own object-specific movement.
+  - The service delegates to existing drag paths through callbacks.
+  - No provider dispatch was added yet.
+  - No behavior changes intended.
 
 #### REF-051 `[ ]` Pilot first move provider
 

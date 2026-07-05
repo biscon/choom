@@ -5,6 +5,7 @@
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/document/SectorEditorDocumentActions.h"
 #include "sector_editor/document/SectorEditorDocumentModals.h"
+#include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorLightInspector.h"
@@ -917,12 +918,13 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
             true,
             [this](engine::InputEvent& event) {
                 if (event.key.key == KEY_ESCAPE) {
-                    if (state.authoringVertexDrag.active) {
-                        CancelAuthoringVertexDrag("Cancelled authoring vertex move");
-                    } else if (state.lightDrag.active) {
-                        CancelLightDrag("Cancelled light move");
-                    } else if (state.runtimeObjectDrag.active) {
-                        CancelRuntimeObjectDrag("Cancelled object move");
+                    SectorEditorManipulationServiceContext manipulationContext =
+                            BuildManipulationServiceContext();
+                    if (CancelFirstActiveSectorEditorManipulation(
+                                manipulationContext,
+                                "Cancelled authoring vertex move",
+                                "Cancelled light move",
+                                "Cancelled object move")) {
                     } else if (state.pendingAuthoringLine.active) {
                         CancelPendingAuthoringLine("Line chain stopped");
                     } else if (state.pendingAuthoringRectangle.active) {
@@ -990,31 +992,21 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
             }
     );
 
-    if (state.authoringVertexDrag.active || state.lightDrag.active || state.runtimeObjectDrag.active) {
-        if (state.authoringVertexDrag.active) {
-            UpdateAuthoringVertexDrag(input);
-        }
-        if (state.lightDrag.active) {
-            UpdateLightDrag(input);
-        }
-        if (state.runtimeObjectDrag.active) {
-            UpdateRuntimeObjectDrag(input);
-        }
+    SectorEditorManipulationServiceContext manipulationContext =
+            BuildManipulationServiceContext();
+    if (IsAnySectorEditorManipulationActive(manipulationContext)) {
+        UpdateActiveSectorEditorManipulation(manipulationContext, input);
 
         input.ForEachEvent(
                 engine::InputEventType::MouseButtonPressed,
                 true,
-                [this](engine::InputEvent& event) {
+                [this, &manipulationContext](engine::InputEvent& event) {
                     if (event.mouseButton.button == MOUSE_RIGHT_BUTTON) {
-                        if (state.authoringVertexDrag.active) {
-                            CancelAuthoringVertexDrag("Cancelled authoring vertex move");
-                        }
-                        if (state.lightDrag.active) {
-                            CancelLightDrag("Cancelled light move");
-                        }
-                        if (state.runtimeObjectDrag.active) {
-                            CancelRuntimeObjectDrag("Cancelled object move");
-                        }
+                        CancelActiveSectorEditorManipulation(
+                                manipulationContext,
+                                "Cancelled authoring vertex move",
+                                "Cancelled light move",
+                                "Cancelled object move");
                         engine::ConsumeEvent(event);
                     }
                 }
@@ -1023,17 +1015,9 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
         input.ForEachEvent(
                 engine::InputEventType::MouseButtonReleased,
                 true,
-                [this](engine::InputEvent& event) {
+                [&manipulationContext](engine::InputEvent& event) {
                     if (event.mouseButton.button == MOUSE_LEFT_BUTTON) {
-                        if (state.authoringVertexDrag.active) {
-                            FinishAuthoringVertexDrag();
-                        }
-                        if (state.lightDrag.active) {
-                            FinishLightDrag();
-                        }
-                        if (state.runtimeObjectDrag.active) {
-                            FinishRuntimeObjectDrag();
-                        }
+                        FinishActiveSectorEditorManipulation(manipulationContext);
                         engine::ConsumeEvent(event);
                     }
                 }
@@ -1050,7 +1034,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
     }
 
     UpdateSelectDragArm(input);
-    if (state.authoringVertexDrag.active || state.lightDrag.active || state.runtimeObjectDrag.active) {
+    if (IsAnySectorEditorManipulationActive(manipulationContext)) {
         return;
     }
 
@@ -1233,70 +1217,20 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
 
 void SectorEditor::UpdateSelectDragArm(engine::Input& input)
 {
-    if (!state.selectDragArm.active) {
-        return;
-    }
-    if (state.currentTool != SectorEditorTool::Select
-            || !input.IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-        state.selectDragArm = SelectDragArmState{};
-        return;
-    }
-    if (!ShouldStartSectorEditorSelectDrag(
-                state.selectDragArm.pressPosition,
-                input.MousePosition())) {
-        return;
-    }
-
-    const SectorEditorPickTarget target = state.selectDragArm.target;
-    state.selectDragArm = SelectDragArmState{};
-    StartSelectDrag(target, input.MousePosition());
+    SectorEditorManipulationServiceContext context = BuildManipulationServiceContext();
+    UpdateSectorEditorSelectDragArm(context, input);
 }
 
 void SectorEditor::ArmSelectedSelectDrag(Vector2 pressPosition)
 {
-    state.selectDragArm = SelectDragArmState{};
-    SectorEditorPickTarget target;
-    if (!FindSelectedMovablePickTargetAtScreenPoint(pressPosition, target)) {
-        return;
-    }
-    state.selectDragArm.active = true;
-    state.selectDragArm.target = target;
-    state.selectDragArm.pressPosition = pressPosition;
+    SectorEditorManipulationServiceContext context = BuildManipulationServiceContext();
+    ArmSectorEditorSelectedDrag(context, pressPosition);
 }
 
 void SectorEditor::StartSelectDrag(SectorEditorPickTarget target, Vector2 screenPoint)
 {
-    if (!IsSectorEditorPickTargetMovable(target)) {
-        return;
-    }
-
-    switch (target.kind) {
-        case SectorEditorPickKind::RuntimeObject:
-            StartRuntimeObjectDrag(target.id);
-            break;
-        case SectorEditorPickKind::DynamicSpotLight:
-        case SectorEditorPickKind::DynamicLight:
-        case SectorEditorPickKind::StaticSpotLight:
-        case SectorEditorPickKind::StaticLight:
-            StartLightDrag(target.id, target.spotHandle);
-            break;
-        case SectorEditorPickKind::AuthoringVertex: {
-            (void) screenPoint;
-            const SectorAuthoringVertex* vertex = FindSectorAuthoringVertex(
-                    state.authoringGraph,
-                    target.id);
-            if (vertex != nullptr) {
-                StartAuthoringVertexDrag(
-                        target.id,
-                        SectorTopologyCoordPoint{vertex->x, vertex->y});
-            }
-            break;
-        }
-        case SectorEditorPickKind::None:
-        case SectorEditorPickKind::AuthoringLine:
-        case SectorEditorPickKind::AuthoringFaceAnchor:
-            break;
-    }
+    SectorEditorManipulationServiceContext context = BuildManipulationServiceContext();
+    StartSectorEditorSelectedManipulation(context, target, screenPoint);
 }
 
 SectorEditorPickTarget SectorEditor::CurrentPickSelectionTarget() const
@@ -1469,40 +1403,30 @@ bool SectorEditor::FindSelectedMovablePickTargetAtScreenPoint(
         Vector2 screenPoint,
         SectorEditorPickTarget& outTarget) const
 {
-    outTarget = SectorEditorPickTarget{};
-    const SectorEditorPickTarget selected = CurrentPickSelectionTarget();
-    if (!IsSectorEditorPickTargetMovable(selected)) {
-        return false;
-    }
-
-    if (selected.kind == SectorEditorPickKind::StaticSpotLight) {
-        int lightId = -1;
-        SpotLightHandle handle = SpotLightHandle::Origin;
-        if (FindTopologyStaticSpotLightHandleNearScreenPoint(screenPoint, lightId, handle)
-                && lightId == selected.id) {
-            outTarget = SectorEditorPickTarget{selected.kind, selected.id, handle};
-            return true;
-        }
-    }
-    if (selected.kind == SectorEditorPickKind::DynamicSpotLight) {
-        int lightId = -1;
-        SpotLightHandle handle = SpotLightHandle::Origin;
-        if (FindTopologyDynamicSpotLightHandleNearScreenPoint(screenPoint, lightId, handle)
-                && lightId == selected.id) {
-            outTarget = SectorEditorPickTarget{selected.kind, selected.id, handle};
-            return true;
-        }
-    }
-
-    const std::vector<SectorEditorPickCandidate> candidates = BuildSelectPickCandidates(screenPoint);
-    for (const SectorEditorPickCandidate& candidate : candidates) {
-        if (!SameSectorEditorPickTarget(candidate.target, selected)) {
-            continue;
-        }
-        outTarget = selected;
-        return true;
-    }
-    return false;
+    SectorEditorManipulationServiceContext context{
+            const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorUiState&>(uiState),
+            const_cast<std::string&>(statusText)};
+    context.userData = const_cast<SectorEditor*>(this);
+    context.currentPickSelectionTarget = [](void* userData) {
+        return static_cast<const SectorEditor*>(userData)->CurrentPickSelectionTarget();
+    };
+    context.buildSelectPickCandidates = [](void* userData, Vector2 point) {
+        return static_cast<const SectorEditor*>(userData)->BuildSelectPickCandidates(point);
+    };
+    context.findStaticSpotLightHandle = [](void* userData, Vector2 point, int& outLightId, SpotLightHandle& outHandle) {
+        return static_cast<const SectorEditor*>(userData)->FindTopologyStaticSpotLightHandleNearScreenPoint(
+                point,
+                outLightId,
+                outHandle);
+    };
+    context.findDynamicSpotLightHandle = [](void* userData, Vector2 point, int& outLightId, SpotLightHandle& outHandle) {
+        return static_cast<const SectorEditor*>(userData)->FindTopologyDynamicSpotLightHandleNearScreenPoint(
+                point,
+                outLightId,
+                outHandle);
+    };
+    return FindSectorEditorSelectedMovablePickTargetAtScreenPoint(context, screenPoint, outTarget);
 }
 
 void SectorEditor::StartAuthoringVertexDrag(int vertexId, SectorTopologyCoordPoint point)
@@ -2336,6 +2260,78 @@ bool SectorEditor::ToCanonicalSectorPoint(
     }
     outPoint = SectorTopologyCoordPointToSectorPoint(topologyPoint);
     return true;
+}
+
+SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceContext()
+{
+    SectorEditorManipulationServiceContext context{
+            state,
+            uiState,
+            statusText};
+    context.userData = this;
+    context.currentPickSelectionTarget = [](void* userData) {
+        return static_cast<SectorEditor*>(userData)->CurrentPickSelectionTarget();
+    };
+    context.buildSelectPickCandidates = [](void* userData, Vector2 point) {
+        return static_cast<SectorEditor*>(userData)->BuildSelectPickCandidates(point);
+    };
+    context.findStaticSpotLightHandle = [](
+            void* userData,
+            Vector2 point,
+            int& outLightId,
+            SpotLightHandle& outHandle) {
+        return static_cast<SectorEditor*>(userData)->FindTopologyStaticSpotLightHandleNearScreenPoint(
+                point,
+                outLightId,
+                outHandle);
+    };
+    context.findDynamicSpotLightHandle = [](
+            void* userData,
+            Vector2 point,
+            int& outLightId,
+            SpotLightHandle& outHandle) {
+        return static_cast<SectorEditor*>(userData)->FindTopologyDynamicSpotLightHandleNearScreenPoint(
+                point,
+                outLightId,
+                outHandle);
+    };
+    context.startAuthoringVertexDrag = [](void* userData, int vertexId, SectorTopologyCoordPoint point) {
+        static_cast<SectorEditor*>(userData)->StartAuthoringVertexDrag(vertexId, point);
+    };
+    context.startRuntimeObjectDrag = [](void* userData, int objectId) {
+        static_cast<SectorEditor*>(userData)->StartRuntimeObjectDrag(objectId);
+    };
+    context.startLightDrag = [](void* userData, int topologyLightId, SpotLightHandle spotHandle) {
+        static_cast<SectorEditor*>(userData)->StartLightDrag(topologyLightId, spotHandle);
+    };
+    context.updateAuthoringVertexDrag = [](void* userData, engine::Input& input) {
+        static_cast<SectorEditor*>(userData)->UpdateAuthoringVertexDrag(input);
+    };
+    context.finishAuthoringVertexDrag = [](void* userData) {
+        static_cast<SectorEditor*>(userData)->FinishAuthoringVertexDrag();
+    };
+    context.cancelAuthoringVertexDrag = [](void* userData, const char* message) {
+        static_cast<SectorEditor*>(userData)->CancelAuthoringVertexDrag(message);
+    };
+    context.updateRuntimeObjectDrag = [](void* userData, engine::Input& input) {
+        static_cast<SectorEditor*>(userData)->UpdateRuntimeObjectDrag(input);
+    };
+    context.finishRuntimeObjectDrag = [](void* userData) {
+        static_cast<SectorEditor*>(userData)->FinishRuntimeObjectDrag();
+    };
+    context.cancelRuntimeObjectDrag = [](void* userData, const char* message) {
+        static_cast<SectorEditor*>(userData)->CancelRuntimeObjectDrag(message);
+    };
+    context.updateLightDrag = [](void* userData, engine::Input& input) {
+        static_cast<SectorEditor*>(userData)->UpdateLightDrag(input);
+    };
+    context.finishLightDrag = [](void* userData) {
+        static_cast<SectorEditor*>(userData)->FinishLightDrag();
+    };
+    context.cancelLightDrag = [](void* userData, const char* message) {
+        static_cast<SectorEditor*>(userData)->CancelLightDrag(message);
+    };
+    return context;
 }
 
 SectorEditorSelectionServiceContext SectorEditor::BuildSelectionServiceContext()
