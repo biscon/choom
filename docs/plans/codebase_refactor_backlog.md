@@ -580,6 +580,10 @@ Task Type:
   - REF-019 identifies document save/load/confirmation modals and add-map
     texture modal as good first narrow slices.
 - Completion notes:
+  - REF-023a progress: extracted document save/load/confirmation modal draw
+    flows into `SectorEditorDocumentModals.*`. REF-023 remains open for other
+    modal slices such as add-map-texture, decal tint, and preview overlay/UV
+    panel flows.
 
 #### REF-024 `[ ]` Review direct `state.topologyMap` mutation sites and cache invalidation paths
 
