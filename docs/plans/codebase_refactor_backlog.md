@@ -55,12 +55,12 @@ Task Type:
 | REF-016 | `[x]` | Medium | Mesh preview | Extract runtime billboard renderer helper | Codex task | Medium | Completed; helper owns billboard shader/draw path |
 | REF-017 | `[x]` | Medium | Mesh preview | Extract sky/bloom helpers | Codex task | Medium | GPU resource lifetime sensitive |
 | REF-018 | `[x]` | Medium | Mesh preview | Review remaining facade and ownership | Audit first | Low | Completed; facade acceptable before rename |
-| REF-019 | `[ ]` | High | Editor god file | Audit remaining `SectorEditor.cpp` seams | Audit first | Low | Do after current feature work |
-| REF-020 | `[ ]` | Medium | Editor god file | Extract texture/material action or inspector code | Codex task | Medium | Preserve document/cache paths |
-| REF-021 | `[ ]` | Medium | Editor god file | Extract runtime object inspector/actions | Codex task | Medium | Runtime preview behavior sensitive |
-| REF-022 | `[ ]` | Medium | Editor god file | Extract light/static-light/object-probe inspector/actions | Codex task | Medium/High | Source-hash semantics matter |
-| REF-023 | `[ ]` | Medium | Editor god file | Extract remaining modal draw flows | Codex task | Medium | Keep boundaries narrow |
-| REF-024 | `[ ]` | High | Editor god file | Review direct `state.topologyMap` mutations | Audit first | Medium | Cache invalidation audit |
+| REF-019 | `[x]` | High | Editor god file | Audit remaining `SectorEditor.cpp` seams | Audit first | Low | Completed; see audit report |
+| REF-020 | `[ ]` | Medium | Editor god file | Extract texture/material action or inspector code | Codex task | Medium | Preserve document/cache paths; audit suggests SideDef/material inspector first |
+| REF-021 | `[ ]` | Medium | Editor god file | Extract runtime object inspector/actions | Codex task | Medium | Runtime preview behavior sensitive; audit recommends splitting into inspector/actions/modal slices |
+| REF-022 | `[ ]` | Medium | Editor god file | Extract light/static-light/object-probe inspector/actions | Codex task | Medium/High | Source-hash semantics matter; audit recommends mini audit before source-hash-sensitive extraction |
+| REF-023 | `[ ]` | Medium | Editor god file | Extract remaining modal draw flows | Codex task | Medium | Keep boundaries narrow; document/add-texture modals are good first slices |
+| REF-024 | `[ ]` | High | Editor god file | Review direct `state.topologyMap` mutations | Audit first | Medium | First-pass map exists in REF-019 audit; keep for narrower follow-up |
 | REF-025 | `[ ]` | Medium | Lightmap/probes | Extract object probe sidecar IO | Codex task | Medium | Preserve sidecar/status behavior |
 | REF-026 | `[x]` | Medium | Lightmap/probes | Extract or reuse `SectorAssetPaths` in lightmap | Codex task | Low | Pair with REF-002 if possible |
 | REF-027 | `[ ]` | Medium | Lightmap/probes | Audit BVH/raycast/light evaluation extraction candidates | Audit first | Medium/High | Needs audit first |
@@ -482,7 +482,7 @@ Task Type:
 
 ### 5. SectorEditor.cpp God File
 
-#### REF-019 `[ ]` Audit remaining `SectorEditor.cpp` seams after current feature work
+#### REF-019 `[x]` Audit remaining `SectorEditor.cpp` seams after current feature work
 
 - Source/audit reference: god file section for `SectorEditor.cpp`.
 - Why it helps: avoids extracting stale or feature-in-progress code.
@@ -492,6 +492,13 @@ Task Type:
 - Risk: Low.
 - Suggested verification: audit output only.
 - Completion notes:
+  - Completed in `docs/audit/sector_editor_cpp_seams_audit.md`.
+  - Conclusion: `SectorEditor.cpp` remains the largest god-file risk, but
+    existing action/modal/inspector/cache seams make small extractions
+    practical.
+  - Recommended first follow-up: split REF-021 and start by extracting the
+    runtime object inspector draw body while preserving
+    `MarkTopologyDocumentEdited()` and runtime object refresh behavior.
 
 #### REF-020 `[ ]` Extract texture/material action or inspector code
 
@@ -505,6 +512,10 @@ Task Type:
 - Risk: Medium.
 - Suggested verification: build, editor material/texture tests if present,
   manual material action smoke.
+- Notes:
+  - REF-019 recommends narrowing the first slice to the SideDef/material
+    inspector or texture/material picker glue, preserving
+    `FinishTopologyMaterialMutation()` / cache invalidation paths.
 - Completion notes:
 
 #### REF-021 `[ ]` Extract runtime object inspector/actions
@@ -519,6 +530,11 @@ Task Type:
 - Risk: Medium.
 - Suggested verification: runtime object tests and manual object authoring
   smoke.
+- Notes:
+  - REF-019 recommends splitting this into runtime object inspector,
+    runtime object actions/drag, and door texture settings modal slices.
+  - Suggested first post-audit implementation item: extract the runtime object
+    inspector draw body into a focused module.
 - Completion notes:
 
 #### REF-022 `[ ]` Extract light/static-light/object-probe inspector/actions
@@ -533,6 +549,9 @@ Task Type:
 - Risk: Medium/High.
 - Suggested verification: lightmap tests, source-hash tests, manual light/object
   probe UI smoke.
+- Notes:
+  - REF-019 recommends a mini audit before moving source-hash-sensitive
+    preview/object-probe/directional/static-light settings broadly.
 - Completion notes:
 
 #### REF-023 `[ ]` Extract remaining modal draw flows with clear boundaries
@@ -545,6 +564,9 @@ Task Type:
 - Suggested task type: Codex task.
 - Risk: Medium.
 - Suggested verification: build and manual modal smoke for touched flows.
+- Notes:
+  - REF-019 identifies document save/load/confirmation modals and add-map
+    texture modal as good first narrow slices.
 - Completion notes:
 
 #### REF-024 `[ ]` Review direct `state.topologyMap` mutation sites and cache invalidation paths
@@ -557,6 +579,10 @@ Task Type:
 - Risk: Medium.
 - Suggested verification: mutation-site audit; no behavior changes unless a
   follow-up bugfix is created.
+- Notes:
+  - REF-019 includes a first-pass mutation/cache map. Keep REF-024 for a
+    narrower follow-up audit, especially after future inspector/action
+    extractions.
 - Completion notes:
 
 ### 6. Lightmap / Object Probe Cleanup
