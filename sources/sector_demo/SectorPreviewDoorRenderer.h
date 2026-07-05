@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPreviewDynamicLighting.h"
@@ -8,6 +9,7 @@
 
 #include <cstddef>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace engine {
@@ -88,6 +90,44 @@ struct SectorPreviewDoorShadowCasterContext {
     const std::vector<SectorDoorShadowCaster>* shadowCasters = nullptr;
     SectorPreviewDoorTextureResolver textureResolver;
     SectorPreviewDoorMeshResolver meshResolver;
+};
+
+class SectorPreviewDoorRenderer {
+public:
+    struct DoorMeshCacheEntry {
+        Mesh mesh = {};
+        SectorDoorSlabMeshData meshData;
+        float width = 0.0f;
+        float height = 0.0f;
+        float thickness = 0.0f;
+        SectorDoorFaceUvSet faceUvs;
+        std::vector<Color> staticLightingColors;
+        bool seenThisFrame = false;
+    };
+
+    void ReserveRuntimeDoorCapacity(size_t capacity);
+    void PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld);
+    void ClearPreparedShadowCasters();
+    void UnloadDoorMeshes();
+
+    bool HasCachedDoorMeshes() const { return !doorMeshCache.empty(); }
+    DoorMeshCacheEntry* FindMutableDoorMesh(int placedObjectId);
+    const DoorMeshCacheEntry* FindDoorMesh(int placedObjectId) const;
+    const std::vector<SectorDoorShadowCaster>& ShadowCasters() const { return runtimeDoorShadowCasters; }
+
+    const Mesh* ResolveDoorShadowCasterMesh(
+            const SectorDoorShadowCaster& caster,
+            float& outWidth,
+            float& outHeight) const;
+    static const Mesh* ResolveDoorShadowCasterMesh(
+            void* userData,
+            const SectorDoorShadowCaster& caster,
+            float& outWidth,
+            float& outHeight);
+
+private:
+    std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;
+    std::vector<SectorDoorShadowCaster> runtimeDoorShadowCasters;
 };
 
 } // namespace game

@@ -126,8 +126,6 @@ private:
             engine::AssetManager& assets,
             engine::World& runtimeObjectWorld,
             SectorRuntimeDoorLightingContext doorLighting);
-    void PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld);
-    void UnloadDoorMeshes();
     static const Texture2D* ResolveShadowCasterTexture(
             void* userData,
             engine::AssetManager& assets,
@@ -212,18 +210,7 @@ private:
     Material doorOpaqueMaterial = {};
     Texture2D doorOpaqueDefaultMaterialTexture = {};
     bool doorOpaqueMaterialLoaded = false;
-    struct DoorMeshCacheEntry {
-        Mesh mesh = {};
-        SectorDoorSlabMeshData meshData;
-        float width = 0.0f;
-        float height = 0.0f;
-        float thickness = 0.0f;
-        SectorDoorFaceUvSet faceUvs;
-        std::vector<Color> staticLightingColors;
-        bool seenThisFrame = false;
-    };
-    std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;
-    std::vector<SectorDoorShadowCaster> runtimeDoorShadowCasters;
+    SectorPreviewDoorRenderer doorRenderer;
     SectorPreviewDynamicLighting dynamicLightState;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;

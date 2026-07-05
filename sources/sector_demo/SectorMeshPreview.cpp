@@ -20,7 +20,6 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
-#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -772,59 +771,6 @@ bool ComputeGeometryBounds(const SectorGeneratedGeometry& geometry, Vector3& out
     return found;
 }
 
-Mesh CreateDoorSlabMesh(const SectorDoorSlabMeshData& data)
-{
-    Mesh mesh = {};
-    if (data.vertices.empty()
-            || data.vertices.size() > static_cast<size_t>(std::numeric_limits<int>::max())
-            || data.indices.empty()
-            || data.indices.size() % 3u != 0u
-            || data.indices.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
-        return mesh;
-    }
-
-    mesh.vertexCount = static_cast<int>(data.vertices.size());
-    mesh.triangleCount = static_cast<int>(data.indices.size() / 3u);
-    mesh.vertices = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 3 * sizeof(float))));
-    mesh.normals = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 3 * sizeof(float))));
-    mesh.texcoords = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 2 * sizeof(float))));
-    mesh.colors = static_cast<unsigned char*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 4 * sizeof(unsigned char))));
-    mesh.indices = static_cast<unsigned short*>(MemAlloc(static_cast<unsigned int>(data.indices.size() * sizeof(unsigned short))));
-
-    if (mesh.vertices == nullptr
-            || mesh.normals == nullptr
-            || mesh.texcoords == nullptr
-            || mesh.colors == nullptr
-            || mesh.indices == nullptr) {
-        std::fprintf(stderr, "[SectorDemo ERROR] Failed to allocate door slab mesh data\n");
-        UnloadMesh(mesh);
-        return Mesh{};
-    }
-
-    for (int i = 0; i < mesh.vertexCount; ++i) {
-        const SectorDoorSlabMeshVertex& vertex = data.vertices[static_cast<size_t>(i)];
-        mesh.vertices[i * 3 + 0] = vertex.position.x;
-        mesh.vertices[i * 3 + 1] = vertex.position.y;
-        mesh.vertices[i * 3 + 2] = vertex.position.z;
-        mesh.normals[i * 3 + 0] = vertex.normal.x;
-        mesh.normals[i * 3 + 1] = vertex.normal.y;
-        mesh.normals[i * 3 + 2] = vertex.normal.z;
-        mesh.texcoords[i * 2 + 0] = vertex.uv.x;
-        mesh.texcoords[i * 2 + 1] = vertex.uv.y;
-        mesh.colors[i * 4 + 0] = vertex.color.r;
-        mesh.colors[i * 4 + 1] = vertex.color.g;
-        mesh.colors[i * 4 + 2] = vertex.color.b;
-        mesh.colors[i * 4 + 3] = vertex.color.a;
-    }
-
-    for (size_t i = 0; i < data.indices.size(); ++i) {
-        mesh.indices[i] = data.indices[i];
-    }
-
-    UploadMesh(&mesh, false);
-    return mesh;
-}
-
 } // namespace
 
 const char* SectorDoorLightingDebugModeName(SectorDoorLightingDebugMode mode)
@@ -957,9 +903,7 @@ bool SectorMeshPreview::RebuildRendererResources(
     dynamicLightState.RebuildSources(
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
-    doorMeshCache.reserve(kSectorRuntimeObjectInitialCapacity);
-    runtimeDoorShadowCasters.clear();
-    runtimeDoorShadowCasters.reserve(kSectorRuntimeObjectInitialCapacity);
+    doorRenderer.ReserveRuntimeDoorCapacity(kSectorRuntimeObjectInitialCapacity);
     runtimeSeconds = 0.0f;
 
     if (!dynamicLightState.EnsureShadowMapResources()) {
@@ -1083,7 +1027,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     visibilityGraphValid = false;
     visibilityLookupWorldValid = false;
     dynamicLightState.Reset();
-    runtimeDoorShadowCasters.clear();
+    doorRenderer.ClearPreparedShadowCasters();
     runtimeSeconds = 0.0f;
     if (!initialized
             && engine::IsNull(assetScope)
@@ -1094,7 +1038,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
             && !billboardRenderer.IsLoaded()
             && !doorOpaqueShaderLoaded
             && !doorOpaqueMaterialLoaded
-            && doorMeshCache.empty()
+            && !doorRenderer.HasCachedDoorMeshes()
             && !dynamicLightState.HasShadowMapResources()
             && !dynamicLightState.HasShadowMaterial()
             && !skyRenderer.IsLoaded()) {
@@ -1105,7 +1049,7 @@ void SectorMeshPreview::ShutdownRendererResources(engine::AssetManager& assets)
     dynamicLightState.UnloadShadowMaterial();
     dynamicLightState.UnloadShadowMapResources();
     skyRenderer.Shutdown();
-    UnloadDoorMeshes();
+    doorRenderer.UnloadDoorMeshes();
     UnloadSectorMeshes(meshes);
     textureHandlesById.clear();
     lightmapTexture = engine::NullTextureHandle();
@@ -1295,69 +1239,6 @@ void SectorMeshPreview::DrawScene(
     EndMode3D();
 }
 
-void SectorMeshPreview::PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld)
-{
-    for (auto& entry : doorMeshCache) {
-        entry.second.seenThisFrame = false;
-    }
-    runtimeDoorShadowCasters.clear();
-
-    runtimeObjectWorld.ForEach<
-            SectorObjectTransform,
-            SectorObject,
-            SectorDoor,
-            SectorDoorResolvedAnchor,
-            SectorDoorRender>(
-            [this](
-                    engine::Entity entity,
-                    SectorObjectTransform& transform,
-                    SectorObject& object,
-                    SectorDoor& door,
-                    SectorDoorResolvedAnchor& anchor,
-                    SectorDoorRender& render) {
-                if (!AppendSectorDoorShadowCaster(
-                            entity,
-                            transform,
-                            object,
-                            door,
-                            anchor,
-                            render,
-                            runtimeDoorShadowCasters)) {
-                    return;
-                }
-
-                DoorMeshCacheEntry& cacheEntry = doorMeshCache[door.placedObjectId];
-                cacheEntry.seenThisFrame = true;
-                const bool meshDirty = cacheEntry.mesh.vertexCount <= 0
-                        || cacheEntry.width != render.width
-                        || cacheEntry.height != render.height
-                        || cacheEntry.thickness != render.thickness
-                        || !SameSectorDoorFaceUvSet(cacheEntry.faceUvs, render.faceUvs);
-                if (meshDirty) {
-                    if (cacheEntry.mesh.vertexCount > 0) {
-                        UnloadMesh(cacheEntry.mesh);
-                    }
-                    cacheEntry.meshData = BuildSectorDoorSlabMeshData(render);
-                    cacheEntry.mesh = CreateDoorSlabMesh(cacheEntry.meshData);
-                    cacheEntry.width = render.width;
-                    cacheEntry.height = render.height;
-                    cacheEntry.thickness = render.thickness;
-                    cacheEntry.faceUvs = render.faceUvs;
-                }
-            });
-
-    for (auto it = doorMeshCache.begin(); it != doorMeshCache.end();) {
-        if (!it->second.seenThisFrame) {
-            if (it->second.mesh.vertexCount > 0) {
-                UnloadMesh(it->second.mesh);
-            }
-            it = doorMeshCache.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
 void SectorMeshPreview::DrawRuntimeDoors(
         engine::AssetManager& assets,
         engine::World& runtimeObjectWorld,
@@ -1369,7 +1250,7 @@ void SectorMeshPreview::DrawRuntimeDoors(
         return;
     }
 
-    PrepareRuntimeDoorMeshes(runtimeObjectWorld);
+    doorRenderer.PrepareRuntimeDoorMeshes(runtimeObjectWorld);
 
     size_t consideredCount = 0;
     size_t drawnCount = 0;
@@ -1464,39 +1345,39 @@ void SectorMeshPreview::DrawRuntimeDoors(
                     return;
                 }
 
-                auto cacheIt = doorMeshCache.find(door.placedObjectId);
-                if (cacheIt == doorMeshCache.end() || cacheIt->second.mesh.vertexCount <= 0) {
+                SectorPreviewDoorRenderer::DoorMeshCacheEntry* cacheEntry =
+                        doorRenderer.FindMutableDoorMesh(door.placedObjectId);
+                if (cacheEntry == nullptr || cacheEntry->mesh.vertexCount <= 0) {
                     ++skippedCount;
                     return;
                 }
-                DoorMeshCacheEntry& cacheEntry = cacheIt->second;
 
                 if (!BuildSectorDoorStaticLightingColors(
-                            cacheEntry.meshData,
+                            cacheEntry->meshData,
                             transform,
                             object,
                             anchor,
                             objectLightProbes,
                             doorLighting.mapForFallback,
-                            cacheEntry.staticLightingColors)) {
-                    cacheEntry.staticLightingColors.assign(
-                            static_cast<size_t>(cacheEntry.mesh.vertexCount),
+                            cacheEntry->staticLightingColors)) {
+                    cacheEntry->staticLightingColors.assign(
+                            static_cast<size_t>(cacheEntry->mesh.vertexCount),
                             WHITE);
                 }
-                if (cacheEntry.mesh.colors != nullptr
-                        && cacheEntry.staticLightingColors.size() == static_cast<size_t>(cacheEntry.mesh.vertexCount)) {
-                    for (int i = 0; i < cacheEntry.mesh.vertexCount; ++i) {
-                        const Color color = cacheEntry.staticLightingColors[static_cast<size_t>(i)];
-                        cacheEntry.mesh.colors[i * 4 + 0] = color.r;
-                        cacheEntry.mesh.colors[i * 4 + 1] = color.g;
-                        cacheEntry.mesh.colors[i * 4 + 2] = color.b;
-                        cacheEntry.mesh.colors[i * 4 + 3] = color.a;
+                if (cacheEntry->mesh.colors != nullptr
+                        && cacheEntry->staticLightingColors.size() == static_cast<size_t>(cacheEntry->mesh.vertexCount)) {
+                    for (int i = 0; i < cacheEntry->mesh.vertexCount; ++i) {
+                        const Color color = cacheEntry->staticLightingColors[static_cast<size_t>(i)];
+                        cacheEntry->mesh.colors[i * 4 + 0] = color.r;
+                        cacheEntry->mesh.colors[i * 4 + 1] = color.g;
+                        cacheEntry->mesh.colors[i * 4 + 2] = color.b;
+                        cacheEntry->mesh.colors[i * 4 + 3] = color.a;
                     }
                     UpdateMeshBuffer(
-                            cacheEntry.mesh,
+                            cacheEntry->mesh,
                             RL_DEFAULT_SHADER_ATTRIB_LOCATION_COLOR,
-                            cacheEntry.mesh.colors,
-                            cacheEntry.mesh.vertexCount * 4 * static_cast<int>(sizeof(unsigned char)),
+                            cacheEntry->mesh.colors,
+                            cacheEntry->mesh.vertexCount * 4 * static_cast<int>(sizeof(unsigned char)),
                             0);
                 }
 
@@ -1512,7 +1393,7 @@ void SectorMeshPreview::DrawRuntimeDoors(
                 doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = *texture;
                 doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
                 DrawMesh(
-                        cacheEntry.mesh,
+                        cacheEntry->mesh,
                         doorOpaqueMaterial,
                         BuildSectorDoorSlabModelMatrix(transform, anchor));
                 ++drawnCount;
@@ -1580,30 +1461,19 @@ void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
     }
 
     if (runtimeObjectWorld != nullptr) {
-        PrepareRuntimeDoorMeshes(*runtimeObjectWorld);
+        doorRenderer.PrepareRuntimeDoorMeshes(*runtimeObjectWorld);
     } else {
-        runtimeDoorShadowCasters.clear();
+        doorRenderer.ClearPreparedShadowCasters();
     }
 
     SectorPreviewDynamicSpotLightShadowRenderContext context;
     context.assets = &assets;
     context.sectorDrawRecords = &meshes.sectorDrawRecords;
-    context.doorShadowCasters = &runtimeDoorShadowCasters;
+    context.doorShadowCasters = &doorRenderer.ShadowCasters();
     context.userData = this;
     context.textureResolver = &SectorMeshPreview::ResolveShadowCasterTexture;
     context.doorMeshResolver = &SectorMeshPreview::ResolveDoorShadowCasterMesh;
     dynamicLightState.RenderShadowMaps(context);
-}
-
-void SectorMeshPreview::UnloadDoorMeshes()
-{
-    for (auto& entry : doorMeshCache) {
-        if (entry.second.mesh.vertexCount > 0) {
-            UnloadMesh(entry.second.mesh);
-            entry.second.mesh = Mesh{};
-        }
-    }
-    doorMeshCache.clear();
 }
 
 void SectorMeshPreview::ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
@@ -1759,15 +1629,7 @@ const Mesh* SectorMeshPreview::ResolveDoorShadowCasterMesh(
     if (preview == nullptr) {
         return nullptr;
     }
-
-    const auto cacheIt = preview->doorMeshCache.find(caster.placedObjectId);
-    if (cacheIt == preview->doorMeshCache.end() || cacheIt->second.mesh.vertexCount <= 0) {
-        return nullptr;
-    }
-
-    outWidth = cacheIt->second.width;
-    outHeight = cacheIt->second.height;
-    return &cacheIt->second.mesh;
+    return preview->doorRenderer.ResolveDoorShadowCasterMesh(caster, outWidth, outHeight);
 }
 
 void SectorMeshPreview::UpdateCamera()
