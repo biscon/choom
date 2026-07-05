@@ -23,6 +23,24 @@ std::vector<SectorEditorPickCandidate> SelectPickCandidatesForManipulation(
             : std::vector<SectorEditorPickCandidate>{};
 }
 
+SectorEditorMoveContext BuildMoveContext(SectorEditorManipulationServiceContext& context)
+{
+    return SectorEditorMoveContext{
+            context.state,
+            context.statusText,
+            context.screenToMap,
+            context.snapMapPoint,
+            context.selectRuntimeObject,
+            context.updateCachedRuntimeObjectDraw,
+            context.markTopologyDocumentEdited,
+            context.refreshRuntimeObjectsAfterAuthoringEdit};
+}
+
+SectorEditorSelectionTarget MakeRuntimeObjectSelectionTarget(int objectId)
+{
+    return SectorEditorSelectionTarget{SectorEditorSelectionTargetKind::RuntimeObject, objectId};
+}
+
 } // namespace
 
 bool IsAnySectorEditorManipulationActive(const SectorEditorManipulationServiceContext& context)
@@ -42,8 +60,14 @@ void UpdateActiveSectorEditorManipulation(
     if (context.state.lightDrag.active && context.updateLightDrag != nullptr) {
         context.updateLightDrag(context.userData, input);
     }
-    if (context.state.runtimeObjectDrag.active && context.updateRuntimeObjectDrag != nullptr) {
-        context.updateRuntimeObjectDrag(context.userData, input);
+    if (context.state.runtimeObjectDrag.active) {
+        if (context.placedObjectMoveProvider != nullptr
+                && context.placedObjectMoveProvider->updateMove != nullptr) {
+            SectorEditorMoveContext moveContext = BuildMoveContext(context);
+            context.placedObjectMoveProvider->updateMove(moveContext, input.MousePosition());
+        } else if (context.updateRuntimeObjectDrag != nullptr) {
+            context.updateRuntimeObjectDrag(context.userData, input);
+        }
     }
 }
 
@@ -55,8 +79,14 @@ void FinishActiveSectorEditorManipulation(SectorEditorManipulationServiceContext
     if (context.state.lightDrag.active && context.finishLightDrag != nullptr) {
         context.finishLightDrag(context.userData);
     }
-    if (context.state.runtimeObjectDrag.active && context.finishRuntimeObjectDrag != nullptr) {
-        context.finishRuntimeObjectDrag(context.userData);
+    if (context.state.runtimeObjectDrag.active) {
+        if (context.placedObjectMoveProvider != nullptr
+                && context.placedObjectMoveProvider->finishMove != nullptr) {
+            SectorEditorMoveContext moveContext = BuildMoveContext(context);
+            context.placedObjectMoveProvider->finishMove(moveContext);
+        } else if (context.finishRuntimeObjectDrag != nullptr) {
+            context.finishRuntimeObjectDrag(context.userData);
+        }
     }
 }
 
@@ -74,8 +104,14 @@ bool CancelFirstActiveSectorEditorManipulation(
         context.cancelLightDrag(context.userData, lightMessage);
         return true;
     }
-    if (context.state.runtimeObjectDrag.active && context.cancelRuntimeObjectDrag != nullptr) {
-        context.cancelRuntimeObjectDrag(context.userData, runtimeObjectMessage);
+    if (context.state.runtimeObjectDrag.active) {
+        if (context.placedObjectMoveProvider != nullptr
+                && context.placedObjectMoveProvider->cancelMove != nullptr) {
+            SectorEditorMoveContext moveContext = BuildMoveContext(context);
+            context.placedObjectMoveProvider->cancelMove(moveContext, runtimeObjectMessage);
+        } else if (context.cancelRuntimeObjectDrag != nullptr) {
+            context.cancelRuntimeObjectDrag(context.userData, runtimeObjectMessage);
+        }
         return true;
     }
     return false;
@@ -93,8 +129,14 @@ void CancelActiveSectorEditorManipulation(
     if (context.state.lightDrag.active && context.cancelLightDrag != nullptr) {
         context.cancelLightDrag(context.userData, lightMessage);
     }
-    if (context.state.runtimeObjectDrag.active && context.cancelRuntimeObjectDrag != nullptr) {
-        context.cancelRuntimeObjectDrag(context.userData, runtimeObjectMessage);
+    if (context.state.runtimeObjectDrag.active) {
+        if (context.placedObjectMoveProvider != nullptr
+                && context.placedObjectMoveProvider->cancelMove != nullptr) {
+            SectorEditorMoveContext moveContext = BuildMoveContext(context);
+            context.placedObjectMoveProvider->cancelMove(moveContext, runtimeObjectMessage);
+        } else if (context.cancelRuntimeObjectDrag != nullptr) {
+            context.cancelRuntimeObjectDrag(context.userData, runtimeObjectMessage);
+        }
     }
 }
 
@@ -146,7 +188,19 @@ void StartSectorEditorSelectedManipulation(
 
     switch (target.kind) {
         case SectorEditorPickKind::RuntimeObject:
-            if (context.startRuntimeObjectDrag != nullptr) {
+            if (context.placedObjectMoveProvider != nullptr
+                    && context.placedObjectMoveProvider->canMove != nullptr
+                    && context.placedObjectMoveProvider->beginMove != nullptr) {
+                SectorEditorMoveContext moveContext = BuildMoveContext(context);
+                const SectorEditorSelectionTarget selectionTarget =
+                        MakeRuntimeObjectSelectionTarget(target.id);
+                if (context.placedObjectMoveProvider->canMove(moveContext, selectionTarget)) {
+                    context.placedObjectMoveProvider->beginMove(
+                            moveContext,
+                            selectionTarget,
+                            screenPoint);
+                }
+            } else if (context.startRuntimeObjectDrag != nullptr) {
                 context.startRuntimeObjectDrag(context.userData, target.id);
             }
             break;

@@ -1,11 +1,14 @@
 #pragma once
 
 #include "engine/input/Input.h"
+#include "sector_editor/selection/SectorEditorMoveContext.h"
+#include "sector_editor/selection/SectorEditorSelectionTarget.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
 
 #include <raylib.h>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -31,6 +34,14 @@ struct SectorEditorManipulationServiceContext {
             Vector2 screenPoint,
             int& outLightId,
             SpotLightHandle& outHandle) = nullptr;
+
+    const SectorEditorMoveProvider* placedObjectMoveProvider = nullptr;
+    std::function<Vector2(Vector2)> screenToMap;
+    std::function<Vector2(Vector2)> snapMapPoint;
+    std::function<void(int)> selectRuntimeObject;
+    std::function<void(const SectorPlacedRuntimeObject&)> updateCachedRuntimeObjectDraw;
+    std::function<void(const char*)> markTopologyDocumentEdited;
+    std::function<void()> refreshRuntimeObjectsAfterAuthoringEdit;
 
     void (*startAuthoringVertexDrag)(
             void* userData,

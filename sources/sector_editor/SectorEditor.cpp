@@ -20,6 +20,7 @@
 #include "sector_editor/tools/SectorEditorToolModule.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectActions.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectDrag.h"
+#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectMoveProvider.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectInspector.h"
 #include "sector_editor/SectorEditorSectorInspector.h"
 #include "sector_editor/SectorEditorTextureModals.h"
@@ -2294,6 +2295,25 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
                 point,
                 outLightId,
                 outHandle);
+    };
+    context.placedObjectMoveProvider = &SectorEditorPlacedObjectMoveProvider();
+    context.screenToMap = [this](Vector2 screenPoint) {
+        return ScreenToMap(screenPoint);
+    };
+    context.snapMapPoint = [this](Vector2 mapPoint) {
+        return SnapMapPoint(mapPoint);
+    };
+    context.selectRuntimeObject = [this](int objectId) {
+        SelectRuntimeObject(objectId);
+    };
+    context.updateCachedRuntimeObjectDraw = [this](const SectorPlacedRuntimeObject& object) {
+        UpdateCachedRuntimeObjectDraw(state.topologyRenderCache, object);
+    };
+    context.markTopologyDocumentEdited = [this](const char* status) {
+        MarkTopologyDocumentEdited(status);
+    };
+    context.refreshRuntimeObjectsAfterAuthoringEdit = [this]() {
+        RefreshRuntimeObjectsAfterAuthoringEdit();
     };
     context.startAuthoringVertexDrag = [](void* userData, int vertexId, SectorTopologyCoordPoint point) {
         static_cast<SectorEditor*>(userData)->StartAuthoringVertexDrag(vertexId, point);

@@ -69,7 +69,7 @@ Task Type:
 | REF-048 | `[x]` | High | Editor architecture | Add passive SelectionTarget and provider type definitions | Codex task | Low/Medium | No behavior changes; shared vocabulary before service extraction |
 | REF-049 | `[x]` | High | Editor architecture | Extract Selection service helpers | Codex task | Medium | Preserve current selected state fields, stale cleanup, and UI reset behavior |
 | REF-050 | `[x]` | High | Editor architecture | Add Manipulation service shell | Codex task | Medium | Own generic drag lifecycle while delegating existing movement paths first |
-| REF-051 | `[ ]` | Medium | Editor architecture | Pilot first move provider | Codex task | Medium | Prefer placed-object/billboard provider; preserve door movement refusal |
+| REF-051 | `[x]` | Medium | Editor architecture | Pilot first move provider | Codex task | Medium | Completed; placed-object/billboard movement routes through provider while preserving door movement refusal |
 | REF-052 | `[ ]` | High | Editor architecture | Migrate Select tool using services/providers | Codex task | High | Do after Selection service, Manipulation service shell, and provider pilot |
 | REF-044 | `[ ]` | Medium | Editor architecture | Migrate material/sidedef/decal editing into `tools/materials/` | Audit first | Medium/High | Preserve material mutation/cache/preview rebuild paths |
 | REF-045 | `[ ]` | Medium | Editor architecture | Audit lights/source-hash-sensitive tool migration | Audit first | High | Static lights, directional light, and object probe settings affect source hash |
@@ -833,7 +833,7 @@ Task Type:
   - No provider dispatch was added yet.
   - No behavior changes intended.
 
-#### REF-051 `[ ]` Pilot first move provider
+#### REF-051 `[x]` Pilot first move provider
 
 - Source/audit reference:
   `docs/audit/sector_editor_selection_manipulation_contract.md`.
@@ -849,6 +849,13 @@ Task Type:
     callback context.
   - Preserve the current door movement refusal status text.
 - Completion notes:
+  - Added the first move provider pilot for placed objects.
+  - Placed-object/billboard movement now routes through the provider from the
+    Manipulation service.
+  - Door movement refusal is preserved by the existing placed-object drag path.
+  - Authoring vertex and light movement remain on fallback callbacks.
+  - No Select migration was performed.
+  - No behavior changes intended.
 
 #### REF-052 `[ ]` Migrate Select tool using services/providers
 

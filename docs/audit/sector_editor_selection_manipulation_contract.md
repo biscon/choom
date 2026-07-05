@@ -331,6 +331,9 @@ Phase 2: Extract Selection service helpers.
   `sources/sector_editor/selection/SectorEditorManipulationService.h/.cpp`.
   Existing drag implementations remain the source of behavior, and provider
   dispatch remains future work.
+- REF-051 note: the first move provider pilot was added for placed objects.
+  Provider dispatch is now proven for one movement family, and Select migration
+  remains future work.
 
 Phase 3: Add Manipulation service shell.
 
