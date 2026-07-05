@@ -74,7 +74,7 @@ Task Type:
 | REF-035 | `[>]` | Deferred | UI | Split `UI.cpp` without a UI-specific reason | Defer | Medium | Not a current dependency problem |
 | REF-036 | `[>]` | Deferred | Editor state | Full document-state vs preview-state rewrite | Defer | High | Needs dedicated plan if revived |
 | REF-037 | `[>]` | Deferred | Mesh preview | Full `SectorMeshPreview` facade rewrite | Defer | High | Needs dedicated plan if revived |
-| REF-039 | `[ ]` | Medium | Mesh preview | Rename Preview renderer terminology | Codex task | Medium | Mechanical rename after renderer extraction campaign |
+| REF-039 | `[ ]` | Medium | Mesh preview | Renderer terminology rename and renderer subdirectory move | Codex task | Medium | Mechanical rename plus renderer file move after extraction campaign |
 
 ## Backlog
 
@@ -425,24 +425,49 @@ Task Type:
     deferred extraction candidate, but no blocking ownership issue was found
     before the renderer terminology rename.
 
-#### REF-039 `[ ]` Rename Preview renderer terminology
+#### REF-039 `[ ]` Renderer terminology rename and renderer subdirectory move
 
 - Source/audit reference:
   `docs/audit/sector_mesh_preview_post_refactor_audit.md`.
 - Why it helps: aligns names with the post-extraction ownership model now that
   `SectorMeshPreview` and helpers are renderer/facade objects rather than a
-  monolithic preview implementation.
+  monolithic preview implementation, and groups renderer-owned implementation
+  files under a dedicated directory.
 - Likely files: `SectorMeshPreview.*`, extracted `SectorPreview*` helpers,
-  editor/demo includes and call sites, source lists if file names change, tests,
-  docs, plans, audits, and backlog references where useful.
-- Suggested task type: Codex task.
-- Risk: Medium.
+  nearby renderer-only helpers if inspection shows they are clearly
+  renderer-owned, editor/demo includes and call sites, source lists if file
+  names change, tests, docs, plans, audits, and backlog references where useful.
+- Suggested destination directory: `sources/sector_demo/renderer/`.
+- Candidate move/rename mapping:
+  - `SectorMeshPreview.h/.cpp` -> `renderer/SectorMeshRenderer.h/.cpp`
+  - `SectorPreviewBillboardRenderer.h/.cpp` -> `renderer/SectorBillboardRenderer.h/.cpp`
+  - `SectorPreviewSkyRenderer.h/.cpp` -> `renderer/SectorSkyRenderer.h/.cpp`
+  - `SectorPreviewBloom.h/.cpp` -> `renderer/SectorBloomRenderer.h/.cpp`
+  - `SectorPreviewDynamicLighting.h/.cpp` -> `renderer/SectorDynamicLightingRenderer.h/.cpp` or `renderer/SectorDynamicLighting.h/.cpp`
+  - `SectorPreviewDoorRenderer.h/.cpp` -> `renderer/SectorDoorRenderer.h/.cpp`
+- Suggested task type: Codex task unless future inspection shows the move needs
+  a plan.
+- Status: Not Started.
+- Risk: Medium because the change is mechanical but creates broad include/file
+  churn.
 - Suggested verification: build, full `ctest`, `git diff --check`, and manual
   render smoke if practical.
 - Scope notes:
-  - Mechanical rename only.
-  - Do not move ownership, change render order, edit shaders, change resource
-    lifetime, alter lightmap source-hash behavior, or refactor the facade.
+  - Rename Preview terminology to Renderer terminology.
+  - Move renderer files under `sources/sector_demo/renderer/`.
+  - Inspect whether nearby renderer-only files should move in the same pass,
+    but do not overreach.
+  - Do not move topology, runtime, collision, lightmap, or mesh-builder backend
+    files just because renderers use them.
+  - Keep `SectorMeshPreview` / `SectorPreview*` behavior unchanged during
+    implementation.
+  - Do not rename `sector_demo` to `sector_engine` in this pass.
+  - Do not change shader code, resource ownership, render order, ECS lifecycle,
+    lightmap/source hash, collision/physics, schema, or editor behavior.
+  - CMake may need explicit test target updates if moved `.cpp` files are
+    listed manually.
+  - Main app source glob should likely pick up moved `.cpp` files, but explicit
+    test targets must be checked.
 - Completion notes:
 
 ### 5. SectorEditor.cpp God File

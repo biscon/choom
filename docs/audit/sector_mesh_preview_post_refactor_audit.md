@@ -186,29 +186,31 @@ It is safe to proceed to a mechanical rename pass after this audit. No major own
 
 Candidate mapping:
 
-- `SectorMeshPreview` -> `SectorMeshRenderer`
-- `SectorPreviewBillboardRenderer` -> `SectorBillboardRenderer`
-- `SectorPreviewSkyRenderer` -> `SectorSkyRenderer`
-- `SectorPreviewBloom` -> `SectorBloomRenderer`
-- `SectorPreviewDynamicLighting` -> `SectorDynamicLightingRenderer` or `SectorDynamicLighting`
-- `SectorPreviewDoorRenderer` -> `SectorDoorRenderer`
+- `SectorMeshPreview` -> `sources/sector_demo/renderer/SectorMeshRenderer`
+- `SectorPreviewBillboardRenderer` -> `sources/sector_demo/renderer/SectorBillboardRenderer`
+- `SectorPreviewSkyRenderer` -> `sources/sector_demo/renderer/SectorSkyRenderer`
+- `SectorPreviewBloom` -> `sources/sector_demo/renderer/SectorBloomRenderer`
+- `SectorPreviewDynamicLighting` -> `sources/sector_demo/renderer/SectorDynamicLightingRenderer` or `sources/sector_demo/renderer/SectorDynamicLighting`
+- `SectorPreviewDoorRenderer` -> `sources/sector_demo/renderer/SectorDoorRenderer`
 
 The rename pass should include:
 
-- source files and headers under `sources/sector_demo`
+- moving clearly renderer-owned source files and headers into
+  `sources/sector_demo/renderer/`
 - includes in `sources/sector_demo`, `sources/sector_editor`, tests, and docs
 - class/type/function names that contain the old terminology
 - comments/docs/plans/audits/backlog references where useful
-- CMake/source-list names only if file names are renamed
+- CMake/source-list names if moved or renamed files are listed manually
 - tests only for include/type name updates
 
 The rename pass should be mechanical only:
 
 - no behavior changes
-- no ownership moves
+- no resource ownership moves
 - no shader/resource changes
 - no topology/cache changes
 - no lightmap source-hash changes
+- no `sector_demo` to `sector_engine` rename
 - build/test after rename
 - manual render smoke after rename if practical
 
