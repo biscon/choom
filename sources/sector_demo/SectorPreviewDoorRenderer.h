@@ -95,6 +95,7 @@ struct SectorPreviewDoorDrawContext {
     SectorRuntimeDoorLightingContext lighting;
     SectorPreviewDoorDynamicLightContext dynamicLighting;
     SectorPreviewDoorTextureResolver textureResolver;
+    const Texture2D* defaultMaterialTexture = nullptr;
     std::string* renderDebugText = nullptr;
 };
 
@@ -146,6 +147,7 @@ public:
     bool LoadOpaqueResources();
     void ShutdownOpaqueResources();
     void PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld);
+    void Draw(const SectorPreviewDoorDrawContext& context);
     void ClearPreparedShadowCasters();
     void UnloadDoorMeshes();
 
@@ -161,6 +163,7 @@ public:
     SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorLightingDebugMode; }
     void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorLightingDebugMode = mode; }
     int DoorLightingDebugModeShaderValue() const { return static_cast<int>(doorLightingDebugMode); }
+    const SectorPreviewDoorRenderStats& RenderStats() const { return renderStats; }
     DoorMeshCacheEntry* FindMutableDoorMesh(int placedObjectId);
     const DoorMeshCacheEntry* FindDoorMesh(int placedObjectId) const;
     const std::vector<SectorDoorShadowCaster>& ShadowCasters() const { return runtimeDoorShadowCasters; }
@@ -187,6 +190,7 @@ private:
     Texture2D opaqueDefaultMaterialTexture = {};
     bool opaqueMaterialLoaded = false;
     SectorDoorLightingDebugMode doorLightingDebugMode = SectorDoorLightingDebugMode::Normal;
+    SectorPreviewDoorRenderStats renderStats;
 };
 
 } // namespace game

@@ -103,9 +103,9 @@ public:
     const std::vector<int>& SelectedDynamicLightIds() const { return dynamicLightState.SelectedLightIds(); }
     size_t DynamicLightCandidateCount() const { return dynamicLightState.CandidateCount(); }
     size_t DynamicLightSourceCount() const { return dynamicLightState.SourceCount(); }
-    size_t DoorConsideredCount() const { return doorRenderStats.considered; }
-    size_t DoorDrawnCount() const { return doorRenderStats.drawn; }
-    size_t DoorSkippedCount() const { return doorRenderStats.skipped; }
+    size_t DoorConsideredCount() const { return doorRenderer.RenderStats().considered; }
+    size_t DoorDrawnCount() const { return doorRenderer.RenderStats().drawn; }
+    size_t DoorSkippedCount() const { return doorRenderer.RenderStats().skipped; }
 
 private:
     engine::TextureHandle TextureForId(const std::string& textureId) const;
@@ -176,7 +176,6 @@ private:
     SectorPreviewDynamicLighting dynamicLightState;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
-    SectorPreviewDoorRenderStats doorRenderStats;
     int lightmapStatus = 0;
     bool initialized = false;
     size_t sectorCount = 0;

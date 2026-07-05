@@ -43,17 +43,6 @@ void AppendBillboardRenderDebugText(std::string& renderDebugText, const std::str
     }
 }
 
-void AppendDoorRenderDebugText(std::string& renderDebugText, const std::string& doorText)
-{
-    const size_t existing = renderDebugText.find(" | doors:");
-    if (existing != std::string::npos) {
-        renderDebugText.erase(existing);
-    }
-    if (!doorText.empty() && !renderDebugText.empty()) {
-        renderDebugText += " | " + doorText;
-    }
-}
-
 Vector2 PreviewYawForwardXZ(float yawRadians)
 {
     return Vector2{std::cos(yawRadians), std::sin(yawRadians)};
@@ -873,189 +862,21 @@ void SectorMeshPreview::DrawRuntimeDoors(
         engine::World& runtimeObjectWorld,
         SectorRuntimeDoorLightingContext doorLighting)
 {
-    if (!doorRenderer.IsOpaqueReady()) {
-        doorRenderStats = {};
-        AppendDoorRenderDebugText(renderDebugText, "doors: shader unavailable");
-        return;
-    }
-
-    Material& doorOpaqueMaterial = doorRenderer.OpaqueMaterial();
-    const Texture2D& doorOpaqueDefaultMaterialTexture = doorRenderer.OpaqueDefaultMaterialTexture();
-    const SectorPreviewDoorOpaqueShaderLocations& doorOpaqueLocations = doorRenderer.OpaqueShaderLocations();
-    doorRenderer.PrepareRuntimeDoorMeshes(runtimeObjectWorld);
-
-    size_t consideredCount = 0;
-    size_t drawnCount = 0;
-    size_t skippedCount = 0;
-    const SectorBakedObjectLightProbeRuntimeData emptyObjectLightProbes;
-    const SectorBakedObjectLightProbeRuntimeData& objectLightProbes =
-            doorLighting.objectLightProbes != nullptr
-            ? *doorLighting.objectLightProbes
-            : emptyObjectLightProbes;
-
-    rlDisableColorBlend();
-    rlDisableBackfaceCulling();
-    rlEnableDepthTest();
-    rlEnableDepthMask();
-    SectorPreviewDynamicLightShaderLocations dynamicLightLocations;
-    dynamicLightLocations.dynamicLightCount = doorOpaqueLocations.dynamicLightCount;
-    dynamicLightLocations.dynamicLightPositions = doorOpaqueLocations.dynamicLightPositions;
-    dynamicLightLocations.dynamicLightColors = doorOpaqueLocations.dynamicLightColors;
-    dynamicLightLocations.dynamicLightRadii = doorOpaqueLocations.dynamicLightRadii;
-    dynamicLightLocations.dynamicLightIntensities = doorOpaqueLocations.dynamicLightIntensities;
-    dynamicLightLocations.dynamicLightTypes = doorOpaqueLocations.dynamicLightTypes;
-    dynamicLightLocations.dynamicLightDirections = doorOpaqueLocations.dynamicLightDirections;
-    dynamicLightLocations.dynamicLightInnerConeCos = doorOpaqueLocations.dynamicLightInnerConeCos;
-    dynamicLightLocations.dynamicLightOuterConeCos = doorOpaqueLocations.dynamicLightOuterConeCos;
-    dynamicLightLocations.dynamicLightingClamp = doorOpaqueLocations.dynamicLightingClamp;
-    UploadSectorPreviewDynamicPointLights(
-            doorOpaqueMaterial.shader,
-            dynamicLightLocations,
-            dynamicLightingEnabled,
-            runtimeSeconds,
-            dynamicLightState.SelectedLights());
-    const SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms =
-            dynamicLightState.PackShadowUniforms();
-    SectorPreviewDynamicSpotLightShadowShaderLocations shadowLocations;
-    shadowLocations.dynamicLightShadowSlots = doorOpaqueLocations.dynamicLightShadowSlots;
-    shadowLocations.shadowLightMatrices = doorOpaqueLocations.shadowLightMatrices;
-    shadowLocations.shadowBias = doorOpaqueLocations.shadowBias;
-    shadowLocations.shadowStrength = doorOpaqueLocations.shadowStrength;
-    shadowLocations.shadowSoftness = doorOpaqueLocations.shadowSoftness;
-    UploadSectorPreviewDynamicSpotLightShadowUniforms(doorOpaqueMaterial.shader, shadowLocations, shadowUniforms);
-    const Texture2D* shadowMap0 = dynamicLightState.ShadowMapDepthTexture(0);
-    const Texture2D* shadowMap1 = dynamicLightState.ShadowMapDepthTexture(1);
-    doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = shadowMap0 != nullptr ? *shadowMap0 : Texture2D{};
-    doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = shadowMap1 != nullptr ? *shadowMap1 : Texture2D{};
-    if (doorOpaqueLocations.debugMode >= 0) {
-        const int debugMode = doorRenderer.DoorLightingDebugModeShaderValue();
-        SetShaderValue(doorOpaqueMaterial.shader, doorOpaqueLocations.debugMode, &debugMode, SHADER_UNIFORM_INT);
-    }
-    if (doorOpaqueLocations.texture >= 0) {
-        const int diffuseTextureUnit = 0;
-        SetShaderValue(doorOpaqueMaterial.shader, doorOpaqueLocations.texture, &diffuseTextureUnit, SHADER_UNIFORM_INT);
-    }
-
-    runtimeObjectWorld.ForEach<
-            SectorObjectTransform,
-            SectorObject,
-            SectorDoor,
-            SectorDoorResolvedAnchor,
-            SectorDoorRender>(
-            [this,
-             &assets,
-             &consideredCount,
-             &drawnCount,
-             &skippedCount,
-             &objectLightProbes,
-             &doorOpaqueMaterial,
-             &doorOpaqueLocations,
-             doorLighting](
-                    engine::Entity entity,
-                    SectorObjectTransform& transform,
-                    SectorObject& object,
-                    SectorDoor& door,
-                    SectorDoorResolvedAnchor& anchor,
-                    SectorDoorRender& render) {
-                ++consideredCount;
-                if (!object.visible || !door.enabled || !render.visible) {
-                    ++skippedCount;
-                    return;
-                }
-                if (render.width <= 0.0f || render.height <= 0.0f || render.thickness <= 0.0f) {
-                    ++skippedCount;
-                    return;
-                }
-
-                const engine::TextureHandle textureHandle = !render.textureId.empty()
-                        ? TextureForId(render.textureId)
-                        : engine::NullTextureHandle();
-                const Texture2D* texture = assets.GetTexture(textureHandle);
-                if (texture == nullptr) {
-                    texture = &defaultMaterialTexture;
-                }
-                if (texture == nullptr || texture->id == 0) {
-                    ++skippedCount;
-                    return;
-                }
-
-                SectorPreviewDoorRenderer::DoorMeshCacheEntry* cacheEntry =
-                        doorRenderer.FindMutableDoorMesh(door.placedObjectId);
-                if (cacheEntry == nullptr || cacheEntry->mesh.vertexCount <= 0) {
-                    ++skippedCount;
-                    return;
-                }
-
-                if (!BuildSectorDoorStaticLightingColors(
-                            cacheEntry->meshData,
-                            transform,
-                            object,
-                            anchor,
-                            objectLightProbes,
-                            doorLighting.mapForFallback,
-                            cacheEntry->staticLightingColors)) {
-                    cacheEntry->staticLightingColors.assign(
-                            static_cast<size_t>(cacheEntry->mesh.vertexCount),
-                            WHITE);
-                }
-                if (cacheEntry->mesh.colors != nullptr
-                        && cacheEntry->staticLightingColors.size() == static_cast<size_t>(cacheEntry->mesh.vertexCount)) {
-                    for (int i = 0; i < cacheEntry->mesh.vertexCount; ++i) {
-                        const Color color = cacheEntry->staticLightingColors[static_cast<size_t>(i)];
-                        cacheEntry->mesh.colors[i * 4 + 0] = color.r;
-                        cacheEntry->mesh.colors[i * 4 + 1] = color.g;
-                        cacheEntry->mesh.colors[i * 4 + 2] = color.b;
-                        cacheEntry->mesh.colors[i * 4 + 3] = color.a;
-                    }
-                    UpdateMeshBuffer(
-                            cacheEntry->mesh,
-                            RL_DEFAULT_SHADER_ATTRIB_LOCATION_COLOR,
-                            cacheEntry->mesh.colors,
-                            cacheEntry->mesh.vertexCount * 4 * static_cast<int>(sizeof(unsigned char)),
-                            0);
-                }
-
-                if (doorOpaqueLocations.tint >= 0) {
-                    const Vector4 tint{
-                            static_cast<float>(render.tint.r) / 255.0f,
-                            static_cast<float>(render.tint.g) / 255.0f,
-                            static_cast<float>(render.tint.b) / 255.0f,
-                            static_cast<float>(render.tint.a) / 255.0f};
-                    SetShaderValue(doorOpaqueMaterial.shader, doorOpaqueLocations.tint, &tint, SHADER_UNIFORM_VEC4);
-                }
-
-                doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = *texture;
-                doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
-                DrawMesh(
-                        cacheEntry->mesh,
-                        doorOpaqueMaterial,
-                        BuildSectorDoorSlabModelMatrix(transform, anchor));
-                ++drawnCount;
-            });
-
-    doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = doorOpaqueDefaultMaterialTexture;
-    doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
-    doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = Texture2D{};
-    rlActiveTextureSlot(0);
-    rlSetTexture(0);
-    rlEnableColorBlend();
-    rlSetBlendMode(BLEND_ALPHA);
-    rlEnableDepthTest();
-    rlEnableDepthMask();
-    rlEnableBackfaceCulling();
-
-    doorRenderStats.considered = consideredCount;
-    doorRenderStats.drawn = drawnCount;
-    doorRenderStats.skipped = skippedCount;
-    AppendDoorRenderDebugText(
-            renderDebugText,
-            "doors: "
-                    + std::to_string(drawnCount)
-                    + " drawn / "
-                    + std::to_string(consideredCount)
-                    + " considered, "
-                    + std::to_string(skippedCount)
-                    + " skipped");
+    SectorPreviewDoorDrawContext context;
+    context.assets = &assets;
+    context.runtimeObjectWorld = &runtimeObjectWorld;
+    context.lighting = doorLighting;
+    context.dynamicLighting.enabled = dynamicLightingEnabled;
+    context.dynamicLighting.runtimeSeconds = runtimeSeconds;
+    context.dynamicLighting.selectedLights = &dynamicLightState.SelectedLights();
+    context.dynamicLighting.shadowUniforms = dynamicLightState.PackShadowUniforms();
+    context.dynamicLighting.shadowMaps = dynamicLightState.BuildShadowMapTextures();
+    context.dynamicLighting.lightingClamp = DynamicLightingClamp;
+    context.textureResolver.userData = this;
+    context.textureResolver.resolve = &SectorMeshPreview::ResolveShadowCasterTexture;
+    context.defaultMaterialTexture = &defaultMaterialTexture;
+    context.renderDebugText = &renderDebugText;
+    doorRenderer.Draw(context);
 }
 
 SectorPreviewBillboardDynamicLightContext SectorMeshPreview::BuildBillboardDynamicLightContext() const
