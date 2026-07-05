@@ -30,17 +30,6 @@ namespace game {
 struct SectorTopologyMap;
 struct SectorBakedObjectLightProbeRuntimeData;
 
-enum class SectorDoorLightingDebugMode {
-    Normal = 0,
-    AlbedoOnly = 1,
-    BakedOnly = 2,
-    DynamicOnly = 3,
-    NormalVisualize = 4,
-    FlatColorNoTexture = 5
-};
-
-const char* SectorDoorLightingDebugModeName(SectorDoorLightingDebugMode mode);
-
 class SectorMeshPreview {
 public:
     bool Rebuild(
@@ -105,8 +94,8 @@ public:
     bool DynamicLightingEnabled() const { return dynamicLightingEnabled; }
     void SetDynamicLightingEnabled(bool enabled) { dynamicLightingEnabled = enabled; }
     void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
-    SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorLightingDebugMode; }
-    void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorLightingDebugMode = mode; }
+    SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorRenderer.DoorLightingDebugMode(); }
+    void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorRenderer.SetDoorLightingDebugMode(mode); }
     const std::vector<SectorPreviewDynamicPointLightUniform>& SelectedDynamicLights() const
     {
         return dynamicLightState.SelectedLights();
@@ -183,38 +172,10 @@ private:
     SectorPreviewSkyRenderer skyRenderer;
     SectorPreviewBloom bloomRenderer;
     SectorPreviewBillboardRenderer billboardRenderer;
-    Shader doorOpaqueShader = {};
-    int doorOpaqueTextureLoc = -1;
-    int doorOpaqueDynamicLightCountLoc = -1;
-    int doorOpaqueDynamicLightPositionsLoc = -1;
-    int doorOpaqueDynamicLightColorsLoc = -1;
-    int doorOpaqueDynamicLightRadiiLoc = -1;
-    int doorOpaqueDynamicLightIntensitiesLoc = -1;
-    int doorOpaqueDynamicLightTypesLoc = -1;
-    int doorOpaqueDynamicLightDirectionsLoc = -1;
-    int doorOpaqueDynamicLightInnerConeCosLoc = -1;
-    int doorOpaqueDynamicLightOuterConeCosLoc = -1;
-    int doorOpaqueDynamicLightShadowSlotsLoc = -1;
-    std::array<int, MaxDynamicSpotLightShadowCasters> doorOpaqueShadowLightMatrixLocs = [] {
-        std::array<int, MaxDynamicSpotLightShadowCasters> locs{};
-        locs.fill(-1);
-        return locs;
-    }();
-    int doorOpaqueShadowBiasLoc = -1;
-    int doorOpaqueShadowStrengthLoc = -1;
-    int doorOpaqueShadowSoftnessLoc = -1;
-    int doorOpaqueDynamicLightingClampLoc = -1;
-    int doorOpaqueDebugModeLoc = -1;
-    int doorOpaqueTintLoc = -1;
-    bool doorOpaqueShaderLoaded = false;
-    Material doorOpaqueMaterial = {};
-    Texture2D doorOpaqueDefaultMaterialTexture = {};
-    bool doorOpaqueMaterialLoaded = false;
     SectorPreviewDoorRenderer doorRenderer;
     SectorPreviewDynamicLighting dynamicLightState;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
-    SectorDoorLightingDebugMode doorLightingDebugMode = SectorDoorLightingDebugMode::Normal;
     SectorPreviewDoorRenderStats doorRenderStats;
     int lightmapStatus = 0;
     bool initialized = false;

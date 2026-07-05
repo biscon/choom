@@ -7,6 +7,7 @@
 
 #include <raylib.h>
 
+#include <array>
 #include <cstddef>
 #include <string>
 #include <unordered_map>
@@ -22,6 +23,17 @@ namespace game {
 struct SectorBakedObjectLightProbeRuntimeData;
 struct SectorDoorShadowCaster;
 struct SectorTopologyMap;
+
+enum class SectorDoorLightingDebugMode {
+    Normal = 0,
+    AlbedoOnly = 1,
+    BakedOnly = 2,
+    DynamicOnly = 3,
+    NormalVisualize = 4,
+    FlatColorNoTexture = 5
+};
+
+const char* SectorDoorLightingDebugModeName(SectorDoorLightingDebugMode mode);
 
 struct SectorRuntimeDoorLightingContext {
     const SectorBakedObjectLightProbeRuntimeData* objectLightProbes = nullptr;
@@ -92,6 +104,31 @@ struct SectorPreviewDoorShadowCasterContext {
     SectorPreviewDoorMeshResolver meshResolver;
 };
 
+struct SectorPreviewDoorOpaqueShaderLocations {
+    int texture = -1;
+    int dynamicLightCount = -1;
+    int dynamicLightPositions = -1;
+    int dynamicLightColors = -1;
+    int dynamicLightRadii = -1;
+    int dynamicLightIntensities = -1;
+    int dynamicLightTypes = -1;
+    int dynamicLightDirections = -1;
+    int dynamicLightInnerConeCos = -1;
+    int dynamicLightOuterConeCos = -1;
+    int dynamicLightShadowSlots = -1;
+    std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrices = [] {
+        std::array<int, MaxDynamicSpotLightShadowCasters> locs{};
+        locs.fill(-1);
+        return locs;
+    }();
+    int shadowBias = -1;
+    int shadowStrength = -1;
+    int shadowSoftness = -1;
+    int dynamicLightingClamp = -1;
+    int debugMode = -1;
+    int tint = -1;
+};
+
 class SectorPreviewDoorRenderer {
 public:
     struct DoorMeshCacheEntry {
@@ -106,11 +143,24 @@ public:
     };
 
     void ReserveRuntimeDoorCapacity(size_t capacity);
+    bool LoadOpaqueResources();
+    void ShutdownOpaqueResources();
     void PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld);
     void ClearPreparedShadowCasters();
     void UnloadDoorMeshes();
 
     bool HasCachedDoorMeshes() const { return !doorMeshCache.empty(); }
+    bool HasOpaqueResources() const { return opaqueShaderLoaded || opaqueMaterialLoaded; }
+    bool IsOpaqueReady() const
+    {
+        return opaqueShaderLoaded && opaqueMaterialLoaded && opaqueMaterial.shader.id != 0;
+    }
+    Material& OpaqueMaterial() { return opaqueMaterial; }
+    const Texture2D& OpaqueDefaultMaterialTexture() const { return opaqueDefaultMaterialTexture; }
+    const SectorPreviewDoorOpaqueShaderLocations& OpaqueShaderLocations() const { return opaqueShaderLocations; }
+    SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorLightingDebugMode; }
+    void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorLightingDebugMode = mode; }
+    int DoorLightingDebugModeShaderValue() const { return static_cast<int>(doorLightingDebugMode); }
     DoorMeshCacheEntry* FindMutableDoorMesh(int placedObjectId);
     const DoorMeshCacheEntry* FindDoorMesh(int placedObjectId) const;
     const std::vector<SectorDoorShadowCaster>& ShadowCasters() const { return runtimeDoorShadowCasters; }
@@ -126,8 +176,17 @@ public:
             float& outHeight);
 
 private:
+    void ResetOpaqueShaderLocations();
+
     std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;
     std::vector<SectorDoorShadowCaster> runtimeDoorShadowCasters;
+    Shader opaqueShader = {};
+    SectorPreviewDoorOpaqueShaderLocations opaqueShaderLocations;
+    bool opaqueShaderLoaded = false;
+    Material opaqueMaterial = {};
+    Texture2D opaqueDefaultMaterialTexture = {};
+    bool opaqueMaterialLoaded = false;
+    SectorDoorLightingDebugMode doorLightingDebugMode = SectorDoorLightingDebugMode::Normal;
 };
 
 } // namespace game
