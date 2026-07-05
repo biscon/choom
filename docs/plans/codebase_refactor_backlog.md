@@ -56,22 +56,26 @@ Task Type:
 | REF-017 | `[x]` | Medium | Mesh preview | Extract sky/bloom helpers | Codex task | Medium | GPU resource lifetime sensitive |
 | REF-018 | `[x]` | Medium | Mesh preview | Review remaining facade and ownership | Audit first | Low | Completed; facade acceptable before rename |
 | REF-019 | `[x]` | High | Editor god file | Audit remaining `SectorEditor.cpp` seams | Audit first | Low | Completed; see audit report |
+| REF-053 | `[x]` | High | Editor god file | Post-tool-migration `SectorEditor.cpp` line map | Audit first | Low | Completed; current size is 10,551 lines; recommends materials/sidedef/decal next |
 | REF-020 | `[ ]` | Medium | Editor god file | Extract texture/material action or inspector code | Codex task | Medium | Preserve document/cache paths; audit suggests SideDef/material inspector first |
 | REF-021 | `[x]` | Medium | Editor god file | Extract runtime object inspector/actions | Codex task | Medium | Completed; runtime object inspector/actions/modal/drag seams extracted |
 | REF-022 | `[ ]` | Medium | Editor god file | Extract light/static-light/object-probe inspector/actions | Codex task | Medium/High | Source-hash semantics matter; audit recommends mini audit before source-hash-sensitive extraction |
-| REF-023 | `[ ]` | Medium | Editor god file | Extract remaining modal draw flows | Codex task | Medium | Keep boundaries narrow; document/add-texture modals are good first slices |
+| REF-023 | `[ ]` | Low | Editor god file | Extract remaining modal draw flows | Codex task | Medium | Most obvious modal draw bodies have moved; remaining work is feature-specific routing |
 | REF-024 | `[ ]` | High | Editor god file | Review direct `state.topologyMap` mutations | Audit first | Medium | First-pass map exists in REF-019 audit; keep for narrower follow-up |
+| REF-054 | `[ ]` | High | Editor god file | Audit materials/sidedef/decal extraction boundary | Audit first | Medium | Narrow callback/context audit before REF-055 |
+| REF-055 | `[ ]` | High | Editor god file | Extract SideDef/material/decal inspector into `tools/materials/` | Codex task | Medium/High | Preserve material finish paths, cache invalidation, and preview rebuild |
+| REF-056 | `[ ]` | Medium | Editor god file | Audit preview overlay and preview UV/material panel extraction | Audit first | Medium/High | Decide material-vs-preview ownership before moving line-count-heavy UI |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
-| REF-043 | `[~]` | Medium | Editor architecture | Authoring tool module contract and migration series | Codex task | Medium/High | REF-043a-c migrated Line, Rectangle, and Insert Vertex; Select waits for selection/manipulation services |
+| REF-043 | `[x]` | Medium | Editor architecture | Authoring tool module contract and migration series | Codex task | Medium/High | Completed through Select using selection/manipulation services |
 | REF-047 | `[x]` | High | Editor architecture | Selection service and manipulation provider contract | Audit first | Low | Completed; Select is the frontend for selection/manipulation, not just another authoring tool |
 | REF-048 | `[x]` | High | Editor architecture | Add passive SelectionTarget and provider type definitions | Codex task | Low/Medium | No behavior changes; shared vocabulary before service extraction |
 | REF-049 | `[x]` | High | Editor architecture | Extract Selection service helpers | Codex task | Medium | Preserve current selected state fields, stale cleanup, and UI reset behavior |
 | REF-050 | `[x]` | High | Editor architecture | Add Manipulation service shell | Codex task | Medium | Own generic drag lifecycle while delegating existing movement paths first |
 | REF-051 | `[x]` | Medium | Editor architecture | Pilot first move provider | Codex task | Medium | Completed; placed-object/billboard movement routes through provider while preserving door movement refusal |
-| REF-052 | `[ ]` | High | Editor architecture | Migrate Select tool using services/providers | Codex task | High | Do after Selection service, Manipulation service shell, and provider pilot |
-| REF-044 | `[ ]` | Medium | Editor architecture | Migrate material/sidedef/decal editing into `tools/materials/` | Audit first | Medium/High | Preserve material mutation/cache/preview rebuild paths |
+| REF-052 | `[x]` | High | Editor architecture | Migrate Select tool using services/providers | Codex task | High | Completed; future provider refinements remain optional |
+| REF-044 | `[ ]` | Medium | Editor architecture | Migrate material/sidedef/decal editing into `tools/materials/` | Audit first | Medium/High | Superseded by REF-054/REF-055 slices |
 | REF-045 | `[ ]` | Medium | Editor architecture | Audit lights/source-hash-sensitive tool migration | Audit first | High | Static lights, directional light, and object probe settings affect source hash |
 | REF-046 | `[ ]` | Low | Editor architecture | Audit preview tool/module migration | Audit first | High | Keep renderer resource orchestration central |
 | REF-025 | `[ ]` | Medium | Lightmap/probes | Extract object probe sidecar IO | Codex task | Medium | Preserve sidecar/status behavior |
@@ -529,6 +533,9 @@ Task Type:
   - REF-019 recommends narrowing the first slice to the SideDef/material
     inspector or texture/material picker glue, preserving
     `FinishTopologyMaterialMutation()` / cache invalidation paths.
+  - REF-053 makes this more specific: do REF-054 first, then extract the
+    SideDef/material/decal inspector as REF-055. Keep texture catalog/import
+    separate from material-specific picker routing.
 - Completion notes:
 
 #### REF-021 `[x]` Extract runtime object inspector/actions
@@ -592,6 +599,11 @@ Task Type:
 - Notes:
   - REF-019 identifies document save/load/confirmation modals and add-map
     texture modal as good first narrow slices.
+  - REF-053 marks those notes partly stale: document save/load/confirmation,
+    add-map texture, texture picker, sprite picker, decal tint, preview
+    settings, lightmap bake, and door texture settings draw bodies now have
+    module ownership. Remaining work is mostly feature-specific callback or
+    picker routing and should not displace material inspector extraction.
 - Completion notes:
   - REF-023a progress: extracted document save/load/confirmation modal draw
     flows into `SectorEditorDocumentModals.*`. REF-023 remains open for other
@@ -619,6 +631,106 @@ Task Type:
   - REF-019 includes a first-pass mutation/cache map. Keep REF-024 for a
     narrower follow-up audit, especially after future inspector/action
     extractions.
+- Completion notes:
+
+#### REF-053 `[x]` Post-tool-migration `SectorEditor.cpp` line map
+
+- Source/audit reference: REF-041 through REF-052 moved placed objects,
+  document helpers, Line/Rectangle/Insert Vertex/Select tools, Selection
+  service helpers, Manipulation service shell, and the placed-object move
+  provider.
+- Why it helps: replaces stale line ranges from prior audits with a current
+  post-migration map of what still remains in `SectorEditor.cpp`.
+- Likely files: documentation only.
+- Suggested task type: Audit first.
+- Risk: Low.
+- Suggested verification: `git diff --check`, `git diff --stat`,
+  `git status --short`.
+- Completion notes:
+  - Completed in
+    `docs/audit/sector_editor_post_tool_migration_line_map.md`.
+  - Current `sources/sector_editor/SectorEditor.cpp` line count: 10,551.
+  - Top remaining line-count clusters are main inspector/authoring remnants,
+    SideDef/material/decal inspector, preview overlay/UV panel, texture picker
+    routing plus material wrappers, and light/lightmap orchestration.
+  - Recommended next implementation sequence: REF-054 narrow
+    materials/sidedef/decal boundary audit, then REF-055 SideDef/material/decal
+    inspector extraction into `tools/materials/`.
+  - Source code, tests, CMake, runtime behavior, topology cache behavior,
+    lightmap source-hash behavior, collision, and preview behavior were not
+    changed by this audit.
+
+#### REF-054 `[ ]` Audit materials/sidedef/decal extraction boundary
+
+- Source/audit reference:
+  `docs/audit/sector_editor_post_tool_migration_line_map.md`.
+- Why it helps: identifies the exact context/callback API needed before moving
+  material inspector UI out of `SectorEditor.cpp`.
+- Likely files: `SectorEditor.cpp`, `SectorEditor.h`,
+  `SectorEditorMaterialActions.*`, `SectorEditorMaterialModals.*`,
+  `SectorEditorTextureActions.*`, `SectorEditorTextureModals.*`, and future
+  `tools/materials/` candidates.
+- Suggested task type: Audit first.
+- Risk: Medium.
+- Suggested verification: documentation checks only.
+- Notes:
+  - Inventory `DrawTopologySideDefInspector()`, `DrawPreviewUvPanel()`,
+    `ApplyTexturePickerSelection()`, `FinishTopologyMaterialMutation()`,
+    `FinishMaterialActionResult()`, authoring-side material routes, and
+    authoring-face flat material routes.
+  - Decide which picker routing belongs with materials and which remains in
+    texture catalog/import modules.
+  - Explicitly document topology render-cache invalidation and preview rebuild
+    paths.
+- Completion notes:
+
+#### REF-055 `[ ]` Extract SideDef/material/decal inspector into `tools/materials/`
+
+- Source/audit reference: REF-053 and REF-054.
+- Why it helps: removes the largest straightforward material UI block from
+  `SectorEditor.cpp` and starts a materials feature folder instead of growing
+  generic action/modal categories.
+- Likely files: new
+  `sources/sector_editor/tools/materials/SectorEditorMaterialInspector.h/.cpp`,
+  `SectorEditor.cpp`, `SectorEditor.h`, and existing material/texture helper
+  headers as needed.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, `git diff --check`, and manual
+  material/decal/texture picker smoke when practical.
+- Notes:
+  - Preserve `FinishTopologyMaterialMutation()` /
+    `FinishMaterialActionResult()` behavior.
+  - Preserve `MarkTopologyDocumentEdited()` and 2D topology render-cache
+    invalidation behavior.
+  - Preserve preview mesh rebuild behavior for material changes made while 3D
+    preview is active.
+  - Do not move texture catalog/import or add-map-texture ownership in this
+    task.
+  - Expected `SectorEditor.cpp` reduction: roughly 550-700 lines.
+- Completion notes:
+
+#### REF-056 `[ ]` Audit preview overlay and preview UV/material panel extraction
+
+- Source/audit reference:
+  `docs/audit/sector_editor_post_tool_migration_line_map.md`.
+- Why it helps: preview overlay and UV/material panel are line-count-heavy, but
+  they touch renderer debug data, selected 3D surfaces, collision labels,
+  dynamic-light debug state, and object-probe debug controls.
+- Likely files: `SectorEditor.cpp`, `SectorEditorPreviewActions.*`,
+  `SectorEditorPreviewSettingsModal.*`, material action files, and renderer
+  facade headers.
+- Suggested task type: Audit first.
+- Risk: Medium/High.
+- Suggested verification: audit only; future implementation should build,
+  ctest, and manually smoke preview overlay/UV/material editing if practical.
+- Notes:
+  - Decide whether `DrawPreviewUvPanel()` belongs in `tools/materials/` or a
+    preview module.
+  - Keep collision/physics/sector lookup and renderer resource orchestration
+    central unless a later runner plan explicitly scopes them.
+  - Expected later `SectorEditor.cpp` reduction if extracted: roughly 450-650
+    lines for overlay and 350-480 lines for UV panel.
 - Completion notes:
 
 #### REF-040 `[x]` Design SectorEditor tool/module boundaries
@@ -904,6 +1016,10 @@ Task Type:
     `FinishMaterialActionResult()` paths.
   - Keep texture catalog/import workflows separate from material-specific
     routing.
+  - REF-053 split this broad item into REF-054
+    materials/sidedef/decal boundary audit and REF-055 SideDef/material/decal
+    inspector extraction. Treat REF-044 as the umbrella, not the next direct
+    implementation task.
 - Completion notes:
 
 #### REF-045 `[ ]` Audit lights/source-hash-sensitive tool migration
