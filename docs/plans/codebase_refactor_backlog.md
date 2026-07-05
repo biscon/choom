@@ -353,6 +353,8 @@ Task Type:
 - Suggested verification: runtime object tests plus manual preview smoke for
   doors, door lighting, and dynamic shadows.
 - Completion notes:
+  - Dedicated runner plan created at
+    `docs/plans/sector_preview_door_renderer_refactor_plan.md`.
 
 #### REF-016 `[x]` Extract runtime billboard renderer helper
 
