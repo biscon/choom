@@ -35,13 +35,13 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_00",
       "title": "Baseline Audit And Behavior Contract",
       "type": "phase",
-      "status": "Planned"
+      "status": "Completed"
     },
     {
       "id": "phase_01",
       "title": "Introduce Door Renderer Context And Types",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Planned"
     },
     {
       "id": "phase_02",
@@ -87,8 +87,8 @@ When an agent is asked to execute this plan, it must:
 
 | Phase / Pass | Status | Date | Notes |
 | --- | --- | --- | --- |
-| Phase 0: Baseline Audit And Behavior Contract | Planned |  | Confirm current door rendering, cache, lighting, shadow, debug, render-state, and ECS boundary behavior before implementation. |
-| Phase 1: Introduce Door Renderer Context And Types | Not Started |  | Add narrow context/data structs only; no ownership move. |
+| Phase 0: Baseline Audit And Behavior Contract | Completed | 2026-07-05 | Audited current door rendering, cache, lighting, shadow, debug, render-state, and ECS boundary behavior. Documentation-only; behavior contract updated. |
+| Phase 1: Introduce Door Renderer Context And Types | Planned |  | Add narrow context/data structs only; no ownership move. |
 | Phase 2: Move Door Mesh Cache Ownership And Preparation | Not Started |  | Move door mesh cache entry, upload/update/prune/unload, and preparation into `SectorPreviewDoorRenderer`. |
 | Phase 3: Move Door Opaque Shader And Material Ownership | Not Started |  | Move door shader/material/resource state without shader formula or uniform name changes. |
 | Phase 4: Move Main Scene Door Draw Path | Not Started |  | Move main-scene door rendering while preserving draw order, object-probe uploads, dynamic lighting/shadows, and render-state restore. |
@@ -136,22 +136,28 @@ Current door rendering behavior to preserve:
 * `SectorMeshPreview` is the public facade for `Rebuild()`, `RebuildRendererResources()`, `ShutdownRendererResources()`, `RenderDynamicSpotLightShadowMaps()`, `DrawScene()`, and `Render()`.
 * Door rendering is currently private to `SectorMeshPreview` through `PrepareRuntimeDoorMeshes()`, `DrawRuntimeDoors()`, `UnloadDoorMeshes()`, `ResolveDoorShadowCasterMesh()`, and related private data.
 * Door mesh cache state is keyed by `SectorDoor::placedObjectId` in `doorMeshCache`. Cache entries store raylib `Mesh`, `SectorDoorSlabMeshData`, width, height, thickness, `SectorDoorFaceUvSet`, static-lighting color buffers, and a per-preparation `seenThisFrame` flag.
+* Current door opaque renderer-owned state in `SectorMeshPreview` is `doorOpaqueShader`, `doorOpaqueMaterial`, `doorOpaqueDefaultMaterialTexture`, `doorOpaqueShaderLoaded`, `doorOpaqueMaterialLoaded`, `doorOpaqueTextureLoc`, dynamic light uniform locations, shadow uniform locations, `doorOpaqueDynamicLightingClampLoc`, `doorOpaqueDebugModeLoc`, and `doorOpaqueTintLoc`.
 * Door cache preparation iterates ECS entities with `SectorObjectTransform`, `SectorObject`, `SectorDoor`, `SectorDoorResolvedAnchor`, and `SectorDoorRender`.
 * Door cache preparation appends `SectorDoorShadowCaster` records through `AppendSectorDoorShadowCaster()`, marks seen cache entries, rebuilds meshes when vertex data is absent or dimensions/face UVs change, and prunes unseen entries by unloading their meshes.
-* Door slab mesh creation currently uses `BuildSectorDoorSlabMeshData(render)`, CPU-side vertex arrays, color buffers, index buffers, and `UploadMesh(&mesh, false)`.
+* Door slab mesh creation currently uses `BuildSectorDoorSlabMeshData(render)`, `CreateDoorSlabMesh()`, CPU-side vertex arrays, normals, UVs, color buffers, unsigned-short index buffers, `MemAlloc()`, and `UploadMesh(&mesh, false)`. Allocation failure logs `"[SectorDemo ERROR] Failed to allocate door slab mesh data"` and returns an empty mesh after `UnloadMesh(mesh)`.
+* Door mesh dirty keys are absent/empty mesh, width, height, thickness, and `SameSectorDoorFaceUvSet(cacheEntry.faceUvs, render.faceUvs)`.
 * Main-scene door draw calls `PrepareRuntimeDoorMeshes()` again so door drawing works even if no shadow pass ran first.
-* Main-scene door draw happens after visible static sector mesh batches and before `SectorPreviewBillboardRenderer::Draw()`.
+* `Render()` calls `RenderDynamicSpotLightShadowMaps()` before `DrawScene()`.
+* `DrawScene()` draws `skyRenderer.Draw()`, then visible static sector mesh batches, then `DrawRuntimeDoors()`, then `SectorPreviewBillboardRenderer::Draw()` while still inside `BeginMode3D(camera)` / `EndMode3D()`.
 * Main-scene door draw preserves object visibility, door enabled state, render visibility, positive width/height/thickness checks, missing texture fallback, cache-miss skipping, tint upload, and draw counters.
 * Door textures are resolved through `SectorMeshPreview::TextureForId()` and `AssetManager::GetTexture()`, with fallback to the door material default diffuse texture.
 * Door static object-probe lighting is rebuilt for the current animated transform with `BuildSectorDoorStaticLightingColors()` and uploaded through `UpdateMeshBuffer()` to the mesh color buffer before drawing.
 * Door main draw uses `BuildSectorDoorSlabModelMatrix(transform, anchor)` so current animated door transforms drive the visual slab.
-* Door shadow caster drawing uses prepared door mesh cache entries, `BuildSectorDoorShadowCasterModelMatrix()`, and door shadow caster width/height returned through the current resolver path. Door shadow caster seal margins must not change.
+* Door shadow caster records are prepared in `PrepareRuntimeDoorMeshes()` and stored in `runtimeDoorShadowCasters`.
+* Door shadow caster drawing uses `SectorPreviewDynamicSpotLightShadowRenderContext::doorShadowCasters`, `userData`, and `doorMeshResolver`; `ResolveDoorShadowCasterMesh()` reads prepared `doorMeshCache` entries, returns cache width/height, and `SectorPreviewDynamicLighting::RenderShadowMaps()` draws them with `BuildSectorDoorShadowCasterModelMatrix()`. Door shadow caster seal margins from `kSectorDoorShadowCasterVerticalSealMarginWorld` and `kSectorDoorShadowCasterHorizontalSealMarginWorld` must not change.
 * `SectorPreviewDynamicLighting` owns dynamic light selection, selected lights, dynamic spotlight shadow map resources, shadow material ownership, shadow uniform packing, and shadow map render orchestration after REF-014.
 * Door dynamic point/spot light receiving uploads through `UploadSectorPreviewDynamicPointLights()` using door shader locations and `dynamicLightState.SelectedLights()`.
 * Door dynamic spotlight shadow receiving uploads through `UploadSectorPreviewDynamicSpotLightShadowUniforms()` using `dynamicLightState.PackShadowUniforms()`.
 * Door shadow map depth textures are bound through `doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS]` and `doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION]`.
-* Door lighting debug mode currently lives in `SectorMeshPreview` as `doorLightingDebugMode`, with public `DoorLightingDebugMode()` and `SetDoorLightingDebugMode()` accessors and `SectorDoorLightingDebugModeName()`.
+* Door lighting debug mode currently lives in `SectorMeshPreview` as `doorLightingDebugMode`, with public `DoorLightingDebugMode()` and `SetDoorLightingDebugMode()` accessors, `DoorLightingDebugModeShaderValue()` using the enum integer value, and `SectorDoorLightingDebugModeName()` returning `Normal`, `AlbedoOnly`, `BakedOnly`, `DynamicOnly`, `NormalVisualize`, and `FlatColorNoTexture`.
 * Door render-state setup disables color blending, disables backface culling, enables depth test and depth writes, then restores active texture slot, texture binding, color blend, alpha blend mode, depth test, depth mask, and backface culling after drawing.
+* Door draw counters currently live in `SectorMeshPreview` as `doorConsideredCount`, `doorDrawnCount`, and `doorSkippedCount`; debug text is appended with `AppendDoorRenderDebugText()` using the `" | doors:"` suffix convention.
+* Door renderer resource lifetime is currently part of `SectorMeshPreview::RebuildRendererResources()` / `ShutdownRendererResources()`: rebuild loads the door opaque shader and default material, while shutdown clears runtime shadow casters, unloads door meshes, restores material map textures, unloads the door material, resets door shader/material handles, and resets door uniform locations.
 * Missing, failed, unloaded, or not-ready door textures and shadow maps must not crash rendering.
 * `SectorMeshPreview` and any extracted door renderer may observe ECS/runtime objects and own renderer GPU caches, but must not spawn, reset, reserve, destroy, or otherwise own runtime object lifecycle.
 
@@ -202,7 +208,7 @@ Use this checklist for implementation phases that affect visual rendering. Repor
 
 ## Execution Log
 
-No phases have been executed yet. Add dated notes here as phases complete.
+* 2026-07-05: Phase 0 completed. Audited `SectorMeshPreview` door rendering/cache/shader/material/debug ownership, `SectorPreviewDynamicLighting` shadow bridge, door mesh creation, dynamic light and shadow uploads, render order, resource lifetime, and ECS/runtime boundaries. Updated the Behavior Contract with exact current symbol names and ownership notes. Documentation-only; no source code, shader, CMake, test, runtime behavior, lightmap source-hash, topology cache, collision, sector lookup, physics, or ECS lifecycle changes. Manual visual smoke was not performed because this is a documentation-only audit phase.
 
 ## Phase 0: Baseline Audit And Behavior Contract
 
