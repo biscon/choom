@@ -6,6 +6,7 @@
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorLightmapAsyncTypes.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
+#include "sector_editor/SectorEditorRuntimeObjectActions.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTypes.h"
@@ -404,6 +405,7 @@ private:
     void AddDynamicLightAt(Vector2 mapPoint);
     bool DeleteDynamicSpotLightById(int topologyLightId);
     void AddDynamicSpotLightAt(Vector2 mapPoint);
+    SectorEditorRuntimeObjectActionContext BuildRuntimeObjectActionContext();
     void AddRuntimeObjectAt(Vector2 mapPoint);
     void AddDoorAtPortal(Vector2 screenPoint);
     bool DeleteSelectedRuntimeObject();

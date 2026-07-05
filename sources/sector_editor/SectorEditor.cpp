@@ -10,6 +10,7 @@
 #include "sector_editor/SectorEditorMaterialActions.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
+#include "sector_editor/SectorEditorRuntimeObjectActions.h"
 #include "sector_editor/SectorEditorRuntimeObjectInspector.h"
 #include "sector_editor/SectorEditorRuntimeObjectModals.h"
 #include "sector_editor/SectorEditorSectorInspector.h"
@@ -3188,66 +3189,72 @@ void SectorEditor::AddDynamicSpotLightAt(Vector2 mapPoint)
     FinishTopologyActionResult(finish);
 }
 
+SectorEditorRuntimeObjectActionContext SectorEditor::BuildRuntimeObjectActionContext()
+{
+    return SectorEditorRuntimeObjectActionContext{
+            state,
+            statusText,
+            engineContext,
+            [this](Vector2 mapPoint) {
+                return FindTopologySectorAt(mapPoint);
+            },
+            [this](
+                    Vector2 screenPoint,
+                    Vector2 mapPoint,
+                    int& outLineDefId,
+                    int& outSideDefId,
+                    SectorTopologySideKind& outSide,
+                    bool& outPreferredMissing) {
+                return FindTopologyLineNearScreenPoint(
+                        screenPoint,
+                        mapPoint,
+                        outLineDefId,
+                        outSideDefId,
+                        outSide,
+                        outPreferredMissing);
+            },
+            [this](Vector2 screenPoint) {
+                return ScreenToMap(screenPoint);
+            },
+            [this](int objectId) {
+                SelectRuntimeObject(objectId);
+            },
+            [this]() {
+                ClearSelection();
+            },
+            [this]() {
+                ClearStaleTopologySelection();
+            },
+            [this](const char* status) {
+                MarkTopologyDocumentEdited(status);
+            }};
+}
+
 void SectorEditor::AddRuntimeObjectAt(Vector2 mapPoint)
 {
-    const int sectorId = FindTopologySectorAt(mapPoint);
-    const SectorEditorAddBillboardResult result = AddBillboardToSector(
-            state.topologyMap,
-            sectorId,
-            mapPoint);
-    if (!result.changed) {
-        if (!result.status.empty()) {
-            statusText = result.status;
-        }
-        return;
-    }
-
-    SelectRuntimeObject(result.objectId);
-    MarkTopologyDocumentEdited(result.status.c_str());
-    RefreshRuntimeObjectsAfterAuthoringEdit();
+    SectorEditorRuntimeObjectActionContext actionContext = BuildRuntimeObjectActionContext();
+    AddSectorEditorRuntimeObject(actionContext, mapPoint);
 }
 
 void SectorEditor::AddDoorAtPortal(Vector2 screenPoint)
 {
-    int lineDefId = -1;
-    int sideDefId = -1;
-    SectorTopologySideKind side = SectorTopologySideKind::Front;
-    bool preferredMissing = false;
-    if (!FindTopologyLineNearScreenPoint(
-                screenPoint,
-                ScreenToMap(screenPoint),
-                lineDefId,
-                sideDefId,
-                side,
-                preferredMissing)) {
-        statusText = "Door placement failed: click a two-sided portal";
-        return;
-    }
-
-    const SectorEditorAddDoorResult result = AddDoorToPortal(state.topologyMap, lineDefId);
-    if (!result.changed) {
-        if (!result.status.empty()) {
-            statusText = result.status;
-        }
-        return;
-    }
-
-    SelectRuntimeObject(result.objectId);
-    MarkTopologyDocumentEdited(result.status.c_str());
-    RefreshRuntimeObjectsAfterAuthoringEdit();
+    SectorEditorRuntimeObjectActionContext actionContext = BuildRuntimeObjectActionContext();
+    AddSectorEditorDoorRuntimeObject(actionContext, screenPoint);
 }
 
 bool SectorEditor::DeleteSelectedRuntimeObject()
 {
-    const SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
-    if (object == nullptr) {
+    SectorEditorRuntimeObjectActionContext actionContext = BuildRuntimeObjectActionContext();
+    const SectorEditorRuntimeObjectDeleteConfirmation confirmation =
+            RequestDeleteSelectedSectorEditorRuntimeObject(actionContext);
+    if (!confirmation.requested) {
         return false;
     }
 
-    const int objectId = object->id;
+    const int objectId = confirmation.objectId;
     OpenConfirmation(
-            "Delete Object",
-            TextFormat("Delete object %d?", objectId),
+            confirmation.title.c_str(),
+            confirmation.message.c_str(),
             [this, objectId]() {
                 DeleteRuntimeObjectById(objectId);
             });
@@ -3256,50 +3263,22 @@ bool SectorEditor::DeleteSelectedRuntimeObject()
 
 bool SectorEditor::DeleteRuntimeObjectById(int objectId)
 {
-    if (FindSectorPlacedRuntimeObject(state.topologyMap, objectId) == nullptr) {
-        ClearStaleTopologySelection();
-        return false;
-    }
-
-    if (!RemoveSectorPlacedRuntimeObject(state.topologyMap, objectId)) {
-        return false;
-    }
-    if (state.selectedRuntimeObjectId == objectId) {
-        ClearSelection();
-    }
-    if (state.runtimeObjectDrag.objectId == objectId) {
-        state.runtimeObjectDrag = RuntimeObjectDragState{};
-    }
-    MarkTopologyDocumentEdited(TextFormat("Deleted object %d", objectId));
-    RefreshRuntimeObjectsAfterAuthoringEdit();
-    return true;
+    SectorEditorRuntimeObjectActionContext actionContext = BuildRuntimeObjectActionContext();
+    return DeleteSectorEditorRuntimeObjectById(actionContext, objectId);
 }
 
 bool SectorEditor::MutateSelectedRuntimeObject(
         const char* status,
         const std::function<bool(SectorPlacedRuntimeObject&)>& mutate)
 {
-    SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
-    if (object == nullptr || !mutate || !mutate(*object)) {
-        return false;
-    }
-
-    MarkTopologyDocumentEdited(status);
-    RefreshRuntimeObjectsAfterAuthoringEdit();
-    return true;
+    SectorEditorRuntimeObjectActionContext actionContext = BuildRuntimeObjectActionContext();
+    return MutateSelectedSectorEditorRuntimeObject(actionContext, status, mutate);
 }
 
 void SectorEditor::RefreshRuntimeObjectsAfterAuthoringEdit()
 {
-    if (engineContext == nullptr) {
-        return;
-    }
-
-    SpawnPlacedRuntimeObjects(
-            engineContext->world,
-            engineContext->assets,
-            state.runtimeObjects,
-            state.topologyMap);
+    SectorEditorRuntimeObjectActionContext actionContext = BuildRuntimeObjectActionContext();
+    RefreshSectorEditorRuntimeObjectsAfterAuthoringEdit(actionContext);
 }
 
 bool SectorEditor::BakeLightmaps()
