@@ -636,12 +636,12 @@ Task Type:
     object editor files into `sources/sector_editor/tools/runtime_objects/`
     with no behavior changes and no direct `SectorEditor` dependency.
 
-#### REF-041 `[ ]` Move runtime object editor files into `tools/runtime_objects/`
+#### REF-041 `[x]` Placed-object tool folder pilot with billboards/doors split
 
 - Source/audit reference:
   `docs/audit/sector_editor_tool_module_boundary_design.md`.
-- Why it helps: establishes the first feature/tool folder using the already
-  extracted runtime object inspector, modal, action, and drag files.
+- Why it helps: establishes the first placed-object tool layout using common
+  infrastructure plus concrete billboard and door feature folders.
 - Likely files: `SectorEditorRuntimeObjectInspector.*`,
   `SectorEditorRuntimeObjectModals.*`,
   `SectorEditorRuntimeObjectActions.*`,
@@ -655,6 +655,15 @@ Task Type:
   - Keep existing context/callback APIs.
   - Do not move renderer/runtime backend files.
 - Completion notes:
+  - Created `sources/sector_editor/tools/placed_objects/`,
+    `sources/sector_editor/tools/billboards/`, and
+    `sources/sector_editor/tools/doors/`.
+  - Moved/split the existing runtime object editor modules into common
+    placed-object dispatch/actions/drag, billboard actions/inspector, and door
+    actions/inspector/modals.
+  - Preserved context/callback boundaries with no direct `SectorEditor`
+    dependency in the moved modules.
+  - No behavior changes intended.
 
 #### REF-042 `[ ]` Move document actions/modals into `document/`
 

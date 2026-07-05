@@ -9,7 +9,7 @@
 
 namespace game {
 
-struct SectorEditorRuntimeObjectDragContext {
+struct SectorEditorPlacedObjectDragContext {
     SectorEditorState& state;
     std::string& statusText;
 
@@ -21,19 +21,19 @@ struct SectorEditorRuntimeObjectDragContext {
     std::function<void()> refreshRuntimeObjectsAfterAuthoringEdit;
 };
 
-void StartSectorEditorRuntimeObjectDrag(
-        SectorEditorRuntimeObjectDragContext& context,
+void StartSectorEditorPlacedObjectDrag(
+        SectorEditorPlacedObjectDragContext& context,
         int objectId);
 
-void UpdateSectorEditorRuntimeObjectDrag(
-        SectorEditorRuntimeObjectDragContext& context,
+void UpdateSectorEditorPlacedObjectDrag(
+        SectorEditorPlacedObjectDragContext& context,
         Vector2 mousePosition);
 
-void FinishSectorEditorRuntimeObjectDrag(
-        SectorEditorRuntimeObjectDragContext& context);
+void FinishSectorEditorPlacedObjectDrag(
+        SectorEditorPlacedObjectDragContext& context);
 
-void CancelSectorEditorRuntimeObjectDrag(
-        SectorEditorRuntimeObjectDragContext& context,
+void CancelSectorEditorPlacedObjectDrag(
+        SectorEditorPlacedObjectDragContext& context,
         const char* message);
 
 } // namespace game

@@ -13,7 +13,7 @@ struct EngineContext;
 
 namespace game {
 
-struct SectorEditorRuntimeObjectActionContext {
+struct SectorEditorPlacedObjectActionContext {
     SectorEditorState& state;
     std::string& statusText;
     engine::EngineContext* engineContext = nullptr;
@@ -28,34 +28,26 @@ struct SectorEditorRuntimeObjectActionContext {
     std::function<void(const char*)> markTopologyDocumentEdited;
 };
 
-struct SectorEditorRuntimeObjectDeleteConfirmation {
+struct SectorEditorPlacedObjectDeleteConfirmation {
     bool requested = false;
     int objectId = -1;
     std::string title;
     std::string message;
 };
 
-void AddSectorEditorRuntimeObject(
-        SectorEditorRuntimeObjectActionContext& context,
-        Vector2 mapPoint);
+SectorEditorPlacedObjectDeleteConfirmation RequestDeleteSelectedSectorEditorPlacedObject(
+        SectorEditorPlacedObjectActionContext& context);
 
-void AddSectorEditorDoorRuntimeObject(
-        SectorEditorRuntimeObjectActionContext& context,
-        Vector2 screenPoint);
-
-SectorEditorRuntimeObjectDeleteConfirmation RequestDeleteSelectedSectorEditorRuntimeObject(
-        SectorEditorRuntimeObjectActionContext& context);
-
-bool DeleteSectorEditorRuntimeObjectById(
-        SectorEditorRuntimeObjectActionContext& context,
+bool DeleteSectorEditorPlacedObjectById(
+        SectorEditorPlacedObjectActionContext& context,
         int objectId);
 
-bool MutateSelectedSectorEditorRuntimeObject(
-        SectorEditorRuntimeObjectActionContext& context,
+bool MutateSelectedSectorEditorPlacedObject(
+        SectorEditorPlacedObjectActionContext& context,
         const char* status,
         const std::function<bool(SectorPlacedRuntimeObject&)>& mutate);
 
-void RefreshSectorEditorRuntimeObjectsAfterAuthoringEdit(
-        SectorEditorRuntimeObjectActionContext& context);
+void RefreshSectorEditorPlacedObjectsAfterAuthoringEdit(
+        SectorEditorPlacedObjectActionContext& context);
 
 } // namespace game

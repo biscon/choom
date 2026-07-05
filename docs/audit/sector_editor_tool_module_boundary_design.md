@@ -752,6 +752,13 @@ Migration priority: Low.
 
 ## Runtime Objects Pilot Plan
 
+Correction note: REF-041 refined this recommendation. The target is no longer
+one flat `tools/runtime_objects/` folder. Use common placed-object
+infrastructure in `tools/placed_objects/` plus concrete feature folders such as
+`tools/billboards/` and `tools/doors/`. This keeps the document/storage family
+separate from editor features and avoids a runtime-object sub-landfill as more
+placed object kinds are added.
+
 Runtime objects are still the best pilot after REF-021, but the pilot is now a
 folder-boundary migration rather than more extraction from `SectorEditor.cpp`.
 REF-021 already created the coherent runtime-object pieces:

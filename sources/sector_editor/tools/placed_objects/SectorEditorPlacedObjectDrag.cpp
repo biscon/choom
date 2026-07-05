@@ -1,4 +1,4 @@
-#include "sector_editor/SectorEditorRuntimeObjectDrag.h"
+#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectDrag.h"
 
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_demo/SectorTopologyMap.h"
@@ -9,8 +9,8 @@
 
 namespace game {
 
-void StartSectorEditorRuntimeObjectDrag(
-        SectorEditorRuntimeObjectDragContext& context,
+void StartSectorEditorPlacedObjectDrag(
+        SectorEditorPlacedObjectDragContext& context,
         int objectId)
 {
     const SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
@@ -34,8 +34,8 @@ void StartSectorEditorRuntimeObjectDrag(
     context.statusText = TextFormat("Moving object %d", objectId);
 }
 
-void UpdateSectorEditorRuntimeObjectDrag(
-        SectorEditorRuntimeObjectDragContext& context,
+void UpdateSectorEditorPlacedObjectDrag(
+        SectorEditorPlacedObjectDragContext& context,
         Vector2 mousePosition)
 {
     if (!context.state.runtimeObjectDrag.active) {
@@ -67,8 +67,8 @@ void UpdateSectorEditorRuntimeObjectDrag(
     context.statusText = TextFormat("Moving object %d", object->id);
 }
 
-void FinishSectorEditorRuntimeObjectDrag(
-        SectorEditorRuntimeObjectDragContext& context)
+void FinishSectorEditorPlacedObjectDrag(
+        SectorEditorPlacedObjectDragContext& context)
 {
     if (!context.state.runtimeObjectDrag.active) {
         return;
@@ -107,8 +107,8 @@ void FinishSectorEditorRuntimeObjectDrag(
     }
 }
 
-void CancelSectorEditorRuntimeObjectDrag(
-        SectorEditorRuntimeObjectDragContext& context,
+void CancelSectorEditorPlacedObjectDrag(
+        SectorEditorPlacedObjectDragContext& context,
         const char* message)
 {
     if (context.state.runtimeObjectDrag.active) {

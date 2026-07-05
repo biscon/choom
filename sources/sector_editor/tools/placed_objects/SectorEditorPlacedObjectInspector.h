@@ -10,7 +10,7 @@
 
 namespace game {
 
-struct SectorEditorRuntimeObjectInspectorCallbacks {
+struct SectorEditorPlacedObjectInspectorCallbacks {
     std::function<const SectorPlacedRuntimeObject*()> selectedRuntimeObject;
     std::function<bool(const char*, const std::function<bool(SectorPlacedRuntimeObject&)>&)>
             mutateSelectedRuntimeObject;
@@ -22,19 +22,19 @@ struct SectorEditorRuntimeObjectInspectorCallbacks {
     std::function<void(bool)> setSelectedDoorRuntimeTargetOpen;
 };
 
-struct SectorEditorRuntimeObjectInspectorMeasureContext {
+struct SectorEditorPlacedObjectInspectorMeasureContext {
     engine::AssetManager& assets;
     engine::FontHandle smallFont;
     const engine::UIConfig& smallConfig;
     SectorEditorState& state;
     engine::EngineContext* engineContext = nullptr;
-    const SectorEditorRuntimeObjectInspectorCallbacks& callbacks;
+    const SectorEditorPlacedObjectInspectorCallbacks& callbacks;
     float contentW = 0.0f;
     float rowH = 0.0f;
     float gap = 0.0f;
 };
 
-struct SectorEditorRuntimeObjectInspectorContext {
+struct SectorEditorPlacedObjectInspectorContext {
     engine::UIContext& ui;
     const engine::UIConfig& config;
     engine::Input& input;
@@ -45,16 +45,16 @@ struct SectorEditorRuntimeObjectInspectorContext {
     SectorEditorState& state;
     SectorEditorUiState& uiState;
     engine::EngineContext* engineContext = nullptr;
-    const SectorEditorRuntimeObjectInspectorCallbacks& callbacks;
+    const SectorEditorPlacedObjectInspectorCallbacks& callbacks;
     float contentW = 0.0f;
     float rowH = 0.0f;
     float gap = 0.0f;
 };
 
-float MeasureSectorEditorRuntimeObjectInspectorContentHeight(
-        const SectorEditorRuntimeObjectInspectorMeasureContext& context);
+float MeasureSectorEditorPlacedObjectInspectorContentHeight(
+        const SectorEditorPlacedObjectInspectorMeasureContext& context);
 
-void DrawSectorEditorRuntimeObjectInspector(
-        SectorEditorRuntimeObjectInspectorContext& context);
+void DrawSectorEditorPlacedObjectInspector(
+        SectorEditorPlacedObjectInspectorContext& context);
 
 } // namespace game

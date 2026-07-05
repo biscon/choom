@@ -1,4 +1,4 @@
-#include "sector_editor/SectorEditorRuntimeObjectModals.h"
+#include "sector_editor/tools/doors/SectorEditorDoorModals.h"
 
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorHelpers.h"

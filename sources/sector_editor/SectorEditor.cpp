@@ -12,10 +12,12 @@
 #include "sector_editor/SectorEditorMaterialModals.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
-#include "sector_editor/SectorEditorRuntimeObjectActions.h"
-#include "sector_editor/SectorEditorRuntimeObjectDrag.h"
-#include "sector_editor/SectorEditorRuntimeObjectInspector.h"
-#include "sector_editor/SectorEditorRuntimeObjectModals.h"
+#include "sector_editor/tools/billboards/SectorEditorBillboardActions.h"
+#include "sector_editor/tools/doors/SectorEditorDoorActions.h"
+#include "sector_editor/tools/doors/SectorEditorDoorModals.h"
+#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectActions.h"
+#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectDrag.h"
+#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectInspector.h"
 #include "sector_editor/SectorEditorSectorInspector.h"
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
@@ -1884,26 +1886,26 @@ void SectorEditor::CancelLightDrag(const char* message)
 
 void SectorEditor::StartRuntimeObjectDrag(int objectId)
 {
-    SectorEditorRuntimeObjectDragContext dragContext = BuildRuntimeObjectDragContext();
-    StartSectorEditorRuntimeObjectDrag(dragContext, objectId);
+    SectorEditorPlacedObjectDragContext dragContext = BuildRuntimeObjectDragContext();
+    StartSectorEditorPlacedObjectDrag(dragContext, objectId);
 }
 
 void SectorEditor::UpdateRuntimeObjectDrag(engine::Input& input)
 {
-    SectorEditorRuntimeObjectDragContext dragContext = BuildRuntimeObjectDragContext();
-    UpdateSectorEditorRuntimeObjectDrag(dragContext, input.MousePosition());
+    SectorEditorPlacedObjectDragContext dragContext = BuildRuntimeObjectDragContext();
+    UpdateSectorEditorPlacedObjectDrag(dragContext, input.MousePosition());
 }
 
 void SectorEditor::FinishRuntimeObjectDrag()
 {
-    SectorEditorRuntimeObjectDragContext dragContext = BuildRuntimeObjectDragContext();
-    FinishSectorEditorRuntimeObjectDrag(dragContext);
+    SectorEditorPlacedObjectDragContext dragContext = BuildRuntimeObjectDragContext();
+    FinishSectorEditorPlacedObjectDrag(dragContext);
 }
 
 void SectorEditor::CancelRuntimeObjectDrag(const char* message)
 {
-    SectorEditorRuntimeObjectDragContext dragContext = BuildRuntimeObjectDragContext();
-    CancelSectorEditorRuntimeObjectDrag(dragContext, message);
+    SectorEditorPlacedObjectDragContext dragContext = BuildRuntimeObjectDragContext();
+    CancelSectorEditorPlacedObjectDrag(dragContext, message);
 }
 
 void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt)
@@ -3125,9 +3127,9 @@ void SectorEditor::AddDynamicSpotLightAt(Vector2 mapPoint)
     FinishTopologyActionResult(finish);
 }
 
-SectorEditorRuntimeObjectDragContext SectorEditor::BuildRuntimeObjectDragContext()
+SectorEditorPlacedObjectDragContext SectorEditor::BuildRuntimeObjectDragContext()
 {
-    return SectorEditorRuntimeObjectDragContext{
+    return SectorEditorPlacedObjectDragContext{
             state,
             statusText,
             [this](Vector2 screenPoint) {
@@ -3150,9 +3152,9 @@ SectorEditorRuntimeObjectDragContext SectorEditor::BuildRuntimeObjectDragContext
             }};
 }
 
-SectorEditorRuntimeObjectActionContext SectorEditor::BuildRuntimeObjectActionContext()
+SectorEditorPlacedObjectActionContext SectorEditor::BuildRuntimeObjectActionContext()
 {
-    return SectorEditorRuntimeObjectActionContext{
+    return SectorEditorPlacedObjectActionContext{
             state,
             statusText,
             engineContext,
@@ -3193,21 +3195,21 @@ SectorEditorRuntimeObjectActionContext SectorEditor::BuildRuntimeObjectActionCon
 
 void SectorEditor::AddRuntimeObjectAt(Vector2 mapPoint)
 {
-    SectorEditorRuntimeObjectActionContext actionContext = BuildRuntimeObjectActionContext();
-    AddSectorEditorRuntimeObject(actionContext, mapPoint);
+    SectorEditorPlacedObjectActionContext actionContext = BuildRuntimeObjectActionContext();
+    AddSectorEditorBillboard(actionContext, mapPoint);
 }
 
 void SectorEditor::AddDoorAtPortal(Vector2 screenPoint)
 {
-    SectorEditorRuntimeObjectActionContext actionContext = BuildRuntimeObjectActionContext();
-    AddSectorEditorDoorRuntimeObject(actionContext, screenPoint);
+    SectorEditorPlacedObjectActionContext actionContext = BuildRuntimeObjectActionContext();
+    AddSectorEditorDoor(actionContext, screenPoint);
 }
 
 bool SectorEditor::DeleteSelectedRuntimeObject()
 {
-    SectorEditorRuntimeObjectActionContext actionContext = BuildRuntimeObjectActionContext();
-    const SectorEditorRuntimeObjectDeleteConfirmation confirmation =
-            RequestDeleteSelectedSectorEditorRuntimeObject(actionContext);
+    SectorEditorPlacedObjectActionContext actionContext = BuildRuntimeObjectActionContext();
+    const SectorEditorPlacedObjectDeleteConfirmation confirmation =
+            RequestDeleteSelectedSectorEditorPlacedObject(actionContext);
     if (!confirmation.requested) {
         return false;
     }
@@ -3224,22 +3226,22 @@ bool SectorEditor::DeleteSelectedRuntimeObject()
 
 bool SectorEditor::DeleteRuntimeObjectById(int objectId)
 {
-    SectorEditorRuntimeObjectActionContext actionContext = BuildRuntimeObjectActionContext();
-    return DeleteSectorEditorRuntimeObjectById(actionContext, objectId);
+    SectorEditorPlacedObjectActionContext actionContext = BuildRuntimeObjectActionContext();
+    return DeleteSectorEditorPlacedObjectById(actionContext, objectId);
 }
 
 bool SectorEditor::MutateSelectedRuntimeObject(
         const char* status,
         const std::function<bool(SectorPlacedRuntimeObject&)>& mutate)
 {
-    SectorEditorRuntimeObjectActionContext actionContext = BuildRuntimeObjectActionContext();
-    return MutateSelectedSectorEditorRuntimeObject(actionContext, status, mutate);
+    SectorEditorPlacedObjectActionContext actionContext = BuildRuntimeObjectActionContext();
+    return MutateSelectedSectorEditorPlacedObject(actionContext, status, mutate);
 }
 
 void SectorEditor::RefreshRuntimeObjectsAfterAuthoringEdit()
 {
-    SectorEditorRuntimeObjectActionContext actionContext = BuildRuntimeObjectActionContext();
-    RefreshSectorEditorRuntimeObjectsAfterAuthoringEdit(actionContext);
+    SectorEditorPlacedObjectActionContext actionContext = BuildRuntimeObjectActionContext();
+    RefreshSectorEditorPlacedObjectsAfterAuthoringEdit(actionContext);
 }
 
 bool SectorEditor::BakeLightmaps()
@@ -5949,7 +5951,7 @@ void SectorEditor::DrawSectorsPanel(
             SectorEditorPanelScrollPaddingPx,
             false);
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
-    const SectorEditorRuntimeObjectInspectorCallbacks runtimeObjectInspectorCallbacks{
+    const SectorEditorPlacedObjectInspectorCallbacks runtimeObjectInspectorCallbacks{
             [this]() { return SelectedRuntimeObject(); },
             [this](
                     const char* status,
@@ -6003,7 +6005,7 @@ void SectorEditor::DrawSectorsPanel(
             return 120.0f;
         }
         if (hasSelectedRuntimeObject) {
-            const SectorEditorRuntimeObjectInspectorMeasureContext runtimeObjectMeasureContext{
+            const SectorEditorPlacedObjectInspectorMeasureContext runtimeObjectMeasureContext{
                     assets,
                     smallFont,
                     smallConfig,
@@ -6014,7 +6016,7 @@ void SectorEditor::DrawSectorsPanel(
                     rowH,
                     gap
             };
-            return MeasureSectorEditorRuntimeObjectInspectorContentHeight(runtimeObjectMeasureContext);
+            return MeasureSectorEditorPlacedObjectInspectorContentHeight(runtimeObjectMeasureContext);
         }
         if (hasSelectedLight) {
             return StaticLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
@@ -6138,7 +6140,7 @@ void SectorEditor::DrawSectorsPanel(
     }
 
     if (hasSelectedRuntimeObject) {
-        SectorEditorRuntimeObjectInspectorContext runtimeObjectInspectorContext{
+        SectorEditorPlacedObjectInspectorContext runtimeObjectInspectorContext{
                 ui,
                 config,
                 input,
@@ -6154,7 +6156,7 @@ void SectorEditor::DrawSectorsPanel(
                 rowH,
                 gap
         };
-        DrawSectorEditorRuntimeObjectInspector(runtimeObjectInspectorContext);
+        DrawSectorEditorPlacedObjectInspector(runtimeObjectInspectorContext);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return;
