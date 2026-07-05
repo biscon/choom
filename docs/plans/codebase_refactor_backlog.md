@@ -62,7 +62,7 @@ Task Type:
 | REF-022 | `[ ]` | Medium | Editor god file | Extract light/static-light/object-probe inspector/actions | Codex task | Medium/High | Source-hash semantics matter; audit recommends mini audit before source-hash-sensitive extraction |
 | REF-023 | `[ ]` | Low | Editor god file | Extract remaining modal draw flows | Codex task | Medium | Most obvious modal draw bodies have moved; remaining work is feature-specific routing |
 | REF-024 | `[ ]` | High | Editor god file | Review direct `state.topologyMap` mutations | Audit first | Medium | First-pass map exists in REF-019 audit; keep for narrower follow-up |
-| REF-054 | `[ ]` | High | Editor god file | Audit materials/sidedef/decal extraction boundary | Audit first | Medium | Narrow callback/context audit before REF-055 |
+| REF-054 | `[x]` | High | Editor god file | Audit materials/sidedef/decal extraction boundary | Audit first | Medium | Completed; report recommends callback-based REF-055 inspector extraction |
 | REF-055 | `[ ]` | High | Editor god file | Extract SideDef/material/decal inspector into `tools/materials/` | Codex task | Medium/High | Preserve material finish paths, cache invalidation, and preview rebuild |
 | REF-056 | `[ ]` | Medium | Editor god file | Audit preview overlay and preview UV/material panel extraction | Audit first | Medium/High | Decide material-vs-preview ownership before moving line-count-heavy UI |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
@@ -75,7 +75,7 @@ Task Type:
 | REF-050 | `[x]` | High | Editor architecture | Add Manipulation service shell | Codex task | Medium | Own generic drag lifecycle while delegating existing movement paths first |
 | REF-051 | `[x]` | Medium | Editor architecture | Pilot first move provider | Codex task | Medium | Completed; placed-object/billboard movement routes through provider while preserving door movement refusal |
 | REF-052 | `[x]` | High | Editor architecture | Migrate Select tool using services/providers | Codex task | High | Completed; future provider refinements remain optional |
-| REF-044 | `[ ]` | Medium | Editor architecture | Migrate material/sidedef/decal editing into `tools/materials/` | Audit first | Medium/High | Superseded by REF-054/REF-055 slices |
+| REF-044 | `[~]` | Medium | Editor architecture | Migrate material/sidedef/decal editing into `tools/materials/` | Audit first | Medium/High | Umbrella for REF-054/REF-055 materials migration series |
 | REF-045 | `[ ]` | Medium | Editor architecture | Audit lights/source-hash-sensitive tool migration | Audit first | High | Static lights, directional light, and object probe settings affect source hash |
 | REF-046 | `[ ]` | Low | Editor architecture | Audit preview tool/module migration | Audit first | High | Keep renderer resource orchestration central |
 | REF-025 | `[ ]` | Medium | Lightmap/probes | Extract object probe sidecar IO | Codex task | Medium | Preserve sidecar/status behavior |
@@ -660,7 +660,7 @@ Task Type:
     lightmap source-hash behavior, collision, and preview behavior were not
     changed by this audit.
 
-#### REF-054 `[ ]` Audit materials/sidedef/decal extraction boundary
+#### REF-054 `[x]` Audit materials/sidedef/decal extraction boundary
 
 - Source/audit reference:
   `docs/audit/sector_editor_post_tool_migration_line_map.md`.
@@ -683,10 +683,25 @@ Task Type:
   - Explicitly document topology render-cache invalidation and preview rebuild
     paths.
 - Completion notes:
+  - Completed in
+    `docs/audit/sector_editor_materials_boundary_audit.md`.
+  - Recommended REF-055 scope: extract the `DrawTopologySideDefInspector()`
+    body and inspector-only helper lambdas into
+    `sources/sector_editor/tools/materials/SectorEditorMaterialInspector.h/.cpp`
+    using a narrow state/UI/callback context and no direct `SectorEditor.h`
+    dependency.
+  - Expected `SectorEditor.cpp` reduction from REF-055: roughly 600-740 lines
+    if broad material finish wrappers, generic texture picker apply routing,
+    preview UV panel, and authoring graph internals remain in `SectorEditor.cpp`
+    initially.
+  - Source code, tests, CMake, runtime behavior, topology cache behavior,
+    lightmap source-hash behavior, collision, and preview behavior were not
+    changed by this audit.
 
 #### REF-055 `[ ]` Extract SideDef/material/decal inspector into `tools/materials/`
 
-- Source/audit reference: REF-053 and REF-054.
+- Source/audit reference: REF-053 and
+  `docs/audit/sector_editor_materials_boundary_audit.md`.
 - Why it helps: removes the largest straightforward material UI block from
   `SectorEditor.cpp` and starts a materials feature folder instead of growing
   generic action/modal categories.
@@ -707,7 +722,9 @@ Task Type:
     preview is active.
   - Do not move texture catalog/import or add-map-texture ownership in this
     task.
-  - Expected `SectorEditor.cpp` reduction: roughly 550-700 lines.
+  - Do not move `ApplyTexturePickerSelection()` or `DrawPreviewUvPanel()` in
+    this task unless a later implementation explicitly re-scopes the work.
+  - Expected `SectorEditor.cpp` reduction: roughly 600-740 lines.
 - Completion notes:
 
 #### REF-056 `[ ]` Audit preview overlay and preview UV/material panel extraction
@@ -997,10 +1014,11 @@ Task Type:
     light movement, and topology/preview selection providers if useful later.
   - No behavior changes intended.
 
-#### REF-044 `[ ]` Migrate material/sidedef/decal editing into `tools/materials/`
+#### REF-044 `[~]` Migrate material/sidedef/decal editing into `tools/materials/`
 
 - Source/audit reference:
-  `docs/audit/sector_editor_tool_module_boundary_design.md`.
+  `docs/audit/sector_editor_tool_module_boundary_design.md` and
+  `docs/audit/sector_editor_materials_boundary_audit.md`.
 - Why it helps: keeps material inspector UI, decal modal, material actions, and
   material-specific picker routing together instead of expanding generic
   material/action/modal categories.
@@ -1021,6 +1039,10 @@ Task Type:
     inspector extraction. Treat REF-044 as the umbrella, not the next direct
     implementation task.
 - Completion notes:
+  - REF-054 completed the materials/sidedef/decal boundary audit at
+    `docs/audit/sector_editor_materials_boundary_audit.md`.
+  - REF-055 remains the next unchecked implementation slice for moving the
+    SideDef/material/decal inspector into `tools/materials/`.
 
 #### REF-045 `[ ]` Audit lights/source-hash-sensitive tool migration
 
