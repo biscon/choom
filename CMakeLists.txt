@@ -119,6 +119,7 @@ if(BUILD_TESTING)
             sources/sector_editor/document/SectorEditorDocumentActions.cpp
             sources/sector_editor/SectorEditorHelpers.cpp
             sources/sector_editor/SectorEditorTextureActions.cpp
+            sources/sector_editor/services/texture_picker/SectorEditorTexturePickerService.cpp
             sources/sector_editor/SectorEditorTopologyActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
             sources/sector_demo/SectorAssetPaths.cpp

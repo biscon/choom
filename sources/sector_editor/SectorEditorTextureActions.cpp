@@ -2,6 +2,7 @@
 
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
 #include "sector_demo/SectorTextureTypes.h"
 
 #include <algorithm>
@@ -11,24 +12,6 @@
 namespace game {
 
 namespace {
-
-void PopulateTexturePickerOptions(TexturePickerState& picker, const SectorTopologyMap& map, const std::string& currentTexture)
-{
-    picker.selectedTextureIndex = 0;
-    picker.scroll = engine::UIScrollState{};
-    picker.textureIds.clear();
-    picker.optionLabels.clear();
-
-    const std::vector<std::string> textureIds = SortedSectorTopologyTextureIds(map);
-    picker.textureIds.insert(picker.textureIds.end(), textureIds.begin(), textureIds.end());
-
-    for (size_t i = 0; i < picker.textureIds.size(); ++i) {
-        picker.optionLabels.push_back(picker.textureIds[i].c_str());
-        if (picker.textureIds[i] == currentTexture) {
-            picker.selectedTextureIndex = static_cast<int>(i);
-        }
-    }
-}
 
 bool IsSectorPickerTarget(TopologyTexturePickerTargetKind kind)
 {
@@ -692,11 +675,10 @@ bool OpenTopologyTexturePicker(
             || field == TopologySectorTextureField::None
             || (layer == TopologyMaterialLayer::Decal
                     && !IsAuthoringFaceAnchorDecalTextureField(field))) {
-        picker = TexturePickerState{};
+        CloseSectorEditorTexturePicker(picker);
         return false;
     }
 
-    picker.open = true;
     picker.rebuildPreviewOnApply = false;
     picker.topologyTargetKind = TopologyTexturePickerTargetKind::Sector;
     picker.topologyLayer = layer;
@@ -705,7 +687,7 @@ bool OpenTopologyTexturePicker(
     picker.topologySideDefId = -1;
     picker.topologyWallPart = TopologyWallPart::Wall;
 
-    PopulateTexturePickerOptions(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
+    OpenSectorEditorTexturePicker(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
     return true;
 }
 
@@ -720,11 +702,10 @@ bool OpenTopologySideDefTexturePicker(
     if (sideDef == nullptr
             || (wallPart == TopologyWallPart::Middle
                     && !IsTopologyMiddleEligible(state.topologyMap, sideDef))) {
-        picker = TexturePickerState{};
+        CloseSectorEditorTexturePicker(picker);
         return false;
     }
 
-    picker.open = true;
     picker.rebuildPreviewOnApply = false;
     picker.topologyTargetKind = TopologyTexturePickerTargetKind::SideDef;
     picker.topologyLayer = wallPart == TopologyWallPart::Middle
@@ -735,7 +716,7 @@ bool OpenTopologySideDefTexturePicker(
     picker.topologySideDefId = sideDefId;
     picker.topologyWallPart = wallPart;
 
-    PopulateTexturePickerOptions(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
+    OpenSectorEditorTexturePicker(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
     return true;
 }
 
@@ -754,11 +735,10 @@ bool OpenAuthoringFaceAnchorTexturePicker(
             || field == TopologySectorTextureField::None
             || (layer == TopologyMaterialLayer::Decal
                     && !IsAuthoringFaceAnchorDecalTextureField(field))) {
-        picker = TexturePickerState{};
+        CloseSectorEditorTexturePicker(picker);
         return false;
     }
 
-    picker.open = true;
     picker.rebuildPreviewOnApply = false;
     picker.authoringSurface3DFlatTarget = false;
     picker.topologyTargetKind = TopologyTexturePickerTargetKind::AuthoringFaceAnchor;
@@ -771,7 +751,7 @@ bool OpenAuthoringFaceAnchorTexturePicker(
     picker.authoringLineId = -1;
     picker.authoringSide = SectorTopologySideKind::Front;
 
-    PopulateTexturePickerOptions(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
+    OpenSectorEditorTexturePicker(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
     return true;
 }
 
@@ -787,11 +767,10 @@ bool OpenAuthoringFaceAnchorTexturePickerById(
             || field == TopologySectorTextureField::None
             || (layer == TopologyMaterialLayer::Decal
                     && !IsAuthoringFaceAnchorDecalTextureField(field))) {
-        picker = TexturePickerState{};
+        CloseSectorEditorTexturePicker(picker);
         return false;
     }
 
-    picker.open = true;
     picker.rebuildPreviewOnApply = false;
     picker.authoringSurface3DFlatTarget = false;
     picker.topologyTargetKind = TopologyTexturePickerTargetKind::AuthoringFaceAnchor;
@@ -806,11 +785,11 @@ bool OpenAuthoringFaceAnchorTexturePickerById(
 
     std::string status;
     if (!ResolveDirectAuthoringFaceAnchorPickerTarget(state, picker, status)) {
-        picker = TexturePickerState{};
+        CloseSectorEditorTexturePicker(picker);
         return false;
     }
 
-    PopulateTexturePickerOptions(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
+    OpenSectorEditorTexturePicker(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
     return true;
 }
 
@@ -831,11 +810,10 @@ bool OpenAuthoringSideTexturePicker(
             || !FindSectorEditorAuthoringSideIdForTopologySideDef(state, topologySideDefId, sideId)
             || (wallPart == TopologyWallPart::Middle
                     && !IsTopologyMiddleEligible(state.topologyMap, sideDef))) {
-        picker = TexturePickerState{};
+        CloseSectorEditorTexturePicker(picker);
         return false;
     }
 
-    picker.open = true;
     picker.rebuildPreviewOnApply = false;
     picker.authoringSurface3DFlatTarget = false;
     picker.topologyTargetKind = TopologyTexturePickerTargetKind::AuthoringSide;
@@ -850,7 +828,7 @@ bool OpenAuthoringSideTexturePicker(
     picker.authoringLineId = -1;
     picker.authoringSide = SectorTopologySideKind::Front;
 
-    PopulateTexturePickerOptions(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
+    OpenSectorEditorTexturePicker(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
     return true;
 }
 
@@ -863,11 +841,10 @@ bool OpenAuthoringSideTexturePickerById(
     TexturePickerState& picker = state.texturePicker;
     if (!HasCurrentAuthoringDerivation(state)
             || FindSectorAuthoringLine(state.authoringGraph, sideId.lineId) == nullptr) {
-        picker = TexturePickerState{};
+        CloseSectorEditorTexturePicker(picker);
         return false;
     }
 
-    picker.open = true;
     picker.rebuildPreviewOnApply = false;
     picker.authoringSurface3DFlatTarget = false;
     picker.topologyTargetKind = TopologyTexturePickerTargetKind::AuthoringSide;
@@ -884,11 +861,11 @@ bool OpenAuthoringSideTexturePickerById(
 
     std::string status;
     if (!ResolveDirectAuthoringSidePickerTarget(state, picker, status)) {
-        picker = TexturePickerState{};
+        CloseSectorEditorTexturePicker(picker);
         return false;
     }
 
-    PopulateTexturePickerOptions(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
+    OpenSectorEditorTexturePicker(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
     return true;
 }
 
@@ -896,11 +873,10 @@ bool OpenMapSkyTexturePicker(SectorEditorState& state)
 {
     TexturePickerState& picker = state.texturePicker;
     if (!state.previewSettingsModal.open) {
-        picker = TexturePickerState{};
+        CloseSectorEditorTexturePicker(picker);
         return false;
     }
 
-    picker.open = true;
     picker.rebuildPreviewOnApply = false;
     picker.topologyTargetKind = TopologyTexturePickerTargetKind::MapSky;
     picker.topologyLayer = TopologyMaterialLayer::Base;
@@ -909,7 +885,7 @@ bool OpenMapSkyTexturePicker(SectorEditorState& state)
     picker.topologySideDefId = -1;
     picker.topologyWallPart = TopologyWallPart::Wall;
 
-    PopulateTexturePickerOptions(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
+    OpenSectorEditorTexturePicker(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
     return true;
 }
 
@@ -918,11 +894,10 @@ bool OpenRuntimeDoorTexturePicker(SectorEditorState& state, int runtimeObjectId)
     TexturePickerState& picker = state.texturePicker;
     const SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(state.topologyMap, runtimeObjectId);
     if (object == nullptr || object->kind != "door") {
-        picker = TexturePickerState{};
+        CloseSectorEditorTexturePicker(picker);
         return false;
     }
 
-    picker.open = true;
     picker.rebuildPreviewOnApply = false;
     picker.topologyTargetKind = TopologyTexturePickerTargetKind::RuntimeDoor;
     picker.topologyLayer = TopologyMaterialLayer::Base;
@@ -935,7 +910,7 @@ bool OpenRuntimeDoorTexturePicker(SectorEditorState& state, int runtimeObjectId)
     picker.authoringSide = SectorTopologySideKind::Front;
     picker.runtimeObjectId = runtimeObjectId;
 
-    PopulateTexturePickerOptions(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
+    OpenSectorEditorTexturePicker(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
     return true;
 }
 
@@ -943,15 +918,13 @@ SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(SectorEditorSta
 {
     SectorEditorTexturePickerApplyResult result;
     TexturePickerState& picker = state.texturePicker;
-    if (!picker.open
-            || picker.topologyTargetKind == TopologyTexturePickerTargetKind::None
-            || picker.selectedTextureIndex < 0
-            || picker.selectedTextureIndex >= static_cast<int>(picker.textureIds.size())) {
-        picker = TexturePickerState{};
+    const SectorEditorSelectedTexture selected = CurrentSectorEditorTexturePickerSelection(picker);
+    if (!selected.valid) {
+        CloseSectorEditorTexturePicker(picker);
         return result;
     }
 
-    const std::string selectedTexture = picker.textureIds[static_cast<size_t>(picker.selectedTextureIndex)];
+    const std::string selectedTexture = selected.textureId;
     result.rebuildPreviewOnApply = picker.rebuildPreviewOnApply;
 
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::MapSky) {
@@ -960,7 +933,7 @@ SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(SectorEditorSta
             state.previewSettingsModal.draftSkySettings.textureId = selectedTexture;
             state.previewSettingsModal.errorMessage.clear();
         }
-        picker = TexturePickerState{};
+        CloseSectorEditorTexturePicker(picker);
         return result;
     }
 
@@ -972,13 +945,13 @@ SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(SectorEditorSta
             result.changed = true;
             result.status = "Selected door texture.";
         }
-        picker = TexturePickerState{};
+        CloseSectorEditorTexturePicker(picker);
         return result;
     }
 
     AssignSelectedTextureToPickerTarget(state.topologyMap, picker, selectedTexture, result);
 
-    picker = TexturePickerState{};
+    CloseSectorEditorTexturePicker(picker);
     return result;
 }
 
@@ -993,17 +966,16 @@ SectorEditorTexturePickerApplyResult ApplyAuthoringTexturePickerSelection(Sector
 
     SectorEditorTexturePickerApplyResult result;
     const auto closeAndReturn = [&state, &result]() {
-        state.texturePicker = TexturePickerState{};
+        CloseSectorEditorTexturePicker(state.texturePicker);
         return result;
     };
 
-    if (picker.selectedTextureIndex < 0
-            || picker.selectedTextureIndex >= static_cast<int>(picker.textureIds.size())) {
+    const SectorEditorSelectedTexture selected = CurrentSectorEditorTexturePickerSelection(picker);
+    if (!selected.valid) {
         return closeAndReturn();
     }
 
-    const std::string selectedTexture =
-            picker.textureIds[static_cast<size_t>(picker.selectedTextureIndex)];
+    const std::string selectedTexture = selected.textureId;
     result.rebuildPreviewOnApply = picker.rebuildPreviewOnApply;
 
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringFaceAnchor) {

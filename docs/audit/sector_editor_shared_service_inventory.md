@@ -300,6 +300,8 @@ Initial scope:
   it consume the service-selected texture result.
 - Keep `SectorEditor.cpp` as the high-level coordinator for feature-owned apply
   routes until material and door/sky routing are split.
+- REF-057 implemented the minimal `TexturePickerService`; feature-specific
+  apply routing remains future work.
 
 Do not move:
 

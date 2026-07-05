@@ -14,6 +14,7 @@
 #include "sector_editor/SectorEditorMaterialModals.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
+#include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
 #include "sector_editor/tools/billboards/SectorEditorBillboardActions.h"
 #include "sector_editor/tools/doors/SectorEditorDoorActions.h"
 #include "sector_editor/tools/doors/SectorEditorDoorModals.h"
@@ -7443,13 +7444,20 @@ void SectorEditor::DrawTexturePickerModal(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
-    const SectorEditorTexturePickerCallbacks callbacks{
-            [this]() { state.texturePicker = TexturePickerState{}; },
+    const SectorEditorTexturePickerServiceCallbacks callbacks{
             [this, &assets]() { ApplyTexturePickerSelection(assets); },
             [this]() { return CurrentTextureForPickerTarget(); },
             [this](const std::string& textureId) { return EditorTextureHandleForId(textureId); }
     };
-    game::DrawTexturePickerModal(ui, config, input, assets, font, state.texturePicker, state.topologyMap, callbacks);
+    DrawSectorEditorTexturePickerModal(
+            ui,
+            config,
+            input,
+            assets,
+            font,
+            state.texturePicker,
+            state.topologyMap,
+            callbacks);
 }
 
 void SectorEditor::DrawSpritePickerModal(
@@ -9736,17 +9744,16 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
 {
     if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDoor) {
         TexturePickerState& picker = state.texturePicker;
-        if (!picker.open
-                || picker.selectedTextureIndex < 0
-                || picker.selectedTextureIndex >= static_cast<int>(picker.textureIds.size())) {
+        const SectorEditorSelectedTexture selected = CurrentSectorEditorTexturePickerSelection(picker);
+        if (!selected.valid) {
             statusText = "Select a texture";
-            picker = TexturePickerState{};
+            CloseSectorEditorTexturePicker(picker);
             return;
         }
 
         const int targetObjectId = picker.runtimeObjectId;
-        const std::string selectedTexture = picker.textureIds[static_cast<size_t>(picker.selectedTextureIndex)];
-        picker = TexturePickerState{};
+        const std::string selectedTexture = selected.textureId;
+        CloseSectorEditorTexturePicker(picker);
 
         if (state.selectedRuntimeObjectId != targetObjectId) {
             statusText = "Door texture target unavailable";
@@ -9814,7 +9821,7 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
             statusText = routeAuthoringSideMaterial
                     ? "Wall material edit unavailable: derived topology is not current"
                     : "3D surface edit unavailable: derived topology is not current";
-            state.texturePicker = TexturePickerState{};
+            CloseSectorEditorTexturePicker(state.texturePicker);
             return;
         }
     }
@@ -9825,7 +9832,7 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
                     authoringSideDefId,
                     sideId)) {
             statusText = "Wall material edit unavailable: selected sidedef has no authoring side mapping";
-            state.texturePicker = TexturePickerState{};
+            CloseSectorEditorTexturePicker(state.texturePicker);
             return;
         }
         topologyBeforePicker = state.topologyMap;
@@ -9873,7 +9880,7 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
             statusText = unavailableStatus.empty()
                     ? "3D flat surface edit unavailable: selected surface has no face anchor mapping"
                     : unavailableStatus;
-            state.texturePicker = TexturePickerState{};
+            CloseSectorEditorTexturePicker(state.texturePicker);
             return;
         }
         topologyBeforePicker = state.topologyMap;

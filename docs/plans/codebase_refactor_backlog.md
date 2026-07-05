@@ -65,7 +65,7 @@ Task Type:
 | REF-054 | `[x]` | High | Editor god file | Audit materials/sidedef/decal extraction boundary | Audit first | Medium | Completed; report recommends callback-based REF-055 inspector extraction |
 | REF-055 | `[x]` | High | Editor god file | Extract SideDef/material/decal inspector into `tools/materials/` | Codex task | Medium/High | Completed; inspector moved to tools/materials while finish wrappers stayed central |
 | REF-056 | `[x]` | High | Editor architecture | SectorEditor shared service inventory audit | Audit first | Low | Completed; recommends minimal TexturePickerService first |
-| REF-057 | `[ ]` | High | Editor architecture | Extract minimal TexturePickerService | Codex task | Medium | Generic picker lifecycle/result mechanics only; preserve feature-specific apply semantics |
+| REF-057 | `[x]` | High | Editor architecture | Extract minimal TexturePickerService | Codex task | Medium | Generic picker lifecycle/result mechanics only; preserve feature-specific apply semantics |
 | REF-058 | `[ ]` | Medium | Editor architecture | Audit AssetCatalog/TextureCatalog service boundary | Audit first | Medium | Keep texture import/handle/catalog ownership separate from picker apply routing |
 | REF-059 | `[ ]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Preserve finish wrappers, cache invalidation, authoring routing, and preview rebuild |
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
@@ -785,7 +785,7 @@ Task Type:
     lightmap source-hash behavior, collision, and preview behavior were not
     changed by this audit.
 
-#### REF-057 `[ ]` Extract minimal TexturePickerService
+#### REF-057 `[x]` Extract minimal TexturePickerService
 
 - Source/audit reference:
   `docs/audit/sector_editor_shared_service_inventory.md`.
@@ -806,6 +806,15 @@ Task Type:
     texture apply, sky apply, sprite picker behavior, add-map texture import, or
     preview rebuild policy.
 - Completion notes:
+  - Minimal `TexturePickerService` added under
+    `sources/sector_editor/services/texture_picker/`.
+  - Generic picker lifecycle/result mechanics moved or centralized: close/reset,
+    open/modal option population, selected texture extraction, and modal
+    callback wiring.
+  - Feature-specific apply semantics remain in existing owners.
+  - `ApplyTexturePickerSelection()` behavior is unchanged; it now consumes the
+    service-selected texture result before running the existing apply routing.
+  - No behavior changes intended.
 
 #### REF-058 `[ ]` Audit AssetCatalog/TextureCatalog service boundary
 
