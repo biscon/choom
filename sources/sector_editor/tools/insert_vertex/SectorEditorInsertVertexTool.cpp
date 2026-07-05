@@ -215,6 +215,8 @@ const SectorEditorToolModule InsertVertexModule{
         SectorEditorTool::AuthoringInsertVertex,
         "Authoring Insert Vertex",
         UpdateInsertVertexToolHover,
+        nullptr,
+        nullptr,
         UpdateInsertVertexTool,
         DrawInsertVertexToolOverlay,
         CancelInsertVertexTool};

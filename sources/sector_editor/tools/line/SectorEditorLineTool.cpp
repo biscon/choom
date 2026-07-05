@@ -148,6 +148,8 @@ const SectorEditorToolModule LineModule{
         SectorEditorTool::AuthoringLine,
         "Authoring Line",
         nullptr,
+        nullptr,
+        nullptr,
         UpdateLineTool,
         DrawLineToolOverlay,
         CancelLineTool};

@@ -28,7 +28,7 @@ Select is not just another migrated authoring tool. In the 2D canvas it handles:
 - movement dispatch to authoring vertex, light, and runtime-object drag systems
 - hover feedback for the same mixed target set
 
-The current danger is visible in `SectorEditor::StartSelectDrag()`: Select
+Before REF-052, the main danger was visible in `SectorEditor::StartSelectDrag()`: Select
 switches on `SectorEditorPickKind` and starts a different movement path for
 runtime objects, lights, and authoring vertices. If Select is migrated directly
 into `tools/select/` without a provider contract, that switch will grow as every
@@ -74,7 +74,7 @@ Feature modules should own their object-specific rules.
 
 | Movement system | Current functions | State touched | Target kind | Mutation route | Dirty/cache route | Runtime refresh route | Cancel behavior | Finish behavior | Risk |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Select drag arm/routing | `UpdateSelectDragArm()`, `ArmSelectedSelectDrag()`, `StartSelectDrag()`, `FindSelectedMovablePickTargetAtScreenPoint()` | `selectDragArm` plus selected target state | Runtime objects, lights, authoring vertices | Dispatch only | None directly | None directly | Clears arm if tool/mouse state changes | Starts one concrete drag system after drag threshold | High growth risk because it switches by target kind |
+| Select drag arm/routing | REF-052 Select module plus Manipulation service drag-arm helpers | `selectDragArm` plus selected target state | Runtime objects, lights, authoring vertices | Dispatch only | None directly | None directly | Clears arm if tool/mouse state changes | Starts one concrete drag system after drag threshold | Lower risk after service/provider migration; provider coverage remains incremental |
 | Authoring vertex movement | `StartAuthoringVertexDrag()`, `UpdateAuthoringVertexDrag()`, `FinishAuthoringVertexDrag()`, `CancelAuthoringVertexDrag()` | `authoringVertexDrag`, `selectedAuthoring`, topology selection clear | Authoring vertex | `MoveSectorEditorAuthoringVertex()` mutates `authoringGraph` | `MarkSectorEditorAuthoringGraphEdited()` invalidates editor topology cache and marks dirty/stale | Derivation refresh happens in authoring helper; no ECS runtime object respawn | Clears drag preview; does not need rollback because mutation happens only on finish | Commits snapped preview point or rejects unchanged/invalid target | Medium; currently local to `SectorEditor.cpp` |
 | Runtime/placed object drag | `StartRuntimeObjectDrag()`, `UpdateRuntimeObjectDrag()`, `FinishRuntimeObjectDrag()`, `CancelRuntimeObjectDrag()`, placed-object drag helpers | `runtimeObjectDrag`, selected runtime object | Runtime object / billboard; door refuses | Mutates `topologyMap.runtimeObjects[*].position` during drag | Drag updates cached runtime-object draw; finish calls `MarkTopologyDocumentEdited()` | Finish calls `RefreshRuntimeObjectsAfterAuthoringEdit()` to respawn runtime ECS objects | Restores original position and cached draw, reselects object | Marks unchanged or dirty; respawns runtime objects after changed move | Low/medium; already has a useful callback context |
 | Light drag | `StartLightDrag()`, `UpdateLightDrag()`, `FinishLightDrag()`, `CancelLightDrag()` | `lightDrag`, light selected IDs | Static/dynamic point and spot lights | Mutates light arrays in `topologyMap` during drag | Finish uses `FinishTopologyActionResult()` -> `MarkTopologyDocumentEdited()` -> cache invalidation | No generic ECS respawn; dynamic preview light refresh is handled by other paths | Restores original position/target and reselects light | Marks unchanged or dirty; static point/dynamic point use topology action helpers | High; static lights are source-hash-sensitive |
@@ -334,6 +334,9 @@ Phase 2: Extract Selection service helpers.
 - REF-051 note: the first move provider pilot was added for placed objects.
   Provider dispatch is now proven for one movement family, and Select migration
   remains future work.
+- REF-052 note: Select was migrated to `sources/sector_editor/tools/select/`
+  using the Selection and Manipulation services. Object-specific movement
+  remains outside Select; provider coverage is still incremental.
 
 Phase 3: Add Manipulation service shell.
 
@@ -470,11 +473,11 @@ Dirty/cache/runtime refresh examples:
 - light movement finish uses topology action results; static light movement
   changes lightmap source inputs because static lights affect baked lighting.
 
-Examples where Select currently routes movement:
+Examples where Select routed movement before REF-052:
 
-- `StartSelectDrag()` routes runtime objects to `StartRuntimeObjectDrag()`.
-- `StartSelectDrag()` routes all four light kinds to `StartLightDrag()`.
-- `StartSelectDrag()` routes authoring vertices to
+- `StartSelectDrag()` routed runtime objects to `StartRuntimeObjectDrag()`.
+- `StartSelectDrag()` routed all four light kinds to `StartLightDrag()`.
+- `StartSelectDrag()` routed authoring vertices to
   `StartAuthoringVertexDrag()`.
 - `IsSectorEditorPickTargetMovable()` currently returns movable for runtime
   objects, all light pick kinds, and authoring vertices; not movable for

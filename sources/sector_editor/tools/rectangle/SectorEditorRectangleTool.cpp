@@ -166,6 +166,8 @@ const SectorEditorToolModule RectangleModule{
         SectorEditorTool::AuthoringRectangle,
         "Authoring Rectangle",
         nullptr,
+        nullptr,
+        nullptr,
         UpdateRectangleTool,
         DrawRectangleToolOverlay,
         CancelRectangleTool};

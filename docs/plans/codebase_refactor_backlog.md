@@ -694,7 +694,7 @@ Task Type:
   - High-level document lifecycle orchestration remains in `SectorEditor`.
   - No behavior changes intended.
 
-#### REF-043 `[~]` Authoring tool module contract and migration series
+#### REF-043 `[x]` Authoring tool module contract and migration series
 
 - Source/audit reference:
   `docs/audit/sector_editor_tool_module_boundary_design.md`.
@@ -733,13 +733,13 @@ Task Type:
   - REF-043c migrated Authoring Insert Vertex behavior into
     `tools/insert_vertex/`.
   - REF-043c registered Insert Vertex in `FindSectorEditorToolModule()`.
-  - `SectorEditor` uses module dispatch for Line, Rectangle, and Insert Vertex.
+  - `SectorEditor` uses module dispatch for Line, Rectangle, Insert Vertex, and
+    Select.
   - REF-047 completed the Selection service and Manipulation provider contract
     report.
-  - Legacy fallback remains for Select.
+  - REF-052 migrated Select using Selection and Manipulation services/providers.
+  - Movement providers can continue as future refinements.
   - No behavior changes intended.
-  - REF-043 remains open for selection/manipulation implementation and Select
-    migration.
 
 #### REF-047 `[x]` Selection service and manipulation provider contract
 
@@ -857,7 +857,7 @@ Task Type:
   - No Select migration was performed.
   - No behavior changes intended.
 
-#### REF-052 `[ ]` Migrate Select tool using services/providers
+#### REF-052 `[x]` Migrate Select tool using services/providers
 
 - Source/audit reference:
   `docs/audit/sector_editor_selection_manipulation_contract.md`.
@@ -875,6 +875,15 @@ Task Type:
   - Select should call services/providers rather than switching over every
     primitive.
 - Completion notes:
+  - Migrated Select into `sources/sector_editor/tools/select/`.
+  - Select uses Selection and Manipulation services for selection state changes
+    and drag/manipulation lifecycle.
+  - Select does not own object-specific movement implementation.
+  - Placed-object movement still routes through the provider.
+  - Authoring vertex and light movement remain fallback movement paths.
+  - Future provider refinements remain open for authoring vertex movement,
+    light movement, and topology/preview selection providers if useful later.
+  - No behavior changes intended.
 
 #### REF-044 `[ ]` Migrate material/sidedef/decal editing into `tools/materials/`
 

@@ -1,15 +1,19 @@
 #pragma once
 
 #include "sector_editor/SectorEditorAuthoringState.h"
+#include "sector_editor/selection/SectorEditorManipulationService.h"
+#include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/SectorEditorTypes.h"
 
 #include <raylib.h>
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace engine {
 class Input;
+struct InputEvent;
 }
 
 namespace game {
@@ -43,6 +47,11 @@ struct SectorEditorToolContext {
             resolveAuthoringInsertVertexPoint;
     std::function<bool(int, SectorTopologyCoordPoint, SectorAuthoringInsertVertexResult*)>
             commitAuthoringInsertVertex;
+
+    std::function<std::vector<SectorEditorPickCandidate>(Vector2)> buildSelectPickCandidates;
+    std::function<SectorEditorPickTarget()> currentPickSelectionTarget;
+    std::function<SectorEditorSelectionServiceContext()> buildSelectionServiceContext;
+    std::function<SectorEditorManipulationServiceContext()> buildManipulationServiceContext;
 };
 
 struct SectorEditorToolModule {
@@ -50,6 +59,8 @@ struct SectorEditorToolModule {
     const char* label = "";
 
     void (*updateHover)(SectorEditorToolContext& context, Vector2 mapPoint) = nullptr;
+    bool (*updateEarly)(SectorEditorToolContext& context) = nullptr;
+    bool (*handleMousePress)(SectorEditorToolContext& context, const engine::InputEvent& event) = nullptr;
     bool (*update)(SectorEditorToolContext& context) = nullptr;
     void (*drawCanvasOverlay)(SectorEditorToolContext& context) = nullptr;
     bool (*cancel)(SectorEditorToolContext& context, const char* message) = nullptr;
