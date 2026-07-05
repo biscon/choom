@@ -852,6 +852,10 @@ The document module should not become a dumping ground for feature-specific
 confirmation flows. Generic confirmation modal state may remain shared; feature
 modals should live with their feature.
 
+Completion note: REF-042 moved document actions/modals into
+`sources/sector_editor/document/`. Document remains a non-tool module, and
+high-level lifecycle orchestration remains central in `SectorEditor`.
+
 ## Authoring Tool Split Plan
 
 Do not create one giant `authoring/` module unless a later audit proves that

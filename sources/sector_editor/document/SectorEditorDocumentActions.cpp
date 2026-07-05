@@ -1,4 +1,4 @@
-#include "sector_editor/SectorEditorDocumentActions.h"
+#include "sector_editor/document/SectorEditorDocumentActions.h"
 
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorHelpers.h"

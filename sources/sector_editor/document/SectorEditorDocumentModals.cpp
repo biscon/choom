@@ -1,4 +1,4 @@
-#include "sector_editor/SectorEditorDocumentModals.h"
+#include "sector_editor/document/SectorEditorDocumentModals.h"
 
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorHelpers.h"

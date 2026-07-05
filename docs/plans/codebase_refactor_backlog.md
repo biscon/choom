@@ -62,8 +62,8 @@ Task Type:
 | REF-023 | `[ ]` | Medium | Editor god file | Extract remaining modal draw flows | Codex task | Medium | Keep boundaries narrow; document/add-texture modals are good first slices |
 | REF-024 | `[ ]` | High | Editor god file | Review direct `state.topologyMap` mutations | Audit first | Medium | First-pass map exists in REF-019 audit; keep for narrower follow-up |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
-| REF-041 | `[ ]` | High | Editor architecture | Move runtime object editor files into `tools/runtime_objects/` | Codex task | Low/Medium | First implementation task from REF-040; no behavior changes |
-| REF-042 | `[ ]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
+| REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
+| REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
 | REF-043 | `[ ]` | Medium | Editor architecture | Split authoring tool modules into select/line/rectangle/insert vertex | Audit first | Medium/High | Do not create one giant authoring module |
 | REF-044 | `[ ]` | Medium | Editor architecture | Migrate material/sidedef/decal editing into `tools/materials/` | Audit first | Medium/High | Preserve material mutation/cache/preview rebuild paths |
 | REF-045 | `[ ]` | Medium | Editor architecture | Audit lights/source-hash-sensitive tool migration | Audit first | High | Static lights, directional light, and object probe settings affect source hash |
@@ -665,7 +665,7 @@ Task Type:
     dependency in the moved modules.
   - No behavior changes intended.
 
-#### REF-042 `[ ]` Move document actions/modals into `document/`
+#### REF-042 `[x]` Move document actions/modals into `document/`
 
 - Source/audit reference:
   `docs/audit/sector_editor_tool_module_boundary_design.md`.
@@ -682,6 +682,11 @@ Task Type:
   - Do not move preview enter/leave or renderer/resource lifecycle into the
     document folder.
 - Completion notes:
+  - Moved document actions/modals into
+    `sources/sector_editor/document/`.
+  - Document remains separate from tools.
+  - High-level document lifecycle orchestration remains in `SectorEditor`.
+  - No behavior changes intended.
 
 #### REF-043 `[ ]` Split authoring tool modules into select, line, rectangle, insert vertex
 

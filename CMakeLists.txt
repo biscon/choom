@@ -116,7 +116,7 @@ if(BUILD_TESTING)
     add_executable(sector_authoring_graph_tests
             tests/SectorAuthoringGraphTests.cpp
             sources/sector_editor/SectorEditorAuthoringState.cpp
-            sources/sector_editor/SectorEditorDocumentActions.cpp
+            sources/sector_editor/document/SectorEditorDocumentActions.cpp
             sources/sector_editor/SectorEditorHelpers.cpp
             sources/sector_editor/SectorEditorTextureActions.cpp
             sources/sector_editor/SectorEditorTopologyActions.cpp
