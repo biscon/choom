@@ -8,6 +8,7 @@
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorPreviewBillboardRenderer.h"
 #include "sector_demo/SectorPreviewBloom.h"
+#include "sector_demo/SectorPreviewDoorRenderer.h"
 #include "sector_demo/SectorPreviewDynamicLighting.h"
 #include "sector_demo/SectorPreviewSkyRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
@@ -28,11 +29,6 @@ namespace game {
 
 struct SectorTopologyMap;
 struct SectorBakedObjectLightProbeRuntimeData;
-
-struct SectorRuntimeDoorLightingContext {
-    const SectorBakedObjectLightProbeRuntimeData* objectLightProbes = nullptr;
-    const SectorTopologyMap* mapForFallback = nullptr;
-};
 
 enum class SectorDoorLightingDebugMode {
     Normal = 0,
@@ -118,9 +114,9 @@ public:
     const std::vector<int>& SelectedDynamicLightIds() const { return dynamicLightState.SelectedLightIds(); }
     size_t DynamicLightCandidateCount() const { return dynamicLightState.CandidateCount(); }
     size_t DynamicLightSourceCount() const { return dynamicLightState.SourceCount(); }
-    size_t DoorConsideredCount() const { return doorConsideredCount; }
-    size_t DoorDrawnCount() const { return doorDrawnCount; }
-    size_t DoorSkippedCount() const { return doorSkippedCount; }
+    size_t DoorConsideredCount() const { return doorRenderStats.considered; }
+    size_t DoorDrawnCount() const { return doorRenderStats.drawn; }
+    size_t DoorSkippedCount() const { return doorRenderStats.skipped; }
 
 private:
     engine::TextureHandle TextureForId(const std::string& textureId) const;
@@ -232,9 +228,7 @@ private:
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
     SectorDoorLightingDebugMode doorLightingDebugMode = SectorDoorLightingDebugMode::Normal;
-    size_t doorConsideredCount = 0;
-    size_t doorDrawnCount = 0;
-    size_t doorSkippedCount = 0;
+    SectorPreviewDoorRenderStats doorRenderStats;
     int lightmapStatus = 0;
     bool initialized = false;
     size_t sectorCount = 0;

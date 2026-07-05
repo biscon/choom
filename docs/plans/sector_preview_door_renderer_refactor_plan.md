@@ -41,13 +41,13 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_01",
       "title": "Introduce Door Renderer Context And Types",
       "type": "phase",
-      "status": "Planned"
+      "status": "Completed"
     },
     {
       "id": "phase_02",
       "title": "Move Door Mesh Cache Ownership And Preparation",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Planned"
     },
     {
       "id": "phase_03",
@@ -88,8 +88,8 @@ When an agent is asked to execute this plan, it must:
 | Phase / Pass | Status | Date | Notes |
 | --- | --- | --- | --- |
 | Phase 0: Baseline Audit And Behavior Contract | Completed | 2026-07-05 | Audited current door rendering, cache, lighting, shadow, debug, render-state, and ECS boundary behavior. Documentation-only; behavior contract updated. |
-| Phase 1: Introduce Door Renderer Context And Types | Planned |  | Add narrow context/data structs only; no ownership move. |
-| Phase 2: Move Door Mesh Cache Ownership And Preparation | Not Started |  | Move door mesh cache entry, upload/update/prune/unload, and preparation into `SectorPreviewDoorRenderer`. |
+| Phase 1: Introduce Door Renderer Context And Types | Completed | 2026-07-05 | Added `SectorPreviewDoorRenderer` module with narrow context/data structs. Grouped existing door draw counters into `SectorPreviewDoorRenderStats` still owned by `SectorMeshPreview`. Source changed; behavior intended unchanged. Checks passed. |
+| Phase 2: Move Door Mesh Cache Ownership And Preparation | Planned |  | Move door mesh cache entry, upload/update/prune/unload, and preparation into `SectorPreviewDoorRenderer`. |
 | Phase 3: Move Door Opaque Shader And Material Ownership | Not Started |  | Move door shader/material/resource state without shader formula or uniform name changes. |
 | Phase 4: Move Main Scene Door Draw Path | Not Started |  | Move main-scene door rendering while preserving draw order, object-probe uploads, dynamic lighting/shadows, and render-state restore. |
 | Phase 5: Move Door Shadow Caster Drawing Integration | Not Started |  | Let dynamic spotlight shadow rendering draw prepared door meshes through the door renderer boundary. |
@@ -209,6 +209,7 @@ Use this checklist for implementation phases that affect visual rendering. Repor
 ## Execution Log
 
 * 2026-07-05: Phase 0 completed. Audited `SectorMeshPreview` door rendering/cache/shader/material/debug ownership, `SectorPreviewDynamicLighting` shadow bridge, door mesh creation, dynamic light and shadow uploads, render order, resource lifetime, and ECS/runtime boundaries. Updated the Behavior Contract with exact current symbol names and ownership notes. Documentation-only; no source code, shader, CMake, test, runtime behavior, lightmap source-hash, topology cache, collision, sector lookup, physics, or ECS lifecycle changes. Manual visual smoke was not performed because this is a documentation-only audit phase.
+* 2026-07-05: Phase 1 completed. Added `sources/sector_demo/SectorPreviewDoorRenderer.h` and `.cpp` with narrow door lighting, draw, preparation, resource, stats, dynamic-light, texture-resolver, mesh-resolver, and shadow-caster context/data types. Moved `SectorRuntimeDoorLightingContext` declaration into the new header through `SectorMeshPreview.h` and grouped the existing public door draw counters into `SectorPreviewDoorRenderStats` while keeping ownership and all rendering implementation in `SectorMeshPreview`. Source code changed; no shader formulas or uniform names, shader/material/cache ownership, dynamic lighting or shadow selection, render order, runtime behavior, lightmap source-hash behavior, topology cache behavior, collision, sector lookup, physics, ECS lifecycle, CMake source-list, or JSON/schema behavior changed. Manual visual smoke was not performed because this pass only introduced types and mechanical no-op counter grouping. Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure -R "sector_runtime_object|sector_light|sector_topology|sector_editor|sector_authoring"`; `ctest --test-dir cmake-build-debug --output-on-failure`.
 
 ## Phase 0: Baseline Audit And Behavior Contract
 

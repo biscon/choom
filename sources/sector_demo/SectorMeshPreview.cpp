@@ -1364,9 +1364,7 @@ void SectorMeshPreview::DrawRuntimeDoors(
         SectorRuntimeDoorLightingContext doorLighting)
 {
     if (!doorOpaqueMaterialLoaded || !doorOpaqueShaderLoaded || doorOpaqueMaterial.shader.id == 0) {
-        doorConsideredCount = 0;
-        doorDrawnCount = 0;
-        doorSkippedCount = 0;
+        doorRenderStats = {};
         AppendDoorRenderDebugText(renderDebugText, "doors: shader unavailable");
         return;
     }
@@ -1531,9 +1529,9 @@ void SectorMeshPreview::DrawRuntimeDoors(
     rlEnableDepthMask();
     rlEnableBackfaceCulling();
 
-    doorConsideredCount = consideredCount;
-    doorDrawnCount = drawnCount;
-    doorSkippedCount = skippedCount;
+    doorRenderStats.considered = consideredCount;
+    doorRenderStats.drawn = drawnCount;
+    doorRenderStats.skipped = skippedCount;
     AppendDoorRenderDebugText(
             renderDebugText,
             "doors: "
