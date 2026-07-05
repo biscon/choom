@@ -222,25 +222,6 @@ int64_t CoordinateSequencePeriod(SectorCoord stepDelta, int64_t snapStep)
     return std::max<int64_t>(1, snapStep / std::max<int64_t>(1, divisor));
 }
 
-const char* InsertVertexFailureStatus(SectorAuthoringInsertVertexStatus status)
-{
-    switch (status) {
-        case SectorAuthoringInsertVertexStatus::Inserted:
-            return "Inserted vertex on authoring line";
-        case SectorAuthoringInsertVertexStatus::InvalidLine:
-            return "Insert Vertex: select or click an authoring line";
-        case SectorAuthoringInsertVertexStatus::InvalidEndpoint:
-            return "Insert Vertex unavailable: selected authoring line is invalid";
-        case SectorAuthoringInsertVertexStatus::OffLine:
-            return "Insert point must lie on the selected line";
-        case SectorAuthoringInsertVertexStatus::Endpoint:
-            return "Insert point is too close to an endpoint";
-        case SectorAuthoringInsertVertexStatus::IdAllocationFailed:
-            return "Insert Vertex failed: could not allocate authoring IDs";
-    }
-    return "Insert Vertex failed";
-}
-
 float AuthoringInspectorTextureRowTotalHeight(float gap)
 {
     return SectorEditorInspectorTextureRowHeight() + gap;
@@ -673,6 +654,9 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
     context.mapToScreen = [this](Vector2 map) {
         return MapToScreen(map);
     };
+    context.screenToMap = [this](Vector2 screen) {
+        return ScreenToMap(screen);
+    };
     context.clearTopologySelectionOnly = [this]() {
         ClearTopologySelectionOnly();
     };
@@ -681,6 +665,12 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
     };
     context.selectAuthoringLine = [this](int lineId) {
         SelectSectorEditorAuthoringLine(state, lineId);
+    };
+    context.hoverAuthoringLine = [this](int lineId) {
+        SetHoveredSectorEditorAuthoringLine(state, lineId);
+    };
+    context.findAuthoringLineNearScreenPoint = [this](Vector2 screenPoint) {
+        return FindAuthoringLineNearScreenPoint(screenPoint);
     };
     context.commitAuthoringLinePoint = [this](SectorTopologyCoordPoint point) {
         return ClickSectorEditorAuthoringLineTool(state, point);
@@ -693,6 +683,19 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
             SectorTopologyCoordPoint oppositeCorner,
             SectorEditorAuthoringRectangleResult* outResult) {
         return AddSectorEditorAuthoringRectangle(state, firstCorner, oppositeCorner, outResult);
+    };
+    context.resolveAuthoringInsertVertexPoint = [this](
+            int lineId,
+            Vector2 mapPoint,
+            SectorTopologyCoordPoint& outPoint,
+            std::string& error) {
+        return TryResolveAuthoringInsertVertexPoint(lineId, mapPoint, outPoint, error);
+    };
+    context.commitAuthoringInsertVertex = [this](
+            int lineId,
+            SectorTopologyCoordPoint point,
+            SectorAuthoringInsertVertexResult* outResult) {
+        return InsertSectorEditorAuthoringVertexOnLine(state, lineId, point, outResult);
     };
     return context;
 }
@@ -1192,12 +1195,6 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                                         cycleCount)
                                 : TextFormat("Selected %s %d", kindName, target.id);
                     }
-                    engine::ConsumeEvent(event);
-                    return;
-                }
-
-                if (state.currentTool == SectorEditorTool::AuthoringInsertVertex) {
-                    CommitAuthoringInsertVertex(event.mouseClick.releasePosition);
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -2160,6 +2157,14 @@ void SectorEditor::CancelPendingAuthoringRectangle(const char* message)
 
 void SectorEditor::CancelPendingAuthoringInsertVertex(const char* message)
 {
+    if (const SectorEditorToolModule* module =
+                FindSectorEditorToolModule(SectorEditorTool::AuthoringInsertVertex)) {
+        if (module->cancel != nullptr) {
+            SectorEditorToolContext toolContext = BuildToolContext(nullptr);
+            module->cancel(toolContext, message);
+            return;
+        }
+    }
     state.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
     if (message != nullptr && message[0] != '\0') {
         statusText = message;
@@ -2303,61 +2308,14 @@ bool SectorEditor::TryResolveAuthoringInsertVertexPoint(
 
 void SectorEditor::UpdatePendingAuthoringInsertVertex(Vector2 mapPoint)
 {
-    PendingAuthoringInsertVertex& pending = state.pendingAuthoringInsertVertex;
-    pending.hasPreviewPoint = false;
-    pending.errorMessage.clear();
-
-    int lineId = pending.active ? pending.lineId : -1;
-    if (!pending.active) {
-        lineId = FindAuthoringLineNearScreenPoint(MapToScreen(mapPoint));
+    if (const SectorEditorToolModule* module =
+                FindSectorEditorToolModule(SectorEditorTool::AuthoringInsertVertex)) {
+        if (module->updateHover != nullptr) {
+            SectorEditorToolContext toolContext = BuildToolContext(nullptr);
+            module->updateHover(toolContext, mapPoint);
+            return;
+        }
     }
-
-    if (FindSectorAuthoringLine(state.authoringGraph, lineId) == nullptr) {
-        pending.lineId = -1;
-        pending.errorMessage = "Insert Vertex: select or click an authoring line";
-        return;
-    }
-
-    pending.lineId = lineId;
-    SetHoveredSectorEditorAuthoringLine(state, lineId);
-    SectorTopologyCoordPoint point;
-    std::string error;
-    if (!TryResolveAuthoringInsertVertexPoint(lineId, mapPoint, point, error)) {
-        pending.errorMessage = error;
-        return;
-    }
-
-    pending.previewPoint = point;
-    pending.hasPreviewPoint = true;
-}
-
-void SectorEditor::CommitAuthoringInsertVertex(Vector2 screenPoint)
-{
-    const int lineId = state.pendingAuthoringInsertVertex.active
-            ? state.pendingAuthoringInsertVertex.lineId
-            : FindAuthoringLineNearScreenPoint(screenPoint);
-    if (FindSectorAuthoringLine(state.authoringGraph, lineId) == nullptr) {
-        statusText = "Insert Vertex: select or click an authoring line";
-        return;
-    }
-
-    SectorTopologyCoordPoint point;
-    std::string error;
-    if (!TryResolveAuthoringInsertVertexPoint(lineId, ScreenToMap(screenPoint), point, error)) {
-        state.pendingAuthoringInsertVertex.errorMessage = error;
-        statusText = error;
-        return;
-    }
-
-    SectorAuthoringInsertVertexResult result;
-    if (!InsertSectorEditorAuthoringVertexOnLine(state, lineId, point, &result)) {
-        statusText = InsertVertexFailureStatus(result.status);
-        state.pendingAuthoringInsertVertex.errorMessage = statusText;
-        return;
-    }
-
-    state.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
-    statusText = "Inserted vertex on authoring line";
 }
 
 SectorPoint SectorEditor::CurrentSnappedSectorPoint() const
@@ -5037,7 +4995,7 @@ void SectorEditor::DrawTopologyDocument()
     };
     drawToolOverlay(SectorEditorTool::AuthoringLine);
     drawToolOverlay(SectorEditorTool::AuthoringRectangle);
-    DrawPendingAuthoringInsertVertex();
+    drawToolOverlay(SectorEditorTool::AuthoringInsertVertex);
     DrawTopologySnapCrosshair();
 
     if (!state.topologyRenderWarning.empty()) {
@@ -5116,11 +5074,6 @@ void SectorEditor::DrawTopologySnapCrosshair() const
     if ((state.currentTool == SectorEditorTool::AuthoringInsertVertex
                 || state.pendingAuthoringInsertVertex.active)
             && state.pendingAuthoringInsertVertex.hasPreviewPoint) {
-        const Vector2 snap = MapToScreen(Vector2{
-                SectorCoordToVisibleAuthoring(state.pendingAuthoringInsertVertex.previewPoint.x),
-                SectorCoordToVisibleAuthoring(state.pendingAuthoringInsertVertex.previewPoint.y)});
-        DrawLineEx(Vector2{snap.x - 9.0f, snap.y}, Vector2{snap.x + 9.0f, snap.y}, 2.0f, Color{235, 224, 130, 255});
-        DrawLineEx(Vector2{snap.x, snap.y - 9.0f}, Vector2{snap.x, snap.y + 9.0f}, 2.0f, Color{235, 224, 130, 255});
         return;
     }
 
@@ -5133,54 +5086,6 @@ void SectorEditor::DrawTopologySnapCrosshair() const
             : MapToScreen(state.snappedMouseMap);
     DrawLineEx(Vector2{snap.x - 9.0f, snap.y}, Vector2{snap.x + 9.0f, snap.y}, 2.0f, Color{235, 224, 130, 255});
     DrawLineEx(Vector2{snap.x, snap.y - 9.0f}, Vector2{snap.x, snap.y + 9.0f}, 2.0f, Color{235, 224, 130, 255});
-}
-
-void SectorEditor::DrawPendingAuthoringInsertVertex() const
-{
-    if (state.currentTool != SectorEditorTool::AuthoringInsertVertex
-            && !state.pendingAuthoringInsertVertex.active) {
-        return;
-    }
-
-    const PendingAuthoringInsertVertex& pending = state.pendingAuthoringInsertVertex;
-    const SectorAuthoringLine* line = FindSectorAuthoringLine(state.authoringGraph, pending.lineId);
-    if (line == nullptr) {
-        return;
-    }
-    const SectorAuthoringVertex* start =
-            FindSectorAuthoringVertex(state.authoringGraph, line->startVertexId);
-    const SectorAuthoringVertex* end =
-            FindSectorAuthoringVertex(state.authoringGraph, line->endVertexId);
-    if (start == nullptr || end == nullptr) {
-        return;
-    }
-
-    const bool invalid = !pending.hasPreviewPoint || !pending.errorMessage.empty();
-    const Color lineColor = invalid ? Color{220, 88, 88, 170} : Color{122, 220, 244, 205};
-    const Color pointColor = invalid ? Color{220, 88, 88, 255} : Color{120, 230, 154, 255};
-    const Vector2 startScreen = MapToScreen(Vector2{
-            SectorCoordToVisibleAuthoring(start->x),
-            SectorCoordToVisibleAuthoring(start->y)});
-    const Vector2 endScreen = MapToScreen(Vector2{
-            SectorCoordToVisibleAuthoring(end->x),
-            SectorCoordToVisibleAuthoring(end->y)});
-    DrawLineEx(startScreen, endScreen, 5.0f, lineColor);
-
-    if (!pending.hasPreviewPoint) {
-        return;
-    }
-
-    const Vector2 point = MapToScreen(Vector2{
-            SectorCoordToVisibleAuthoring(pending.previewPoint.x),
-            SectorCoordToVisibleAuthoring(pending.previewPoint.y)});
-    DrawCircleV(point, 5.0f, pointColor);
-    DrawCircleLines(
-            static_cast<int>(std::round(point.x)),
-            static_cast<int>(std::round(point.y)),
-            9.0f,
-            Color{20, 24, 32, 255});
-    DrawLineEx(Vector2{point.x - 10.0f, point.y}, Vector2{point.x + 10.0f, point.y}, 2.0f, pointColor);
-    DrawLineEx(Vector2{point.x, point.y - 10.0f}, Vector2{point.x, point.y + 10.0f}, 2.0f, pointColor);
 }
 
 void SectorEditor::DrawAuthoringVertexMoveOverlay() const

@@ -147,6 +147,7 @@ void DrawLineToolOverlay(SectorEditorToolContext& context)
 const SectorEditorToolModule LineModule{
         SectorEditorTool::AuthoringLine,
         "Authoring Line",
+        nullptr,
         UpdateLineTool,
         DrawLineToolOverlay,
         CancelLineTool};

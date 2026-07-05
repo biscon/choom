@@ -93,7 +93,6 @@ private:
             SectorTopologyCoordPoint& outPoint,
             std::string& error) const;
     void UpdatePendingAuthoringInsertVertex(Vector2 mapPoint);
-    void CommitAuthoringInsertVertex(Vector2 screenPoint);
     SectorPoint CurrentSnappedSectorPoint() const;
     bool ToTopologyCoordPoint(SectorPoint point, SectorTopologyCoordPoint& outPoint, std::string& error) const;
     bool ToCanonicalSectorPoint(SectorPoint point, SectorPoint& outPoint, std::string& error) const;
@@ -104,7 +103,6 @@ private:
     void DrawTopologyDocument();
     void DrawTopologySelectedLineHighlight() const;
     void DrawTopologySnapCrosshair() const;
-    void DrawPendingAuthoringInsertVertex() const;
     void DrawAuthoringVertexMoveOverlay() const;
     void DrawLightMoveOverlay() const;
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;

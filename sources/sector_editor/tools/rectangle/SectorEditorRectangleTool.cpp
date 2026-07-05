@@ -165,6 +165,7 @@ void DrawRectangleToolOverlay(SectorEditorToolContext& context)
 const SectorEditorToolModule RectangleModule{
         SectorEditorTool::AuthoringRectangle,
         "Authoring Rectangle",
+        nullptr,
         UpdateRectangleTool,
         DrawRectangleToolOverlay,
         CancelRectangleTool};

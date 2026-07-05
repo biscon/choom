@@ -25,9 +25,12 @@ struct SectorEditorToolContext {
     std::function<SectorPoint()> currentSnappedSectorPoint;
     std::function<bool(SectorPoint, SectorTopologyCoordPoint&, std::string&)> toTopologyCoordPoint;
     std::function<Vector2(Vector2)> mapToScreen;
+    std::function<Vector2(Vector2)> screenToMap;
     std::function<void()> clearTopologySelectionOnly;
     std::function<void()> clearSelection;
     std::function<void(int)> selectAuthoringLine;
+    std::function<void(int)> hoverAuthoringLine;
+    std::function<int(Vector2)> findAuthoringLineNearScreenPoint;
     std::function<SectorEditorAuthoringLineToolClickResult(SectorTopologyCoordPoint)>
             commitAuthoringLinePoint;
     std::function<void()> cancelAuthoringLineChain;
@@ -36,12 +39,17 @@ struct SectorEditorToolContext {
             SectorTopologyCoordPoint,
             SectorEditorAuthoringRectangleResult*)>
             commitAuthoringRectangle;
+    std::function<bool(int, Vector2, SectorTopologyCoordPoint&, std::string&)>
+            resolveAuthoringInsertVertexPoint;
+    std::function<bool(int, SectorTopologyCoordPoint, SectorAuthoringInsertVertexResult*)>
+            commitAuthoringInsertVertex;
 };
 
 struct SectorEditorToolModule {
     SectorEditorTool id;
     const char* label = "";
 
+    void (*updateHover)(SectorEditorToolContext& context, Vector2 mapPoint) = nullptr;
     bool (*update)(SectorEditorToolContext& context) = nullptr;
     void (*drawCanvasOverlay)(SectorEditorToolContext& context) = nullptr;
     bool (*cancel)(SectorEditorToolContext& context, const char* message) = nullptr;

@@ -913,6 +913,11 @@ REF-043b progress: migrated Authoring Rectangle into the v0 tool module contract
 under `tools/rectangle/`. Insert Vertex and Select remain future migrations. The
 contract remains intentionally minimal and expected to evolve.
 
+REF-043c progress: migrated Authoring Insert Vertex into the v0 tool module
+contract under `tools/insert_vertex/`. Select remains future work and should
+wait until a Selection service and Manipulation provider contract are designed.
+The v0 contract remains intentionally minimal and expected to evolve.
+
 Risks:
 
 - pending tool cancellation can be subtly changed

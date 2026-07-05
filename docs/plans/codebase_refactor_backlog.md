@@ -705,21 +705,27 @@ Task Type:
   - REF-043a: Minimal authoring tool contract and Line tool pilot.
   - REF-043b: Rectangle tool migration.
   - REF-043c: Insert Vertex tool migration.
-  - REF-043d: Select tool migration, probably last.
+  - REF-043d: Selection service and manipulation provider contract.
+  - REF-043e: Select tool migration using the selection/manipulation contract.
 - Notes:
   - Keep current "Authoring Line" terminology until a rename task is explicitly
     scoped.
-  - Split select last because it routes to other tool drag systems.
+  - Select migration should wait for a Selection service and Manipulation
+    provider contract.
+  - Select is both an active tool and the frontend for selection/move behavior.
+  - Do not migrate Select as a giant switch over movable types.
 - Completion notes:
   - REF-043a added a minimal tool module descriptor/lookup.
   - REF-043a migrated Authoring Line behavior into `tools/line/`.
   - REF-043b migrated Authoring Rectangle behavior into `tools/rectangle/`.
   - REF-043b registered Rectangle in `FindSectorEditorToolModule()`.
-  - `SectorEditor` uses module dispatch for Line and legacy fallback for
-    unmigrated tools.
-  - Legacy fallback remains for Insert Vertex and Select.
+  - REF-043c migrated Authoring Insert Vertex behavior into
+    `tools/insert_vertex/`.
+  - REF-043c registered Insert Vertex in `FindSectorEditorToolModule()`.
+  - `SectorEditor` uses module dispatch for Line, Rectangle, and Insert Vertex.
+  - Legacy fallback remains for Select.
   - No behavior changes intended.
-  - REF-043 remains open for insert vertex and select.
+  - REF-043 remains open for selection/manipulation design and Select migration.
 
 #### REF-044 `[ ]` Migrate material/sidedef/decal editing into `tools/materials/`
 
