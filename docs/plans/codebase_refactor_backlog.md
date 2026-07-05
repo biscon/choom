@@ -51,7 +51,7 @@ Task Type:
 | REF-038 | `[x]` | Low | Editor header | Direct include cleanup after REF-012 | Codex task | Low/Medium | Removed obvious redundant umbrella includes |
 | REF-013 | `[x]` | High | Mesh preview | Audit `SectorMeshPreview` extraction seams | Audit first | Medium | Completed; see audit report |
 | REF-014 | `[x]` | High | Mesh preview | Extract dynamic lighting/shadow internals | Runner plan | Medium/High | Completed; manual render smoke still recommended |
-| REF-015 | `[ ]` | High | Mesh preview | Extract runtime door renderer / mesh cache helper | Runner plan | Medium/High | Door lighting/shadow risk |
+| REF-015 | `[x]` | High | Mesh preview | Extract runtime door renderer / mesh cache helper | Runner plan | Medium/High | Completed; manual preview smoke still recommended |
 | REF-016 | `[x]` | Medium | Mesh preview | Extract runtime billboard renderer helper | Codex task | Medium | Completed; helper owns billboard shader/draw path |
 | REF-017 | `[x]` | Medium | Mesh preview | Extract sky/bloom helpers | Codex task | Medium | GPU resource lifetime sensitive |
 | REF-018 | `[ ]` | Medium | Mesh preview | Review remaining facade and ownership | Audit first | Low | Post-extraction checkpoint |
@@ -340,7 +340,7 @@ Task Type:
     so visual smoke for dynamic lights, spotlight shadows, doors, and billboards
     remains recommended.
 
-#### REF-015 `[ ]` Extract runtime door renderer / mesh cache helper
+#### REF-015 `[x]` Extract runtime door renderer / mesh cache helper
 
 - Source/audit reference: medium refactor 3 and runtime object vs renderer
   coupling notes.
@@ -355,6 +355,17 @@ Task Type:
 - Completion notes:
   - Dedicated runner plan created at
     `docs/plans/sector_preview_door_renderer_refactor_plan.md`.
+  - Completed by extracting renderer-owned door mesh cache/resource lifetime,
+    opaque door shader/material/debug state, main-scene door drawing, draw
+    counters/debug text, prepared door shadow caster records, and dynamic
+    spotlight shadow mesh resolution into `SectorPreviewDoorRenderer` while
+    keeping `SectorMeshPreview` as the public facade and high-level render
+    sequencing owner.
+  - Final automated closeout verification passed on 2026-07-05: plan status,
+    build, targeted sector tests, full `ctest`, `git diff --check`,
+    `git diff --stat`, and `git status --short`. Manual 3D preview smoke was
+    not performed, so visual smoke for door rendering, door lighting, and
+    dynamic shadows remains recommended.
 
 #### REF-016 `[x]` Extract runtime billboard renderer helper
 
