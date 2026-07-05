@@ -286,11 +286,6 @@ private:
     void OpenPreviewSettingsModal();
     void ApplyPreviewSettingsModal(engine::AssetManager& assets);
     void OpenDoorTextureSettingsModal();
-    bool ApplySelectedDoorFaceUvValue(int component, float value);
-    bool ApplySelectedDoorFaceUvFit(SectorDoorUvFitMode mode);
-    bool ResetSelectedDoorFaceUv();
-    bool CopySelectedDoorFaceUvFromFront();
-    bool ApplySelectedDoorFaceUvToAll();
     void RefreshDefaultTextures();
     void RefreshEditorTextureAssets(engine::AssetManager& assets);
     engine::TextureHandle EditorTextureHandleForId(const std::string& textureId) const;

@@ -11,6 +11,7 @@
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/SectorEditorRuntimeObjectInspector.h"
+#include "sector_editor/SectorEditorRuntimeObjectModals.h"
 #include "sector_editor/SectorEditorSectorInspector.h"
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
@@ -8953,231 +8954,26 @@ void SectorEditor::DrawDoorTextureSettingsModal(
         engine::FontHandle font,
         engine::FontHandle smallFont)
 {
-    DoorTextureSettingsModalState& modalState = state.doorTextureSettingsModal;
-    if (!modalState.open) {
-        return;
-    }
-
-    bool closeRequested = false;
-    input.ForEachEvent(
-            engine::InputEventType::KeyPressed,
-            true,
-            [&closeRequested](engine::InputEvent& event) {
-                if (event.key.key == KEY_ESCAPE) {
-                    closeRequested = true;
-                    engine::ConsumeEvent(event);
-                }
-            });
-
-    const SectorPlacedRuntimeObject* selectedObject = SelectedRuntimeObject();
-    if (selectedObject == nullptr
-            || selectedObject->kind != "door"
-            || selectedObject->id != modalState.runtimeObjectId) {
-        modalState.statusMessage = "Door texture settings target is no longer selected.";
-    }
-
-    DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
-    const Rectangle modal{
-            (EditorWidth - 680.0f) * 0.5f,
-            (EditorHeight - 600.0f) * 0.5f,
-            680.0f,
-            600.0f
-    };
-    constexpr float padding = 26.0f;
-    constexpr float gap = 10.0f;
-    const SectorEditorDoorTextureSettingsModalLayout layout =
-            BuildSectorEditorDoorTextureSettingsModalLayout(modal, padding, gap);
-    DrawRectangleRec(modal, Color{20, 24, 32, 248});
-    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
-
-    engine::Text(config, assets, layout.titleRect, font, "Door Texture Settings");
-
-    for (int i = 0; i < SectorDoorFaceCount; ++i) {
-        const SectorDoorFace face = SectorDoorFaceFromIndex(i);
-        const bool selected = SectorDoorFaceIndex(modalState.selectedFace) == i;
-        if (engine::ToolButton(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    TextFormat("sector_editor_door_uv_face_%d", i),
-                    layout.faceButtonRects[i],
-                    font,
-                    SectorDoorFaceName(face),
-                    selected)) {
-            if (!selected) {
-                modalState.selectedFace = face;
-                modalState.scaleUInput = engine::UIFloatInputState{};
-                modalState.scaleVInput = engine::UIFloatInputState{};
-                modalState.offsetUInput = engine::UIFloatInputState{};
-                modalState.offsetVInput = engine::UIFloatInputState{};
-                modalState.statusMessage.clear();
-            }
-        }
-    }
-
-    selectedObject = SelectedRuntimeObject();
-    const SectorDoorFaceUv selectedUv = selectedObject != nullptr
-                    && selectedObject->kind == "door"
-                    && selectedObject->id == modalState.runtimeObjectId
-            ? DoorFaceUv(selectedObject->door.faceUvs, modalState.selectedFace)
-            : SectorDoorFaceUv{};
-
-    auto drawUvFloat =
-            [&](const char* id,
-                const char* label,
-                float value,
-                engine::UIFloatInputState& inputState,
-                float minValue,
-                float maxValue,
-                int component,
-                int row) {
-                const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
-                        ui,
-                        config,
-                        input,
-                        assets,
-                        font,
-                        id,
-                        label,
-                        layout.uvLabelRects[row],
-                        layout.uvInputRects[row],
-                        engine::UITextJustify::Left,
-                        value,
-                        inputState,
-                        minValue,
-                        maxValue,
-                        3);
-                if (result.changed && result.value != value) {
-                    if (!result.finite) {
-                        modalState.statusMessage = "Door UV values must be finite.";
-                    } else if (!ApplySelectedDoorFaceUvValue(component, result.value)) {
-                        modalState.statusMessage = statusText.empty()
-                                ? "Door UV value unchanged."
-                                : statusText;
-                    } else {
-                        modalState.statusMessage = TextFormat(
-                                "Updated %s UV.",
-                                SectorDoorFaceName(modalState.selectedFace));
-                    }
-                }
-            };
-
-    drawUvFloat(
-            "sector_editor_door_uv_scale_u",
-            "UV Scale U",
-            selectedUv.scale.x,
-            modalState.scaleUInput,
-            TopologyUvScaleMin,
-            TopologyUvScaleMax,
-            0,
-            0);
-    drawUvFloat(
-            "sector_editor_door_uv_scale_v",
-            "UV Scale V",
-            selectedUv.scale.y,
-            modalState.scaleVInput,
-            TopologyUvScaleMin,
-            TopologyUvScaleMax,
-            1,
-            1);
-    drawUvFloat(
-            "sector_editor_door_uv_offset_u",
-            "UV Offset U",
-            selectedUv.offset.x,
-            modalState.offsetUInput,
-            -100000.0f,
-            100000.0f,
-            2,
-            2);
-    drawUvFloat(
-            "sector_editor_door_uv_offset_v",
-            "UV Offset V",
-            selectedUv.offset.y,
-            modalState.offsetVInput,
-            -100000.0f,
-            100000.0f,
-            3,
-            3);
-
-    const auto resetInputs = [&modalState]() {
-        modalState.scaleUInput = engine::UIFloatInputState{};
-        modalState.scaleVInput = engine::UIFloatInputState{};
-        modalState.offsetUInput = engine::UIFloatInputState{};
-        modalState.offsetVInput = engine::UIFloatInputState{};
-    };
-    auto actionButton = [&](const char* id, const char* label, Rectangle bounds, const std::function<bool()>& action) {
-        if (engine::Button(ui, config, input, assets, id, bounds, font, label)) {
-            if (action && action()) {
-                resetInputs();
-            } else if (modalState.statusMessage.empty() && !statusText.empty()) {
-                modalState.statusMessage = statusText;
-            }
-        }
-    };
-
-    actionButton(
-            "sector_editor_door_uv_fit_width",
-            "Fit Width",
-            layout.actionButtonRects[0],
-            [this]() { return ApplySelectedDoorFaceUvFit(SectorDoorUvFitMode::Width); });
-    actionButton(
-            "sector_editor_door_uv_fit_height",
-            "Fit Height",
-            layout.actionButtonRects[1],
-            [this]() { return ApplySelectedDoorFaceUvFit(SectorDoorUvFitMode::Height); });
-    actionButton(
-            "sector_editor_door_uv_fit_both",
-            "Fit Both",
-            layout.actionButtonRects[2],
-            [this]() { return ApplySelectedDoorFaceUvFit(SectorDoorUvFitMode::Both); });
-    actionButton(
-            "sector_editor_door_uv_reset_face",
-            "Reset Face",
-            layout.actionButtonRects[3],
-            [this]() { return ResetSelectedDoorFaceUv(); });
-    actionButton(
-            "sector_editor_door_uv_copy_front",
-            "Copy From Front",
-            layout.actionButtonRects[4],
-            [this]() { return CopySelectedDoorFaceUvFromFront(); });
-    actionButton(
-            "sector_editor_door_uv_apply_all",
-            "Apply To All",
-            layout.actionButtonRects[5],
-            [this]() { return ApplySelectedDoorFaceUvToAll(); });
-
-    if (!modalState.statusMessage.empty()) {
-        const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
-        engine::Text(
-                ui,
-                smallConfig,
-                assets,
-                layout.statusRect,
-                smallFont,
-                modalState.statusMessage.c_str(),
-                engine::UITextJustify::Left,
-                config.mutedTextColor,
-                true);
-    }
-
-    closeRequested = closeRequested || engine::Button(
+    const SectorEditorDoorTextureSettingsModalCallbacks callbacks{
+            [this]() { return SelectedRuntimeObject(); },
+            [this](
+                    const char* status,
+                    const std::function<bool(SectorPlacedRuntimeObject&)>& mutate) {
+                return MutateSelectedRuntimeObject(status, mutate);
+            }};
+    SectorEditorDoorTextureSettingsModalContext context{
             ui,
             config,
             input,
             assets,
-            "sector_editor_door_uv_done",
-            layout.doneButtonRect,
             font,
-            "Done");
-
-    input.ForEachEvent(engine::InputEventType::Any, true, [](engine::InputEvent& event) {
-        engine::ConsumeEvent(event);
-    });
-
-    if (closeRequested) {
-        state.doorTextureSettingsModal = DoorTextureSettingsModalState{};
-    }
+            smallFont,
+            state.doorTextureSettingsModal,
+            state.topologyMap,
+            state.selectedRuntimeObjectId,
+            statusText,
+            callbacks};
+    DrawSectorEditorDoorTextureSettingsModal(context);
 }
 
 void SectorEditor::DrawPreviewSettingsModal(
@@ -11722,174 +11518,10 @@ void SectorEditor::OpenSelectedDoorTexturePicker()
 
 void SectorEditor::OpenDoorTextureSettingsModal()
 {
-    const SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
-    if (object == nullptr || object->kind != "door") {
-        statusText = "Select a door first.";
-        return;
-    }
-
-    state.doorTextureSettingsModal = DoorTextureSettingsModalState{};
-    state.doorTextureSettingsModal.open = true;
-    state.doorTextureSettingsModal.runtimeObjectId = object->id;
-    state.doorTextureSettingsModal.selectedFace = SectorDoorFace::Front;
-}
-
-bool SectorEditor::ApplySelectedDoorFaceUvValue(int component, float value)
-{
-    DoorTextureSettingsModalState& modal = state.doorTextureSettingsModal;
-    if (!modal.open || state.selectedRuntimeObjectId != modal.runtimeObjectId) {
-        statusText = "Door UV target unavailable.";
-        return false;
-    }
-    if (!std::isfinite(value)) {
-        statusText = "Door UV values must be finite.";
-        return false;
-    }
-    if ((component == 0 || component == 1) && !IsValidSectorDoorUvScale(value)) {
-        statusText = "Door UV scale must be between 0.001 and 64.";
-        return false;
-    }
-
-    const SectorDoorFace face = modal.selectedFace;
-    const bool changed = MutateSelectedRuntimeObject(
-            TextFormat("Updated door %s UV", SectorDoorFaceName(face)),
-            [face, component, value](SectorPlacedRuntimeObject& object) {
-                if (object.kind != "door") {
-                    return false;
-                }
-                SectorDoorFaceUv& uv = DoorFaceUv(object.door.faceUvs, face);
-                float* target = nullptr;
-                switch (component) {
-                    case 0: target = &uv.scale.x; break;
-                    case 1: target = &uv.scale.y; break;
-                    case 2: target = &uv.offset.x; break;
-                    case 3: target = &uv.offset.y; break;
-                    default: break;
-                }
-                if (target == nullptr || *target == value) {
-                    return false;
-                }
-                *target = value;
-                return true;
-            });
-    return changed;
-}
-
-bool SectorEditor::ApplySelectedDoorFaceUvFit(SectorDoorUvFitMode mode)
-{
-    DoorTextureSettingsModalState& modal = state.doorTextureSettingsModal;
-    const SectorPlacedRuntimeObject* object = SelectedRuntimeObject();
-    if (!modal.open
-            || object == nullptr
-            || object->kind != "door"
-            || object->id != modal.runtimeObjectId) {
-        modal.statusMessage = "Door UV target unavailable.";
-        statusText = modal.statusMessage;
-        return false;
-    }
-
-    const SectorResolvedDoorAnchor resolved = ResolveSectorDoorAnchor(state.topologyMap, object->door);
-    if (!resolved.valid) {
-        modal.statusMessage = "Fit needs a valid door anchor.";
-        statusText = modal.statusMessage;
-        return false;
-    }
-
-    const SectorDoorRender render{
-            resolved.width,
-            resolved.height,
-            object->door.thickness,
-            object->door.normalOffset,
-            object->door.textureId,
-            object->door.faceUvs,
-            WHITE,
-            true};
-    const SectorDoorFace face = modal.selectedFace;
-    const bool changed = MutateSelectedRuntimeObject(
-            TextFormat("Fit door %s UV", SectorDoorFaceName(face)),
-            [face, mode, render, &modal](SectorPlacedRuntimeObject& target) {
-                if (target.kind != "door") {
-                    return false;
-                }
-                std::string error;
-                const SectorDoorFaceUvSet before = target.door.faceUvs;
-                if (!FitSectorDoorFaceUv(target.door.faceUvs, face, mode, render, &error)) {
-                    modal.statusMessage = error;
-                    return false;
-                }
-                return !SameSectorDoorFaceUvSet(before, target.door.faceUvs);
-            });
-    if (changed) {
-        modal.statusMessage = TextFormat("Fit %s UV to one texture repeat.", SectorDoorFaceName(face));
-    } else if (modal.statusMessage.empty()) {
-        modal.statusMessage = "Door UV fit unchanged.";
-    }
-    statusText = modal.statusMessage;
-    return changed;
-}
-
-bool SectorEditor::ResetSelectedDoorFaceUv()
-{
-    DoorTextureSettingsModalState& modal = state.doorTextureSettingsModal;
-    if (!modal.open || state.selectedRuntimeObjectId != modal.runtimeObjectId) {
-        modal.statusMessage = "Door UV target unavailable.";
-        statusText = modal.statusMessage;
-        return false;
-    }
-    const SectorDoorFace face = modal.selectedFace;
-    const bool changed = MutateSelectedRuntimeObject(
-            TextFormat("Reset door %s UV", SectorDoorFaceName(face)),
-            [face](SectorPlacedRuntimeObject& object) {
-                return object.kind == "door" && ResetSectorDoorFaceUv(object.door.faceUvs, face);
-            });
-    modal.statusMessage = changed
-            ? TextFormat("Reset %s UV.", SectorDoorFaceName(face))
-            : "Door face UV already default.";
-    statusText = modal.statusMessage;
-    return changed;
-}
-
-bool SectorEditor::CopySelectedDoorFaceUvFromFront()
-{
-    DoorTextureSettingsModalState& modal = state.doorTextureSettingsModal;
-    if (!modal.open || state.selectedRuntimeObjectId != modal.runtimeObjectId) {
-        modal.statusMessage = "Door UV target unavailable.";
-        statusText = modal.statusMessage;
-        return false;
-    }
-    const SectorDoorFace face = modal.selectedFace;
-    const bool changed = MutateSelectedRuntimeObject(
-            TextFormat("Copied front UV to door %s", SectorDoorFaceName(face)),
-            [face](SectorPlacedRuntimeObject& object) {
-                return object.kind == "door"
-                        && CopySectorDoorFaceUv(object.door.faceUvs, SectorDoorFace::Front, face);
-            });
-    modal.statusMessage = changed
-            ? TextFormat("Copied Front UV to %s.", SectorDoorFaceName(face))
-            : "Copy From Front unchanged.";
-    statusText = modal.statusMessage;
-    return changed;
-}
-
-bool SectorEditor::ApplySelectedDoorFaceUvToAll()
-{
-    DoorTextureSettingsModalState& modal = state.doorTextureSettingsModal;
-    if (!modal.open || state.selectedRuntimeObjectId != modal.runtimeObjectId) {
-        modal.statusMessage = "Door UV target unavailable.";
-        statusText = modal.statusMessage;
-        return false;
-    }
-    const SectorDoorFace face = modal.selectedFace;
-    const bool changed = MutateSelectedRuntimeObject(
-            TextFormat("Applied door %s UV to all faces", SectorDoorFaceName(face)),
-            [face](SectorPlacedRuntimeObject& object) {
-                return object.kind == "door" && ApplySectorDoorFaceUvToAll(object.door.faceUvs, face);
-            });
-    modal.statusMessage = changed
-            ? TextFormat("Applied %s UV to all faces.", SectorDoorFaceName(face))
-            : "Apply To All unchanged.";
-    statusText = modal.statusMessage;
-    return changed;
+    OpenSectorEditorDoorTextureSettingsModal(
+            state.doorTextureSettingsModal,
+            SelectedRuntimeObject(),
+            statusText);
 }
 
 void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)

@@ -539,6 +539,9 @@ Task Type:
   - REF-021a progress: extracted the runtime object inspector draw body into
     `SectorEditorRuntimeObjectInspector.*`. REF-021 remains open for runtime
     object actions/drag and door texture settings modal/action slices.
+  - REF-021b progress: extracted the door texture settings modal draw flow and
+    focused UV action helpers into `SectorEditorRuntimeObjectModals.*`.
+    REF-021 remains open for runtime object actions/drag slices.
 
 #### REF-022 `[ ]` Extract light/static-light/object-probe inspector/actions
 
