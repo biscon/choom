@@ -54,7 +54,7 @@ Task Type:
 | REF-015 | `[x]` | High | Mesh preview | Extract runtime door renderer / mesh cache helper | Runner plan | Medium/High | Completed; manual preview smoke still recommended |
 | REF-016 | `[x]` | Medium | Mesh preview | Extract runtime billboard renderer helper | Codex task | Medium | Completed; helper owns billboard shader/draw path |
 | REF-017 | `[x]` | Medium | Mesh preview | Extract sky/bloom helpers | Codex task | Medium | GPU resource lifetime sensitive |
-| REF-018 | `[ ]` | Medium | Mesh preview | Review remaining facade and ownership | Audit first | Low | Post-extraction checkpoint |
+| REF-018 | `[x]` | Medium | Mesh preview | Review remaining facade and ownership | Audit first | Low | Completed; facade acceptable before rename |
 | REF-019 | `[ ]` | High | Editor god file | Audit remaining `SectorEditor.cpp` seams | Audit first | Low | Do after current feature work |
 | REF-020 | `[ ]` | Medium | Editor god file | Extract texture/material action or inspector code | Codex task | Medium | Preserve document/cache paths |
 | REF-021 | `[ ]` | Medium | Editor god file | Extract runtime object inspector/actions | Codex task | Medium | Runtime preview behavior sensitive |
@@ -74,6 +74,7 @@ Task Type:
 | REF-035 | `[>]` | Deferred | UI | Split `UI.cpp` without a UI-specific reason | Defer | Medium | Not a current dependency problem |
 | REF-036 | `[>]` | Deferred | Editor state | Full document-state vs preview-state rewrite | Defer | High | Needs dedicated plan if revived |
 | REF-037 | `[>]` | Deferred | Mesh preview | Full `SectorMeshPreview` facade rewrite | Defer | High | Needs dedicated plan if revived |
+| REF-039 | `[ ]` | Medium | Mesh preview | Rename Preview renderer terminology | Codex task | Medium | Mechanical rename after renderer extraction campaign |
 
 ## Backlog
 
@@ -408,7 +409,7 @@ Task Type:
   - Dynamic lighting, doors, billboards, and static scene rendering remain
     separate and were not moved by this task.
 
-#### REF-018 `[ ]` Review remaining `SectorMeshPreview` facade and ownership after extractions
+#### REF-018 `[x]` Review remaining `SectorMeshPreview` facade and ownership after extractions
 
 - Source/audit reference: larger refactor warning for full facade rewrite.
 - Why it helps: decides whether the remaining facade is good enough or needs a
@@ -417,6 +418,31 @@ Task Type:
 - Suggested task type: Audit first.
 - Risk: Low.
 - Suggested verification: post-extraction review only.
+- Completion notes:
+  - Completed in `docs/audit/sector_mesh_preview_post_refactor_audit.md`.
+  - Conclusion: `SectorMeshPreview` is now an acceptable public facade and
+    high-level render coordinator; static sector rendering remains the main
+    deferred extraction candidate, but no blocking ownership issue was found
+    before the renderer terminology rename.
+
+#### REF-039 `[ ]` Rename Preview renderer terminology
+
+- Source/audit reference:
+  `docs/audit/sector_mesh_preview_post_refactor_audit.md`.
+- Why it helps: aligns names with the post-extraction ownership model now that
+  `SectorMeshPreview` and helpers are renderer/facade objects rather than a
+  monolithic preview implementation.
+- Likely files: `SectorMeshPreview.*`, extracted `SectorPreview*` helpers,
+  editor/demo includes and call sites, source lists if file names change, tests,
+  docs, plans, audits, and backlog references where useful.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, full `ctest`, `git diff --check`, and manual
+  render smoke if practical.
+- Scope notes:
+  - Mechanical rename only.
+  - Do not move ownership, change render order, edit shaders, change resource
+    lifetime, alter lightmap source-hash behavior, or refactor the facade.
 - Completion notes:
 
 ### 5. SectorEditor.cpp God File
