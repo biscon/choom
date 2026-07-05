@@ -87,7 +87,6 @@ private:
     void CancelPendingAuthoringRectangle(const char* message);
     void CancelPendingAuthoringInsertVertex(const char* message);
     void BeginPendingAuthoringInsertVertex(int lineId);
-    void AddAuthoringRectanglePoint(SectorPoint point);
     bool TryResolveAuthoringInsertVertexPoint(
             int lineId,
             Vector2 mapPoint,
@@ -105,7 +104,6 @@ private:
     void DrawTopologyDocument();
     void DrawTopologySelectedLineHighlight() const;
     void DrawTopologySnapCrosshair() const;
-    void DrawPendingAuthoringRectangle() const;
     void DrawPendingAuthoringInsertVertex() const;
     void DrawAuthoringVertexMoveOverlay() const;
     void DrawLightMoveOverlay() const;

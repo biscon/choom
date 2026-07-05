@@ -688,6 +688,12 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
     context.cancelAuthoringLineChain = [this]() {
         CancelSectorEditorAuthoringLineToolChain(state);
     };
+    context.commitAuthoringRectangle = [this](
+            SectorTopologyCoordPoint firstCorner,
+            SectorTopologyCoordPoint oppositeCorner,
+            SectorEditorAuthoringRectangleResult* outResult) {
+        return AddSectorEditorAuthoringRectangle(state, firstCorner, oppositeCorner, outResult);
+    };
     return context;
 }
 
@@ -1186,12 +1192,6 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                                         cycleCount)
                                 : TextFormat("Selected %s %d", kindName, target.id);
                     }
-                    engine::ConsumeEvent(event);
-                    return;
-                }
-
-                if (state.currentTool == SectorEditorTool::AuthoringRectangle) {
-                    AddAuthoringRectanglePoint(CurrentSnappedSectorPoint());
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -2144,6 +2144,14 @@ void SectorEditor::CancelPendingAuthoringLine(const char* message)
 
 void SectorEditor::CancelPendingAuthoringRectangle(const char* message)
 {
+    if (const SectorEditorToolModule* module =
+                FindSectorEditorToolModule(SectorEditorTool::AuthoringRectangle)) {
+        if (module->cancel != nullptr) {
+            SectorEditorToolContext toolContext = BuildToolContext(nullptr);
+            module->cancel(toolContext, message);
+            return;
+        }
+    }
     state.pendingAuthoringRectangle = PendingAuthoringRectangleDraw{};
     if (message != nullptr && message[0] != '\0') {
         statusText = message;
@@ -2350,45 +2358,6 @@ void SectorEditor::CommitAuthoringInsertVertex(Vector2 screenPoint)
 
     state.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
     statusText = "Inserted vertex on authoring line";
-}
-
-void SectorEditor::AddAuthoringRectanglePoint(SectorPoint point)
-{
-    ClearTopologySelectionOnly();
-
-    std::string error;
-    SectorTopologyCoordPoint topologyPoint;
-    if (!ToTopologyCoordPoint(point, topologyPoint, error)) {
-        state.pendingAuthoringRectangle.errorMessage = error;
-        statusText = error;
-        return;
-    }
-
-    if (!state.pendingAuthoringRectangle.active) {
-        state.pendingAuthoringRectangle.active = true;
-        state.pendingAuthoringRectangle.firstCorner = topologyPoint;
-        state.pendingAuthoringRectangle.currentCorner = topologyPoint;
-        state.pendingAuthoringRectangle.errorMessage.clear();
-        statusText = "Rectangle: click opposite corner, right click/Esc cancels";
-        return;
-    }
-
-    SectorEditorAuthoringRectangleResult result;
-    if (!AddSectorEditorAuthoringRectangle(
-                state,
-                state.pendingAuthoringRectangle.firstCorner,
-                topologyPoint,
-                &result)) {
-        state.pendingAuthoringRectangle.currentCorner = topologyPoint;
-        state.pendingAuthoringRectangle.errorMessage = "Rectangle needs non-zero width and height";
-        statusText = state.pendingAuthoringRectangle.errorMessage;
-        return;
-    }
-
-    state.pendingAuthoringRectangle = PendingAuthoringRectangleDraw{};
-    ClearSelection();
-    SelectSectorEditorAuthoringLine(state, result.lineIds[0]);
-    statusText = "Created authoring rectangle";
 }
 
 SectorPoint SectorEditor::CurrentSnappedSectorPoint() const
@@ -5057,14 +5026,17 @@ void SectorEditor::DrawTopologyDocument()
     DrawCachedTopologyDynamicSpotLights(state.topologyRenderCache, drawContext);
     DrawCachedRuntimeObjects(state.topologyRenderCache, drawContext);
     DrawLightMoveOverlay();
-    if (const SectorEditorToolModule* lineModule =
-                FindSectorEditorToolModule(SectorEditorTool::AuthoringLine)) {
-        if (lineModule->drawCanvasOverlay != nullptr) {
+    const auto drawToolOverlay = [this](SectorEditorTool tool) {
+        if (const SectorEditorToolModule* lineModule = FindSectorEditorToolModule(tool)) {
+            if (lineModule->drawCanvasOverlay == nullptr) {
+                return;
+            }
             SectorEditorToolContext toolContext = BuildToolContext(nullptr);
             lineModule->drawCanvasOverlay(toolContext);
         }
-    }
-    DrawPendingAuthoringRectangle();
+    };
+    drawToolOverlay(SectorEditorTool::AuthoringLine);
+    drawToolOverlay(SectorEditorTool::AuthoringRectangle);
     DrawPendingAuthoringInsertVertex();
     DrawTopologySnapCrosshair();
 
@@ -5161,60 +5133,6 @@ void SectorEditor::DrawTopologySnapCrosshair() const
             : MapToScreen(state.snappedMouseMap);
     DrawLineEx(Vector2{snap.x - 9.0f, snap.y}, Vector2{snap.x + 9.0f, snap.y}, 2.0f, Color{235, 224, 130, 255});
     DrawLineEx(Vector2{snap.x, snap.y - 9.0f}, Vector2{snap.x, snap.y + 9.0f}, 2.0f, Color{235, 224, 130, 255});
-}
-
-void SectorEditor::DrawPendingAuthoringRectangle() const
-{
-    if (!state.pendingAuthoringRectangle.active) {
-        return;
-    }
-
-    const SectorPoint first = SectorTopologyCoordPointToSectorPoint(
-            state.pendingAuthoringRectangle.firstCorner);
-    const SectorPoint cursor = SectorTopologyCoordPointToSectorPoint(
-            state.pendingAuthoringRectangle.currentCorner);
-    const bool invalid = first.x == cursor.x
-            || first.y == cursor.y
-            || !state.pendingAuthoringRectangle.errorMessage.empty();
-    const Color lineColor = invalid ? Color{220, 88, 88, 190} : Color{122, 220, 244, 205};
-    const Color firstColor = Color{245, 226, 154, 255};
-    const Color cursorColor = invalid ? Color{220, 88, 88, 255} : Color{120, 230, 154, 255};
-
-    const float minX = std::min(first.x, cursor.x);
-    const float maxX = std::max(first.x, cursor.x);
-    const float minY = std::min(first.y, cursor.y);
-    const float maxY = std::max(first.y, cursor.y);
-    const Vector2 a = MapToScreen(Vector2{minX, minY});
-    const Vector2 b = MapToScreen(Vector2{maxX, minY});
-    const Vector2 c = MapToScreen(Vector2{maxX, maxY});
-    const Vector2 d = MapToScreen(Vector2{minX, maxY});
-    if (!invalid) {
-        DrawLineEx(a, b, 3.0f, lineColor);
-        DrawLineEx(b, c, 3.0f, lineColor);
-        DrawLineEx(c, d, 3.0f, lineColor);
-        DrawLineEx(d, a, 3.0f, lineColor);
-    } else if (!SamePoint(first, cursor)) {
-        DrawLineEx(
-                MapToScreen(SectorPointToVector2(first)),
-                MapToScreen(SectorPointToVector2(cursor)),
-                3.0f,
-                lineColor);
-    }
-
-    const Vector2 firstScreen = MapToScreen(SectorPointToVector2(first));
-    const Vector2 cursorScreen = MapToScreen(SectorPointToVector2(cursor));
-    DrawCircleV(firstScreen, 5.5f, firstColor);
-    DrawCircleLines(
-            static_cast<int>(std::round(firstScreen.x)),
-            static_cast<int>(std::round(firstScreen.y)),
-            8.0f,
-            Color{20, 24, 32, 255});
-    DrawCircleV(cursorScreen, 5.0f, cursorColor);
-    DrawCircleLines(
-            static_cast<int>(std::round(cursorScreen.x)),
-            static_cast<int>(std::round(cursorScreen.y)),
-            7.5f,
-            Color{20, 24, 32, 255});
 }
 
 void SectorEditor::DrawPendingAuthoringInsertVertex() const

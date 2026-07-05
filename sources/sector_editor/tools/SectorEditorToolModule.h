@@ -31,6 +31,11 @@ struct SectorEditorToolContext {
     std::function<SectorEditorAuthoringLineToolClickResult(SectorTopologyCoordPoint)>
             commitAuthoringLinePoint;
     std::function<void()> cancelAuthoringLineChain;
+    std::function<bool(
+            SectorTopologyCoordPoint,
+            SectorTopologyCoordPoint,
+            SectorEditorAuthoringRectangleResult*)>
+            commitAuthoringRectangle;
 };
 
 struct SectorEditorToolModule {

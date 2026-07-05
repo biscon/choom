@@ -713,10 +713,13 @@ Task Type:
 - Completion notes:
   - REF-043a added a minimal tool module descriptor/lookup.
   - REF-043a migrated Authoring Line behavior into `tools/line/`.
+  - REF-043b migrated Authoring Rectangle behavior into `tools/rectangle/`.
+  - REF-043b registered Rectangle in `FindSectorEditorToolModule()`.
   - `SectorEditor` uses module dispatch for Line and legacy fallback for
     unmigrated tools.
+  - Legacy fallback remains for Insert Vertex and Select.
   - No behavior changes intended.
-  - REF-043 remains open for rectangle, insert vertex, and select.
+  - REF-043 remains open for insert vertex and select.
 
 #### REF-044 `[ ]` Migrate material/sidedef/decal editing into `tools/materials/`
 
