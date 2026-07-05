@@ -67,10 +67,11 @@ Task Type:
 | REF-056 | `[x]` | High | Editor architecture | SectorEditor shared service inventory audit | Audit first | Low | Completed; recommends minimal TexturePickerService first |
 | REF-057 | `[x]` | High | Editor architecture | Extract minimal TexturePickerService | Codex task | Medium | Generic picker lifecycle/result mechanics only; preserve feature-specific apply semantics |
 | REF-058 | `[ ]` | Medium | Editor architecture | Audit AssetCatalog/TextureCatalog service boundary | Audit first | Medium | Keep texture import/handle/catalog ownership separate from picker apply routing |
-| REF-059 | `[ ]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Preserve finish wrappers, cache invalidation, authoring routing, and preview rebuild |
+| REF-059 | `[x]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Completed; recommends material-specific picker routing extraction before MaterialEditBridge |
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
 | REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
 | REF-062 | `[ ]` | Medium | Lightmap/probes | Extract LightmapBakeController | Runner plan | High | Worker lifecycle/result install/source-hash stale-result logic needs runner-level guardrails |
+| REF-063 | `[ ]` | High | Editor architecture | Extract material-specific texture picker routing | Codex task | High | Keep TexturePickerService generic; preserve authoring rollback/apply, dirty/cache, preview rebuild, and non-material door/sky routes |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
@@ -836,7 +837,7 @@ Task Type:
     material-specific picker apply semantics.
 - Completion notes:
 
-#### REF-059 `[ ]` Audit MaterialEditBridge and material-specific picker routing
+#### REF-059 `[x]` Audit MaterialEditBridge and material-specific picker routing
 
 - Source/audit reference:
   `docs/audit/sector_editor_shared_service_inventory.md` and
@@ -856,6 +857,36 @@ Task Type:
     flags, preview rebuild behavior, and `MarkTopologyDocumentEdited()`.
   - Decide whether material-specific texture picker apply routing moves into
     `tools/materials` or a smaller `MaterialEditBridge`.
+- Completion notes:
+  - Completed in `docs/audit/sector_editor_material_edit_bridge_audit.md`.
+  - Recommended next implementation: REF-063, extract material-specific texture
+    picker routing before adding a broader `MaterialEditBridge`.
+  - Expected next-slice reduction: roughly 120-220 lines or 4-6 picker target
+    branches isolated; callback reduction likely 0-2 until bridge work follows.
+  - Keep REF-044 open because material migration is still incomplete; REF-058
+    and REF-060 remain open because this audit did not cover those scopes.
+
+#### REF-063 `[ ]` Extract material-specific texture picker routing
+
+- Source/audit reference:
+  `docs/audit/sector_editor_material_edit_bridge_audit.md`.
+- Why it helps: isolates material picker target routing after REF-057 without
+  moving generic picker lifecycle, door, sky, sprite, or add-map texture paths.
+- Likely files: `SectorEditor.cpp`, `SectorEditorTextureActions.*`,
+  `SectorEditorTextureModals.*`, and a narrow material edit/picker routing file
+  under `services/material_edit/` or `tools/materials/` if scoped to material UI.
+- Suggested task type: Codex task.
+- Risk: High.
+- Suggested verification: build, ctest, `git diff --check`, and manual material
+  picker smoke for 2D SideDef/sector, authoring side/face, Preview3D surface,
+  plus door and sky regression smoke.
+- Notes:
+  - Keep `TexturePickerService` generic.
+  - Move material-specific current/open/apply routing only after clearly
+    isolating `Sector`, `SideDef`, `AuthoringFaceAnchor`, and `AuthoringSide`
+    target kinds.
+  - Preserve authoring temporary topology rollback/apply semantics exactly.
+  - Keep material dirty/cache/preview policy out of `TexturePickerService`.
 - Completion notes:
 
 #### REF-060 `[ ]` Audit Preview UV/material panel service dependencies
