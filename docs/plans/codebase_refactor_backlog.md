@@ -57,10 +57,17 @@ Task Type:
 | REF-018 | `[x]` | Medium | Mesh preview | Review remaining facade and ownership | Audit first | Low | Completed; facade acceptable before rename |
 | REF-019 | `[x]` | High | Editor god file | Audit remaining `SectorEditor.cpp` seams | Audit first | Low | Completed; see audit report |
 | REF-020 | `[ ]` | Medium | Editor god file | Extract texture/material action or inspector code | Codex task | Medium | Preserve document/cache paths; audit suggests SideDef/material inspector first |
-| REF-021 | `[ ]` | Medium | Editor god file | Extract runtime object inspector/actions | Codex task | Medium | Runtime preview behavior sensitive; audit recommends splitting into inspector/actions/modal slices |
+| REF-021 | `[x]` | Medium | Editor god file | Extract runtime object inspector/actions | Codex task | Medium | Completed; runtime object inspector/actions/modal/drag seams extracted |
 | REF-022 | `[ ]` | Medium | Editor god file | Extract light/static-light/object-probe inspector/actions | Codex task | Medium/High | Source-hash semantics matter; audit recommends mini audit before source-hash-sensitive extraction |
 | REF-023 | `[ ]` | Medium | Editor god file | Extract remaining modal draw flows | Codex task | Medium | Keep boundaries narrow; document/add-texture modals are good first slices |
 | REF-024 | `[ ]` | High | Editor god file | Review direct `state.topologyMap` mutations | Audit first | Medium | First-pass map exists in REF-019 audit; keep for narrower follow-up |
+| REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
+| REF-041 | `[ ]` | High | Editor architecture | Move runtime object editor files into `tools/runtime_objects/` | Codex task | Low/Medium | First implementation task from REF-040; no behavior changes |
+| REF-042 | `[ ]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
+| REF-043 | `[ ]` | Medium | Editor architecture | Split authoring tool modules into select/line/rectangle/insert vertex | Audit first | Medium/High | Do not create one giant authoring module |
+| REF-044 | `[ ]` | Medium | Editor architecture | Migrate material/sidedef/decal editing into `tools/materials/` | Audit first | Medium/High | Preserve material mutation/cache/preview rebuild paths |
+| REF-045 | `[ ]` | Medium | Editor architecture | Audit lights/source-hash-sensitive tool migration | Audit first | High | Static lights, directional light, and object probe settings affect source hash |
+| REF-046 | `[ ]` | Low | Editor architecture | Audit preview tool/module migration | Audit first | High | Keep renderer resource orchestration central |
 | REF-025 | `[ ]` | Medium | Lightmap/probes | Extract object probe sidecar IO | Codex task | Medium | Preserve sidecar/status behavior |
 | REF-026 | `[x]` | Medium | Lightmap/probes | Extract or reuse `SectorAssetPaths` in lightmap | Codex task | Low | Pair with REF-002 if possible |
 | REF-027 | `[ ]` | Medium | Lightmap/probes | Audit BVH/raycast/light evaluation extraction candidates | Audit first | Medium/High | Needs audit first |
@@ -606,6 +613,143 @@ Task Type:
   - REF-019 includes a first-pass mutation/cache map. Keep REF-024 for a
     narrower follow-up audit, especially after future inspector/action
     extractions.
+- Completion notes:
+
+#### REF-040 `[x]` Design SectorEditor tool/module boundaries
+
+- Source/audit reference: REF-019 and the risk that category-based extraction
+  can create new `Modals`, `Inspectors`, `Actions`, and `Helpers` landfills.
+- Why it helps: defines the next architecture direction for reducing
+  `SectorEditor.cpp` around feature/tool modules instead of broad category
+  files.
+- Likely files: audit/backlog documentation only.
+- Suggested task type: Audit first.
+- Risk: Low.
+- Suggested verification: `git diff --check`, `git diff --stat`,
+  `git status --short`.
+- Completion notes:
+  - Completed in `docs/audit/sector_editor_tool_module_boundary_design.md`.
+  - Conclusion: future editor work should move toward feature/tool folders,
+    narrow toolbox/context APIs, and optional handler dispatch rather than a fat
+    `IEditorTool` hierarchy or more category-file growth.
+  - Recommended first implementation task: move the already extracted runtime
+    object editor files into `sources/sector_editor/tools/runtime_objects/`
+    with no behavior changes and no direct `SectorEditor` dependency.
+
+#### REF-041 `[ ]` Move runtime object editor files into `tools/runtime_objects/`
+
+- Source/audit reference:
+  `docs/audit/sector_editor_tool_module_boundary_design.md`.
+- Why it helps: establishes the first feature/tool folder using the already
+  extracted runtime object inspector, modal, action, and drag files.
+- Likely files: `SectorEditorRuntimeObjectInspector.*`,
+  `SectorEditorRuntimeObjectModals.*`,
+  `SectorEditorRuntimeObjectActions.*`,
+  `SectorEditorRuntimeObjectDrag.*`, include paths.
+- Suggested task type: Codex task.
+- Risk: Low/Medium.
+- Suggested verification: build, ctest, `git diff --check`, and manual runtime
+  object authoring smoke.
+- Notes:
+  - Do not add a full tool registry.
+  - Keep existing context/callback APIs.
+  - Do not move renderer/runtime backend files.
+- Completion notes:
+
+#### REF-042 `[ ]` Move document actions/modals into `document/`
+
+- Source/audit reference:
+  `docs/audit/sector_editor_tool_module_boundary_design.md`.
+- Why it helps: separates document lifecycle helpers from tool modules while
+  keeping high-level editor lifecycle orchestration central.
+- Likely files: `SectorEditorDocumentActions.*`,
+  `SectorEditorDocumentModals.*`, include paths.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, and manual
+  new/load/save/reload smoke.
+- Notes:
+  - Document is not a tool.
+  - Do not move preview enter/leave or renderer/resource lifecycle into the
+    document folder.
+- Completion notes:
+
+#### REF-043 `[ ]` Split authoring tool modules into select, line, rectangle, insert vertex
+
+- Source/audit reference:
+  `docs/audit/sector_editor_tool_module_boundary_design.md`.
+- Why it helps: avoids one giant authoring module and lets each tool own its
+  input/overlay/temporary state where practical.
+- Likely files: `SectorEditor.cpp`, `SectorEditorAuthoringState.*`, future
+  `tools/select/`, `tools/line/`, `tools/rectangle/`,
+  `tools/insert_vertex/`.
+- Suggested task type: Audit first.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, and manual select/line/rectangle/insert
+  vertex authoring smoke after implementation tasks.
+- Notes:
+  - Keep current "Authoring Line" terminology until a rename task is explicitly
+    scoped.
+  - Split select last because it routes to other tool drag systems.
+- Completion notes:
+
+#### REF-044 `[ ]` Migrate material/sidedef/decal editing into `tools/materials/`
+
+- Source/audit reference:
+  `docs/audit/sector_editor_tool_module_boundary_design.md`.
+- Why it helps: keeps material inspector UI, decal modal, material actions, and
+  material-specific picker routing together instead of expanding generic
+  material/action/modal categories.
+- Likely files: `SectorEditorMaterialActions.*`,
+  `SectorEditorMaterialModals.*`, SideDef/material inspector code, material
+  picker routing.
+- Suggested task type: Audit first.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, material/decal/texture picker smoke;
+  implementation reports must mention topology render-cache invalidation.
+- Notes:
+  - Preserve `FinishTopologyMaterialMutation()` /
+    `FinishMaterialActionResult()` paths.
+  - Keep texture catalog/import workflows separate from material-specific
+    routing.
+- Completion notes:
+
+#### REF-045 `[ ]` Audit lights/source-hash-sensitive tool migration
+
+- Source/audit reference:
+  `docs/audit/sector_editor_tool_module_boundary_design.md`.
+- Why it helps: lights, directional settings, object probe settings, and
+  lightmap bake coupling are high-risk boundaries that should not be moved
+  casually.
+- Likely files: `SectorEditorLightInspector.*`, light action/drag code,
+  preview settings apply code, lightmap tests.
+- Suggested task type: Audit first.
+- Risk: High.
+- Suggested verification: source-hash audit first; future implementation needs
+  build, ctest, source-hash tests, and manual light/preview/bake smoke.
+- Notes:
+  - Static lights, static spotlights, directional light, object probe spacing,
+    object probe height, and `ceilingSky` are source-hash-sensitive.
+  - Sky visual settings and preview settings should remain source-hash-neutral.
+- Completion notes:
+
+#### REF-046 `[ ]` Audit preview tool/module migration
+
+- Source/audit reference:
+  `docs/audit/sector_editor_tool_module_boundary_design.md`.
+- Why it helps: identifies which preview overlays, UV panel, and preview
+  settings UI can move without disturbing renderer resource lifecycle.
+- Likely files: `SectorEditorPreviewActions.*`,
+  `SectorEditorPreviewSettingsModal.*`, preview overlay/UV panel code,
+  `SectorEditor.cpp`.
+- Suggested task type: Audit first.
+- Risk: High.
+- Suggested verification: audit first; future implementation needs build,
+  ctest, and manual preview render/overlay/UV smoke.
+- Notes:
+  - Keep `SectorMeshRenderer` implementation and GPU resource orchestration
+    outside tool modules.
+  - Defer broad preview facade rewrites.
 - Completion notes:
 
 ### 6. Lightmap / Object Probe Cleanup
