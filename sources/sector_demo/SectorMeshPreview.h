@@ -119,11 +119,6 @@ private:
             void* userData,
             engine::AssetManager& assets,
             const std::string& textureId);
-    static const Mesh* ResolveDoorShadowCasterMesh(
-            void* userData,
-            const SectorDoorShadowCaster& caster,
-            float& outWidth,
-            float& outHeight);
 
     SectorMeshBuildResult meshes;
     SectorGeneratedGeometry generatedGeometry;

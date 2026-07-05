@@ -926,8 +926,9 @@ void SectorMeshPreview::RenderDynamicSpotLightShadowMaps(
     context.sectorDrawRecords = &meshes.sectorDrawRecords;
     context.doorShadowCasters = &doorRenderer.ShadowCasters();
     context.userData = this;
+    context.doorMeshResolverUserData = &doorRenderer;
     context.textureResolver = &SectorMeshPreview::ResolveShadowCasterTexture;
-    context.doorMeshResolver = &SectorMeshPreview::ResolveDoorShadowCasterMesh;
+    context.doorMeshResolver = &SectorPreviewDoorRenderer::ResolveDoorShadowCasterMesh;
     dynamicLightState.RenderShadowMaps(context);
 }
 
@@ -1072,19 +1073,6 @@ const Texture2D* SectorMeshPreview::ResolveShadowCasterTexture(
         return nullptr;
     }
     return assets.GetTexture(preview->TextureForId(textureId));
-}
-
-const Mesh* SectorMeshPreview::ResolveDoorShadowCasterMesh(
-        void* userData,
-        const SectorDoorShadowCaster& caster,
-        float& outWidth,
-        float& outHeight)
-{
-    const SectorMeshPreview* preview = static_cast<const SectorMeshPreview*>(userData);
-    if (preview == nullptr) {
-        return nullptr;
-    }
-    return preview->doorRenderer.ResolveDoorShadowCasterMesh(caster, outWidth, outHeight);
 }
 
 void SectorMeshPreview::UpdateCamera()

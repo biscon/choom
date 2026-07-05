@@ -512,7 +512,7 @@ void SectorPreviewDynamicLighting::RenderShadowMaps(
                 float doorWidth = 0.0f;
                 float doorHeight = 0.0f;
                 const Mesh* doorMesh = context.doorMeshResolver(
-                        context.userData,
+                        context.doorMeshResolverUserData,
                         caster,
                         doorWidth,
                         doorHeight);

@@ -35,6 +35,7 @@ struct SectorPreviewDynamicSpotLightShadowRenderContext {
     const std::vector<SectorMeshBatch>* sectorDrawRecords = nullptr;
     const std::vector<SectorDoorShadowCaster>* doorShadowCasters = nullptr;
     void* userData = nullptr;
+    void* doorMeshResolverUserData = nullptr;
     TextureResolver textureResolver = nullptr;
     DoorMeshResolver doorMeshResolver = nullptr;
 };
