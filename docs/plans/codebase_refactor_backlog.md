@@ -57,14 +57,20 @@ Task Type:
 | REF-018 | `[x]` | Medium | Mesh preview | Review remaining facade and ownership | Audit first | Low | Completed; facade acceptable before rename |
 | REF-019 | `[x]` | High | Editor god file | Audit remaining `SectorEditor.cpp` seams | Audit first | Low | Completed; see audit report |
 | REF-053 | `[x]` | High | Editor god file | Post-tool-migration `SectorEditor.cpp` line map | Audit first | Low | Completed; current size is 10,551 lines; recommends materials/sidedef/decal next |
-| REF-020 | `[ ]` | Medium | Editor god file | Extract texture/material action or inspector code | Codex task | Medium | Preserve document/cache paths; audit suggests SideDef/material inspector first |
+| REF-020 | `[ ]` | Medium | Editor god file | Extract texture/material action or inspector code | Codex task | Medium | Post-REF-055 work should proceed through picker/material services, not broad generic extraction |
 | REF-021 | `[x]` | Medium | Editor god file | Extract runtime object inspector/actions | Codex task | Medium | Completed; runtime object inspector/actions/modal/drag seams extracted |
 | REF-022 | `[ ]` | Medium | Editor god file | Extract light/static-light/object-probe inspector/actions | Codex task | Medium/High | Source-hash semantics matter; audit recommends mini audit before source-hash-sensitive extraction |
 | REF-023 | `[ ]` | Low | Editor god file | Extract remaining modal draw flows | Codex task | Medium | Most obvious modal draw bodies have moved; remaining work is feature-specific routing |
 | REF-024 | `[ ]` | High | Editor god file | Review direct `state.topologyMap` mutations | Audit first | Medium | First-pass map exists in REF-019 audit; keep for narrower follow-up |
 | REF-054 | `[x]` | High | Editor god file | Audit materials/sidedef/decal extraction boundary | Audit first | Medium | Completed; report recommends callback-based REF-055 inspector extraction |
 | REF-055 | `[x]` | High | Editor god file | Extract SideDef/material/decal inspector into `tools/materials/` | Codex task | Medium/High | Completed; inspector moved to tools/materials while finish wrappers stayed central |
-| REF-056 | `[ ]` | Medium | Editor god file | Audit preview overlay and preview UV/material panel extraction | Audit first | Medium/High | Decide material-vs-preview ownership before moving line-count-heavy UI |
+| REF-056 | `[x]` | High | Editor architecture | SectorEditor shared service inventory audit | Audit first | Low | Completed; recommends minimal TexturePickerService first |
+| REF-057 | `[ ]` | High | Editor architecture | Extract minimal TexturePickerService | Codex task | Medium | Generic picker lifecycle/result mechanics only; preserve feature-specific apply semantics |
+| REF-058 | `[ ]` | Medium | Editor architecture | Audit AssetCatalog/TextureCatalog service boundary | Audit first | Medium | Keep texture import/handle/catalog ownership separate from picker apply routing |
+| REF-059 | `[ ]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Preserve finish wrappers, cache invalidation, authoring routing, and preview rebuild |
+| REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
+| REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
+| REF-062 | `[ ]` | Medium | Lightmap/probes | Extract LightmapBakeController | Runner plan | High | Worker lifecycle/result install/source-hash stale-result logic needs runner-level guardrails |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
@@ -536,6 +542,10 @@ Task Type:
   - REF-053 makes this more specific: do REF-054 first, then extract the
     SideDef/material/decal inspector as REF-055. Keep texture catalog/import
     separate from material-specific picker routing.
+  - REF-056 marks the next texture/material work as service-shaped: implement
+    the minimal TexturePickerService first, then audit material-specific picker
+    routing and a MaterialEditBridge. Avoid another broad generic
+    texture/material extraction.
 - Completion notes:
 
 #### REF-021 `[x]` Extract runtime object inspector/actions
@@ -738,27 +748,169 @@ Task Type:
   - `DrawPreviewUvPanel()` remains in `SectorEditor.cpp`.
   - No behavior changes were intended.
 
-#### REF-056 `[ ]` Audit preview overlay and preview UV/material panel extraction
+#### REF-056 `[x]` SectorEditor shared service inventory audit
 
 - Source/audit reference:
-  `docs/audit/sector_editor_post_tool_migration_line_map.md`.
-- Why it helps: preview overlay and UV/material panel are line-count-heavy, but
-  they touch renderer debug data, selected 3D surfaces, collision labels,
-  dynamic-light debug state, and object-probe debug controls.
+  `docs/audit/sector_editor_post_tool_migration_line_map.md`,
+  `docs/audit/sector_editor_materials_boundary_audit.md`, and REF-055
+  completion notes.
+- Why it helps: identifies shared editor services before moving more feature
+  modules, so future tools depend on shared APIs instead of long callback
+  bridges back into `SectorEditor.cpp`.
+- Likely files: documentation only.
+- Suggested task type: Audit first.
+- Risk: Low.
+- Suggested verification: `git diff --check`, `git diff --stat`,
+  `git status --short`.
+- Notes:
+  - Evaluate TexturePickerService, MaterialEditBridge, PreviewSurface/material
+    service, LightEditingService, LightmapBakeController, DocumentController,
+    AssetCatalog/TextureCatalog, Status/Diagnostics, and selection/manipulation
+    refinements.
+  - Decide which remaining `SectorEditor.cpp` functions are shared
+    capabilities, feature-specific code, or high-level coordinator glue.
+  - Keep REF-044 open while material picker routing, preview UV/material panel,
+    and wrapper cleanup remain incomplete.
+- Completion notes:
+  - Completed in
+    `docs/audit/sector_editor_shared_service_inventory.md`.
+  - Recommended first service implementation: minimal TexturePickerService for
+    generic picker lifecycle/result mechanics, preserving feature-specific
+    material, door, sky, and sprite apply semantics.
+  - Future backlog items were added/refined for TexturePickerService,
+    AssetCatalog/TextureCatalog, material-specific picker routing /
+    MaterialEditBridge, preview UV/material panel dependencies, status
+    diagnostics deferral, and LightmapBakeController runner-plan work.
+  - Source code, tests, CMake, runtime behavior, topology cache behavior,
+    lightmap source-hash behavior, collision, and preview behavior were not
+    changed by this audit.
+
+#### REF-057 `[ ]` Extract minimal TexturePickerService
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md`.
+- Why it helps: centralizes generic texture picker modal/catalog/open/close and
+  selected-result mechanics before more material, door, sky, or preview clients
+  are moved.
+- Likely files: new focused service files under `sources/sector_editor/`,
+  `SectorEditorTextureActions.*`, `SectorEditorTextureModals.*`,
+  `SectorEditorModalTypes.h`, `SectorEditor.cpp`, and picker call sites.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`; manual texture
+  picker smoke for material, sky, door, and preview surfaces when practical.
+- Notes:
+  - Initial scope is generic picker lifecycle/result mechanics only.
+  - Preserve existing picker targets and apply semantics.
+  - Do not move material finish wrappers, authoring graph writeback, door
+    texture apply, sky apply, sprite picker behavior, add-map texture import, or
+    preview rebuild policy.
+- Completion notes:
+
+#### REF-058 `[ ]` Audit AssetCatalog/TextureCatalog service boundary
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md`.
+- Why it helps: separates texture registry scans, imported texture handles,
+  sprite metadata catalog, and map texture dictionary helpers from picker apply
+  routing before the picker service grows too broad.
+- Likely files: `SectorEditorTextureActions.*`,
+  `SectorEditorTextureModals.*`, `SectorEditorTypes.h`, texture registry and
+  sprite metadata callers.
+- Suggested task type: Audit first.
+- Risk: Medium.
+- Suggested verification: documentation checks only.
+- Notes:
+  - Decide what belongs in an asset/texture catalog service versus
+    TexturePickerService.
+  - Keep add-map texture import and sprite metadata repair separate from
+    material-specific picker apply semantics.
+- Completion notes:
+
+#### REF-059 `[ ]` Audit MaterialEditBridge and material-specific picker routing
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md` and
+  `docs/audit/sector_editor_materials_boundary_audit.md`.
+- Why it helps: reduces `tools/materials` callback tentacles without duplicating
+  dirty/cache/preview rebuild or authoring-vs-topology routing behavior.
+- Likely files: `SectorEditor.cpp`, `SectorEditor.h`,
+  `SectorEditorMaterialActions.*`, `tools/materials/`,
+  `SectorEditorTextureActions.*`.
+- Suggested task type: Audit first.
+- Risk: High.
+- Suggested verification: audit first; future implementation needs build,
+  ctest, picker/material smoke, and explicit cache invalidation report.
+- Notes:
+  - Preserve `FinishTopologyMaterialMutation()`,
+    `FinishMaterialActionResult()`, authoring side/face writeback, UI reset
+    flags, preview rebuild behavior, and `MarkTopologyDocumentEdited()`.
+  - Decide whether material-specific texture picker apply routing moves into
+    `tools/materials` or a smaller `MaterialEditBridge`.
+- Completion notes:
+
+#### REF-060 `[ ]` Audit Preview UV/material panel service dependencies
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md`.
+- Why it helps: `DrawPreviewUvPanel()` is line-count-heavy, but it depends on
+  picker routing, material finish behavior, selected 3D surface state, and
+  preview rebuild hooks.
 - Likely files: `SectorEditor.cpp`, `SectorEditorPreviewActions.*`,
-  `SectorEditorPreviewSettingsModal.*`, material action files, and renderer
-  facade headers.
+  `SectorEditorPreviewSettingsModal.*`, material action files,
+  selection service files, and renderer facade headers.
 - Suggested task type: Audit first.
 - Risk: Medium/High.
 - Suggested verification: audit only; future implementation should build,
-  ctest, and manually smoke preview overlay/UV/material editing if practical.
+  ctest, and manually smoke preview UV/material editing if practical.
 - Notes:
-  - Decide whether `DrawPreviewUvPanel()` belongs in `tools/materials/` or a
-    preview module.
+  - Decide whether `DrawPreviewUvPanel()` belongs in `tools/materials/`, a
+    preview module, or a small preview-surface material service.
   - Keep collision/physics/sector lookup and renderer resource orchestration
     central unless a later runner plan explicitly scopes them.
-  - Expected later `SectorEditor.cpp` reduction if extracted: roughly 450-650
-    lines for overlay and 350-480 lines for UV panel.
+  - Expected later `SectorEditor.cpp` reduction if extracted: roughly 350-480
+    lines for UV/material panel, separate from preview overlay.
+- Completion notes:
+
+#### REF-061 `[>]` Evaluate Status/Diagnostics service
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md`.
+- Why it helps: may reduce repeated `statusText` and warning callback plumbing
+  if service contexts become noisy.
+- Likely files: `SectorEditor.cpp`, `SectorEditorTypes.h`, tool contexts,
+  preview overlay/status display code.
+- Suggested task type: Defer.
+- Risk: Low/Medium.
+- Suggested verification: audit first if revived.
+- Notes:
+  - Low priority because it does not unlock major line-count reduction by
+    itself.
+  - Do not move validation generation, cache warning ownership, or feature
+    mutation policy into a generic status sink.
+- Completion notes:
+
+#### REF-062 `[ ]` Extract LightmapBakeController
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md`.
+- Why it helps: could encapsulate async bake worker lifecycle, cancellation,
+  temporary file cleanup, result installation, source-hash stale-result
+  rejection, object-probe sidecar installation, and bake progress/status.
+- Likely files: `SectorEditor.cpp`, `SectorEditorLightmapAsyncTypes.h`,
+  `SectorEditorLightmapModal.*`, lightmap backend files, object-probe sidecar
+  helpers, and tests around source-hash behavior.
+- Suggested task type: Runner plan.
+- Risk: High.
+- Suggested verification: runner plan with build, ctest, targeted lightmap
+  tests, source-hash checks, cancellation/result-install checks, and manual bake
+  smoke when practical.
+- Notes:
+  - Do not combine with broad light editing migration.
+  - Preserve source-hash stale-result rejection and object-probe sidecar install
+    behavior.
+  - Preview result refresh should remain an explicit callback/hook rather than
+    exposing renderer internals to the controller.
 - Completion notes:
 
 #### REF-040 `[x]` Design SectorEditor tool/module boundaries
@@ -1055,6 +1207,9 @@ Task Type:
   - REF-055 extracted the SideDef/material/decal inspector into
     `tools/materials/`; follow-up material picker routing, preview UV panel, and
     wrapper cleanup tasks remain open under this umbrella.
+  - REF-056 recommends minimal TexturePickerService first, then a
+    MaterialEditBridge/material-specific picker routing audit before moving more
+    material clients.
 
 #### REF-045 `[ ]` Audit lights/source-hash-sensitive tool migration
 
@@ -1073,6 +1228,8 @@ Task Type:
   - Static lights, static spotlights, directional light, object probe spacing,
     object probe height, and `ceilingSky` are source-hash-sensitive.
   - Sky visual settings and preview settings should remain source-hash-neutral.
+  - REF-056 keeps broad light editing as audit-first and separates it from the
+    LightmapBakeController runner-plan work.
 - Completion notes:
 
 #### REF-046 `[ ]` Audit preview tool/module migration
@@ -1092,6 +1249,9 @@ Task Type:
   - Keep `SectorMeshRenderer` implementation and GPU resource orchestration
     outside tool modules.
   - Defer broad preview facade rewrites.
+  - REF-056 split the immediate preview question into REF-060 for the preview
+    UV/material panel dependency audit; keep preview overlay/debug UI migration
+    separate from material editing.
 - Completion notes:
 
 ### 6. Lightmap / Object Probe Cleanup
