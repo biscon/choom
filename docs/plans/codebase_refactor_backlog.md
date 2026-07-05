@@ -66,7 +66,7 @@ Task Type:
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
 | REF-043 | `[~]` | Medium | Editor architecture | Authoring tool module contract and migration series | Codex task | Medium/High | REF-043a-c migrated Line, Rectangle, and Insert Vertex; Select waits for selection/manipulation services |
 | REF-047 | `[x]` | High | Editor architecture | Selection service and manipulation provider contract | Audit first | Low | Completed; Select is the frontend for selection/manipulation, not just another authoring tool |
-| REF-048 | `[ ]` | High | Editor architecture | Add passive SelectionTarget and provider type definitions | Codex task | Low/Medium | No behavior changes; shared vocabulary before service extraction |
+| REF-048 | `[x]` | High | Editor architecture | Add passive SelectionTarget and provider type definitions | Codex task | Low/Medium | No behavior changes; shared vocabulary before service extraction |
 | REF-049 | `[ ]` | High | Editor architecture | Extract Selection service helpers | Codex task | Medium | Preserve current selected state fields, stale cleanup, and UI reset behavior |
 | REF-050 | `[ ]` | High | Editor architecture | Add Manipulation service shell | Codex task | Medium | Own generic drag lifecycle while delegating existing movement paths first |
 | REF-051 | `[ ]` | Medium | Editor architecture | Pilot first move provider | Codex task | Medium | Prefer placed-object/billboard provider; preserve door movement refusal |
@@ -764,7 +764,7 @@ Task Type:
   - Recommended first implementation task: add passive `SelectionTarget` and
     provider/capability type definitions only.
 
-#### REF-048 `[ ]` Add passive SelectionTarget and provider type definitions
+#### REF-048 `[x]` Add passive SelectionTarget and provider type definitions
 
 - Source/audit reference:
   `docs/audit/sector_editor_selection_manipulation_contract.md`.
@@ -779,6 +779,11 @@ Task Type:
   - No behavior changes.
   - Preserve existing selection state fields during this slice.
 - Completion notes:
+  - Added passive `SectorEditorSelectionTarget` and provider/capability type
+    definitions in `sources/sector_editor/SectorEditorSelectionTarget.h`.
+  - No behavior migration was performed.
+  - Current selected state fields are preserved.
+  - Future REF-049/050/051/052 work will use these definitions.
 
 #### REF-049 `[ ]` Extract Selection service helpers
 

@@ -308,6 +308,9 @@ Phase 1: Add passive `SelectionTarget` and provider type definitions.
 - Verification: build, ctest, diff checks.
 - Manual smoke: not required if no behavior changes.
 - Task type: Codex task.
+- REF-048 note: passive target/provider definitions were added in
+  `sources/sector_editor/SectorEditorSelectionTarget.h`; no behavior was
+  migrated.
 
 Phase 2: Extract Selection service helpers.
 
