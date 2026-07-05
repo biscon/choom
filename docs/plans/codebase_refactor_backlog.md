@@ -64,7 +64,7 @@ Task Type:
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
-| REF-043 | `[ ]` | Medium | Editor architecture | Split authoring tool modules into select/line/rectangle/insert vertex | Audit first | Medium/High | Do not create one giant authoring module |
+| REF-043 | `[~]` | Medium | Editor architecture | Authoring tool module contract and migration series | Codex task | Medium/High | REF-043a adds v0 tool contract and Line tool pilot; rectangle, insert vertex, and select remain |
 | REF-044 | `[ ]` | Medium | Editor architecture | Migrate material/sidedef/decal editing into `tools/materials/` | Audit first | Medium/High | Preserve material mutation/cache/preview rebuild paths |
 | REF-045 | `[ ]` | Medium | Editor architecture | Audit lights/source-hash-sensitive tool migration | Audit first | High | Static lights, directional light, and object probe settings affect source hash |
 | REF-046 | `[ ]` | Low | Editor architecture | Audit preview tool/module migration | Audit first | High | Keep renderer resource orchestration central |
@@ -688,24 +688,35 @@ Task Type:
   - High-level document lifecycle orchestration remains in `SectorEditor`.
   - No behavior changes intended.
 
-#### REF-043 `[ ]` Split authoring tool modules into select, line, rectangle, insert vertex
+#### REF-043 `[~]` Authoring tool module contract and migration series
 
 - Source/audit reference:
   `docs/audit/sector_editor_tool_module_boundary_design.md`.
 - Why it helps: avoids one giant authoring module and lets each tool own its
   input/overlay/temporary state where practical.
-- Likely files: `SectorEditor.cpp`, `SectorEditorAuthoringState.*`, future
-  `tools/select/`, `tools/line/`, `tools/rectangle/`,
+- Likely files: `SectorEditor.cpp`, `SectorEditorAuthoringState.*`,
+  `tools/`, `tools/select/`, `tools/line/`, `tools/rectangle/`,
   `tools/insert_vertex/`.
-- Suggested task type: Audit first.
+- Suggested task type: Codex task.
 - Risk: Medium/High.
 - Suggested verification: build, ctest, and manual select/line/rectangle/insert
   vertex authoring smoke after implementation tasks.
+- Series:
+  - REF-043a: Minimal authoring tool contract and Line tool pilot.
+  - REF-043b: Rectangle tool migration.
+  - REF-043c: Insert Vertex tool migration.
+  - REF-043d: Select tool migration, probably last.
 - Notes:
   - Keep current "Authoring Line" terminology until a rename task is explicitly
     scoped.
   - Split select last because it routes to other tool drag systems.
 - Completion notes:
+  - REF-043a added a minimal tool module descriptor/lookup.
+  - REF-043a migrated Authoring Line behavior into `tools/line/`.
+  - `SectorEditor` uses module dispatch for Line and legacy fallback for
+    unmigrated tools.
+  - No behavior changes intended.
+  - REF-043 remains open for rectangle, insert vertex, and select.
 
 #### REF-044 `[ ]` Migrate material/sidedef/decal editing into `tools/materials/`
 

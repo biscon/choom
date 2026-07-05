@@ -904,6 +904,11 @@ Migration order:
 5. Extract insert vertex.
 6. Extract select last because it routes to other tools and drag systems.
 
+REF-043a progress: introduced a minimal v0 tool module contract and made
+Authoring Line the first migrated authoring tool under `tools/line/`. Rectangle,
+insert vertex, and select remain future migrations. The contract is deliberately
+small and expected to evolve as the remaining authoring tools move.
+
 Risks:
 
 - pending tool cancellation can be subtly changed

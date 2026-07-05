@@ -21,6 +21,8 @@
 
 namespace game {
 
+struct SectorEditorToolContext;
+
 class SectorEditor {
 public:
     bool Init(engine::EngineContext& context);
@@ -85,7 +87,6 @@ private:
     void CancelPendingAuthoringRectangle(const char* message);
     void CancelPendingAuthoringInsertVertex(const char* message);
     void BeginPendingAuthoringInsertVertex(int lineId);
-    void AddAuthoringLinePoint(SectorPoint point);
     void AddAuthoringRectanglePoint(SectorPoint point);
     bool TryResolveAuthoringInsertVertexPoint(
             int lineId,
@@ -104,7 +105,6 @@ private:
     void DrawTopologyDocument();
     void DrawTopologySelectedLineHighlight() const;
     void DrawTopologySnapCrosshair() const;
-    void DrawPendingAuthoringLine() const;
     void DrawPendingAuthoringRectangle() const;
     void DrawPendingAuthoringInsertVertex() const;
     void DrawAuthoringVertexMoveOverlay() const;
@@ -406,6 +406,7 @@ private:
     void AddDynamicLightAt(Vector2 mapPoint);
     bool DeleteDynamicSpotLightById(int topologyLightId);
     void AddDynamicSpotLightAt(Vector2 mapPoint);
+    SectorEditorToolContext BuildToolContext(engine::Input* input);
     SectorEditorPlacedObjectDragContext BuildRuntimeObjectDragContext();
     SectorEditorPlacedObjectActionContext BuildRuntimeObjectActionContext();
     void AddRuntimeObjectAt(Vector2 mapPoint);
