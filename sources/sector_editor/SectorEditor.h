@@ -272,15 +272,8 @@ private:
     void OpenPreviewSettingsModal();
     void ApplyPreviewSettingsModal(engine::AssetManager& assets);
     void OpenDoorTextureSettingsModal();
-    void RefreshDefaultTextures();
-    void RefreshEditorTextureAssets(engine::AssetManager& assets);
-    engine::TextureHandle EditorTextureHandleForId(const std::string& textureId) const;
     void OpenAddMapTextureModal(engine::AssetManager& assets);
     void CloseAddMapTextureModal(engine::AssetManager& assets);
-    void RefreshAddMapTextureScan();
-    void SelectAddMapTexturePath(int pathIndex);
-    void RefreshAddMapTexturePreview(engine::AssetManager& assets);
-    bool ValidateAddMapTextureId(std::string& error) const;
     bool AddSelectedMapTexture(engine::AssetManager& assets);
     SectorEditorManipulationServiceContext BuildManipulationServiceContext();
     SectorEditorSelectionServiceContext BuildSelectionServiceContext();

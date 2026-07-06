@@ -88,13 +88,7 @@ void DrawSpritePickerModal(
         const SectorEditorSpritePickerCallbacks& callbacks);
 
 void RefreshAddMapTextureScan(AddMapTextureState& modalState);
-void SelectAddMapTexturePath(
-        AddMapTextureState& modalState,
-        const SectorTopologyMap& map,
-        int pathIndex);
 void RefreshAddMapTexturePreview(AddMapTextureState& modalState, engine::AssetManager& assets);
-bool ValidateAddMapTextureId(const AddMapTextureState& modalState, std::string& error);
-SectorEditorAddTextureResult AddSelectedMapTexture(SectorEditorState& state);
 
 void RefreshSpritePickerScan(SpritePickerState& picker);
 void RefreshSpriteMetadataCatalog(SectorSpriteMetadataCatalog& catalog);

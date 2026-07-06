@@ -243,6 +243,10 @@ Authoring graph is the source of truth. SectorTopologyMap is derived output, not
   design decision. `LightEditingService` owns normal light mutation; lightmap
   bake controller/source-hash policy remains separate.
 - REF-062: lightmap bake controller extraction remains future work.
+- REF-080/REF-081: `TextureCatalogService` owns generic texture
+  catalog/handle/default/registration behavior. Direct missing-texture UI
+  checks may still use core helpers until those modules can receive the service
+  cleanly without callback bridges.
 
 References:
 

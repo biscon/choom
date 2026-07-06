@@ -68,6 +68,7 @@ Task Type:
 | REF-057 | `[x]` | High | Editor architecture | Extract minimal TexturePickerService | Codex task | Medium | Generic picker lifecycle/result mechanics only; preserve feature-specific apply semantics |
 | REF-058 | `[ ]` | Medium | Editor architecture | Audit AssetCatalog/TextureCatalog service boundary | Audit first | Medium | Keep texture import/handle/catalog ownership separate from picker apply routing |
 | REF-080 | `[x]` | High | Editor architecture | Extract TextureCatalogService | Codex task | Medium | Completed; generic texture catalog/handle behavior moved, apply/document semantics unchanged |
+| REF-081 | `[x]` | High | Editor architecture | Clean up TextureCatalogService integration debt | Codex task | Medium | Completed; obsolete wrappers removed while add-map lifecycle stayed central |
 | REF-059 | `[x]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Completed; recommends material-specific picker routing extraction before MaterialEditBridge |
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
 | REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
@@ -889,6 +890,61 @@ Task Type:
     `SectorEditorHelpers` for non-catalog callers; broader asset catalog audit
     remains open in REF-058.
   - No source-hash or schema behavior changed.
+
+#### REF-081 `[x]` Clean up TextureCatalogService integration debt
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md` and REF-080
+  completion debt.
+- Why it helps: makes the texture catalog ownership boundary clearer after the
+  initial service extraction.
+- Likely files: `SectorEditor.cpp`, `SectorEditor.h`,
+  `SectorEditorTextureActions.cpp`, `SectorEditorTextureModals.h`,
+  `sources/sector_editor/services/texture_catalog/`, and focused tests/docs.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, dependency grep
+  for no concrete `SectorEditor` dependency under `services/texture_catalog`,
+  and texture picker/add-map manual smoke when practical.
+- Notes:
+  - Keep `TextureCatalogService` catalog-only.
+  - Keep add-map modal UI, preview scope lifetime, dirty/status/document
+    lifecycle, and texture import behavior outside the catalog service.
+  - Do not add callback bridges to force catalog access into modules.
+- Completion notes:
+  - Removed obsolete `SectorEditor` wrappers:
+    `RefreshDefaultTextures()`, `RefreshEditorTextureAssets()`,
+    `EditorTextureHandleForId()`, `RefreshAddMapTextureScan()`,
+    `SelectAddMapTexturePath()`, `RefreshAddMapTexturePreview()`, and
+    `ValidateAddMapTextureId()`.
+  - Removed obsolete free compatibility wrappers:
+    `SelectAddMapTexturePath(AddMapTextureState&, const SectorTopologyMap&, int)`,
+    `ValidateAddMapTextureId(const AddMapTextureState&, std::string&)`, and
+    `AddSelectedMapTexture(SectorEditorState&)`.
+  - Remaining `SectorEditor` texture functions are orchestration/lifecycle:
+    `BuildTextureCatalogService()`, `OpenAddMapTextureModal()`,
+    `CloseAddMapTextureModal()`, `AddSelectedMapTexture()`,
+    `OpenMapSkyTexturePicker()`, `OpenSelectedDoorTexturePicker()`,
+    `OpenSelectedBillboardSpritePicker()`,
+    `ApplySelectedBillboardSpritePickerSelection()`,
+    `ApplyTexturePickerSelection()`, and `CurrentTextureForPickerTarget()`.
+  - Direct generic catalog access cleaned up where it was already local to
+    `SectorEditor`; direct missing-texture UI checks remain as debt in
+    `SectorEditorTextureModals.cpp`, `SectorEditorSectorInspector.cpp`,
+    `inspector/SectorEditorInspectorPanel.cpp`,
+    `preview/SectorEditorPreviewUvPanel.cpp`,
+    `tools/doors/SectorEditorDoorInspector.cpp`, and
+    `tools/materials/SectorEditorMaterialInspector.cpp` because those modules
+    do not currently receive `SectorEditorTextureCatalogService` cleanly.
+  - `TextureCatalogService` remains catalog-only; `TexturePickerService`
+    remains generic picker lifecycle/result machinery.
+  - Material, door, sky, sprite/billboard, and add-map apply semantics stayed
+    in their existing feature owners.
+  - Add-map preview scope unload, selected path changes, preview refresh
+    timing, modal close/reset, handle refresh, status text, dirty/cache/status,
+    and document lifecycle behavior stayed unchanged.
+  - Rendering, collision, serialization schema, lightmap, and lightmap
+    source-hash behavior were not intentionally changed.
 
 #### REF-059 `[x]` Audit MaterialEditBridge and material-specific picker routing
 

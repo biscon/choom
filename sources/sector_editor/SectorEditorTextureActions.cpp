@@ -56,30 +56,6 @@ void RefreshAddMapTextureScan(AddMapTextureState& modalState)
     modalState.selectedPathIndex = modalState.paths.empty() ? -1 : 0;
 }
 
-void SelectAddMapTexturePath(
-        AddMapTextureState& modalState,
-        const SectorTopologyMap& map,
-        int pathIndex)
-{
-    SectorEditorState state;
-    state.topologyMap = map;
-    SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}
-            .SelectAddMapTexturePath(modalState, pathIndex);
-}
-
-bool ValidateAddMapTextureId(const AddMapTextureState& modalState, std::string& error)
-{
-    SectorEditorState state;
-    return SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}
-            .ValidateAddMapTextureId(modalState, error);
-}
-
-SectorEditorAddTextureResult AddSelectedMapTexture(SectorEditorState& state)
-{
-    return SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}
-            .RegisterSelectedMapTexture(state.addMapTexture);
-}
-
 void RefreshSpritePickerScan(SpritePickerState& picker)
 {
     picker.sprites = ScanAssetSpriteAsepriteJsons(picker.scanMessage);
