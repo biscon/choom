@@ -77,6 +77,7 @@ Task Type:
 | REF-066 | `[x]` | Medium | Editor architecture | Extract Preview3D UV/material panel into `preview/` | Codex task | Medium/High | Completed; panel moved to preview module and uses `MaterialEditingService` directly |
 | REF-074 | `[x]` | Medium | Editor architecture | Extract Preview3D overlay/debug UI into `preview/` | Codex task | Medium | Completed; overlay module returns one-frame high-level action requests |
 | REF-075 | `[x]` | Medium | Editor architecture | Extract main inspector routing panel into `inspector/` | Codex task | Medium | Completed; selected-object inspector routing moved out of `SectorEditor.cpp` |
+| REF-076 | `[x]` | Medium | Editor architecture | Add LightEditingService for light inspector edits | Codex task | Medium/High | Completed; light inspector property edits use service directly |
 | REF-067 | `[x]` | High | Editor architecture | Authoring-owned topology edit cleanup and direct topology mutation inventory | Codex task | Medium/High | Completed; Blocks Player authoring-owned with strict mapping-gap failure and inventory report |
 | REF-068 | `[x]` | High | Editor architecture | Replace SideDef inspector UV topology mutation with authoring material edits | Codex task | Medium/High | Completed; inspector UV apply/reset writes authoring material data and fails without mapping |
 | REF-069 | `[x]` | Medium | Editor architecture | Remove invalid no-authoring topology-edit support | Codex task | Medium/High | Completed; normal editor edits require authoring data or fail |
@@ -1082,6 +1083,37 @@ Task Type:
   - No behavior changes intended.
   - REF-058, preview follow-ups, lights/lightmap work, and the main
     tools/toolbar panel remain open.
+
+#### REF-076 `[x]` Add LightEditingService for light inspector edits
+
+- Source/audit reference: REF-076 task.
+- Why it helps: removes the temporary REF-075 light inspector dirty-request
+  bridge and moves normal light property mutation behind a shared editor
+  service.
+- Likely files: `sources/sector_editor/services/lights/`,
+  `SectorEditorLightInspector.*`, `inspector/SectorEditorInspectorPanel.*`,
+  `SectorEditor.cpp`.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, `git diff --check`, service dependency
+  grep, inspector dirty-request grep, and manual light inspector smoke if
+  practical.
+- Completion notes:
+  - Added `SectorEditorLightEditingService` under
+    `sources/sector_editor/services/lights/`.
+  - Added service-safe `MarkSectorEditorTopologyDocumentEdited()` helper for
+    exact old dirty/cache/revision/status behavior without depending on
+    `SectorEditor.h`.
+  - Light inspector static/dynamic point and spotlight property edits now call
+    the service directly.
+  - REF-075 `MarkTopologyDocumentEdited` light inspector dirty request removed.
+  - Static/dynamic light semantics and lightmap source-hash behavior unchanged.
+  - Lightmap bake worker/result install and LightmapBakeController work not
+    moved.
+  - Add light, delete confirmation/confirmed mutation, drag light, spotlight
+    pilot, and preview overlay light controls remain future service migration
+    debt.
+  - REF-058, REF-062, unrelated preview/tools work remain open.
 
 #### REF-067 `[x]` Authoring-owned topology edit cleanup and direct topology mutation inventory
 

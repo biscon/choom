@@ -12,6 +12,7 @@
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
+#include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -549,6 +550,18 @@ game::SectorEditorMaterialEditingService MakeMaterialEditingService(
                         }
                         return true;
                     }}};
+}
+
+game::SectorEditorLightEditingService MakeLightEditingService(
+        game::SectorEditorState& state,
+        game::SectorEditorUiState& uiState,
+        std::string& statusText)
+{
+    return game::SectorEditorLightEditingService{
+            game::SectorEditorLightEditingServiceContext{
+                    state,
+                    uiState,
+                    statusText}};
 }
 
 game::SectorTopologySideDef SideDef(
@@ -3201,6 +3214,91 @@ void TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTo
           "failed side material inspector write records invalid last-valid state");
     Check(state.authoringDerivedTopologyStale,
           "failed side material inspector write leaves derived topology stale");
+}
+
+void TestEditorLightEditingServiceStaticEditMarksDirtyAndInvalidatesCache()
+{
+    game::SectorEditorState state;
+    state.topologyRenderCache.valid = true;
+    state.topologyRenderRevision = 41;
+    state.topologyRenderWarning = "keep warning";
+    game::SectorEditorUiState uiState;
+    std::string statusText = "old";
+    game::SectorEditorLightEditingService service =
+            MakeLightEditingService(state, uiState, statusText);
+
+    game::SectorTopologyStaticPointLight light;
+    light.id = 7;
+    light.radius = 4.0f;
+
+    Check(service.SetStaticLightRadius(light, 6.0f),
+          "light service static radius edit succeeds");
+    Check(Near(light.radius, 6.0f),
+          "light service static radius edit changes field");
+    Check(state.topologyDocumentDirty && state.hasUnsavedChanges,
+          "light service static edit marks document dirty and unsaved");
+    Check(!state.topologyRenderCache.valid,
+          "light service static edit invalidates topology render cache");
+    Check(state.topologyRenderRevision == 42,
+          "light service static edit increments topology render revision");
+    Check(state.topologyRenderWarning == "keep warning",
+          "light service static edit preserves topology render warning like old dirty path");
+    Check(statusText == "Updated static light 7",
+          "light service static edit updates status");
+}
+
+void TestEditorLightEditingServiceDynamicEditPreservesDirtyBehavior()
+{
+    game::SectorEditorState state;
+    state.topologyRenderCache.valid = true;
+    state.topologyRenderRevision = 9;
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    game::SectorEditorLightEditingService service =
+            MakeLightEditingService(state, uiState, statusText);
+
+    game::SectorTopologyDynamicPointLight light;
+    light.id = 12;
+    light.enabled = true;
+
+    Check(service.SetDynamicLightEnabled(light, false),
+          "light service dynamic enabled edit succeeds");
+    Check(!light.enabled,
+          "light service dynamic enabled edit changes field");
+    Check(state.topologyDocumentDirty && state.hasUnsavedChanges,
+          "light service dynamic edit marks document dirty and unsaved");
+    Check(!state.topologyRenderCache.valid,
+          "light service dynamic edit invalidates topology render cache");
+    Check(state.topologyRenderRevision == 10,
+          "light service dynamic edit increments topology render revision");
+    Check(statusText == "Updated dynamic light 12 enabled",
+          "light service dynamic edit updates status");
+}
+
+void TestEditorLightEditingServiceNoOpDoesNotDirtyOrUpdateStatus()
+{
+    game::SectorEditorState state;
+    state.topologyRenderCache.valid = true;
+    state.topologyRenderRevision = 5;
+    game::SectorEditorUiState uiState;
+    std::string statusText = "unchanged";
+    game::SectorEditorLightEditingService service =
+            MakeLightEditingService(state, uiState, statusText);
+
+    game::SectorTopologyDynamicSpotLight light;
+    light.id = 33;
+    light.shadowBias = game::DynamicSpotLightMinShadowBias;
+
+    Check(!service.SetDynamicSpotLightShadowBias(light, -1.0f),
+          "light service clamp-first no-op returns false");
+    Check(!state.topologyDocumentDirty && !state.hasUnsavedChanges,
+          "light service no-op does not mark document dirty");
+    Check(state.topologyRenderCache.valid,
+          "light service no-op does not invalidate topology render cache");
+    Check(state.topologyRenderRevision == 5,
+          "light service no-op does not increment topology render revision");
+    Check(statusText == "unchanged",
+          "light service no-op does not update status");
 }
 
 void TestEditorMaterialEditingServiceSideDefBaseUvWritesThroughAuthoringSide()
@@ -8549,6 +8647,9 @@ int main()
     TestEditorAuthoringSideMaterialInspectorWritesProjectAfterDerivation();
     TestEditorAuthoringSideMaterialInspectorWritesProjectToSplitDerivedSideDefs();
     TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTopology();
+    TestEditorLightEditingServiceStaticEditMarksDirtyAndInvalidatesCache();
+    TestEditorLightEditingServiceDynamicEditPreservesDirtyBehavior();
+    TestEditorLightEditingServiceNoOpDoesNotDirtyOrUpdateStatus();
     TestEditorMaterialEditingServiceSideDefBaseUvWritesThroughAuthoringSide();
     TestEditorMaterialEditingServiceNoAuthoringMaterialEditFailsWithoutMutatingTopology();
     TestEditorMaterialEditingServiceSideDefDecalUvWritesThroughAuthoringSide();

@@ -85,7 +85,9 @@ bool DrawSelectedStaticLightInspector(
         float gap,
         SectorTopologyStaticPointLight& light,
         SectorEditorUiState& uiState,
-        const SectorEditorLightInspectorCallbacks& callbacks)
+        SectorEditorLightEditingService& lightEditing,
+        bool& deleteRequested,
+        bool& bakeRequested)
 {
     float y = 0.0f;
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Static Light: %d", light.id), engine::UITextJustify::Left, config.textColor);
@@ -102,12 +104,19 @@ bool DrawSelectedStaticLightInspector(
     }
 
     if (engine::Button(ui, config, input, assets, "sector_editor_delete_light", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Light")) {
-        callbacks.deleteSelectedLight();
+        deleteRequested = true;
         return true;
     }
     y += rowH + gap;
 
-    auto drawLightFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
+    enum class StaticLightFloatField {
+        PositionX,
+        PositionY,
+        PositionZ,
+        Intensity,
+        Radius
+    };
+    auto drawLightFloat = [&](const char* id, const char* label, float value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals, StaticLightFloatField field) {
         const SectorEditorInspectorNumericRowLayout layout =
                 BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
@@ -127,20 +136,30 @@ bool DrawSelectedStaticLightInspector(
                 maxValue,
                 decimals);
         if (result.changed && result.value != value) {
-            value = result.value;
-            callbacks.markTopologyDocumentEdited(TextFormat("Updated static light %d", light.id));
+            if (field == StaticLightFloatField::Intensity) {
+                lightEditing.SetStaticLightIntensity(light, result.value);
+            } else if (field == StaticLightFloatField::Radius) {
+                lightEditing.SetStaticLightRadius(light, result.value);
+            } else {
+                Vector3 position = light.position;
+                if (field == StaticLightFloatField::PositionX) {
+                    position.x = result.value;
+                } else if (field == StaticLightFloatField::PositionY) {
+                    position.y = result.value;
+                } else {
+                    position.z = result.value;
+                }
+                lightEditing.SetStaticLightPosition(light, position);
+            }
         }
         y += rowH + gap;
     };
 
-    drawLightFloat("sector_editor_light_x", "X:", light.position.x, uiState.lightXInput, -8192.0f, 8192.0f, 2);
-    drawLightFloat("sector_editor_light_y", "Y:", light.position.y, uiState.lightYInput, -512.0f, 512.0f, 2);
-    drawLightFloat("sector_editor_light_z", "Z:", light.position.z, uiState.lightZInput, -8192.0f, 8192.0f, 2);
-    drawLightFloat("sector_editor_light_intensity", "Intensity:", light.intensity, uiState.lightIntensityInput, 0.0f, 8.0f, 3);
-    light.intensity = ClampLightIntensity(light.intensity);
-    drawLightFloat("sector_editor_light_radius", "Radius:", light.radius, uiState.lightRadiusInput, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), 2);
-    light.radius = ClampLightRadius(light.radius);
-    light.sourceRadius = ClampLightSourceRadius(light.sourceRadius, light.radius);
+    drawLightFloat("sector_editor_light_x", "X:", light.position.x, uiState.lightXInput, -8192.0f, 8192.0f, 2, StaticLightFloatField::PositionX);
+    drawLightFloat("sector_editor_light_y", "Y:", light.position.y, uiState.lightYInput, -512.0f, 512.0f, 2, StaticLightFloatField::PositionY);
+    drawLightFloat("sector_editor_light_z", "Z:", light.position.z, uiState.lightZInput, -8192.0f, 8192.0f, 2, StaticLightFloatField::PositionZ);
+    drawLightFloat("sector_editor_light_intensity", "Intensity:", light.intensity, uiState.lightIntensityInput, 0.0f, 8.0f, 3, StaticLightFloatField::Intensity);
+    drawLightFloat("sector_editor_light_radius", "Radius:", light.radius, uiState.lightRadiusInput, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), 2, StaticLightFloatField::Radius);
     {
         const SectorEditorInspectorNumericRowLayout layout =
                 BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
@@ -162,8 +181,7 @@ bool DrawSelectedStaticLightInspector(
                 3);
         const float edited = ClampLightSourceRadius(result.value, light.radius);
         if (result.changed && edited != light.sourceRadius) {
-            light.sourceRadius = edited;
-            callbacks.markTopologyDocumentEdited("Updated light source radius");
+            lightEditing.SetStaticLightSourceRadius(light, result.value);
         }
         y += rowH + gap;
     }
@@ -184,9 +202,15 @@ bool DrawSelectedStaticLightInspector(
                 channel,
                 inputState);
         if (result.changed && result.channel != channel) {
-            channel = result.channel;
-            light.color.a = 255;
-            callbacks.markTopologyDocumentEdited(TextFormat("Updated static light %d color", light.id));
+            Color color = light.color;
+            if (&channel == &light.color.r) {
+                color.r = result.channel;
+            } else if (&channel == &light.color.g) {
+                color.g = result.channel;
+            } else {
+                color.b = result.channel;
+            }
+            lightEditing.SetStaticLightColor(light, color);
         }
         y += rowH + gap;
     };
@@ -205,7 +229,7 @@ bool DrawSelectedStaticLightInspector(
     y += 36.0f + gap;
 
     if (engine::Button(ui, config, input, assets, "sector_editor_light_bake", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
-        callbacks.bakeLightmaps();
+        bakeRequested = true;
     }
 
     return true;
@@ -223,7 +247,9 @@ bool DrawSelectedStaticSpotLightInspector(
         float gap,
         SectorTopologyStaticSpotLight& light,
         SectorEditorUiState& uiState,
-        const SectorEditorLightInspectorCallbacks& callbacks)
+        SectorEditorLightEditingService& lightEditing,
+        bool& deleteRequested,
+        bool& bakeRequested)
 {
     float y = 0.0f;
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Static Spot: %d", light.id), engine::UITextJustify::Left, config.textColor);
@@ -240,12 +266,24 @@ bool DrawSelectedStaticSpotLightInspector(
     }
 
     if (engine::Button(ui, config, input, assets, "sector_editor_delete_static_spot_light", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Light")) {
-        callbacks.deleteSelectedLight();
+        deleteRequested = true;
         return true;
     }
     y += rowH + gap;
 
-    auto drawLightFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
+    enum class StaticSpotFloatField {
+        PositionX,
+        PositionY,
+        PositionZ,
+        TargetX,
+        TargetY,
+        TargetZ,
+        Range,
+        InnerCone,
+        OuterCone,
+        Intensity
+    };
+    auto drawLightFloat = [&](const char* id, const char* label, float value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals, StaticSpotFloatField field) {
         const SectorEditorInspectorNumericRowLayout layout =
                 BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
@@ -265,21 +303,48 @@ bool DrawSelectedStaticSpotLightInspector(
                 maxValue,
                 decimals);
         if (result.changed && result.value != value) {
-            value = result.value;
-            callbacks.markTopologyDocumentEdited(TextFormat("Updated static spot %d", light.id));
+            if (field == StaticSpotFloatField::Range) {
+                lightEditing.SetStaticSpotLightRange(light, result.value);
+            } else if (field == StaticSpotFloatField::InnerCone) {
+                lightEditing.SetStaticSpotLightInnerCone(light, result.value);
+            } else if (field == StaticSpotFloatField::OuterCone) {
+                lightEditing.SetStaticSpotLightOuterCone(light, result.value);
+            } else if (field == StaticSpotFloatField::Intensity) {
+                lightEditing.SetStaticSpotLightIntensity(light, result.value);
+            } else if (field == StaticSpotFloatField::TargetX
+                    || field == StaticSpotFloatField::TargetY
+                    || field == StaticSpotFloatField::TargetZ) {
+                Vector3 target = light.target;
+                if (field == StaticSpotFloatField::TargetX) {
+                    target.x = result.value;
+                } else if (field == StaticSpotFloatField::TargetY) {
+                    target.y = result.value;
+                } else {
+                    target.z = result.value;
+                }
+                lightEditing.SetStaticSpotLightTarget(light, target);
+            } else {
+                Vector3 position = light.position;
+                if (field == StaticSpotFloatField::PositionX) {
+                    position.x = result.value;
+                } else if (field == StaticSpotFloatField::PositionY) {
+                    position.y = result.value;
+                } else {
+                    position.z = result.value;
+                }
+                lightEditing.SetStaticSpotLightPosition(light, position);
+            }
         }
         y += rowH + gap;
     };
 
-    drawLightFloat("sector_editor_static_spot_light_x", "Position X:", light.position.x, uiState.lightXInput, -8192.0f, 8192.0f, 2);
-    drawLightFloat("sector_editor_static_spot_light_y", "Position Y:", light.position.y, uiState.lightYInput, -512.0f, 512.0f, 2);
-    drawLightFloat("sector_editor_static_spot_light_z", "Position Z:", light.position.z, uiState.lightZInput, -8192.0f, 8192.0f, 2);
-    drawLightFloat("sector_editor_static_spot_light_target_x", "Target X:", light.target.x, uiState.lightTargetXInput, -8192.0f, 8192.0f, 2);
-    drawLightFloat("sector_editor_static_spot_light_target_y", "Target Y:", light.target.y, uiState.lightTargetYInput, -512.0f, 512.0f, 2);
-    drawLightFloat("sector_editor_static_spot_light_target_z", "Target Z:", light.target.z, uiState.lightTargetZInput, -8192.0f, 8192.0f, 2);
-    drawLightFloat("sector_editor_static_spot_light_range", "Radius:", light.range, uiState.lightRadiusInput, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), 2);
-    light.range = ClampLightRadius(light.range);
-    light.sourceRadius = ClampLightSourceRadius(light.sourceRadius, light.range);
+    drawLightFloat("sector_editor_static_spot_light_x", "Position X:", light.position.x, uiState.lightXInput, -8192.0f, 8192.0f, 2, StaticSpotFloatField::PositionX);
+    drawLightFloat("sector_editor_static_spot_light_y", "Position Y:", light.position.y, uiState.lightYInput, -512.0f, 512.0f, 2, StaticSpotFloatField::PositionY);
+    drawLightFloat("sector_editor_static_spot_light_z", "Position Z:", light.position.z, uiState.lightZInput, -8192.0f, 8192.0f, 2, StaticSpotFloatField::PositionZ);
+    drawLightFloat("sector_editor_static_spot_light_target_x", "Target X:", light.target.x, uiState.lightTargetXInput, -8192.0f, 8192.0f, 2, StaticSpotFloatField::TargetX);
+    drawLightFloat("sector_editor_static_spot_light_target_y", "Target Y:", light.target.y, uiState.lightTargetYInput, -512.0f, 512.0f, 2, StaticSpotFloatField::TargetY);
+    drawLightFloat("sector_editor_static_spot_light_target_z", "Target Z:", light.target.z, uiState.lightTargetZInput, -8192.0f, 8192.0f, 2, StaticSpotFloatField::TargetZ);
+    drawLightFloat("sector_editor_static_spot_light_range", "Radius:", light.range, uiState.lightRadiusInput, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), 2, StaticSpotFloatField::Range);
     {
         const SectorEditorInspectorNumericRowLayout layout =
                 BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
@@ -301,17 +366,13 @@ bool DrawSelectedStaticSpotLightInspector(
                 3);
         const float edited = ClampLightSourceRadius(result.value, light.range);
         if (result.changed && edited != light.sourceRadius) {
-            light.sourceRadius = edited;
-            callbacks.markTopologyDocumentEdited(TextFormat("Updated static spot %d source radius", light.id));
+            lightEditing.SetStaticSpotLightSourceRadius(light, result.value);
         }
         y += rowH + gap;
     }
-    drawLightFloat("sector_editor_static_spot_light_inner_cone", "Inner cone:", light.innerConeDegrees, uiState.lightInnerConeInput, 0.0f, 179.0f, 2);
-    light.innerConeDegrees = std::clamp(light.innerConeDegrees, 0.0f, 179.0f);
-    drawLightFloat("sector_editor_static_spot_light_outer_cone", "Outer cone:", light.outerConeDegrees, uiState.lightOuterConeInput, 0.0f, 179.0f, 2);
-    light.outerConeDegrees = std::clamp(std::max(light.outerConeDegrees, light.innerConeDegrees), 0.0f, 179.0f);
-    drawLightFloat("sector_editor_static_spot_light_intensity", "Intensity:", light.intensity, uiState.lightIntensityInput, 0.0f, 8.0f, 3);
-    light.intensity = ClampLightIntensity(light.intensity);
+    drawLightFloat("sector_editor_static_spot_light_inner_cone", "Inner cone:", light.innerConeDegrees, uiState.lightInnerConeInput, 0.0f, 179.0f, 2, StaticSpotFloatField::InnerCone);
+    drawLightFloat("sector_editor_static_spot_light_outer_cone", "Outer cone:", light.outerConeDegrees, uiState.lightOuterConeInput, 0.0f, 179.0f, 2, StaticSpotFloatField::OuterCone);
+    drawLightFloat("sector_editor_static_spot_light_intensity", "Intensity:", light.intensity, uiState.lightIntensityInput, 0.0f, 8.0f, 3, StaticSpotFloatField::Intensity);
 
     auto drawLightChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
         const float colorLabelW = 126.0f;
@@ -329,9 +390,15 @@ bool DrawSelectedStaticSpotLightInspector(
                 channel,
                 inputState);
         if (result.changed && result.channel != channel) {
-            channel = result.channel;
-            light.color.a = 255;
-            callbacks.markTopologyDocumentEdited(TextFormat("Updated static spot %d color", light.id));
+            Color color = light.color;
+            if (&channel == &light.color.r) {
+                color.r = result.channel;
+            } else if (&channel == &light.color.g) {
+                color.g = result.channel;
+            } else {
+                color.b = result.channel;
+            }
+            lightEditing.SetStaticSpotLightColor(light, color);
         }
         y += rowH + gap;
     };
@@ -350,7 +417,7 @@ bool DrawSelectedStaticSpotLightInspector(
     y += 36.0f + gap;
 
     if (engine::Button(ui, config, input, assets, "sector_editor_static_spot_light_bake", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
-        callbacks.bakeLightmaps();
+        bakeRequested = true;
     }
 
     return true;
@@ -368,7 +435,8 @@ bool DrawSelectedDynamicLightInspector(
         float gap,
         SectorTopologyDynamicPointLight& light,
         SectorEditorUiState& uiState,
-        const SectorEditorLightInspectorCallbacks& callbacks)
+        SectorEditorLightEditingService& lightEditing,
+        bool& deleteRequested)
 {
     float y = 0.0f;
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Dynamic Light: %d", light.id), engine::UITextJustify::Left, config.textColor);
@@ -385,7 +453,7 @@ bool DrawSelectedDynamicLightInspector(
     }
 
     if (engine::Button(ui, config, input, assets, "sector_editor_delete_dynamic_light", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Light")) {
-        callbacks.deleteSelectedLight();
+        deleteRequested = true;
         return true;
     }
     y += rowH + gap;
@@ -393,20 +461,27 @@ bool DrawSelectedDynamicLightInspector(
     bool enabled = light.enabled;
     if (engine::Checkbox(ui, config, input, assets, "sector_editor_dynamic_light_enabled", Rectangle{0.0f, y, contentW, rowH}, font, "Enabled", enabled)
             && enabled != light.enabled) {
-        light.enabled = enabled;
-        callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic light %d enabled", light.id));
+        lightEditing.SetDynamicLightEnabled(light, enabled);
     }
     y += rowH + gap;
 
     bool flicker = light.flicker;
     if (engine::Checkbox(ui, config, input, assets, "sector_editor_dynamic_light_flicker", Rectangle{0.0f, y, contentW, rowH}, font, "Flicker", flicker)
             && flicker != light.flicker) {
-        light.flicker = flicker;
-        callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic light %d flicker", light.id));
+        lightEditing.SetDynamicLightFlicker(light, flicker);
     }
     y += rowH + gap;
 
-    auto drawLightFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
+    enum class DynamicLightFloatField {
+        FlickerSpeed,
+        FlickerAmount,
+        PositionX,
+        PositionY,
+        PositionZ,
+        Intensity,
+        Radius
+    };
+    auto drawLightFloat = [&](const char* id, const char* label, float value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals, DynamicLightFloatField field) {
         const SectorEditorInspectorNumericRowLayout layout =
                 BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
@@ -426,8 +501,25 @@ bool DrawSelectedDynamicLightInspector(
                 maxValue,
                 decimals);
         if (result.changed && result.value != value) {
-            value = result.value;
-            callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic light %d", light.id));
+            if (field == DynamicLightFloatField::FlickerSpeed) {
+                lightEditing.SetDynamicLightFlickerSpeed(light, result.value);
+            } else if (field == DynamicLightFloatField::FlickerAmount) {
+                lightEditing.SetDynamicLightFlickerAmount(light, result.value);
+            } else if (field == DynamicLightFloatField::Intensity) {
+                lightEditing.SetDynamicLightIntensity(light, result.value);
+            } else if (field == DynamicLightFloatField::Radius) {
+                lightEditing.SetDynamicLightRadius(light, result.value);
+            } else {
+                Vector3 position = light.position;
+                if (field == DynamicLightFloatField::PositionX) {
+                    position.x = result.value;
+                } else if (field == DynamicLightFloatField::PositionY) {
+                    position.y = result.value;
+                } else {
+                    position.z = result.value;
+                }
+                lightEditing.SetDynamicLightPosition(light, position);
+            }
         }
         y += rowH + gap;
     };
@@ -439,8 +531,8 @@ bool DrawSelectedDynamicLightInspector(
             uiState.lightFlickerSpeedInput,
             DynamicLightFlickerMinSpeed,
             DynamicLightFlickerMaxSpeed,
-            3);
-    light.flickerSpeed = ClampDynamicLightFlickerSpeed(light.flickerSpeed);
+            3,
+            DynamicLightFloatField::FlickerSpeed);
     drawLightFloat(
             "sector_editor_dynamic_light_flicker_amount",
             "Flicker amount:",
@@ -448,16 +540,14 @@ bool DrawSelectedDynamicLightInspector(
             uiState.lightFlickerAmountInput,
             DynamicLightFlickerMinAmount,
             DynamicLightFlickerMaxAmount,
-            3);
-    light.flickerAmount = ClampDynamicLightFlickerAmount(light.flickerAmount);
+            3,
+            DynamicLightFloatField::FlickerAmount);
 
-    drawLightFloat("sector_editor_dynamic_light_x", "X:", light.position.x, uiState.lightXInput, -8192.0f, 8192.0f, 2);
-    drawLightFloat("sector_editor_dynamic_light_y", "Y:", light.position.y, uiState.lightYInput, -512.0f, 512.0f, 2);
-    drawLightFloat("sector_editor_dynamic_light_z", "Z:", light.position.z, uiState.lightZInput, -8192.0f, 8192.0f, 2);
-    drawLightFloat("sector_editor_dynamic_light_intensity", "Intensity:", light.intensity, uiState.lightIntensityInput, 0.0f, 8.0f, 3);
-    light.intensity = ClampLightIntensity(light.intensity);
-    drawLightFloat("sector_editor_dynamic_light_radius", "Radius:", light.radius, uiState.lightRadiusInput, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), 2);
-    light.radius = ClampLightRadius(light.radius);
+    drawLightFloat("sector_editor_dynamic_light_x", "X:", light.position.x, uiState.lightXInput, -8192.0f, 8192.0f, 2, DynamicLightFloatField::PositionX);
+    drawLightFloat("sector_editor_dynamic_light_y", "Y:", light.position.y, uiState.lightYInput, -512.0f, 512.0f, 2, DynamicLightFloatField::PositionY);
+    drawLightFloat("sector_editor_dynamic_light_z", "Z:", light.position.z, uiState.lightZInput, -8192.0f, 8192.0f, 2, DynamicLightFloatField::PositionZ);
+    drawLightFloat("sector_editor_dynamic_light_intensity", "Intensity:", light.intensity, uiState.lightIntensityInput, 0.0f, 8.0f, 3, DynamicLightFloatField::Intensity);
+    drawLightFloat("sector_editor_dynamic_light_radius", "Radius:", light.radius, uiState.lightRadiusInput, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), 2, DynamicLightFloatField::Radius);
 
     auto drawLightChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
         const float colorLabelW = 116.0f;
@@ -475,9 +565,15 @@ bool DrawSelectedDynamicLightInspector(
                 channel,
                 inputState);
         if (result.changed && result.channel != channel) {
-            channel = result.channel;
-            light.color.a = 255;
-            callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic light %d color", light.id));
+            Color color = light.color;
+            if (&channel == &light.color.r) {
+                color.r = result.channel;
+            } else if (&channel == &light.color.g) {
+                color.g = result.channel;
+            } else {
+                color.b = result.channel;
+            }
+            lightEditing.SetDynamicLightColor(light, color);
         }
         y += rowH + gap;
     };
@@ -510,7 +606,8 @@ bool DrawSelectedDynamicSpotLightInspector(
         float gap,
         SectorTopologyDynamicSpotLight& light,
         SectorEditorUiState& uiState,
-        const SectorEditorLightInspectorCallbacks& callbacks)
+        SectorEditorLightEditingService& lightEditing,
+        bool& deleteRequested)
 {
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     float y = 0.0f;
@@ -528,7 +625,7 @@ bool DrawSelectedDynamicSpotLightInspector(
     }
 
     if (engine::Button(ui, config, input, assets, "sector_editor_delete_dynamic_spot_light", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Light")) {
-        callbacks.deleteSelectedLight();
+        deleteRequested = true;
         return true;
     }
     y += rowH + gap;
@@ -536,20 +633,32 @@ bool DrawSelectedDynamicSpotLightInspector(
     bool enabled = light.enabled;
     if (engine::Checkbox(ui, config, input, assets, "sector_editor_dynamic_spot_light_enabled", Rectangle{0.0f, y, contentW, rowH}, font, "Enabled", enabled)
             && enabled != light.enabled) {
-        light.enabled = enabled;
-        callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d enabled", light.id));
+        lightEditing.SetDynamicSpotLightEnabled(light, enabled);
     }
     y += rowH + gap;
 
     bool flicker = light.flicker;
     if (engine::Checkbox(ui, config, input, assets, "sector_editor_dynamic_spot_light_flicker", Rectangle{0.0f, y, contentW, rowH}, font, "Flicker", flicker)
             && flicker != light.flicker) {
-        light.flicker = flicker;
-        callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d flicker", light.id));
+        lightEditing.SetDynamicSpotLightFlicker(light, flicker);
     }
     y += rowH + gap;
 
-    auto drawLightFloat = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals) {
+    enum class DynamicSpotFloatField {
+        FlickerSpeed,
+        FlickerAmount,
+        PositionX,
+        PositionY,
+        PositionZ,
+        TargetX,
+        TargetY,
+        TargetZ,
+        Intensity,
+        Range,
+        InnerCone,
+        OuterCone
+    };
+    auto drawLightFloat = [&](const char* id, const char* label, float value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals, DynamicSpotFloatField field) {
         const SectorEditorInspectorNumericRowLayout layout =
                 BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
@@ -569,8 +678,41 @@ bool DrawSelectedDynamicSpotLightInspector(
                 maxValue,
                 decimals);
         if (result.changed && result.value != value) {
-            value = result.value;
-            callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d", light.id));
+            if (field == DynamicSpotFloatField::FlickerSpeed) {
+                lightEditing.SetDynamicSpotLightFlickerSpeed(light, result.value);
+            } else if (field == DynamicSpotFloatField::FlickerAmount) {
+                lightEditing.SetDynamicSpotLightFlickerAmount(light, result.value);
+            } else if (field == DynamicSpotFloatField::Intensity) {
+                lightEditing.SetDynamicSpotLightIntensity(light, result.value);
+            } else if (field == DynamicSpotFloatField::Range) {
+                lightEditing.SetDynamicSpotLightRange(light, result.value);
+            } else if (field == DynamicSpotFloatField::InnerCone) {
+                lightEditing.SetDynamicSpotLightInnerCone(light, result.value);
+            } else if (field == DynamicSpotFloatField::OuterCone) {
+                lightEditing.SetDynamicSpotLightOuterCone(light, result.value);
+            } else if (field == DynamicSpotFloatField::TargetX
+                    || field == DynamicSpotFloatField::TargetY
+                    || field == DynamicSpotFloatField::TargetZ) {
+                Vector3 target = light.target;
+                if (field == DynamicSpotFloatField::TargetX) {
+                    target.x = result.value;
+                } else if (field == DynamicSpotFloatField::TargetY) {
+                    target.y = result.value;
+                } else {
+                    target.z = result.value;
+                }
+                lightEditing.SetDynamicSpotLightTarget(light, target);
+            } else {
+                Vector3 position = light.position;
+                if (field == DynamicSpotFloatField::PositionX) {
+                    position.x = result.value;
+                } else if (field == DynamicSpotFloatField::PositionY) {
+                    position.y = result.value;
+                } else {
+                    position.z = result.value;
+                }
+                lightEditing.SetDynamicSpotLightPosition(light, position);
+            }
         }
         y += rowH + gap;
     };
@@ -582,8 +724,8 @@ bool DrawSelectedDynamicSpotLightInspector(
             uiState.lightFlickerSpeedInput,
             DynamicLightFlickerMinSpeed,
             DynamicLightFlickerMaxSpeed,
-            3);
-    light.flickerSpeed = ClampDynamicLightFlickerSpeed(light.flickerSpeed);
+            3,
+            DynamicSpotFloatField::FlickerSpeed);
     drawLightFloat(
             "sector_editor_dynamic_spot_light_flicker_amount",
             "Flicker amount:",
@@ -591,14 +733,13 @@ bool DrawSelectedDynamicSpotLightInspector(
             uiState.lightFlickerAmountInput,
             DynamicLightFlickerMinAmount,
             DynamicLightFlickerMaxAmount,
-            3);
-    light.flickerAmount = ClampDynamicLightFlickerAmount(light.flickerAmount);
+            3,
+            DynamicSpotFloatField::FlickerAmount);
 
     bool castsShadow = light.castsShadow;
     if (engine::Checkbox(ui, config, input, assets, "sector_editor_dynamic_spot_light_casts_shadow", Rectangle{0.0f, y, contentW, rowH}, font, "Cast Shadows", castsShadow)
             && castsShadow != light.castsShadow) {
-        light.castsShadow = castsShadow;
-        callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d shadow request", light.id));
+        lightEditing.SetDynamicSpotLightCastsShadow(light, castsShadow);
     }
     y += rowH + gap;
     const char* shadowNote = TextFormat(
@@ -644,8 +785,7 @@ bool DrawSelectedDynamicSpotLightInspector(
                 1);
         const int edited = ClampDynamicSpotLightShadowPriority(result.value);
         if (result.changed && edited != light.shadowPriority) {
-            light.shadowPriority = edited;
-            callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d shadow priority", light.id));
+            lightEditing.SetDynamicSpotLightShadowPriority(light, result.value);
         }
         y += rowH + gap;
     }
@@ -670,8 +810,7 @@ bool DrawSelectedDynamicSpotLightInspector(
                 5);
         const float edited = ClampDynamicSpotLightShadowBias(result.value);
         if (result.changed && edited != light.shadowBias) {
-            light.shadowBias = edited;
-            callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d shadow bias", light.id));
+            lightEditing.SetDynamicSpotLightShadowBias(light, result.value);
         }
         y += rowH + gap;
     }
@@ -696,8 +835,7 @@ bool DrawSelectedDynamicSpotLightInspector(
                 3);
         const float edited = ClampDynamicSpotLightShadowStrength(result.value);
         if (result.changed && edited != light.shadowStrength) {
-            light.shadowStrength = edited;
-            callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d shadow strength", light.id));
+            lightEditing.SetDynamicSpotLightShadowStrength(light, result.value);
         }
         y += rowH + gap;
     }
@@ -722,26 +860,21 @@ bool DrawSelectedDynamicSpotLightInspector(
                 3);
         const float edited = ClampDynamicSpotLightShadowSoftness(result.value);
         if (result.changed && edited != light.shadowSoftness) {
-            light.shadowSoftness = edited;
-            callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d shadow softness", light.id));
+            lightEditing.SetDynamicSpotLightShadowSoftness(light, result.value);
         }
         y += rowH + gap;
     }
 
-    drawLightFloat("sector_editor_dynamic_spot_light_x", "Position X:", light.position.x, uiState.lightXInput, -8192.0f, 8192.0f, 2);
-    drawLightFloat("sector_editor_dynamic_spot_light_y", "Position Y:", light.position.y, uiState.lightYInput, -512.0f, 512.0f, 2);
-    drawLightFloat("sector_editor_dynamic_spot_light_z", "Position Z:", light.position.z, uiState.lightZInput, -8192.0f, 8192.0f, 2);
-    drawLightFloat("sector_editor_dynamic_spot_light_target_x", "Target X:", light.target.x, uiState.lightTargetXInput, -8192.0f, 8192.0f, 2);
-    drawLightFloat("sector_editor_dynamic_spot_light_target_y", "Target Y:", light.target.y, uiState.lightTargetYInput, -512.0f, 512.0f, 2);
-    drawLightFloat("sector_editor_dynamic_spot_light_target_z", "Target Z:", light.target.z, uiState.lightTargetZInput, -8192.0f, 8192.0f, 2);
-    drawLightFloat("sector_editor_dynamic_spot_light_intensity", "Intensity:", light.intensity, uiState.lightIntensityInput, 0.0f, 8.0f, 3);
-    light.intensity = ClampLightIntensity(light.intensity);
-    drawLightFloat("sector_editor_dynamic_spot_light_range", "Range:", light.range, uiState.lightRadiusInput, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), 2);
-    light.range = ClampLightRadius(light.range);
-    drawLightFloat("sector_editor_dynamic_spot_light_inner_cone", "Inner cone:", light.innerConeDegrees, uiState.lightInnerConeInput, 0.0f, 179.0f, 2);
-    light.innerConeDegrees = std::clamp(light.innerConeDegrees, 0.0f, 179.0f);
-    drawLightFloat("sector_editor_dynamic_spot_light_outer_cone", "Outer cone:", light.outerConeDegrees, uiState.lightOuterConeInput, 0.0f, 179.0f, 2);
-    light.outerConeDegrees = std::clamp(std::max(light.outerConeDegrees, light.innerConeDegrees), 0.0f, 179.0f);
+    drawLightFloat("sector_editor_dynamic_spot_light_x", "Position X:", light.position.x, uiState.lightXInput, -8192.0f, 8192.0f, 2, DynamicSpotFloatField::PositionX);
+    drawLightFloat("sector_editor_dynamic_spot_light_y", "Position Y:", light.position.y, uiState.lightYInput, -512.0f, 512.0f, 2, DynamicSpotFloatField::PositionY);
+    drawLightFloat("sector_editor_dynamic_spot_light_z", "Position Z:", light.position.z, uiState.lightZInput, -8192.0f, 8192.0f, 2, DynamicSpotFloatField::PositionZ);
+    drawLightFloat("sector_editor_dynamic_spot_light_target_x", "Target X:", light.target.x, uiState.lightTargetXInput, -8192.0f, 8192.0f, 2, DynamicSpotFloatField::TargetX);
+    drawLightFloat("sector_editor_dynamic_spot_light_target_y", "Target Y:", light.target.y, uiState.lightTargetYInput, -512.0f, 512.0f, 2, DynamicSpotFloatField::TargetY);
+    drawLightFloat("sector_editor_dynamic_spot_light_target_z", "Target Z:", light.target.z, uiState.lightTargetZInput, -8192.0f, 8192.0f, 2, DynamicSpotFloatField::TargetZ);
+    drawLightFloat("sector_editor_dynamic_spot_light_intensity", "Intensity:", light.intensity, uiState.lightIntensityInput, 0.0f, 8.0f, 3, DynamicSpotFloatField::Intensity);
+    drawLightFloat("sector_editor_dynamic_spot_light_range", "Range:", light.range, uiState.lightRadiusInput, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), 2, DynamicSpotFloatField::Range);
+    drawLightFloat("sector_editor_dynamic_spot_light_inner_cone", "Inner cone:", light.innerConeDegrees, uiState.lightInnerConeInput, 0.0f, 179.0f, 2, DynamicSpotFloatField::InnerCone);
+    drawLightFloat("sector_editor_dynamic_spot_light_outer_cone", "Outer cone:", light.outerConeDegrees, uiState.lightOuterConeInput, 0.0f, 179.0f, 2, DynamicSpotFloatField::OuterCone);
 
     auto drawLightChannel = [&](const char* id, const char* label, unsigned char& channel, engine::UIIntInputState& inputState) {
         const float colorLabelW = 126.0f;
@@ -759,9 +892,15 @@ bool DrawSelectedDynamicSpotLightInspector(
                 channel,
                 inputState);
         if (result.changed && result.channel != channel) {
-            channel = result.channel;
-            light.color.a = 255;
-            callbacks.markTopologyDocumentEdited(TextFormat("Updated dynamic spot %d color", light.id));
+            Color color = light.color;
+            if (&channel == &light.color.r) {
+                color.r = result.channel;
+            } else if (&channel == &light.color.g) {
+                color.g = result.channel;
+            } else {
+                color.b = result.channel;
+            }
+            lightEditing.SetDynamicSpotLightColor(light, color);
         }
         y += rowH + gap;
     };

@@ -324,6 +324,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     SectorEditorSelectionServiceContext& selection = context.selection;
     SectorEditorPlacedObjectActionContext& placedObjectActions = context.placedObjectActions;
     SectorEditorMaterialEditingService& materialEditing = context.materialEditing;
+    SectorEditorLightEditingService& lightEditing = context.lightEditing;
     engine::EngineContext* engineContext = context.engineContext;
 
     auto selectedTopologySector = [&]() { return SelectedSectorEditorTopologySector(selection); };
@@ -830,15 +831,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     }
 
     if (hasSelectedLight) {
-        const SectorEditorLightInspectorCallbacks callbacks{
-                [&](const char* status) {
-                    AppendRequest(result, SectorEditorInspectorPanelRequestKind::MarkTopologyDocumentEdited, status);
-                },
-                [&]() { AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedLight);
-                    return true; },
-                [&]() { AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
-                    return true; }
-        };
+        bool deleteRequested = false;
+        bool bakeRequested = false;
         DrawSelectedStaticLightInspector(
                 ui,
                 config,
@@ -851,22 +845,23 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 gap,
                 *selectedStaticLight(),
                 uiState,
-                callbacks);
+                lightEditing,
+                deleteRequested,
+                bakeRequested);
+        if (deleteRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedLight);
+        }
+        if (bakeRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
+        }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return result;
     }
 
     if (hasSelectedStaticSpotLight) {
-        const SectorEditorLightInspectorCallbacks callbacks{
-                [&](const char* status) {
-                    AppendRequest(result, SectorEditorInspectorPanelRequestKind::MarkTopologyDocumentEdited, status);
-                },
-                [&]() { AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedLight);
-                    return true; },
-                [&]() { AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
-                    return true; }
-        };
+        bool deleteRequested = false;
+        bool bakeRequested = false;
         DrawSelectedStaticSpotLightInspector(
                 ui,
                 config,
@@ -879,21 +874,22 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 gap,
                 *selectedStaticSpotLight(),
                 uiState,
-                callbacks);
+                lightEditing,
+                deleteRequested,
+                bakeRequested);
+        if (deleteRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedLight);
+        }
+        if (bakeRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
+        }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return result;
     }
 
     if (hasSelectedDynamicLight) {
-        const SectorEditorLightInspectorCallbacks callbacks{
-                [&](const char* status) {
-                    AppendRequest(result, SectorEditorInspectorPanelRequestKind::MarkTopologyDocumentEdited, status);
-                },
-                [&]() { AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedLight);
-                    return true; },
-                []() { return false; }
-        };
+        bool deleteRequested = false;
         DrawSelectedDynamicLightInspector(
                 ui,
                 config,
@@ -906,21 +902,18 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 gap,
                 *selectedDynamicLight(),
                 uiState,
-                callbacks);
+                lightEditing,
+                deleteRequested);
+        if (deleteRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedLight);
+        }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return result;
     }
 
     if (hasSelectedDynamicSpotLight) {
-        const SectorEditorLightInspectorCallbacks callbacks{
-                [&](const char* status) {
-                    AppendRequest(result, SectorEditorInspectorPanelRequestKind::MarkTopologyDocumentEdited, status);
-                },
-                [&]() { AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedLight);
-                    return true; },
-                []() { return false; }
-        };
+        bool deleteRequested = false;
         DrawSelectedDynamicSpotLightInspector(
                 ui,
                 config,
@@ -934,7 +927,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 gap,
                 *selectedDynamicSpotLight(),
                 uiState,
-                callbacks);
+                lightEditing,
+                deleteRequested);
+        if (deleteRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedLight);
+        }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return result;

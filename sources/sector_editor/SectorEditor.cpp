@@ -3,6 +3,7 @@
 #include "engine/assets/TextureLoadFlags.h"
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
+#include "sector_editor/SectorEditorDirtyState.h"
 #include "sector_editor/document/SectorEditorDocumentActions.h"
 #include "sector_editor/document/SectorEditorDocumentModals.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
@@ -2243,12 +2244,7 @@ void SectorEditor::ClearStaleTopologySelection()
 
 void SectorEditor::MarkTopologyDocumentEdited(const char* status)
 {
-    state.topologyDocumentDirty = true;
-    state.hasUnsavedChanges = true;
-    InvalidateTopologyRenderCache();
-    if (status != nullptr && status[0] != '\0') {
-        statusText = status;
-    }
+    MarkSectorEditorTopologyDocumentEdited(state, statusText, status);
 }
 
 bool SectorEditor::FinishTopologyActionResult(const SectorEditorTopologyActionResult& result)
@@ -4143,6 +4139,7 @@ void SectorEditor::DrawSectorsPanel(
     SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
     SectorEditorPlacedObjectActionContext placedObjectActions = BuildRuntimeObjectActionContext();
     SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
     SectorEditorInspectorPanelContext context{
             ui,
             config,
@@ -4157,14 +4154,12 @@ void SectorEditor::DrawSectorsPanel(
             selection,
             placedObjectActions,
             materialEditing,
+            lightEditing,
             engineContext};
     const SectorEditorInspectorPanelResult result = DrawSectorEditorInspectorPanel(context);
     for (int i = 0; i < result.requestCount; ++i) {
         const SectorEditorInspectorPanelRequest& request = result.requests[static_cast<size_t>(i)];
         switch (request.kind) {
-        case SectorEditorInspectorPanelRequestKind::MarkTopologyDocumentEdited:
-            MarkTopologyDocumentEdited(request.status.c_str());
-            break;
         case SectorEditorInspectorPanelRequestKind::RebuildSectorCollisionWorld:
             RebuildSectorCollisionWorld();
             break;
@@ -5794,6 +5789,15 @@ SectorEditorMaterialEditingService SectorEditor::BuildMaterialEditingService()
                         }
                         return true;
                     }}};
+}
+
+SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
+{
+    return SectorEditorLightEditingService{
+            SectorEditorLightEditingServiceContext{
+                    state,
+                    uiState,
+                    statusText}};
 }
 
 bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& context)

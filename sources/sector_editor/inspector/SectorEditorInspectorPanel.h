@@ -5,6 +5,7 @@
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
+#include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectActions.h"
 
@@ -16,7 +17,6 @@
 namespace game {
 
 enum class SectorEditorInspectorPanelRequestKind {
-    MarkTopologyDocumentEdited,
     RebuildSectorCollisionWorld,
     BeginAuthoringInsertVertex,
     DeleteSelectedRuntimeObject,
@@ -51,6 +51,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorSelectionServiceContext& selection;
     SectorEditorPlacedObjectActionContext& placedObjectActions;
     SectorEditorMaterialEditingService& materialEditing;
+    SectorEditorLightEditingService& lightEditing;
     engine::EngineContext* engineContext = nullptr;
 };
 
