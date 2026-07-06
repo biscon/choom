@@ -71,7 +71,7 @@ Task Type:
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
 | REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
 | REF-062 | `[ ]` | Medium | Lightmap/probes | Extract LightmapBakeController | Runner plan | High | Worker lifecycle/result install/source-hash stale-result logic needs runner-level guardrails |
-| REF-063 | `[ ]` | High | Editor architecture | Extract material-specific texture picker routing | Codex task | High | Keep TexturePickerService generic; preserve authoring rollback/apply, dirty/cache, preview rebuild, and non-material door/sky routes |
+| REF-063 | `[x]` | High | Editor architecture | Extract material-specific texture picker routing | Codex task | High | Completed; material targets route through `services/material_edit`, non-material picker routes stayed out |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
@@ -866,7 +866,7 @@ Task Type:
   - Keep REF-044 open because material migration is still incomplete; REF-058
     and REF-060 remain open because this audit did not cover those scopes.
 
-#### REF-063 `[ ]` Extract material-specific texture picker routing
+#### REF-063 `[x]` Extract material-specific texture picker routing
 
 - Source/audit reference:
   `docs/audit/sector_editor_material_edit_bridge_audit.md`.
@@ -888,6 +888,16 @@ Task Type:
   - Preserve authoring temporary topology rollback/apply semantics exactly.
   - Keep material dirty/cache/preview policy out of `TexturePickerService`.
 - Completion notes:
+  - Material-specific texture picker routing was extracted to
+    `sources/sector_editor/services/material_edit/`.
+  - `Sector`, `SideDef`, `AuthoringFaceAnchor`, and `AuthoringSide` material
+    targets now route through the material picker routing module.
+  - `RuntimeDoor`, `MapSky`, sprite picker, and add-map texture scan/import
+    behavior stayed out of the material picker route.
+  - `TexturePickerService` remains generic lifecycle/result mechanics.
+  - Broad `MaterialEditBridge` and finish-wrapper extraction remain future
+    work.
+  - No behavior changes intended.
 
 #### REF-060 `[ ]` Audit Preview UV/material panel service dependencies
 

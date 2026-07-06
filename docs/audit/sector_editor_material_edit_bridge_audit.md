@@ -8,6 +8,10 @@ The remaining bridge problem is not UI layout. It is orchestration: topology-vs-
 
 Recommended next task: **REF-063: Extract material-specific texture picker routing from `ApplyTexturePickerSelection()`**. Picker routing should move before a broader `MaterialEditBridge`, because the picker target split is already explicit and can remove the riskiest switch growth while leaving finish wrappers centralized. Expected reduction is roughly 120-220 lines from `SectorEditor.cpp`/`SectorEditorTextureActions.cpp` or 4-6 target branches isolated, with little or no callback reduction yet. Top risks are preserving authoring rollback/apply semantics, `rebuildPreviewOnApply`, and not moving door/sky/runtime behavior.
 
+Completion note: REF-063 implemented the recommended material-specific picker
+routing extraction under `services/material_edit/`. Broader `MaterialEditBridge`
+work remains future work.
+
 ## Scope And Method
 
 Static analysis only. No GUI/render smoke was performed.

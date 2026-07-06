@@ -14,6 +14,7 @@
 #include "sector_editor/SectorEditorMaterialModals.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
 #include "sector_editor/tools/billboards/SectorEditorBillboardActions.h"
 #include "sector_editor/tools/doors/SectorEditorDoorActions.h"
@@ -6427,7 +6428,7 @@ void SectorEditor::DrawSectorsPanel(
                                             row.pickerButtonRect,
                                             font,
                                             ">")) {
-                                    if (!OpenAuthoringSideTexturePickerById(
+                                    if (!OpenSectorEditorMaterialPickerForAuthoringSideById(
                                                 state,
                                                 sideId,
                                                 part,
@@ -6486,7 +6487,7 @@ void SectorEditor::DrawSectorsPanel(
                                             row.pickerButtonRect,
                                             font,
                                             ">")) {
-                                    if (!OpenAuthoringSideTexturePickerById(
+                                    if (!OpenSectorEditorMaterialPickerForAuthoringSideById(
                                                 state,
                                                 sideId,
                                                 part,
@@ -6874,7 +6875,7 @@ void SectorEditor::DrawSectorsPanel(
                     engine::UITextJustify::Left,
                     missing ? config.invalidColor : config.mutedTextColor);
             if (engine::Button(ui, config, input, assets, id, row.pickerButtonRect, font, ">")) {
-                if (!OpenAuthoringFaceAnchorTexturePickerById(
+                if (!OpenSectorEditorMaterialPickerForAuthoringFaceAnchorById(
                             state,
                             faceAnchorId,
                             field,
@@ -6961,7 +6962,7 @@ void SectorEditor::DrawSectorsPanel(
                                 row.pickerButtonRect,
                                 font,
                                 ">")) {
-                        if (!OpenAuthoringFaceAnchorTexturePickerById(
+                        if (!OpenSectorEditorMaterialPickerForAuthoringFaceAnchorById(
                                     state,
                                     faceAnchorId,
                                     field,
@@ -7171,7 +7172,7 @@ void SectorEditor::DrawSectorsPanel(
                                 row.pickerButtonRect,
                                 font,
                                 ">")) {
-                        if (!OpenAuthoringFaceAnchorTexturePickerById(
+                        if (!OpenSectorEditorMaterialPickerForAuthoringFaceAnchorById(
                                     state,
                                     faceAnchorId,
                                     field,
@@ -9692,8 +9693,8 @@ void SectorEditor::OpenTopologyTexturePicker(
         TopologyMaterialLayer layer)
 {
     const bool opened = HasAuthoringGraphData()
-            ? game::OpenAuthoringFaceAnchorTexturePicker(state, sectorId, field, layer)
-            : game::OpenTopologyTexturePicker(state, sectorId, field, layer);
+            ? game::OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(state, sectorId, field, layer)
+            : game::OpenSectorEditorMaterialPickerForSector(state, sectorId, field, layer);
     if (!opened) {
         statusText = "No topology sector texture target";
     }
@@ -9705,8 +9706,8 @@ void SectorEditor::OpenTopologySideDefTexturePicker(
         TopologyMaterialLayer layer)
 {
     const bool opened = HasAuthoringGraphData()
-            ? game::OpenAuthoringSideTexturePicker(state, sideDefId, wallPart, layer)
-            : game::OpenTopologySideDefTexturePicker(state, sideDefId, wallPart, layer);
+            ? game::OpenSectorEditorMaterialPickerForAuthoringSide(state, sideDefId, wallPart, layer)
+            : game::OpenSectorEditorMaterialPickerForSideDef(state, sideDefId, wallPart, layer);
     if (!opened) {
         statusText = "No topology sidedef texture target";
     }
@@ -9775,169 +9776,44 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
         return;
     }
 
-    if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringFaceAnchor
-            || state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringSide) {
-        const SectorEditorTexturePickerApplyResult result =
-                game::ApplyAuthoringTexturePickerSelection(state);
-        if (!result.status.empty()) {
-            statusText = result.status;
-        }
-            if (result.changed
-                    && result.rebuildPreviewOnApply
-                    && state.mode == SectorEditorMode::Preview3D
-                    && preview.IsRendererReady()) {
-            if (engineContext != nullptr) {
-                RebuildPreviewMeshesPreservingView(*engineContext);
-            }
-        }
+    if (IsSectorEditorMaterialTexturePickerTarget(state.texturePicker.topologyTargetKind)) {
+        SectorEditorMaterialPickerRoutingContext routingContext{
+                state,
+                statusText,
+                [this](const char* status, engine::AssetManager* callbackAssets) {
+                    return FinishTopologyMaterialMutation(status, callbackAssets);
+                },
+                [this](
+                        TopologySurfaceEditTarget target,
+                        const SectorEditorMaterialActionResult& result,
+                        const SectorTopologyMap& editedTopology,
+                        engine::AssetManager* callbackAssets) {
+                    return FinishAuthoringSideMaterialActionResult(
+                            target,
+                            result,
+                            editedTopology,
+                            callbackAssets);
+                },
+                [this](
+                        TopologySurfaceEditTarget target,
+                        engine::AssetManager* callbackAssets,
+                        SectorEditorMaterialPickerActionFn action) {
+                    return ApplyAuthoringFaceAnchorFlatMaterialAction(target, callbackAssets, action);
+                },
+                [this](const char* status) { MarkTopologyDocumentEdited(status); },
+                [this]() {
+                    if (state.mode == SectorEditorMode::Preview3D
+                            && preview.IsRendererReady()
+                            && engineContext != nullptr) {
+                        return RebuildPreviewMeshesPreservingView(*engineContext);
+                    }
+                    return false;
+                }};
+        ApplySectorEditorMaterialTexturePickerSelection(routingContext, &assets);
         return;
     }
 
-    const bool routeAuthoringSideMaterial =
-            HasAuthoringGraphData()
-            && state.texturePicker.open
-            && state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef;
-    const bool routeAuthoringFlatMaterial =
-            HasAuthoringGraphData()
-            && state.texturePicker.open
-            && state.texturePicker.authoringSurface3DFlatTarget
-            && state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::Sector
-            && (state.texturePicker.topologyField == TopologySectorTextureField::Floor
-                    || state.texturePicker.topologyField == TopologySectorTextureField::Ceiling);
-    const int authoringSideDefId = routeAuthoringSideMaterial
-            ? state.texturePicker.topologySideDefId
-            : -1;
-    const TopologyMaterialLayer authoringPickerLayer = routeAuthoringSideMaterial
-            ? state.texturePicker.topologyLayer
-            : TopologyMaterialLayer::Base;
-    TopologySurfaceEditTarget authoringSideTarget;
-    TopologySurfaceEditTarget authoringFlatTarget;
-    SectorSurfaceRef authoringFlatSurface;
-    SectorTopologyMap topologyBeforePicker;
-    if (routeAuthoringSideMaterial || routeAuthoringFlatMaterial) {
-        if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-                || state.authoringDerivedTopologyStale
-                || !state.authoringDerivation.success) {
-            statusText = routeAuthoringSideMaterial
-                    ? "Wall material edit unavailable: derived topology is not current"
-                    : "3D surface edit unavailable: derived topology is not current";
-            CloseSectorEditorTexturePicker(state.texturePicker);
-            return;
-        }
-    }
-    if (routeAuthoringSideMaterial) {
-        SectorAuthoringSideId sideId;
-        if (!FindSectorEditorAuthoringSideIdForTopologySideDef(
-                    state,
-                    authoringSideDefId,
-                    sideId)) {
-            statusText = "Wall material edit unavailable: selected sidedef has no authoring side mapping";
-            CloseSectorEditorTexturePicker(state.texturePicker);
-            return;
-        }
-        topologyBeforePicker = state.topologyMap;
-        const SectorTopologySideDef* sideDef =
-                FindSectorTopologySideDef(state.topologyMap, authoringSideDefId);
-        if (sideDef != nullptr) {
-            switch (state.texturePicker.topologyWallPart) {
-                case TopologyWallPart::Wall:
-                    authoringSideTarget.kind = TopologySurfaceEditTargetKind::SideDefWall;
-                    break;
-                case TopologyWallPart::Lower:
-                    authoringSideTarget.kind = TopologySurfaceEditTargetKind::SideDefLower;
-                    break;
-                case TopologyWallPart::Upper:
-                    authoringSideTarget.kind = TopologySurfaceEditTargetKind::SideDefUpper;
-                    break;
-                case TopologyWallPart::Middle:
-                    authoringSideTarget.kind = TopologySurfaceEditTargetKind::SideDefMiddle;
-                    break;
-            }
-            authoringSideTarget.sectorId = sideDef->sectorId;
-            authoringSideTarget.lineDefId = sideDef->lineDefId;
-            authoringSideTarget.sideDefId = sideDef->id;
-            authoringSideTarget.side = sideDef->side;
-        }
-    }
-    if (routeAuthoringFlatMaterial) {
-        authoringFlatTarget.kind = state.texturePicker.topologyField == TopologySectorTextureField::Floor
-                ? TopologySurfaceEditTargetKind::SectorFloor
-                : TopologySurfaceEditTargetKind::SectorCeiling;
-        authoringFlatTarget.sectorId = state.texturePicker.topologySectorId;
-        authoringFlatSurface.kind = state.texturePicker.topologyField == TopologySectorTextureField::Floor
-                ? SectorSurfaceKind::Floor
-                : SectorSurfaceKind::Ceiling;
-        authoringFlatSurface.topologySectorId = state.texturePicker.topologySectorId;
-
-        SectorEditorAuthoringSurfaceTarget surfaceTarget;
-        std::string unavailableStatus;
-        if (!ResolveSectorEditorAuthoringSurfaceTarget(
-                    state,
-                    authoringFlatSurface,
-                    surfaceTarget,
-                    &unavailableStatus)
-                || surfaceTarget.kind != SectorEditorAuthoringSurfaceTargetKind::FaceAnchor) {
-            statusText = unavailableStatus.empty()
-                    ? "3D flat surface edit unavailable: selected surface has no face anchor mapping"
-                    : unavailableStatus;
-            CloseSectorEditorTexturePicker(state.texturePicker);
-            return;
-        }
-        topologyBeforePicker = state.topologyMap;
-    }
-
-    const SectorEditorTexturePickerApplyResult result = game::ApplyTexturePickerSelection(state);
-    if (routeAuthoringSideMaterial) {
-        const SectorTopologyMap editedTopology = state.topologyMap;
-        state.topologyMap = topologyBeforePicker;
-        if (result.changed) {
-            SectorEditorMaterialActionResult materialResult;
-            materialResult.changed = true;
-            materialResult.status = result.status;
-            materialResult.resetSideDefUvInputs = true;
-            materialResult.resetDecalInputs = authoringPickerLayer == TopologyMaterialLayer::Decal;
-            FinishAuthoringSideMaterialActionResult(
-                    authoringSideTarget,
-                    materialResult,
-                    editedTopology,
-                    &assets);
-        }
-        return;
-    }
-    if (routeAuthoringFlatMaterial) {
-        const SectorTopologyMap editedTopology = state.topologyMap;
-        state.topologyMap = topologyBeforePicker;
-        if (result.changed) {
-            ApplyAuthoringFaceAnchorFlatMaterialAction(
-                    authoringFlatTarget,
-                    &assets,
-                    [authoringFlatTarget, editedTopology, result](SectorTopologyMap& map) {
-                        map = editedTopology;
-                        SectorEditorMaterialActionResult materialResult;
-                        materialResult.changed = true;
-                        materialResult.status = result.status;
-                        materialResult.resetSurface3DUi = true;
-                        materialResult.resetSectorUvInputs = true;
-                        materialResult.resetDecalInputs = true;
-                        return materialResult;
-                    });
-        }
-        return;
-    }
-
-    if (result.changed) {
-        if (result.useMaterialMutationFinish) {
-            FinishTopologyMaterialMutation(result.status.c_str(), &assets);
-        } else {
-            state.topologyRenderWarning.clear();
-            MarkTopologyDocumentEdited(result.status.c_str());
-            if (result.rebuildPreviewOnApply && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
-                if (engineContext != nullptr) {
-                    RebuildPreviewMeshesPreservingView(*engineContext);
-                }
-            }
-        }
-    }
+    game::ApplyTexturePickerSelection(state);
 }
 
 } // namespace game
