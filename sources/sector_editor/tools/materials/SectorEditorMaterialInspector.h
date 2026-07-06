@@ -13,7 +13,7 @@ namespace game {
 
 struct SectorEditorMaterialInspectorCallbacks {
     std::function<void(int, TopologyWallPart)> selectTopologySideDef;
-    std::function<bool(int, bool)> setLineDefBlocksPlayer;
+    std::function<bool(int, bool)> setAuthoringOrLegacyLineDefBlocksPlayer;
     std::function<void(int, TopologyWallPart, TopologyMaterialLayer)> openSideDefTexturePicker;
 };
 

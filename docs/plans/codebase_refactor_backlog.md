@@ -75,6 +75,9 @@ Task Type:
 | REF-064 | `[x]` | High | Editor architecture | Add minimal MaterialEditBridge for material action wrappers | Codex task | Medium/High | Completed; action wrappers route through bridge while finish paths stay in `SectorEditor.cpp` |
 | REF-065 | `[x]` | High | Editor architecture | Promote MaterialEditBridge into MaterialEditingService | Codex task | Medium/High | Completed; bridge removed and material clients use service directly |
 | REF-066 | `[x]` | Medium | Editor architecture | Extract Preview3D UV/material panel into `preview/` | Codex task | Medium/High | Completed; panel moved to preview module and uses `MaterialEditingService` directly |
+| REF-067 | `[x]` | High | Editor architecture | Authoring-owned topology edit cleanup and direct topology mutation inventory | Codex task | Medium/High | Completed; Blocks Player authoring-owned with strict mapping-gap failure and inventory report |
+| REF-068 | `[x]` | High | Editor architecture | Replace SideDef inspector UV topology mutation with authoring material edits | Codex task | Medium/High | Completed; inspector UV apply/reset writes authoring material data and fails without mapping |
+| REF-069 | `[ ]` | Medium | Editor architecture | Remove or quarantine legacy no-authoring topology-edit fallback support | Codex task | Medium/High | Future cleanup; keep fallback names narrow until removed |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
@@ -1009,6 +1012,80 @@ Task Type:
   - REF-044 remains open because material migration is still incomplete.
   - REF-058, lights, and lightmap/source-hash-sensitive work remain open.
   - No behavior changes intended.
+
+#### REF-067 `[x]` Authoring-owned topology edit cleanup and direct topology mutation inventory
+
+- Source/audit reference: REF-067 task and
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`.
+- Why it helps: keeps editable portal/player-blocking ownership on the
+  authoring graph instead of silently mutating derived topology.
+- Likely files: `SectorEditor.cpp`, `SectorEditorTopologyActions.*`,
+  material inspector and Preview3D UV panel callback contexts, audit docs.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: full build, full `ctest`, requested topology mutation
+  greps, `git diff --check`, and manual Blocks Player smoke in 2D and
+  Preview3D if practical.
+- Completion notes:
+  - Blocks Player edits use `SectorAuthoringLine::flags.blocksPlayer` when
+    authoring data exists.
+  - Topology derivation already copies authoring line flags into
+    `SectorTopologyLineDef::flags`.
+  - Legacy/no-authoring fallback retained as
+    `SetLegacyTopologyPortalBlocksPlayer()`.
+  - Authoring-backed linedefs with no derived authoring mapping now fail with a
+    clear status instead of falling back to topology mutation.
+  - Inventory report:
+    `docs/audit/sector_editor_direct_topology_edit_inventory.md`.
+  - Remaining direct topology mutation found: inspector-specific sidedef UV
+    apply/reset still mutates topology directly and should move under
+    authoring material edits in REF-068.
+  - No rendering, collision, serialization, material, lightmap, or preview
+    behavior changes intended except the Blocks Player ownership correction.
+  - REF-044 remains open because material migration is still incomplete.
+  - REF-058, lights, and lightmap/source-hash-sensitive work remain open.
+
+#### REF-068 `[x]` Replace SideDef inspector UV topology mutation with authoring material edits
+
+- Source/audit reference:
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`.
+- Why it helps: keeps 2D SideDef inspector UV edits on the authoring graph
+  instead of mutating derived topology directly.
+- Likely files: `services/material_edit/`, `tools/materials/`, authoring graph
+  tests, and direct topology edit inventory/backlog docs.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: full build, full `ctest`, requested topology/material
+  greps, `git diff --check`, and manual SideDef UV smoke if practical.
+- Completion notes:
+  - SideDef inspector UV apply/reset now writes authoring side material data.
+  - Direct topology UV mutation was removed for this path, including the
+    inspector's immediate `selectedUv` pre-write.
+  - Missing authoring mapping and no-authoring data now fail instead of
+    mutating derived topology.
+  - No legacy/no-authoring fallback remains for this scoped UV path.
+  - Inventory updated.
+  - No behavior changes intended except the ownership correction.
+  - REF-044 remains open because broader material scratch/writeback routes
+    still exist.
+  - REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
+    remain open.
+
+#### REF-069 `[ ]` Remove or quarantine legacy no-authoring topology-edit fallback support
+
+- Source/audit reference:
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`.
+- Why it helps: narrows or removes remaining topology-edit fallback paths that
+  should not apply to authoring-backed maps.
+- Likely files: editor topology/material action services and any explicit
+  legacy fallback helpers.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, direct topology mutation greps, and
+  targeted legacy/no-authoring workflow smoke if still supported.
+- Notes:
+  - Keep existing legacy fallback names explicit until removal.
+  - Do not fold this into REF-044 material scratch/writeback cleanup.
 
 #### REF-061 `[>]` Evaluate Status/Diagnostics service
 

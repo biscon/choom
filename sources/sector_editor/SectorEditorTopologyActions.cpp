@@ -427,7 +427,7 @@ SectorEditorTopologyActionResult FinishMoveDynamicLight(
             light->position.z));
 }
 
-SectorEditorTopologyActionResult SetPortalBlocksPlayer(
+SectorEditorTopologyActionResult SetLegacyTopologyPortalBlocksPlayer(
         SectorTopologyMap& map,
         int lineDefId,
         bool blocksPlayer)

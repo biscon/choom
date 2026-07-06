@@ -334,7 +334,7 @@ private:
     bool IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget target) const;
     void ResetSurface3DUiState();
     Rectangle BuildPreviewUvPanelRect() const;
-    bool SetLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
+    bool SetAuthoringOrLegacyLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
     SectorEditorMaterialEditingService BuildMaterialEditingService();
     bool HasAuthoringGraphData() const;
     bool EnsureSelectedSurface3DAuthoringMappingCurrent();

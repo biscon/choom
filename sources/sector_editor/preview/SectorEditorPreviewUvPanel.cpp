@@ -271,8 +271,8 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
                     font,
                     "Blocks Player",
                     blocksPlayer)) {
-            if (context.setLineDefBlocksPlayer) {
-                context.setLineDefBlocksPlayer(portalLineDefId, blocksPlayer);
+            if (context.setAuthoringOrLegacyLineDefBlocksPlayer) {
+                context.setAuthoringOrLegacyLineDefBlocksPlayer(portalLineDefId, blocksPlayer);
             }
         }
         actionX += 146.0f + gap;

@@ -88,6 +88,19 @@ bool HasNonDefaultUv(const SectorTopologyUvSettings& uv)
             || uv.offset.y != 0.0f;
 }
 
+SectorTopologyWallPartSettings& AuthoringWallPartSettingsFor(
+        SectorAuthoringLineSide& side,
+        TopologyWallPart part)
+{
+    switch (part) {
+        case TopologyWallPart::Wall: return side.wall;
+        case TopologyWallPart::Lower: return side.lower;
+        case TopologyWallPart::Upper: return side.upper;
+        case TopologyWallPart::Middle: return side.middle;
+    }
+    return side.wall;
+}
+
 } // namespace
 
 SectorEditorMaterialEditingService::SectorEditorMaterialEditingService(
@@ -347,24 +360,67 @@ bool SectorEditorMaterialEditingService::ApplyInspectorSideDefUvValue(
         context_.statusText = "Invalid topology sidedef UV value";
         return false;
     }
-    SectorTopologyUvSettings* uv = MutableUvForMaterialSurface(context_.state.topologyMap, target, layer);
-    if (uv == nullptr) {
+    if (!IsWallTopologyEditTarget(target.kind)) {
+        context_.statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+    const TopologyMaterialLayer effectiveLayer = EffectiveTopologyMaterialLayer(target.kind, layer);
+    const SectorTopologyUvSettings* derivedUv =
+            UvForMaterialSurface(context_.state.topologyMap, target, effectiveLayer);
+    if (derivedUv == nullptr) {
         context_.statusText = layer == TopologyMaterialLayer::Decal
                 ? "No decal assigned."
                 : "Selected material target is no longer valid.";
         return false;
     }
-    AssignUvComponent(*uv, component, value);
     const char* status = TextFormat(
             "Updated topology sidedef %d %s %s UV",
             target.sideDefId,
             TopologyWallPartStatusName(TopologyEditTargetWallPart(target.kind)),
-            TopologyMaterialLayerStatusName(layer));
-    if (target.kind == TopologySurfaceEditTargetKind::SideDefMiddle) {
-        return FinishTopologyMaterialMutation(status, &assets);
+            TopologyMaterialLayerStatusName(effectiveLayer));
+
+    if (!HasAuthoringGraphData(context_.state)) {
+        context_.statusText = "Cannot edit sidedef UV: material UV editor requires authoring data.";
+        return false;
     }
+    if (context_.state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+            || context_.state.authoringDerivedTopologyStale
+            || !context_.state.authoringDerivation.success) {
+        context_.statusText = "Cannot edit sidedef UV: derived topology is not current.";
+        return false;
+    }
+
+    SectorAuthoringSideId sideId;
+    if (!FindSectorEditorAuthoringSideIdForTopologySideDef(
+                context_.state,
+                target.sideDefId,
+                sideId)) {
+        context_.statusText = "Cannot edit sidedef UV: selected topology side is not mapped to an authoring line.";
+        return false;
+    }
+
+    const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
     context_.state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(status);
+    const bool refreshed = MutateSectorEditorAuthoringSideForTopologySideDef(
+            context_.state,
+            target.sideDefId,
+            status,
+            [wallPart, effectiveLayer, component, value](SectorAuthoringLineSide& side) {
+                SectorTopologyWallPartSettings& part = AuthoringWallPartSettingsFor(side, wallPart);
+                SectorTopologyUvSettings& authoringUv = effectiveLayer == TopologyMaterialLayer::Decal
+                        ? part.decal.uv
+                        : part.uv;
+                AssignUvComponent(authoringUv, component, value);
+                return true;
+            });
+    if (!refreshed) {
+        context_.statusText = "Cannot edit sidedef UV: selected topology side is not mapped to an authoring line.";
+        return false;
+    }
+    if (target.kind == TopologySurfaceEditTargetKind::SideDefMiddle
+            && context_.requestPreviewMaterialMeshRebuild) {
+        return context_.requestPreviewMaterialMeshRebuild(&assets);
+    }
     return true;
 }
 
@@ -373,29 +429,76 @@ bool SectorEditorMaterialEditingService::ResetInspectorSideDefUv(
         TopologyMaterialLayer layer,
         engine::AssetManager& assets)
 {
-    SectorTopologyUvSettings* uv = MutableUvForMaterialSurface(context_.state.topologyMap, target, layer);
-    if (uv == nullptr) {
+    if (!IsWallTopologyEditTarget(target.kind)) {
+        context_.statusText = "Selected material target is no longer valid.";
+        return false;
+    }
+    const TopologyMaterialLayer effectiveLayer = EffectiveTopologyMaterialLayer(target.kind, layer);
+    const SectorTopologyUvSettings* derivedUv =
+            UvForMaterialSurface(context_.state.topologyMap, target, effectiveLayer);
+    if (derivedUv == nullptr) {
         context_.statusText = layer == TopologyMaterialLayer::Decal
                 ? "No decal assigned."
                 : "Selected material target is no longer valid.";
         return false;
     }
-    if (!HasNonDefaultUv(*uv)) {
+
+    if (!HasAuthoringGraphData(context_.state)) {
+        context_.statusText = "Cannot edit sidedef UV: material UV editor requires authoring data.";
         return false;
     }
-    ResetTopologyUv(*uv);
+    if (context_.state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+            || context_.state.authoringDerivedTopologyStale
+            || !context_.state.authoringDerivation.success) {
+        context_.statusText = "Cannot edit sidedef UV: derived topology is not current.";
+        return false;
+    }
+
+    SectorAuthoringSideId sideId;
+    if (!FindSectorEditorAuthoringSideIdForTopologySideDef(
+                context_.state,
+                target.sideDefId,
+                sideId)) {
+        context_.statusText = "Cannot edit sidedef UV: selected topology side is not mapped to an authoring line.";
+        return false;
+    }
+    if (!HasNonDefaultUv(*derivedUv)) {
+        return false;
+    }
+
+    const char* status = target.kind == TopologySurfaceEditTargetKind::SideDefMiddle
+            ? "Reset middle UV."
+            : TextFormat(
+                    "Reset topology sidedef %d %s %s UV",
+                    target.sideDefId,
+                    TopologyWallPartStatusName(TopologyEditTargetWallPart(target.kind)),
+                    TopologyMaterialLayerStatusName(effectiveLayer));
+
+    const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+    context_.state.topologyRenderWarning.clear();
+    const bool refreshed = MutateSectorEditorAuthoringSideForTopologySideDef(
+            context_.state,
+            target.sideDefId,
+            status,
+            [wallPart, effectiveLayer](SectorAuthoringLineSide& side) {
+                SectorTopologyWallPartSettings& part = AuthoringWallPartSettingsFor(side, wallPart);
+                SectorTopologyUvSettings& authoringUv = effectiveLayer == TopologyMaterialLayer::Decal
+                        ? part.decal.uv
+                        : part.uv;
+                ResetTopologyUv(authoringUv);
+                return true;
+            });
+    if (!refreshed) {
+        context_.statusText = "Cannot edit sidedef UV: selected topology side is not mapped to an authoring line.";
+        return false;
+    }
     for (engine::UIFloatInputState& inputState : context_.uiState.topologySideDefUvInputs) {
         inputState = engine::UIFloatInputState{};
     }
-    if (target.kind == TopologySurfaceEditTargetKind::SideDefMiddle) {
-        return FinishTopologyMaterialMutation("Reset middle UV.", &assets);
+    if (target.kind == TopologySurfaceEditTargetKind::SideDefMiddle
+            && context_.requestPreviewMaterialMeshRebuild) {
+        return context_.requestPreviewMaterialMeshRebuild(&assets);
     }
-    context_.state.topologyRenderWarning.clear();
-    MarkTopologyDocumentEdited(TextFormat(
-            "Reset topology sidedef %d %s %s UV",
-            target.sideDefId,
-            TopologyWallPartStatusName(TopologyEditTargetWallPart(target.kind)),
-            TopologyMaterialLayerStatusName(layer)));
     return true;
 }
 

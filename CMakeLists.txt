@@ -118,11 +118,18 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorAuthoringState.cpp
             sources/sector_editor/document/SectorEditorDocumentActions.cpp
             sources/sector_editor/SectorEditorHelpers.cpp
+            sources/sector_editor/SectorEditorMaterialActions.cpp
             sources/sector_editor/SectorEditorTextureActions.cpp
+            sources/sector_editor/selection/SectorEditorSelectionService.cpp
+            sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
             sources/sector_editor/services/texture_picker/SectorEditorTexturePickerService.cpp
             sources/sector_editor/SectorEditorTopologyActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
+            sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorCollisionWorld.cpp

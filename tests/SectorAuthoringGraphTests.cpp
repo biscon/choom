@@ -10,6 +10,7 @@
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -517,6 +518,36 @@ game::SectorTopologyWallPartSettings WallPart(
     part.uv.scale = Vector2{scaleX, scaleY};
     part.uv.offset = Vector2{offsetX, offsetY};
     return part;
+}
+
+game::TopologySurfaceEditTarget SideDefMaterialTarget(const game::SectorTopologySideDef& sideDef)
+{
+    return game::TopologySurfaceEditTarget{
+            game::TopologySurfaceEditTargetKind::SideDefWall,
+            sideDef.sectorId,
+            sideDef.lineDefId,
+            sideDef.id,
+            sideDef.side};
+}
+
+game::SectorEditorMaterialEditingService MakeMaterialEditingService(
+        game::SectorEditorState& state,
+        game::SectorEditorUiState& uiState,
+        std::string& statusText,
+        bool* previewRebuildRequested = nullptr)
+{
+    return game::SectorEditorMaterialEditingService{
+            game::SectorEditorMaterialEditingServiceContext{
+                    state,
+                    uiState,
+                    state.texturePicker,
+                    statusText,
+                    [previewRebuildRequested](engine::AssetManager*) {
+                        if (previewRebuildRequested != nullptr) {
+                            *previewRebuildRequested = true;
+                        }
+                        return true;
+                    }}};
 }
 
 game::SectorTopologySideDef SideDef(
@@ -3169,6 +3200,279 @@ void TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTo
           "failed side material inspector write records invalid last-valid state");
     Check(state.authoringDerivedTopologyStale,
           "failed side material inspector write leaves derived topology stale");
+}
+
+void TestEditorMaterialEditingServiceSideDefBaseUvWritesThroughAuthoringSide()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall = WallPart("wall", 1.0f, 1.0f, 0.0f, 0.0f);
+    state.authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "service sidedef base UV setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service sidedef base UV setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    bool previewRebuildRequested = false;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, uiState, statusText, &previewRebuildRequested);
+
+    Check(service.ApplyInspectorSideDefUvValue(
+                  SideDefMaterialTarget(*sideDef),
+                  game::TopologyMaterialLayer::Base,
+                  0,
+                  2.25f,
+                  assets),
+          "service sidedef base UV apply succeeds");
+
+    const game::SectorAuthoringLineSide* editedSide = game::FindSectorAuthoringLineSide(
+            state.authoringGraph,
+            side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(editedSide != nullptr && Near(editedSide->wall.uv.scale.x, 2.25f),
+          "service sidedef base UV apply writes authoring side");
+    Check(projectedSideDef != nullptr && Near(projectedSideDef->wall.uv.scale.x, 2.25f),
+          "service sidedef base UV apply refreshes derived topology");
+    Check(state.topologyDocumentDirty && state.hasUnsavedChanges,
+          "service sidedef base UV apply marks document dirty");
+    Check(!previewRebuildRequested,
+          "service sidedef base UV apply does not rebuild preview for non-middle wall part");
+}
+
+void TestEditorMaterialEditingServiceSideDefDecalUvWritesThroughAuthoringSide()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall.textureId = "wall";
+    side.wall.decal.textureId = "poster";
+    state.authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "service sidedef decal UV setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service sidedef decal UV setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, uiState, statusText);
+
+    Check(service.ApplyInspectorSideDefUvValue(
+                  SideDefMaterialTarget(*sideDef),
+                  game::TopologyMaterialLayer::Decal,
+                  2,
+                  7.5f,
+                  assets),
+          "service sidedef decal UV apply succeeds");
+
+    const game::SectorAuthoringLineSide* editedSide = game::FindSectorAuthoringLineSide(
+            state.authoringGraph,
+            side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(editedSide != nullptr && Near(editedSide->wall.decal.uv.offset.x, 7.5f),
+          "service sidedef decal UV apply writes authoring side");
+    Check(projectedSideDef != nullptr && Near(projectedSideDef->wall.decal.uv.offset.x, 7.5f),
+          "service sidedef decal UV apply refreshes derived topology");
+}
+
+void TestEditorMaterialEditingServiceSideDefBaseUvResetWritesThroughAuthoringSide()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall = WallPart("wall", 2.0f, 3.0f, 4.0f, 5.0f);
+    state.authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "service sidedef base UV reset setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service sidedef base UV reset setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    game::SectorEditorUiState uiState;
+    uiState.topologySideDefUvInputs[0].buffer[0] = 'x';
+    uiState.topologySideDefUvInputs[0].editing = true;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, uiState, statusText);
+
+    Check(service.ResetInspectorSideDefUv(
+                  SideDefMaterialTarget(*sideDef),
+                  game::TopologyMaterialLayer::Base,
+                  assets),
+          "service sidedef base UV reset succeeds");
+
+    const game::SectorAuthoringLineSide* editedSide = game::FindSectorAuthoringLineSide(
+            state.authoringGraph,
+            side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(editedSide != nullptr
+                  && Near(editedSide->wall.uv.scale.x, 1.0f)
+                  && Near(editedSide->wall.uv.scale.y, 1.0f)
+                  && Near(editedSide->wall.uv.offset.x, 0.0f)
+                  && Near(editedSide->wall.uv.offset.y, 0.0f),
+          "service sidedef base UV reset writes authoring defaults");
+    Check(projectedSideDef != nullptr
+                  && Near(projectedSideDef->wall.uv.scale.x, 1.0f)
+                  && Near(projectedSideDef->wall.uv.offset.x, 0.0f),
+          "service sidedef base UV reset refreshes derived topology");
+    Check(uiState.topologySideDefUvInputs[0].buffer[0] == '\0'
+                  && !uiState.topologySideDefUvInputs[0].editing,
+          "service sidedef base UV reset clears inspector input buffers");
+}
+
+void TestEditorMaterialEditingServiceSideDefDecalUvResetWritesThroughAuthoringSide()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall.textureId = "wall";
+    side.wall.decal.textureId = "poster";
+    side.wall.decal.uv.scale = Vector2{2.0f, 3.0f};
+    side.wall.decal.uv.offset = Vector2{4.0f, 5.0f};
+    state.authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "service sidedef decal UV reset setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service sidedef decal UV reset setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, uiState, statusText);
+
+    Check(service.ResetInspectorSideDefUv(
+                  SideDefMaterialTarget(*sideDef),
+                  game::TopologyMaterialLayer::Decal,
+                  assets),
+          "service sidedef decal UV reset succeeds");
+
+    const game::SectorAuthoringLineSide* editedSide = game::FindSectorAuthoringLineSide(
+            state.authoringGraph,
+            side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(editedSide != nullptr
+                  && Near(editedSide->wall.decal.uv.scale.x, 1.0f)
+                  && Near(editedSide->wall.decal.uv.offset.x, 0.0f),
+          "service sidedef decal UV reset writes authoring defaults");
+    Check(projectedSideDef != nullptr
+                  && Near(projectedSideDef->wall.decal.uv.scale.x, 1.0f)
+                  && Near(projectedSideDef->wall.decal.uv.offset.x, 0.0f),
+          "service sidedef decal UV reset refreshes derived topology");
+}
+
+void TestEditorMaterialEditingServiceSideDefUvMissingMappingDoesNotMutateTopology()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall = WallPart("wall", 1.0f, 1.0f, 0.0f, 0.0f);
+    state.authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "service sidedef missing mapping setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service sidedef missing mapping setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+    const game::TopologySurfaceEditTarget target = SideDefMaterialTarget(*sideDef);
+    const game::SectorTopologyMap beforeTopology = state.topologyMap;
+    state.authoringDerivation.mapping.sides.clear();
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, uiState, statusText);
+
+    Check(!service.ApplyInspectorSideDefUvValue(
+                  target,
+                  game::TopologyMaterialLayer::Base,
+                  0,
+                  2.0f,
+                  assets),
+          "service sidedef UV apply fails without authoring side mapping");
+
+    const game::SectorTopologySideDef* afterSideDef =
+            game::FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+    const game::SectorTopologySideDef* beforeSideDef =
+            game::FindSectorTopologySideDef(beforeTopology, target.sideDefId);
+    Check(statusText.find("not mapped to an authoring line") != std::string::npos,
+          "service sidedef UV missing mapping reports clear status");
+    Check(afterSideDef != nullptr
+                  && beforeSideDef != nullptr
+                  && Near(afterSideDef->wall.uv.scale.x, beforeSideDef->wall.uv.scale.x)
+                  && Near(afterSideDef->wall.uv.offset.x, beforeSideDef->wall.uv.offset.x),
+          "service sidedef UV missing mapping does not mutate derived topology");
 }
 
 void TestEditorAuthoringLineFlagInspectorWritesProjectAfterDerivation()
@@ -7817,6 +8121,11 @@ int main()
     TestEditorAuthoringSideMaterialInspectorWritesProjectAfterDerivation();
     TestEditorAuthoringSideMaterialInspectorWritesProjectToSplitDerivedSideDefs();
     TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTopology();
+    TestEditorMaterialEditingServiceSideDefBaseUvWritesThroughAuthoringSide();
+    TestEditorMaterialEditingServiceSideDefDecalUvWritesThroughAuthoringSide();
+    TestEditorMaterialEditingServiceSideDefBaseUvResetWritesThroughAuthoringSide();
+    TestEditorMaterialEditingServiceSideDefDecalUvResetWritesThroughAuthoringSide();
+    TestEditorMaterialEditingServiceSideDefUvMissingMappingDoesNotMutateTopology();
     TestEditorAuthoringLineFlagInspectorWritesProjectAfterDerivation();
     TestEditorAuthoringLineFlagInspectorWritesProjectToSplitDerivedLineDefs();
     TestEditorAuthoringLineFlagInspectorWriteDoesNotDirectlyMutateDerivedTopology();

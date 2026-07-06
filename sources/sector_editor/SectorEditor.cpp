@@ -2446,7 +2446,7 @@ bool SectorEditor::FinishTopologyActionResult(const SectorEditorTopologyActionRe
     return true;
 }
 
-bool SectorEditor::SetLineDefBlocksPlayer(int lineDefId, bool blocksPlayer)
+bool SectorEditor::SetAuthoringOrLegacyLineDefBlocksPlayer(int lineDefId, bool blocksPlayer)
 {
     const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, lineDefId);
     if (lineDef == nullptr) {
@@ -2458,12 +2458,28 @@ bool SectorEditor::SetLineDefBlocksPlayer(int lineDefId, bool blocksPlayer)
         return false;
     }
 
+    if (!HasAuthoringGraphData()) {
+        const bool changed = FinishTopologyActionResult(
+                SetLegacyTopologyPortalBlocksPlayer(state.topologyMap, lineDefId, blocksPlayer));
+        if (changed) {
+            RebuildSectorCollisionWorld();
+        }
+        return changed;
+    }
+
+    if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+            || state.authoringDerivedTopologyStale
+            || !state.authoringDerivation.success) {
+        statusText = "Blocks Player unavailable: derived topology is not current.";
+        return false;
+    }
+
     const int authoringLineId =
             FindSectorEditorAuthoringLineIdForTopologyLineDef(state, lineDefId);
     const SectorAuthoringLine* authoringLine =
             FindSectorAuthoringLine(state.authoringGraph, authoringLineId);
     if (authoringLine == nullptr) {
-        statusText = "Blocks Player unavailable: selected linedef has no authoring line mapping.";
+        statusText = "Blocks Player unavailable: selected derived linedef has no authoring line mapping.";
         return false;
     }
     if (authoringLine->flags.blocksPlayer == blocksPlayer) {
@@ -4182,7 +4198,7 @@ void SectorEditor::DrawPreviewUvPanel(
             statusText,
             materialEditing,
             [this](int lineDefId, bool blocksPlayer) {
-                return SetLineDefBlocksPlayer(lineDefId, blocksPlayer);
+                return SetAuthoringOrLegacyLineDefBlocksPlayer(lineDefId, blocksPlayer);
             }};
     DrawSectorEditorPreviewUvPanel(panelContext);
 }
@@ -6859,7 +6875,7 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 SelectTopologySideDef(sideDefId, wallPart);
             },
             [this](int lineDefId, bool blocksPlayer) {
-                return SetLineDefBlocksPlayer(lineDefId, blocksPlayer);
+                return SetAuthoringOrLegacyLineDefBlocksPlayer(lineDefId, blocksPlayer);
             },
             [this](int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer) {
                 OpenTopologySideDefTexturePicker(sideDefId, wallPart, layer);

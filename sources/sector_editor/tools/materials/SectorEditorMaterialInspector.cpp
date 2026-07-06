@@ -245,7 +245,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     font,
                     "Blocks Player",
                     blocksPlayer)) {
-            callbacks.setLineDefBlocksPlayer(lineDef->id, blocksPlayer);
+            callbacks.setAuthoringOrLegacyLineDefBlocksPlayer(lineDef->id, blocksPlayer);
             return true;
         }
         y += 36.0f + gap;
@@ -422,10 +422,12 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
         y += 38.0f + gap;
     }
 
-    SectorTopologyUvSettings& selectedUv = layer == TopologyMaterialLayer::Decal ? selectedPart.decal.uv : selectedPart.uv;
+    const SectorTopologyUvSettings& selectedUv = layer == TopologyMaterialLayer::Decal
+            ? selectedPart.decal.uv
+            : selectedPart.uv;
     const float uvColumnW = (contentW - gap) * 0.5f;
     const float uvBlockH = 62.0f;
-    auto drawUvInput = [&](int stateIndex, const char* id, const char* label, float value, float minValue, float maxValue, Rectangle bounds, auto applyValue) {
+    auto drawUvInput = [&](int stateIndex, const char* id, const char* label, float value, float minValue, float maxValue, Rectangle bounds) {
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -445,55 +447,59 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
         if (result.changed && result.value != value) {
             if (!result.finite) {
                 statusText = "Invalid topology sidedef UV value";
-                return;
+                return false;
             }
-            applyValue(result.value);
-            materialEditing.ApplyInspectorSideDefUvValue(
+            return materialEditing.ApplyInspectorSideDefUvValue(
                     selectedMaterialTarget,
                     layer,
                     stateIndex,
                     result.value,
                     assets);
         }
+        return false;
     };
 
-    drawUvInput(
+    if (drawUvInput(
             0,
             "sector_editor_topology_sidedef_uv_scale_u",
             "Scale U",
             selectedUv.scale.x,
             TopologyUvScaleMin,
             TopologyUvScaleMax,
-            Rectangle{0.0f, y, uvColumnW, uvBlockH},
-            [&](float value) { selectedUv.scale.x = value; });
-    drawUvInput(
+            Rectangle{0.0f, y, uvColumnW, uvBlockH})) {
+        return true;
+    }
+    if (drawUvInput(
             1,
             "sector_editor_topology_sidedef_uv_scale_v",
             "Scale V",
             selectedUv.scale.y,
             TopologyUvScaleMin,
             TopologyUvScaleMax,
-            Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH},
-            [&](float value) { selectedUv.scale.y = value; });
+            Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH})) {
+        return true;
+    }
     y += uvBlockH + gap;
-    drawUvInput(
+    if (drawUvInput(
             2,
             "sector_editor_topology_sidedef_uv_offset_u",
             "Offset U",
             selectedUv.offset.x,
             -1024.0f,
             1024.0f,
-            Rectangle{0.0f, y, uvColumnW, uvBlockH},
-            [&](float value) { selectedUv.offset.x = value; });
-    drawUvInput(
+            Rectangle{0.0f, y, uvColumnW, uvBlockH})) {
+        return true;
+    }
+    if (drawUvInput(
             3,
             "sector_editor_topology_sidedef_uv_offset_v",
             "Offset V",
             selectedUv.offset.y,
             -1024.0f,
             1024.0f,
-            Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH},
-            [&](float value) { selectedUv.offset.y = value; });
+            Rectangle{uvColumnW + gap, y, uvColumnW, uvBlockH})) {
+        return true;
+    }
     y += uvBlockH + gap;
 
     if (layer == TopologyMaterialLayer::Decal) {
@@ -615,7 +621,9 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{0.0f, y, contentW, 38.0f},
                 font,
                 TextFormat("Reset %s UV", TopologyWallPartName(state.selectedTopologyWallPart)))) {
-        materialEditing.ResetInspectorSideDefUv(selectedMaterialTarget, layer, assets);
+        if (materialEditing.ResetInspectorSideDefUv(selectedMaterialTarget, layer, assets)) {
+            return true;
+        }
     }
     y += 38.0f + gap;
 
