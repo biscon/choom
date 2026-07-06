@@ -295,6 +295,10 @@ Manual smoke checklist:
 
 REF-059 already existed and was marked complete by this task. Completion notes point to this report and recommend REF-063 as the next implementation. REF-044 remains open as the umbrella because material migration is incomplete. REF-058 and REF-060 remain open because this task did not perform those audits. Future implementation items were added/refined but not marked complete.
 
+## REF-066 Update
+
+REF-066 extracted the Preview3D UV/material panel into `sources/sector_editor/preview/` after `SectorEditorMaterialEditingService` was in place. Broader preview overlay/debug UI remains future work.
+
 ## Appendix: Evidence
 
 Commands used:

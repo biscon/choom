@@ -74,6 +74,7 @@ Task Type:
 | REF-063 | `[x]` | High | Editor architecture | Extract material-specific texture picker routing | Codex task | High | Completed; material targets route through `services/material_edit`, non-material picker routes stayed out |
 | REF-064 | `[x]` | High | Editor architecture | Add minimal MaterialEditBridge for material action wrappers | Codex task | Medium/High | Completed; action wrappers route through bridge while finish paths stay in `SectorEditor.cpp` |
 | REF-065 | `[x]` | High | Editor architecture | Promote MaterialEditBridge into MaterialEditingService | Codex task | Medium/High | Completed; bridge removed and material clients use service directly |
+| REF-066 | `[x]` | Medium | Editor architecture | Extract Preview3D UV/material panel into `preview/` | Codex task | Medium/High | Completed; panel moved to preview module and uses `MaterialEditingService` directly |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
@@ -976,6 +977,38 @@ Task Type:
   - Expected later `SectorEditor.cpp` reduction if extracted: roughly 350-480
     lines for UV/material panel, separate from preview overlay.
 - Completion notes:
+
+#### REF-066 `[x]` Extract Preview3D UV/material panel into `preview/`
+
+- Source/audit reference:
+  `docs/audit/sector_editor_material_edit_bridge_audit.md`.
+- Why it helps: removes the selected-surface Preview3D UV/material panel from
+  `SectorEditor.cpp` after material operations were promoted to
+  `SectorEditorMaterialEditingService`.
+- Likely files: `SectorEditor.cpp`,
+  `sources/sector_editor/preview/SectorEditorPreviewUvPanel.h`,
+  `sources/sector_editor/preview/SectorEditorPreviewUvPanel.cpp`.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, `git diff --check`, dependency grep for
+  no concrete `SectorEditor` dependency under `preview/`, and manual Preview3D
+  material smoke if practical.
+- Completion notes:
+  - Preview3D UV/material panel extracted to `sources/sector_editor/preview/`.
+  - Created `SectorEditorPreviewUvPanel.h` and
+    `SectorEditorPreviewUvPanel.cpp`.
+  - Panel uses `SectorEditorMaterialEditingService` directly for material
+    operations.
+  - No new material callback bridge was introduced; the only panel callback is
+    the narrow non-material portal `Blocks Player` edit port.
+  - `SectorEditor.cpp` line count reduced from 9,172 to 8,710 lines, a
+    462-line reduction.
+  - Preview renderer/collision/camera ownership stayed in `SectorEditor.cpp`.
+  - Preview overlay/debug UI stayed in `SectorEditor.cpp`.
+  - `TexturePickerService` stayed generic.
+  - REF-044 remains open because material migration is still incomplete.
+  - REF-058, lights, and lightmap/source-hash-sensitive work remain open.
+  - No behavior changes intended.
 
 #### REF-061 `[>]` Evaluate Status/Diagnostics service
 
