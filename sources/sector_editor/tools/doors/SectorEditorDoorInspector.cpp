@@ -5,6 +5,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 
 #include <raylib.h>
 #include <raymath.h>
@@ -62,8 +63,7 @@ float MeasureSectorEditorDoorInspectorContentHeight(
       anchorStatus.c_str(), context.contentW, 2);
   const bool textureMissing =
       !object.door.textureId.empty() &&
-      FindSectorTopologyTexture(context.state.topologyMap,
-                                object.door.textureId) == nullptr;
+      !context.textureCatalog.HasTexture(object.door.textureId);
   const std::string textureStatus =
       object.door.textureId.empty() ? "Texture: default material"
       : textureMissing
@@ -350,8 +350,7 @@ void DrawSectorEditorDoorInspector(
 
   const bool textureMissing =
       !selectedObject->door.textureId.empty() &&
-      FindSectorTopologyTexture(state.topologyMap,
-                                selectedObject->door.textureId) == nullptr;
+      !context.textureCatalog.HasTexture(selectedObject->door.textureId);
   const std::string textureStatus =
       selectedObject->door.textureId.empty() ? "Texture: default material"
       : textureMissing

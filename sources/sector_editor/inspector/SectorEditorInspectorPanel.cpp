@@ -7,6 +7,7 @@
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorVertexInspector.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/tools/doors/SectorEditorDoorModals.h"
 #include "sector_editor/tools/materials/SectorEditorMaterialInspector.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectInspector.h"
@@ -278,6 +279,7 @@ bool DrawTopologySideDefInspector(
     SectorEditorState& state = context.state;
     SectorEditorUiState& uiState = context.uiState;
     std::string& statusText = context.statusText;
+    SectorEditorTextureCatalogService& textureCatalog = context.textureCatalog;
 
     const SectorEditorMaterialInspectorCallbacks callbacks{
             [&](int sideDefId, TopologyWallPart wallPart) {
@@ -302,7 +304,8 @@ bool DrawTopologySideDefInspector(
             uiState,
             statusText,
             callbacks,
-            materialEditing};
+            materialEditing,
+            textureCatalog};
     return DrawTopologySideDefMaterialInspector(materialContext);
 }
 
@@ -324,6 +327,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     SectorEditorSelectionServiceContext& selection = context.selection;
     SectorEditorPlacedObjectActionContext& placedObjectActions = context.placedObjectActions;
     SectorEditorMaterialEditingService& materialEditing = context.materialEditing;
+    SectorEditorTextureCatalogService& textureCatalog = context.textureCatalog;
     SectorEditorLightEditingService& lightEditing = context.lightEditing;
     engine::EngineContext* engineContext = context.engineContext;
 
@@ -463,6 +467,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     state,
                     engineContext,
                     runtimeObjectInspectorCallbacks,
+                    textureCatalog,
                     scrollContentW,
                     rowH,
                     gap
@@ -603,6 +608,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 uiState,
                 engineContext,
                 runtimeObjectInspectorCallbacks,
+                textureCatalog,
                 contentW,
                 rowH,
                 gap
@@ -815,6 +821,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     state,
                     uiState,
                     materialEditing,
+                    textureCatalog,
                     callbacks)) {
             engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
             engine::EndPanel(ui, config, panel);
@@ -1114,7 +1121,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 const SectorEditorInspectorTextureRowLayout row =
                                         BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
                                 const bool missing = !textureId.empty()
-                                        && FindSectorTopologyTexture(state.topologyMap, textureId) == nullptr;
+                                        && !textureCatalog.HasTexture(textureId);
                                 engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                                 engine::Text(
                                         ui,
@@ -1173,7 +1180,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 const SectorEditorInspectorTextureRowLayout row =
                                         BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
                                 const bool missing = !decal.textureId.empty()
-                                        && FindSectorTopologyTexture(state.topologyMap, decal.textureId) == nullptr;
+                                        && !textureCatalog.HasTexture(decal.textureId);
                                 engine::Text(ui, config, assets, row.labelRect, font, title, engine::UITextJustify::Left, config.mutedTextColor);
                                 engine::Text(
                                         ui,
@@ -1589,7 +1596,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             const float buttonW = 38.0f;
             const SectorEditorInspectorTextureRowLayout row =
                     BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, 0.0f);
-            const bool missing = !textureId.empty() && FindSectorTopologyTexture(state.topologyMap, textureId) == nullptr;
+            const bool missing = !textureId.empty() && !textureCatalog.HasTexture(textureId);
             engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
             engine::Text(
                     ui,
@@ -1642,7 +1649,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     const SectorEditorInspectorTextureRowLayout row =
                             BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
                     const bool missing = !decal.textureId.empty()
-                            && FindSectorTopologyTexture(state.topologyMap, decal.textureId) == nullptr;
+                            && !textureCatalog.HasTexture(decal.textureId);
                     engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                     engine::Text(
                             ui,
@@ -1844,7 +1851,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     const SectorEditorInspectorTextureRowLayout row =
                             BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
                     const bool missing = !decal.textureId.empty()
-                            && FindSectorTopologyTexture(state.topologyMap, decal.textureId) == nullptr;
+                            && !textureCatalog.HasTexture(decal.textureId);
                     engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                     engine::Text(
                             ui,

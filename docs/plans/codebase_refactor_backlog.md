@@ -69,6 +69,7 @@ Task Type:
 | REF-058 | `[ ]` | Medium | Editor architecture | Audit AssetCatalog/TextureCatalog service boundary | Audit first | Medium | Keep texture import/handle/catalog ownership separate from picker apply routing |
 | REF-080 | `[x]` | High | Editor architecture | Extract TextureCatalogService | Codex task | Medium | Completed; generic texture catalog/handle behavior moved, apply/document semantics unchanged |
 | REF-081 | `[x]` | High | Editor architecture | Clean up TextureCatalogService integration debt | Codex task | Medium | Completed; obsolete wrappers removed while add-map lifecycle stayed central |
+| REF-082 | `[x]` | High | Editor architecture | Pass TextureCatalogService to remaining texture UI clients | Codex task | Medium | Completed; remaining UI missing-texture checks use catalog service |
 | REF-059 | `[x]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Completed; recommends material-specific picker routing extraction before MaterialEditBridge |
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
 | REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
@@ -945,6 +946,48 @@ Task Type:
     and document lifecycle behavior stayed unchanged.
   - Rendering, collision, serialization schema, lightmap, and lightmap
     source-hash behavior were not intentionally changed.
+
+#### REF-082 `[x]` Pass TextureCatalogService to remaining texture UI clients
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md` and REF-081
+  completion debt.
+- Why it helps: removes remaining direct generic texture catalog checks from UI
+  clients without adding callback-to-`SectorEditor` plumbing.
+- Likely files: `SectorEditor.cpp`, `SectorEditorTextureModals.*`,
+  `SectorEditorSectorInspector.*`, `inspector/SectorEditorInspectorPanel.*`,
+  `preview/SectorEditorPreviewUvPanel.*`, `tools/doors/`,
+  `tools/materials/`, and `tools/placed_objects/`.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, dependency greps
+  for texture catalog/helper use, no new catalog callback bridge, and no
+  concrete `SectorEditor` dependency under `services/texture_catalog`.
+- Notes:
+  - Keep `TextureCatalogService` catalog-only.
+  - Keep `TexturePickerService` generic lifecycle/result machinery.
+  - Do not move material, door, sky, sprite/billboard, or add-map apply
+    semantics into the catalog service.
+- Completion notes:
+  - `TextureCatalogService` passed to remaining UI clients where clean:
+    sector inspector, inspector panel, preview UV panel, door inspector,
+    material inspector, and texture picker modal display path.
+  - Direct missing-texture UI checks were replaced with
+    `textureCatalog.HasTexture()` calls, and texture picker preview metadata
+    now uses `textureCatalog.FindTexture()`.
+  - Remaining direct `FindSectorTopologyTexture` uses are exactly the helper
+    declaration/implementation in `SectorEditorHelpers.*` and
+    `SectorEditorTextureCatalogService::FindTexture()` in
+    `services/texture_catalog/SectorEditorTextureCatalogService.cpp`.
+  - No callback bridge was introduced.
+  - `SectorEditorTextureCatalogService` remains a stateless/context-backed
+    facade over `SectorEditorState`, constructed only at `SectorEditor`
+    composition boundaries and passed synchronously to clients.
+  - Feature apply behavior for material, door, sky, sprite/billboard, and
+    add-map texture flows stayed unchanged.
+  - Dirty/cache/status timing, document lifecycle, serialization schema,
+    rendering, collision, lightmap, and source-hash behavior were not
+    intentionally changed.
 
 #### REF-059 `[x]` Audit MaterialEditBridge and material-specific picker routing
 

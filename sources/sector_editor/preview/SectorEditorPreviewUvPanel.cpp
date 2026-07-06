@@ -5,6 +5,7 @@
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
@@ -71,6 +72,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
     SectorEditorState& state = context.state;
     SectorEditorUiState& uiState = context.uiState;
     SectorEditorMaterialEditingService& materialEditing = context.materialEditing;
+    SectorEditorTextureCatalogService& textureCatalog = context.textureCatalog;
 
     const TopologySurfaceEditTarget target = state.selectedTopologySurface3D;
     const bool targetIsMiddle = IsMiddleTopologyEditTarget(target.kind);
@@ -175,7 +177,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
 
     const std::string currentTexture = materialEditing.CurrentTextureForSurface(target, layer);
     const bool missingTexture = !currentTexture.empty()
-            && FindSectorTopologyTexture(state.topologyMap, currentTexture) == nullptr;
+            && !textureCatalog.HasTexture(currentTexture);
     engine::Text(
             ui,
             config,

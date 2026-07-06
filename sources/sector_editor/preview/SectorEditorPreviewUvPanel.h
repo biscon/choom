@@ -13,6 +13,8 @@
 
 namespace game {
 
+class SectorEditorTextureCatalogService;
+
 struct SectorEditorPreviewUvPanelContext {
     engine::UIContext& ui;
     const engine::UIConfig& config;
@@ -28,6 +30,7 @@ struct SectorEditorPreviewUvPanelContext {
     std::string& statusText;
 
     SectorEditorMaterialEditingService& materialEditing;
+    SectorEditorTextureCatalogService& textureCatalog;
     std::function<bool(int, bool)> setAuthoringLineDefBlocksPlayer;
 };
 

@@ -15,6 +15,8 @@
 
 namespace game {
 
+class SectorEditorTextureCatalogService;
+
 struct SectorEditorAddTextureModalCallbacks {
     std::function<void()> close;
     std::function<bool()> addSelected;
@@ -27,7 +29,6 @@ struct SectorEditorTexturePickerCallbacks {
     std::function<void()> close;
     std::function<void()> applySelection;
     std::function<std::string()> currentTextureForTarget;
-    std::function<engine::TextureHandle(const std::string&)> textureHandleForId;
 };
 
 struct SectorEditorSpritePickerCallbacks {
@@ -75,7 +76,7 @@ void DrawTexturePickerModal(
         engine::AssetManager& assets,
         engine::FontHandle font,
         TexturePickerState& picker,
-        const SectorTopologyMap& map,
+        SectorEditorTextureCatalogService& textureCatalog,
         const SectorEditorTexturePickerCallbacks& callbacks);
 
 void DrawSpritePickerModal(

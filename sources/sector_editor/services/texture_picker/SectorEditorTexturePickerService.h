@@ -12,6 +12,8 @@
 
 namespace game {
 
+class SectorEditorTextureCatalogService;
+
 struct SectorEditorSelectedTexture {
     bool valid = false;
     std::string textureId;
@@ -20,7 +22,6 @@ struct SectorEditorSelectedTexture {
 struct SectorEditorTexturePickerServiceCallbacks {
     std::function<void()> applySelection;
     std::function<std::string()> currentTextureForTarget;
-    std::function<engine::TextureHandle(const std::string&)> textureHandleForId;
 };
 
 void CloseSectorEditorTexturePicker(TexturePickerState& picker);
@@ -41,16 +42,15 @@ inline void DrawSectorEditorTexturePickerModal(
         engine::AssetManager& assets,
         engine::FontHandle font,
         TexturePickerState& picker,
-        const SectorTopologyMap& map,
+        SectorEditorTextureCatalogService& textureCatalog,
         const SectorEditorTexturePickerServiceCallbacks& callbacks)
 {
     const SectorEditorTexturePickerCallbacks modalCallbacks{
             [&picker]() { CloseSectorEditorTexturePicker(picker); },
             callbacks.applySelection,
-            callbacks.currentTextureForTarget,
-            callbacks.textureHandleForId
+            callbacks.currentTextureForTarget
     };
-    DrawTexturePickerModal(ui, config, input, assets, font, picker, map, modalCallbacks);
+    DrawTexturePickerModal(ui, config, input, assets, font, picker, textureCatalog, modalCallbacks);
 }
 
 } // namespace game

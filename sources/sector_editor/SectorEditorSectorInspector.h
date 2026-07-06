@@ -12,6 +12,8 @@
 
 namespace game {
 
+class SectorEditorTextureCatalogService;
+
 struct SectorEditorSectorInspectorCallbacks {
     std::function<bool()> tryRenameSelectedTopologySector;
     std::function<void(const char*)> setStatusText;
@@ -40,6 +42,7 @@ bool DrawTopologySectorInspector(
         SectorEditorState& state,
         SectorEditorUiState& uiState,
         SectorEditorMaterialEditingService& materialEditing,
+        SectorEditorTextureCatalogService& textureCatalog,
         const SectorEditorSectorInspectorCallbacks& callbacks);
 
 } // namespace game

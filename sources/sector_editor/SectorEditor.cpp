@@ -2702,6 +2702,7 @@ void SectorEditor::DrawPreviewUvPanel(
     }
 
     SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
+    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     SectorEditorPreviewUvPanelContext panelContext{
             ui,
             config,
@@ -2714,6 +2715,7 @@ void SectorEditor::DrawPreviewUvPanel(
             uiState,
             statusText,
             materialEditing,
+            textureCatalog,
             [this](int lineDefId, bool blocksPlayer) {
                 return SetAuthoringLineDefBlocksPlayer(lineDefId, blocksPlayer);
             }};
@@ -3544,6 +3546,7 @@ void SectorEditor::DrawSectorsPanel(
     SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
     SectorEditorPlacedObjectActionContext placedObjectActions = BuildRuntimeObjectActionContext();
     SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
+    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     SectorEditorLightEditingService lightEditing = BuildLightEditingService();
     SectorEditorInspectorPanelContext context{
             ui,
@@ -3559,6 +3562,7 @@ void SectorEditor::DrawSectorsPanel(
             selection,
             placedObjectActions,
             materialEditing,
+            textureCatalog,
             lightEditing,
             engineContext};
     const SectorEditorInspectorPanelResult result = DrawSectorEditorInspectorPanel(context);
@@ -3591,15 +3595,16 @@ void SectorEditor::DrawAddMapTextureModal(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
+    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     const SectorEditorAddTextureModalCallbacks callbacks{
             [this, &assets]() { CloseAddMapTextureModal(assets); },
             [this, &assets]() { return AddSelectedMapTexture(assets); },
-            [this](int pathIndex) {
-                BuildTextureCatalogService().SelectAddMapTexturePath(state.addMapTexture, pathIndex);
+            [&textureCatalog, this](int pathIndex) {
+                textureCatalog.SelectAddMapTexturePath(state.addMapTexture, pathIndex);
             },
             [this, &assets]() { game::RefreshAddMapTexturePreview(state.addMapTexture, assets); },
-            [this](std::string& error) {
-                return BuildTextureCatalogService().ValidateAddMapTextureId(state.addMapTexture, error);
+            [&textureCatalog, this](std::string& error) {
+                return textureCatalog.ValidateAddMapTextureId(state.addMapTexture, error);
             }
     };
     game::DrawAddMapTextureModal(ui, config, input, assets, font, state.addMapTexture, callbacks);
@@ -3612,12 +3617,10 @@ void SectorEditor::DrawTexturePickerModal(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
+    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     const SectorEditorTexturePickerServiceCallbacks callbacks{
             [this, &assets]() { ApplyTexturePickerSelection(assets); },
-            [this]() { return CurrentTextureForPickerTarget(); },
-            [this](const std::string& textureId) {
-                return BuildTextureCatalogService().TextureHandleForId(textureId);
-            }
+            [this]() { return CurrentTextureForPickerTarget(); }
     };
     DrawSectorEditorTexturePickerModal(
             ui,
@@ -3626,7 +3629,7 @@ void SectorEditor::DrawTexturePickerModal(
             assets,
             font,
             state.texturePicker,
-            state.topologyMap,
+            textureCatalog,
             callbacks);
 }
 
@@ -3928,8 +3931,9 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     state.viewCenter = Vector2{9.0f, 6.0f};
     state.viewZoom = 48.0f;
     state.gridSize = 8;
-    BuildTextureCatalogService().RefreshDefaultTextureIds();
-    BuildTextureCatalogService().RefreshTextureHandles(assets);
+    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
+    textureCatalog.RefreshDefaultTextureIds();
+    textureCatalog.RefreshTextureHandles(assets);
     initialized = true;
     statusText = "New blank level";
 }
@@ -4016,8 +4020,9 @@ bool SectorEditor::LoadLevel(
     state.authoringVertexDrag = AuthoringVertexDragState{};
     state.lightDrag = LightDragState{};
     state.lightEditing = LightEditingState{};
-    BuildTextureCatalogService().RefreshDefaultTextureIds();
-    BuildTextureCatalogService().RefreshTextureHandles(assets);
+    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
+    textureCatalog.RefreshDefaultTextureIds();
+    textureCatalog.RefreshTextureHandles(assets);
     ResetSectorRuntimeObjectsForMap(context.world, assets, state.runtimeObjects, state.topologyMap);
     if (loadedAuthoringGraph) {
         const char* loadedText = authoringDerivationCurrent
@@ -4478,7 +4483,7 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
             state.fpsControllerConfig.headBobFrequency);
 }
 
-SectorEditorTextureCatalogService SectorEditor::BuildTextureCatalogService()
+SectorEditorTextureCatalogService SectorEditor::MakeTextureCatalogService()
 {
     return SectorEditorTextureCatalogService{
             SectorEditorTextureCatalogServiceContext{
@@ -4490,7 +4495,8 @@ void SectorEditor::OpenAddMapTextureModal(engine::AssetManager& assets)
     CloseAddMapTextureModal(assets);
     state.addMapTexture.open = true;
     game::RefreshAddMapTextureScan(state.addMapTexture);
-    BuildTextureCatalogService().SelectAddMapTexturePath(
+    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
+    textureCatalog.SelectAddMapTexturePath(
             state.addMapTexture,
             state.addMapTexture.selectedPathIndex);
     statusText = "Add topology texture";
@@ -4506,13 +4512,14 @@ void SectorEditor::CloseAddMapTextureModal(engine::AssetManager& assets)
 
 bool SectorEditor::AddSelectedMapTexture(engine::AssetManager& assets)
 {
+    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     const SectorEditorAddTextureResult result =
-            BuildTextureCatalogService().RegisterSelectedMapTexture(state.addMapTexture);
+            textureCatalog.RegisterSelectedMapTexture(state.addMapTexture);
     if (!result.success) {
         return false;
     }
 
-    BuildTextureCatalogService().RefreshTextureHandles(assets);
+    textureCatalog.RefreshTextureHandles(assets);
     state.hasUnsavedChanges = true;
     state.topologyDocumentDirty = true;
     statusText = TextFormat("%s texture %s", result.replacing ? "Updated" : "Added", result.textureId.c_str());

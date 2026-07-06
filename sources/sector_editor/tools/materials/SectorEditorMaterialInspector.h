@@ -11,6 +11,8 @@
 
 namespace game {
 
+class SectorEditorTextureCatalogService;
+
 struct SectorEditorMaterialInspectorCallbacks {
     std::function<void(int, TopologyWallPart)> selectTopologySideDef;
     std::function<bool(int, bool)> setAuthoringLineDefBlocksPlayer;
@@ -32,6 +34,7 @@ struct SectorEditorMaterialInspectorContext {
     std::string& statusText;
     const SectorEditorMaterialInspectorCallbacks& callbacks;
     SectorEditorMaterialEditingService& materialEditing;
+    SectorEditorTextureCatalogService& textureCatalog;
 };
 
 bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& context);

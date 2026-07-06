@@ -16,6 +16,8 @@
 
 namespace game {
 
+class SectorEditorTextureCatalogService;
+
 enum class SectorEditorInspectorPanelRequestKind {
     RebuildSectorCollisionWorld,
     BeginAuthoringInsertVertex,
@@ -51,6 +53,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorSelectionServiceContext& selection;
     SectorEditorPlacedObjectActionContext& placedObjectActions;
     SectorEditorMaterialEditingService& materialEditing;
+    SectorEditorTextureCatalogService& textureCatalog;
     SectorEditorLightEditingService& lightEditing;
     engine::EngineContext* engineContext = nullptr;
 };

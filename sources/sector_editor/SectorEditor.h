@@ -322,7 +322,7 @@ private:
     bool SetAuthoringLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
     SectorEditorMaterialEditingService BuildMaterialEditingService();
     SectorEditorLightEditingService BuildLightEditingService();
-    SectorEditorTextureCatalogService BuildTextureCatalogService();
+    SectorEditorTextureCatalogService MakeTextureCatalogService();
     bool HasAuthoringGraphData() const;
     bool EnsureSelectedSurface3DAuthoringMappingCurrent();
     bool FinishTopologyActionResult(const SectorEditorTopologyActionResult& result);

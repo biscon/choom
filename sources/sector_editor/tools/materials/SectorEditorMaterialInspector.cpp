@@ -3,6 +3,7 @@
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
@@ -28,6 +29,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
     std::string& statusText = context.statusText;
     const SectorEditorMaterialInspectorCallbacks& callbacks = context.callbacks;
     SectorEditorMaterialEditingService& materialEditing = context.materialEditing;
+    SectorEditorTextureCatalogService& textureCatalog = context.textureCatalog;
 
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     const SectorTopologyLineDef* lineDef =
@@ -256,7 +258,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
         const float buttonW = 38.0f;
         const float labelColumnW = 74.0f;
         const Rectangle row{0.0f, y, contentW, 36.0f};
-        const bool missing = !textureId.empty() && FindSectorTopologyTexture(state.topologyMap, textureId) == nullptr;
+        const bool missing = !textureId.empty() && !textureCatalog.HasTexture(textureId);
         engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
         engine::Text(
                 ui,
