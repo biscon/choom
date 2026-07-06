@@ -3,6 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/SectorEditorTypes.h"
 
 #include <raylib.h>
@@ -20,15 +21,6 @@ struct SectorEditorSectorInspectorCallbacks {
     std::function<bool(float)> applySectorAmbientIntensity;
     std::function<bool(Color)> applySectorAmbientColor;
     std::function<bool(TopologySectorTextureField, const SectorTopologyUvSettings&)> applySectorUv;
-    std::function<void(int, TopologySectorTextureField, TopologyMaterialLayer)> openTopologyTexturePicker;
-    std::function<bool(TopologySurfaceEditTarget)> copyTopologyMaterial;
-    std::function<bool(TopologySurfaceEditTarget, engine::AssetManager&)> pasteTopologyMaterial;
-    std::function<bool(TopologySurfaceEditTarget, float)> applySurfaceDecalOpacity;
-    std::function<bool(TopologySurfaceEditTarget, bool)> applySurfaceDecalEmissive;
-    std::function<bool(TopologySurfaceEditTarget, float)> applySurfaceDecalBloomIntensity;
-    std::function<bool(TopologySurfaceEditTarget)> openDecalTintModal;
-    std::function<bool(TopologySurfaceEditTarget)> fitSelectedDecal;
-    std::function<bool(TopologySurfaceEditTarget)> clearSurfaceDecal;
 };
 
 float SectorInspectorContentHeight(float rowH, float gap, bool hasIdError);
@@ -47,6 +39,7 @@ bool DrawTopologySectorInspector(
         SectorTopologySector& sector,
         SectorEditorState& state,
         SectorEditorUiState& uiState,
+        SectorEditorMaterialEditingService& materialEditing,
         const SectorEditorSectorInspectorCallbacks& callbacks);
 
 } // namespace game

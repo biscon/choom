@@ -343,14 +343,6 @@ private:
     void ClearTransientTopologyEditStateAfterGeometryChange();
     void ClearTopologySelectionOnly();
     void ClearSelection();
-    void OpenMaterialPickerForDerivedSector(
-            int sectorId,
-            TopologySectorTextureField field,
-            TopologyMaterialLayer layer);
-    void OpenMaterialPickerForDerivedSideDef(
-            int sideDefId,
-            TopologyWallPart wallPart,
-            TopologyMaterialLayer layer);
     void OpenMapSkyTexturePicker();
     void OpenSelectedDoorTexturePicker();
     void OpenSelectedBillboardSpritePicker();

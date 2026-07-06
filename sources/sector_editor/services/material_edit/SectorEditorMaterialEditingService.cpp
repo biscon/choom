@@ -198,7 +198,7 @@ bool SectorEditorMaterialEditingService::FinishAuthoringMaterialActionResult(
     return refreshed;
 }
 
-bool SectorEditorMaterialEditingService::ApplyAuthoringSideMaterialAction(
+bool SectorEditorMaterialEditingService::ApplyAuthoringSideMaterialEdit(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets,
         TopologyMaterialLayer layer,
@@ -258,7 +258,7 @@ bool SectorEditorMaterialEditingService::ApplyAuthoringSideMaterialAction(
             "Wall material edit unavailable: selected sidedef has no authoring side mapping");
 }
 
-bool SectorEditorMaterialEditingService::ApplyAuthoringFaceAnchorFlatMaterialAction(
+bool SectorEditorMaterialEditingService::ApplyAuthoringFaceAnchorMaterialEdit(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets,
         TopologyMaterialLayer layer,
@@ -327,10 +327,10 @@ bool SectorEditorMaterialEditingService::ApplyMaterialAction(
         const SectorEditorAuthoringMaterialActionFn& action)
 {
     if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData(context_.state)) {
-        return ApplyAuthoringSideMaterialAction(target, assets, layer, action);
+        return ApplyAuthoringSideMaterialEdit(target, assets, layer, action);
     }
     if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData(context_.state)) {
-        return ApplyAuthoringFaceAnchorFlatMaterialAction(target, assets, layer, action);
+        return ApplyAuthoringFaceAnchorMaterialEdit(target, assets, layer, action);
     }
     context_.statusText = HasAuthoringGraphData(context_.state)
             ? "Cannot edit material: selected derived target has no authoring material route."
@@ -842,48 +842,48 @@ std::string SectorEditorMaterialEditingService::CurrentTextureForPickerTarget() 
     return CurrentSectorEditorMaterialPickerTexture(context_.state, context_.texturePicker);
 }
 
-bool SectorEditorMaterialEditingService::OpenTexturePickerForAuthoringFaceAnchor(
+bool SectorEditorMaterialEditingService::OpenMaterialPickerForDerivedSector(
         int topologySectorId,
         TopologySectorTextureField field,
         TopologyMaterialLayer layer)
 {
-    return OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
+    return OpenSectorEditorMaterialPickerForDerivedSector(
             context_.state,
             topologySectorId,
             field,
             layer);
 }
 
-bool SectorEditorMaterialEditingService::OpenTexturePickerForAuthoringFaceAnchorById(
+bool SectorEditorMaterialEditingService::OpenMaterialPickerForAuthoringFaceAnchor(
         int faceAnchorId,
         TopologySectorTextureField field,
         TopologyMaterialLayer layer)
 {
-    return OpenSectorEditorMaterialPickerForAuthoringFaceAnchorById(
+    return OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
             context_.state,
             faceAnchorId,
             field,
             layer);
 }
 
-bool SectorEditorMaterialEditingService::OpenTexturePickerForAuthoringSide(
+bool SectorEditorMaterialEditingService::OpenMaterialPickerForDerivedSideDef(
         int topologySideDefId,
         TopologyWallPart wallPart,
         TopologyMaterialLayer layer)
 {
-    return OpenSectorEditorMaterialPickerForAuthoringSide(
+    return OpenSectorEditorMaterialPickerForDerivedSideDef(
             context_.state,
             topologySideDefId,
             wallPart,
             layer);
 }
 
-bool SectorEditorMaterialEditingService::OpenTexturePickerForAuthoringSideById(
+bool SectorEditorMaterialEditingService::OpenMaterialPickerForAuthoringSide(
         SectorAuthoringSideId sideId,
         TopologyWallPart wallPart,
         TopologyMaterialLayer layer)
 {
-    return OpenSectorEditorMaterialPickerForAuthoringSideById(
+    return OpenSectorEditorMaterialPickerForAuthoringSide(
             context_.state,
             sideId,
             wallPart,

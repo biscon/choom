@@ -11,6 +11,7 @@
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -3624,19 +3625,16 @@ void TestEditorMaterialEditingServiceDerivedSidePickerWritesAuthoringSideDirectl
         return;
     }
 
-    state.texturePicker.open = true;
-    state.texturePicker.topologyTargetKind = game::TopologyTexturePickerTargetKind::SideDef;
-    state.texturePicker.topologyLayer = game::TopologyMaterialLayer::Base;
-    state.texturePicker.topologySideDefId = sideDef->id;
-    state.texturePicker.topologyWallPart = game::TopologyWallPart::Wall;
-    state.texturePicker.textureIds.push_back("old_wall");
-    state.texturePicker.textureIds.push_back("new_wall");
-    SelectTextureInPicker(state.texturePicker, "new_wall");
-
     game::SectorEditorUiState uiState;
     std::string statusText;
     game::SectorEditorMaterialEditingService service =
             MakeMaterialEditingService(state, uiState, statusText);
+    Check(service.OpenMaterialPickerForDerivedSideDef(
+                  sideDef->id,
+                  game::TopologyWallPart::Wall,
+                  game::TopologyMaterialLayer::Base),
+          "service derived side picker opens through material service");
+    SelectTextureInPicker(state.texturePicker, "new_wall");
     const game::SectorEditorTexturePickerApplyResult result =
             service.ApplyTexturePickerSelection(nullptr);
 
@@ -4170,7 +4168,7 @@ void TestEditorAuthoringFaceDefaultDecalTexturePickerWritesThroughAnchor()
     Check(game::RefreshSectorEditorAuthoringDerivation(state),
           "authoring face default decal picker setup derives valid topology");
 
-    Check(game::OpenAuthoringFaceAnchorTexturePickerById(
+    Check(game::OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
                   state,
                   200,
                   game::TopologySectorTextureField::DefaultWall,
@@ -4178,7 +4176,7 @@ void TestEditorAuthoringFaceDefaultDecalTexturePickerWritesThroughAnchor()
           "authoring face default wall decal picker opens");
     SelectTextureInPicker(state.texturePicker, "default_poster");
     const game::SectorEditorTexturePickerApplyResult result =
-            game::ApplyAuthoringTexturePickerSelection(state);
+            game::ApplySectorEditorMaterialTexturePickerSelection(state);
 
     const game::SectorAuthoringFaceAnchor* anchor =
             game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
@@ -4846,7 +4844,7 @@ void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailab
     Check(game::RefreshSectorEditorAuthoringDerivation(state),
           "direct authoring picker fail-closed setup derives valid topology");
 
-    Check(game::OpenAuthoringSideTexturePickerById(
+    Check(game::OpenSectorEditorMaterialPickerForAuthoringSide(
                   state,
                   game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front},
                   game::TopologyWallPart::Wall,
@@ -4855,7 +4853,7 @@ void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailab
     SelectTextureInPicker(state.texturePicker, "new_wall");
     game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed after direct side picker open");
     const game::SectorEditorTexturePickerApplyResult staleSideResult =
-            game::ApplyAuthoringTexturePickerSelection(state);
+            game::ApplySectorEditorMaterialTexturePickerSelection(state);
     const game::SectorAuthoringLineSide* afterStaleSide =
             game::FindSectorAuthoringLineSide(
                     state.authoringGraph,
@@ -4870,7 +4868,7 @@ void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailab
     Check(game::RefreshSectorEditorAuthoringDerivation(state),
           "direct picker fail-closed setup restores current derivation");
     state.authoringDerivation.mapping.sectors.clear();
-    Check(!game::OpenAuthoringFaceAnchorTexturePickerById(
+    Check(!game::OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
                   state,
                   200,
                   game::TopologySectorTextureField::Floor,
@@ -4882,7 +4880,7 @@ void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailab
     Check(game::RefreshSectorEditorAuthoringDerivation(state),
           "direct picker fail-closed setup restores current derivation again");
     state.authoringDerivation.mapping.sectors.push_back(state.authoringDerivation.mapping.sectors.front());
-    Check(!game::OpenAuthoringFaceAnchorTexturePickerById(
+    Check(!game::OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
                   state,
                   200,
                   game::TopologySectorTextureField::Floor,
@@ -5091,39 +5089,34 @@ void TestEditorAuthoringFlatSurfaceFloorUvWritesThroughFaceAnchor()
     state.selectedSurface3D = surface;
     state.selectedTopologySurface3D = target;
 
-    game::SectorEditorAuthoringFlatMaterialActionResult result;
-    Check(game::ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
-                  state,
-                  surface,
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, uiState, statusText);
+
+    Check(service.ApplySurfaceUvValue(
                   target,
-                  [target](game::SectorTopologyMap& map) {
-                      game::SectorEditorMaterialActionResult action;
-                      game::SectorTopologySector* sector =
-                              game::FindSectorTopologySector(map, target.sectorId);
-                      if (sector != nullptr) {
-                          sector->floorUv.scale.x = 2.5f;
-                          action.changed = true;
-                          action.status = "Updated 3D floor base UV";
-                      }
-                      return action;
-                  },
-                  &result),
-          "3D floor UV face-anchor helper handles graph-authored flat target");
+                  game::TopologyMaterialLayer::Base,
+                  0,
+                  2.5f,
+                  game::SectorSurfaceKind::Floor,
+                  assets),
+          "service 3D floor UV edit handles graph-authored flat target");
 
     const game::SectorAuthoringFaceAnchor* anchor =
             game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
     const game::SectorTopologySector* sector =
             game::FindSectorTopologySector(state.topologyMap, 200);
-    Check(result.changed, "3D floor UV face-anchor helper reports changed edit");
     Check(anchor != nullptr && anchor->floorUv.scale.x == 2.5f,
-          "3D floor UV edit writes to face anchor floor UV");
+          "service 3D floor UV edit writes to face anchor floor UV");
     Check(sector != nullptr && sector->floorUv.scale.x == 2.5f,
-          "3D floor UV edit refreshes derived sector projection");
+          "service 3D floor UV edit refreshes derived sector projection");
     Check(state.topologyDocumentDirty && state.hasUnsavedChanges,
-          "3D floor UV edit marks authoring document dirty");
+          "service 3D floor UV edit marks authoring document dirty");
     Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
                   && !state.authoringDerivedTopologyStale,
-          "3D floor UV edit leaves refreshed authoring derivation current");
+          "service 3D floor UV edit leaves refreshed authoring derivation current");
 }
 
 void TestEditorAuthoringFlatSurfaceCeilingUvWritesThroughFaceAnchor()
@@ -5145,39 +5138,35 @@ void TestEditorAuthoringFlatSurfaceCeilingUvWritesThroughFaceAnchor()
     state.selectedSurface3D = surface;
     state.selectedTopologySurface3D = target;
 
-    game::SectorEditorAuthoringFlatMaterialActionResult result;
-    Check(game::ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
-                  state,
-                  surface,
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, uiState, statusText);
+
+    Check(service.ApplySurfaceUvValue(
                   target,
-                  [target](game::SectorTopologyMap& map) {
-                      game::SectorEditorMaterialActionResult action;
-                      game::SectorTopologySector* sector =
-                              game::FindSectorTopologySector(map, target.sectorId);
-                      if (sector != nullptr) {
-                          sector->ceilingUv.offset.y = 1.25f;
-                          action.changed = true;
-                          action.status = "Updated 3D ceiling base UV";
-                      }
-                      return action;
-                  },
-                  &result),
-          "3D ceiling UV face-anchor helper handles graph-authored flat target");
+                  game::TopologyMaterialLayer::Base,
+                  3,
+                  1.25f,
+                  game::SectorSurfaceKind::Ceiling,
+                  assets),
+          "service 3D ceiling UV edit handles graph-authored flat target");
 
     const game::SectorAuthoringFaceAnchor* anchor =
             game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
     const game::SectorTopologySector* sector =
             game::FindSectorTopologySector(state.topologyMap, 200);
-    Check(result.changed, "3D ceiling UV face-anchor helper reports changed edit");
     Check(anchor != nullptr && anchor->ceilingUv.offset.y == 1.25f,
-          "3D ceiling UV edit writes to face anchor ceiling UV");
+          "service 3D ceiling UV edit writes to face anchor ceiling UV");
     Check(sector != nullptr && sector->ceilingUv.offset.y == 1.25f,
-          "3D ceiling UV edit refreshes derived sector projection");
+          "service 3D ceiling UV edit refreshes derived sector projection");
 }
 
 void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
 {
     game::SectorEditorState state;
+    state.topologyMap.texturesById.emplace("floor_tiles", game::SectorTextureDefinition{"floor_tiles", "floor_tiles.png"});
     state.authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
@@ -5194,34 +5183,34 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
     state.selectedSurface3D = surface;
     state.selectedTopologySurface3D = target;
 
-    game::SectorEditorAuthoringFlatMaterialActionResult result;
-    Check(game::ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
-                  state,
-                  surface,
-                  target,
-                  [target](game::SectorTopologyMap& map) {
-                      game::SectorEditorMaterialActionResult action;
-                      game::SectorTopologySector* sector =
-                              game::FindSectorTopologySector(map, target.sectorId);
-                      if (sector != nullptr) {
-                          sector->floorTextureId = "floor_tiles";
-                          action.changed = true;
-                          action.status = "Selected floor texture.";
-                      }
-                      return action;
-                  },
-                  &result),
-          "3D flat texture face-anchor helper handles graph-authored flat target");
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, uiState, statusText);
+
+    Check(service.OpenMaterialPickerForDerivedSector(
+                  200,
+                  game::TopologySectorTextureField::Floor,
+                  game::TopologyMaterialLayer::Base),
+          "service flat texture picker opens for graph-authored flat target");
+    for (size_t i = 0; i < state.texturePicker.textureIds.size(); ++i) {
+        if (state.texturePicker.textureIds[i] == "floor_tiles") {
+            state.texturePicker.selectedTextureIndex = static_cast<int>(i);
+            break;
+        }
+    }
+    const game::SectorEditorTexturePickerApplyResult result =
+            service.ApplyTexturePickerSelection(nullptr);
 
     const game::SectorAuthoringFaceAnchor* anchor =
             game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
     const game::SectorTopologySector* sector =
             game::FindSectorTopologySector(state.topologyMap, 200);
-    Check(result.changed, "3D flat texture face-anchor helper reports changed edit");
+    Check(result.changed, "service flat texture picker reports changed edit");
     Check(anchor != nullptr && anchor->floorTextureId == "floor_tiles",
-          "3D floor texture edit writes to face anchor floor texture");
+          "service flat texture picker writes to face anchor floor texture");
     Check(sector != nullptr && sector->floorTextureId == "floor_tiles",
-          "3D floor texture edit refreshes derived sector projection");
+          "service flat texture picker refreshes derived sector projection");
 }
 
 void TestEditorAuthoringFlatSurfaceStaleMappingBlocksMaterialEdits()
@@ -5252,32 +5241,27 @@ void TestEditorAuthoringFlatSurfaceStaleMappingBlocksMaterialEdits()
 
     game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed before flat edit");
 
-    game::SectorEditorAuthoringFlatMaterialActionResult result;
-    Check(game::ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
-                  state,
-                  surface,
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, uiState, statusText);
+
+    Check(service.ApplySurfaceUvValue(
                   target,
-                  [target](game::SectorTopologyMap& map) {
-                      game::SectorEditorMaterialActionResult action;
-                      game::SectorTopologySector* sector =
-                              game::FindSectorTopologySector(map, target.sectorId);
-                      if (sector != nullptr) {
-                          sector->floorUv.scale.x = 3.0f;
-                          action.changed = true;
-                          action.status = "Updated 3D floor base UV";
-                      }
-                      return action;
-                  },
-                  &result),
-          "stale 3D flat material edit is handled as unavailable");
+                  game::TopologyMaterialLayer::Base,
+                  0,
+                  3.0f,
+                  game::SectorSurfaceKind::Floor,
+                  assets),
+          "stale service 3D flat material edit fails");
 
     const game::SectorAuthoringFaceAnchor* afterAnchor =
             game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
     const game::SectorTopologySector* afterSector =
             game::FindSectorTopologySector(state.topologyMap, 200);
-    Check(!result.changed, "stale 3D flat material edit reports no mutation");
-    Check(result.status.find("derived topology is not current") != std::string::npos,
-          "stale 3D flat material edit reports stale mapping");
+    Check(statusText.find("derived topology is not current") != std::string::npos,
+          "stale service 3D flat material edit reports stale mapping");
     Check(state.selectedSurface3D.kind == game::SectorSurfaceKind::None
                   && state.selectedTopologySurface3D.kind == game::TopologySurfaceEditTargetKind::None,
           "stale 3D flat material edit clears selected 3D surface");
@@ -5316,7 +5300,7 @@ void TestEditorAuthoringFaceTexturePickerWritesThroughFaceAnchor()
     Check(game::RefreshSectorEditorAuthoringDerivation(state),
           "authoring face picker setup derives valid topology");
 
-    Check(game::OpenAuthoringFaceAnchorTexturePicker(
+    Check(game::OpenSectorEditorMaterialPickerForDerivedSector(
                   state,
                   200,
                   game::TopologySectorTextureField::Floor,
@@ -5329,7 +5313,7 @@ void TestEditorAuthoringFaceTexturePickerWritesThroughFaceAnchor()
 
     SelectTextureInPicker(state.texturePicker, "new_floor");
     const game::SectorEditorTexturePickerApplyResult result =
-            game::ApplyAuthoringTexturePickerSelection(state);
+            game::ApplySectorEditorMaterialTexturePickerSelection(state);
 
     const game::SectorAuthoringFaceAnchor* editedAnchor =
             game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
@@ -5372,7 +5356,7 @@ void TestEditorAuthoringSideTexturePickerWritesThroughAuthoringSide()
         return;
     }
 
-    Check(game::OpenAuthoringSideTexturePicker(
+    Check(game::OpenSectorEditorMaterialPickerForDerivedSideDef(
                   state,
                   sideDef->id,
                   game::TopologyWallPart::Wall,
@@ -5385,7 +5369,7 @@ void TestEditorAuthoringSideTexturePickerWritesThroughAuthoringSide()
 
     SelectTextureInPicker(state.texturePicker, "new_wall");
     const game::SectorEditorTexturePickerApplyResult result =
-            game::ApplyAuthoringTexturePickerSelection(state);
+            game::ApplySectorEditorMaterialTexturePickerSelection(state);
 
     const game::SectorAuthoringLineSide* editedSide =
             game::FindSectorAuthoringLineSide(
@@ -5421,7 +5405,7 @@ void TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen()
     Check(game::RefreshSectorEditorAuthoringDerivation(state),
           "stale face picker setup derives valid topology");
 
-    Check(game::OpenAuthoringFaceAnchorTexturePicker(
+    Check(game::OpenSectorEditorMaterialPickerForDerivedSector(
                   state,
                   200,
                   game::TopologySectorTextureField::Floor,
@@ -5437,7 +5421,7 @@ void TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen()
     game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed after picker open");
 
     const game::SectorEditorTexturePickerApplyResult result =
-            game::ApplyAuthoringTexturePickerSelection(state);
+            game::ApplySectorEditorMaterialTexturePickerSelection(state);
 
     const game::SectorAuthoringFaceAnchor* afterAnchor =
             game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
@@ -5480,7 +5464,7 @@ void TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen()
     }
     const int sideDefId = sideDef->id;
 
-    Check(game::OpenAuthoringSideTexturePicker(
+    Check(game::OpenSectorEditorMaterialPickerForDerivedSideDef(
                   state,
                   sideDefId,
                   game::TopologyWallPart::Wall,
@@ -5496,7 +5480,7 @@ void TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen()
     game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed after picker open");
 
     const game::SectorEditorTexturePickerApplyResult result =
-            game::ApplyAuthoringTexturePickerSelection(state);
+            game::ApplySectorEditorMaterialTexturePickerSelection(state);
 
     const game::SectorAuthoringLineSide* afterSide =
             game::FindSectorAuthoringLineSide(
@@ -5526,7 +5510,7 @@ void TestEditorAuthoringTexturePickerRejectsStaleMapping()
           "stale authoring picker setup derives valid topology");
     game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed before picker open");
 
-    Check(!game::OpenAuthoringFaceAnchorTexturePicker(
+    Check(!game::OpenSectorEditorMaterialPickerForDerivedSector(
                   state,
                   200,
                   game::TopologySectorTextureField::Floor,

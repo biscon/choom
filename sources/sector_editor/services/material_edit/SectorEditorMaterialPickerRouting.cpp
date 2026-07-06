@@ -435,7 +435,7 @@ std::string CurrentSectorEditorMaterialPickerTexture(
     return std::string{};
 }
 
-bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
+bool OpenSectorEditorMaterialPickerForDerivedSector(
         SectorEditorState& state,
         int topologySectorId,
         TopologySectorTextureField field,
@@ -473,7 +473,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
     return true;
 }
 
-bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchorById(
+bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
         SectorEditorState& state,
         int faceAnchorId,
         TopologySectorTextureField field,
@@ -514,7 +514,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchorById(
     return true;
 }
 
-bool OpenSectorEditorMaterialPickerForAuthoringSide(
+bool OpenSectorEditorMaterialPickerForDerivedSideDef(
         SectorEditorState& state,
         int topologySideDefId,
         TopologyWallPart wallPart,
@@ -556,7 +556,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringSide(
     return true;
 }
 
-bool OpenSectorEditorMaterialPickerForAuthoringSideById(
+bool OpenSectorEditorMaterialPickerForAuthoringSide(
         SectorEditorState& state,
         SectorAuthoringSideId sideId,
         TopologyWallPart wallPart,

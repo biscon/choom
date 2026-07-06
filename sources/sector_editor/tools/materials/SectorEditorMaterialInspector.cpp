@@ -1,5 +1,6 @@
 #include "sector_editor/tools/materials/SectorEditorMaterialInspector.h"
 
+#include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_demo/SectorTopologyMap.h"
@@ -267,7 +268,11 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 engine::UITextJustify::Left,
                 missing ? config.invalidColor : config.mutedTextColor);
         if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
-            callbacks.openSideDefTexturePicker(sideDef->id, wallPart, layer);
+            if (!materialEditing.OpenMaterialPickerForDerivedSideDef(sideDef->id, wallPart, layer)) {
+                statusText = HasAuthoringGraphData(state)
+                        ? "No derived sidedef authoring material target"
+                        : "Cannot edit material: authoring data is required.";
+            }
         }
         y += row.height + gap;
     };
@@ -400,7 +405,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     config,
                     input,
                     assets,
-                    "sector_editor_topology_sidedef_copy_material",
+                    "sector_editor_material_sidedef_copy_material",
                     Rectangle{0.0f, y, contentW, 38.0f},
                     font,
                     TextFormat("Copy %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
@@ -413,7 +418,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     config,
                     input,
                     assets,
-                    "sector_editor_topology_sidedef_paste_material",
+                    "sector_editor_material_sidedef_paste_material",
                     Rectangle{0.0f, y, contentW, 38.0f},
                     font,
                     TextFormat("Paste %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {

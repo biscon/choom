@@ -97,19 +97,19 @@ public:
     std::string CurrentTextureForSurface(TopologySurfaceEditTarget target, TopologyMaterialLayer layer) const;
 
     std::string CurrentTextureForPickerTarget() const;
-    bool OpenTexturePickerForAuthoringFaceAnchor(
+    bool OpenMaterialPickerForDerivedSector(
             int topologySectorId,
             TopologySectorTextureField field,
             TopologyMaterialLayer layer);
-    bool OpenTexturePickerForAuthoringFaceAnchorById(
+    bool OpenMaterialPickerForAuthoringFaceAnchor(
             int faceAnchorId,
             TopologySectorTextureField field,
             TopologyMaterialLayer layer);
-    bool OpenTexturePickerForAuthoringSide(
+    bool OpenMaterialPickerForDerivedSideDef(
             int topologySideDefId,
             TopologyWallPart wallPart,
             TopologyMaterialLayer layer);
-    bool OpenTexturePickerForAuthoringSideById(
+    bool OpenMaterialPickerForAuthoringSide(
             SectorAuthoringSideId sideId,
             TopologyWallPart wallPart,
             TopologyMaterialLayer layer);
@@ -121,12 +121,12 @@ private:
             engine::AssetManager* assets,
             TopologyMaterialLayer layer,
             const SectorEditorAuthoringMaterialActionFn& action);
-    bool ApplyAuthoringSideMaterialAction(
+    bool ApplyAuthoringSideMaterialEdit(
             TopologySurfaceEditTarget target,
             engine::AssetManager* assets,
             TopologyMaterialLayer layer,
             const SectorEditorAuthoringMaterialActionFn& action);
-    bool ApplyAuthoringFaceAnchorFlatMaterialAction(
+    bool ApplyAuthoringFaceAnchorMaterialEdit(
             TopologySurfaceEditTarget target,
             engine::AssetManager* assets,
             TopologyMaterialLayer layer,

@@ -231,8 +231,9 @@ Authoring graph is the source of truth. SectorTopologyMap is derived output, not
 
 ## Current Known Transitional Debt
 
-- REF-044: remaining material scratch/writeback routes should become direct
-  authoring material edits.
+- REF-044/REF-072: normal material edits now write authoring data directly;
+  remaining material debt is limited to future tool/module cleanup if new
+  callback or wrapper growth appears.
 - REF-069/direct topology inventory: no-authoring fallback remnants should stay
   removed; any newly found remnants are bugs.
 - REF-060/REF-066: Preview UV/material panel extraction is complete; remaining

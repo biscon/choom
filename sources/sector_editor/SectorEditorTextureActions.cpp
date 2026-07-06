@@ -289,42 +289,6 @@ std::string CurrentTextureForPickerTarget(const SectorEditorState& state)
     return std::string{};
 }
 
-bool OpenAuthoringFaceAnchorTexturePicker(
-        SectorEditorState& state,
-        int topologySectorId,
-        TopologySectorTextureField field,
-        TopologyMaterialLayer layer)
-{
-    return OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(state, topologySectorId, field, layer);
-}
-
-bool OpenAuthoringFaceAnchorTexturePickerById(
-        SectorEditorState& state,
-        int faceAnchorId,
-        TopologySectorTextureField field,
-        TopologyMaterialLayer layer)
-{
-    return OpenSectorEditorMaterialPickerForAuthoringFaceAnchorById(state, faceAnchorId, field, layer);
-}
-
-bool OpenAuthoringSideTexturePicker(
-        SectorEditorState& state,
-        int topologySideDefId,
-        TopologyWallPart wallPart,
-        TopologyMaterialLayer layer)
-{
-    return OpenSectorEditorMaterialPickerForAuthoringSide(state, topologySideDefId, wallPart, layer);
-}
-
-bool OpenAuthoringSideTexturePickerById(
-        SectorEditorState& state,
-        SectorAuthoringSideId sideId,
-        TopologyWallPart wallPart,
-        TopologyMaterialLayer layer)
-{
-    return OpenSectorEditorMaterialPickerForAuthoringSideById(state, sideId, wallPart, layer);
-}
-
 bool OpenMapSkyTexturePicker(SectorEditorState& state)
 {
     TexturePickerState& picker = state.texturePicker;
@@ -411,11 +375,6 @@ SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(SectorEditorSta
 
     CloseSectorEditorTexturePicker(picker);
     return result;
-}
-
-SectorEditorTexturePickerApplyResult ApplyAuthoringTexturePickerSelection(SectorEditorState& state)
-{
-    return ApplySectorEditorMaterialTexturePickerSelection(state);
 }
 
 } // namespace game

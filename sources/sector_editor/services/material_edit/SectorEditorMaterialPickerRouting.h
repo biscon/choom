@@ -22,22 +22,22 @@ std::string CurrentSectorEditorMaterialPickerTexture(
         const SectorEditorState& state,
         const TexturePickerState& picker);
 
-bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
+bool OpenSectorEditorMaterialPickerForDerivedSector(
         SectorEditorState& state,
         int topologySectorId,
         TopologySectorTextureField field,
         TopologyMaterialLayer layer);
-bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchorById(
+bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
         SectorEditorState& state,
         int faceAnchorId,
         TopologySectorTextureField field,
         TopologyMaterialLayer layer);
-bool OpenSectorEditorMaterialPickerForAuthoringSide(
+bool OpenSectorEditorMaterialPickerForDerivedSideDef(
         SectorEditorState& state,
         int topologySideDefId,
         TopologyWallPart wallPart,
         TopologyMaterialLayer layer);
-bool OpenSectorEditorMaterialPickerForAuthoringSideById(
+bool OpenSectorEditorMaterialPickerForAuthoringSide(
         SectorEditorState& state,
         SectorAuthoringSideId sideId,
         TopologyWallPart wallPart,

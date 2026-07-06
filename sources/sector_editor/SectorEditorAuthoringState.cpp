@@ -26,21 +26,6 @@ bool HasAuthoringGraphData(const SectorEditorState& state)
 
 namespace {
 
-bool IsFlatSurfaceEditTarget(TopologySurfaceEditTargetKind kind)
-{
-    return kind == TopologySurfaceEditTargetKind::SectorFloor
-            || kind == TopologySurfaceEditTargetKind::SectorCeiling;
-}
-
-bool SameSectorSurfaceRef(SectorSurfaceRef a, SectorSurfaceRef b)
-{
-    return a.kind == b.kind
-            && a.topologySectorId == b.topologySectorId
-            && a.topologyLineDefId == b.topologyLineDefId
-            && a.topologySideDefId == b.topologySideDefId
-            && a.topologySide == b.topologySide;
-}
-
 void CopyEditorMapLevelFields(SectorTopologyMap& target, const SectorTopologyMap& source)
 {
     target.texturesById = source.texturesById;
@@ -1858,93 +1843,6 @@ bool ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
         *outStatus = status;
     }
     return false;
-}
-
-bool ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
-        SectorEditorState& state,
-        SectorSurfaceRef surface,
-        TopologySurfaceEditTarget target,
-        const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action,
-        SectorEditorAuthoringFlatMaterialActionResult* outResult)
-{
-    SectorEditorAuthoringFlatMaterialActionResult result;
-    const auto finish = [&result, outResult](bool returnValue) {
-        if (outResult != nullptr) {
-            *outResult = result;
-        }
-        return returnValue;
-    };
-
-    if (!HasAuthoringGraphData(state) || !IsFlatSurfaceEditTarget(target.kind)) {
-        return finish(false);
-    }
-
-    result.handled = true;
-    if (!action) {
-        result.status = "Flat material edit unavailable.";
-        return finish(true);
-    }
-
-    SectorEditorAuthoringSurfaceTarget authoringTarget;
-    std::string unavailableStatus;
-    if (!ResolveSectorEditorAuthoringSurfaceTarget(
-                state,
-                surface,
-                authoringTarget,
-                &unavailableStatus)
-            || authoringTarget.kind != SectorEditorAuthoringSurfaceTargetKind::FaceAnchor) {
-        if (state.selectedSurface3D.kind != SectorSurfaceKind::None
-                && SameSectorSurfaceRef(state.selectedSurface3D, surface)) {
-            state.selectedSurface3D = SectorSurfaceRef{};
-            state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
-        }
-        result.status = unavailableStatus.empty()
-                ? "3D flat surface edit unavailable: selected surface has no face anchor mapping"
-                : unavailableStatus;
-        return finish(true);
-    }
-
-    SectorTopologyMap editedTopology = state.topologyMap;
-    result.materialResult = action(editedTopology);
-    result.status = result.materialResult.status;
-    if (!result.materialResult.changed) {
-        return finish(true);
-    }
-
-    const SectorTopologySector* editedSector =
-            FindSectorTopologySector(editedTopology, target.sectorId);
-    if (editedSector == nullptr) {
-        result.status = "3D flat surface edit unavailable: selected sector is no longer valid";
-        result.materialResult.changed = false;
-        return finish(true);
-    }
-
-    const char* status = result.materialResult.status.empty()
-            ? "Updated authoring face anchor material"
-            : result.materialResult.status.c_str();
-    const bool refreshed = MutateSectorEditorAuthoringFaceAnchorForTopologySector(
-            state,
-            target.sectorId,
-            status,
-            [target, editedSector](SectorAuthoringFaceAnchor& anchor) {
-                if (target.kind == TopologySurfaceEditTargetKind::SectorFloor) {
-                    anchor.floorTextureId = editedSector->floorTextureId;
-                    anchor.floorUv = editedSector->floorUv;
-                    anchor.floorDecal = editedSector->floorDecal;
-                } else if (target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-                    anchor.ceilingTextureId = editedSector->ceilingTextureId;
-                    anchor.ceilingUv = editedSector->ceilingUv;
-                    anchor.ceilingDecal = editedSector->ceilingDecal;
-                } else {
-                    return false;
-                }
-                return true;
-            });
-    result.changed = refreshed;
-    if (!refreshed) {
-        result.status = "3D flat surface edit unavailable: selected sector has no face anchor mapping";
-    }
-    return finish(true);
 }
 
 bool MutateSectorEditorAuthoringFaceAnchorForTopologySector(

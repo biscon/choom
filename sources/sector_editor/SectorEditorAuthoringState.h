@@ -1,6 +1,5 @@
 #pragma once
 
-#include "sector_editor/SectorEditorMaterialActions.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
 
@@ -209,20 +208,6 @@ SectorAuthoringSelectionTarget MakeSectorEditorAuthoringSelectionTargetForSurfac
 bool ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
         SectorEditorState& state,
         std::string* outStatus = nullptr);
-
-struct SectorEditorAuthoringFlatMaterialActionResult {
-    bool handled = false;
-    bool changed = false;
-    SectorEditorMaterialActionResult materialResult;
-    std::string status;
-};
-
-bool ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
-        SectorEditorState& state,
-        SectorSurfaceRef surface,
-        TopologySurfaceEditTarget target,
-        const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action,
-        SectorEditorAuthoringFlatMaterialActionResult* outResult = nullptr);
 
 bool MutateSectorEditorAuthoringFaceAnchorForTopologySector(
         SectorEditorState& state,

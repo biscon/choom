@@ -5434,7 +5434,7 @@ void SectorEditor::DrawSectorsPanel(
                                 }
                                 *target = uv;
                                 return true;
-                    };
+                };
                     if (mutateSelectedAuthoringFaceAnchor(status, applyAnchorUv)) {
                         return true;
                     }
@@ -5442,33 +5442,6 @@ void SectorEditor::DrawSectorsPanel(
                         return reportAuthoringFaceAnchorUnavailable();
                     }
                     return reportAuthoringFaceAnchorUnavailable();
-                },
-                [this](int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer) {
-                    OpenMaterialPickerForDerivedSector(sectorId, field, layer);
-                },
-                [&materialEditing](TopologySurfaceEditTarget target) {
-                    return materialEditing.CopyMaterial(target);
-                },
-                [&materialEditing](TopologySurfaceEditTarget target, engine::AssetManager& callbackAssets) {
-                    return materialEditing.PasteMaterial(target, callbackAssets);
-                },
-                [&materialEditing](TopologySurfaceEditTarget target, float opacity) {
-                    return materialEditing.ApplyDecalOpacity(target, opacity, nullptr);
-                },
-                [&materialEditing](TopologySurfaceEditTarget target, bool emissive) {
-                    return materialEditing.ApplyDecalEmissive(target, emissive, nullptr);
-                },
-                [&materialEditing](TopologySurfaceEditTarget target, float bloomIntensity) {
-                    return materialEditing.ApplyDecalBloomIntensity(target, bloomIntensity, nullptr);
-                },
-                [&materialEditing](TopologySurfaceEditTarget target) {
-                    return materialEditing.OpenDecalTintModal(target);
-                },
-                [&materialEditing](TopologySurfaceEditTarget target) {
-                    return materialEditing.FitSelectedDecal(target, nullptr);
-                },
-                [&materialEditing](TopologySurfaceEditTarget target) {
-                    return materialEditing.ClearSurfaceDecal(target, nullptr);
                 }
         };
         if (game::DrawTopologySectorInspector(
@@ -5485,6 +5458,7 @@ void SectorEditor::DrawSectorsPanel(
                     *SelectedTopologySector(),
                     state,
                     uiState,
+                    materialEditing,
                     callbacks)) {
             engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
             engine::EndPanel(ui, config, panel);
@@ -5836,7 +5810,7 @@ void SectorEditor::DrawSectorsPanel(
                                             row.pickerButtonRect,
                                             font,
                                             ">")) {
-                                    if (!materialEditing.OpenTexturePickerForAuthoringSideById(
+                                    if (!materialEditing.OpenMaterialPickerForAuthoringSide(
                                                 sideId,
                                                 part,
                                                 TopologyMaterialLayer::Base)) {
@@ -5894,7 +5868,7 @@ void SectorEditor::DrawSectorsPanel(
                                             row.pickerButtonRect,
                                             font,
                                             ">")) {
-                                    if (!materialEditing.OpenTexturePickerForAuthoringSideById(
+                                    if (!materialEditing.OpenMaterialPickerForAuthoringSide(
                                                 sideId,
                                                 part,
                                                 TopologyMaterialLayer::Decal)) {
@@ -6281,7 +6255,7 @@ void SectorEditor::DrawSectorsPanel(
                     engine::UITextJustify::Left,
                     missing ? config.invalidColor : config.mutedTextColor);
             if (engine::Button(ui, config, input, assets, id, row.pickerButtonRect, font, ">")) {
-                if (!materialEditing.OpenTexturePickerForAuthoringFaceAnchorById(
+                if (!materialEditing.OpenMaterialPickerForAuthoringFaceAnchor(
                             faceAnchorId,
                             field,
                             TopologyMaterialLayer::Base)) {
@@ -6367,7 +6341,7 @@ void SectorEditor::DrawSectorsPanel(
                                 row.pickerButtonRect,
                                 font,
                                 ">")) {
-                        if (!materialEditing.OpenTexturePickerForAuthoringFaceAnchorById(
+                        if (!materialEditing.OpenMaterialPickerForAuthoringFaceAnchor(
                                     faceAnchorId,
                                     field,
                                     TopologyMaterialLayer::Decal)) {
@@ -6576,7 +6550,7 @@ void SectorEditor::DrawSectorsPanel(
                                 row.pickerButtonRect,
                                 font,
                                 ">")) {
-                        if (!materialEditing.OpenTexturePickerForAuthoringFaceAnchorById(
+                        if (!materialEditing.OpenMaterialPickerForAuthoringFaceAnchor(
                                     faceAnchorId,
                                     field,
                                     TopologyMaterialLayer::Decal)) {
@@ -6755,9 +6729,6 @@ bool SectorEditor::DrawTopologySideDefInspector(
             },
             [this](int lineDefId, bool blocksPlayer) {
                 return SetAuthoringLineDefBlocksPlayer(lineDefId, blocksPlayer);
-            },
-            [this](int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer) {
-                OpenMaterialPickerForDerivedSideDef(sideDefId, wallPart, layer);
             }};
     SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
     SectorEditorMaterialInspectorContext context{
@@ -8500,37 +8471,6 @@ void SectorEditor::ApplySelectedBillboardSpritePickerSelection()
     statusText = changed
             ? TextFormat("Selected sprite %s", selected.spriteAnimationPath.c_str())
             : "Billboard sprite unchanged";
-}
-
-void SectorEditor::OpenMaterialPickerForDerivedSector(
-        int sectorId,
-        TopologySectorTextureField field,
-        TopologyMaterialLayer layer)
-{
-    SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
-    const bool opened = materialEditing.OpenTexturePickerForAuthoringFaceAnchor(
-            sectorId,
-            field,
-            layer);
-    if (!opened) {
-        statusText = HasAuthoringGraphData()
-                ? "No derived sector authoring material target"
-                : "Cannot edit material: authoring data is required.";
-    }
-}
-
-void SectorEditor::OpenMaterialPickerForDerivedSideDef(
-        int sideDefId,
-        TopologyWallPart wallPart,
-        TopologyMaterialLayer layer)
-{
-    SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
-    const bool opened = materialEditing.OpenTexturePickerForAuthoringSide(sideDefId, wallPart, layer);
-    if (!opened) {
-        statusText = HasAuthoringGraphData()
-                ? "No derived sidedef authoring material target"
-                : "Cannot edit material: authoring data is required.";
-    }
 }
 
 void SectorEditor::OpenMapSkyTexturePicker()

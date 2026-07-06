@@ -31,7 +31,7 @@ void OpenPreviewSurfaceTexturePicker(
     if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
             || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
         const TopologySectorTextureField field = TopologyEditTargetSectorTextureField(target.kind);
-        opened = materialEditing.OpenTexturePickerForAuthoringFaceAnchor(target.sectorId, field, layer);
+        opened = materialEditing.OpenMaterialPickerForDerivedSector(target.sectorId, field, layer);
         if (opened && state.texturePicker.open && HasAuthoringGraphData(state)) {
             state.texturePicker.authoringSurface3DFlatTarget = true;
         }
@@ -42,7 +42,7 @@ void OpenPreviewSurfaceTexturePicker(
         }
     } else {
         const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
-        opened = materialEditing.OpenTexturePickerForAuthoringSide(target.sideDefId, wallPart, layer);
+        opened = materialEditing.OpenMaterialPickerForDerivedSideDef(target.sideDefId, wallPart, layer);
         if (!opened) {
             context.statusText = HasAuthoringGraphData(state)
                     ? "No derived sidedef authoring material target"

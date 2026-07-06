@@ -80,6 +80,7 @@ Task Type:
 | REF-069 | `[x]` | Medium | Editor architecture | Remove invalid no-authoring topology-edit support | Codex task | Medium/High | Completed; normal editor edits require authoring data or fail |
 | REF-070 | `[x]` | High | Editor architecture | Write Sector Editor Architectural Principles document | Codex task | Low | Completed; architecture contract added under `docs/architecture/` |
 | REF-071 | `[x]` | High | Editor architecture | Remove remaining material topology scratch/writeback routes | Codex task | Medium/High | Completed; material service and picker routes now write authoring material data directly |
+| REF-072 | `[x]` | Medium | Editor architecture | Clean up material service debt after authoring-owned material migration | Codex task | Medium | Completed; stale scratch/writeback helper, wrappers, callback remnants, and misleading names removed |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
@@ -1068,8 +1069,8 @@ Task Type:
   - No no-authoring topology edit behavior remains for this scoped UV path.
   - Inventory updated.
   - No behavior changes intended except the ownership correction.
-  - REF-044 remains open because broader material scratch/writeback routes
-    still exist.
+  - REF-044 remains open as the broader material/tool migration umbrella; the
+    broader material scratch/writeback routes were removed later by REF-071.
   - REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
     remain open.
 
@@ -1097,8 +1098,8 @@ Task Type:
     `OpenMaterialPickerForDerivedSector()` and
     `OpenMaterialPickerForDerivedSideDef()`.
   - Inventory updated with remaining topology-owned runtime/cache/bake state,
-    import/migration-only conversion, lights/runtime objects, and REF-044
-    material scratch/writeback routes.
+    import/migration-only conversion, lights/runtime objects, and then-open
+    REF-044 material cleanup work.
   - No missing authoring fields were found for the scoped sector/material/line
     properties.
   - Do not fold this into REF-044 material scratch/writeback cleanup.
@@ -1166,6 +1167,39 @@ Task Type:
   - No behavior changes intended except the material ownership correction.
   - REF-044 remains open only as the broader material/tool migration umbrella.
   - REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
+    remain open.
+
+#### REF-072 `[x]` Clean up material service debt after authoring-owned material migration
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md` and
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`.
+- Why it helps: removes stale names, wrappers, dead helpers, and callback
+  remnants that still implied topology material scratch/writeback.
+- Likely files: `services/material_edit/`, material/sector inspector modules,
+  `SectorEditorAuthoringState.*`, authoring graph tests, and architecture/audit
+  docs.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: full build, full `ctest`, requested material/topology
+  greps, `git diff --check`, and material inspector/Preview3D manual smoke if
+  practical.
+- Completion notes:
+  - Removed the obsolete flat material scratch/writeback helper from authoring
+    state.
+  - Renamed material service internals to `ApplyAuthoringSideMaterialEdit()` and
+    `ApplyAuthoringFaceAnchorMaterialEdit()`.
+  - Removed material-specific picker wrapper exports from texture actions; tests
+    and callers use `services/material_edit` routing/service APIs directly.
+  - Removed material operation callback remnants from the sector inspector and
+    the sidedef material inspector where `MaterialEditingService` is available.
+  - Removed unused `SectorEditor` material picker wrapper methods.
+  - Replaced obsolete scratch/writeback implementation tests with equivalent
+    authoring-owned material service/picker tests for floor UV, ceiling UV,
+    flat texture picker apply, and stale mapping failure.
+  - No remaining material source-of-truth debt is currently listed.
+  - REF-044 remains open only as the broader material/tool migration umbrella;
+    REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
     remain open.
 
 #### REF-061 `[>]` Evaluate Status/Diagnostics service
@@ -1502,10 +1536,9 @@ Task Type:
     `docs/audit/sector_editor_materials_boundary_audit.md`.
   - REF-055 extracted the SideDef/material/decal inspector into
     `tools/materials/`; follow-up material picker routing, preview UV panel, and
-    wrapper cleanup tasks remain open under this umbrella.
-  - REF-056 recommends minimal TexturePickerService first, then a
-    MaterialEditBridge/material-specific picker routing audit before moving more
-    material clients.
+    wrapper cleanup tasks were completed by later service/panel cleanup tasks.
+  - REF-044 remains open only as a broad umbrella for future material/tool
+    module cleanup if new concrete debt appears.
 
 #### REF-045 `[ ]` Audit lights/source-hash-sensitive tool migration
 
