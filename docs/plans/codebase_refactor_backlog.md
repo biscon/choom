@@ -71,6 +71,7 @@ Task Type:
 | REF-081 | `[x]` | High | Editor architecture | Clean up TextureCatalogService integration debt | Codex task | Medium | Completed; obsolete wrappers removed while add-map lifecycle stayed central |
 | REF-082 | `[x]` | High | Editor architecture | Pass TextureCatalogService to remaining texture UI clients | Codex task | Medium | Completed; remaining UI missing-texture checks use catalog service |
 | REF-083 | `[x]` | High | Editor architecture | SectorEditor state ownership and remaining code map | Audit first | Low | Completed; report recommends TextureCatalogState split next |
+| REF-084 | `[x]` | High | Editor architecture | Write service-owned editor state migration runner plan | Runner plan | Low | Planning complete; implementation phases remain Not Started in the runner plan |
 | REF-059 | `[x]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Completed; recommends material-specific picker routing extraction before MaterialEditBridge |
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
 | REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
@@ -1028,6 +1029,51 @@ Task Type:
     out of the catalog service.
   - No source code, tests, CMake, editor behavior, topology mutation behavior,
     lightmap behavior, or source-hash behavior was intentionally changed.
+
+#### REF-084 `[x]` Write service-owned editor state migration runner plan
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md`,
+  `docs/audit/sector_editor_state_ownership_and_remaining_map.md`, and
+  current post-REF-083 sector editor service/state boundaries.
+- Why it helps: creates a runner-compatible phased plan for moving
+  service-specific state out of `SectorEditorState` / `SectorEditorUiState`
+  without implementing the migration in one broad refactor.
+- Likely files: documentation only for this planning task; future
+  implementation phases are scoped in the runner plan.
+- Suggested task type: Runner plan.
+- Risk: Low for planning; implementation phases range from low/medium
+  `TextureCatalogState` work to higher-risk selection/manipulation and future
+  preview/document planning.
+- Suggested verification: `git diff --check`, `git diff --stat`,
+  `git status --short`; build optional because this is documentation-only.
+- Notes:
+  - Planning output:
+    `docs/plans/ref084_service_state_ownership_runner_plan.md`.
+  - The generated plan keeps implementation phases separate and initially
+    `Not Started`: `TextureCatalogState`, `MaterialEditingState`,
+    `LightEditingState`, `SelectionState`, `ManipulationState`, optional
+    `InspectorUiState` feature input groups, and preview/document planning
+    notes.
+  - Plan amendment: tightened Phase 1 texture scope ownership so
+    `editorTextureHandlesById` moves first and `editorTextureScope` only moves
+    if lifetime/order is clearly catalog-owned; split Phase 2 into
+    `MaterialEditingState` and `MaterialEditingUiState` child passes; deferred
+    preview-surface selection by default from Phase 4.
+  - Future implementation phase 1 should start with `TextureCatalogState`,
+    keeping `SectorTopologyMap::texturesById` as map-level registry and keeping
+    add-map modal/apply semantics outside `TextureCatalogService`.
+  - Future implementation phases must compile and pass tests independently
+    before moving to the next phase.
+  - Separate future runner plans are still needed for broad `PreviewState` and
+    `DocumentState` ownership work.
+- Completion notes:
+  - Runner-compatible plan written at
+    `docs/plans/ref084_service_state_ownership_runner_plan.md`.
+  - Planning is complete, but no implementation phase is complete.
+  - No source code, tests, CMake, editor behavior, topology mutation behavior,
+    rendering/collision behavior, lightmap behavior, or source-hash behavior
+    was intentionally changed.
 
 #### REF-059 `[x]` Audit MaterialEditBridge and material-specific picker routing
 
