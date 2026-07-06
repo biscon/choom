@@ -15,6 +15,7 @@
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 
 #include <raylib.h>
@@ -363,18 +364,12 @@ private:
             const char* status,
             const std::function<bool(SectorPlacedRuntimeObject&)>& mutate);
     void RefreshRuntimeObjectsAfterAuthoringEdit();
-    bool BakeLightmaps();
     bool StartLightmapBake();
     void PollLightmapBakeResult(engine::AssetManager& assets);
-    void RequestLightmapBakeCancel();
-    void JoinLightmapBakeWorker();
-    void ShutdownLightmapBake();
-    bool IsLightmapBakeBlocking() const;
-    bool ConsumeLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
     bool InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
     SectorEditorState state;
     SectorEditorUiState uiState;
-    LightmapBakeAsyncState lightmapBake;
+    SectorEditorLightmapBakeController lightmapBake;
     Rectangle canvasRect = {};
     std::string statusText;
     SectorMeshRenderer preview;

@@ -35,79 +35,79 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_01",
       "title": "Inventory And Controller Skeleton",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_01a",
       "title": "Add Passive Controller Skeleton",
       "type": "pass",
       "parent": "phase_01",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02",
       "title": "Move Lifecycle State And Shutdown Helpers",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02a",
       "title": "Delegate Worker Lifecycle Cancel Join And Shutdown",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03",
       "title": "Move Start Request Construction",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03a",
       "title": "Move Start Worker Mechanics Behind Controller Request",
       "type": "pass",
       "parent": "phase_03",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04",
       "title": "Move Result Polling And Terminal State",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04a",
       "title": "Move Poll Consume And Stale Classification Boundary",
       "type": "pass",
       "parent": "phase_04",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05",
       "title": "Clarify Result Install Boundary",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_05a",
       "title": "Extract Install Payload Or Direct Install Boundary",
       "type": "pass",
       "parent": "phase_05",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_06",
       "title": "Cleanup Wrappers Docs And Backlog",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_06a",
       "title": "Remove Obsolete Wrappers And Close Implementation Plan",
       "type": "pass",
       "parent": "phase_06",
-      "status": "Not Started"
+      "status": "Completed"
     }
   ]
 }
@@ -117,18 +117,18 @@ When an agent is asked to execute this plan, it must:
 
 | Phase / Pass | Status | Date | Notes |
 | --- | --- | --- | --- |
-| Phase 1: Inventory And Controller Skeleton | Not Started |  | Parent phase. |
-| Phase 1A: Add Passive Controller Skeleton | Not Started |  | First executable pass; add controller files/skeleton with no behavior moved. |
-| Phase 2: Move Lifecycle State And Shutdown Helpers | Not Started |  | Parent phase. |
-| Phase 2A: Delegate Worker Lifecycle Cancel Join And Shutdown | Not Started |  | Move lifecycle state/helpers behind controller while preserving behavior. |
-| Phase 3: Move Start Request Construction | Not Started |  | Parent phase. |
-| Phase 3A: Move Start Worker Mechanics Behind Controller Request | Not Started |  | Move start/thread execution mechanics while preserving copied inputs and source-hash capture. |
-| Phase 4: Move Result Polling And Terminal State | Not Started |  | Parent phase. |
-| Phase 4A: Move Poll Consume And Stale Classification Boundary | Not Started |  | Move result polling/terminal lifecycle while keeping install editor-owned. |
-| Phase 5: Clarify Result Install Boundary | Not Started |  | Parent phase; highest-risk phase. |
-| Phase 5A: Extract Install Payload Or Direct Install Boundary | Not Started |  | Preserve preferred payload/result boundary unless direct install is demonstrably cleaner without behavior changes. |
-| Phase 6: Cleanup Wrappers Docs And Backlog | Not Started |  | Parent phase. |
-| Phase 6A: Remove Obsolete Wrappers And Close Implementation Plan | Not Started |  | Remove temporary wrappers/debt, update docs/backlog, and run final verification. |
+| Phase 1: Inventory And Controller Skeleton | Completed | 2026-07-06 | Parent phase completed; no additional Phase 1 child passes were added. |
+| Phase 1A: Add Passive Controller Skeleton | Completed | 2026-07-06 | Added passive controller skeleton files with inert query/no-op methods. No bake lifecycle behavior moved. Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`. |
+| Phase 2: Move Lifecycle State And Shutdown Helpers | Completed | 2026-07-06 | Parent phase completed; no additional Phase 2 child passes were added. |
+| Phase 2A: Delegate Worker Lifecycle Cancel Join And Shutdown | Completed | 2026-07-06 | Moved lifecycle state, blocking queries, cancel/join/shutdown cleanup, pending-result polling, and modal acknowledgement state behind the controller. Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`. |
+| Phase 3: Move Start Request Construction | Completed | 2026-07-06 | Parent phase completed; no additional Phase 3 child passes were added. |
+| Phase 3A: Move Start Worker Mechanics Behind Controller Request | Completed | 2026-07-06 | Moved request-owned worker start and bake execution into the controller while preserving editor-side preflight, copied inputs, and source-hash capture. Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`. |
+| Phase 4: Move Result Polling And Terminal State | Completed | 2026-07-06 | Parent phase completed; no additional Phase 4 child passes were added. |
+| Phase 4A: Move Poll Consume And Stale Classification Boundary | Completed | 2026-07-06 | Moved consume-once polling, join-after-result, completed-time capture, cancel/failure terminal state, cancel/failure temp cleanup, and stale-result classification boundary into the controller while keeping install editor-owned. Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`. |
+| Phase 5: Clarify Result Install Boundary | Completed | 2026-07-06 | Parent phase completed; no additional Phase 5 child passes were added. |
+| Phase 5A: Extract Install Payload Or Direct Install Boundary | Completed | 2026-07-06 | Preserved the preferred payload/result boundary: controller installs files and returns metadata payload; editor applies document/preview/status side effects. Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`. |
+| Phase 6: Cleanup Wrappers Docs And Backlog | Completed | 2026-07-06 | Parent phase completed; no additional Phase 6 child passes were added. |
+| Phase 6A: Remove Obsolete Wrappers And Close Implementation Plan | Completed | 2026-07-06 | Removed obsolete `SectorEditor` lightmap lifecycle wrappers, marked REF-062 complete in the backlog, and ran final verification. Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`. Manual smoke: not run. |
 
 ## Execution Tracking Rules
 
@@ -350,6 +350,16 @@ How to update this plan after completion:
 - Mark `phase_01` `Completed` only if no additional Phase 1 child passes were added.
 - Add the completion date, verification results, and a short behavior note.
 
+Execution note 2026-07-06:
+
+- Added `SectorEditorLightmapBakeController.h/.cpp` under `sources/sector_editor/services/lightmap_bake/`.
+- The skeleton has no dependency on `SectorEditor.h` and only exposes inert progress/query/no-op methods for later integration.
+- Source code changed: yes, limited to the passive controller files and this plan update.
+- Behavior unchanged: all bake lifecycle, worker start/cancel/join/shutdown, temp cleanup, result install, source-hash handling, and object probe sidecar behavior remain in `SectorEditor.cpp`.
+- Worker live-state safety unchanged: no worker behavior moved or added, and the new controller does not reference live editor state.
+- Wrappers introduced: none.
+- Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`.
+
 ## Phase 2
 
 Executable pass: `phase_02a` / Delegate Worker Lifecycle Cancel Join And Shutdown.
@@ -404,6 +414,19 @@ How to update this plan after completion:
 - Mark `phase_02` `Completed` only if no additional Phase 2 child passes were added.
 - Add the completion date, verification results, and wrapper/debt notes.
 
+Execution note 2026-07-06:
+
+- Moved `LightmapBakeAsyncState` ownership into `SectorEditorLightmapBakeController`; `SectorEditor` now composes the controller instead of directly storing the async state.
+- Moved lifecycle behavior into the controller: start-state initialization and temp pre-clean for the selected temporary output, second-start blocking query, cancel request state, worker join, pending-result consume-once polling, completed-time capture, shutdown temp cleanup for current and pending outputs, modal terminal/acknowledgement state, and read-only modal view construction.
+- Updated `SectorEditorLightmapModal.*` to consume `SectorEditorLightmapBakeModalView` and explicit cancel/close intents; it no longer mutates bake lifecycle state directly.
+- Source code changed: yes, limited to the selected phase files and this plan update.
+- Behavior intentionally stayed in `SectorEditor`: current-level and authoring-derived-topology preflight, source-hash capture, bake request construction, legacy worker lambda construction/execution, result classification side effects that touch editor status/logging, result install, document dirtying, and preview rebuild.
+- Wrappers/debt remaining: `SectorEditor::RequestLightmapBakeCancel()`, `JoinLightmapBakeWorker()`, `ShutdownLightmapBake()`, and `IsLightmapBakeBlocking()` remain as call-site wrappers; `StartLightmapBake()` still uses temporary `*ForLegacyWorker()` controller accessors to assemble the worker lambda. This is temporary debt for `phase_03a`, where start worker mechanics move behind a controller request.
+- Source-hash behavior unchanged: `ComputeSectorLightmapSourceHash(state.topologyMap)` is still called in `SectorEditor::StartLightmapBake()` before worker start and install stale-result rejection is unchanged.
+- Object probe sidecar behavior unchanged: temp pre-clean, shutdown/pending cleanup, failure/cancel cleanup, install validation/copy/delete, and installed metadata handling preserve the existing paths and ownership.
+- Worker live-state safety unchanged: the worker still captures only copied bake input plus controller-owned progress/result primitives; it does not capture `this` or live editor state.
+- Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`.
+
 ## Phase 3
 
 Executable pass: `phase_03a` / Move Start Worker Mechanics Behind Controller Request.
@@ -456,6 +479,19 @@ How to update this plan after completion:
 - Mark `phase_03` `Completed` only if no additional Phase 3 child passes were added.
 - Add the completion date, verification results, and behavior notes.
 
+Execution note 2026-07-06:
+
+- Added `SectorEditorLightmapBakeRequest` with a copied topology snapshot, expected source hash, final output path, temporary output path, and source revision field.
+- Moved start worker mechanics into `SectorEditorLightmapBakeController::StartBake()`: temp lightmap/object-probe pre-clean, progress/modal/timing initialization, pending-result reset, worker thread creation, progress/cancel callback wiring, `BakeSectorLightmap()` execution, report formatting, async result publication, and terminal worker progress flags.
+- Source code changed: yes, limited to the selected phase files and this plan update.
+- Behavior intentionally stayed in `SectorEditor`: current-level path preflight, authoring-derived-topology gate, empty-sector check, `BuildLevelPaths()`, source-hash computation timing, result consumption, result install, document dirtying, and preview rebuild.
+- Wrappers/debt remaining: `SectorEditor::RequestLightmapBakeCancel()`, `JoinLightmapBakeWorker()`, `ShutdownLightmapBake()`, and `IsLightmapBakeBlocking()` remain as call-site wrappers until later cleanup. The Phase 2 temporary `*ForLegacyWorker()` controller accessors were removed.
+- Source-hash behavior unchanged: `ComputeSectorLightmapSourceHash(state.topologyMap)` is still called in `SectorEditor::StartLightmapBake()` after path/preflight checks and before `StartBake()` creates the worker; install stale-result rejection is unchanged.
+- Object probe sidecar behavior unchanged: the same temporary sidecar path is deleted before start, worker bake still writes through the existing backend, and result cleanup/install behavior remains editor-owned.
+- Worker live-state safety preserved: the worker captures only the moved request data plus controller-owned progress/result primitives; it does not capture `SectorEditor`, `SectorEditorState`, live topology references, renderer, UI, asset manager, or document state.
+- Cache invalidation behavior unchanged: this pass did not touch topology mutation paths or 2D topology render-cache invalidation.
+- Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`.
+
 ## Phase 4
 
 Executable pass: `phase_04a` / Move Poll Consume And Stale Classification Boundary.
@@ -506,6 +542,20 @@ How to update this plan after completion:
 - Mark `phase_04a` `Completed` in the JSON block and Current Progress table.
 - Mark `phase_04` `Completed` only if no additional Phase 4 child passes were added.
 - Add the completion date, verification results, and behavior notes.
+
+Execution note 2026-07-06:
+
+- Added `SectorEditorLightmapBakePollStatus` / `SectorEditorLightmapBakePollResult` and replaced raw pending-result polling with `SectorEditorLightmapBakeController::Poll()`.
+- Moved result polling/terminal behavior into the controller: consume-once pending-result extraction, join-after-result, completed-time recording, successful-result transition to `InstallingResult`, cancelled terminal state, failed terminal state, failed-result warning logging, and cancelled/failed temporary output cleanup.
+- Added `SectorEditorLightmapBakeController::IsCompletedResultStale()` as the stale classification boundary; `SectorEditor` still computes the current source hash from live topology on the main thread before install.
+- Source code changed: yes, limited to the selected phase files and this plan update.
+- Behavior intentionally stayed in `SectorEditor`: successful result file install, missing-temp validation, sidecar copy ordering, installed baked metadata writes, document dirty flags, bake report logging after install, status text assignment, and preview mesh rebuild.
+- Wrappers/debt remaining: `SectorEditor::RequestLightmapBakeCancel()`, `JoinLightmapBakeWorker()`, `ShutdownLightmapBake()`, and `IsLightmapBakeBlocking()` remain as call-site wrappers until the cleanup phase. `SectorEditor::ConsumeLightmapBakeResult()` was removed.
+- Source-hash behavior unchanged: start still captures `ComputeSectorLightmapSourceHash(state.topologyMap)` before worker start, and install still rejects stale results by comparing the current main-thread topology hash against `result.expectedSourceHash`.
+- Object probe sidecar behavior unchanged: cancelled/failed result cleanup still deletes the result temp lightmap and result probe path; successful install, sidecar validation/copy/delete ordering, and installed probe metadata remain editor-owned and unchanged.
+- Worker live-state safety preserved: the worker still captures only copied request data and controller-owned progress/result primitives; it does not reference live editor state.
+- Cache invalidation behavior unchanged: this pass did not touch topology mutation paths or 2D topology render-cache invalidation.
+- Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`.
 
 ## Phase 5
 
@@ -573,6 +623,21 @@ How to update this plan after completion:
 - Mark `phase_05` `Completed` only if no additional Phase 5 child passes were added.
 - Add the completion date, verification results, install-boundary decision, and behavior notes.
 
+Execution note 2026-07-06:
+
+- Added `SectorEditorLightmapBakeInstallPayload` and `SectorEditorLightmapBakeController::InstallCompletedResultFiles()`.
+- Preserved the preferred payload/result boundary: the controller now owns successful-result file install behavior for stale-result rejection, missing temporary output validation, output-directory creation, object-probe sidecar copy before lightmap copy, temp cleanup, final sidecar cleanup on lightmap-copy failure, and metadata-ready object probe path/source-hash preparation.
+- Source code changed: yes, limited to the selected phase files, the focused lightmap test target, and this plan update.
+- Behavior intentionally stayed in `SectorEditor`: current main-thread source-hash computation, applying `state.topologyMap.bakedLightmap`, `state.hasUnsavedChanges`, `state.topologyDocumentDirty`, bake report logging, status text assignment, and conditional preview mesh rebuild.
+- Wrappers/debt remaining: `SectorEditor::RequestLightmapBakeCancel()`, `JoinLightmapBakeWorker()`, `ShutdownLightmapBake()`, and `IsLightmapBakeBlocking()` remain as call-site wrappers until the cleanup phase. `SectorEditor::InstallLightmapBakeResult()` remains as the editor-owned document/preview/status integration wrapper around the controller install payload.
+- Added focused non-GUI coverage to `sector_topology_lightmap_tests` for stale rejection cleanup, missing temp lightmap cleanup, missing temp object-probe sidecar cleanup, sidecar copy failure cleanup, lightmap copy failure cleanup, and successful metadata payload. Generated test files are confined to `/tmp/ref077_lightmap_bake_controller_phase_05a`.
+- Source-hash behavior unchanged: start still captures the hash before worker start, install still compares current main-thread topology hash against `result.expectedSourceHash`, and installed metadata remains tied to the bake result source hash.
+- Object probe sidecar behavior unchanged: install still requires the temporary sidecar, copies it before the lightmap, deletes final sidecar if lightmap copy fails, deletes temp sidecar on success/failure, and installs object probe metadata with the final asset-relative sidecar path and bake source hash.
+- Worker live-state safety preserved: no worker behavior changed; the worker still captures only copied request data and controller-owned progress/result primitives, with no live editor state references.
+- Cache invalidation behavior unchanged: this pass did not touch topology mutation paths or 2D topology render-cache invalidation.
+- Lightmap source-hash behavior unchanged: no source-hash policy or source-hash-sensitive data changed.
+- Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`.
+
 ## Phase 6
 
 Executable pass: `phase_06a` / Remove Obsolete Wrappers And Close Implementation Plan.
@@ -629,6 +694,23 @@ How to update this plan after completion:
 - If all phases are complete, update REF-062 in `docs/plans/codebase_refactor_backlog.md` according to the completed implementation state.
 - Add final verification results and manual-smoke status.
 
+Execution note 2026-07-06:
+
+- Removed obsolete `SectorEditor` wrappers: `BakeLightmaps()`, `RequestLightmapBakeCancel()`, `JoinLightmapBakeWorker()`, `ShutdownLightmapBake()`, and `IsLightmapBakeBlocking()`.
+- Existing call sites now call `StartLightmapBake()` or the composed `SectorEditorLightmapBakeController` directly.
+- Source code changed: yes, limited to wrapper cleanup in `SectorEditor.cpp` / `SectorEditor.h`, this plan update, and the REF-062 backlog update.
+- Cleanup behavior moved into the controller in earlier phases remains controller-owned; this pass did not move additional bake behavior beyond removing wrapper indirection.
+- Behavior intentionally stayed in `SectorEditor`: current-level and authoring-derived-topology preflight, source-hash computation against live topology on the main thread, applying baked metadata to `state.topologyMap`, document dirty flags, status text, bake report logging, and conditional preview rebuild.
+- Wrappers remaining: `StartLightmapBake()`, `PollLightmapBakeResult()`, and `InstallLightmapBakeResult()` remain as editor-owned orchestration/integration boundaries, not temporary compatibility debt.
+- Temporary wrapper debt remaining: none known for REF-077.
+- Backlog updated: REF-062 is marked complete; REF-077 remains marked complete.
+- Source-hash behavior unchanged: no source-hash policy or source-hash-sensitive data changed.
+- Object probe sidecar behavior unchanged: sidecar validation/copy/cleanup and installed metadata behavior remain as implemented in the controller/install payload boundary.
+- Worker live-state safety preserved: no worker behavior changed; the worker still captures only copied request data and controller-owned progress/result primitives, with no live editor state references.
+- Cache invalidation behavior unchanged: this pass did not touch topology mutation paths or 2D topology render-cache invalidation.
+- Manual smoke: not run.
+- Verification passed: `cmake --build cmake-build-debug -j2`; `ctest --test-dir cmake-build-debug --output-on-failure`; `git diff --check`; `git diff --stat`; `git status --short`.
+
 ## Tests
 
 Add focused non-GUI tests where practical. Prefer generated maps/temp paths and avoid user-edited levels under `assets/levels` or `assets/sector_demo`.
@@ -666,8 +748,8 @@ After implementation, run the editor manually and verify:
 
 ## Backlog Updates
 
-- REF-077 records this runner plan as planning complete only.
-- REF-062 remains open as the implementation umbrella for the later extraction.
+- REF-077 records this runner plan and completed implementation tracking.
+- REF-062 is complete as of `phase_06a`; manual bake smoke remains recommended when practical.
 - REF-025 object probe sidecar IO remains open; do not fold it into the bake controller extraction unless a later task explicitly scopes it.
 - REF-028 source-hash checkpoint remains open and should be referenced by implementation/test work.
 

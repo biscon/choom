@@ -1,3 +1,4 @@
+#include "sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTopologyGeometry.h"
@@ -42,6 +43,18 @@ std::filesystem::path Phase01bSandboxDir()
 std::filesystem::path ObjectProbePhase01aSandboxDir()
 {
     return std::filesystem::temp_directory_path() / "sector_baked_object_light_probes_phase_01a";
+}
+
+std::filesystem::path Ref077Phase05aSandboxDir()
+{
+    return std::filesystem::temp_directory_path() / "ref077_lightmap_bake_controller_phase_05a";
+}
+
+void WriteTextFile(const std::filesystem::path& path, const char* text)
+{
+    std::filesystem::create_directories(path.parent_path());
+    std::ofstream file(path, std::ios::binary);
+    file << text;
 }
 
 void PatchByte(const std::filesystem::path& path, std::streamoff offset, unsigned char value)
@@ -195,6 +208,171 @@ void TestSectorAssetPathHelpers()
           "asset-root filesystem path converts to project-relative asset path");
     Check(game::MakeSectorAssetRelativePath("/tmp/outside.lightmap.png") == "/tmp/outside.lightmap.png",
           "filesystem path outside asset root stays unchanged");
+}
+
+game::SectorLightmapBakeAsyncResult MakeInstallTestResult(const std::filesystem::path& sandbox)
+{
+    game::SectorLightmapBakeAsyncResult result;
+    result.succeeded = true;
+    result.expectedSourceHash = "hash-a";
+    result.temporaryOutputPath = (sandbox / "temp.lightmap.tmp.png").generic_string();
+    result.finalOutputPath = (sandbox / "installed" / "map.lightmap.png").generic_string();
+    result.bakeResult.width = 64;
+    result.bakeResult.height = 32;
+    result.bakeResult.sourceHash = "hash-a";
+    result.bakeResult.objectProbes.path =
+            game::MakeSectorObjectProbeSidecarPathForLightmapPath(result.temporaryOutputPath);
+    result.bakeResult.objectProbes.sourceHash = "stale-probe-hash";
+    result.bakeResult.objectProbes.count = 7;
+    result.bakeResult.objectProbes.format = "test-format";
+    result.bakeResult.totalBakeSeconds = 1.25;
+    return result;
+}
+
+void WriteInstallTestTemps(const game::SectorLightmapBakeAsyncResult& result)
+{
+    WriteTextFile(result.temporaryOutputPath, "lightmap");
+    WriteTextFile(result.bakeResult.objectProbes.path, "probes");
+}
+
+void TestLightmapBakeInstallBoundaryRejectsStaleAndCleansTemps()
+{
+    const std::filesystem::path sandbox = Ref077Phase05aSandboxDir() / "stale";
+    std::filesystem::remove_all(sandbox);
+    game::SectorLightmapBakeAsyncResult result = MakeInstallTestResult(sandbox);
+    WriteInstallTestTemps(result);
+
+    game::SectorEditorLightmapBakeController controller;
+    game::SectorEditorLightmapBakeInstallPayload payload;
+    const bool installed = controller.InstallCompletedResultFiles(result, "hash-b", payload);
+
+    Check(!installed, "stale lightmap install result is rejected");
+    Check(payload.status == "Bake discarded: document changed during bake",
+          "stale lightmap install reports unchanged status text");
+    Check(!std::filesystem::exists(result.temporaryOutputPath), "stale install deletes temp lightmap");
+    Check(!std::filesystem::exists(result.bakeResult.objectProbes.path), "stale install deletes temp probe sidecar");
+    Check(!std::filesystem::exists(result.finalOutputPath), "stale install does not copy final lightmap");
+    std::filesystem::remove_all(sandbox);
+}
+
+void TestLightmapBakeInstallBoundaryMissingTempsCleanUp()
+{
+    const std::filesystem::path sandbox = Ref077Phase05aSandboxDir() / "missing";
+    std::filesystem::remove_all(sandbox);
+
+    {
+        game::SectorLightmapBakeAsyncResult result = MakeInstallTestResult(sandbox / "lightmap");
+        WriteTextFile(result.bakeResult.objectProbes.path, "probes");
+
+        game::SectorEditorLightmapBakeController controller;
+        game::SectorEditorLightmapBakeInstallPayload payload;
+        const bool installed = controller.InstallCompletedResultFiles(result, "hash-a", payload);
+
+        Check(!installed, "missing temp lightmap install result is rejected");
+        Check(payload.status == "Bake failed: temporary lightmap output missing",
+              "missing temp lightmap reports unchanged status text");
+        Check(!std::filesystem::exists(result.bakeResult.objectProbes.path),
+              "missing temp lightmap deletes temp probe sidecar");
+    }
+
+    {
+        game::SectorLightmapBakeAsyncResult result = MakeInstallTestResult(sandbox / "sidecar");
+        WriteTextFile(result.temporaryOutputPath, "lightmap");
+
+        game::SectorEditorLightmapBakeController controller;
+        game::SectorEditorLightmapBakeInstallPayload payload;
+        const bool installed = controller.InstallCompletedResultFiles(result, "hash-a", payload);
+
+        Check(!installed, "missing temp object probe sidecar install result is rejected");
+        Check(payload.status == "Bake failed: temporary object probe output missing",
+              "missing temp object probe sidecar reports unchanged status text");
+        Check(!std::filesystem::exists(result.temporaryOutputPath),
+              "missing temp object probe sidecar deletes temp lightmap");
+    }
+
+    std::filesystem::remove_all(sandbox);
+}
+
+void TestLightmapBakeInstallBoundaryCopyFailureCleanup()
+{
+    const std::filesystem::path sandbox = Ref077Phase05aSandboxDir() / "copy_failure";
+    std::filesystem::remove_all(sandbox);
+
+    {
+        game::SectorLightmapBakeAsyncResult result = MakeInstallTestResult(sandbox / "sidecar");
+        WriteInstallTestTemps(result);
+        const std::string finalObjectProbePath =
+                game::MakeSectorObjectProbeSidecarPathForLightmapPath(result.finalOutputPath);
+        std::filesystem::create_directories(finalObjectProbePath);
+
+        game::SectorEditorLightmapBakeController controller;
+        game::SectorEditorLightmapBakeInstallPayload payload;
+        const bool installed = controller.InstallCompletedResultFiles(result, "hash-a", payload);
+
+        Check(!installed, "object probe sidecar copy failure rejects install");
+        Check(payload.status.find("Bake failed: could not install object probe sidecar:") == 0,
+              "object probe sidecar copy failure reports unchanged status prefix");
+        Check(!std::filesystem::exists(result.temporaryOutputPath),
+              "object probe sidecar copy failure deletes temp lightmap");
+        Check(!std::filesystem::exists(result.bakeResult.objectProbes.path),
+              "object probe sidecar copy failure deletes temp probe sidecar");
+    }
+
+    {
+        game::SectorLightmapBakeAsyncResult result = MakeInstallTestResult(sandbox / "lightmap");
+        WriteInstallTestTemps(result);
+        const std::string finalObjectProbePath =
+                game::MakeSectorObjectProbeSidecarPathForLightmapPath(result.finalOutputPath);
+        std::filesystem::create_directories(result.finalOutputPath);
+
+        game::SectorEditorLightmapBakeController controller;
+        game::SectorEditorLightmapBakeInstallPayload payload;
+        const bool installed = controller.InstallCompletedResultFiles(result, "hash-a", payload);
+
+        Check(!installed, "lightmap copy failure rejects install");
+        Check(payload.status.find("Bake failed: could not install lightmap:") == 0,
+              "lightmap copy failure reports unchanged status prefix");
+        Check(!std::filesystem::exists(result.temporaryOutputPath), "lightmap copy failure deletes temp lightmap");
+        Check(!std::filesystem::exists(result.bakeResult.objectProbes.path),
+              "lightmap copy failure deletes temp probe sidecar");
+        Check(!std::filesystem::exists(finalObjectProbePath),
+              "lightmap copy failure deletes copied final object probe sidecar");
+    }
+
+    std::filesystem::remove_all(sandbox);
+}
+
+void TestLightmapBakeInstallBoundarySuccessfulPayload()
+{
+    const std::filesystem::path sandbox = Ref077Phase05aSandboxDir() / "success";
+    std::filesystem::remove_all(sandbox);
+    game::SectorLightmapBakeAsyncResult result = MakeInstallTestResult(sandbox);
+    WriteInstallTestTemps(result);
+
+    game::SectorEditorLightmapBakeController controller;
+    game::SectorEditorLightmapBakeInstallPayload payload;
+    const bool installed = controller.InstallCompletedResultFiles(result, "hash-a", payload);
+
+    const std::string finalObjectProbePath =
+            game::MakeSectorObjectProbeSidecarPathForLightmapPath(result.finalOutputPath);
+    Check(installed, "successful lightmap install payload is produced");
+    Check(std::filesystem::exists(result.finalOutputPath), "successful install copies final lightmap");
+    Check(std::filesystem::exists(finalObjectProbePath), "successful install copies final object probe sidecar");
+    Check(!std::filesystem::exists(result.temporaryOutputPath), "successful install deletes temp lightmap");
+    Check(!std::filesystem::exists(result.bakeResult.objectProbes.path),
+          "successful install deletes temp object probe sidecar");
+    Check(payload.finalLightmapPath == result.finalOutputPath, "install payload keeps final lightmap path");
+    Check(payload.finalObjectProbePath == finalObjectProbePath, "install payload keeps final object probe path");
+    Check(payload.bakeResult.width == result.bakeResult.width, "install payload preserves lightmap width");
+    Check(payload.bakeResult.height == result.bakeResult.height, "install payload preserves lightmap height");
+    Check(payload.bakeResult.sourceHash == result.bakeResult.sourceHash, "install payload preserves source hash");
+    Check(payload.bakeResult.objectProbes.count == result.bakeResult.objectProbes.count,
+          "install payload preserves object probe metadata");
+    Check(payload.bakeResult.objectProbes.path == payload.finalObjectProbeAssetPath,
+          "install payload rewrites object probe metadata to final asset path");
+    Check(payload.bakeResult.objectProbes.sourceHash == result.bakeResult.sourceHash,
+          "install payload rewrites object probe source hash to lightmap source hash");
+    std::filesystem::remove_all(sandbox);
 }
 
 bool FiniteVector(Vector3 value)
@@ -2427,6 +2605,10 @@ int main()
 {
     TestLightmapBakeReportFormatting();
     TestSectorAssetPathHelpers();
+    TestLightmapBakeInstallBoundaryRejectsStaleAndCleansTemps();
+    TestLightmapBakeInstallBoundaryMissingTempsCleanUp();
+    TestLightmapBakeInstallBoundaryCopyFailureCleanup();
+    TestLightmapBakeInstallBoundarySuccessfulPayload();
     TestObjectLightProbeSidecarRoundTrip();
     TestObjectLightProbeSidecarRejectsInvalidFiles();
     TestObjectLightProbeRuntimeDataLoadsAndBuildsSectorRanges();

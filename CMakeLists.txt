@@ -190,6 +190,8 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_lightmap_tests
             tests/SectorTopologyLightmapTests.cpp
+            sources/sector_editor/SectorEditorHelpers.cpp
+            sources/sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp

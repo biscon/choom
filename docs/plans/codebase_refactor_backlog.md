@@ -70,8 +70,8 @@ Task Type:
 | REF-059 | `[x]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Completed; recommends material-specific picker routing extraction before MaterialEditBridge |
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
 | REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
-| REF-062 | `[ ]` | Medium | Lightmap/probes | Extract LightmapBakeController | Runner plan | High | Worker lifecycle/result install/source-hash stale-result logic needs runner-level guardrails |
-| REF-077 | `[x]` | High | Lightmap/probes | Write LightmapBakeController runner plan | Runner plan | Low | Planning complete; implementation remains under REF-062 |
+| REF-062 | `[x]` | Medium | Lightmap/probes | Extract LightmapBakeController | Runner plan | High | Completed through REF-077 runner plan; manual bake smoke still recommended |
+| REF-077 | `[x]` | High | Lightmap/probes | Write LightmapBakeController runner plan | Runner plan | Low | Planning and implementation complete under REF-062 |
 | REF-063 | `[x]` | High | Editor architecture | Extract material-specific texture picker routing | Codex task | High | Completed; material targets route through `services/material_edit`, non-material picker routes stayed out |
 | REF-064 | `[x]` | High | Editor architecture | Add minimal MaterialEditBridge for material action wrappers | Codex task | Medium/High | Completed; action wrappers route through bridge while finish paths stay in `SectorEditor.cpp` |
 | REF-065 | `[x]` | High | Editor architecture | Promote MaterialEditBridge into MaterialEditingService | Codex task | Medium/High | Completed; bridge removed and material clients use service directly |
@@ -1114,7 +1114,7 @@ Task Type:
   - Add light, delete confirmation/confirmed mutation, drag light, spotlight
     pilot, and preview overlay light controls remain future service migration
     debt.
-  - REF-058, REF-062, unrelated preview/tools work remain open.
+  - REF-058 and unrelated preview/tools work remain open.
 
 #### REF-067 `[x]` Authoring-owned topology edit cleanup and direct topology mutation inventory
 
@@ -1348,7 +1348,7 @@ Task Type:
     mutation policy into a generic status sink.
 - Completion notes:
 
-#### REF-062 `[ ]` Extract LightmapBakeController
+#### REF-062 `[x]` Extract LightmapBakeController
 
 - Source/audit reference:
   `docs/audit/sector_editor_shared_service_inventory.md` and
@@ -1374,6 +1374,18 @@ Task Type:
     start/request construction, result polling/stale classification, install
     boundary, and cleanup/docs.
 - Completion notes:
+  - Completed 2026-07-06 through
+    `docs/plans/ref077_lightmap_bake_controller_runner_plan.md`.
+  - `SectorEditorLightmapBakeController` now owns the async worker lifecycle,
+    cancellation, progress/modal state, pending-result polling, terminal state,
+    temporary output cleanup, stale-result file rejection, successful file
+    install, and metadata-ready install payload creation.
+  - `SectorEditor` still owns current-level preflight, source-hash computation
+    against live topology on the main thread, document dirty flags, status text,
+    report logging, and conditional preview rebuild.
+  - Source-hash policy and object-probe sidecar install behavior were preserved.
+  - Automated verification passed in the runner plan; manual bake smoke remains
+    recommended when practical.
 
 #### REF-077 `[x]` Write LightmapBakeController runner plan
 
@@ -1393,9 +1405,8 @@ Task Type:
   build, ctest, focused non-GUI lifecycle/source-hash/object-probe tests, and
   manual bake smoke.
 - Notes:
-  - Planning is complete; implementation is not complete.
-  - REF-062 remains open as the implementation umbrella.
-  - Future phases from the runner plan are: controller skeleton, worker
+  - Planning is complete; implementation completed under REF-062 on 2026-07-06.
+  - Runner-plan phases covered: controller skeleton, worker
     lifecycle/cancel/join/shutdown state, start/request construction, result
     polling/stale classification, install/result application boundary, and
     cleanup/docs.
