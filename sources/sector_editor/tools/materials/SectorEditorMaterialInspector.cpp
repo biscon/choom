@@ -26,7 +26,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
     SectorEditorUiState& uiState = context.uiState;
     std::string& statusText = context.statusText;
     const SectorEditorMaterialInspectorCallbacks& callbacks = context.callbacks;
-    SectorEditorMaterialEditBridgeContext& materialEditBridge = context.materialEditBridge;
+    SectorEditorMaterialEditingService& materialEditing = context.materialEditing;
 
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     const SectorTopologyLineDef* lineDef =
@@ -381,7 +381,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                         Rectangle{0.0f, y, contentW, 38.0f},
                         font,
                         "Clear Middle")) {
-                ClearSectorEditorMiddleTexture(materialEditBridge, selectedMaterialTarget, &assets);
+                materialEditing.ClearMiddleTexture(selectedMaterialTarget, &assets);
             }
             y += 38.0f + gap;
         }
@@ -404,7 +404,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{0.0f, y, contentW, 38.0f},
                     font,
                     TextFormat("Copy %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
-            CopySectorEditorMaterial(materialEditBridge, selectedMaterialTarget);
+            materialEditing.CopyMaterial(selectedMaterialTarget);
         }
         y += 38.0f + gap;
 
@@ -417,7 +417,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{0.0f, y, contentW, 38.0f},
                     font,
                     TextFormat("Paste %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
-            PasteSectorEditorMaterial(materialEditBridge, selectedMaterialTarget, assets);
+            materialEditing.PasteMaterial(selectedMaterialTarget, assets);
         }
         y += 38.0f + gap;
     }
@@ -448,17 +448,12 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 return;
             }
             applyValue(result.value);
-            const char* status = TextFormat(
-                    "Updated topology sidedef %d %s %s UV",
-                    sideDef->id,
-                    TopologyWallPartStatusName(state.selectedTopologyWallPart),
-                    TopologyMaterialLayerStatusName(layer));
-            if (selectedMiddle) {
-                callbacks.finishTopologyMaterialMutation(status, &assets);
-            } else {
-                state.topologyRenderWarning.clear();
-                callbacks.markTopologyDocumentEdited(status);
-            }
+            materialEditing.ApplyInspectorSideDefUvValue(
+                    selectedMaterialTarget,
+                    layer,
+                    stateIndex,
+                    result.value,
+                    assets);
         }
     };
 
@@ -519,11 +514,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 1.0f,
                 3);
         if (opacityResult.changed && opacityResult.value != selectedPart.decal.opacity && opacityResult.finite) {
-            ApplySectorEditorSurfaceDecalOpacity(
-                    materialEditBridge,
-                    selectedMaterialTarget,
-                    opacityResult.value,
-                    &assets);
+            materialEditing.ApplyDecalOpacity(selectedMaterialTarget, opacityResult.value, &assets);
         }
         y += rowH + gap;
 
@@ -538,11 +529,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     font,
                     "Emissive",
                     emissive)) {
-            ApplySectorEditorSurfaceDecalEmissive(
-                    materialEditBridge,
-                    selectedMaterialTarget,
-                    emissive,
-                    &assets);
+            materialEditing.ApplyDecalEmissive(selectedMaterialTarget, emissive, &assets);
         }
         y += 36.0f + gap;
 
@@ -564,8 +551,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     10.0f,
                     3);
             if (bloomResult.changed && bloomResult.value != selectedPart.decal.bloomIntensity) {
-                ApplySectorEditorSurfaceDecalBloomIntensity(
-                        materialEditBridge,
+                materialEditing.ApplyDecalBloomIntensity(
                         selectedMaterialTarget,
                         bloomResult.value,
                         &assets);
@@ -584,7 +570,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     swatchLocal,
                     font,
                     "")) {
-            OpenSectorEditorDecalTintModal(materialEditBridge, selectedMaterialTarget);
+            materialEditing.OpenDecalTintModal(selectedMaterialTarget);
         }
         const Rectangle swatchScreen{
                 scroll.viewport.x + swatchLocal.x,
@@ -604,7 +590,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{0.0f, y, decalButtonW, 38.0f},
                     font,
                     "Fit Decal")) {
-            FitSectorEditorSelectedDecal(materialEditBridge, selectedMaterialTarget, &assets);
+            materialEditing.FitSelectedDecal(selectedMaterialTarget, &assets);
         }
         if (engine::Button(
                     ui,
@@ -615,7 +601,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{decalButtonW + gap, y, decalButtonW, 38.0f},
                     font,
                     "Clear Decal")) {
-            ClearSectorEditorSurfaceDecal(materialEditBridge, selectedMaterialTarget, &assets);
+            materialEditing.ClearSurfaceDecal(selectedMaterialTarget, &assets);
         }
         y += 38.0f + gap;
     }
@@ -629,20 +615,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{0.0f, y, contentW, 38.0f},
                 font,
                 TextFormat("Reset %s UV", TopologyWallPartName(state.selectedTopologyWallPart)))) {
-        ResetTopologyUv(selectedUv);
-        for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
-            inputState = engine::UIFloatInputState{};
-        }
-        if (selectedMiddle) {
-            callbacks.finishTopologyMaterialMutation("Reset middle UV.", &assets);
-        } else {
-            state.topologyRenderWarning.clear();
-            callbacks.markTopologyDocumentEdited(TextFormat(
-                    "Reset topology sidedef %d %s %s UV",
-                    sideDef->id,
-                    TopologyWallPartStatusName(state.selectedTopologyWallPart),
-                    TopologyMaterialLayerStatusName(layer)));
-        }
+        materialEditing.ResetInspectorSideDefUv(selectedMaterialTarget, layer, assets);
     }
     y += 38.0f + gap;
 
@@ -656,8 +629,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{0.0f, y, fitButtonW, 34.0f},
                 font,
                 "Fit Width")) {
-        FitSectorEditorSelectedWallMaterial(
-                materialEditBridge,
+        materialEditing.FitSelectedWallMaterial(
                 selectedMaterialTarget,
                 TopologyUvFitMode::Width,
                 &assets,
@@ -672,8 +644,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{fitButtonW + gap, y, fitButtonW, 34.0f},
                 font,
                 "Fit Height")) {
-        FitSectorEditorSelectedWallMaterial(
-                materialEditBridge,
+        materialEditing.FitSelectedWallMaterial(
                 selectedMaterialTarget,
                 TopologyUvFitMode::Height,
                 &assets,
@@ -688,8 +659,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{(fitButtonW + gap) * 2.0f, y, fitButtonW, 34.0f},
                 font,
                 "Fit Both")) {
-        FitSectorEditorSelectedWallMaterial(
-                materialEditBridge,
+        materialEditing.FitSelectedWallMaterial(
                 selectedMaterialTarget,
                 TopologyUvFitMode::Both,
                 &assets,
@@ -707,7 +677,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{0.0f, y, contentW, 38.0f},
                     font,
                     "Clear Middle")) {
-            ClearSectorEditorMiddleTexture(materialEditBridge, selectedMaterialTarget, &assets);
+            materialEditing.ClearMiddleTexture(selectedMaterialTarget, &assets);
         }
         return true;
     }
@@ -721,8 +691,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{0.0f, y, contentW, 34.0f},
                 font,
                 "Align Vertical")) {
-        AlignSectorEditorSelectedWallMaterialVertical(
-                materialEditBridge,
+        materialEditing.AlignSelectedWallMaterialVertical(
                 selectedMaterialTarget,
                 &assets,
                 layer);
@@ -739,8 +708,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{0.0f, y, alignButtonW, 34.0f},
                 font,
                 "Align U Prev")) {
-        AlignSectorEditorSelectedWallMaterialU(
-                materialEditBridge,
+        materialEditing.AlignSelectedWallMaterialU(
                 selectedMaterialTarget,
                 TopologyUAlignDirection::Previous,
                 &assets,
@@ -755,8 +723,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{alignButtonW + gap, y, alignButtonW, 34.0f},
                 font,
                 "Align U Next")) {
-        AlignSectorEditorSelectedWallMaterialU(
-                materialEditBridge,
+        materialEditing.AlignSelectedWallMaterialU(
                 selectedMaterialTarget,
                 TopologyUAlignDirection::Next,
                 &assets,

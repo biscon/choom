@@ -73,6 +73,7 @@ Task Type:
 | REF-062 | `[ ]` | Medium | Lightmap/probes | Extract LightmapBakeController | Runner plan | High | Worker lifecycle/result install/source-hash stale-result logic needs runner-level guardrails |
 | REF-063 | `[x]` | High | Editor architecture | Extract material-specific texture picker routing | Codex task | High | Completed; material targets route through `services/material_edit`, non-material picker routes stayed out |
 | REF-064 | `[x]` | High | Editor architecture | Add minimal MaterialEditBridge for material action wrappers | Codex task | Medium/High | Completed; action wrappers route through bridge while finish paths stay in `SectorEditor.cpp` |
+| REF-065 | `[x]` | High | Editor architecture | Promote MaterialEditBridge into MaterialEditingService | Codex task | Medium/High | Completed; bridge removed and material clients use service directly |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
@@ -922,6 +923,35 @@ Task Type:
   - Broad editor finish paths remain in `SectorEditor.cpp`.
   - `DrawPreviewUvPanel` remains unmoved.
   - `TexturePickerService` remains generic.
+  - No behavior changes intended.
+
+#### REF-065 `[x]` Promote MaterialEditBridge into MaterialEditingService
+
+- Source/audit reference:
+  `docs/audit/sector_editor_material_edit_bridge_audit.md`.
+- Why it helps: replaces the temporary callback bridge with a concrete service
+  dependency that tools and panels can call directly.
+- Likely files: `SectorEditor.cpp`, `tools/materials/`, and
+  `services/material_edit/`.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, `git diff --check`, bridge grep,
+  dependency grep for no concrete `SectorEditor` dependency under
+  `services/material_edit`, and manual material smoke if practical.
+- Completion notes:
+  - `MaterialEditBridge` was removed/replaced.
+  - Real `SectorEditorMaterialEditingService` was added under
+    `services/material_edit`.
+  - `tools/materials` now uses the material editing service directly for
+    material operations.
+  - Material picker routing is used through the material editing service while
+    generic picker lifecycle/result mechanics remain in `TexturePickerService`.
+  - Old `SectorEditor` material wrapper/callback funnel was removed where
+    practical; no remaining material operation wrapper bridges are intended.
+  - `DrawPreviewUvPanel` remains in `SectorEditor.cpp`; extraction stays open
+    under REF-060.
+  - REF-044 remains open as the broader material migration umbrella.
+  - REF-058, lights, and lightmap/source-hash-sensitive work remain open.
   - No behavior changes intended.
 
 #### REF-060 `[ ]` Audit Preview UV/material panel service dependencies

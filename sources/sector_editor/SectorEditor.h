@@ -6,6 +6,7 @@
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorLightmapAsyncTypes.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectActions.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectDrag.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
@@ -24,7 +25,6 @@
 namespace game {
 
 struct SectorEditorToolContext;
-struct SectorEditorMaterialEditBridgeCallbacks;
 
 class SectorEditor {
 public:
@@ -334,48 +334,10 @@ private:
     bool IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget target) const;
     void ResetSurface3DUiState();
     Rectangle BuildPreviewUvPanelRect() const;
-    const SectorTopologyDecalLayer* DecalForSurface(TopologySurfaceEditTarget target) const;
-    SectorTopologyDecalLayer* MutableDecalForSurface(TopologySurfaceEditTarget target);
-    const SectorTopologyUvSettings* UvForSurface(TopologySurfaceEditTarget target, TopologyMaterialLayer layer) const;
-    SectorTopologyUvSettings* MutableUvForSurface(TopologySurfaceEditTarget target, TopologyMaterialLayer layer);
-    bool IsDecalAssigned(TopologySurfaceEditTarget target) const;
-    std::string CurrentTextureForSurface(TopologySurfaceEditTarget target, TopologyMaterialLayer layer) const;
-    bool CopyTopologyMaterial(TopologySurfaceEditTarget target);
-    bool PasteTopologyMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets);
-    bool ApplySurface3DUvValue(TopologySurfaceEditTarget target, TopologyMaterialLayer layer, int component, float value, engine::AssetManager& assets);
-    bool ApplySurfaceDecalOpacity(TopologySurfaceEditTarget target, float opacity, engine::AssetManager* assets);
-    bool ApplySurfaceDecalEmissive(TopologySurfaceEditTarget target, bool emissive, engine::AssetManager* assets);
-    bool ApplySurfaceDecalTint(TopologySurfaceEditTarget target, Vector3 tint, engine::AssetManager* assets);
-    bool ApplySurfaceDecalBloomIntensity(TopologySurfaceEditTarget target, float bloomIntensity, engine::AssetManager* assets);
-    bool OpenDecalTintModal(TopologySurfaceEditTarget target);
-    bool ClearSurfaceDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
-    bool ClearMiddleTexture(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool SetLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
-    bool ResetSurface3DUv(TopologySurfaceEditTarget target, TopologyMaterialLayer layer, engine::AssetManager& assets);
-    bool FitSelectedDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
-    bool FitSelectedFlatDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
-    bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets, TopologyMaterialLayer layer);
-    bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets, TopologyMaterialLayer layer);
-    bool AlignSelectedWallMaterialU(TopologySurfaceEditTarget target, TopologyUAlignDirection direction, engine::AssetManager* assets, TopologyMaterialLayer layer);
-    SectorEditorMaterialEditBridgeCallbacks BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditingService BuildMaterialEditingService();
     bool HasAuthoringGraphData() const;
-    bool IsSelectedSurface3DFlatTarget(TopologySurfaceEditTarget target) const;
     bool EnsureSelectedSurface3DAuthoringMappingCurrent();
-    bool ApplyAuthoringSideMaterialAction(
-            TopologySurfaceEditTarget target,
-            engine::AssetManager* assets,
-            const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action);
-    bool ApplyAuthoringFaceAnchorFlatMaterialAction(
-            TopologySurfaceEditTarget target,
-            engine::AssetManager* assets,
-            const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action);
-    bool FinishAuthoringSideMaterialActionResult(
-            TopologySurfaceEditTarget target,
-            const SectorEditorMaterialActionResult& result,
-            const SectorTopologyMap& editedTopology,
-            engine::AssetManager* assets);
-    bool FinishMaterialActionResult(const SectorEditorMaterialActionResult& result, engine::AssetManager* assets);
-    bool FinishTopologyMaterialMutation(const char* status, engine::AssetManager* assets);
     bool FinishTopologyActionResult(const SectorEditorTopologyActionResult& result);
     bool RebuildPreviewMeshesPreservingView(engine::EngineContext& context);
     void ClearTransientTopologyEditStateAfterGeometryChange();

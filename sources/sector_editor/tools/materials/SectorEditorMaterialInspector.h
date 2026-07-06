@@ -3,7 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
-#include "sector_editor/services/material_edit/SectorEditorMaterialEditBridge.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/SectorEditorTypes.h"
 
 #include <functional>
@@ -15,8 +15,6 @@ struct SectorEditorMaterialInspectorCallbacks {
     std::function<void(int, TopologyWallPart)> selectTopologySideDef;
     std::function<bool(int, bool)> setLineDefBlocksPlayer;
     std::function<void(int, TopologyWallPart, TopologyMaterialLayer)> openSideDefTexturePicker;
-    std::function<void(const char*)> markTopologyDocumentEdited;
-    std::function<bool(const char*, engine::AssetManager*)> finishTopologyMaterialMutation;
 };
 
 struct SectorEditorMaterialInspectorContext {
@@ -34,7 +32,7 @@ struct SectorEditorMaterialInspectorContext {
     SectorEditorUiState& uiState;
     std::string& statusText;
     const SectorEditorMaterialInspectorCallbacks& callbacks;
-    SectorEditorMaterialEditBridgeContext& materialEditBridge;
+    SectorEditorMaterialEditingService& materialEditing;
 };
 
 bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& context);
