@@ -239,8 +239,9 @@ Authoring graph is the source of truth. SectorTopologyMap is derived output, not
 - REF-060/REF-066: Preview UV/material panel extraction is complete; remaining
   debt is limited to preview surface material/service boundary follow-up if
   callbacks grow.
-- REF-045: lights/runtime object topology ownership remains a future design
-  decision.
+- REF-045/REF-079: lights/runtime object topology ownership remains a future
+  design decision. `LightEditingService` owns normal light mutation; lightmap
+  bake controller/source-hash policy remains separate.
 - REF-062: lightmap bake controller extraction remains future work.
 
 References:

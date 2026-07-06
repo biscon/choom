@@ -13,7 +13,7 @@ struct SectorEditorSelectionServiceContext {
     SectorEditorUiState& uiState;
     std::string* statusText = nullptr;
     void* userData = nullptr;
-    void (*cancelSpotLightPilot)(void* userData, const char* message) = nullptr;
+    void (*requestCancelSpotLightPilotWithPreviewRestore)(void* userData, const char* message) = nullptr;
 };
 
 SectorTopologySector* SelectedSectorEditorTopologySector(SectorEditorSelectionServiceContext& context);

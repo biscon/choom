@@ -80,6 +80,7 @@ Task Type:
 | REF-075 | `[x]` | Medium | Editor architecture | Extract main inspector routing panel into `inspector/` | Codex task | Medium | Completed; selected-object inspector routing moved out of `SectorEditor.cpp` |
 | REF-076 | `[x]` | Medium | Editor architecture | Add LightEditingService for light inspector edits | Codex task | Medium/High | Completed; light inspector property edits use service directly |
 | REF-078 | `[x]` | Medium | Editor architecture | Complete LightEditingService mutation ownership | Codex task | Medium/High | Completed; light add/delete/drag/pilot data mutations moved to LightEditingService while preview/lightmap ownership stayed central |
+| REF-079 | `[x]` | Medium | Editor architecture | Clean up LightEditingService integration debt | Codex task | Medium | Completed; obsolete light wrappers removed and editor/service light names clarified |
 | REF-067 | `[x]` | High | Editor architecture | Authoring-owned topology edit cleanup and direct topology mutation inventory | Codex task | Medium/High | Completed; Blocks Player authoring-owned with strict mapping-gap failure and inventory report |
 | REF-068 | `[x]` | High | Editor architecture | Replace SideDef inspector UV topology mutation with authoring material edits | Codex task | Medium/High | Completed; inspector UV apply/reset writes authoring material data and fails without mapping |
 | REF-069 | `[x]` | Medium | Editor architecture | Remove invalid no-authoring topology-edit support | Codex task | Medium/High | Completed; normal editor edits require authoring data or fail |
@@ -1150,6 +1151,40 @@ Task Type:
   - `SectorEditor.cpp` line count reduced from 5,768 to 5,381 lines.
   - Remaining light service debt: preview renderer refresh is intentionally
     reported by service result flags and executed by `SectorEditor`.
+  - REF-058 and unrelated preview/tools/document items remain open.
+
+#### REF-079 `[x]` Clean up LightEditingService integration debt
+
+- Source/audit reference: REF-079 task.
+- Why it helps: removes stale light wrapper/request naming after REF-078 and
+  keeps service-owned mutation names distinct from editor-owned orchestration.
+- Likely files: `SectorEditor.cpp`, `SectorEditor.h`,
+  `inspector/SectorEditorInspectorPanel.*`,
+  `preview/SectorEditorPreviewOverlay.*`,
+  `selection/SectorEditorSelectionService.*`, backlog/architecture docs.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, full `ctest`, `git diff --check`, service
+  dependency grep, light mutation grep, callback grep, and manual light editing
+  smoke if practical.
+- Completion notes:
+  - Removed obsolete `SectorEditor::TryRenameSelectedLight()`; no remaining
+    `SectorEditor` add/delete/drag/pilot data-mutation wrappers were found.
+  - Renamed `SectorEditor::DeleteSelectedLight()` to
+    `OpenDeleteSelectedLightConfirmation()` and inspector requests to
+    confirmation intent.
+  - Renamed `SectorEditor` spotlight pilot apply/cancel handlers to
+    `ApplySpotLightPilotFromPreviewPose()` and
+    `CancelSpotLightPilotWithPreviewRestore()`; preview overlay requests now
+    use request-oriented names.
+  - `LightEditingService` remains the owner of normal light data mutation,
+    including add/delete/drag/pilot data changes and original data restore.
+  - `SectorEditor` still owns confirmation, input/gesture, preview pose
+    restoration, dynamic renderer refresh execution, and high-level dispatch.
+  - Light inspector request/callback debt is removed for normal light
+    mutation; the remaining delete request is confirmation-modal flow.
+  - Lightmap bake controller and source-hash behavior unchanged.
+  - `SectorEditor.cpp` line count reduced from 5,381 after REF-078 to 5,365.
   - REF-058 and unrelated preview/tools/document items remain open.
 
 #### REF-067 `[x]` Authoring-owned topology edit cleanup and direct topology mutation inventory

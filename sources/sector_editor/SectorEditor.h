@@ -262,8 +262,8 @@ private:
     void ApplyGameplayPoseToPreview();
     void TogglePreviewControlMode();
     bool StartSpotLightPilot();
-    bool ApplySpotLightPilot();
-    void CancelSpotLightPilot(const char* message);
+    bool ApplySpotLightPilotFromPreviewPose();
+    void CancelSpotLightPilotWithPreviewRestore(const char* message);
     bool RebuildSectorCollisionWorld();
     SectorFpsVerticalContext BuildGameplayVerticalContext();
     void RefreshGameplaySectorAndVerticalContext();
@@ -343,8 +343,7 @@ private:
     std::string CurrentTextureForPickerTarget() const;
     bool TryRenameSelectedDerivedSectorAuthoringName();
     void MarkTopologyDocumentEdited(const char* status);
-    bool TryRenameSelectedLight();
-    bool DeleteSelectedLight();
+    bool OpenDeleteSelectedLightConfirmation();
     SectorEditorToolContext BuildToolContext(engine::Input* input);
     SectorEditorPlacedObjectDragContext BuildRuntimeObjectDragContext();
     SectorEditorPlacedObjectActionContext BuildRuntimeObjectActionContext();

@@ -786,16 +786,16 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                         DeleteSelectedAuthoringVertex();
                     } else if (state.topologySelectionKind == TopologySelectionKind::StaticLight
                             && state.selectedTopologyLightId >= 0) {
-                        DeleteSelectedLight();
+                        OpenDeleteSelectedLightConfirmation();
                     } else if (state.topologySelectionKind == TopologySelectionKind::StaticSpotLight
                             && state.selectedTopologyStaticSpotLightId >= 0) {
-                        DeleteSelectedLight();
+                        OpenDeleteSelectedLightConfirmation();
                     } else if (state.topologySelectionKind == TopologySelectionKind::DynamicLight
                             && state.selectedTopologyDynamicLightId >= 0) {
-                        DeleteSelectedLight();
+                        OpenDeleteSelectedLightConfirmation();
                     } else if (state.topologySelectionKind == TopologySelectionKind::DynamicSpotLight
                             && state.selectedTopologyDynamicSpotLightId >= 0) {
-                        DeleteSelectedLight();
+                        OpenDeleteSelectedLightConfirmation();
                     } else if (state.selectedRuntimeObjectId >= 0) {
                         DeleteSelectedRuntimeObject();
                     } else if (state.topologySelectionKind == TopologySelectionKind::Sector
@@ -1455,7 +1455,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
-                    CancelSpotLightPilot(nullptr);
+                    CancelSpotLightPilotWithPreviewRestore(nullptr);
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
                 }
@@ -1916,7 +1916,7 @@ SectorEditorSelectionServiceContext SectorEditor::BuildSelectionServiceContext()
             &statusText,
             this,
             [](void* userData, const char* message) {
-                static_cast<SectorEditor*>(userData)->CancelSpotLightPilot(message);
+                static_cast<SectorEditor*>(userData)->CancelSpotLightPilotWithPreviewRestore(message);
             }};
     return context;
 }
@@ -2192,23 +2192,7 @@ bool SectorEditor::TryRenameSelectedDerivedSectorAuthoringName()
     return true;
 }
 
-bool SectorEditor::TryRenameSelectedLight()
-{
-    if (SelectedTopologyLight() == nullptr
-            && SelectedTopologyStaticSpotLight() == nullptr
-            && SelectedTopologyDynamicLight() == nullptr
-            && SelectedTopologyDynamicSpotLight() == nullptr) {
-        uiState.idEditError = "No light selected";
-        statusText = uiState.idEditError;
-        return false;
-    }
-
-    uiState.idEditError = "Topology light IDs are stable";
-    statusText = uiState.idEditError;
-    return false;
-}
-
-bool SectorEditor::DeleteSelectedLight()
+bool SectorEditor::OpenDeleteSelectedLightConfirmation()
 {
     const SectorTopologyStaticPointLight* light = SelectedTopologyLight();
     const SectorTopologyStaticSpotLight* staticSpotLight = SelectedTopologyStaticSpotLight();
@@ -2674,13 +2658,13 @@ void SectorEditor::DrawPreviewOverlay(
             preview};
     const SectorEditorPreviewOverlayResult result = DrawSectorEditorPreviewOverlay(overlayContext);
 
-    if (result.cancelSpotLightPilot) {
-        CancelSpotLightPilot("Spotlight pilot cancelled");
+    if (result.requestCancelSpotLightPilot) {
+        CancelSpotLightPilotWithPreviewRestore("Spotlight pilot cancelled");
     }
-    if (result.applySpotLightPilot) {
-        ApplySpotLightPilot();
+    if (result.requestApplySpotLightPilot) {
+        ApplySpotLightPilotFromPreviewPose();
     }
-    if (result.startSpotLightPilot) {
+    if (result.requestStartSpotLightPilot) {
         StartSpotLightPilot();
     }
     if (result.openPreviewSettings) {
@@ -3590,8 +3574,8 @@ void SectorEditor::DrawSectorsPanel(
         case SectorEditorInspectorPanelRequestKind::DeleteSelectedRuntimeObject:
             DeleteSelectedRuntimeObject();
             break;
-        case SectorEditorInspectorPanelRequestKind::DeleteSelectedLight:
-            DeleteSelectedLight();
+        case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation:
+            OpenDeleteSelectedLightConfirmation();
             break;
         case SectorEditorInspectorPanelRequestKind::BakeLightmaps:
             StartLightmapBake();
@@ -4235,7 +4219,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
 
 void SectorEditor::LeavePreview3D()
 {
-    CancelSpotLightPilot(nullptr);
+    CancelSpotLightPilotWithPreviewRestore(nullptr);
     if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
         ClearSectorFpsLandingDip(state.landingDipState);
         ApplyGameplayPoseToPreview();
@@ -4328,7 +4312,7 @@ bool SectorEditor::StartSpotLightPilot()
     return true;
 }
 
-bool SectorEditor::ApplySpotLightPilot()
+bool SectorEditor::ApplySpotLightPilotFromPreviewPose()
 {
     if (!state.spotLightPilot.active) {
         return false;
@@ -4356,7 +4340,7 @@ bool SectorEditor::ApplySpotLightPilot()
     return result.changed;
 }
 
-void SectorEditor::CancelSpotLightPilot(const char* message)
+void SectorEditor::CancelSpotLightPilotWithPreviewRestore(const char* message)
 {
     if (!state.spotLightPilot.active) {
         return;

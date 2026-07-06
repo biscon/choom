@@ -849,7 +849,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 deleteRequested,
                 bakeRequested);
         if (deleteRequested) {
-            AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedLight);
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
         }
         if (bakeRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
@@ -878,7 +878,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 deleteRequested,
                 bakeRequested);
         if (deleteRequested) {
-            AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedLight);
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
         }
         if (bakeRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
@@ -905,7 +905,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 lightEditing,
                 deleteRequested);
         if (deleteRequested) {
-            AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedLight);
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
@@ -930,7 +930,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 lightEditing,
                 deleteRequested);
         if (deleteRequested) {
-            AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedLight);
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);

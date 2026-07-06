@@ -11,10 +11,10 @@ namespace game {
 
 namespace {
 
-void CancelSpotLightPilot(SectorEditorSelectionServiceContext& context, const char* message)
+void RequestCancelSpotLightPilotWithPreviewRestore(SectorEditorSelectionServiceContext& context, const char* message)
 {
-    if (context.cancelSpotLightPilot != nullptr) {
-        context.cancelSpotLightPilot(context.userData, message);
+    if (context.requestCancelSpotLightPilotWithPreviewRestore != nullptr) {
+        context.requestCancelSpotLightPilotWithPreviewRestore(context.userData, message);
     }
 }
 
@@ -256,7 +256,7 @@ void ClearStaleSectorEditorTopologySelection(SectorEditorSelectionServiceContext
     }
 
     if (stale) {
-        CancelSpotLightPilot(context, nullptr);
+        RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
         state.topologySelectionKind = TopologySelectionKind::None;
         state.selectedTopologySectorId = -1;
         state.selectedTopologyVertexId = -1;
@@ -338,7 +338,7 @@ void ResetSectorEditorSurface3DUiState(SectorEditorSelectionServiceContext& cont
 
 void ClearSectorEditorTopologySelectionOnly(SectorEditorSelectionServiceContext& context)
 {
-    CancelSpotLightPilot(context, nullptr);
+    RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
     context.state.selectDragArm = SelectDragArmState{};
     context.state.lightDrag = LightDragState{};
     context.state.lightEditing = LightEditingState{};
@@ -367,7 +367,7 @@ void ClearSectorEditorTopologySelectionOnly(SectorEditorSelectionServiceContext&
 
 void ClearSectorEditorSelection(SectorEditorSelectionServiceContext& context)
 {
-    CancelSpotLightPilot(context, nullptr);
+    RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
     context.state.selectDragArm = SelectDragArmState{};
     context.state.authoringVertexDrag = AuthoringVertexDragState{};
     context.state.topologySelectionKind = TopologySelectionKind::None;
@@ -404,7 +404,7 @@ void SelectSectorEditorTopologySector(SectorEditorSelectionServiceContext& conte
         return;
     }
 
-    CancelSpotLightPilot(context, nullptr);
+    RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
     context.state.topologySelectionKind = TopologySelectionKind::Sector;
     context.state.selectedTopologySectorId = sectorId;
     context.state.selectedTopologyVertexId = -1;
@@ -445,7 +445,7 @@ void SelectSectorEditorTopologyVertex(SectorEditorSelectionServiceContext& conte
         return;
     }
 
-    CancelSpotLightPilot(context, nullptr);
+    RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
     context.state.topologySelectionKind = TopologySelectionKind::Vertex;
     context.state.selectedTopologySectorId = -1;
     context.state.selectedTopologyVertexId = vertex->id;
@@ -484,7 +484,7 @@ void SelectSectorEditorTopologySideDef(
         return;
     }
 
-    CancelSpotLightPilot(context, nullptr);
+    RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
     context.state.topologySelectionKind = TopologySelectionKind::SideDef;
     context.state.selectedTopologySectorId = -1;
     context.state.selectedTopologyVertexId = -1;
@@ -525,7 +525,7 @@ void SelectSectorEditorTopologyLineDef(
         return;
     }
 
-    CancelSpotLightPilot(context, nullptr);
+    RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
     context.state.topologySelectionKind = TopologySelectionKind::LineDef;
     context.state.selectedTopologySectorId = -1;
     context.state.selectedTopologyVertexId = -1;
@@ -561,7 +561,7 @@ void SelectSectorEditorTopologyLight(SectorEditorSelectionServiceContext& contex
         return;
     }
 
-    CancelSpotLightPilot(context, nullptr);
+    RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
     context.state.selectedTopologyLightId = topologyLightId;
     context.state.selectedTopologyStaticSpotLightId = -1;
     context.state.selectedTopologyDynamicLightId = -1;
@@ -607,7 +607,7 @@ void SelectSectorEditorTopologyStaticSpotLight(SectorEditorSelectionServiceConte
     if (context.state.spotLightPilot.active
             && (context.state.spotLightPilot.kind != SpotLightPilotKind::Static
                     || context.state.spotLightPilot.lightId != topologyLightId)) {
-        CancelSpotLightPilot(context, nullptr);
+        RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
     }
     context.state.selectedTopologyStaticSpotLightId = topologyLightId;
     context.state.selectedTopologyLightId = -1;
@@ -651,7 +651,7 @@ void SelectSectorEditorTopologyDynamicLight(SectorEditorSelectionServiceContext&
         return;
     }
 
-    CancelSpotLightPilot(context, nullptr);
+    RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
     context.state.selectedTopologyDynamicLightId = topologyLightId;
     context.state.selectedTopologyLightId = -1;
     context.state.selectedTopologyStaticSpotLightId = -1;
@@ -697,7 +697,7 @@ void SelectSectorEditorTopologyDynamicSpotLight(SectorEditorSelectionServiceCont
     if (context.state.spotLightPilot.active
             && (context.state.spotLightPilot.kind != SpotLightPilotKind::Dynamic
                     || context.state.spotLightPilot.lightId != topologyLightId)) {
-        CancelSpotLightPilot(context, nullptr);
+        RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
     }
     context.state.selectedTopologyDynamicSpotLightId = topologyLightId;
     context.state.selectedTopologyLightId = -1;

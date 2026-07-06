@@ -28,9 +28,9 @@ struct SectorEditorPreviewOverlayContext {
 };
 
 struct SectorEditorPreviewOverlayResult {
-    bool startSpotLightPilot = false;
-    bool applySpotLightPilot = false;
-    bool cancelSpotLightPilot = false;
+    bool requestStartSpotLightPilot = false;
+    bool requestApplySpotLightPilot = false;
+    bool requestCancelSpotLightPilot = false;
     bool openPreviewSettings = false;
     bool markTopologyDocumentEdited = false;
     const char* topologyDocumentEditStatus = nullptr;

@@ -578,7 +578,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         Rectangle{actionsRight - 72.0f, actionY, 72.0f, 28.0f},
                         smallFont,
                         "Cancel")) {
-                result.cancelSpotLightPilot = true;
+                result.requestCancelSpotLightPilot = true;
             }
             actionsRight -= 82.0f;
             if (engine::Button(
@@ -590,7 +590,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         Rectangle{actionsRight - 66.0f, actionY, 66.0f, 28.0f},
                         smallFont,
                         "Apply")) {
-                result.applySpotLightPilot = true;
+                result.requestApplySpotLightPilot = true;
             }
         } else if (hasSelectedSpotLight && state.previewControlMode == SectorPreviewControlMode::FreeFly) {
             if (engine::Button(
@@ -602,7 +602,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         Rectangle{actionsRight - 92.0f, actionY, 92.0f, 28.0f},
                         smallFont,
                         "Pilot")) {
-                result.startSpotLightPilot = true;
+                result.requestStartSpotLightPilot = true;
             }
         }
     }

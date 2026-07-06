@@ -20,7 +20,7 @@ enum class SectorEditorInspectorPanelRequestKind {
     RebuildSectorCollisionWorld,
     BeginAuthoringInsertVertex,
     DeleteSelectedRuntimeObject,
-    DeleteSelectedLight,
+    OpenDeleteSelectedLightConfirmation,
     BakeLightmaps
 };
 
