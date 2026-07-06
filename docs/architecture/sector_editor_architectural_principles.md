@@ -50,8 +50,8 @@ The authoring graph owns normal user-editable map state, including:
 - derived geometry used by renderer/preview/collision/lightmaps
 - derived IDs and mappings back to authoring graph
 - render/cache/bake/runtime outputs
-- texture registry / map-level asset dictionary if that remains the current
-  model
+- texture registry / map-level asset dictionary, while it remains intentionally
+  global map metadata rather than authoring geometry
 - lights/runtime objects only if they are intentionally topology-map-owned for
   now and tracked as future design decisions
 - imported topology data only as transient input before conversion to authoring
@@ -218,14 +218,26 @@ Future sector editor Codex tasks should include:
 - Any temporary exception must be named, documented, and added to backlog
   cleanup.
 
+Copy/paste snippet for future tasks:
+
+```text
+Before editing code, read and obey:
+docs/architecture/sector_editor_architectural_principles.md
+
+This document is an architecture contract. If this task conflicts with it, stop and report the conflict instead of implementing around it.
+
+Authoring graph is the source of truth. SectorTopologyMap is derived output, not an editable model. Normal editor UI must edit authoring graph data or fail clearly.
+```
+
 ## Current Known Transitional Debt
 
 - REF-044: remaining material scratch/writeback routes should become direct
   authoring material edits.
 - REF-069/direct topology inventory: no-authoring fallback remnants should stay
   removed; any newly found remnants are bugs.
-- REF-060/REF-066: Preview UV/material panel extraction is complete, but preview
-  surface material/service boundaries may still need follow-up if callbacks grow.
+- REF-060/REF-066: Preview UV/material panel extraction is complete; remaining
+  debt is limited to preview surface material/service boundary follow-up if
+  callbacks grow.
 - REF-045: lights/runtime object topology ownership remains a future design
   decision.
 - REF-062: lightmap bake controller extraction remains future work.
