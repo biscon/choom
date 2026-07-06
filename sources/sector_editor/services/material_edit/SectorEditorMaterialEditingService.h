@@ -10,8 +10,17 @@
 
 namespace game {
 
-using SectorEditorMaterialEditingActionFn =
-        std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>;
+struct SectorEditorAuthoringMaterialTarget {
+    TopologySurfaceEditTarget target;
+    TopologyMaterialLayer layer = TopologyMaterialLayer::Base;
+    std::string* textureId = nullptr;
+    SectorTopologyUvSettings* uv = nullptr;
+    SectorTopologyDecalLayer* decal = nullptr;
+    SectorTopologyWallPartSettings* wallPart = nullptr;
+};
+
+using SectorEditorAuthoringMaterialActionFn =
+        std::function<SectorEditorMaterialActionResult(SectorEditorAuthoringMaterialTarget&)>;
 
 struct SectorEditorMaterialEditingServiceContext {
     SectorEditorState& state;
@@ -24,9 +33,6 @@ struct SectorEditorMaterialEditingServiceContext {
 class SectorEditorMaterialEditingService {
 public:
     explicit SectorEditorMaterialEditingService(SectorEditorMaterialEditingServiceContext context);
-
-    bool FinishTopologyMaterialMutation(const char* status, engine::AssetManager* assets);
-    bool FinishMaterialActionResult(const SectorEditorMaterialActionResult& result, engine::AssetManager* assets);
 
     bool CopyMaterial(TopologySurfaceEditTarget target);
     bool PasteMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets);
@@ -83,13 +89,9 @@ public:
             TopologyMaterialLayer layer);
 
     const SectorTopologyDecalLayer* DecalForSurface(TopologySurfaceEditTarget target) const;
-    SectorTopologyDecalLayer* MutableDecalForSurface(TopologySurfaceEditTarget target);
     const SectorTopologyUvSettings* UvForSurface(
             TopologySurfaceEditTarget target,
             TopologyMaterialLayer layer) const;
-    SectorTopologyUvSettings* MutableUvForSurface(
-            TopologySurfaceEditTarget target,
-            TopologyMaterialLayer layer);
     bool IsDecalAssigned(TopologySurfaceEditTarget target) const;
     bool IsValidSurfaceTarget(TopologySurfaceEditTarget target) const;
     std::string CurrentTextureForSurface(TopologySurfaceEditTarget target, TopologyMaterialLayer layer) const;
@@ -117,20 +119,23 @@ private:
     bool ApplyMaterialAction(
             TopologySurfaceEditTarget target,
             engine::AssetManager* assets,
-            const SectorEditorMaterialEditingActionFn& action);
+            TopologyMaterialLayer layer,
+            const SectorEditorAuthoringMaterialActionFn& action);
     bool ApplyAuthoringSideMaterialAction(
             TopologySurfaceEditTarget target,
             engine::AssetManager* assets,
-            const SectorEditorMaterialEditingActionFn& action);
+            TopologyMaterialLayer layer,
+            const SectorEditorAuthoringMaterialActionFn& action);
     bool ApplyAuthoringFaceAnchorFlatMaterialAction(
             TopologySurfaceEditTarget target,
             engine::AssetManager* assets,
-            const SectorEditorMaterialEditingActionFn& action);
-    bool FinishAuthoringSideMaterialActionResult(
-            TopologySurfaceEditTarget target,
+            TopologyMaterialLayer layer,
+            const SectorEditorAuthoringMaterialActionFn& action);
+    bool FinishAuthoringMaterialActionResult(
             const SectorEditorMaterialActionResult& result,
-            const SectorTopologyMap& editedTopology,
-            engine::AssetManager* assets);
+            bool refreshed,
+            engine::AssetManager* assets,
+            const char* failureStatus);
     void MarkTopologyDocumentEdited(const char* status);
     void ApplyMaterialUiResetFlags(const SectorEditorMaterialActionResult& result);
 

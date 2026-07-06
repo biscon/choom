@@ -79,6 +79,7 @@ Task Type:
 | REF-068 | `[x]` | High | Editor architecture | Replace SideDef inspector UV topology mutation with authoring material edits | Codex task | Medium/High | Completed; inspector UV apply/reset writes authoring material data and fails without mapping |
 | REF-069 | `[x]` | Medium | Editor architecture | Remove invalid no-authoring topology-edit support | Codex task | Medium/High | Completed; normal editor edits require authoring data or fail |
 | REF-070 | `[x]` | High | Editor architecture | Write Sector Editor Architectural Principles document | Codex task | Low | Completed; architecture contract added under `docs/architecture/` |
+| REF-071 | `[x]` | High | Editor architecture | Remove remaining material topology scratch/writeback routes | Codex task | Medium/High | Completed; material service and picker routes now write authoring material data directly |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
@@ -1101,8 +1102,7 @@ Task Type:
   - No missing authoring fields were found for the scoped sector/material/line
     properties.
   - Do not fold this into REF-044 material scratch/writeback cleanup.
-  - REF-044 remains open because transitional material scratch/writeback routes
-    still exist.
+  - REF-044 remains open as the broader material/tool migration umbrella.
   - REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
     remain open.
 
@@ -1136,6 +1136,37 @@ Task Type:
     temporary exceptions as backlog debt.
   - No source code, tests, CMake, editor/runtime behavior, cache behavior, or
     lightmap source-hash behavior changed.
+
+#### REF-071 `[x]` Remove remaining material topology scratch/writeback routes
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md` and
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`.
+- Why it helps: finishes the material ownership correction by making normal
+  material edits write authoring graph material fields directly.
+- Likely files: `services/material_edit/`, `SectorEditorMaterialActions.*`,
+  authoring graph tests, and direct topology edit inventory/backlog docs.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: full build, full `ctest`, requested material/topology
+  greps, `git diff --check`, and material inspector/Preview3D manual smoke if
+  practical.
+- Completion notes:
+  - Remaining known material scratch/writeback routes were removed; no remaining
+    normal editor material scratch/writeback route is listed.
+  - Direct authoring material edit routes were added for authoring side wall
+    parts and authoring face-anchor floor/ceiling flats.
+  - Material picker routing now writes selected material texture IDs directly to
+    authoring side/face data.
+  - No-authoring material edits fail instead of mutating topology.
+  - Missing authoring side overrides may still be seeded from current derived
+    display values by existing authoring mutation helpers before the direct
+    authoring assignment is applied.
+  - Inventory updated.
+  - No behavior changes intended except the material ownership correction.
+  - REF-044 remains open only as the broader material/tool migration umbrella.
+  - REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
+    remain open.
 
 #### REF-061 `[>]` Evaluate Status/Diagnostics service
 

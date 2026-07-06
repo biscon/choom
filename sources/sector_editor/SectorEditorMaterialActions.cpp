@@ -301,11 +301,9 @@ SectorEditorMaterialActionResult PasteMaterialSurface(
             return Failure("Selected material target is no longer valid.");
         }
         if (target.kind == TopologySurfaceEditTargetKind::SectorFloor) {
-            sector->floorTextureId = payload.textureId;
-            sector->floorUv = payload.uv;
+            return PasteMaterialToFields(target, payload, sector->floorTextureId, sector->floorUv);
         } else {
-            sector->ceilingTextureId = payload.textureId;
-            sector->ceilingUv = payload.uv;
+            return PasteMaterialToFields(target, payload, sector->ceilingTextureId, sector->ceilingUv);
         }
     } else {
         SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, target.sideDefId);
@@ -315,10 +313,28 @@ SectorEditorMaterialActionResult PasteMaterialSurface(
         SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(
                 *sideDef,
                 TopologyEditTargetWallPart(target.kind));
-        part.textureId = payload.textureId;
-        part.uv = payload.uv;
+        return PasteMaterialToFields(target, payload, part.textureId, part.uv);
+    }
+}
+
+SectorEditorMaterialActionResult PasteMaterialToFields(
+        TopologySurfaceEditTarget target,
+        const TopologyMaterialPayload& payload,
+        std::string& textureId,
+        SectorTopologyUvSettings& uv)
+{
+    if (!payload.valid) {
+        return Failure("No copied material.");
+    }
+    if (payload.kind != target.kind) {
+        return Failure(TextFormat(
+                "Copied material is for %s; selected target is %s.",
+                TopologyMaterialKindName(payload.kind),
+                TopologyMaterialKindName(target.kind)));
     }
 
+    textureId = payload.textureId;
+    uv = payload.uv;
     return Changed(TextFormat("Pasted %s material.", TopologyMaterialKindName(target.kind)));
 }
 
@@ -344,11 +360,29 @@ SectorEditorMaterialActionResult ApplySurfaceUvValue(
                 : "Selected material target is no longer valid.");
     }
 
+    return ApplySurfaceUvValueToSettings(target, layer, surfaceKind, component, value, *uv);
+}
+
+SectorEditorMaterialActionResult ApplySurfaceUvValueToSettings(
+        TopologySurfaceEditTarget target,
+        TopologyMaterialLayer layer,
+        SectorSurfaceKind surfaceKind,
+        int component,
+        float value,
+        SectorTopologyUvSettings& uv)
+{
+    if (!std::isfinite(value)) {
+        return {};
+    }
+    if ((component == 0 || component == 1) && !ValidateUvScale(value)) {
+        return {};
+    }
+
     switch (component) {
-        case 0: uv->scale.x = value; break;
-        case 1: uv->scale.y = value; break;
-        case 2: uv->offset.x = value; break;
-        case 3: uv->offset.y = value; break;
+        case 0: uv.scale.x = value; break;
+        case 1: uv.scale.y = value; break;
+        case 2: uv.offset.x = value; break;
+        case 3: uv.offset.y = value; break;
         default: return {};
     }
 
@@ -375,7 +409,26 @@ SectorEditorMaterialActionResult ApplySurfaceDecalOpacity(
         return {};
     }
 
-    decal->opacity = opacity;
+    return ApplySurfaceDecalOpacityToLayer(target, opacity, *decal);
+}
+
+SectorEditorMaterialActionResult ApplySurfaceDecalOpacityToLayer(
+        TopologySurfaceEditTarget target,
+        float opacity,
+        SectorTopologyDecalLayer& decal)
+{
+    if (!std::isfinite(opacity)) {
+        return {};
+    }
+    opacity = std::clamp(opacity, 0.0f, 1.0f);
+    if (decal.textureId.empty()) {
+        return Failure("No decal assigned.");
+    }
+    if (decal.opacity == opacity) {
+        return {};
+    }
+
+    decal.opacity = opacity;
     return Changed(TextFormat("Set %s decal opacity.", TopologyMaterialKindName(target.kind)));
 }
 
@@ -395,7 +448,22 @@ SectorEditorMaterialActionResult ApplySurfaceDecalEmissive(
         return {};
     }
 
-    decal->emissive = emissive;
+    return ApplySurfaceDecalEmissiveToLayer(target, emissive, *decal);
+}
+
+SectorEditorMaterialActionResult ApplySurfaceDecalEmissiveToLayer(
+        TopologySurfaceEditTarget target,
+        bool emissive,
+        SectorTopologyDecalLayer& decal)
+{
+    if (decal.textureId.empty()) {
+        return Failure("No decal assigned.");
+    }
+    if (decal.emissive == emissive) {
+        return {};
+    }
+
+    decal.emissive = emissive;
     return Changed(TextFormat("Set %s decal emissive.", TopologyMaterialKindName(target.kind)));
 }
 
@@ -418,7 +486,25 @@ SectorEditorMaterialActionResult ApplySurfaceDecalTint(
         return {};
     }
 
-    decal->tint = tint;
+    return ApplySurfaceDecalTintToLayer(target, tint, *decal);
+}
+
+SectorEditorMaterialActionResult ApplySurfaceDecalTintToLayer(
+        TopologySurfaceEditTarget target,
+        Vector3 tint,
+        SectorTopologyDecalLayer& decal)
+{
+    if (!IsValidDecalTint(tint)) {
+        return Failure("Invalid decal tint.");
+    }
+    if (decal.textureId.empty()) {
+        return Failure("No decal assigned.");
+    }
+    if (SameTint(decal.tint, tint)) {
+        return {};
+    }
+
+    decal.tint = tint;
     return Changed(TextFormat("Set %s decal tint.", TopologyMaterialKindName(target.kind)));
 }
 
@@ -439,7 +525,23 @@ SectorEditorMaterialActionResult ApplySurfaceDecalBloomIntensity(
         return {};
     }
 
-    decal->bloomIntensity = bloomIntensity;
+    return ApplySurfaceDecalBloomIntensityToLayer(target, bloomIntensity, *decal);
+}
+
+SectorEditorMaterialActionResult ApplySurfaceDecalBloomIntensityToLayer(
+        TopologySurfaceEditTarget target,
+        float bloomIntensity,
+        SectorTopologyDecalLayer& decal)
+{
+    bloomIntensity = ClampDecalBloomIntensity(bloomIntensity);
+    if (decal.textureId.empty()) {
+        return Failure("No decal assigned.");
+    }
+    if (decal.bloomIntensity == bloomIntensity) {
+        return {};
+    }
+
+    decal.bloomIntensity = bloomIntensity;
     return Changed(TextFormat("Set %s decal bloom intensity.", TopologyMaterialKindName(target.kind)));
 }
 
@@ -476,11 +578,18 @@ SectorEditorMaterialActionResult ClearSurfaceDecal(
     if (decal == nullptr) {
         return Failure("Selected material target is no longer valid.");
     }
-    if (IsDefaultDecalLayer(*decal)) {
+    return ClearSurfaceDecalLayer(target, *decal);
+}
+
+SectorEditorMaterialActionResult ClearSurfaceDecalLayer(
+        TopologySurfaceEditTarget target,
+        SectorTopologyDecalLayer& decal)
+{
+    if (IsDefaultDecalLayer(decal)) {
         return Failure("No decal assigned.");
     }
 
-    ResetDecalLayer(*decal);
+    ResetDecalLayer(decal);
     SectorEditorMaterialActionResult result = Changed(
             TextFormat("Cleared %s decal.", TopologyMaterialKindName(target.kind)));
     result.resetSurface3DUi = true;
@@ -504,11 +613,21 @@ SectorEditorMaterialActionResult ClearMiddleTexture(
     if (sideDef == nullptr) {
         return Failure("Selected middle texture target is no longer valid.");
     }
-    if (IsDefaultWallPartSettings(sideDef->middle)) {
+    return ClearMiddleTextureSettings(target, sideDef->middle);
+}
+
+SectorEditorMaterialActionResult ClearMiddleTextureSettings(
+        TopologySurfaceEditTarget target,
+        SectorTopologyWallPartSettings& middle)
+{
+    if (target.kind != TopologySurfaceEditTargetKind::SideDefMiddle) {
+        return Failure("Selected middle texture target is no longer valid.");
+    }
+    if (IsDefaultWallPartSettings(middle)) {
         return Failure("No middle texture assigned.");
     }
 
-    sideDef->middle = SectorTopologyWallPartSettings{};
+    middle = SectorTopologyWallPartSettings{};
     SectorEditorMaterialActionResult result = Changed("Cleared middle texture.");
     result.resetSurface3DUi = true;
     result.resetSideDefUvInputs = true;
@@ -541,7 +660,24 @@ SectorEditorMaterialActionResult ResetSurfaceUv(
         return {};
     }
 
-    ResetTopologyUv(*uv);
+    return ResetSurfaceUvSettings(target, layer, surfaceKind, *uv);
+}
+
+SectorEditorMaterialActionResult ResetSurfaceUvSettings(
+        TopologySurfaceEditTarget target,
+        TopologyMaterialLayer layer,
+        SectorSurfaceKind surfaceKind,
+        SectorTopologyUvSettings& uv)
+{
+    const bool changed = uv.scale.x != 1.0f
+            || uv.scale.y != 1.0f
+            || uv.offset.x != 0.0f
+            || uv.offset.y != 0.0f;
+    if (!changed) {
+        return {};
+    }
+
+    ResetTopologyUv(uv);
     SectorEditorMaterialActionResult result = Changed(TextFormat(
             "Reset 3D %s %s UV",
             SurfaceKindName(surfaceKind),
@@ -565,6 +701,32 @@ SectorEditorMaterialActionResult FitSelectedDecal(
     }
     if (IsWallTopologyEditTarget(target.kind)) {
         return FitSelectedWallMaterial(map, target, TopologyUvFitMode::Both, TopologyMaterialLayer::Decal);
+    }
+
+    return Failure("Selected material target cannot be fit.");
+}
+
+SectorEditorMaterialActionResult FitSelectedDecalToAuthoring(
+        const SectorTopologyMap& map,
+        TopologySurfaceEditTarget target,
+        SectorTopologyUvSettings& uv)
+{
+    if (!IsValidMaterialSurfaceTarget(map, target)) {
+        return Failure("Selected material target is no longer valid.");
+    }
+    if (!IsMaterialDecalAssigned(map, target)) {
+        return Failure("No decal assigned.");
+    }
+    if (IsFlatTarget(target.kind)) {
+        return FitSelectedFlatDecalToUv(map, target, uv);
+    }
+    if (IsWallTopologyEditTarget(target.kind)) {
+        return FitSelectedWallMaterialToUv(
+                map,
+                target,
+                TopologyUvFitMode::Both,
+                TopologyMaterialLayer::Decal,
+                uv);
     }
 
     return Failure("Selected material target cannot be fit.");
@@ -653,9 +815,91 @@ SectorEditorMaterialActionResult FitSelectedFlatDecal(
     if (uv == nullptr) {
         return Failure("No decal assigned.");
     }
-    uv->scale = fittedScale;
-    uv->offset = Vector2{0.0f, 0.0f};
+    return FitSelectedFlatDecalToUv(map, target, *uv);
+}
 
+SectorEditorMaterialActionResult FitSelectedFlatDecalToUv(
+        const SectorTopologyMap& map,
+        TopologySurfaceEditTarget target,
+        SectorTopologyUvSettings& uv)
+{
+    if (!IsFlatTarget(target.kind)) {
+        return Failure("Select a floor or ceiling surface before fitting decal UVs.");
+    }
+    if (!IsMaterialDecalAssigned(map, target)) {
+        return Failure("No decal assigned.");
+    }
+
+    const SectorTopologySector* sector = FindSectorTopologySector(map, target.sectorId);
+    if (sector == nullptr) {
+        return Failure("Selected sector is no longer valid.");
+    }
+
+    SectorTopologyLoopSet loops;
+    if (!ExtractSectorTopologyLoops(map, sector->id, loops)) {
+        return Failure("Selected sector has invalid loops.");
+    }
+
+    bool hasPoint = false;
+    float minX = 0.0f;
+    float maxX = 0.0f;
+    float minY = 0.0f;
+    float maxY = 0.0f;
+    auto visitLoop = [&](const SectorTopologyLoop& loop) {
+        if (loop.vertexIds.empty()) {
+            return false;
+        }
+        for (int vertexId : loop.vertexIds) {
+            const SectorTopologyVertex* vertex = FindSectorTopologyVertex(map, vertexId);
+            if (vertex == nullptr) {
+                return false;
+            }
+            const Vector2 world = SectorCoordToWorldPosition2(vertex->x, vertex->y);
+            if (!std::isfinite(world.x) || !std::isfinite(world.y)) {
+                return false;
+            }
+            if (!hasPoint) {
+                minX = maxX = world.x;
+                minY = maxY = world.y;
+                hasPoint = true;
+            } else {
+                minX = std::min(minX, world.x);
+                maxX = std::max(maxX, world.x);
+                minY = std::min(minY, world.y);
+                maxY = std::max(maxY, world.y);
+            }
+        }
+        return true;
+    };
+
+    if (!visitLoop(loops.outer)) {
+        return Failure("Selected sector has invalid outer loop.");
+    }
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        if (!visitLoop(hole)) {
+            return Failure("Selected sector has invalid hole loop.");
+        }
+    }
+    if (!hasPoint) {
+        return Failure("Selected sector has no vertices.");
+    }
+
+    const float widthWorld = maxX - minX;
+    const float heightWorld = maxY - minY;
+    if (!(widthWorld > 0.0f) || !(heightWorld > 0.0f)
+            || !std::isfinite(widthWorld) || !std::isfinite(heightWorld)) {
+        return Failure("Selected sector has invalid flat bounds.");
+    }
+
+    const Vector2 fittedScale{
+            kSectorGeneratedTextureWorldSize / widthWorld,
+            kSectorGeneratedTextureWorldSize / heightWorld};
+    if (!ValidateUvScale(fittedScale.x) || !ValidateUvScale(fittedScale.y)) {
+        return Failure("Fit decal requires a UV scale outside the editable range.");
+    }
+
+    uv.scale = fittedScale;
+    uv.offset = Vector2{0.0f, 0.0f};
     SectorEditorMaterialActionResult result = Changed(
             TextFormat("Fit %s decal.", TopologyMaterialKindName(target.kind)));
     result.resetSurface3DUi = true;
@@ -793,13 +1037,141 @@ SectorEditorMaterialActionResult FitSelectedWallMaterial(
                 ? "No decal assigned."
                 : "Selected material target is no longer valid.");
     }
+    return FitSelectedWallMaterialToUv(map, target, mode, layer, *uv);
+}
+
+SectorEditorMaterialActionResult FitSelectedWallMaterialToUv(
+        const SectorTopologyMap& map,
+        TopologySurfaceEditTarget target,
+        TopologyUvFitMode mode,
+        TopologyMaterialLayer layer,
+        SectorTopologyUvSettings& uv)
+{
+    if (!IsWallTopologyEditTarget(target.kind) || !IsValidMaterialSurfaceTarget(map, target)) {
+        return Failure("Select a wall, lower, upper, or middle surface before fitting UVs.");
+    }
+    if (layer == TopologyMaterialLayer::Decal && !IsMaterialDecalAssigned(map, target)) {
+        return Failure("No decal assigned.");
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, target.sideDefId);
+    if (sideDef == nullptr
+            || sideDef->lineDefId != target.lineDefId
+            || sideDef->sectorId != target.sectorId
+            || sideDef->side != target.side) {
+        return Failure("Selected sidedef is no longer valid.");
+    }
+
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, sideDef->lineDefId);
+    if (lineDef == nullptr) {
+        return Failure("Selected sidedef references a missing linedef.");
+    }
+
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(map, *lineDef, start, end) || start == nullptr || end == nullptr) {
+        return Failure("Selected linedef endpoints are missing.");
+    }
+
+    const double dx = static_cast<double>(end->x) - static_cast<double>(start->x);
+    const double dy = static_cast<double>(end->y) - static_cast<double>(start->y);
+    const double coordLength = std::sqrt(dx * dx + dy * dy);
+    const float wallLengthWorld = SectorCoordDistanceToWorldDistance(coordLength);
+    if (!(wallLengthWorld > 0.0f) || !std::isfinite(wallLengthWorld)) {
+        return Failure("Selected wall has invalid length.");
+    }
+
+    const SectorTopologySector* sector = FindSectorTopologySector(map, sideDef->sectorId);
+    if (sector == nullptr) {
+        return Failure("Selected sidedef references a missing sector.");
+    }
+
+    const int oppositeSideDefId = sideDef->side == SectorTopologySideKind::Front
+            ? lineDef->backSideDefId
+            : lineDef->frontSideDefId;
+    const SectorTopologySideDef* opposite = FindOppositeSectorTopologySideDef(map, sideDef->id);
+    if (oppositeSideDefId != -1 && opposite == nullptr) {
+        return Failure("Selected sidedef's opposite side is no longer valid.");
+    }
+
+    const SectorTopologySector* oppositeSector = nullptr;
+    if (opposite != nullptr) {
+        oppositeSector = FindSectorTopologySector(map, opposite->sectorId);
+        if (oppositeSector == nullptr) {
+            return Failure("Selected sidedef's opposite sector is missing.");
+        }
+    }
+
+    const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+    if (wallPart == TopologyWallPart::Middle
+            && layer == TopologyMaterialLayer::Base
+            && sideDef->middle.textureId.empty()) {
+        return Failure("No middle texture assigned.");
+    }
+
+    float heightAuthoring = 0.0f;
+    switch (wallPart) {
+        case TopologyWallPart::Wall:
+            if (opposite != nullptr) {
+                return Failure("Selected wall part has no visible solid wall span.");
+            }
+            heightAuthoring = std::fabs(sector->ceilingZ - sector->floorZ);
+            break;
+        case TopologyWallPart::Lower:
+            if (oppositeSector == nullptr) {
+                return Failure("Lower wall fit needs an opposite sector.");
+            }
+            if (!(oppositeSector->floorZ > sector->floorZ)) {
+                return Failure("Selected lower wall has no visible height span.");
+            }
+            heightAuthoring = oppositeSector->floorZ - sector->floorZ;
+            break;
+        case TopologyWallPart::Upper:
+            if (oppositeSector == nullptr) {
+                return Failure("Upper wall fit needs an opposite sector.");
+            }
+            if (!(sector->ceilingZ > oppositeSector->ceilingZ)) {
+                return Failure("Selected upper wall has no visible height span.");
+            }
+            heightAuthoring = sector->ceilingZ - oppositeSector->ceilingZ;
+            break;
+        case TopologyWallPart::Middle: {
+            if (oppositeSector == nullptr) {
+                return Failure("Middle texture fit needs an opposite sector.");
+            }
+            const float bottom = std::max(sector->floorZ, oppositeSector->floorZ);
+            const float top = std::min(sector->ceilingZ, oppositeSector->ceilingZ);
+            if (!(top > bottom) || !std::isfinite(bottom) || !std::isfinite(top)) {
+                return Failure("Selected middle texture has no visible height span.");
+            }
+            heightAuthoring = top - bottom;
+            break;
+        }
+    }
+
+    const float wallHeightWorld = SectorAuthoringToWorldDistance(std::fabs(heightAuthoring));
+    const bool fitWidth = mode == TopologyUvFitMode::Width || mode == TopologyUvFitMode::Both;
+    const bool fitHeight = mode == TopologyUvFitMode::Height || mode == TopologyUvFitMode::Both;
+    if (fitHeight && (!(wallHeightWorld > 0.0f) || !std::isfinite(wallHeightWorld))) {
+        return Failure("Selected wall has invalid height.");
+    }
+
+    const float widthScale = kSectorGeneratedTextureWorldSize / wallLengthWorld;
+    const float heightScale = fitHeight ? kSectorGeneratedTextureWorldSize / wallHeightWorld : 1.0f;
+    if (fitWidth && !ValidateUvScale(widthScale)) {
+        return Failure("Fit width requires a UV scale outside the editable range.");
+    }
+    if (fitHeight && !ValidateUvScale(heightScale)) {
+        return Failure("Fit height requires a UV scale outside the editable range.");
+    }
+
     if (fitWidth) {
-        uv->scale.x = widthScale;
-        uv->offset.x = 0.0f;
+        uv.scale.x = widthScale;
+        uv.offset.x = 0.0f;
     }
     if (fitHeight) {
-        uv->scale.y = heightScale;
-        uv->offset.y = 0.0f;
+        uv.scale.y = heightScale;
+        uv.offset.y = 0.0f;
     }
 
     SectorEditorMaterialActionResult result = Changed(
@@ -916,16 +1288,115 @@ SectorEditorMaterialActionResult AlignSelectedWallMaterialVertical(
                 ? "No decal assigned."
                 : "Selected material target is no longer valid.");
     }
-    if (!std::isfinite(uv->scale.y)) {
+    return AlignSelectedWallMaterialVerticalToUv(map, target, layer, *uv);
+}
+
+SectorEditorMaterialActionResult AlignSelectedWallMaterialVerticalToUv(
+        const SectorTopologyMap& map,
+        TopologySurfaceEditTarget target,
+        TopologyMaterialLayer layer,
+        SectorTopologyUvSettings& uv)
+{
+    if (!IsWallTopologyEditTarget(target.kind) || !IsValidMaterialSurfaceTarget(map, target)) {
+        return Failure("Select a wall, lower, or upper surface before aligning UVs.");
+    }
+    if (layer == TopologyMaterialLayer::Decal && !IsMaterialDecalAssigned(map, target)) {
+        return Failure("No decal assigned.");
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, target.sideDefId);
+    if (sideDef == nullptr
+            || sideDef->lineDefId != target.lineDefId
+            || sideDef->sectorId != target.sectorId
+            || sideDef->side != target.side) {
+        return Failure("Selected sidedef is no longer valid.");
+    }
+
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, sideDef->lineDefId);
+    if (lineDef == nullptr) {
+        return Failure("Selected sidedef references a missing linedef.");
+    }
+
+    const SectorTopologySector* sector = FindSectorTopologySector(map, sideDef->sectorId);
+    if (sector == nullptr) {
+        return Failure("Selected sidedef references a missing sector.");
+    }
+
+    const int oppositeSideDefId = sideDef->side == SectorTopologySideKind::Front
+            ? lineDef->backSideDefId
+            : lineDef->frontSideDefId;
+    const SectorTopologySideDef* opposite = FindOppositeSectorTopologySideDef(map, sideDef->id);
+    if (oppositeSideDefId != -1 && opposite == nullptr) {
+        return Failure("Selected sidedef's opposite side is no longer valid.");
+    }
+
+    const SectorTopologySector* oppositeSector = nullptr;
+    if (opposite != nullptr) {
+        oppositeSector = FindSectorTopologySector(map, opposite->sectorId);
+        if (oppositeSector == nullptr) {
+            return Failure("Selected sidedef's opposite sector is missing.");
+        }
+    }
+
+    const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+    if (wallPart == TopologyWallPart::Middle) {
+        return Failure("Middle texture vertical alignment is not available yet.");
+    }
+
+    float spanBottomAuthoring = 0.0f;
+    float spanTopAuthoring = 0.0f;
+    switch (wallPart) {
+        case TopologyWallPart::Wall:
+            if (opposite != nullptr) {
+                return Failure("Selected wall part has no visible solid wall span.");
+            }
+            spanBottomAuthoring = sector->floorZ;
+            spanTopAuthoring = sector->ceilingZ;
+            break;
+        case TopologyWallPart::Lower:
+            if (oppositeSector == nullptr) {
+                return Failure("Lower wall alignment needs an opposite sector.");
+            }
+            if (!(oppositeSector->floorZ > sector->floorZ)) {
+                return Failure("Selected lower wall has no visible height span.");
+            }
+            spanBottomAuthoring = sector->floorZ;
+            spanTopAuthoring = oppositeSector->floorZ;
+            break;
+        case TopologyWallPart::Upper:
+            if (oppositeSector == nullptr) {
+                return Failure("Upper wall alignment needs an opposite sector.");
+            }
+            if (!(sector->ceilingZ > oppositeSector->ceilingZ)) {
+                return Failure("Selected upper wall has no visible height span.");
+            }
+            spanBottomAuthoring = oppositeSector->ceilingZ;
+            spanTopAuthoring = sector->ceilingZ;
+            break;
+        case TopologyWallPart::Middle:
+            return Failure("Middle texture vertical alignment is not available yet.");
+    }
+
+    const float spanBottomWorld = SectorAuthoringToWorldDistance(spanBottomAuthoring);
+    const float spanTopWorld = SectorAuthoringToWorldDistance(spanTopAuthoring);
+    const float spanHeightWorld = spanTopWorld - spanBottomWorld;
+    if (!(spanHeightWorld > 0.0f)
+            || !std::isfinite(spanBottomWorld)
+            || !std::isfinite(spanTopWorld)
+            || !std::isfinite(spanHeightWorld)) {
+        return Failure("Selected wall has invalid height.");
+    }
+
+    if (!std::isfinite(uv.scale.y)) {
         return Failure("Selected wall has invalid V scale.");
     }
 
-    const float alignedOffsetY = -(spanTopWorld / kSectorGeneratedTextureWorldSize) * uv->scale.y;
+    const float alignedOffsetY = -(spanTopWorld / kSectorGeneratedTextureWorldSize) * uv.scale.y;
     if (!std::isfinite(alignedOffsetY)) {
         return Failure("Aligned V offset is invalid.");
     }
 
-    uv->offset.y = alignedOffsetY;
+    uv.offset.y = alignedOffsetY;
     SectorEditorMaterialActionResult result = Changed(TextFormat(
             "Aligned %s %s vertically.",
             TopologyWallPartStatusName(wallPart),
@@ -1069,9 +1540,140 @@ SectorEditorMaterialActionResult AlignSelectedWallMaterialU(
                 ? "No decal assigned."
                 : "Selected material target is no longer valid.");
     }
+    return AlignSelectedWallMaterialUToUv(map, target, direction, layer, *selectedUv);
+}
 
-    if (!std::isfinite(selectedUv->scale.x)
-            || !std::isfinite(selectedUv->offset.x)
+SectorEditorMaterialActionResult AlignSelectedWallMaterialUToUv(
+        const SectorTopologyMap& map,
+        TopologySurfaceEditTarget target,
+        TopologyUAlignDirection direction,
+        TopologyMaterialLayer layer,
+        SectorTopologyUvSettings& selectedUv)
+{
+    if (!IsWallTopologyEditTarget(target.kind) || !IsValidMaterialSurfaceTarget(map, target)) {
+        return Failure("Select a wall, lower, or upper surface before aligning U.");
+    }
+    if (layer == TopologyMaterialLayer::Decal && !IsMaterialDecalAssigned(map, target)) {
+        return Failure("No decal assigned.");
+    }
+
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, target.sideDefId);
+    if (sideDef == nullptr
+            || sideDef->lineDefId != target.lineDefId
+            || sideDef->sectorId != target.sectorId
+            || sideDef->side != target.side) {
+        return Failure("Selected sidedef is no longer valid.");
+    }
+
+    const SectorTopologySector* sector = FindSectorTopologySector(map, sideDef->sectorId);
+    if (sector == nullptr) {
+        return Failure("Selected sidedef references a missing sector.");
+    }
+
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, sideDef->lineDefId);
+    if (lineDef == nullptr) {
+        return Failure("Selected sidedef references a missing linedef.");
+    }
+
+    float selectedLengthWorld = 0.0f;
+    if (!SectorTopologyWallLengthWorld(map, *lineDef, selectedLengthWorld)) {
+        return Failure("Selected wall has invalid length.");
+    }
+
+    SectorTopologyLoopSet loops;
+    if (!ExtractSectorTopologyLoops(map, sideDef->sectorId, loops)) {
+        return Failure("Could not extract selected sector boundary loop.");
+    }
+
+    const SectorTopologyLoop* selectedLoop = nullptr;
+    size_t selectedEdgeIndex = 0;
+    if (!FindUniqueSectorLoopEdgeForSideDef(loops, sideDef->id, selectedLoop, selectedEdgeIndex)
+            || selectedLoop == nullptr
+            || selectedLoop->edges.empty()) {
+        return Failure("Selected sidedef was not found in exactly one sector loop.");
+    }
+
+    const size_t edgeCount = selectedLoop->edges.size();
+    if (edgeCount < 2) {
+        return Failure("Selected sector loop has no neighboring wall segment.");
+    }
+
+    const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
+    if (wallPart == TopologyWallPart::Middle) {
+        return Failure("Middle texture U alignment is not available yet.");
+    }
+    const SectorTopologyLoopEdge& selectedEdge = selectedLoop->edges[selectedEdgeIndex];
+
+    if (selectedEdge.sideDefId != sideDef->id
+            || selectedEdge.lineDefId != sideDef->lineDefId
+            || selectedEdge.side != sideDef->side) {
+        return Failure("Selected sidedef loop edge is stale.");
+    }
+
+    if (!TopologyWallPartHasVisibleSpan(map, *sideDef, wallPart)) {
+        switch (wallPart) {
+            case TopologyWallPart::Wall:
+                return Failure("Selected wall part has no visible solid wall span.");
+            case TopologyWallPart::Lower:
+                return Failure("Selected lower wall has no visible height span.");
+            case TopologyWallPart::Upper:
+                return Failure("Selected upper wall has no visible height span.");
+            case TopologyWallPart::Middle:
+                return Failure("Selected middle texture has no visible height span.");
+        }
+    }
+
+    std::string neighborError;
+    const SectorTopologyLoopEdge* neighborEdge = FindVisibleTopologyWallPartNeighborEdge(
+            map,
+            *selectedLoop,
+            selectedEdgeIndex,
+            sideDef->sectorId,
+            direction,
+            wallPart,
+            layer,
+            neighborError);
+    if (neighborEdge == nullptr) {
+        if (!neighborError.empty()) {
+            return Failure(neighborError.c_str());
+        }
+        return Failure(TextFormat(
+                "No %s visible %s %s in this sector loop.",
+                TopologyUAlignDirectionStatusName(direction),
+                TopologyWallPartSurfaceStatusName(wallPart),
+                TopologyMaterialLayerStatusName(layer)));
+    }
+
+    const SectorTopologySideDef* neighborSideDef = FindSectorTopologySideDef(map, neighborEdge->sideDefId);
+    if (neighborSideDef == nullptr
+            || neighborSideDef->lineDefId != neighborEdge->lineDefId
+            || neighborSideDef->sectorId != sideDef->sectorId
+            || neighborSideDef->side != neighborEdge->side) {
+        return Failure(TextFormat(
+                "%s sidedef is no longer valid.",
+                direction == TopologyUAlignDirection::Previous ? "Previous" : "Next"));
+    }
+
+    const SectorTopologyLineDef* neighborLineDef = FindSectorTopologyLineDef(map, neighborSideDef->lineDefId);
+    if (neighborLineDef == nullptr) {
+        return Failure(TextFormat(
+                "%s sidedef references a missing linedef.",
+                direction == TopologyUAlignDirection::Previous ? "Previous" : "Next"));
+    }
+
+    float neighborLengthWorld = 0.0f;
+    if (!SectorTopologyWallLengthWorld(map, *neighborLineDef, neighborLengthWorld)) {
+        return Failure(TextFormat(
+                "%s wall has invalid length.",
+                direction == TopologyUAlignDirection::Previous ? "Previous" : "Next"));
+    }
+
+    const SectorTopologyWallPartSettings& neighborPart = TopologyWallPartSettingsFor(*neighborSideDef, wallPart);
+    const SectorTopologyUvSettings& neighborUv = layer == TopologyMaterialLayer::Decal
+            ? neighborPart.decal.uv
+            : neighborPart.uv;
+    if (!std::isfinite(selectedUv.scale.x)
+            || !std::isfinite(selectedUv.offset.x)
             || !std::isfinite(neighborUv.scale.x)
             || !std::isfinite(neighborUv.offset.x)) {
         return Failure("Wall U alignment requires finite U scale and offset values.");
@@ -1083,14 +1685,14 @@ SectorEditorMaterialActionResult AlignSelectedWallMaterialU(
         alignedOffsetX = previousBaseEndU * neighborUv.scale.x + neighborUv.offset.x;
     } else {
         const float selectedBaseEndU = selectedLengthWorld / kSectorGeneratedTextureWorldSize;
-        alignedOffsetX = neighborUv.offset.x - selectedBaseEndU * selectedUv->scale.x;
+        alignedOffsetX = neighborUv.offset.x - selectedBaseEndU * selectedUv.scale.x;
     }
 
     if (!std::isfinite(alignedOffsetX)) {
         return Failure("Aligned U offset is invalid.");
     }
 
-    selectedUv->offset.x = alignedOffsetX;
+    selectedUv.offset.x = alignedOffsetX;
     SectorEditorMaterialActionResult result = Changed(TextFormat(
             "Aligned %s %s U from %s.",
             TopologyWallPartStatusName(wallPart),

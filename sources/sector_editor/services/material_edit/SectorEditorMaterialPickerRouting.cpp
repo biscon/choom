@@ -8,12 +8,6 @@ namespace game {
 
 namespace {
 
-bool IsSectorPickerTarget(TopologyTexturePickerTargetKind kind)
-{
-    return kind == TopologyTexturePickerTargetKind::Sector
-            || kind == TopologyTexturePickerTargetKind::AuthoringFaceAnchor;
-}
-
 bool IsSidePickerTarget(TopologyTexturePickerTargetKind kind)
 {
     return kind == TopologyTexturePickerTargetKind::SideDef
@@ -186,128 +180,119 @@ bool ResolveDirectAuthoringSidePickerTarget(
     return true;
 }
 
-void AssignSelectedTextureToPickerTarget(
-        SectorTopologyMap& map,
+void AssignDecalTexture(
+        SectorTopologyDecalLayer& decal,
+        const std::string& selectedTexture,
+        bool& changed)
+{
+    if (decal.textureId.empty()) {
+        ResetTopologyUv(decal.uv);
+        decal.opacity = 1.0f;
+        decal.emissive = false;
+        decal.tint = Vector3{1.0f, 1.0f, 1.0f};
+        decal.bloomIntensity = 1.0f;
+    }
+    if (decal.textureId != selectedTexture) {
+        decal.textureId = selectedTexture;
+        changed = true;
+    }
+}
+
+void AssignTexture(std::string& textureId, const std::string& selectedTexture, bool& changed)
+{
+    if (textureId != selectedTexture) {
+        textureId = selectedTexture;
+        changed = true;
+    }
+}
+
+bool AssignSelectedTextureToAuthoringFaceAnchor(
+        SectorAuthoringFaceAnchor& anchor,
         const TexturePickerState& picker,
         const std::string& selectedTexture,
         SectorEditorTexturePickerApplyResult& result)
 {
-    auto assignTexture = [&](std::string& field) {
-        if (field != selectedTexture) {
-            field = selectedTexture;
-            result.changed = true;
-        }
-    };
-    auto assignDecalTexture = [&](SectorTopologyDecalLayer& decal) {
-        if (decal.textureId.empty()) {
-            ResetTopologyUv(decal.uv);
-            decal.opacity = 1.0f;
-            decal.emissive = false;
-            decal.tint = Vector3{1.0f, 1.0f, 1.0f};
-            decal.bloomIntensity = 1.0f;
-        }
-        assignTexture(decal.textureId);
-    };
-
-    if (IsSectorPickerTarget(picker.topologyTargetKind)) {
-        SectorTopologySector* sector = FindSectorTopologySector(map, picker.topologySectorId);
-        if (sector == nullptr) {
-            return;
-        }
-
-        switch (picker.topologyField) {
-            case TopologySectorTextureField::Floor:
-                if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
-                    assignDecalTexture(sector->floorDecal);
-                } else {
-                    assignTexture(sector->floorTextureId);
-                }
-                break;
-            case TopologySectorTextureField::Ceiling:
-                if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
-                    assignDecalTexture(sector->ceilingDecal);
-                } else {
-                    assignTexture(sector->ceilingTextureId);
-                }
-                break;
-            case TopologySectorTextureField::DefaultWall:
-                assignTexture(sector->defaultWall.textureId);
-                break;
-            case TopologySectorTextureField::DefaultLower:
-                assignTexture(sector->defaultLower.textureId);
-                break;
-            case TopologySectorTextureField::DefaultUpper:
-                assignTexture(sector->defaultUpper.textureId);
-                break;
-            case TopologySectorTextureField::None:
-                break;
-        }
-        result.status = picker.topologyLayer == TopologyMaterialLayer::Decal
-                ? TextFormat("Selected %s decal texture.",
-                        picker.topologyField == TopologySectorTextureField::Floor ? "floor" : "ceiling")
-                : TextFormat("Changed %s", TopologySectorTextureFieldLabel(picker.topologyField));
-        return;
+    bool changed = false;
+    switch (picker.topologyField) {
+        case TopologySectorTextureField::Floor:
+            if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+                AssignDecalTexture(anchor.floorDecal, selectedTexture, changed);
+            } else {
+                AssignTexture(anchor.floorTextureId, selectedTexture, changed);
+            }
+            result.status = picker.topologyLayer == TopologyMaterialLayer::Decal
+                    ? "Selected floor decal texture."
+                    : TextFormat("Changed %s", TopologySectorTextureFieldLabel(picker.topologyField));
+            break;
+        case TopologySectorTextureField::Ceiling:
+            if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+                AssignDecalTexture(anchor.ceilingDecal, selectedTexture, changed);
+            } else {
+                AssignTexture(anchor.ceilingTextureId, selectedTexture, changed);
+            }
+            result.status = picker.topologyLayer == TopologyMaterialLayer::Decal
+                    ? "Selected ceiling decal texture."
+                    : TextFormat("Changed %s", TopologySectorTextureFieldLabel(picker.topologyField));
+            break;
+        case TopologySectorTextureField::DefaultWall:
+            if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+                AssignDecalTexture(anchor.defaultWall.decal, selectedTexture, changed);
+            } else {
+                AssignTexture(anchor.defaultWall.textureId, selectedTexture, changed);
+            }
+            result.status = TextFormat("Changed %s", TopologySectorTextureFieldLabel(picker.topologyField));
+            break;
+        case TopologySectorTextureField::DefaultLower:
+            if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+                AssignDecalTexture(anchor.defaultLower.decal, selectedTexture, changed);
+            } else {
+                AssignTexture(anchor.defaultLower.textureId, selectedTexture, changed);
+            }
+            result.status = TextFormat("Changed %s", TopologySectorTextureFieldLabel(picker.topologyField));
+            break;
+        case TopologySectorTextureField::DefaultUpper:
+            if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
+                AssignDecalTexture(anchor.defaultUpper.decal, selectedTexture, changed);
+            } else {
+                AssignTexture(anchor.defaultUpper.textureId, selectedTexture, changed);
+            }
+            result.status = TextFormat("Changed %s", TopologySectorTextureFieldLabel(picker.topologyField));
+            break;
+        case TopologySectorTextureField::None:
+            return false;
     }
-
-    if (IsSidePickerTarget(picker.topologyTargetKind)) {
-        SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, picker.topologySideDefId);
-        if (sideDef == nullptr) {
-            return;
-        }
-        SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(*sideDef, picker.topologyWallPart);
-        const TopologyMaterialLayer layer = picker.topologyWallPart == TopologyWallPart::Middle
-                ? TopologyMaterialLayer::Base
-                : picker.topologyLayer;
-        if (layer == TopologyMaterialLayer::Decal) {
-            assignDecalTexture(part.decal);
-            result.status = TextFormat(
-                    "Selected %s decal texture.",
-                    TopologyWallPartStatusName(picker.topologyWallPart));
-        } else {
-            assignTexture(part.textureId);
-            result.status = picker.topologyWallPart == TopologyWallPart::Middle
-                    ? "Selected middle texture."
-                    : TextFormat(
-                            "Changed topology sidedef %d %s texture",
-                            sideDef->id,
-                            TopologyWallPartStatusName(picker.topologyWallPart));
-        }
-        result.useMaterialMutationFinish = picker.topologyWallPart == TopologyWallPart::Middle;
-    }
+    result.changed = changed;
+    return changed;
 }
 
-TopologySurfaceEditTarget BuildSideTarget(const SectorTopologySideDef& sideDef, TopologyWallPart wallPart)
+bool AssignSelectedTextureToAuthoringSide(
+        SectorAuthoringLineSide& side,
+        const TexturePickerState& picker,
+        const std::string& selectedTexture,
+        SectorEditorTexturePickerApplyResult& result)
 {
-    TopologySurfaceEditTarget target;
-    switch (wallPart) {
-        case TopologyWallPart::Wall:
-            target.kind = TopologySurfaceEditTargetKind::SideDefWall;
-            break;
-        case TopologyWallPart::Lower:
-            target.kind = TopologySurfaceEditTargetKind::SideDefLower;
-            break;
-        case TopologyWallPart::Upper:
-            target.kind = TopologySurfaceEditTargetKind::SideDefUpper;
-            break;
-        case TopologyWallPart::Middle:
-            target.kind = TopologySurfaceEditTargetKind::SideDefMiddle;
-            break;
+    SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(side, picker.topologyWallPart);
+    const TopologyMaterialLayer layer = picker.topologyWallPart == TopologyWallPart::Middle
+            ? TopologyMaterialLayer::Base
+            : picker.topologyLayer;
+    bool changed = false;
+    if (layer == TopologyMaterialLayer::Decal) {
+        AssignDecalTexture(part.decal, selectedTexture, changed);
+        result.status = TextFormat(
+                "Selected %s decal texture.",
+                TopologyWallPartStatusName(picker.topologyWallPart));
+    } else {
+        AssignTexture(part.textureId, selectedTexture, changed);
+        result.status = picker.topologyWallPart == TopologyWallPart::Middle
+                ? "Selected middle texture."
+                : TextFormat(
+                        "Changed topology sidedef %d %s texture",
+                        picker.topologySideDefId,
+                        TopologyWallPartStatusName(picker.topologyWallPart));
     }
-    target.sectorId = sideDef.sectorId;
-    target.lineDefId = sideDef.lineDefId;
-    target.sideDefId = sideDef.id;
-    target.side = sideDef.side;
-    return target;
-}
-
-TopologySurfaceEditTarget BuildFlatTarget(const TexturePickerState& picker)
-{
-    TopologySurfaceEditTarget target;
-    target.kind = picker.topologyField == TopologySectorTextureField::Floor
-            ? TopologySurfaceEditTargetKind::SectorFloor
-            : TopologySurfaceEditTargetKind::SectorCeiling;
-    target.sectorId = picker.topologySectorId;
-    return target;
+    result.changed = changed;
+    result.useMaterialMutationFinish = picker.topologyWallPart == TopologyWallPart::Middle;
+    return changed;
 }
 
 SectorSurfaceRef BuildFlatSurface(const TexturePickerState& picker)
@@ -725,54 +710,16 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
             return closeAndReturn();
         }
 
-        SectorTopologyMap editedTopology = state.topologyMap;
-        AssignSelectedTextureToPickerTarget(editedTopology, picker, selectedTexture, result);
-        if (!result.changed) {
-            return closeAndReturn();
-        }
-
-        const SectorTopologySector* editedSector =
-                FindSectorTopologySector(editedTopology, picker.topologySectorId);
-        if (editedSector == nullptr) {
-            result.changed = false;
-            result.status = "Authoring face texture edit unavailable: selected sector is not current";
-            return closeAndReturn();
-        }
-
-        const SectorTopologySector copiedSector = *editedSector;
         if (!MutateSectorEditorAuthoringFaceAnchorForTopologySector(
                     state,
                     picker.topologySectorId,
-                    result.status.c_str(),
-                    [picker, copiedSector](SectorAuthoringFaceAnchor& anchor) {
-                        switch (picker.topologyField) {
-                            case TopologySectorTextureField::Floor:
-                                if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
-                                    anchor.floorDecal = copiedSector.floorDecal;
-                                } else {
-                                    anchor.floorTextureId = copiedSector.floorTextureId;
-                                }
-                                return true;
-                            case TopologySectorTextureField::Ceiling:
-                                if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
-                                    anchor.ceilingDecal = copiedSector.ceilingDecal;
-                                } else {
-                                    anchor.ceilingTextureId = copiedSector.ceilingTextureId;
-                                }
-                                return true;
-                            case TopologySectorTextureField::DefaultWall:
-                                anchor.defaultWall = copiedSector.defaultWall;
-                                return true;
-                            case TopologySectorTextureField::DefaultLower:
-                                anchor.defaultLower = copiedSector.defaultLower;
-                                return true;
-                            case TopologySectorTextureField::DefaultUpper:
-                                anchor.defaultUpper = copiedSector.defaultUpper;
-                                return true;
-                            case TopologySectorTextureField::None:
-                                break;
-                        }
-                        return false;
+                    "Updated authoring face anchor texture",
+                    [picker, selectedTexture, &result](SectorAuthoringFaceAnchor& anchor) {
+                        return AssignSelectedTextureToAuthoringFaceAnchor(
+                                anchor,
+                                picker,
+                                selectedTexture,
+                                result);
                     })) {
             result.changed = false;
         }
@@ -815,29 +762,16 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
             return closeAndReturn();
         }
 
-        SectorTopologyMap editedTopology = state.topologyMap;
-        AssignSelectedTextureToPickerTarget(editedTopology, picker, selectedTexture, result);
-        if (!result.changed) {
-            return closeAndReturn();
-        }
-
-        const SectorTopologySideDef* editedSideDef =
-                FindSectorTopologySideDef(editedTopology, picker.topologySideDefId);
-        if (editedSideDef == nullptr) {
-            result.changed = false;
-            result.status = "Authoring side texture edit unavailable: selected sidedef is not current";
-            return closeAndReturn();
-        }
-
-        const SectorTopologyWallPartSettings copiedPart =
-                TopologyWallPartSettingsFor(*editedSideDef, picker.topologyWallPart);
         if (!MutateSectorEditorAuthoringSideForTopologySideDef(
                     state,
                     picker.topologySideDefId,
-                    result.status.c_str(),
-                    [picker, copiedPart](SectorAuthoringLineSide& side) {
-                        TopologyWallPartSettingsFor(side, picker.topologyWallPart) = copiedPart;
-                        return true;
+                    "Updated authoring side texture",
+                    [picker, selectedTexture, &result](SectorAuthoringLineSide& side) {
+                        return AssignSelectedTextureToAuthoringSide(
+                                side,
+                                picker,
+                                selectedTexture,
+                                result);
                     })) {
             result.changed = false;
         }
@@ -852,6 +786,7 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
         SectorEditorMaterialPickerRoutingContext& context,
         engine::AssetManager* assets)
 {
+    (void)assets;
     SectorEditorState& state = context.state;
     TexturePickerState picker = state.texturePicker;
     if (!picker.open || !IsSectorEditorMaterialTexturePickerTarget(picker.topologyTargetKind)) {
@@ -884,13 +819,6 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
             && picker.topologyTargetKind == TopologyTexturePickerTargetKind::Sector
             && (picker.topologyField == TopologySectorTextureField::Floor
                     || picker.topologyField == TopologySectorTextureField::Ceiling);
-    const TopologyMaterialLayer authoringPickerLayer = routeAuthoringSideMaterial
-            ? picker.topologyLayer
-            : TopologyMaterialLayer::Base;
-    TopologySurfaceEditTarget authoringSideTarget;
-    TopologySurfaceEditTarget authoringFlatTarget;
-    SectorTopologyMap topologyBeforePicker;
-
     if (routeAuthoringSideMaterial || routeAuthoringFlatMaterial) {
         if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
                 || state.authoringDerivedTopologyStale
@@ -910,16 +838,16 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
             CloseSectorEditorTexturePicker(state.texturePicker);
             return SectorEditorTexturePickerApplyResult{};
         }
-        topologyBeforePicker = state.topologyMap;
         const SectorTopologySideDef* sideDef =
                 FindSectorTopologySideDef(state.topologyMap, picker.topologySideDefId);
-        if (sideDef != nullptr) {
-            authoringSideTarget = BuildSideTarget(*sideDef, picker.topologyWallPart);
+        if (sideDef == nullptr) {
+            context.statusText = "Wall material edit unavailable: selected sidedef is not current";
+            CloseSectorEditorTexturePicker(state.texturePicker);
+            return SectorEditorTexturePickerApplyResult{};
         }
     }
 
     if (routeAuthoringFlatMaterial) {
-        authoringFlatTarget = BuildFlatTarget(picker);
         SectorEditorAuthoringSurfaceTarget surfaceTarget;
         std::string unavailableStatus;
         if (!ResolveSectorEditorAuthoringSurfaceTarget(
@@ -934,7 +862,6 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
             CloseSectorEditorTexturePicker(state.texturePicker);
             return SectorEditorTexturePickerApplyResult{};
         }
-        topologyBeforePicker = state.topologyMap;
     }
 
     if (!routeAuthoringSideMaterial && !routeAuthoringFlatMaterial) {
@@ -950,66 +877,51 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
         return result;
     }
     result.rebuildPreviewOnApply = picker.rebuildPreviewOnApply;
-    AssignSelectedTextureToPickerTarget(
-            state.topologyMap,
-            picker,
-            selected.textureId,
-            result);
     CloseSectorEditorTexturePicker(state.texturePicker);
     if (routeAuthoringSideMaterial) {
-        const SectorTopologyMap editedTopology = state.topologyMap;
-        state.topologyMap = topologyBeforePicker;
-        if (result.changed && context.finishAuthoringSideMaterialActionResult) {
-            SectorEditorMaterialActionResult materialResult;
-            materialResult.changed = true;
-            materialResult.status = result.status;
-            materialResult.resetSideDefUvInputs = true;
-            materialResult.resetDecalInputs = authoringPickerLayer == TopologyMaterialLayer::Decal;
-            context.finishAuthoringSideMaterialActionResult(
-                    authoringSideTarget,
-                    materialResult,
-                    editedTopology,
-                    assets);
+        const bool refreshed = MutateSectorEditorAuthoringSideForTopologySideDef(
+                state,
+                picker.topologySideDefId,
+                "Updated authoring side texture",
+                [&](SectorAuthoringLineSide& side) {
+                    return AssignSelectedTextureToAuthoringSide(side, picker, selected.textureId, result);
+                });
+        if (!refreshed && result.changed) {
+            result.changed = false;
+            context.statusText = "Wall material edit unavailable: selected sidedef has no authoring side mapping";
+            return result;
+        }
+        if (!result.status.empty()) {
+            context.statusText = result.status;
+        }
+        if (result.changed && result.rebuildPreviewOnApply && context.rebuildPreviewForTexturePickerApply) {
+            context.rebuildPreviewForTexturePickerApply();
         }
         return result;
     }
 
     if (routeAuthoringFlatMaterial) {
-        const SectorTopologyMap editedTopology = state.topologyMap;
-        state.topologyMap = topologyBeforePicker;
-        if (result.changed && context.applyAuthoringFaceAnchorFlatMaterialAction) {
-            context.applyAuthoringFaceAnchorFlatMaterialAction(
-                    authoringFlatTarget,
-                    assets,
-                    [authoringFlatTarget, editedTopology, result](SectorTopologyMap& map) {
-                        map = editedTopology;
-                        SectorEditorMaterialActionResult materialResult;
-                        materialResult.changed = true;
-                        materialResult.status = result.status;
-                        materialResult.resetSurface3DUi = true;
-                        materialResult.resetSectorUvInputs = true;
-                        materialResult.resetDecalInputs = true;
-                        return materialResult;
-                    });
+        const bool refreshed = MutateSectorEditorAuthoringFaceAnchorForTopologySector(
+                state,
+                picker.topologySectorId,
+                "Updated authoring face anchor texture",
+                [&](SectorAuthoringFaceAnchor& anchor) {
+                    return AssignSelectedTextureToAuthoringFaceAnchor(anchor, picker, selected.textureId, result);
+                });
+        if (!refreshed && result.changed) {
+            result.changed = false;
+            context.statusText = "3D flat surface edit unavailable: selected sector has no face anchor mapping";
+            return result;
+        }
+        if (!result.status.empty()) {
+            context.statusText = result.status;
+        }
+        if (result.changed && result.rebuildPreviewOnApply && context.rebuildPreviewForTexturePickerApply) {
+            context.rebuildPreviewForTexturePickerApply();
         }
         return result;
     }
 
-    if (result.changed) {
-        if (result.useMaterialMutationFinish) {
-            if (context.finishTopologyMaterialMutation) {
-                context.finishTopologyMaterialMutation(result.status.c_str(), assets);
-            }
-        } else {
-            state.topologyRenderWarning.clear();
-            if (context.markTopologyDocumentEdited) {
-                context.markTopologyDocumentEdited(result.status.c_str());
-            }
-            if (result.rebuildPreviewOnApply && context.rebuildPreviewForTexturePickerApply) {
-                context.rebuildPreviewForTexturePickerApply();
-            }
-        }
-    }
     return result;
 }
 

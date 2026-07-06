@@ -10,23 +10,9 @@
 
 namespace game {
 
-using SectorEditorMaterialPickerActionFn =
-        std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>;
-
 struct SectorEditorMaterialPickerRoutingContext {
     SectorEditorState& state;
     std::string& statusText;
-    std::function<bool(const char*, engine::AssetManager*)> finishTopologyMaterialMutation;
-    std::function<bool(
-            TopologySurfaceEditTarget,
-            const SectorEditorMaterialActionResult&,
-            const SectorTopologyMap&,
-            engine::AssetManager*)> finishAuthoringSideMaterialActionResult;
-    std::function<bool(
-            TopologySurfaceEditTarget,
-            engine::AssetManager*,
-            SectorEditorMaterialPickerActionFn)> applyAuthoringFaceAnchorFlatMaterialAction;
-    std::function<void(const char*)> markTopologyDocumentEdited;
     std::function<bool()> rebuildPreviewForTexturePickerApply;
 };
 

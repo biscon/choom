@@ -3508,6 +3508,152 @@ void TestEditorMaterialEditingServiceSideDefUvMissingMappingDoesNotMutateTopolog
           "service sidedef UV missing mapping does not mutate derived topology");
 }
 
+void TestEditorMaterialEditingServiceSideDecalOpacityWritesThroughAuthoringSide()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall.textureId = "wall";
+    side.wall.decal.textureId = "poster";
+    side.wall.decal.opacity = 0.25f;
+    state.authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "service side decal opacity setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service side decal opacity setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, uiState, statusText);
+
+    Check(service.ApplyDecalOpacity(SideDefMaterialTarget(*sideDef), 0.75f, nullptr),
+          "service side decal opacity apply succeeds");
+
+    const game::SectorAuthoringLineSide* editedSide =
+            game::FindSectorAuthoringLineSide(state.authoringGraph, side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(editedSide != nullptr && Near(editedSide->wall.decal.opacity, 0.75f),
+          "service side decal opacity writes authoring side");
+    Check(projectedSideDef != nullptr && Near(projectedSideDef->wall.decal.opacity, 0.75f),
+          "service side decal opacity refreshes derived topology");
+}
+
+void TestEditorMaterialEditingServiceFlatDecalFitWritesThroughFaceAnchor()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    Check(anchor != nullptr, "service flat decal fit setup has anchor");
+    if (anchor == nullptr) {
+        return;
+    }
+    anchor->floorDecal.textureId = "floor_mark";
+    anchor->floorDecal.uv.scale = Vector2{2.0f, 2.0f};
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "service flat decal fit setup derives valid topology");
+
+    game::TopologySurfaceEditTarget target;
+    target.kind = game::TopologySurfaceEditTargetKind::SectorFloor;
+    target.sectorId = 200;
+    state.selectedSurface3D.kind = game::SectorSurfaceKind::Floor;
+    state.selectedSurface3D.topologySectorId = 200;
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, uiState, statusText);
+
+    Check(service.FitSelectedFlatDecal(target, nullptr),
+          "service flat decal fit succeeds");
+
+    const game::SectorAuthoringFaceAnchor* editedAnchor =
+            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+    const game::SectorTopologySector* projectedSector =
+            game::FindSectorTopologySector(state.topologyMap, 200);
+    Check(editedAnchor != nullptr
+                  && (!Near(editedAnchor->floorDecal.uv.scale.x, 2.0f)
+                          || !Near(editedAnchor->floorDecal.uv.scale.y, 2.0f)),
+          "service flat decal fit writes authoring face anchor UV");
+    Check(projectedSector != nullptr
+                  && Near(projectedSector->floorDecal.uv.scale.x, editedAnchor->floorDecal.uv.scale.x)
+                  && Near(projectedSector->floorDecal.uv.scale.y, editedAnchor->floorDecal.uv.scale.y),
+          "service flat decal fit refreshes derived topology");
+}
+
+void TestEditorMaterialEditingServiceDerivedSidePickerWritesAuthoringSideDirectly()
+{
+    game::SectorEditorState state;
+    state.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
+    state.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall.textureId = "old_wall";
+    state.authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "service derived side picker setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service derived side picker setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    state.texturePicker.open = true;
+    state.texturePicker.topologyTargetKind = game::TopologyTexturePickerTargetKind::SideDef;
+    state.texturePicker.topologyLayer = game::TopologyMaterialLayer::Base;
+    state.texturePicker.topologySideDefId = sideDef->id;
+    state.texturePicker.topologyWallPart = game::TopologyWallPart::Wall;
+    state.texturePicker.textureIds.push_back("old_wall");
+    state.texturePicker.textureIds.push_back("new_wall");
+    SelectTextureInPicker(state.texturePicker, "new_wall");
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, uiState, statusText);
+    const game::SectorEditorTexturePickerApplyResult result =
+            service.ApplyTexturePickerSelection(nullptr);
+
+    const game::SectorAuthoringLineSide* editedSide =
+            game::FindSectorAuthoringLineSide(state.authoringGraph, side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            state.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(result.changed, "service derived side picker reports texture change");
+    Check(editedSide != nullptr && editedSide->wall.textureId == "new_wall",
+          "service derived side picker writes authoring side");
+    Check(projectedSideDef != nullptr && projectedSideDef->wall.textureId == "new_wall",
+          "service derived side picker refreshes derived topology");
+    Check(!state.texturePicker.open, "service derived side picker closes after apply");
+}
+
 void TestEditorAuthoringLineFlagInspectorWritesProjectAfterDerivation()
 {
     game::SectorEditorState state;
@@ -8258,6 +8404,9 @@ int main()
     TestEditorMaterialEditingServiceSideDefBaseUvResetWritesThroughAuthoringSide();
     TestEditorMaterialEditingServiceSideDefDecalUvResetWritesThroughAuthoringSide();
     TestEditorMaterialEditingServiceSideDefUvMissingMappingDoesNotMutateTopology();
+    TestEditorMaterialEditingServiceSideDecalOpacityWritesThroughAuthoringSide();
+    TestEditorMaterialEditingServiceFlatDecalFitWritesThroughFaceAnchor();
+    TestEditorMaterialEditingServiceDerivedSidePickerWritesAuthoringSideDirectly();
     TestEditorAuthoringLineFlagInspectorWritesProjectAfterDerivation();
     TestEditorNoAuthoringBlocksPlayerEditFailsWithoutMutatingTopology();
     TestEditorAuthoringBlocksPlayerEditWritesAuthoringLine();
