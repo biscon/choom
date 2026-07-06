@@ -81,6 +81,7 @@ Task Type:
 | REF-070 | `[x]` | High | Editor architecture | Write Sector Editor Architectural Principles document | Codex task | Low | Completed; architecture contract added under `docs/architecture/` |
 | REF-071 | `[x]` | High | Editor architecture | Remove remaining material topology scratch/writeback routes | Codex task | Medium/High | Completed; material service and picker routes now write authoring material data directly |
 | REF-072 | `[x]` | Medium | Editor architecture | Clean up material service debt after authoring-owned material migration | Codex task | Medium | Completed; stale scratch/writeback helper, wrappers, callback remnants, and misleading names removed |
+| REF-073 | `[x]` | High | Editor architecture | Rectangle tool authoring-graph split correctness | Codex task | Medium/High | Completed; rectangle insertion now splits authoring graph lines before topology derivation |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
@@ -1201,6 +1202,34 @@ Task Type:
   - REF-044 remains open only as the broader material/tool migration umbrella;
     REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
     remain open.
+
+#### REF-073 `[x]` Rectangle tool authoring-graph split correctness
+
+- Source/audit reference: sector editor architectural principles; editable
+  identity must be created in the authoring graph, not derived topology.
+- Why it helps: rectangle insertion no longer relies on topology-only splits
+  when rectangle edges cross existing authoring lines.
+- Likely files: `SectorEditorAuthoringState.*`, rectangle/line tool call paths,
+  and authoring graph tests.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, direct topology mutation greps, and
+  manual rectangle/selection/material smoke when practical.
+- Completion notes:
+  - Rectangle insertion now uses an atomic candidate authoring graph and commits
+    only after all four edges succeed.
+  - Rectangle edges split crossed authoring graph lines and split themselves
+    into authoring subsegments before topology derivation.
+  - Topology-only edit identity is not used; `SectorTopologyMap` remains derived
+    output for rectangle edit identity.
+  - Line tool and rectangle tool insertion share the split-aware authoring line
+    insertion helper.
+  - Tests cover crossed-line splits, rectangle edge splits, shared intersection
+    vertices, multiple sorted intersections, corner-on-line splits, overlap
+    rejection, non-grid intersection rejection, atomic failure, metadata
+    preservation, and derivation through the existing authoring refresh path.
+  - No rendering, collision, lightmap, material, texture picker, schema, or
+    document lifecycle behavior changes were intended.
 
 #### REF-061 `[>]` Evaluate Status/Diagnostics service
 

@@ -5,6 +5,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace game {
 
@@ -109,6 +110,8 @@ void CancelSectorEditorAuthoringLineToolChain(SectorEditorState& state);
 struct SectorEditorAuthoringRectangleResult {
     int vertexIds[4] = {-1, -1, -1, -1};
     int lineIds[4] = {-1, -1, -1, -1};
+    std::vector<int> insertedLineIds;
+    std::string errorMessage;
 };
 
 bool CreateSectorAuthoringRectangle(

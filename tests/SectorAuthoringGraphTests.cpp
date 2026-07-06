@@ -6992,6 +6992,173 @@ void TestEditorAuthoringRectangleCommitMarksDirtyAndReusesVertices()
           "authoring rectangle editor helper bumps topology render revision");
 }
 
+void TestAuthoringRectangleSplitsCrossedAuthoringLineAndOwnEdges()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 32, -16);
+    AddAuthoringVertexWithId(graph, 2, 32, 80);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+    game::SectorAuthoringLine* source = game::FindSectorAuthoringLine(graph, 10);
+    Check(source != nullptr, "rectangle split metadata setup has source line");
+    source->flags.blocksPlayer = true;
+    source->special.type = 4;
+    source->special.tag = "portal";
+
+    game::SectorAuthoringLineSide sourceSide;
+    sourceSide.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    sourceSide.middle = WallPart("source_middle", 1.0f, 2.0f, 3.0f, 4.0f);
+    graph.lineSides.push_back(sourceSide);
+
+    game::SectorEditorAuthoringRectangleResult result;
+    Check(game::CreateSectorAuthoringRectangle(
+                  graph,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &result),
+          "rectangle crossing authoring line inserts successfully");
+
+    const int topSplit = FindAuthoringVertexIdAt(graph, 32, 0);
+    const int bottomSplit = FindAuthoringVertexIdAt(graph, 32, 64);
+    Check(topSplit > 0 && bottomSplit > 0,
+          "rectangle crossing creates shared authoring intersection vertices");
+    Check(game::FindSectorAuthoringLine(graph, 10) == nullptr,
+          "rectangle crossing removes original crossed source line");
+    Check(FindAuthoringLineWithEndpoints(graph, 1, topSplit) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, topSplit, bottomSplit) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, bottomSplit, 2) != nullptr,
+          "rectangle crossing splits existing source line into authoring children");
+    Check(FindAuthoringLineWithEndpoints(graph, result.vertexIds[0], topSplit) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, topSplit, result.vertexIds[1]) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, result.vertexIds[2], bottomSplit) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, bottomSplit, result.vertexIds[3]) != nullptr,
+          "rectangle crossing splits rectangle edges into authoring subsegments");
+    Check(result.insertedLineIds.size() == 6,
+          "rectangle crossing reports all inserted rectangle subsegment line IDs");
+
+    for (const game::SectorAuthoringLine& line : graph.lines) {
+        const bool sourceChild =
+                (line.startVertexId == 1 && line.endVertexId == topSplit)
+                || (line.startVertexId == topSplit && line.endVertexId == bottomSplit)
+                || (line.startVertexId == bottomSplit && line.endVertexId == 2);
+        if (!sourceChild) {
+            continue;
+        }
+        Check(line.flags.blocksPlayer
+                      && line.special.type == 4
+                      && line.special.tag == "portal",
+              "rectangle split source child preserves line flags and special data");
+        const game::SectorAuthoringLineSide* childSide =
+                game::FindSectorAuthoringLineSide(
+                        graph,
+                        game::SectorAuthoringSideId{line.id, game::SectorTopologySideKind::Front});
+        Check(childSide != nullptr
+                      && childSide->middle.textureId == "source_middle",
+              "rectangle split source child preserves side material metadata");
+    }
+
+    Check(!game::HasSectorAuthoringValidationErrors(
+                  game::ValidateSectorAuthoringGraphReferences(graph)),
+          "rectangle crossing leaves split authoring graph references valid");
+}
+
+void TestAuthoringRectangleSortsMultipleIntersectionsOnOneEdge()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 16, -16);
+    AddAuthoringVertexWithId(graph, 2, 16, 80);
+    AddAuthoringVertexWithId(graph, 3, 48, -16);
+    AddAuthoringVertexWithId(graph, 4, 48, 80);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+    AddAuthoringLineWithId(graph, 11, 3, 4);
+
+    game::SectorEditorAuthoringRectangleResult result;
+    Check(game::CreateSectorAuthoringRectangle(
+                  graph,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &result),
+          "rectangle with multiple crossings inserts successfully");
+
+    const int a = FindAuthoringVertexIdAt(graph, 16, 0);
+    const int b = FindAuthoringVertexIdAt(graph, 48, 0);
+    Check(a > 0 && b > 0, "multiple rectangle crossings create top-edge split vertices");
+    Check(FindAuthoringLineWithEndpoints(graph, result.vertexIds[0], a) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, a, b) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, b, result.vertexIds[1]) != nullptr,
+          "multiple rectangle crossings sort top-edge subsegments without overlap");
+}
+
+void TestAuthoringRectangleCornerOnLineSplitsExistingLine()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, -16, -16);
+    AddAuthoringVertexWithId(graph, 2, 16, 16);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+
+    game::SectorEditorAuthoringRectangleResult result;
+    Check(game::CreateSectorAuthoringRectangle(
+                  graph,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &result),
+          "rectangle corner touching existing line inserts successfully");
+
+    const int corner = FindAuthoringVertexIdAt(graph, 0, 0);
+    Check(corner == result.vertexIds[0],
+          "rectangle corner touching existing line reuses the corner authoring vertex");
+    Check(game::FindSectorAuthoringLine(graph, 10) == nullptr,
+          "rectangle corner touching line removes original crossed line");
+    Check(FindAuthoringLineWithEndpoints(graph, 1, corner) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, corner, 2) != nullptr,
+          "rectangle corner touching line splits source line at the corner vertex");
+}
+
+void TestAuthoringRectangleRejectsOverlapAtomically()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringVertexWithId(graph, 2, 64, 0);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+    const game::SectorAuthoringGraph original = graph;
+
+    game::SectorEditorAuthoringRectangleResult result;
+    Check(!game::CreateSectorAuthoringRectangle(
+                  graph,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &result),
+          "rectangle overlapping an existing line is rejected");
+    Check(TextContains(result.errorMessage.c_str(), "overlaps"),
+          "rectangle overlap rejection reports clear status");
+    Check(graph.vertices.size() == original.vertices.size()
+                  && graph.lines.size() == original.lines.size()
+                  && game::FindSectorAuthoringLine(graph, 10) != nullptr,
+          "rejected overlapping rectangle leaves graph unchanged atomically");
+}
+
+void TestAuthoringRectangleRejectsNonGridIntersectionAtomically()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringVertexWithId(graph, 2, 64, 32);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+    const game::SectorAuthoringGraph original = graph;
+
+    game::SectorEditorAuthoringRectangleResult result;
+    Check(!game::CreateSectorAuthoringRectangle(
+                  graph,
+                  game::SectorTopologyCoordPoint{33, -10},
+                  game::SectorTopologyCoordPoint{80, 50},
+                  &result),
+          "rectangle with non-grid intersection is rejected");
+    Check(TextContains(result.errorMessage.c_str(), "not representable"),
+          "rectangle non-grid rejection reports clear status");
+    Check(graph.vertices.size() == original.vertices.size()
+                  && graph.lines.size() == original.lines.size()
+                  && CountAuthoringVerticesAt(graph, 33, 16) == 0,
+          "rejected non-grid rectangle leaves graph unchanged atomically");
+}
+
 void TestEditorAuthoringLinePickingFindsNearestValidLine()
 {
     game::SectorAuthoringGraph graph;
@@ -8476,6 +8643,11 @@ int main()
     TestAuthoringRectangleHelperDerivesValidTopology();
     TestAuthoringNestedRectanglesDeriveThroughExistingBehavior();
     TestEditorAuthoringRectangleCommitMarksDirtyAndReusesVertices();
+    TestAuthoringRectangleSplitsCrossedAuthoringLineAndOwnEdges();
+    TestAuthoringRectangleSortsMultipleIntersectionsOnOneEdge();
+    TestAuthoringRectangleCornerOnLineSplitsExistingLine();
+    TestAuthoringRectangleRejectsOverlapAtomically();
+    TestAuthoringRectangleRejectsNonGridIntersectionAtomically();
     TestEditorAuthoringLinePickingFindsNearestValidLine();
     TestEditorAuthoringDeleteSelectedLineOnlyMutatesGraphAndInvalidates();
     TestEditorAuthoringVertexPickingFindsNearestValidVertex();

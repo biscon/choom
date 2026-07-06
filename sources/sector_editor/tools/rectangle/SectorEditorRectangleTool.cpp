@@ -55,8 +55,9 @@ void CommitRectanglePoint(SectorEditorToolContext& context, SectorPoint point)
                     topologyPoint,
                     &result)) {
         context.state.pendingAuthoringRectangle.currentCorner = topologyPoint;
-        context.state.pendingAuthoringRectangle.errorMessage =
-                "Rectangle needs non-zero width and height";
+        context.state.pendingAuthoringRectangle.errorMessage = result.errorMessage.empty()
+                ? "Rectangle needs non-zero width and height"
+                : result.errorMessage;
         context.statusText = context.state.pendingAuthoringRectangle.errorMessage;
         return;
     }

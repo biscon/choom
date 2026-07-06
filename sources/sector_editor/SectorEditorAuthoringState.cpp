@@ -1,5 +1,6 @@
 #include "sector_editor/SectorEditorAuthoringState.h"
 
+#include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_editor/SectorEditorHelpers.h"
 
 #include <raylib.h>
@@ -25,6 +26,11 @@ bool HasAuthoringGraphData(const SectorEditorState& state)
 }
 
 namespace {
+
+struct SectorEditorAuthoringSegmentInsertResult {
+    std::vector<SectorEditorAuthoringLineSegmentResult> segments;
+    std::string errorMessage;
+};
 
 void CopyEditorMapLevelFields(SectorTopologyMap& target, const SectorTopologyMap& source)
 {
@@ -873,9 +879,8 @@ bool MaterializeSectorAuthoringLineEndpoint(
         int& outVertexId)
 {
     outVertexId = -1;
-    if (FindSectorAuthoringVertexAtPoint(graph, point, &outVertexId)) {
-        return true;
-    }
+    const bool hadExistingVertex =
+            FindSectorAuthoringVertexAtPoint(graph, point, &outVertexId);
 
     bool splitAny = false;
     bool keepScanning = true;
@@ -906,7 +911,247 @@ bool MaterializeSectorAuthoringLineEndpoint(
         return FindSectorAuthoringVertexAtPoint(graph, point, &outVertexId);
     }
 
+    if (hadExistingVertex) {
+        return true;
+    }
+
     return AddSectorAuthoringVertex(graph, point.x, point.y, &outVertexId);
+}
+
+bool SameSectorTopologyPoint(SectorTopologyCoordPoint lhs, SectorTopologyCoordPoint rhs)
+{
+    return lhs.x == rhs.x && lhs.y == rhs.y;
+}
+
+bool AddUniqueSectorTopologyPoint(
+        std::vector<SectorTopologyCoordPoint>& points,
+        SectorTopologyCoordPoint point)
+{
+    for (const SectorTopologyCoordPoint existing : points) {
+        if (SameSectorTopologyPoint(existing, point)) {
+            return false;
+        }
+    }
+    points.push_back(point);
+    return true;
+}
+
+bool MakeIntegerIntersectionPoint(
+        SectorTopologyCoordPoint a,
+        SectorTopologyCoordPoint b,
+        SectorTopologyCoordPoint c,
+        SectorTopologyCoordPoint d,
+        SectorTopologyCoordPoint& outPoint)
+{
+    const int64_t ax = static_cast<int64_t>(b.x) - a.x;
+    const int64_t ay = static_cast<int64_t>(b.y) - a.y;
+    const int64_t cx = static_cast<int64_t>(d.x) - c.x;
+    const int64_t cy = static_cast<int64_t>(d.y) - c.y;
+    const int64_t qpx = static_cast<int64_t>(c.x) - a.x;
+    const int64_t qpy = static_cast<int64_t>(c.y) - a.y;
+    const __int128 denominator =
+            static_cast<__int128>(ax) * cy - static_cast<__int128>(ay) * cx;
+    if (denominator == 0) {
+        return false;
+    }
+
+    const __int128 numerator =
+            static_cast<__int128>(qpx) * cy - static_cast<__int128>(qpy) * cx;
+    const __int128 xNumerator =
+            static_cast<__int128>(a.x) * denominator
+            + static_cast<__int128>(ax) * numerator;
+    const __int128 yNumerator =
+            static_cast<__int128>(a.y) * denominator
+            + static_cast<__int128>(ay) * numerator;
+    if (xNumerator % denominator != 0 || yNumerator % denominator != 0) {
+        return false;
+    }
+
+    outPoint.x = static_cast<SectorCoord>(xNumerator / denominator);
+    outPoint.y = static_cast<SectorCoord>(yNumerator / denominator);
+    return true;
+}
+
+void AddTouchIntersectionPoints(
+        std::vector<SectorTopologyCoordPoint>& points,
+        SectorTopologyCoordPoint a,
+        SectorTopologyCoordPoint b,
+        SectorTopologyCoordPoint c,
+        SectorTopologyCoordPoint d)
+{
+    const SectorTopologyCoordPoint candidates[4] = {a, b, c, d};
+    for (const SectorTopologyCoordPoint point : candidates) {
+        if (SectorTopologyPointOnSegment(point, a, b)
+                && SectorTopologyPointOnSegment(point, c, d)) {
+            AddUniqueSectorTopologyPoint(points, point);
+        }
+    }
+}
+
+int64_t SegmentSortKey(
+        SectorTopologyCoordPoint start,
+        SectorTopologyCoordPoint end,
+        SectorTopologyCoordPoint point)
+{
+    const int64_t dx = static_cast<int64_t>(end.x) - start.x;
+    const int64_t dy = static_cast<int64_t>(end.y) - start.y;
+    const int64_t px = static_cast<int64_t>(point.x) - start.x;
+    const int64_t py = static_cast<int64_t>(point.y) - start.y;
+    return px * dx + py * dy;
+}
+
+bool InsertSectorEditorAuthoringLineSegmentIntoGraphWithSplits(
+        SectorAuthoringGraph& graph,
+        SectorTopologyCoordPoint start,
+        SectorTopologyCoordPoint end,
+        SectorEditorAuthoringSegmentInsertResult* outResult = nullptr)
+{
+    SectorEditorAuthoringSegmentInsertResult result;
+    if (start.x == end.x && start.y == end.y) {
+        result.errorMessage = "Cannot insert line: zero-length segment.";
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
+        return false;
+    }
+
+    SectorAuthoringGraph candidate = graph;
+    std::vector<SectorTopologyCoordPoint> splitPoints;
+    AddUniqueSectorTopologyPoint(splitPoints, start);
+    AddUniqueSectorTopologyPoint(splitPoints, end);
+
+    const std::vector<SectorAuthoringLine> sourceLines = candidate.lines;
+    for (const SectorAuthoringLine& line : sourceLines) {
+        const SectorAuthoringVertex* lineStart =
+                FindSectorAuthoringVertex(candidate, line.startVertexId);
+        const SectorAuthoringVertex* lineEnd =
+                FindSectorAuthoringVertex(candidate, line.endVertexId);
+        if (lineStart == nullptr || lineEnd == nullptr) {
+            result.errorMessage = "Cannot insert line: existing authoring line is invalid.";
+            if (outResult != nullptr) {
+                *outResult = result;
+            }
+            return false;
+        }
+
+        const SectorTopologyCoordPoint existingStart{lineStart->x, lineStart->y};
+        const SectorTopologyCoordPoint existingEnd{lineEnd->x, lineEnd->y};
+        const SectorTopologySegmentIntersectionKind intersection =
+                SectorTopologySegmentIntersection(start, end, existingStart, existingEnd);
+        if (intersection == SectorTopologySegmentIntersectionKind::None) {
+            continue;
+        }
+        if (intersection == SectorTopologySegmentIntersectionKind::CollinearOverlap) {
+            result.errorMessage = "Cannot insert line: edge overlaps an existing line.";
+            if (outResult != nullptr) {
+                *outResult = result;
+            }
+            return false;
+        }
+
+        if (intersection == SectorTopologySegmentIntersectionKind::Proper) {
+            SectorTopologyCoordPoint point{};
+            if (!MakeIntegerIntersectionPoint(start, end, existingStart, existingEnd, point)) {
+                result.errorMessage =
+                        "Cannot insert line: intersection is not representable on the authoring grid.";
+                if (outResult != nullptr) {
+                    *outResult = result;
+                }
+                return false;
+            }
+            AddUniqueSectorTopologyPoint(splitPoints, point);
+            continue;
+        }
+
+        AddTouchIntersectionPoints(splitPoints, start, end, existingStart, existingEnd);
+    }
+
+    std::sort(
+            splitPoints.begin(),
+            splitPoints.end(),
+            [start, end](SectorTopologyCoordPoint lhs, SectorTopologyCoordPoint rhs) {
+                const int64_t lhsKey = SegmentSortKey(start, end, lhs);
+                const int64_t rhsKey = SegmentSortKey(start, end, rhs);
+                if (lhsKey != rhsKey) {
+                    return lhsKey < rhsKey;
+                }
+                if (lhs.x != rhs.x) {
+                    return lhs.x < rhs.x;
+                }
+                return lhs.y < rhs.y;
+            });
+
+    for (const SectorTopologyCoordPoint point : splitPoints) {
+        int vertexId = -1;
+        if (!MaterializeSectorAuthoringLineEndpoint(candidate, point, vertexId)) {
+            result.errorMessage = "Cannot insert line: failed to split existing authoring line.";
+            if (outResult != nullptr) {
+                *outResult = result;
+            }
+            return false;
+        }
+    }
+
+    for (std::size_t index = 1; index < splitPoints.size(); ++index) {
+        const SectorTopologyCoordPoint segmentStart = splitPoints[index - 1];
+        const SectorTopologyCoordPoint segmentEnd = splitPoints[index];
+        if (SameSectorTopologyPoint(segmentStart, segmentEnd)) {
+            continue;
+        }
+
+        int startVertexId = -1;
+        int endVertexId = -1;
+        if (!FindSectorAuthoringVertexAtPoint(candidate, segmentStart, &startVertexId)
+                || !FindSectorAuthoringVertexAtPoint(candidate, segmentEnd, &endVertexId)
+                || startVertexId == endVertexId) {
+            result.errorMessage = "Cannot insert line: zero-length segment.";
+            if (outResult != nullptr) {
+                *outResult = result;
+            }
+            return false;
+        }
+
+        int lineId = -1;
+        if (!AddSectorAuthoringLine(candidate, startVertexId, endVertexId, &lineId)) {
+            result.errorMessage = "Cannot insert line: duplicate edge.";
+            if (outResult != nullptr) {
+                *outResult = result;
+            }
+            return false;
+        }
+
+        SectorEditorAuthoringLineSegmentResult segment;
+        segment.lineId = lineId;
+        segment.startVertexId = startVertexId;
+        segment.endVertexId = endVertexId;
+        segment.startPoint = segmentStart;
+        segment.endPoint = segmentEnd;
+        result.segments.push_back(segment);
+    }
+
+    if (result.segments.empty()) {
+        result.errorMessage = "Cannot insert line: zero-length segment.";
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
+        return false;
+    }
+
+    const std::vector<SectorAuthoringValidationIssue> issues =
+            ValidateSectorAuthoringGraphReferences(candidate);
+    if (HasSectorAuthoringValidationErrors(issues)) {
+        result.errorMessage = "Cannot insert line: authoring graph validation failed.";
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
+        return false;
+    }
+
+    graph = std::move(candidate);
+    if (outResult != nullptr) {
+        *outResult = result;
+    }
+    return true;
 }
 
 bool FindSectorEditorAuthoringLineNearMapPoint(
@@ -1210,51 +1455,33 @@ bool AddSectorEditorAuthoringLineSegment(
         int* outLineId,
         SectorEditorAuthoringLineSegmentResult* outResult)
 {
-    if (start.x == end.x && start.y == end.y) {
-        return false;
-    }
-
     SectorAuthoringGraph candidate = state.authoringGraph;
-    int startVertexId = -1;
-    int endVertexId = -1;
-    if (!MaterializeSectorAuthoringLineEndpoint(candidate, start, startVertexId)
-            || !MaterializeSectorAuthoringLineEndpoint(candidate, end, endVertexId)) {
-        return false;
-    }
-
-    int lineId = -1;
-    if (!AddSectorAuthoringLine(candidate, startVertexId, endVertexId, &lineId)) {
+    SectorEditorAuthoringSegmentInsertResult insertResult;
+    if (!InsertSectorEditorAuthoringLineSegmentIntoGraphWithSplits(
+                candidate,
+                start,
+                end,
+                &insertResult)) {
         return false;
     }
 
     state.authoringGraph = std::move(candidate);
     PruneSectorEditorAuthoringSelectionToGraph(state);
 
+    const SectorEditorAuthoringLineSegmentResult segment = insertResult.segments.back();
     if (outLineId != nullptr) {
-        *outLineId = lineId;
+        *outLineId = segment.lineId;
     }
     if (outResult != nullptr) {
-        outResult->lineId = lineId;
-        outResult->startVertexId = startVertexId;
-        outResult->endVertexId = endVertexId;
-        outResult->startPoint = start;
-        outResult->endPoint = end;
-        if (const SectorAuthoringVertex* resolvedStart =
-                    FindSectorAuthoringVertex(state.authoringGraph, startVertexId)) {
-            outResult->startPoint = SectorTopologyCoordPoint{resolvedStart->x, resolvedStart->y};
-        }
-        if (const SectorAuthoringVertex* resolvedEnd =
-                    FindSectorAuthoringVertex(state.authoringGraph, endVertexId)) {
-            outResult->endPoint = SectorTopologyCoordPoint{resolvedEnd->x, resolvedEnd->y};
-        }
+        *outResult = segment;
     }
     MarkSectorEditorAuthoringGraphEdited(
             state,
-            TextFormat("Added authoring line %d", lineId));
+            TextFormat("Added authoring line %d", segment.lineId));
     RefreshSectorEditorAuthoringDerivation(
             state,
-            TextFormat("Added authoring line %d; derived topology current", lineId),
-            TextFormat("Added authoring line %d; derivation failed", lineId));
+            TextFormat("Added authoring line %d; derived topology current", segment.lineId),
+            TextFormat("Added authoring line %d; derivation failed", segment.lineId));
     return true;
 }
 
@@ -1349,15 +1576,28 @@ bool CreateSectorAuthoringRectangle(
     }
 
     for (std::size_t index = 0; index < corners.size(); ++index) {
-        int lineId = -1;
-        if (!AddSectorAuthoringLine(
+        SectorEditorAuthoringSegmentInsertResult edgeResult;
+        if (!InsertSectorEditorAuthoringLineSegmentIntoGraphWithSplits(
                     candidate,
-                    result.vertexIds[index],
-                    result.vertexIds[(index + 1) % corners.size()],
-                    &lineId)) {
+                    corners[index],
+                    corners[(index + 1) % corners.size()],
+                    &edgeResult)) {
+            result.errorMessage = edgeResult.errorMessage.empty()
+                    ? "Cannot insert rectangle: duplicate edge."
+                    : edgeResult.errorMessage;
+            const std::string prefix = "Cannot insert line:";
+            if (result.errorMessage.compare(0, prefix.size(), prefix) == 0) {
+                result.errorMessage.replace(0, prefix.size(), "Cannot insert rectangle:");
+            }
+            if (outResult != nullptr) {
+                *outResult = result;
+            }
             return false;
         }
-        result.lineIds[index] = lineId;
+        result.lineIds[index] = edgeResult.segments.front().lineId;
+        for (const SectorEditorAuthoringLineSegmentResult& segment : edgeResult.segments) {
+            result.insertedLineIds.push_back(segment.lineId);
+        }
     }
 
     graph = std::move(candidate);
@@ -1379,6 +1619,9 @@ bool AddSectorEditorAuthoringRectangle(
                 firstCorner,
                 oppositeCorner,
                 &result)) {
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
         return false;
     }
 
