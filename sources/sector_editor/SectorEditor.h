@@ -8,6 +8,7 @@
 #include "sector_editor/SectorEditorMaterialActions.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectActions.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectDrag.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
@@ -328,6 +329,7 @@ private:
     bool SetAuthoringLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
     SectorEditorMaterialEditingService BuildMaterialEditingService();
     SectorEditorLightEditingService BuildLightEditingService();
+    SectorEditorTextureCatalogService BuildTextureCatalogService();
     bool HasAuthoringGraphData() const;
     bool EnsureSelectedSurface3DAuthoringMappingCurrent();
     bool FinishTopologyActionResult(const SectorEditorTopologyActionResult& result);

@@ -67,6 +67,7 @@ Task Type:
 | REF-056 | `[x]` | High | Editor architecture | SectorEditor shared service inventory audit | Audit first | Low | Completed; recommends minimal TexturePickerService first |
 | REF-057 | `[x]` | High | Editor architecture | Extract minimal TexturePickerService | Codex task | Medium | Generic picker lifecycle/result mechanics only; preserve feature-specific apply semantics |
 | REF-058 | `[ ]` | Medium | Editor architecture | Audit AssetCatalog/TextureCatalog service boundary | Audit first | Medium | Keep texture import/handle/catalog ownership separate from picker apply routing |
+| REF-080 | `[x]` | High | Editor architecture | Extract TextureCatalogService | Codex task | Medium | Completed; generic texture catalog/handle behavior moved, apply/document semantics unchanged |
 | REF-059 | `[x]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Completed; recommends material-specific picker routing extraction before MaterialEditBridge |
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
 | REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
@@ -852,6 +853,42 @@ Task Type:
   - Keep add-map texture import and sprite metadata repair separate from
     material-specific picker apply semantics.
 - Completion notes:
+
+#### REF-080 `[x]` Extract TextureCatalogService
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md` and
+  `docs/architecture/sector_editor_architectural_principles.md`.
+- Why it helps: gives tools, picker routing, and editor orchestration a real
+  service for generic map texture catalog and editor handle lookup behavior
+  without absorbing feature-specific apply semantics.
+- Likely files: `sources/sector_editor/services/texture_catalog/`,
+  `SectorEditorTextureActions.*`, `SectorEditor.cpp`,
+  `services/texture_picker/`, and focused tests.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, dependency grep
+  for no concrete `SectorEditor` dependency under `services/texture_catalog`,
+  and picker/add-map manual smoke when practical.
+- Notes:
+  - Keep `TexturePickerService` generic.
+  - Keep material, door, sky, sprite, and add-map apply semantics outside the
+    catalog service.
+  - Do not move document dirty/cache/status lifecycle into the catalog service.
+- Completion notes:
+  - `TextureCatalogService` added under
+    `sources/sector_editor/services/texture_catalog/`.
+  - Generic texture registry, sorted option source, default texture ID refresh,
+    editor texture handle refresh, handle lookup, and add-map texture registry
+    behavior moved or wrapped through the catalog service.
+  - `TexturePickerService` remains generic modal/result service.
+  - `MaterialEditingService` remains owner of material picker semantics.
+  - Door, sky, sprite, and add-map apply/modal behavior stayed outside the
+    catalog service.
+  - Remaining texture catalog debt: pure core texture helpers remain in
+    `SectorEditorHelpers` for non-catalog callers; broader asset catalog audit
+    remains open in REF-058.
+  - No source-hash or schema behavior changed.
 
 #### REF-059 `[x]` Audit MaterialEditBridge and material-specific picker routing
 

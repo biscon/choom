@@ -13,6 +13,7 @@
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -5681,6 +5682,12 @@ void TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture()
 void TestEditorMapTextureImportPreservesMapLevelRegistryOnly()
 {
     game::SectorEditorState state;
+    state.topologyMap.texturesById.emplace(
+            "z_existing",
+            game::SectorTextureDefinition{"z_existing", "assets/images/z_existing.png"});
+    state.topologyMap.texturesById.emplace(
+            "a_existing",
+            game::SectorTextureDefinition{"a_existing", "assets/images/a_existing.png"});
     state.topologyRenderCache.valid = true;
     const uint64_t originalRevision = state.topologyRenderRevision;
     state.addMapTexture.paths.push_back("assets/images/imported_wall.png");
@@ -5692,19 +5699,47 @@ void TestEditorMapTextureImportPreservesMapLevelRegistryOnly()
             "imported_wall");
     state.addMapTexture.filter = game::SectorTextureFilter::Point;
 
+    game::SectorEditorTextureCatalogService catalog{
+            game::SectorEditorTextureCatalogServiceContext{state}};
     const game::SectorEditorAddTextureResult result =
-            game::AddSelectedMapTexture(state);
+            catalog.RegisterSelectedMapTexture(state.addMapTexture);
 
     const auto textureIt = state.topologyMap.texturesById.find("imported_wall");
-    Check(result.success, "map texture import helper succeeds for valid texture id");
+    Check(result.success, "texture catalog registers valid map texture id");
     Check(textureIt != state.topologyMap.texturesById.end()
                   && textureIt->second.path == "assets/images/imported_wall.png"
                   && textureIt->second.filter == game::SectorTextureFilter::Point,
-          "map texture import writes only the map-level texture registry");
+          "texture catalog writes only the map-level texture registry");
+    Check(catalog.HasTexture("imported_wall"), "texture catalog finds registered texture id");
+    Check(catalog.FindTexture("missing_texture") == nullptr, "texture catalog reports missing texture id");
+    Check(catalog.TextureHandleForId("missing_texture") == engine::NullTextureHandle(),
+          "texture catalog missing handle lookup returns null texture handle");
     Check(state.topologyRenderCache.valid,
-          "map texture import does not invalidate cached topology rendering by itself");
+          "texture catalog registration does not invalidate cached topology rendering by itself");
     Check(state.topologyRenderRevision == originalRevision,
-          "map texture import does not bump topology render revision by itself");
+          "texture catalog registration does not bump topology render revision by itself");
+
+    state.addMapTexture.paths[0] = "assets/images/imported_wall_replacement.png";
+    state.addMapTexture.filter = game::SectorTextureFilter::Bilinear;
+    const game::SectorEditorAddTextureResult replacement =
+            catalog.RegisterSelectedMapTexture(state.addMapTexture);
+    const game::SectorTextureDefinition* replaced = catalog.FindTexture("imported_wall");
+    Check(replacement.success && replacement.replacing,
+          "texture catalog preserves duplicate id replacement reporting");
+    Check(replaced != nullptr
+                  && replaced->path == "assets/images/imported_wall_replacement.png"
+                  && replaced->filter == game::SectorTextureFilter::Bilinear,
+          "texture catalog preserves duplicate id replacement behavior");
+
+    game::TexturePickerState picker;
+    catalog.PopulatePickerOptions(picker, "imported_wall");
+    Check(picker.textureIds.size() == 3
+                  && picker.textureIds[0] == "a_existing"
+                  && picker.textureIds[1] == "imported_wall"
+                  && picker.textureIds[2] == "z_existing",
+          "texture catalog picker options remain sorted by texture id");
+    Check(picker.selectedTextureIndex == 1,
+          "texture catalog picker options preserve current texture selection");
 }
 
 void TestSpriteMetadataScannerFindsNestedJsonAndFrameTagClips()

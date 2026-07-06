@@ -1,6 +1,5 @@
 #include "sector_editor/SectorEditor.h"
 
-#include "engine/assets/TextureLoadFlags.h"
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorDirtyState.h"
@@ -20,6 +19,7 @@
 #include "sector_editor/preview/SectorEditorPreviewUvPanel.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
 #include "sector_editor/tools/billboards/SectorEditorBillboardActions.h"
 #include "sector_editor/tools/doors/SectorEditorDoorActions.h"
@@ -3611,7 +3611,9 @@ void SectorEditor::DrawTexturePickerModal(
     const SectorEditorTexturePickerServiceCallbacks callbacks{
             [this, &assets]() { ApplyTexturePickerSelection(assets); },
             [this]() { return CurrentTextureForPickerTarget(); },
-            [this](const std::string& textureId) { return EditorTextureHandleForId(textureId); }
+            [this](const std::string& textureId) {
+                return BuildTextureCatalogService().TextureHandleForId(textureId);
+            }
     };
     DrawSectorEditorTexturePickerModal(
             ui,
@@ -4474,65 +4476,25 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
 
 void SectorEditor::RefreshDefaultTextures()
 {
-    auto findTexture = [this](const char* preferred, const std::string& fallback = std::string{}) {
-        const auto preferredIt = state.topologyMap.texturesById.find(preferred);
-        if (preferredIt != state.topologyMap.texturesById.end()) {
-            return preferredIt->first;
-        }
-        if (!fallback.empty()) {
-            return fallback;
-        }
-        const std::vector<std::string> textureIds = SortedSectorTopologyTextureIds(state.topologyMap);
-        return textureIds.empty() ? std::string{} : textureIds.front();
-    };
-
-    state.defaultWallTextureId = findTexture("wall");
-    state.defaultFloorTextureId = findTexture("floor");
-    state.defaultCeilingTextureId = findTexture("ceiling");
-    state.defaultLowerWallTextureId = findTexture("step_wall", state.defaultWallTextureId);
-    state.defaultUpperWallTextureId = findTexture("upper_wall", state.defaultWallTextureId);
+    BuildTextureCatalogService().RefreshDefaultTextureIds();
 }
 
 void SectorEditor::RefreshEditorTextureAssets(engine::AssetManager& assets)
 {
-    if (!engine::IsNull(state.editorTextureScope)) {
-        assets.UnloadScope(state.editorTextureScope);
-        state.editorTextureScope = engine::NullAssetScopeHandle();
-    }
-    state.editorTextureHandlesById.clear();
-
-    if (state.topologyMap.texturesById.empty()) {
-        return;
-    }
-
-    state.editorTextureScope = assets.CreateScope("sector_editor_textures");
-    if (engine::IsNull(state.editorTextureScope)) {
-        return;
-    }
-
-    for (const std::string& textureId : SortedSectorTopologyTextureIds(state.topologyMap)) {
-        const SectorTextureDefinition* texture = FindSectorTopologyTexture(state.topologyMap, textureId);
-        if (texture == nullptr) {
-            continue;
-        }
-
-        const std::string resolvedPath = ResolveEditorAssetPath(texture->path);
-        state.editorTextureHandlesById.emplace(
-                texture->id,
-                assets.RequestTexture(
-                        state.editorTextureScope,
-                        texture->id.c_str(),
-                        resolvedPath.c_str(),
-                        SectorTextureLoadFlags(texture->filter)
-                )
-        );
-    }
+    BuildTextureCatalogService().RefreshTextureHandles(assets);
 }
 
 engine::TextureHandle SectorEditor::EditorTextureHandleForId(const std::string& textureId) const
 {
-    const auto it = state.editorTextureHandlesById.find(textureId);
-    return it == state.editorTextureHandlesById.end() ? engine::NullTextureHandle() : it->second;
+    SectorEditorTextureCatalogServiceContext serviceContext{const_cast<SectorEditorState&>(state)};
+    return SectorEditorTextureCatalogService{serviceContext}.TextureHandleForId(textureId);
+}
+
+SectorEditorTextureCatalogService SectorEditor::BuildTextureCatalogService()
+{
+    return SectorEditorTextureCatalogService{
+            SectorEditorTextureCatalogServiceContext{
+                    state}};
 }
 
 void SectorEditor::OpenAddMapTextureModal(engine::AssetManager& assets)
@@ -4559,7 +4521,7 @@ void SectorEditor::RefreshAddMapTextureScan()
 
 void SectorEditor::SelectAddMapTexturePath(int pathIndex)
 {
-    game::SelectAddMapTexturePath(state.addMapTexture, state.topologyMap, pathIndex);
+    BuildTextureCatalogService().SelectAddMapTexturePath(state.addMapTexture, pathIndex);
 }
 
 void SectorEditor::RefreshAddMapTexturePreview(engine::AssetManager& assets)
@@ -4569,12 +4531,14 @@ void SectorEditor::RefreshAddMapTexturePreview(engine::AssetManager& assets)
 
 bool SectorEditor::ValidateAddMapTextureId(std::string& error) const
 {
-    return game::ValidateAddMapTextureId(state.addMapTexture, error);
+    SectorEditorTextureCatalogServiceContext serviceContext{const_cast<SectorEditorState&>(state)};
+    return SectorEditorTextureCatalogService{serviceContext}.ValidateAddMapTextureId(state.addMapTexture, error);
 }
 
 bool SectorEditor::AddSelectedMapTexture(engine::AssetManager& assets)
 {
-    const SectorEditorAddTextureResult result = game::AddSelectedMapTexture(state);
+    const SectorEditorAddTextureResult result =
+            BuildTextureCatalogService().RegisterSelectedMapTexture(state.addMapTexture);
     if (!result.success) {
         return false;
     }

@@ -1,10 +1,6 @@
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
 
-#include "sector_editor/SectorEditorHelpers.h"
-#include "sector_demo/SectorTextureTypes.h"
-
 #include <cstddef>
-#include <vector>
 
 namespace game {
 
@@ -15,7 +11,7 @@ void CloseSectorEditorTexturePicker(TexturePickerState& picker)
 
 void PopulateSectorEditorTexturePickerOptions(
         TexturePickerState& picker,
-        const SectorTopologyMap& map,
+        const std::vector<std::string>& textureIds,
         const std::string& currentTexture)
 {
     picker.selectedTextureIndex = 0;
@@ -23,8 +19,8 @@ void PopulateSectorEditorTexturePickerOptions(
     picker.textureIds.clear();
     picker.optionLabels.clear();
 
-    const std::vector<std::string> textureIds = SortedSectorTopologyTextureIds(map);
     picker.textureIds.insert(picker.textureIds.end(), textureIds.begin(), textureIds.end());
+    picker.optionLabels.reserve(picker.textureIds.size());
 
     for (size_t i = 0; i < picker.textureIds.size(); ++i) {
         picker.optionLabels.push_back(picker.textureIds[i].c_str());
@@ -36,11 +32,11 @@ void PopulateSectorEditorTexturePickerOptions(
 
 void OpenSectorEditorTexturePicker(
         TexturePickerState& picker,
-        const SectorTopologyMap& map,
+        const std::vector<std::string>& textureIds,
         const std::string& currentTexture)
 {
     picker.open = true;
-    PopulateSectorEditorTexturePickerOptions(picker, map, currentTexture);
+    PopulateSectorEditorTexturePickerOptions(picker, textureIds, currentTexture);
 }
 
 SectorEditorSelectedTexture CurrentSectorEditorTexturePickerSelection(const TexturePickerState& picker)

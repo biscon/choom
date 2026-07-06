@@ -2,6 +2,7 @@
 
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
 
 namespace game {
@@ -468,7 +469,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSector(
 
     OpenSectorEditorTexturePicker(
             picker,
-            state.topologyMap,
+            SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}.TextureIds(),
             CurrentSectorEditorMaterialPickerTexture(state, picker));
     return true;
 }
@@ -509,7 +510,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
 
     OpenSectorEditorTexturePicker(
             picker,
-            state.topologyMap,
+            SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}.TextureIds(),
             CurrentSectorEditorMaterialPickerTexture(state, picker));
     return true;
 }
@@ -551,7 +552,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSideDef(
 
     OpenSectorEditorTexturePicker(
             picker,
-            state.topologyMap,
+            SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}.TextureIds(),
             CurrentSectorEditorMaterialPickerTexture(state, picker));
     return true;
 }
@@ -591,7 +592,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringSide(
 
     OpenSectorEditorTexturePicker(
             picker,
-            state.topologyMap,
+            SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}.TextureIds(),
             CurrentSectorEditorMaterialPickerTexture(state, picker));
     return true;
 }

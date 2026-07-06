@@ -139,6 +139,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/lights/SectorEditorLightEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
+            sources/sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.cpp
             sources/sector_editor/services/texture_picker/SectorEditorTexturePickerService.cpp
             sources/sector_editor/SectorEditorTopologyActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp

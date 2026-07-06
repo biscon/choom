@@ -2,11 +2,11 @@
 
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
 #include "sector_demo/SectorTextureTypes.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <utility>
 
 namespace game {
@@ -61,70 +61,23 @@ void SelectAddMapTexturePath(
         const SectorTopologyMap& map,
         int pathIndex)
 {
-    if (pathIndex < 0 || pathIndex >= static_cast<int>(modalState.paths.size())) {
-        modalState.selectedPathIndex = -1;
-        modalState.textureIdBuffer[0] = '\0';
-        return;
-    }
-
-    modalState.selectedPathIndex = pathIndex;
-    const std::string base = GeneratedTextureIdBase(modalState.paths[static_cast<size_t>(pathIndex)]);
-    std::string uniqueId = base;
-    int suffix = 1;
-    while (FindSectorTopologyTexture(map, uniqueId) != nullptr) {
-        char suffixBuffer[16] = {};
-        std::snprintf(suffixBuffer, sizeof(suffixBuffer), "_%03d", suffix);
-        uniqueId = base + suffixBuffer;
-        ++suffix;
-    }
-
-    std::snprintf(modalState.textureIdBuffer, sizeof(modalState.textureIdBuffer), "%s", uniqueId.c_str());
-    modalState.previewPath.clear();
-    modalState.previewTexture = engine::NullTextureHandle();
+    SectorEditorState state;
+    state.topologyMap = map;
+    SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}
+            .SelectAddMapTexturePath(modalState, pathIndex);
 }
 
 bool ValidateAddMapTextureId(const AddMapTextureState& modalState, std::string& error)
 {
-    error.clear();
-    if (modalState.selectedPathIndex < 0 || modalState.selectedPathIndex >= static_cast<int>(modalState.paths.size())) {
-        error = "Select a PNG file";
-        return false;
-    }
-
-    const std::string id = modalState.textureIdBuffer;
-    if (id.empty()) {
-        error = "Texture ID is required";
-        return false;
-    }
-    if (!IsValidTextureId(id)) {
-        error = "Texture ID may only contain letters, digits, underscores, and dashes";
-        return false;
-    }
-    return true;
+    SectorEditorState state;
+    return SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}
+            .ValidateAddMapTextureId(modalState, error);
 }
 
 SectorEditorAddTextureResult AddSelectedMapTexture(SectorEditorState& state)
 {
-    SectorEditorAddTextureResult result;
-    if (!ValidateAddMapTextureId(state.addMapTexture, result.error)) {
-        state.addMapTexture.validationMessage = result.error;
-        return result;
-    }
-
-    AddMapTextureState& modalState = state.addMapTexture;
-    const std::string id = modalState.textureIdBuffer;
-    const std::string path = modalState.paths[static_cast<size_t>(modalState.selectedPathIndex)];
-    result.replacing = FindSectorTopologyTexture(state.topologyMap, id) != nullptr;
-    result.textureId = id;
-
-    SectorTextureDefinition definition;
-    definition.id = id;
-    definition.path = path;
-    definition.filter = modalState.filter;
-    state.topologyMap.texturesById[id] = std::move(definition);
-
-    result.success = true;
-    return result;
+    return SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}
+            .RegisterSelectedMapTexture(state.addMapTexture);
 }
 
 void RefreshSpritePickerScan(SpritePickerState& picker)
@@ -305,7 +258,10 @@ bool OpenMapSkyTexturePicker(SectorEditorState& state)
     picker.topologySideDefId = -1;
     picker.topologyWallPart = TopologyWallPart::Wall;
 
-    OpenSectorEditorTexturePicker(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
+    OpenSectorEditorTexturePicker(
+            picker,
+            SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}.TextureIds(),
+            CurrentTextureForPickerTarget(state));
     return true;
 }
 
@@ -330,7 +286,10 @@ bool OpenRuntimeDoorTexturePicker(SectorEditorState& state, int runtimeObjectId)
     picker.authoringSide = SectorTopologySideKind::Front;
     picker.runtimeObjectId = runtimeObjectId;
 
-    OpenSectorEditorTexturePicker(picker, state.topologyMap, CurrentTextureForPickerTarget(state));
+    OpenSectorEditorTexturePicker(
+            picker,
+            SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}.TextureIds(),
+            CurrentTextureForPickerTarget(state));
     return true;
 }
 

@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace game {
 
@@ -25,11 +26,11 @@ struct SectorEditorTexturePickerServiceCallbacks {
 void CloseSectorEditorTexturePicker(TexturePickerState& picker);
 void PopulateSectorEditorTexturePickerOptions(
         TexturePickerState& picker,
-        const SectorTopologyMap& map,
+        const std::vector<std::string>& textureIds,
         const std::string& currentTexture);
 void OpenSectorEditorTexturePicker(
         TexturePickerState& picker,
-        const SectorTopologyMap& map,
+        const std::vector<std::string>& textureIds,
         const std::string& currentTexture);
 SectorEditorSelectedTexture CurrentSectorEditorTexturePickerSelection(const TexturePickerState& picker);
 
