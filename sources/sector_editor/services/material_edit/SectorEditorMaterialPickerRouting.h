@@ -36,16 +36,6 @@ std::string CurrentSectorEditorMaterialPickerTexture(
         const SectorEditorState& state,
         const TexturePickerState& picker);
 
-bool OpenSectorEditorMaterialPickerForSector(
-        SectorEditorState& state,
-        int sectorId,
-        TopologySectorTextureField field,
-        TopologyMaterialLayer layer);
-bool OpenSectorEditorMaterialPickerForSideDef(
-        SectorEditorState& state,
-        int sideDefId,
-        TopologyWallPart wallPart,
-        TopologyMaterialLayer layer);
 bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
         SectorEditorState& state,
         int topologySectorId,

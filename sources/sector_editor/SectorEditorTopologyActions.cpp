@@ -427,26 +427,4 @@ SectorEditorTopologyActionResult FinishMoveDynamicLight(
             light->position.z));
 }
 
-SectorEditorTopologyActionResult SetLegacyTopologyPortalBlocksPlayer(
-        SectorTopologyMap& map,
-        int lineDefId,
-        bool blocksPlayer)
-{
-    SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, lineDefId);
-    if (lineDef == nullptr) {
-        return Unchanged("Selected linedef is no longer valid.");
-    }
-    if (lineDef->frontSideDefId == -1 || lineDef->backSideDefId == -1) {
-        return Unchanged("Blocks Player is only editable on two-sided portals.");
-    }
-    if (lineDef->flags.blocksPlayer == blocksPlayer) {
-        return Unchanged();
-    }
-
-    lineDef->flags.blocksPlayer = blocksPlayer;
-    return Changed(blocksPlayer
-            ? "Enabled player blocking on portal."
-            : "Disabled player blocking on portal.");
-}
-
 } // namespace game

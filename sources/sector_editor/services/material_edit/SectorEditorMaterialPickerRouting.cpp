@@ -450,68 +450,6 @@ std::string CurrentSectorEditorMaterialPickerTexture(
     return std::string{};
 }
 
-bool OpenSectorEditorMaterialPickerForSector(
-        SectorEditorState& state,
-        int sectorId,
-        TopologySectorTextureField field,
-        TopologyMaterialLayer layer)
-{
-    TexturePickerState& picker = state.texturePicker;
-    if (FindSectorTopologySector(state.topologyMap, sectorId) == nullptr
-            || field == TopologySectorTextureField::None
-            || (layer == TopologyMaterialLayer::Decal
-                    && !IsAuthoringFaceAnchorDecalTextureField(field))) {
-        CloseSectorEditorTexturePicker(picker);
-        return false;
-    }
-
-    picker.rebuildPreviewOnApply = false;
-    picker.topologyTargetKind = TopologyTexturePickerTargetKind::Sector;
-    picker.topologyLayer = layer;
-    picker.topologySectorId = sectorId;
-    picker.topologyField = field;
-    picker.topologySideDefId = -1;
-    picker.topologyWallPart = TopologyWallPart::Wall;
-
-    OpenSectorEditorTexturePicker(
-            picker,
-            state.topologyMap,
-            CurrentSectorEditorMaterialPickerTexture(state, picker));
-    return true;
-}
-
-bool OpenSectorEditorMaterialPickerForSideDef(
-        SectorEditorState& state,
-        int sideDefId,
-        TopologyWallPart wallPart,
-        TopologyMaterialLayer layer)
-{
-    TexturePickerState& picker = state.texturePicker;
-    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, sideDefId);
-    if (sideDef == nullptr
-            || (wallPart == TopologyWallPart::Middle
-                    && !IsTopologyMiddleEligible(state.topologyMap, sideDef))) {
-        CloseSectorEditorTexturePicker(picker);
-        return false;
-    }
-
-    picker.rebuildPreviewOnApply = false;
-    picker.topologyTargetKind = TopologyTexturePickerTargetKind::SideDef;
-    picker.topologyLayer = wallPart == TopologyWallPart::Middle
-            ? TopologyMaterialLayer::Base
-            : layer;
-    picker.topologySectorId = -1;
-    picker.topologyField = TopologySectorTextureField::None;
-    picker.topologySideDefId = sideDefId;
-    picker.topologyWallPart = wallPart;
-
-    OpenSectorEditorTexturePicker(
-            picker,
-            state.topologyMap,
-            CurrentSectorEditorMaterialPickerTexture(state, picker));
-    return true;
-}
-
 bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
         SectorEditorState& state,
         int topologySectorId,
@@ -906,7 +844,7 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
         return closeAndReturn();
     }
 
-    AssignSelectedTextureToPickerTarget(state.topologyMap, picker, selectedTexture, result);
+    result.status = "Cannot edit material: authoring data is required.";
     return closeAndReturn();
 }
 
@@ -929,6 +867,12 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
         }
         ApplyDirectAuthoringPreviewRebuildIfNeeded(result, &context);
         return result;
+    }
+
+    if (!HasAuthoringGraphData(state)) {
+        context.statusText = "Cannot edit material: authoring data is required.";
+        CloseSectorEditorTexturePicker(state.texturePicker);
+        return SectorEditorTexturePickerApplyResult{};
     }
 
     const bool routeAuthoringSideMaterial =
@@ -993,8 +937,25 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
         topologyBeforePicker = state.topologyMap;
     }
 
-    SectorEditorTexturePickerApplyResult result =
-            ApplySectorEditorMaterialTexturePickerSelection(state);
+    if (!routeAuthoringSideMaterial && !routeAuthoringFlatMaterial) {
+        context.statusText = "Cannot edit material: selected derived target has no authoring material route.";
+        CloseSectorEditorTexturePicker(state.texturePicker);
+        return SectorEditorTexturePickerApplyResult{};
+    }
+
+    SectorEditorTexturePickerApplyResult result;
+    const SectorEditorSelectedTexture selected = CurrentSectorEditorTexturePickerSelection(picker);
+    if (!selected.valid) {
+        CloseSectorEditorTexturePicker(state.texturePicker);
+        return result;
+    }
+    result.rebuildPreviewOnApply = picker.rebuildPreviewOnApply;
+    AssignSelectedTextureToPickerTarget(
+            state.topologyMap,
+            picker,
+            selected.textureId,
+            result);
+    CloseSectorEditorTexturePicker(state.texturePicker);
     if (routeAuthoringSideMaterial) {
         const SectorTopologyMap editedTopology = state.topologyMap;
         state.topologyMap = topologyBeforePicker;

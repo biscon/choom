@@ -116,16 +116,6 @@ bool RepairBillboardClipsForSpriteMetadata(
         const SectorSpriteMetadata& metadata,
         bool repairInvalidNonEmpty);
 
-bool OpenTopologyTexturePicker(
-        SectorEditorState& state,
-        int sectorId,
-        TopologySectorTextureField field,
-        TopologyMaterialLayer layer);
-bool OpenTopologySideDefTexturePicker(
-        SectorEditorState& state,
-        int sideDefId,
-        TopologyWallPart wallPart,
-        TopologyMaterialLayer layer);
 bool OpenAuthoringFaceAnchorTexturePicker(
         SectorEditorState& state,
         int topologySectorId,

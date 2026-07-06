@@ -95,14 +95,6 @@ public:
     std::string CurrentTextureForSurface(TopologySurfaceEditTarget target, TopologyMaterialLayer layer) const;
 
     std::string CurrentTextureForPickerTarget() const;
-    bool OpenTexturePickerForSector(
-            int sectorId,
-            TopologySectorTextureField field,
-            TopologyMaterialLayer layer);
-    bool OpenTexturePickerForSideDef(
-            int sideDefId,
-            TopologyWallPart wallPart,
-            TopologyMaterialLayer layer);
     bool OpenTexturePickerForAuthoringFaceAnchor(
             int topologySectorId,
             TopologySectorTextureField field,

@@ -291,7 +291,10 @@ bool SectorEditorMaterialEditingService::ApplyMaterialAction(
     if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData(context_.state)) {
         return ApplyAuthoringFaceAnchorFlatMaterialAction(target, assets, action);
     }
-    return FinishMaterialActionResult(action(context_.state.topologyMap), assets);
+    context_.statusText = HasAuthoringGraphData(context_.state)
+            ? "Cannot edit material: selected derived target has no authoring material route."
+            : "Cannot edit material: authoring data is required.";
+    return false;
 }
 
 bool SectorEditorMaterialEditingService::CopyMaterial(TopologySurfaceEditTarget target)
@@ -556,6 +559,10 @@ bool SectorEditorMaterialEditingService::ApplyDecalBloomIntensity(
 
 bool SectorEditorMaterialEditingService::OpenDecalTintModal(TopologySurfaceEditTarget target)
 {
+    if (!HasAuthoringGraphData(context_.state)) {
+        context_.statusText = "Cannot edit material: authoring data is required.";
+        return false;
+    }
     DecalTintModalState modal;
     std::string status;
     if (!BuildDecalTintModal(context_.state.topologyMap, target, modal, status)) {
@@ -701,22 +708,6 @@ std::string SectorEditorMaterialEditingService::CurrentTextureForSurface(
 std::string SectorEditorMaterialEditingService::CurrentTextureForPickerTarget() const
 {
     return CurrentSectorEditorMaterialPickerTexture(context_.state, context_.texturePicker);
-}
-
-bool SectorEditorMaterialEditingService::OpenTexturePickerForSector(
-        int sectorId,
-        TopologySectorTextureField field,
-        TopologyMaterialLayer layer)
-{
-    return OpenSectorEditorMaterialPickerForSector(context_.state, sectorId, field, layer);
-}
-
-bool SectorEditorMaterialEditingService::OpenTexturePickerForSideDef(
-        int sideDefId,
-        TopologyWallPart wallPart,
-        TopologyMaterialLayer layer)
-{
-    return OpenSectorEditorMaterialPickerForSideDef(context_.state, sideDefId, wallPart, layer);
 }
 
 bool SectorEditorMaterialEditingService::OpenTexturePickerForAuthoringFaceAnchor(

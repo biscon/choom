@@ -2107,6 +2107,71 @@ bool MutateSectorEditorAuthoringLineById(
             "Updated authoring line flags; derivation failed");
 }
 
+bool SetSectorEditorAuthoringLineDefBlocksPlayer(
+        SectorEditorState& state,
+        int topologyLineDefId,
+        bool blocksPlayer,
+        std::string* outStatus)
+{
+    const auto fail = [outStatus](const char* status) {
+        if (outStatus != nullptr) {
+            *outStatus = status == nullptr ? "" : status;
+        }
+        return false;
+    };
+
+    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
+            state.topologyMap,
+            topologyLineDefId);
+    if (lineDef == nullptr) {
+        return fail("Selected linedef is no longer valid.");
+    }
+    if (lineDef->frontSideDefId == -1 || lineDef->backSideDefId == -1) {
+        return fail("Blocks Player is only editable on two-sided portals.");
+    }
+    if (!HasAuthoringGraphData(state)) {
+        return fail("Cannot edit line flag: authoring data is required.");
+    }
+    if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+            || state.authoringDerivedTopologyStale
+            || !state.authoringDerivation.success) {
+        return fail("Blocks Player unavailable: derived topology is not current.");
+    }
+
+    const int authoringLineId =
+            FindSectorEditorAuthoringLineIdForTopologyLineDef(state, topologyLineDefId);
+    const SectorAuthoringLine* authoringLine =
+            FindSectorAuthoringLine(state.authoringGraph, authoringLineId);
+    if (authoringLine == nullptr) {
+        return fail("Blocks Player unavailable: selected derived linedef has no authoring line mapping.");
+    }
+    if (authoringLine->flags.blocksPlayer == blocksPlayer) {
+        if (outStatus != nullptr) {
+            outStatus->clear();
+        }
+        return true;
+    }
+
+    const char* status = blocksPlayer
+            ? "Enabled player blocking on authoring portal."
+            : "Disabled player blocking on authoring portal.";
+    const bool changed = MutateSectorEditorAuthoringLineById(
+            state,
+            authoringLineId,
+            status,
+            [blocksPlayer](SectorAuthoringLine& line) {
+                line.flags.blocksPlayer = blocksPlayer;
+                return true;
+            });
+    if (!changed) {
+        return fail("Blocks Player edit failed: authoring derivation failed.");
+    }
+    if (outStatus != nullptr) {
+        *outStatus = status;
+    }
+    return true;
+}
+
 bool RefreshSectorEditorAuthoringDerivation(
         SectorEditorState& state,
         const char* successStatus,

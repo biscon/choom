@@ -31,22 +31,22 @@ void OpenPreviewSurfaceTexturePicker(
     if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
             || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
         const TopologySectorTextureField field = TopologyEditTargetSectorTextureField(target.kind);
-        opened = HasAuthoringGraphData(state)
-                ? materialEditing.OpenTexturePickerForAuthoringFaceAnchor(target.sectorId, field, layer)
-                : materialEditing.OpenTexturePickerForSector(target.sectorId, field, layer);
+        opened = materialEditing.OpenTexturePickerForAuthoringFaceAnchor(target.sectorId, field, layer);
         if (opened && state.texturePicker.open && HasAuthoringGraphData(state)) {
             state.texturePicker.authoringSurface3DFlatTarget = true;
         }
         if (!opened) {
-            context.statusText = "No topology sector texture target";
+            context.statusText = HasAuthoringGraphData(state)
+                    ? "No derived sector authoring material target"
+                    : "Cannot edit material: authoring data is required.";
         }
     } else {
         const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
-        opened = HasAuthoringGraphData(state)
-                ? materialEditing.OpenTexturePickerForAuthoringSide(target.sideDefId, wallPart, layer)
-                : materialEditing.OpenTexturePickerForSideDef(target.sideDefId, wallPart, layer);
+        opened = materialEditing.OpenTexturePickerForAuthoringSide(target.sideDefId, wallPart, layer);
         if (!opened) {
-            context.statusText = "No topology sidedef texture target";
+            context.statusText = HasAuthoringGraphData(state)
+                    ? "No derived sidedef authoring material target"
+                    : "Cannot edit material: authoring data is required.";
         }
     }
     if (opened && state.texturePicker.open) {
@@ -271,8 +271,8 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
                     font,
                     "Blocks Player",
                     blocksPlayer)) {
-            if (context.setAuthoringOrLegacyLineDefBlocksPlayer) {
-                context.setAuthoringOrLegacyLineDefBlocksPlayer(portalLineDefId, blocksPlayer);
+            if (context.setAuthoringLineDefBlocksPlayer) {
+                context.setAuthoringLineDefBlocksPlayer(portalLineDefId, blocksPlayer);
             }
         }
         actionX += 146.0f + gap;

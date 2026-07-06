@@ -289,24 +289,6 @@ std::string CurrentTextureForPickerTarget(const SectorEditorState& state)
     return std::string{};
 }
 
-bool OpenTopologyTexturePicker(
-        SectorEditorState& state,
-        int sectorId,
-        TopologySectorTextureField field,
-        TopologyMaterialLayer layer)
-{
-    return OpenSectorEditorMaterialPickerForSector(state, sectorId, field, layer);
-}
-
-bool OpenTopologySideDefTexturePicker(
-        SectorEditorState& state,
-        int sideDefId,
-        TopologyWallPart wallPart,
-        TopologyMaterialLayer layer)
-{
-    return OpenSectorEditorMaterialPickerForSideDef(state, sideDefId, wallPart, layer);
-}
-
 bool OpenAuthoringFaceAnchorTexturePicker(
         SectorEditorState& state,
         int topologySectorId,

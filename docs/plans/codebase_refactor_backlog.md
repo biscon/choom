@@ -77,7 +77,7 @@ Task Type:
 | REF-066 | `[x]` | Medium | Editor architecture | Extract Preview3D UV/material panel into `preview/` | Codex task | Medium/High | Completed; panel moved to preview module and uses `MaterialEditingService` directly |
 | REF-067 | `[x]` | High | Editor architecture | Authoring-owned topology edit cleanup and direct topology mutation inventory | Codex task | Medium/High | Completed; Blocks Player authoring-owned with strict mapping-gap failure and inventory report |
 | REF-068 | `[x]` | High | Editor architecture | Replace SideDef inspector UV topology mutation with authoring material edits | Codex task | Medium/High | Completed; inspector UV apply/reset writes authoring material data and fails without mapping |
-| REF-069 | `[ ]` | Medium | Editor architecture | Remove or quarantine legacy no-authoring topology-edit fallback support | Codex task | Medium/High | Future cleanup; keep fallback names narrow until removed |
+| REF-069 | `[x]` | Medium | Editor architecture | Remove invalid no-authoring topology-edit support | Codex task | Medium/High | Completed; normal editor edits require authoring data or fail |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
@@ -1031,8 +1031,8 @@ Task Type:
     authoring data exists.
   - Topology derivation already copies authoring line flags into
     `SectorTopologyLineDef::flags`.
-  - Legacy/no-authoring fallback retained as
-    `SetLegacyTopologyPortalBlocksPlayer()`.
+  - Invalid no-authoring edit support removed; Blocks Player now fails when
+    authoring data is missing instead of mutating derived topology.
   - Authoring-backed linedefs with no derived authoring mapping now fail with a
     clear status instead of falling back to topology mutation.
   - Inventory report:
@@ -1063,7 +1063,7 @@ Task Type:
     inspector's immediate `selectedUv` pre-write.
   - Missing authoring mapping and no-authoring data now fail instead of
     mutating derived topology.
-  - No legacy/no-authoring fallback remains for this scoped UV path.
+  - No no-authoring topology edit behavior remains for this scoped UV path.
   - Inventory updated.
   - No behavior changes intended except the ownership correction.
   - REF-044 remains open because broader material scratch/writeback routes
@@ -1071,21 +1071,39 @@ Task Type:
   - REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
     remain open.
 
-#### REF-069 `[ ]` Remove or quarantine legacy no-authoring topology-edit fallback support
+#### REF-069 `[x]` Remove invalid no-authoring topology-edit support
 
 - Source/audit reference:
   `docs/audit/sector_editor_direct_topology_edit_inventory.md`.
-- Why it helps: narrows or removes remaining topology-edit fallback paths that
-  should not apply to authoring-backed maps.
+- Why it helps: enforces that editable maps require authoring graph data and
+  that `SectorTopologyMap` is not an editable map model.
 - Likely files: editor topology/material action services and any explicit
-  legacy fallback helpers.
+  invalid no-authoring edit-state helpers.
 - Suggested task type: Codex task.
 - Risk: Medium/High.
 - Suggested verification: build, ctest, direct topology mutation greps, and
-  targeted legacy/no-authoring workflow smoke if still supported.
-- Notes:
-  - Keep existing legacy fallback names explicit until removal.
+  targeted invalid no-authoring edit-state checks.
+- Completion notes:
+  - Normal no-authoring topology edit behavior was removed from map-editing UI
+    paths; invalid no-authoring edit states now fail clearly.
+  - Blocks Player now uses `SetAuthoringLineDefBlocksPlayer()` and
+    `SetSectorEditorAuthoringLineDefBlocksPlayer()`; the old topology mutation
+    helper was deleted.
+  - Sector name/height/sky/ambient/material/UV callbacks require authoring
+    face-anchor data and no longer mutate `SectorTopologySector`.
+  - Editor-facing material picker entry points were renamed to
+    `OpenMaterialPickerForDerivedSector()` and
+    `OpenMaterialPickerForDerivedSideDef()`.
+  - Inventory updated with remaining topology-owned runtime/cache/bake state,
+    import/migration-only conversion, lights/runtime objects, and REF-044
+    material scratch/writeback routes.
+  - No missing authoring fields were found for the scoped sector/material/line
+    properties.
   - Do not fold this into REF-044 material scratch/writeback cleanup.
+  - REF-044 remains open because transitional material scratch/writeback routes
+    still exist.
+  - REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
+    remain open.
 
 #### REF-061 `[>]` Evaluate Status/Diagnostics service
 

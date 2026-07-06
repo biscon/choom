@@ -260,6 +260,12 @@ bool MutateSectorEditorAuthoringLineById(
         const char* status,
         const std::function<bool(SectorAuthoringLine&)>& mutate);
 
+bool SetSectorEditorAuthoringLineDefBlocksPlayer(
+        SectorEditorState& state,
+        int topologyLineDefId,
+        bool blocksPlayer,
+        std::string* outStatus = nullptr);
+
 bool RefreshSectorEditorAuthoringDerivation(
         SectorEditorState& state,
         const char* successStatus = nullptr,

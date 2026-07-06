@@ -334,7 +334,7 @@ private:
     bool IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget target) const;
     void ResetSurface3DUiState();
     Rectangle BuildPreviewUvPanelRect() const;
-    bool SetAuthoringOrLegacyLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
+    bool SetAuthoringLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
     SectorEditorMaterialEditingService BuildMaterialEditingService();
     bool HasAuthoringGraphData() const;
     bool EnsureSelectedSurface3DAuthoringMappingCurrent();
@@ -343,15 +343,21 @@ private:
     void ClearTransientTopologyEditStateAfterGeometryChange();
     void ClearTopologySelectionOnly();
     void ClearSelection();
-    void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer);
-    void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer);
+    void OpenMaterialPickerForDerivedSector(
+            int sectorId,
+            TopologySectorTextureField field,
+            TopologyMaterialLayer layer);
+    void OpenMaterialPickerForDerivedSideDef(
+            int sideDefId,
+            TopologyWallPart wallPart,
+            TopologyMaterialLayer layer);
     void OpenMapSkyTexturePicker();
     void OpenSelectedDoorTexturePicker();
     void OpenSelectedBillboardSpritePicker();
     void ApplySelectedBillboardSpritePickerSelection();
     void ApplyTexturePickerSelection(engine::AssetManager& assets);
     std::string CurrentTextureForPickerTarget() const;
-    bool TryRenameSelectedTopologySector();
+    bool TryRenameSelectedDerivedSectorAuthoringName();
     void MarkTopologyDocumentEdited(const char* status);
     bool TryRenameSelectedLight();
     bool DeleteSelectedLight();

@@ -245,7 +245,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     font,
                     "Blocks Player",
                     blocksPlayer)) {
-            callbacks.setAuthoringOrLegacyLineDefBlocksPlayer(lineDef->id, blocksPlayer);
+            callbacks.setAuthoringLineDefBlocksPlayer(lineDef->id, blocksPlayer);
             return true;
         }
         y += 36.0f + gap;

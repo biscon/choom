@@ -28,7 +28,7 @@ struct SectorEditorPreviewUvPanelContext {
     std::string& statusText;
 
     SectorEditorMaterialEditingService& materialEditing;
-    std::function<bool(int, bool)> setAuthoringOrLegacyLineDefBlocksPlayer;
+    std::function<bool(int, bool)> setAuthoringLineDefBlocksPlayer;
 };
 
 Rectangle BuildSectorEditorPreviewUvPanelRect();

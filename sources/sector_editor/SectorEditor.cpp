@@ -2446,56 +2446,20 @@ bool SectorEditor::FinishTopologyActionResult(const SectorEditorTopologyActionRe
     return true;
 }
 
-bool SectorEditor::SetAuthoringOrLegacyLineDefBlocksPlayer(int lineDefId, bool blocksPlayer)
+bool SectorEditor::SetAuthoringLineDefBlocksPlayer(int lineDefId, bool blocksPlayer)
 {
-    const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(state.topologyMap, lineDefId);
-    if (lineDef == nullptr) {
-        statusText = "Selected linedef is no longer valid.";
-        return false;
-    }
-    if (lineDef->frontSideDefId == -1 || lineDef->backSideDefId == -1) {
-        statusText = "Blocks Player is only editable on two-sided portals.";
-        return false;
-    }
-
-    if (!HasAuthoringGraphData()) {
-        const bool changed = FinishTopologyActionResult(
-                SetLegacyTopologyPortalBlocksPlayer(state.topologyMap, lineDefId, blocksPlayer));
-        if (changed) {
-            RebuildSectorCollisionWorld();
-        }
-        return changed;
-    }
-
-    if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-            || state.authoringDerivedTopologyStale
-            || !state.authoringDerivation.success) {
-        statusText = "Blocks Player unavailable: derived topology is not current.";
-        return false;
-    }
-
-    const int authoringLineId =
-            FindSectorEditorAuthoringLineIdForTopologyLineDef(state, lineDefId);
-    const SectorAuthoringLine* authoringLine =
-            FindSectorAuthoringLine(state.authoringGraph, authoringLineId);
-    if (authoringLine == nullptr) {
-        statusText = "Blocks Player unavailable: selected derived linedef has no authoring line mapping.";
-        return false;
-    }
-    if (authoringLine->flags.blocksPlayer == blocksPlayer) {
-        return true;
-    }
-
-    const bool changed = MutateSectorEditorAuthoringLineForTopologyLineDef(
+    std::string status;
+    const bool changed = SetSectorEditorAuthoringLineDefBlocksPlayer(
             state,
             lineDefId,
-            blocksPlayer
-                    ? "Enabled player blocking on authoring portal."
-                    : "Disabled player blocking on authoring portal.",
-            [blocksPlayer](SectorAuthoringLine& line) {
-                line.flags.blocksPlayer = blocksPlayer;
-                return true;
-            });
+            blocksPlayer,
+            &status);
+    if (!status.empty()) {
+        statusText = status;
+    }
+    if (changed && status.empty()) {
+        return true;
+    }
     if (changed) {
         RebuildSectorCollisionWorld();
     }
@@ -2524,7 +2488,7 @@ void SectorEditor::SyncSelectedLightIdBuffer()
     SyncSectorEditorSelectedLightIdBuffer(context);
 }
 
-bool SectorEditor::TryRenameSelectedTopologySector()
+bool SectorEditor::TryRenameSelectedDerivedSectorAuthoringName()
 {
     SectorTopologySector* sector = SelectedTopologySector();
     if (sector == nullptr) {
@@ -2539,11 +2503,12 @@ bool SectorEditor::TryRenameSelectedTopologySector()
         return true;
     }
 
-    const bool hasAuthoringGraph =
-            !state.authoringGraph.vertices.empty()
-            || !state.authoringGraph.lines.empty()
-            || !state.authoringGraph.lineSides.empty()
-            || !state.authoringGraph.faceAnchors.empty();
+    const bool hasAuthoringGraph = HasAuthoringGraphData();
+    if (!hasAuthoringGraph) {
+        uiState.idEditError = "Cannot edit sector property: authoring data is required.";
+        statusText = uiState.idEditError;
+        return true;
+    }
     if (hasAuthoringGraph
             && (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
                     || state.authoringDerivedTopologyStale
@@ -2570,15 +2535,8 @@ bool SectorEditor::TryRenameSelectedTopologySector()
         uiState.idEditError.clear();
         return true;
     }
-    if (hasAuthoringGraph) {
-        uiState.idEditError = "Sector name edit unavailable: selected sector has no face anchor mapping";
-        statusText = uiState.idEditError;
-        return true;
-    }
-
-    sector->name = newName;
-    uiState.idEditError.clear();
-    MarkTopologyDocumentEdited(TextFormat("Renamed topology sector %d", sector->id));
+    uiState.idEditError = "Sector name edit unavailable: selected sector has no face anchor mapping";
+    statusText = uiState.idEditError;
     return true;
 }
 
@@ -4198,7 +4156,7 @@ void SectorEditor::DrawPreviewUvPanel(
             statusText,
             materialEditing,
             [this](int lineDefId, bool blocksPlayer) {
-                return SetAuthoringOrLegacyLineDefBlocksPlayer(lineDefId, blocksPlayer);
+                return SetAuthoringLineDefBlocksPlayer(lineDefId, blocksPlayer);
             }};
     DrawSectorEditorPreviewUvPanel(panelContext);
 }
@@ -5307,8 +5265,11 @@ void SectorEditor::DrawSectorsPanel(
         };
         const auto selectedAuthoringFaceAnchorUnavailable = [this, hasAuthoringGraph]() {
             const SectorTopologySector* selectedSector = SelectedTopologySector();
-            if (selectedSector == nullptr || !hasAuthoringGraph()) {
+            if (selectedSector == nullptr) {
                 return false;
+            }
+            if (!hasAuthoringGraph()) {
+                return true;
             }
             if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
                     || state.authoringDerivedTopologyStale
@@ -5319,9 +5280,10 @@ void SectorEditor::DrawSectorsPanel(
                            state,
                            selectedSector->id) < 0;
         };
-        const auto reportAuthoringFaceAnchorUnavailable = [this]() {
-            const char* message =
-                    "Sector property edit unavailable: selected sector has no current face anchor mapping";
+        const auto reportAuthoringFaceAnchorUnavailable = [this, hasAuthoringGraph]() {
+            const char* message = !hasAuthoringGraph()
+                    ? "Cannot edit sector property: authoring data is required."
+                    : "Sector property edit unavailable: selected sector has no current face anchor mapping";
             statusText = message;
             return true;
         };
@@ -5348,22 +5310,12 @@ void SectorEditor::DrawSectorsPanel(
                             mutate);
                     return true;
                 };
-        const auto mutateSelectedTopologySector =
-                [this](const char* status, const std::function<bool(SectorTopologySector&)>& mutate) {
-                    SectorTopologySector* selectedSector = SelectedTopologySector();
-                    if (selectedSector == nullptr || !mutate || !mutate(*selectedSector)) {
-                        return false;
-                    }
-                    MarkTopologyDocumentEdited(status);
-                    return true;
-                };
         SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
         const SectorEditorSectorInspectorCallbacks callbacks{
-                [this]() { return TryRenameSelectedTopologySector(); },
+                [this]() { return TryRenameSelectedDerivedSectorAuthoringName(); },
                 [this](const char* status) { statusText = status != nullptr ? status : ""; },
                 [this](const char* status) { MarkTopologyDocumentEdited(status); },
                 [mutateSelectedAuthoringFaceAnchor,
-                 mutateSelectedTopologySector,
                  selectedAuthoringFaceAnchorUnavailable,
                  reportAuthoringFaceAnchorUnavailable](
                         float floorZ,
@@ -5384,19 +5336,9 @@ void SectorEditor::DrawSectorsPanel(
                     if (selectedAuthoringFaceAnchorUnavailable()) {
                         return reportAuthoringFaceAnchorUnavailable();
                     }
-                    return mutateSelectedTopologySector(
-                            status,
-                            [floorZ, ceilingZ](SectorTopologySector& sector) {
-                                if (sector.floorZ == floorZ && sector.ceilingZ == ceilingZ) {
-                                    return false;
-                                }
-                                sector.floorZ = floorZ;
-                                sector.ceilingZ = ceilingZ;
-                                return true;
-                            });
+                    return reportAuthoringFaceAnchorUnavailable();
                 },
                 [mutateSelectedAuthoringFaceAnchor,
-                 mutateSelectedTopologySector,
                  selectedAuthoringFaceAnchorUnavailable,
                  reportAuthoringFaceAnchorUnavailable](bool ceilingSky) {
                     const char* status = "Updated sector ceiling sky";
@@ -5414,18 +5356,9 @@ void SectorEditor::DrawSectorsPanel(
                     if (selectedAuthoringFaceAnchorUnavailable()) {
                         return reportAuthoringFaceAnchorUnavailable();
                     }
-                    return mutateSelectedTopologySector(
-                            status,
-                            [ceilingSky](SectorTopologySector& sector) {
-                                if (sector.ceilingSky == ceilingSky) {
-                                    return false;
-                                }
-                                sector.ceilingSky = ceilingSky;
-                                return true;
-                            });
+                    return reportAuthoringFaceAnchorUnavailable();
                 },
                 [mutateSelectedAuthoringFaceAnchor,
-                 mutateSelectedTopologySector,
                  selectedAuthoringFaceAnchorUnavailable,
                  reportAuthoringFaceAnchorUnavailable](float intensity) {
                     const char* status = "Updated sector ambient intensity";
@@ -5443,18 +5376,9 @@ void SectorEditor::DrawSectorsPanel(
                     if (selectedAuthoringFaceAnchorUnavailable()) {
                         return reportAuthoringFaceAnchorUnavailable();
                     }
-                    return mutateSelectedTopologySector(
-                            status,
-                            [intensity](SectorTopologySector& sector) {
-                                if (sector.ambientIntensity == intensity) {
-                                    return false;
-                                }
-                                sector.ambientIntensity = intensity;
-                                return true;
-                            });
+                    return reportAuthoringFaceAnchorUnavailable();
                 },
                 [mutateSelectedAuthoringFaceAnchor,
-                 mutateSelectedTopologySector,
                  selectedAuthoringFaceAnchorUnavailable,
                  reportAuthoringFaceAnchorUnavailable](Color color) {
                     const char* status = "Updated sector ambient color";
@@ -5475,21 +5399,9 @@ void SectorEditor::DrawSectorsPanel(
                     if (selectedAuthoringFaceAnchorUnavailable()) {
                         return reportAuthoringFaceAnchorUnavailable();
                     }
-                    return mutateSelectedTopologySector(
-                            status,
-                            [color](SectorTopologySector& sector) {
-                                if (sector.ambientColor.r == color.r
-                                        && sector.ambientColor.g == color.g
-                                        && sector.ambientColor.b == color.b
-                                        && sector.ambientColor.a == color.a) {
-                                    return false;
-                                }
-                                sector.ambientColor = color;
-                                return true;
-                            });
+                    return reportAuthoringFaceAnchorUnavailable();
                 },
                 [mutateSelectedAuthoringFaceAnchor,
-                 mutateSelectedTopologySector,
                  selectedAuthoringFaceAnchorUnavailable,
                  reportAuthoringFaceAnchorUnavailable](
                         TopologySectorTextureField field,
@@ -5529,43 +5441,10 @@ void SectorEditor::DrawSectorsPanel(
                     if (selectedAuthoringFaceAnchorUnavailable()) {
                         return reportAuthoringFaceAnchorUnavailable();
                     }
-                    return mutateSelectedTopologySector(
-                            status,
-                            [field, uv](SectorTopologySector& sector) {
-                                SectorTopologyUvSettings* target = nullptr;
-                                switch (field) {
-                                case TopologySectorTextureField::Floor:
-                                    target = &sector.floorUv;
-                                    break;
-                                case TopologySectorTextureField::Ceiling:
-                                    target = &sector.ceilingUv;
-                                    break;
-                                case TopologySectorTextureField::DefaultWall:
-                                    target = &sector.defaultWall.uv;
-                                    break;
-                                case TopologySectorTextureField::DefaultLower:
-                                    target = &sector.defaultLower.uv;
-                                    break;
-                                case TopologySectorTextureField::DefaultUpper:
-                                    target = &sector.defaultUpper.uv;
-                                    break;
-                                case TopologySectorTextureField::None:
-                                    break;
-                                }
-                                if (target == nullptr) {
-                                    return false;
-                                }
-                                *target = uv;
-                                return true;
-                            });
+                    return reportAuthoringFaceAnchorUnavailable();
                 },
-                [&materialEditing, this](int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer) {
-                    const bool opened = HasAuthoringGraphData()
-                            ? materialEditing.OpenTexturePickerForAuthoringFaceAnchor(sectorId, field, layer)
-                            : materialEditing.OpenTexturePickerForSector(sectorId, field, layer);
-                    if (!opened) {
-                        statusText = "No topology sector texture target";
-                    }
+                [this](int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer) {
+                    OpenMaterialPickerForDerivedSector(sectorId, field, layer);
                 },
                 [&materialEditing](TopologySurfaceEditTarget target) {
                     return materialEditing.CopyMaterial(target);
@@ -6875,10 +6754,10 @@ bool SectorEditor::DrawTopologySideDefInspector(
                 SelectTopologySideDef(sideDefId, wallPart);
             },
             [this](int lineDefId, bool blocksPlayer) {
-                return SetAuthoringOrLegacyLineDefBlocksPlayer(lineDefId, blocksPlayer);
+                return SetAuthoringLineDefBlocksPlayer(lineDefId, blocksPlayer);
             },
             [this](int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer) {
-                OpenTopologySideDefTexturePicker(sideDefId, wallPart, layer);
+                OpenMaterialPickerForDerivedSideDef(sideDefId, wallPart, layer);
             }};
     SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
     SectorEditorMaterialInspectorContext context{
@@ -8623,31 +8502,34 @@ void SectorEditor::ApplySelectedBillboardSpritePickerSelection()
             : "Billboard sprite unchanged";
 }
 
-void SectorEditor::OpenTopologyTexturePicker(
+void SectorEditor::OpenMaterialPickerForDerivedSector(
         int sectorId,
         TopologySectorTextureField field,
         TopologyMaterialLayer layer)
 {
     SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
-    const bool opened = HasAuthoringGraphData()
-            ? materialEditing.OpenTexturePickerForAuthoringFaceAnchor(sectorId, field, layer)
-            : materialEditing.OpenTexturePickerForSector(sectorId, field, layer);
+    const bool opened = materialEditing.OpenTexturePickerForAuthoringFaceAnchor(
+            sectorId,
+            field,
+            layer);
     if (!opened) {
-        statusText = "No topology sector texture target";
+        statusText = HasAuthoringGraphData()
+                ? "No derived sector authoring material target"
+                : "Cannot edit material: authoring data is required.";
     }
 }
 
-void SectorEditor::OpenTopologySideDefTexturePicker(
+void SectorEditor::OpenMaterialPickerForDerivedSideDef(
         int sideDefId,
         TopologyWallPart wallPart,
         TopologyMaterialLayer layer)
 {
     SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
-    const bool opened = HasAuthoringGraphData()
-            ? materialEditing.OpenTexturePickerForAuthoringSide(sideDefId, wallPart, layer)
-            : materialEditing.OpenTexturePickerForSideDef(sideDefId, wallPart, layer);
+    const bool opened = materialEditing.OpenTexturePickerForAuthoringSide(sideDefId, wallPart, layer);
     if (!opened) {
-        statusText = "No topology sidedef texture target";
+        statusText = HasAuthoringGraphData()
+                ? "No derived sidedef authoring material target"
+                : "Cannot edit material: authoring data is required.";
     }
 }
 

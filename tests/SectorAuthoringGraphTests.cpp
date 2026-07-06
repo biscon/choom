@@ -3257,6 +3257,39 @@ void TestEditorMaterialEditingServiceSideDefBaseUvWritesThroughAuthoringSide()
           "service sidedef base UV apply does not rebuild preview for non-middle wall part");
 }
 
+void TestEditorMaterialEditingServiceNoAuthoringMaterialEditFailsWithoutMutatingTopology()
+{
+    game::SectorEditorState state;
+    state.topologyMap = MakeSingleSectorSquareMap();
+    game::SectorTopologySector* sector = game::FindSectorTopologySector(state.topologyMap, 200);
+    Check(sector != nullptr, "invalid no-authoring material edit setup finds sector");
+    if (sector == nullptr) {
+        return;
+    }
+    sector->floorDecal.textureId = "mark";
+    sector->floorDecal.opacity = 0.25f;
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, uiState, statusText);
+    const game::TopologySurfaceEditTarget target{
+            game::TopologySurfaceEditTargetKind::SectorFloor,
+            200,
+            -1,
+            -1,
+            game::SectorTopologySideKind::Front};
+
+    Check(!service.ApplyDecalOpacity(target, 0.75f, nullptr),
+          "invalid no-authoring material edit fails");
+    const game::SectorTopologySector* afterSector =
+            game::FindSectorTopologySector(state.topologyMap, 200);
+    Check(statusText.find("authoring data is required") != std::string::npos,
+          "invalid no-authoring material edit reports authoring requirement");
+    Check(afterSector != nullptr && afterSector->floorDecal.opacity == 0.25f,
+          "invalid no-authoring material edit does not mutate derived topology");
+}
+
 void TestEditorMaterialEditingServiceSideDefDecalUvWritesThroughAuthoringSide()
 {
     game::SectorEditorState state;
@@ -3522,6 +3555,101 @@ void TestEditorAuthoringLineFlagInspectorWritesProjectAfterDerivation()
           "line flag inspector write invalidates cached editor topology rendering");
     Check(state.topologyRenderRevision == originalRevision + 1,
           "line flag inspector write bumps topology render revision");
+}
+
+void TestEditorNoAuthoringBlocksPlayerEditFailsWithoutMutatingTopology()
+{
+    game::SectorEditorState state;
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
+    const game::SectorAuthoringDerivationResult derivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    Check(derivation.success, "invalid no-authoring blocksPlayer setup derives topology");
+    state.topologyMap = derivation.topology;
+
+    const game::SectorTopologyLineDef* initialLineDef =
+            FindDerivedLineDefForAuthoringLine(derivation, 11);
+    Check(initialLineDef != nullptr, "invalid no-authoring blocksPlayer setup finds portal");
+    if (initialLineDef == nullptr) {
+        return;
+    }
+
+    std::string status;
+    Check(!game::SetSectorEditorAuthoringLineDefBlocksPlayer(
+                  state,
+                  initialLineDef->id,
+                  true,
+                  &status),
+          "invalid no-authoring blocksPlayer edit fails");
+    const game::SectorTopologyLineDef* afterLineDef =
+            game::FindSectorTopologyLineDef(state.topologyMap, initialLineDef->id);
+    Check(status.find("authoring data is required") != std::string::npos,
+          "invalid no-authoring blocksPlayer edit reports authoring requirement");
+    Check(afterLineDef != nullptr && !afterLineDef->flags.blocksPlayer,
+          "invalid no-authoring blocksPlayer edit does not mutate derived topology");
+}
+
+void TestEditorAuthoringBlocksPlayerEditWritesAuthoringLine()
+{
+    game::SectorEditorState state;
+    state.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
+    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+          "authoring blocksPlayer edit setup derives valid topology");
+
+    const game::SectorTopologyLineDef* initialLineDef =
+            FindDerivedLineDefForAuthoringLine(state.authoringDerivation, 11);
+    Check(initialLineDef != nullptr, "authoring blocksPlayer edit setup finds portal");
+    if (initialLineDef == nullptr) {
+        return;
+    }
+
+    std::string status;
+    Check(game::SetSectorEditorAuthoringLineDefBlocksPlayer(
+                  state,
+                  initialLineDef->id,
+                  true,
+                  &status),
+          "authoring blocksPlayer edit succeeds");
+    const game::SectorAuthoringLine* authoringLine =
+            game::FindSectorAuthoringLine(state.authoringGraph, 11);
+    const game::SectorTopologyLineDef* projectedLineDef =
+            FindDerivedLineDefForAuthoringLine(state.authoringDerivation, 11);
+    Check(authoringLine != nullptr && authoringLine->flags.blocksPlayer,
+          "authoring blocksPlayer edit mutates authoring line");
+    Check(projectedLineDef != nullptr && projectedLineDef->flags.blocksPlayer,
+          "authoring blocksPlayer edit refreshes derived topology");
+    Check(status.find("authoring portal") != std::string::npos,
+          "authoring blocksPlayer edit reports authoring status");
+}
+
+void TestEditorNoAuthoringSectorPropertyEditFailsWithoutMutatingTopology()
+{
+    game::SectorEditorState state;
+    state.topologyMap = MakeSingleSectorSquareMap();
+    const game::SectorTopologySector* beforeSector =
+            game::FindSectorTopologySector(state.topologyMap, 200);
+    Check(beforeSector != nullptr, "invalid no-authoring sector property setup finds sector");
+    if (beforeSector == nullptr) {
+        return;
+    }
+    const float originalFloorZ = beforeSector->floorZ;
+
+    Check(!game::MutateSectorEditorAuthoringFaceAnchorForTopologySector(
+                  state,
+                  200,
+                  "Updated sector height",
+                  [](game::SectorAuthoringFaceAnchor& anchor) {
+                      anchor.floorZ = 8.0f;
+                      return true;
+                  }),
+          "invalid no-authoring sector property edit fails");
+    const game::SectorTopologySector* afterSector =
+            game::FindSectorTopologySector(state.topologyMap, 200);
+    Check(afterSector != nullptr && afterSector->floorZ == originalFloorZ,
+          "invalid no-authoring sector property edit does not mutate derived topology");
 }
 
 void TestEditorAuthoringLineFlagInspectorWritesProjectToSplitDerivedLineDefs()
@@ -5262,29 +5390,32 @@ void TestEditorAuthoringTexturePickerRejectsStaleMapping()
           "authoring face picker closes state when mapping is stale");
 }
 
-void TestEditorLegacyTopologyTexturePickerWritesLiveTopologyWithoutAuthoringGraph()
+void TestEditorNoAuthoringTexturePickerApplyFailsWithoutMutatingTopology()
 {
     game::SectorEditorState state;
     state.topologyMap = MakeSingleSectorSquareMap();
     state.topologyMap.texturesById.emplace("room_floor", game::SectorTextureDefinition{"room_floor", "room_floor.png"});
     state.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
 
-    Check(game::OpenTopologyTexturePicker(
-                  state,
-                  200,
-                  game::TopologySectorTextureField::Floor,
-                  game::TopologyMaterialLayer::Base),
-          "legacy topology texture picker opens without authoring graph");
+    state.texturePicker.open = true;
+    state.texturePicker.topologyTargetKind = game::TopologyTexturePickerTargetKind::Sector;
+    state.texturePicker.topologyLayer = game::TopologyMaterialLayer::Base;
+    state.texturePicker.topologySectorId = 200;
+    state.texturePicker.topologyField = game::TopologySectorTextureField::Floor;
+    state.texturePicker.textureIds.push_back("room_floor");
+    state.texturePicker.textureIds.push_back("new_floor");
     SelectTextureInPicker(state.texturePicker, "new_floor");
 
     const game::SectorEditorTexturePickerApplyResult result =
             game::ApplyTexturePickerSelection(state);
     const game::SectorTopologySector* sector =
             game::FindSectorTopologySector(state.topologyMap, 200);
-    Check(result.changed, "legacy topology texture picker reports texture change");
-    Check(sector != nullptr && sector->floorTextureId == "new_floor",
-          "legacy topology texture picker writes live topology when no authoring graph is active");
-    Check(!state.texturePicker.open, "legacy topology texture picker closes after apply");
+    Check(!result.changed, "invalid no-authoring texture picker reports no material change");
+    Check(result.status.find("authoring data is required") != std::string::npos,
+          "invalid no-authoring texture picker reports authoring requirement");
+    Check(sector != nullptr && sector->floorTextureId == "room_floor",
+          "invalid no-authoring texture picker does not mutate derived topology");
+    Check(!state.texturePicker.open, "invalid no-authoring texture picker closes after apply");
 }
 
 void TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture()
@@ -8122,11 +8253,15 @@ int main()
     TestEditorAuthoringSideMaterialInspectorWritesProjectToSplitDerivedSideDefs();
     TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTopology();
     TestEditorMaterialEditingServiceSideDefBaseUvWritesThroughAuthoringSide();
+    TestEditorMaterialEditingServiceNoAuthoringMaterialEditFailsWithoutMutatingTopology();
     TestEditorMaterialEditingServiceSideDefDecalUvWritesThroughAuthoringSide();
     TestEditorMaterialEditingServiceSideDefBaseUvResetWritesThroughAuthoringSide();
     TestEditorMaterialEditingServiceSideDefDecalUvResetWritesThroughAuthoringSide();
     TestEditorMaterialEditingServiceSideDefUvMissingMappingDoesNotMutateTopology();
     TestEditorAuthoringLineFlagInspectorWritesProjectAfterDerivation();
+    TestEditorNoAuthoringBlocksPlayerEditFailsWithoutMutatingTopology();
+    TestEditorAuthoringBlocksPlayerEditWritesAuthoringLine();
+    TestEditorNoAuthoringSectorPropertyEditFailsWithoutMutatingTopology();
     TestEditorAuthoringLineFlagInspectorWritesProjectToSplitDerivedLineDefs();
     TestEditorAuthoringLineFlagInspectorWriteDoesNotDirectlyMutateDerivedTopology();
     TestEditorSelectedAuthoringLineInspectorTargetDoesNotNeedTopologySelection();
@@ -8168,7 +8303,7 @@ int main()
     TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen();
     TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen();
     TestEditorAuthoringTexturePickerRejectsStaleMapping();
-    TestEditorLegacyTopologyTexturePickerWritesLiveTopologyWithoutAuthoringGraph();
+    TestEditorNoAuthoringTexturePickerApplyFailsWithoutMutatingTopology();
     TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture();
     TestEditorMapTextureImportPreservesMapLevelRegistryOnly();
     TestSpriteMetadataScannerFindsNestedJsonAndFrameTagClips();
