@@ -70,6 +70,7 @@ Task Type:
 | REF-080 | `[x]` | High | Editor architecture | Extract TextureCatalogService | Codex task | Medium | Completed; generic texture catalog/handle behavior moved, apply/document semantics unchanged |
 | REF-081 | `[x]` | High | Editor architecture | Clean up TextureCatalogService integration debt | Codex task | Medium | Completed; obsolete wrappers removed while add-map lifecycle stayed central |
 | REF-082 | `[x]` | High | Editor architecture | Pass TextureCatalogService to remaining texture UI clients | Codex task | Medium | Completed; remaining UI missing-texture checks use catalog service |
+| REF-083 | `[x]` | High | Editor architecture | SectorEditor state ownership and remaining code map | Audit first | Low | Completed; report recommends TextureCatalogState split next |
 | REF-059 | `[x]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Completed; recommends material-specific picker routing extraction before MaterialEditBridge |
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
 | REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
@@ -988,6 +989,45 @@ Task Type:
   - Dirty/cache/status timing, document lifecycle, serialization schema,
     rendering, collision, lightmap, and source-hash behavior were not
     intentionally changed.
+
+#### REF-083 `[x]` SectorEditor state ownership and remaining code map
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md`,
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`, and current
+  post-REF-082 sector editor code.
+- Why it helps: records which extracted services own real state, which are
+  context-backed facades over `SectorEditorState`, what remains in
+  `SectorEditor.cpp`, and which state splits would help future runtime/game
+  mode reuse.
+- Likely files: documentation only.
+- Suggested task type: Audit first.
+- Risk: Low.
+- Suggested verification: `git diff --check`, `git diff --stat`,
+  `git status --short`; build optional because this is documentation-only.
+- Completion notes:
+  - Report path:
+    `docs/audit/sector_editor_state_ownership_and_remaining_map.md`.
+  - Current `SectorEditor.cpp` line count: 5,305 lines.
+  - `SectorEditorState` is still acting as a god state object: recent services
+    own meaningful behavior, but most durable editor, document, preview,
+    selection, texture, material, light, modal, and runtime state is still
+    stored centrally.
+  - Top state ownership split candidates:
+    `TextureCatalogState`, `MaterialEditingState`, `LightEditingState`,
+    `SelectionState`/`ManipulationState`, `PreviewState`, `InspectorUiState`,
+    and a broader planned `DocumentState`.
+  - Top remaining `SectorEditor.cpp` clusters: lifecycle/update/render/UI
+    orchestration; canvas/tool routing and picking; preview/gameplay/collision
+    lifecycle; document/modal lifecycle; texture picker/add-map/door/sky/sprite
+    routing and service wrappers.
+  - Recommended next implementation task: split a narrow
+    `TextureCatalogState` out of `SectorEditorState` so
+    `TextureCatalogService` can own editor texture scope/handle-cache state
+    while keeping add-map modal lifecycle and feature-specific apply semantics
+    out of the catalog service.
+  - No source code, tests, CMake, editor behavior, topology mutation behavior,
+    lightmap behavior, or source-hash behavior was intentionally changed.
 
 #### REF-059 `[x]` Audit MaterialEditBridge and material-specific picker routing
 
