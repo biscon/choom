@@ -75,6 +75,7 @@ Task Type:
 | REF-064 | `[x]` | High | Editor architecture | Add minimal MaterialEditBridge for material action wrappers | Codex task | Medium/High | Completed; action wrappers route through bridge while finish paths stay in `SectorEditor.cpp` |
 | REF-065 | `[x]` | High | Editor architecture | Promote MaterialEditBridge into MaterialEditingService | Codex task | Medium/High | Completed; bridge removed and material clients use service directly |
 | REF-066 | `[x]` | Medium | Editor architecture | Extract Preview3D UV/material panel into `preview/` | Codex task | Medium/High | Completed; panel moved to preview module and uses `MaterialEditingService` directly |
+| REF-074 | `[x]` | Medium | Editor architecture | Extract Preview3D overlay/debug UI into `preview/` | Codex task | Medium | Completed; overlay module returns one-frame high-level action requests |
 | REF-067 | `[x]` | High | Editor architecture | Authoring-owned topology edit cleanup and direct topology mutation inventory | Codex task | Medium/High | Completed; Blocks Player authoring-owned with strict mapping-gap failure and inventory report |
 | REF-068 | `[x]` | High | Editor architecture | Replace SideDef inspector UV topology mutation with authoring material edits | Codex task | Medium/High | Completed; inspector UV apply/reset writes authoring material data and fails without mapping |
 | REF-069 | `[x]` | Medium | Editor architecture | Remove invalid no-authoring topology-edit support | Codex task | Medium/High | Completed; normal editor edits require authoring data or fail |
@@ -1016,6 +1017,34 @@ Task Type:
   - REF-044 remains open because material migration is still incomplete.
   - REF-058, lights, and lightmap/source-hash-sensitive work remain open.
   - No behavior changes intended.
+
+#### REF-074 `[x]` Extract Preview3D overlay/debug UI into `preview/`
+
+- Source/audit reference: REF-074 task.
+- Why it helps: removes Preview3D overlay/debug display code from
+  `SectorEditor.cpp` while keeping preview renderer, camera, collision,
+  lifecycle, material, and lightmap ownership in the editor.
+- Likely files: `SectorEditor.cpp`,
+  `sources/sector_editor/preview/SectorEditorPreviewOverlay.h`,
+  `sources/sector_editor/preview/SectorEditorPreviewOverlay.cpp`.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, dependency grep for
+  no concrete `SectorEditor` dependency under `preview/`, and manual Preview3D
+  overlay smoke if practical.
+- Completion notes:
+  - Preview3D overlay/debug UI extracted to `sources/sector_editor/preview/`.
+  - Created `SectorEditorPreviewOverlay.h` and
+    `SectorEditorPreviewOverlay.cpp`.
+  - `SectorEditor.cpp` line count reduced from 8,548 to 7,809 lines, a
+    739-line reduction.
+  - Preview renderer/collision/camera ownership stayed in `SectorEditor.cpp`.
+  - Light/lightmap/source-hash behavior unchanged.
+  - No callback bridge was introduced; the overlay returns one-frame action
+    requests for high-level editor-owned actions.
+  - No behavior changes intended.
+  - REF-058, lights, lightmap/source-hash-sensitive work, and main
+    tools/inspector extraction work remain open.
 
 #### REF-067 `[x]` Authoring-owned topology edit cleanup and direct topology mutation inventory
 
