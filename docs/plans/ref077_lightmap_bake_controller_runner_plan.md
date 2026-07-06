@@ -1,5 +1,150 @@
 # REF-077 LightmapBakeController Runner Plan
 
+## How To Use This Plan
+
+This is a living execution plan for REF-062/REF-077.
+
+When an agent is asked to execute this plan, it must:
+
+1. Read this section first.
+2. Read the `plan-state-json` block.
+3. Identify the selected phase/pass.
+4. Execute only that selected phase/pass.
+5. Do not skip ahead.
+6. Do not execute multiple phases/passes in one run unless the selected item explicitly says it is a combined pass.
+7. If the selected item is too broad, update this plan with smaller child passes and stop.
+8. If smaller passes are added, do not also implement source changes in the same run unless explicitly instructed.
+9. After executing a phase/pass, update this plan with status, date, summary, verification results, and behavior notes.
+10. Do not claim manual verification unless it was actually performed.
+11. Keep this plan self-tracking so future fresh-context runs can resume from it.
+
+```plan-state-json id="ref077-lightmap-bake-controller"
+{
+  "plan_id": "ref077_lightmap_bake_controller",
+  "status_values": [
+    "Not Started",
+    "Planned",
+    "In Progress",
+    "Completed",
+    "Deferred",
+    "Blocked",
+    "Partial"
+  ],
+  "items": [
+    {
+      "id": "phase_01",
+      "title": "Inventory And Controller Skeleton",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_01a",
+      "title": "Add Passive Controller Skeleton",
+      "type": "pass",
+      "parent": "phase_01",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_02",
+      "title": "Move Lifecycle State And Shutdown Helpers",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_02a",
+      "title": "Delegate Worker Lifecycle Cancel Join And Shutdown",
+      "type": "pass",
+      "parent": "phase_02",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_03",
+      "title": "Move Start Request Construction",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_03a",
+      "title": "Move Start Worker Mechanics Behind Controller Request",
+      "type": "pass",
+      "parent": "phase_03",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_04",
+      "title": "Move Result Polling And Terminal State",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_04a",
+      "title": "Move Poll Consume And Stale Classification Boundary",
+      "type": "pass",
+      "parent": "phase_04",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_05",
+      "title": "Clarify Result Install Boundary",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_05a",
+      "title": "Extract Install Payload Or Direct Install Boundary",
+      "type": "pass",
+      "parent": "phase_05",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_06",
+      "title": "Cleanup Wrappers Docs And Backlog",
+      "type": "phase",
+      "status": "Not Started"
+    },
+    {
+      "id": "phase_06a",
+      "title": "Remove Obsolete Wrappers And Close Implementation Plan",
+      "type": "pass",
+      "parent": "phase_06",
+      "status": "Not Started"
+    }
+  ]
+}
+```
+
+## Current Progress
+
+| Phase / Pass | Status | Date | Notes |
+| --- | --- | --- | --- |
+| Phase 1: Inventory And Controller Skeleton | Not Started |  | Parent phase. |
+| Phase 1A: Add Passive Controller Skeleton | Not Started |  | First executable pass; add controller files/skeleton with no behavior moved. |
+| Phase 2: Move Lifecycle State And Shutdown Helpers | Not Started |  | Parent phase. |
+| Phase 2A: Delegate Worker Lifecycle Cancel Join And Shutdown | Not Started |  | Move lifecycle state/helpers behind controller while preserving behavior. |
+| Phase 3: Move Start Request Construction | Not Started |  | Parent phase. |
+| Phase 3A: Move Start Worker Mechanics Behind Controller Request | Not Started |  | Move start/thread execution mechanics while preserving copied inputs and source-hash capture. |
+| Phase 4: Move Result Polling And Terminal State | Not Started |  | Parent phase. |
+| Phase 4A: Move Poll Consume And Stale Classification Boundary | Not Started |  | Move result polling/terminal lifecycle while keeping install editor-owned. |
+| Phase 5: Clarify Result Install Boundary | Not Started |  | Parent phase; highest-risk phase. |
+| Phase 5A: Extract Install Payload Or Direct Install Boundary | Not Started |  | Preserve preferred payload/result boundary unless direct install is demonstrably cleaner without behavior changes. |
+| Phase 6: Cleanup Wrappers Docs And Backlog | Not Started |  | Parent phase. |
+| Phase 6A: Remove Obsolete Wrappers And Close Implementation Plan | Not Started |  | Remove temporary wrappers/debt, update docs/backlog, and run final verification. |
+
+## Execution Tracking Rules
+
+- Each phase/pass must be independently buildable and testable.
+- Each phase/pass final report must state whether source code changed.
+- Each implementation phase/pass must update this document before finishing.
+- The update should be small and local: update the JSON status, the Current Progress row, and add or update execution notes for the selected phase/pass.
+- Do not rewrite unrelated phases when marking progress.
+- If behavior is intended to remain unchanged, explicitly state that.
+- If a phase/pass changes serialization, generated data, public APIs, runtime behavior, cache invalidation, source-hash behavior, object probe sidecar behavior, worker lifecycle, or build/test behavior, clearly say so.
+- Do not claim manual GUI verification unless it was actually performed.
+- If a phase/pass produces only a plan or audit and no source changes, state that clearly.
+- If a phase/pass is too broad, add smaller child passes under that phase and stop without source changes.
+- Keep the JSON block and Current Progress table synchronized.
+- A parent phase should only be marked `Completed` after all non-deferred child passes are `Completed`.
+
 ## Summary
 
 Extract the lightmap bake worker/controller logic from `SectorEditor.cpp` into a dedicated editor service, tentatively:
@@ -117,6 +262,15 @@ Suggested concrete API shape:
 
 Request/result helper types should live with the controller and must not include `SectorEditor.h`.
 
+## Dependency Direction Rules
+
+- `SectorEditor` may compose and call `SectorEditorLightmapBakeController`.
+- `SectorEditorLightmapBakeController` must not include `SectorEditor.h`.
+- `SectorEditorLightmapBakeController` must not call `SectorEditor::` methods.
+- UI/modal code should consume read-only bake view data and return explicit user intents; lifecycle state transitions belong to the controller.
+- Preview renderer, collision, document dirty state, and level path ownership stay above the controller unless a selected phase explicitly narrows that boundary without changing behavior.
+- Direct `SectorTopologyMap` writes are allowed only for bake result metadata/runtime output categories already accepted by the architecture contract.
+
 ## Source Hash Behavior To Preserve
 
 Current start behavior:
@@ -150,6 +304,8 @@ Do not propose or implement any source-hash policy change in REF-077 phases.
 
 ## Phase 1
 
+Executable pass: `phase_01a` / Add Passive Controller Skeleton.
+
 Goal: inventory-backed controller skeleton, no behavior moved.
 
 Files to modify:
@@ -179,7 +335,24 @@ Remains:
 
 - All behavior still in `SectorEditor.cpp`.
 
+Final report expectations:
+
+- State what skeleton files/types were added.
+- Confirm no bake lifecycle behavior moved.
+- Confirm source-hash behavior is unchanged.
+- Confirm object probe sidecar behavior is unchanged.
+- Confirm no worker references live editor state.
+- List any wrappers introduced and whether they are temporary debt.
+
+How to update this plan after completion:
+
+- Mark `phase_01a` `Completed` in the JSON block and Current Progress table.
+- Mark `phase_01` `Completed` only if no additional Phase 1 child passes were added.
+- Add the completion date, verification results, and a short behavior note.
+
 ## Phase 2
+
+Executable pass: `phase_02a` / Delegate Worker Lifecycle Cancel Join And Shutdown.
 
 Goal: move worker lifecycle state and shutdown/cancel/join helpers behind the controller.
 
@@ -215,7 +388,25 @@ Remains:
 
 - Start request construction, source-hash capture, result consumption, and install stay in `SectorEditor.cpp`.
 
+Final report expectations:
+
+- State what lifecycle behavior moved into the controller.
+- State what lifecycle behavior intentionally stayed in `SectorEditor`.
+- List wrappers that remain and why.
+- Identify any temporary wrapper debt and add matching backlog notes if debt remains.
+- Confirm source-hash behavior is unchanged.
+- Confirm object probe sidecar behavior is unchanged.
+- Confirm the worker never references live editor state.
+
+How to update this plan after completion:
+
+- Mark `phase_02a` `Completed` in the JSON block and Current Progress table.
+- Mark `phase_02` `Completed` only if no additional Phase 2 child passes were added.
+- Add the completion date, verification results, and wrapper/debt notes.
+
 ## Phase 3
+
+Executable pass: `phase_03a` / Move Start Worker Mechanics Behind Controller Request.
 
 Goal: move `StartLightmapBake()` worker start mechanics and bake request execution.
 
@@ -249,7 +440,25 @@ Remains:
 
 - `SectorEditor` still consumes results and installs metadata/files.
 
+Final report expectations:
+
+- State what start/request/worker behavior moved into the controller.
+- State what start preflight behavior intentionally stayed in `SectorEditor`.
+- List wrappers that remain and why.
+- Identify any temporary wrapper debt and add matching backlog notes if debt remains.
+- Confirm source-hash behavior is unchanged, including when `ComputeSectorLightmapSourceHash()` is called.
+- Confirm object probe sidecar behavior is unchanged.
+- Confirm the worker captures only copied input and controller-owned primitives.
+
+How to update this plan after completion:
+
+- Mark `phase_03a` `Completed` in the JSON block and Current Progress table.
+- Mark `phase_03` `Completed` only if no additional Phase 3 child passes were added.
+- Add the completion date, verification results, and behavior notes.
+
 ## Phase 4
+
+Executable pass: `phase_04a` / Move Poll Consume And Stale Classification Boundary.
 
 Goal: move result polling/terminal lifecycle and stale-result classification while keeping editor-owned install.
 
@@ -282,7 +491,25 @@ Remains:
 
 - File install, metadata install, dirty state, report logging, and preview rebuild remain in `SectorEditor`.
 
+Final report expectations:
+
+- State what poll/result/terminal behavior moved into the controller.
+- State what result install behavior intentionally stayed in `SectorEditor`.
+- List wrappers that remain and why.
+- Identify any temporary wrapper debt and add matching backlog notes if debt remains.
+- Confirm source-hash behavior is unchanged.
+- Confirm object probe sidecar behavior is unchanged.
+- Confirm the worker never references live editor state.
+
+How to update this plan after completion:
+
+- Mark `phase_04a` `Completed` in the JSON block and Current Progress table.
+- Mark `phase_04` `Completed` only if no additional Phase 4 child passes were added.
+- Add the completion date, verification results, and behavior notes.
+
 ## Phase 5
+
+Executable pass: `phase_05a` / Extract Install Payload Or Direct Install Boundary.
 
 Goal: clarify and implement the result install boundary.
 
@@ -329,7 +556,26 @@ Remains:
 
 - Thin wrappers and obsolete state cleanup.
 
+Final report expectations:
+
+- State what install/file behavior moved into the controller or helper.
+- State what document/preview/status behavior intentionally stayed in `SectorEditor`.
+- List wrappers that remain and why.
+- Identify any temporary wrapper debt and add matching backlog notes if debt remains.
+- Confirm source-hash behavior is unchanged, including stale rejection and installed metadata.
+- Confirm object probe sidecar behavior is unchanged, including copy ordering and cleanup.
+- Confirm the worker never references live editor state.
+- State whether the preferred payload/result boundary was preserved; if not, explain why direct controller install was cleaner without behavior changes.
+
+How to update this plan after completion:
+
+- Mark `phase_05a` `Completed` in the JSON block and Current Progress table.
+- Mark `phase_05` `Completed` only if no additional Phase 5 child passes were added.
+- Add the completion date, verification results, install-boundary decision, and behavior notes.
+
 ## Phase 6
+
+Executable pass: `phase_06a` / Remove Obsolete Wrappers And Close Implementation Plan.
 
 Goal: remove obsolete wrappers/state and update docs/backlog after implementation.
 
@@ -364,6 +610,24 @@ Verification:
 - `git diff --stat`
 - `git status --short`
 - Manual smoke checklist below.
+
+Final report expectations:
+
+- State what cleanup behavior moved into the controller, if any.
+- State what intentionally stayed in `SectorEditor`.
+- List any wrappers that still remain and why.
+- Identify any temporary wrapper debt and add matching backlog notes if debt remains.
+- Confirm source-hash behavior is unchanged.
+- Confirm object probe sidecar behavior is unchanged.
+- Confirm the worker never references live editor state.
+- State whether REF-062 was marked complete or remains open.
+
+How to update this plan after completion:
+
+- Mark `phase_06a` `Completed` in the JSON block and Current Progress table.
+- Mark `phase_06` `Completed` only if no additional Phase 6 child passes were added.
+- If all phases are complete, update REF-062 in `docs/plans/codebase_refactor_backlog.md` according to the completed implementation state.
+- Add final verification results and manual-smoke status.
 
 ## Tests
 
@@ -406,6 +670,13 @@ After implementation, run the editor manually and verify:
 - REF-062 remains open as the implementation umbrella for the later extraction.
 - REF-025 object probe sidecar IO remains open; do not fold it into the bake controller extraction unless a later task explicitly scopes it.
 - REF-028 source-hash checkpoint remains open and should be referenced by implementation/test work.
+
+## Deferred Decisions For Later Phases
+
+- Whether Phase 5 keeps install as a controller-produced payload applied by `SectorEditor`, or lets the controller install directly into `SectorTopologyMap&`. The preferred boundary is payload/result; direct install is allowed only if it is cleaner without behavior changes and still leaves document dirty state, status text, asset manager interaction, and preview rebuild editor-owned.
+- Whether the modal receives a dedicated `SectorEditorLightmapBakeModalView` type or another read-only state model. This should be decided in the first phase that touches `SectorEditorLightmapModal.*`.
+- Whether `SectorEditorLightmapAsyncTypes.h` remains as a shared compatibility header, moves under `services/lightmap_bake/`, or is replaced by controller-local types. Decide only when a selected phase needs that change.
+- Whether focused controller lifecycle tests are added in Phase 2 or deferred until Phase 3/4 when the controller owns enough behavior to test without UI/renderer dependencies.
 
 ## Open Questions / Stop Conditions
 
