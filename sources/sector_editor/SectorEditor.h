@@ -136,17 +136,6 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font,
             engine::FontHandle smallFont);
-    bool DrawTopologySideDefInspector(
-            engine::UIContext& ui,
-            const engine::UIConfig& config,
-            engine::Input& input,
-            engine::AssetManager& assets,
-            engine::FontHandle font,
-            engine::FontHandle smallFont,
-            engine::UIScrollAreaResult scroll,
-            float contentW,
-            float rowH,
-            float gap);
     void DrawTexturePickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,

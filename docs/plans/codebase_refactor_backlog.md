@@ -76,6 +76,7 @@ Task Type:
 | REF-065 | `[x]` | High | Editor architecture | Promote MaterialEditBridge into MaterialEditingService | Codex task | Medium/High | Completed; bridge removed and material clients use service directly |
 | REF-066 | `[x]` | Medium | Editor architecture | Extract Preview3D UV/material panel into `preview/` | Codex task | Medium/High | Completed; panel moved to preview module and uses `MaterialEditingService` directly |
 | REF-074 | `[x]` | Medium | Editor architecture | Extract Preview3D overlay/debug UI into `preview/` | Codex task | Medium | Completed; overlay module returns one-frame high-level action requests |
+| REF-075 | `[x]` | Medium | Editor architecture | Extract main inspector routing panel into `inspector/` | Codex task | Medium | Completed; selected-object inspector routing moved out of `SectorEditor.cpp` |
 | REF-067 | `[x]` | High | Editor architecture | Authoring-owned topology edit cleanup and direct topology mutation inventory | Codex task | Medium/High | Completed; Blocks Player authoring-owned with strict mapping-gap failure and inventory report |
 | REF-068 | `[x]` | High | Editor architecture | Replace SideDef inspector UV topology mutation with authoring material edits | Codex task | Medium/High | Completed; inspector UV apply/reset writes authoring material data and fails without mapping |
 | REF-069 | `[x]` | Medium | Editor architecture | Remove invalid no-authoring topology-edit support | Codex task | Medium/High | Completed; normal editor edits require authoring data or fail |
@@ -1045,6 +1046,42 @@ Task Type:
   - No behavior changes intended.
   - REF-058, lights, lightmap/source-hash-sensitive work, and main
     tools/inspector extraction work remain open.
+
+#### REF-075 `[x]` Extract main inspector routing panel into `inspector/`
+
+- Source/audit reference: REF-075 task.
+- Why it helps: removes selected-object inspector routing from
+  `SectorEditor.cpp` while keeping editor lifecycle, preview, lightmap, and
+  source-hash ownership in the editor.
+- Likely files: `SectorEditor.cpp`,
+  `sources/sector_editor/inspector/SectorEditorInspectorPanel.h`,
+  `sources/sector_editor/inspector/SectorEditorInspectorPanel.cpp`.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, dependency grep for
+  no concrete `SectorEditor` dependency under `inspector/`, callback/request
+  grep, and manual selected-object inspector smoke if practical.
+- Completion notes:
+  - Main selected-object inspector routing panel extracted to
+    `sources/sector_editor/inspector/`.
+  - Created `SectorEditorInspectorPanel.h` and
+    `SectorEditorInspectorPanel.cpp`.
+  - `SectorEditor.cpp` line count reduced from 7,809 to 5,982 lines, a
+    1,827-line reduction.
+  - Feature inspectors and services are used directly where applicable,
+    including `SectorEditorMaterialEditingService`, selection service context,
+    placed-object action context, and existing feature inspector modules.
+  - No broad callback bridge introduced; result requests are limited to
+    high-level editor workflow/lifecycle, confirmation modal, bake/lifecycle,
+    infrastructure refresh, and temporary light-editing service debt.
+  - Preview lifecycle, preview renderer/collision/camera ownership, lightmap
+    bake ownership, and lightmap/source-hash behavior stayed in
+    `SectorEditor.cpp`.
+  - `engine::EngineContext*` remains in the inspector context only for existing
+    placed-object inspector runtime/world access.
+  - No behavior changes intended.
+  - REF-058, preview follow-ups, lights/lightmap work, and the main
+    tools/toolbar panel remain open.
 
 #### REF-067 `[x]` Authoring-owned topology edit cleanup and direct topology mutation inventory
 
