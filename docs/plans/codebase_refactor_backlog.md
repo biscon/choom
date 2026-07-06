@@ -71,6 +71,7 @@ Task Type:
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
 | REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
 | REF-062 | `[ ]` | Medium | Lightmap/probes | Extract LightmapBakeController | Runner plan | High | Worker lifecycle/result install/source-hash stale-result logic needs runner-level guardrails |
+| REF-077 | `[x]` | High | Lightmap/probes | Write LightmapBakeController runner plan | Runner plan | Low | Planning complete; implementation remains under REF-062 |
 | REF-063 | `[x]` | High | Editor architecture | Extract material-specific texture picker routing | Codex task | High | Completed; material targets route through `services/material_edit`, non-material picker routes stayed out |
 | REF-064 | `[x]` | High | Editor architecture | Add minimal MaterialEditBridge for material action wrappers | Codex task | Medium/High | Completed; action wrappers route through bridge while finish paths stay in `SectorEditor.cpp` |
 | REF-065 | `[x]` | High | Editor architecture | Promote MaterialEditBridge into MaterialEditingService | Codex task | Medium/High | Completed; bridge removed and material clients use service directly |
@@ -1350,7 +1351,8 @@ Task Type:
 #### REF-062 `[ ]` Extract LightmapBakeController
 
 - Source/audit reference:
-  `docs/audit/sector_editor_shared_service_inventory.md`.
+  `docs/audit/sector_editor_shared_service_inventory.md` and
+  `docs/plans/ref077_lightmap_bake_controller_runner_plan.md`.
 - Why it helps: could encapsulate async bake worker lifecycle, cancellation,
   temporary file cleanup, result installation, source-hash stale-result
   rejection, object-probe sidecar installation, and bake progress/status.
@@ -1368,7 +1370,40 @@ Task Type:
     behavior.
   - Preview result refresh should remain an explicit callback/hook rather than
     exposing renderer internals to the controller.
+  - Implement through the six phases in REF-077: skeleton, lifecycle state,
+    start/request construction, result polling/stale classification, install
+    boundary, and cleanup/docs.
 - Completion notes:
+
+#### REF-077 `[x]` Write LightmapBakeController runner plan
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md`, REF-062, and
+  current lightmap bake/controller code in `SectorEditor.cpp`.
+- Why it helps: turns the high-risk LightmapBakeController extraction into
+  independently buildable implementation phases with explicit source-hash,
+  object-probe sidecar, temp-file, cancel/join/shutdown, result-install, and
+  preview-refresh guardrails.
+- Likely files: documentation only for this planning task; future implementation
+  files are listed in `docs/plans/ref077_lightmap_bake_controller_runner_plan.md`.
+- Suggested task type: Runner plan.
+- Risk: Low for planning; High for later implementation.
+- Suggested verification: `git diff --check`, `git diff --stat`, and
+  `git status --short` for the planning task. Future implementation should run
+  build, ctest, focused non-GUI lifecycle/source-hash/object-probe tests, and
+  manual bake smoke.
+- Notes:
+  - Planning is complete; implementation is not complete.
+  - REF-062 remains open as the implementation umbrella.
+  - Future phases from the runner plan are: controller skeleton, worker
+    lifecycle/cancel/join/shutdown state, start/request construction, result
+    polling/stale classification, install/result application boundary, and
+    cleanup/docs.
+- Completion notes: Runner-compatible plan written at
+  `docs/plans/ref077_lightmap_bake_controller_runner_plan.md`. No source, CMake,
+  tests, or behavior changes are included in REF-077. Amended to clarify
+  modal/controller ownership, per-phase wrapper/debt reporting, and Phase 5
+  result-install risk.
 
 #### REF-040 `[x]` Design SectorEditor tool/module boundaries
 
