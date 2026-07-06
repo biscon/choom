@@ -341,6 +341,7 @@ void ClearSectorEditorTopologySelectionOnly(SectorEditorSelectionServiceContext&
     CancelSpotLightPilot(context, nullptr);
     context.state.selectDragArm = SelectDragArmState{};
     context.state.lightDrag = LightDragState{};
+    context.state.lightEditing = LightEditingState{};
     context.state.runtimeObjectDrag = RuntimeObjectDragState{};
     context.state.topologySelectionKind = TopologySelectionKind::None;
     context.state.selectedTopologySectorId = -1;

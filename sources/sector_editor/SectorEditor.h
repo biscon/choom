@@ -345,14 +345,6 @@ private:
     void MarkTopologyDocumentEdited(const char* status);
     bool TryRenameSelectedLight();
     bool DeleteSelectedLight();
-    bool DeleteLightById(int topologyLightId);
-    void AddStaticLightAt(Vector2 mapPoint);
-    bool DeleteStaticSpotLightById(int topologyLightId);
-    void AddStaticSpotLightAt(Vector2 mapPoint);
-    bool DeleteDynamicLightById(int topologyLightId);
-    void AddDynamicLightAt(Vector2 mapPoint);
-    bool DeleteDynamicSpotLightById(int topologyLightId);
-    void AddDynamicSpotLightAt(Vector2 mapPoint);
     SectorEditorToolContext BuildToolContext(engine::Input* input);
     SectorEditorPlacedObjectDragContext BuildRuntimeObjectDragContext();
     SectorEditorPlacedObjectActionContext BuildRuntimeObjectActionContext();

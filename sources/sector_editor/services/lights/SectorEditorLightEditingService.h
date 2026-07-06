@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/SectorEditorTopologyActions.h"
 
 #include <raylib.h>
 
@@ -14,9 +15,30 @@ struct SectorEditorLightEditingServiceContext {
     std::string& statusText;
 };
 
+struct SectorEditorLightMutationResult {
+    bool changed = false;
+    bool dynamicLightRendererRefreshNeeded = false;
+    bool previewPoseRestoreNeeded = false;
+    SpotLightPilotState restoredSpotLightPilot;
+};
+
 class SectorEditorLightEditingService {
 public:
     explicit SectorEditorLightEditingService(SectorEditorLightEditingServiceContext context);
+
+    SectorEditorLightMutationResult AddStaticLight(int sectorId, Vector2 mapPoint);
+    SectorEditorLightMutationResult AddStaticSpotLight(int sectorId, Vector2 mapPoint);
+    SectorEditorLightMutationResult AddDynamicLight(int sectorId, Vector2 mapPoint);
+    SectorEditorLightMutationResult AddDynamicSpotLight(int sectorId, Vector2 mapPoint);
+    SectorEditorLightMutationResult DeleteSelectedLightConfirmed();
+
+    bool BeginLightDrag(TopologySelectionKind kind, int topologyLightId, SpotLightHandle spotHandle);
+    SectorEditorLightMutationResult ApplyLightDragToSnappedPosition(Vector3 snappedPosition);
+    SectorEditorLightMutationResult FinishLightDrag();
+    SectorEditorLightMutationResult CancelLightDragData(const char* message);
+
+    SectorEditorLightMutationResult ApplySpotLightPilot(Vector3 position, Vector3 target);
+    SectorEditorLightMutationResult CancelSpotLightPilotData(const char* message);
 
     bool SetStaticLightPosition(SectorTopologyStaticPointLight& light, Vector3 position);
     bool SetStaticLightIntensity(SectorTopologyStaticPointLight& light, float intensity);
@@ -61,6 +83,7 @@ public:
 
 private:
     void MarkEdited(const char* status);
+    bool FinishTopologyActionResult(const SectorEditorTopologyActionResult& result);
 
     SectorEditorLightEditingServiceContext context_;
 };

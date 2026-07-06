@@ -79,6 +79,7 @@ Task Type:
 | REF-074 | `[x]` | Medium | Editor architecture | Extract Preview3D overlay/debug UI into `preview/` | Codex task | Medium | Completed; overlay module returns one-frame high-level action requests |
 | REF-075 | `[x]` | Medium | Editor architecture | Extract main inspector routing panel into `inspector/` | Codex task | Medium | Completed; selected-object inspector routing moved out of `SectorEditor.cpp` |
 | REF-076 | `[x]` | Medium | Editor architecture | Add LightEditingService for light inspector edits | Codex task | Medium/High | Completed; light inspector property edits use service directly |
+| REF-078 | `[x]` | Medium | Editor architecture | Complete LightEditingService mutation ownership | Codex task | Medium/High | Completed; light add/delete/drag/pilot data mutations moved to LightEditingService while preview/lightmap ownership stayed central |
 | REF-067 | `[x]` | High | Editor architecture | Authoring-owned topology edit cleanup and direct topology mutation inventory | Codex task | Medium/High | Completed; Blocks Player authoring-owned with strict mapping-gap failure and inventory report |
 | REF-068 | `[x]` | High | Editor architecture | Replace SideDef inspector UV topology mutation with authoring material edits | Codex task | Medium/High | Completed; inspector UV apply/reset writes authoring material data and fails without mapping |
 | REF-069 | `[x]` | Medium | Editor architecture | Remove invalid no-authoring topology-edit support | Codex task | Medium/High | Completed; normal editor edits require authoring data or fail |
@@ -1115,6 +1116,41 @@ Task Type:
     pilot, and preview overlay light controls remain future service migration
     debt.
   - REF-058 and unrelated preview/tools work remain open.
+
+#### REF-078 `[x]` Complete LightEditingService mutation ownership
+
+- Source/audit reference: REF-078 task.
+- Why it helps: completes the REF-076 light service boundary by moving normal
+  light add/delete/drag/pilot data mutation semantics out of `SectorEditor`
+  while keeping preview, input, modal, document, lightmap, and source-hash
+  ownership central.
+- Likely files: `sources/sector_editor/services/lights/`, `SectorEditor.cpp`,
+  `SectorEditorTypes.h`, `SectorEditorSelectionTypes.h`,
+  `tests/SectorEditorLightEditingServiceTests.cpp`.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, full `ctest`, `git diff --check`, service
+  dependency grep, light mutation grep, and manual light editing smoke if
+  practical.
+- Completion notes:
+  - Added light add, confirmed delete, drag apply/finish/cancel, and spotlight
+    pilot apply/cancel data mutation methods to `SectorEditorLightEditingService`.
+  - Service owns original light position/target restore data through
+    `LightEditingState`; `SectorEditor` still owns mouse/input capture,
+    snapping, coordinate conversion, preview camera/mouse-look restoration, and
+    dynamic renderer refresh execution.
+  - Preview overlay UI still only emits start/apply/cancel requests.
+  - Delete confirmation modal flow remains editor-owned.
+  - Lightmap bake controller unchanged.
+  - `ComputeSectorLightmapSourceHash` and source-hash policy unchanged.
+  - Rendering, collision, and serialization/schema behavior were not
+    intentionally changed.
+  - Added dedicated `tests/SectorEditorLightEditingServiceTests.cpp` and
+    `sector_editor_light_editing_service` CMake test target.
+  - `SectorEditor.cpp` line count reduced from 5,768 to 5,381 lines.
+  - Remaining light service debt: preview renderer refresh is intentionally
+    reported by service result flags and executed by `SectorEditor`.
+  - REF-058 and unrelated preview/tools/document items remain open.
 
 #### REF-067 `[x]` Authoring-owned topology edit cleanup and direct topology mutation inventory
 

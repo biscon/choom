@@ -129,6 +129,7 @@ struct SectorEditorState {
     PendingAuthoringInsertVertex pendingAuthoringInsertVertex;
     AuthoringVertexDragState authoringVertexDrag;
     LightDragState lightDrag;
+    LightEditingState lightEditing;
     RuntimeObjectDragState runtimeObjectDrag;
     float defaultSectorFloorZ = 0.0f;
     float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);

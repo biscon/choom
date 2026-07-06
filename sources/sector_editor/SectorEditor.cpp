@@ -969,25 +969,33 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (state.currentTool == SectorEditorTool::StaticLight) {
-                    AddStaticLightAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    const Vector2 mapPoint = SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition));
+                    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+                    lightEditing.AddStaticLight(FindTopologySectorAt(mapPoint), mapPoint);
                     engine::ConsumeEvent(event);
                     return;
                 }
 
                 if (state.currentTool == SectorEditorTool::StaticSpotLight) {
-                    AddStaticSpotLightAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    const Vector2 mapPoint = SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition));
+                    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+                    lightEditing.AddStaticSpotLight(FindTopologySectorAt(mapPoint), mapPoint);
                     engine::ConsumeEvent(event);
                     return;
                 }
 
                 if (state.currentTool == SectorEditorTool::DynamicLight) {
-                    AddDynamicLightAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    const Vector2 mapPoint = SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition));
+                    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+                    lightEditing.AddDynamicLight(FindTopologySectorAt(mapPoint), mapPoint);
                     engine::ConsumeEvent(event);
                     return;
                 }
 
                 if (state.currentTool == SectorEditorTool::DynamicSpotLight) {
-                    AddDynamicSpotLightAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    const Vector2 mapPoint = SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition));
+                    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+                    lightEditing.AddDynamicSpotLight(FindTopologySectorAt(mapPoint), mapPoint);
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -1259,17 +1267,16 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
         }
 
         SelectTopologyStaticSpotLight(topologyLightId);
+        SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+        if (!lightEditing.BeginLightDrag(TopologySelectionKind::StaticSpotLight, topologyLightId, spotHandle)) {
+            return;
+        }
         state.lightDrag.active = true;
         state.lightDrag.topologyLightId = topologyLightId;
         state.lightDrag.spotHandle = spotHandle;
-        state.lightDrag.originalPosition = light->position;
-        state.lightDrag.originalTarget = light->target;
         state.lightDrag.snappedPosition = spotHandle == SpotLightHandle::Target
                 ? light->target
                 : light->position;
-        statusText = spotHandle == SpotLightHandle::Target
-                ? TextFormat("Aiming static spot %d", light->id)
-                : TextFormat("Moving static spot %d", light->id);
         return;
     }
 
@@ -1282,17 +1289,16 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
         }
 
         SelectTopologyDynamicSpotLight(topologyLightId);
+        SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+        if (!lightEditing.BeginLightDrag(TopologySelectionKind::DynamicSpotLight, topologyLightId, spotHandle)) {
+            return;
+        }
         state.lightDrag.active = true;
         state.lightDrag.topologyLightId = topologyLightId;
         state.lightDrag.spotHandle = spotHandle;
-        state.lightDrag.originalPosition = light->position;
-        state.lightDrag.originalTarget = light->target;
         state.lightDrag.snappedPosition = spotHandle == SpotLightHandle::Target
                 ? light->target
                 : light->position;
-        statusText = spotHandle == SpotLightHandle::Target
-                ? TextFormat("Aiming dynamic spot %d", light->id)
-                : TextFormat("Moving dynamic spot %d", light->id);
         return;
     }
 
@@ -1305,11 +1311,14 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
         }
 
         SelectTopologyDynamicLight(topologyLightId);
+        SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+        if (!lightEditing.BeginLightDrag(TopologySelectionKind::DynamicLight, topologyLightId, SpotLightHandle::Origin)) {
+            return;
+        }
         state.lightDrag.active = true;
         state.lightDrag.topologyLightId = topologyLightId;
-        state.lightDrag.originalPosition = light->position;
+        state.lightDrag.spotHandle = SpotLightHandle::Origin;
         state.lightDrag.snappedPosition = light->position;
-        statusText = TextFormat("Moving dynamic light %d", light->id);
         return;
     }
 
@@ -1320,11 +1329,14 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
         return;
     }
     SelectTopologyLight(topologyLightId);
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    if (!lightEditing.BeginLightDrag(TopologySelectionKind::StaticLight, topologyLightId, SpotLightHandle::Origin)) {
+        return;
+    }
     state.lightDrag.active = true;
     state.lightDrag.topologyLightId = topologyLightId;
-    state.lightDrag.originalPosition = light->position;
+    state.lightDrag.spotHandle = SpotLightHandle::Origin;
     state.lightDrag.snappedPosition = light->position;
-    statusText = TextFormat("Moving static light %d", light->id);
 }
 
 void SectorEditor::UpdateLightDrag(engine::Input& input)
@@ -1336,89 +1348,10 @@ void SectorEditor::UpdateLightDrag(engine::Input& input)
     const Vector2 snapped = SnapMapPoint(ScreenToMap(input.MousePosition()));
     state.lightDrag.snappedPosition = Vector3{
             snapped.x,
-            state.lightDrag.originalPosition.y,
+            0.0f,
             snapped.y};
-
-    if (state.topologySelectionKind == TopologySelectionKind::DynamicLight) {
-        SectorTopologyDynamicPointLight* light = FindSectorTopologyDynamicLight(
-                state.topologyMap,
-                state.lightDrag.topologyLightId);
-        if (light == nullptr) {
-            return;
-        }
-        light->position.x = state.lightDrag.snappedPosition.x;
-        light->position.y = state.lightDrag.originalPosition.y;
-        light->position.z = state.lightDrag.snappedPosition.z;
-        statusText = TextFormat("Moving dynamic light %d", light->id);
-        return;
-    }
-
-    if (state.topologySelectionKind == TopologySelectionKind::DynamicSpotLight) {
-        SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(
-                state.topologyMap,
-                state.lightDrag.topologyLightId);
-        if (light == nullptr) {
-            return;
-        }
-
-        if (state.lightDrag.spotHandle == SpotLightHandle::Target) {
-            light->target.x = state.lightDrag.snappedPosition.x;
-            light->target.y = state.lightDrag.originalTarget.y;
-            light->target.z = state.lightDrag.snappedPosition.z;
-            statusText = TextFormat("Aiming dynamic spot %d", light->id);
-            return;
-        }
-
-        const float dx = state.lightDrag.snappedPosition.x - state.lightDrag.originalPosition.x;
-        const float dz = state.lightDrag.snappedPosition.z - state.lightDrag.originalPosition.z;
-        light->position.x = state.lightDrag.snappedPosition.x;
-        light->position.y = state.lightDrag.originalPosition.y;
-        light->position.z = state.lightDrag.snappedPosition.z;
-        light->target.x = state.lightDrag.originalTarget.x + dx;
-        light->target.y = state.lightDrag.originalTarget.y;
-        light->target.z = state.lightDrag.originalTarget.z + dz;
-        statusText = TextFormat("Moving dynamic spot %d", light->id);
-        return;
-    }
-
-    if (state.topologySelectionKind == TopologySelectionKind::StaticSpotLight) {
-        SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
-                state.topologyMap,
-                state.lightDrag.topologyLightId);
-        if (light == nullptr) {
-            return;
-        }
-
-        if (state.lightDrag.spotHandle == SpotLightHandle::Target) {
-            light->target.x = state.lightDrag.snappedPosition.x;
-            light->target.y = state.lightDrag.originalTarget.y;
-            light->target.z = state.lightDrag.snappedPosition.z;
-            statusText = TextFormat("Aiming static spot %d", light->id);
-            return;
-        }
-
-        const float dx = state.lightDrag.snappedPosition.x - state.lightDrag.originalPosition.x;
-        const float dz = state.lightDrag.snappedPosition.z - state.lightDrag.originalPosition.z;
-        light->position.x = state.lightDrag.snappedPosition.x;
-        light->position.y = state.lightDrag.originalPosition.y;
-        light->position.z = state.lightDrag.snappedPosition.z;
-        light->target.x = state.lightDrag.originalTarget.x + dx;
-        light->target.y = state.lightDrag.originalTarget.y;
-        light->target.z = state.lightDrag.originalTarget.z + dz;
-        statusText = TextFormat("Moving static spot %d", light->id);
-        return;
-    }
-
-    SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
-            state.topologyMap,
-            state.lightDrag.topologyLightId);
-    if (light == nullptr) {
-        return;
-    }
-    light->position.x = state.lightDrag.snappedPosition.x;
-    light->position.y = state.lightDrag.originalPosition.y;
-    light->position.z = state.lightDrag.snappedPosition.z;
-    statusText = TextFormat("Moving static light %d", light->id);
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    lightEditing.ApplyLightDragToSnappedPosition(state.lightDrag.snappedPosition);
 }
 
 void SectorEditor::FinishLightDrag()
@@ -1427,120 +1360,25 @@ void SectorEditor::FinishLightDrag()
         return;
     }
 
-    const int lightId = state.lightDrag.topologyLightId;
-    const Vector3 original = state.lightDrag.originalPosition;
-    const Vector3 originalTarget = state.lightDrag.originalTarget;
-    const SpotLightHandle spotHandle = state.lightDrag.spotHandle;
-    const TopologySelectionKind selectionKind = state.topologySelectionKind;
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    const SectorEditorLightMutationResult result = lightEditing.FinishLightDrag();
     state.lightDrag = LightDragState{};
-
-    if (selectionKind == TopologySelectionKind::DynamicLight) {
-        SectorTopologyDynamicPointLight* light = FindSectorTopologyDynamicLight(state.topologyMap, lightId);
-        if (light == nullptr) {
-            return;
-        }
-
-        SelectTopologyDynamicLight(lightId);
-        FinishTopologyActionResult(FinishMoveDynamicLight(state.topologyMap, lightId, original));
-        return;
+    if (result.dynamicLightRendererRefreshNeeded) {
+        preview.RefreshDynamicLightSources(state.topologyMap);
     }
-
-    if (selectionKind == TopologySelectionKind::DynamicSpotLight) {
-        SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(state.topologyMap, lightId);
-        if (light == nullptr) {
-            return;
-        }
-
-        SelectTopologyDynamicSpotLight(lightId);
-        const bool movedOrigin = std::fabs(light->position.x - original.x) > GeometryEpsilon
-                || std::fabs(light->position.z - original.z) > GeometryEpsilon;
-        const bool movedTarget = std::fabs(light->target.x - originalTarget.x) > GeometryEpsilon
-                || std::fabs(light->target.z - originalTarget.z) > GeometryEpsilon;
-        SectorEditorTopologyActionResult result;
-        result.changed = spotHandle == SpotLightHandle::Target
-                ? movedTarget
-                : (movedOrigin || movedTarget);
-        result.status = result.changed
-                ? TextFormat("Moved dynamic spot %d", lightId)
-                : TextFormat("Dynamic spot %d unchanged", lightId);
-        FinishTopologyActionResult(result);
-        return;
-    }
-
-    if (selectionKind == TopologySelectionKind::StaticSpotLight) {
-        SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(state.topologyMap, lightId);
-        if (light == nullptr) {
-            return;
-        }
-
-        SelectTopologyStaticSpotLight(lightId);
-        const bool movedOrigin = std::fabs(light->position.x - original.x) > GeometryEpsilon
-                || std::fabs(light->position.z - original.z) > GeometryEpsilon;
-        const bool movedTarget = std::fabs(light->target.x - originalTarget.x) > GeometryEpsilon
-                || std::fabs(light->target.z - originalTarget.z) > GeometryEpsilon;
-        SectorEditorTopologyActionResult result;
-        result.changed = spotHandle == SpotLightHandle::Target
-                ? movedTarget
-                : (movedOrigin || movedTarget);
-        result.status = result.changed
-                ? TextFormat("Moved static spot %d", lightId)
-                : TextFormat("Static spot %d unchanged", lightId);
-        FinishTopologyActionResult(result);
-        return;
-    }
-
-    SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(state.topologyMap, lightId);
-    if (light == nullptr) {
-        return;
-    }
-    SelectTopologyLight(lightId);
-    FinishTopologyActionResult(FinishMoveStaticLight(state.topologyMap, lightId, original));
 }
 
 void SectorEditor::CancelLightDrag(const char* message)
 {
     if (state.lightDrag.active) {
-        if (state.topologySelectionKind == TopologySelectionKind::DynamicLight) {
-            SectorTopologyDynamicPointLight* light = FindSectorTopologyDynamicLight(
-                    state.topologyMap,
-                    state.lightDrag.topologyLightId);
-            if (light != nullptr) {
-                light->position = state.lightDrag.originalPosition;
-                SelectTopologyDynamicLight(light->id);
-            }
-        } else if (state.topologySelectionKind == TopologySelectionKind::DynamicSpotLight) {
-            SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(
-                    state.topologyMap,
-                    state.lightDrag.topologyLightId);
-            if (light != nullptr) {
-                light->position = state.lightDrag.originalPosition;
-                light->target = state.lightDrag.originalTarget;
-                SelectTopologyDynamicSpotLight(light->id);
-            }
-        } else if (state.topologySelectionKind == TopologySelectionKind::StaticSpotLight) {
-            SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
-                    state.topologyMap,
-                    state.lightDrag.topologyLightId);
-            if (light != nullptr) {
-                light->position = state.lightDrag.originalPosition;
-                light->target = state.lightDrag.originalTarget;
-                SelectTopologyStaticSpotLight(light->id);
-            }
-        } else {
-            SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
-                    state.topologyMap,
-                    state.lightDrag.topologyLightId);
-            if (light != nullptr) {
-                light->position = state.lightDrag.originalPosition;
-                SelectTopologyLight(light->id);
-            }
+        SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+        const SectorEditorLightMutationResult result = lightEditing.CancelLightDragData(message);
+        if (result.dynamicLightRendererRefreshNeeded) {
+            preview.RefreshDynamicLightSources(state.topologyMap);
         }
     }
 
     state.lightDrag = LightDragState{};
-    if (message != nullptr && message[0] != '\0') {
-        statusText = message;
-    }
 }
 
 void SectorEditor::StartRuntimeObjectDrag(int objectId)
@@ -2394,224 +2232,21 @@ bool SectorEditor::DeleteSelectedLight()
                             : (dynamicLight != nullptr
                                     ? TextFormat("Delete dynamic light %d?", lightId)
                                     : TextFormat("Delete dynamic spot %d?", lightId))),
-            [this,
-             lightId,
-             isStaticSpot = staticSpotLight != nullptr,
-             isDynamic = dynamicLight != nullptr,
-             isDynamicSpot = dynamicSpotLight != nullptr]() {
-                if (isDynamicSpot) {
-                    DeleteDynamicSpotLightById(lightId);
-                } else if (isStaticSpot) {
-                    DeleteStaticSpotLightById(lightId);
-                } else if (isDynamic) {
-                    DeleteDynamicLightById(lightId);
-                } else {
-                    DeleteLightById(lightId);
+            [this]() {
+                SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+                const SectorEditorLightMutationResult result = lightEditing.DeleteSelectedLightConfirmed();
+                if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
+                    ResetSectorFreeflyController(state.freeflyController, result.restoredSpotLightPilot.originalPreviewPose);
+                    SetSectorFreeflyMouseLookEnabled(
+                            state.freeflyController,
+                            result.restoredSpotLightPilot.originalMouseLookEnabled);
+                    preview.ApplyRendererPose(state.freeflyController.pose);
+                }
+                if (result.dynamicLightRendererRefreshNeeded) {
+                    preview.RefreshDynamicLightSources(state.topologyMap);
                 }
             });
     return true;
-}
-
-bool SectorEditor::DeleteLightById(int topologyLightId)
-{
-    const bool hadLight = FindSectorTopologyStaticLight(state.topologyMap, topologyLightId) != nullptr;
-    const SectorEditorTopologyActionResult result = DeleteStaticLight(state.topologyMap, topologyLightId);
-    if (!result.changed) {
-        if (!hadLight) {
-            ClearStaleTopologySelection();
-        }
-        FinishTopologyActionResult(result);
-        return false;
-    }
-
-    if (!hadLight) {
-        ClearStaleTopologySelection();
-        return false;
-    }
-
-    if (state.selectedTopologyLightId == topologyLightId) {
-        ClearSelection();
-    }
-    if (state.hoveredTopologyLightId == topologyLightId) {
-        state.hoveredTopologyLightId = -1;
-    }
-    if (state.lightDrag.topologyLightId == topologyLightId) {
-        state.lightDrag = LightDragState{};
-    }
-    return FinishTopologyActionResult(result);
-}
-
-void SectorEditor::AddStaticLightAt(Vector2 mapPoint)
-{
-    const int sectorId = FindTopologySectorAt(mapPoint);
-    const SectorEditorAddStaticLightResult result = AddStaticLightToSector(
-            state.topologyMap,
-            sectorId,
-            mapPoint);
-    if (!result.changed) {
-        if (!result.status.empty()) {
-            statusText = result.status;
-        }
-        return;
-    }
-
-    SelectTopologyLight(result.lightId);
-    SectorEditorTopologyActionResult finish;
-    finish.changed = true;
-    finish.status = result.status;
-    FinishTopologyActionResult(finish);
-}
-
-bool SectorEditor::DeleteStaticSpotLightById(int topologyLightId)
-{
-    const bool hadLight = FindSectorTopologyStaticSpotLight(state.topologyMap, topologyLightId) != nullptr;
-    const SectorEditorTopologyActionResult result = DeleteStaticSpotLight(state.topologyMap, topologyLightId);
-    if (!result.changed) {
-        if (!hadLight) {
-            ClearStaleTopologySelection();
-        }
-        FinishTopologyActionResult(result);
-        return false;
-    }
-
-    if (!hadLight) {
-        ClearStaleTopologySelection();
-        return false;
-    }
-
-    if (state.selectedTopologyStaticSpotLightId == topologyLightId) {
-        CancelSpotLightPilot(nullptr);
-        ClearSelection();
-    }
-    if (state.hoveredTopologyStaticSpotLightId == topologyLightId) {
-        state.hoveredTopologyStaticSpotLightId = -1;
-    }
-    if (state.lightDrag.topologyLightId == topologyLightId) {
-        state.lightDrag = LightDragState{};
-    }
-    return FinishTopologyActionResult(result);
-}
-
-void SectorEditor::AddStaticSpotLightAt(Vector2 mapPoint)
-{
-    const int sectorId = FindTopologySectorAt(mapPoint);
-    const SectorEditorAddStaticSpotLightResult result = AddStaticSpotLightToSector(
-            state.topologyMap,
-            sectorId,
-            mapPoint);
-    if (!result.changed) {
-        if (!result.status.empty()) {
-            statusText = result.status;
-        }
-        return;
-    }
-
-    SelectTopologyStaticSpotLight(result.lightId);
-    SectorEditorTopologyActionResult finish;
-    finish.changed = true;
-    finish.status = result.status;
-    FinishTopologyActionResult(finish);
-}
-
-bool SectorEditor::DeleteDynamicLightById(int topologyLightId)
-{
-    const bool hadLight = FindSectorTopologyDynamicLight(state.topologyMap, topologyLightId) != nullptr;
-    const SectorEditorTopologyActionResult result = DeleteDynamicLight(state.topologyMap, topologyLightId);
-    if (!result.changed) {
-        if (!hadLight) {
-            ClearStaleTopologySelection();
-        }
-        FinishTopologyActionResult(result);
-        return false;
-    }
-
-    if (!hadLight) {
-        ClearStaleTopologySelection();
-        return false;
-    }
-
-    if (state.selectedTopologyDynamicLightId == topologyLightId) {
-        ClearSelection();
-    }
-    if (state.hoveredTopologyDynamicLightId == topologyLightId) {
-        state.hoveredTopologyDynamicLightId = -1;
-    }
-    if (state.lightDrag.topologyLightId == topologyLightId) {
-        state.lightDrag = LightDragState{};
-    }
-    return FinishTopologyActionResult(result);
-}
-
-void SectorEditor::AddDynamicLightAt(Vector2 mapPoint)
-{
-    const int sectorId = FindTopologySectorAt(mapPoint);
-    const SectorEditorAddDynamicLightResult result = AddDynamicLightToSector(
-            state.topologyMap,
-            sectorId,
-            mapPoint);
-    if (!result.changed) {
-        if (!result.status.empty()) {
-            statusText = result.status;
-        }
-        return;
-    }
-
-    SelectTopologyDynamicLight(result.lightId);
-    SectorEditorTopologyActionResult finish;
-    finish.changed = true;
-    finish.status = result.status;
-    FinishTopologyActionResult(finish);
-}
-
-bool SectorEditor::DeleteDynamicSpotLightById(int topologyLightId)
-{
-    const bool hadLight = FindSectorTopologyDynamicSpotLight(state.topologyMap, topologyLightId) != nullptr;
-    const SectorEditorTopologyActionResult result = DeleteDynamicSpotLight(state.topologyMap, topologyLightId);
-    if (!result.changed) {
-        if (!hadLight) {
-            ClearStaleTopologySelection();
-        }
-        FinishTopologyActionResult(result);
-        return false;
-    }
-
-    if (!hadLight) {
-        ClearStaleTopologySelection();
-        return false;
-    }
-
-    if (state.selectedTopologyDynamicSpotLightId == topologyLightId) {
-        CancelSpotLightPilot(nullptr);
-        ClearSelection();
-    }
-    if (state.hoveredTopologyDynamicSpotLightId == topologyLightId) {
-        state.hoveredTopologyDynamicSpotLightId = -1;
-    }
-    if (state.lightDrag.topologyLightId == topologyLightId) {
-        state.lightDrag = LightDragState{};
-    }
-    return FinishTopologyActionResult(result);
-}
-
-void SectorEditor::AddDynamicSpotLightAt(Vector2 mapPoint)
-{
-    const int sectorId = FindTopologySectorAt(mapPoint);
-    const SectorEditorAddDynamicSpotLightResult result = AddDynamicSpotLightToSector(
-            state.topologyMap,
-            sectorId,
-            mapPoint);
-    if (!result.changed) {
-        if (!result.status.empty()) {
-            statusText = result.status;
-        }
-        return;
-    }
-
-    SelectTopologyDynamicSpotLight(result.lightId);
-    SectorEditorTopologyActionResult finish;
-    finish.changed = true;
-    finish.status = result.status;
-    FinishTopologyActionResult(finish);
 }
 
 SectorEditorPlacedObjectDragContext SectorEditor::BuildRuntimeObjectDragContext()
@@ -4390,6 +4025,7 @@ bool SectorEditor::LoadLevel(
     state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
     state.authoringVertexDrag = AuthoringVertexDragState{};
     state.lightDrag = LightDragState{};
+    state.lightEditing = LightEditingState{};
     RefreshDefaultTextures();
     RefreshEditorTextureAssets(assets);
     ResetSectorRuntimeObjectsForMap(context.world, assets, state.runtimeObjects, state.topologyMap);
@@ -4699,41 +4335,25 @@ bool SectorEditor::ApplySpotLightPilot()
     }
 
     const SpotLightPilotState pilot = state.spotLightPilot;
-    SectorTopologyStaticSpotLight* staticLight = pilot.kind == SpotLightPilotKind::Static
-            ? FindSectorTopologyStaticSpotLight(state.topologyMap, pilot.lightId)
-            : nullptr;
-    SectorTopologyDynamicSpotLight* dynamicLight = pilot.kind == SpotLightPilotKind::Dynamic
-            ? FindSectorTopologyDynamicSpotLight(state.topologyMap, pilot.lightId)
-            : nullptr;
-    if (staticLight == nullptr && dynamicLight == nullptr) {
-        CancelSpotLightPilot("Spotlight pilot cancelled: light missing");
-        return false;
-    }
-
-    const int lightId = staticLight != nullptr ? staticLight->id : dynamicLight->id;
     const SectorViewPose pose = ActivePreviewPose();
     const Vector3 forward = PreviewForwardFromPose(pose);
     const Vector3 targetWorld = Vector3Add(
             pose.position,
             Vector3Scale(forward, pilot.targetDistanceWorld));
-    if (staticLight != nullptr) {
-        staticLight->position = SectorWorldToAuthoringPosition(pose.position);
-        staticLight->target = SectorWorldToAuthoringPosition(targetWorld);
-    } else {
-        dynamicLight->position = SectorWorldToAuthoringPosition(pose.position);
-        dynamicLight->target = SectorWorldToAuthoringPosition(targetWorld);
+
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    const SectorEditorLightMutationResult result = lightEditing.ApplySpotLightPilot(
+            SectorWorldToAuthoringPosition(pose.position),
+            SectorWorldToAuthoringPosition(targetWorld));
+    if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
+        ResetSectorFreeflyController(state.freeflyController, result.restoredSpotLightPilot.originalPreviewPose);
+        SetSectorFreeflyMouseLookEnabled(state.freeflyController, result.restoredSpotLightPilot.originalMouseLookEnabled);
+        preview.ApplyRendererPose(state.freeflyController.pose);
     }
-    state.spotLightPilot = SpotLightPilotState{};
-    MarkTopologyDocumentEdited(staticLight != nullptr
-            ? TextFormat("Piloted static spot %d", lightId)
-            : TextFormat("Piloted dynamic spot %d", lightId));
-    if (dynamicLight != nullptr) {
+    if (result.dynamicLightRendererRefreshNeeded) {
         preview.RefreshDynamicLightSources(state.topologyMap);
     }
-    statusText = staticLight != nullptr
-            ? TextFormat("Applied static spot %d pilot pose", lightId)
-            : TextFormat("Applied dynamic spot %d pilot pose", lightId);
-    return true;
+    return result.changed;
 }
 
 void SectorEditor::CancelSpotLightPilot(const char* message)
@@ -4742,24 +4362,17 @@ void SectorEditor::CancelSpotLightPilot(const char* message)
         return;
     }
 
-    const SpotLightPilotState pilot = state.spotLightPilot;
-    state.spotLightPilot = SpotLightPilotState{};
-    if (pilot.kind == SpotLightPilotKind::Static) {
-        if (SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(state.topologyMap, pilot.lightId)) {
-            light->position = pilot.originalPosition;
-            light->target = pilot.originalTarget;
-        }
-    } else if (SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(state.topologyMap, pilot.lightId)) {
-        light->position = pilot.originalPosition;
-        light->target = pilot.originalTarget;
-    }
-    if (state.mode == SectorEditorMode::Preview3D) {
-        ResetSectorFreeflyController(state.freeflyController, pilot.originalPreviewPose);
-        SetSectorFreeflyMouseLookEnabled(state.freeflyController, pilot.originalMouseLookEnabled);
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    const SectorEditorLightMutationResult result = lightEditing.CancelSpotLightPilotData(message);
+    if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
+        ResetSectorFreeflyController(state.freeflyController, result.restoredSpotLightPilot.originalPreviewPose);
+        SetSectorFreeflyMouseLookEnabled(
+                state.freeflyController,
+                result.restoredSpotLightPilot.originalMouseLookEnabled);
         preview.ApplyRendererPose(state.freeflyController.pose);
     }
-    if (message != nullptr && message[0] != '\0') {
-        statusText = message;
+    if (result.dynamicLightRendererRefreshNeeded) {
+        preview.RefreshDynamicLightSources(state.topologyMap);
     }
 }
 
