@@ -78,6 +78,7 @@ Task Type:
 | REF-067 | `[x]` | High | Editor architecture | Authoring-owned topology edit cleanup and direct topology mutation inventory | Codex task | Medium/High | Completed; Blocks Player authoring-owned with strict mapping-gap failure and inventory report |
 | REF-068 | `[x]` | High | Editor architecture | Replace SideDef inspector UV topology mutation with authoring material edits | Codex task | Medium/High | Completed; inspector UV apply/reset writes authoring material data and fails without mapping |
 | REF-069 | `[x]` | Medium | Editor architecture | Remove invalid no-authoring topology-edit support | Codex task | Medium/High | Completed; normal editor edits require authoring data or fail |
+| REF-070 | `[x]` | High | Editor architecture | Write Sector Editor Architectural Principles document | Codex task | Low | Completed; architecture contract added under `docs/architecture/` |
 | REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
 | REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
 | REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
@@ -1104,6 +1105,37 @@ Task Type:
     still exist.
   - REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
     remain open.
+
+#### REF-070 `[x]` Write Sector Editor Architectural Principles document
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md`,
+  `docs/audit/sector_editor_material_edit_bridge_audit.md`,
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`, and recent
+  REF-067/REF-068/REF-069 source-of-truth cleanup.
+- Why it helps: gives future sector editor tasks a strict architecture contract
+  so stale names, transitional code, and legacy fallback remnants are not copied
+  forward.
+- Likely files:
+  `docs/architecture/sector_editor_architectural_principles.md` and this
+  backlog.
+- Suggested task type: Codex task.
+- Risk: Low.
+- Suggested verification: `git diff --check`, `git diff --stat`, and
+  `git status --short`.
+- Completion notes:
+  - Architecture principles doc path:
+    `docs/architecture/sector_editor_architectural_principles.md`.
+  - Source-of-truth invariant documented: editable map data belongs to the
+    authoring graph; `SectorTopologyMap` is derived/compiled output and is not
+    an editable map model.
+  - Service/callback rules documented: tools and panels should depend on real
+    services directly, while callback bridges are short-lived migration seams.
+  - Future Codex task requirement documented: read the principles before sector
+    editor changes, stop on conflicts, avoid copying violations, and document
+    temporary exceptions as backlog debt.
+  - No source code, tests, CMake, editor/runtime behavior, cache behavior, or
+    lightmap source-hash behavior changed.
 
 #### REF-061 `[>]` Evaluate Status/Diagnostics service
 
