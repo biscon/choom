@@ -26,6 +26,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
     SectorEditorUiState& uiState = context.uiState;
     std::string& statusText = context.statusText;
     const SectorEditorMaterialInspectorCallbacks& callbacks = context.callbacks;
+    SectorEditorMaterialEditBridgeContext& materialEditBridge = context.materialEditBridge;
 
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     const SectorTopologyLineDef* lineDef =
@@ -380,7 +381,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                         Rectangle{0.0f, y, contentW, 38.0f},
                         font,
                         "Clear Middle")) {
-                callbacks.clearMiddleTexture(selectedMaterialTarget, &assets);
+                ClearSectorEditorMiddleTexture(materialEditBridge, selectedMaterialTarget, &assets);
             }
             y += 38.0f + gap;
         }
@@ -403,7 +404,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{0.0f, y, contentW, 38.0f},
                     font,
                     TextFormat("Copy %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
-            callbacks.copyTopologyMaterial(selectedMaterialTarget);
+            CopySectorEditorMaterial(materialEditBridge, selectedMaterialTarget);
         }
         y += 38.0f + gap;
 
@@ -416,7 +417,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{0.0f, y, contentW, 38.0f},
                     font,
                     TextFormat("Paste %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
-            callbacks.pasteTopologyMaterial(selectedMaterialTarget, assets);
+            PasteSectorEditorMaterial(materialEditBridge, selectedMaterialTarget, assets);
         }
         y += 38.0f + gap;
     }
@@ -518,7 +519,11 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 1.0f,
                 3);
         if (opacityResult.changed && opacityResult.value != selectedPart.decal.opacity && opacityResult.finite) {
-            callbacks.applyDecalOpacity(selectedMaterialTarget, opacityResult.value, &assets);
+            ApplySectorEditorSurfaceDecalOpacity(
+                    materialEditBridge,
+                    selectedMaterialTarget,
+                    opacityResult.value,
+                    &assets);
         }
         y += rowH + gap;
 
@@ -533,7 +538,11 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     font,
                     "Emissive",
                     emissive)) {
-            callbacks.applyDecalEmissive(selectedMaterialTarget, emissive, &assets);
+            ApplySectorEditorSurfaceDecalEmissive(
+                    materialEditBridge,
+                    selectedMaterialTarget,
+                    emissive,
+                    &assets);
         }
         y += 36.0f + gap;
 
@@ -555,7 +564,11 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     10.0f,
                     3);
             if (bloomResult.changed && bloomResult.value != selectedPart.decal.bloomIntensity) {
-                callbacks.applyDecalBloomIntensity(selectedMaterialTarget, bloomResult.value, &assets);
+                ApplySectorEditorSurfaceDecalBloomIntensity(
+                        materialEditBridge,
+                        selectedMaterialTarget,
+                        bloomResult.value,
+                        &assets);
             }
             y += rowH + gap;
         }
@@ -571,7 +584,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     swatchLocal,
                     font,
                     "")) {
-            callbacks.openDecalTintModal(selectedMaterialTarget);
+            OpenSectorEditorDecalTintModal(materialEditBridge, selectedMaterialTarget);
         }
         const Rectangle swatchScreen{
                 scroll.viewport.x + swatchLocal.x,
@@ -591,7 +604,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{0.0f, y, decalButtonW, 38.0f},
                     font,
                     "Fit Decal")) {
-            callbacks.fitSelectedDecal(selectedMaterialTarget, &assets);
+            FitSectorEditorSelectedDecal(materialEditBridge, selectedMaterialTarget, &assets);
         }
         if (engine::Button(
                     ui,
@@ -602,7 +615,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{decalButtonW + gap, y, decalButtonW, 38.0f},
                     font,
                     "Clear Decal")) {
-            callbacks.clearSurfaceDecal(selectedMaterialTarget, &assets);
+            ClearSectorEditorSurfaceDecal(materialEditBridge, selectedMaterialTarget, &assets);
         }
         y += 38.0f + gap;
     }
@@ -643,7 +656,12 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{0.0f, y, fitButtonW, 34.0f},
                 font,
                 "Fit Width")) {
-        callbacks.fitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Width, &assets, layer);
+        FitSectorEditorSelectedWallMaterial(
+                materialEditBridge,
+                selectedMaterialTarget,
+                TopologyUvFitMode::Width,
+                &assets,
+                layer);
     }
     if (engine::Button(
                 ui,
@@ -654,7 +672,12 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{fitButtonW + gap, y, fitButtonW, 34.0f},
                 font,
                 "Fit Height")) {
-        callbacks.fitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Height, &assets, layer);
+        FitSectorEditorSelectedWallMaterial(
+                materialEditBridge,
+                selectedMaterialTarget,
+                TopologyUvFitMode::Height,
+                &assets,
+                layer);
     }
     if (engine::Button(
                 ui,
@@ -665,7 +688,12 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{(fitButtonW + gap) * 2.0f, y, fitButtonW, 34.0f},
                 font,
                 "Fit Both")) {
-        callbacks.fitSelectedWallMaterial(selectedMaterialTarget, TopologyUvFitMode::Both, &assets, layer);
+        FitSectorEditorSelectedWallMaterial(
+                materialEditBridge,
+                selectedMaterialTarget,
+                TopologyUvFitMode::Both,
+                &assets,
+                layer);
     }
     y += 34.0f + gap;
 
@@ -679,7 +707,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{0.0f, y, contentW, 38.0f},
                     font,
                     "Clear Middle")) {
-            callbacks.clearMiddleTexture(selectedMaterialTarget, &assets);
+            ClearSectorEditorMiddleTexture(materialEditBridge, selectedMaterialTarget, &assets);
         }
         return true;
     }
@@ -693,7 +721,11 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{0.0f, y, contentW, 34.0f},
                 font,
                 "Align Vertical")) {
-        callbacks.alignSelectedWallMaterialVertical(selectedMaterialTarget, &assets, layer);
+        AlignSectorEditorSelectedWallMaterialVertical(
+                materialEditBridge,
+                selectedMaterialTarget,
+                &assets,
+                layer);
     }
     y += 34.0f + gap;
 
@@ -707,7 +739,12 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{0.0f, y, alignButtonW, 34.0f},
                 font,
                 "Align U Prev")) {
-        callbacks.alignSelectedWallMaterialU(selectedMaterialTarget, TopologyUAlignDirection::Previous, &assets, layer);
+        AlignSectorEditorSelectedWallMaterialU(
+                materialEditBridge,
+                selectedMaterialTarget,
+                TopologyUAlignDirection::Previous,
+                &assets,
+                layer);
     }
     if (engine::Button(
                 ui,
@@ -718,7 +755,12 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{alignButtonW + gap, y, alignButtonW, 34.0f},
                 font,
                 "Align U Next")) {
-        callbacks.alignSelectedWallMaterialU(selectedMaterialTarget, TopologyUAlignDirection::Next, &assets, layer);
+        AlignSectorEditorSelectedWallMaterialU(
+                materialEditBridge,
+                selectedMaterialTarget,
+                TopologyUAlignDirection::Next,
+                &assets,
+                layer);
     }
 
     return true;

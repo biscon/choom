@@ -3,6 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialEditBridge.h"
 #include "sector_editor/SectorEditorTypes.h"
 
 #include <functional>
@@ -14,18 +15,6 @@ struct SectorEditorMaterialInspectorCallbacks {
     std::function<void(int, TopologyWallPart)> selectTopologySideDef;
     std::function<bool(int, bool)> setLineDefBlocksPlayer;
     std::function<void(int, TopologyWallPart, TopologyMaterialLayer)> openSideDefTexturePicker;
-    std::function<bool(TopologySurfaceEditTarget)> copyTopologyMaterial;
-    std::function<bool(TopologySurfaceEditTarget, engine::AssetManager&)> pasteTopologyMaterial;
-    std::function<bool(TopologySurfaceEditTarget, float, engine::AssetManager*)> applyDecalOpacity;
-    std::function<bool(TopologySurfaceEditTarget, bool, engine::AssetManager*)> applyDecalEmissive;
-    std::function<bool(TopologySurfaceEditTarget, float, engine::AssetManager*)> applyDecalBloomIntensity;
-    std::function<bool(TopologySurfaceEditTarget)> openDecalTintModal;
-    std::function<bool(TopologySurfaceEditTarget, engine::AssetManager*)> fitSelectedDecal;
-    std::function<bool(TopologySurfaceEditTarget, engine::AssetManager*)> clearSurfaceDecal;
-    std::function<bool(TopologySurfaceEditTarget, engine::AssetManager*)> clearMiddleTexture;
-    std::function<bool(TopologySurfaceEditTarget, TopologyUvFitMode, engine::AssetManager*, TopologyMaterialLayer)> fitSelectedWallMaterial;
-    std::function<bool(TopologySurfaceEditTarget, engine::AssetManager*, TopologyMaterialLayer)> alignSelectedWallMaterialVertical;
-    std::function<bool(TopologySurfaceEditTarget, TopologyUAlignDirection, engine::AssetManager*, TopologyMaterialLayer)> alignSelectedWallMaterialU;
     std::function<void(const char*)> markTopologyDocumentEdited;
     std::function<bool(const char*, engine::AssetManager*)> finishTopologyMaterialMutation;
 };
@@ -45,6 +34,7 @@ struct SectorEditorMaterialInspectorContext {
     SectorEditorUiState& uiState;
     std::string& statusText;
     const SectorEditorMaterialInspectorCallbacks& callbacks;
+    SectorEditorMaterialEditBridgeContext& materialEditBridge;
 };
 
 bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& context);

@@ -12,6 +12,10 @@ Completion note: REF-063 implemented the recommended material-specific picker
 routing extraction under `services/material_edit/`. Broader `MaterialEditBridge`
 work remains future work.
 
+Completion note: REF-064 implemented a minimal `MaterialEditBridge` for material
+action wrappers under `services/material_edit/`. Preview UV/material panel
+extraction and broader bridge cleanup remain future work.
+
 ## Scope And Method
 
 Static analysis only. No GUI/render smoke was performed.

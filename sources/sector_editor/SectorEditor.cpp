@@ -14,6 +14,7 @@
 #include "sector_editor/SectorEditorMaterialModals.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialEditBridge.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
 #include "sector_editor/tools/billboards/SectorEditorBillboardActions.h"
@@ -7356,53 +7357,17 @@ bool SectorEditor::DrawTopologySideDefInspector(
             [this](int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer) {
                 OpenTopologySideDefTexturePicker(sideDefId, wallPart, layer);
             },
-            [this](TopologySurfaceEditTarget target) { return CopyTopologyMaterial(target); },
-            [this](TopologySurfaceEditTarget target, engine::AssetManager& callbackAssets) {
-                return PasteTopologyMaterial(target, callbackAssets);
-            },
-            [this](TopologySurfaceEditTarget target, float opacity, engine::AssetManager* callbackAssets) {
-                return ApplySurfaceDecalOpacity(target, opacity, callbackAssets);
-            },
-            [this](TopologySurfaceEditTarget target, bool emissive, engine::AssetManager* callbackAssets) {
-                return ApplySurfaceDecalEmissive(target, emissive, callbackAssets);
-            },
-            [this](TopologySurfaceEditTarget target, float bloomIntensity, engine::AssetManager* callbackAssets) {
-                return ApplySurfaceDecalBloomIntensity(target, bloomIntensity, callbackAssets);
-            },
-            [this](TopologySurfaceEditTarget target) { return OpenDecalTintModal(target); },
-            [this](TopologySurfaceEditTarget target, engine::AssetManager* callbackAssets) {
-                return FitSelectedDecal(target, callbackAssets);
-            },
-            [this](TopologySurfaceEditTarget target, engine::AssetManager* callbackAssets) {
-                return ClearSurfaceDecal(target, callbackAssets);
-            },
-            [this](TopologySurfaceEditTarget target, engine::AssetManager* callbackAssets) {
-                return ClearMiddleTexture(target, callbackAssets);
-            },
-            [this](
-                    TopologySurfaceEditTarget target,
-                    TopologyUvFitMode mode,
-                    engine::AssetManager* callbackAssets,
-                    TopologyMaterialLayer layer) {
-                return FitSelectedWallMaterial(target, mode, callbackAssets, layer);
-            },
-            [this](
-                    TopologySurfaceEditTarget target,
-                    engine::AssetManager* callbackAssets,
-                    TopologyMaterialLayer layer) {
-                return AlignSelectedWallMaterialVertical(target, callbackAssets, layer);
-            },
-            [this](
-                    TopologySurfaceEditTarget target,
-                    TopologyUAlignDirection direction,
-                    engine::AssetManager* callbackAssets,
-                    TopologyMaterialLayer layer) {
-                return AlignSelectedWallMaterialU(target, direction, callbackAssets, layer);
-            },
             [this](const char* status) { MarkTopologyDocumentEdited(status); },
             [this](const char* status, engine::AssetManager* callbackAssets) {
                 return FinishTopologyMaterialMutation(status, callbackAssets);
             }};
+    const SectorEditorMaterialEditBridgeCallbacks materialEditCallbacks =
+            BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext materialEditBridge{
+            state,
+            uiState,
+            statusText,
+            materialEditCallbacks};
     SectorEditorMaterialInspectorContext context{
             ui,
             config,
@@ -7417,7 +7382,8 @@ bool SectorEditor::DrawTopologySideDefInspector(
             state,
             uiState,
             statusText,
-            callbacks};
+            callbacks,
+            materialEditBridge};
     return DrawTopologySideDefMaterialInspector(context);
 }
 
@@ -9232,40 +9198,44 @@ std::string SectorEditor::CurrentTextureForSurface(
     return game::CurrentTextureForMaterialSurface(state.topologyMap, target, layer);
 }
 
+SectorEditorMaterialEditBridgeCallbacks SectorEditor::BuildMaterialEditBridgeCallbacks()
+{
+    return SectorEditorMaterialEditBridgeCallbacks{
+            [this](const char* status) {
+                MarkTopologyDocumentEdited(status);
+            },
+            [this](const char* status, engine::AssetManager* callbackAssets) {
+                return FinishTopologyMaterialMutation(status, callbackAssets);
+            },
+            [this](const SectorEditorMaterialActionResult& result, engine::AssetManager* callbackAssets) {
+                return FinishMaterialActionResult(result, callbackAssets);
+            },
+            [this](
+                    TopologySurfaceEditTarget target,
+                    engine::AssetManager* callbackAssets,
+                    SectorEditorMaterialEditActionFn action) {
+                return ApplyAuthoringSideMaterialAction(target, callbackAssets, action);
+            },
+            [this](
+                    TopologySurfaceEditTarget target,
+                    engine::AssetManager* callbackAssets,
+                    SectorEditorMaterialEditActionFn action) {
+                return ApplyAuthoringFaceAnchorFlatMaterialAction(target, callbackAssets, action);
+            }};
+}
+
 bool SectorEditor::CopyTopologyMaterial(TopologySurfaceEditTarget target)
 {
-    TopologyMaterialPayload payload;
-    std::string status;
-    if (!game::CopyMaterialSurface(state.topologyMap, target, payload, status)) {
-        statusText = status;
-        return false;
-    }
-    state.copiedTopologyMaterial = payload;
-    statusText = status;
-    return true;
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return CopySectorEditorMaterial(context, target);
 }
 
 bool SectorEditor::PasteTopologyMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets)
 {
-    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
-        return ApplyAuthoringSideMaterialAction(
-                target,
-                &assets,
-                [this, target](SectorTopologyMap& map) {
-                    return game::PasteMaterialSurface(map, target, state.copiedTopologyMaterial);
-                });
-    }
-    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
-        return ApplyAuthoringFaceAnchorFlatMaterialAction(
-                target,
-                &assets,
-                [this, target](SectorTopologyMap& map) {
-                    return game::PasteMaterialSurface(map, target, state.copiedTopologyMaterial);
-                });
-    }
-    return FinishMaterialActionResult(
-            game::PasteMaterialSurface(state.topologyMap, target, state.copiedTopologyMaterial),
-            &assets);
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return PasteSectorEditorMaterial(context, target, assets);
 }
 
 bool SectorEditor::ApplySurface3DUvValue(
@@ -9321,23 +9291,9 @@ bool SectorEditor::ApplySurfaceDecalOpacity(
         float opacity,
         engine::AssetManager* assets)
 {
-    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
-        return ApplyAuthoringSideMaterialAction(
-                target,
-                assets,
-                [target, opacity](SectorTopologyMap& map) {
-                    return game::ApplySurfaceDecalOpacity(map, target, opacity);
-                });
-    }
-    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
-        return ApplyAuthoringFaceAnchorFlatMaterialAction(
-                target,
-                assets,
-                [target, opacity](SectorTopologyMap& map) {
-                    return game::ApplySurfaceDecalOpacity(map, target, opacity);
-                });
-    }
-    return FinishMaterialActionResult(game::ApplySurfaceDecalOpacity(state.topologyMap, target, opacity), assets);
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return ApplySectorEditorSurfaceDecalOpacity(context, target, opacity, assets);
 }
 
 bool SectorEditor::ApplySurfaceDecalEmissive(
@@ -9345,23 +9301,9 @@ bool SectorEditor::ApplySurfaceDecalEmissive(
         bool emissive,
         engine::AssetManager* assets)
 {
-    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
-        return ApplyAuthoringSideMaterialAction(
-                target,
-                assets,
-                [target, emissive](SectorTopologyMap& map) {
-                    return game::ApplySurfaceDecalEmissive(map, target, emissive);
-                });
-    }
-    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
-        return ApplyAuthoringFaceAnchorFlatMaterialAction(
-                target,
-                assets,
-                [target, emissive](SectorTopologyMap& map) {
-                    return game::ApplySurfaceDecalEmissive(map, target, emissive);
-                });
-    }
-    return FinishMaterialActionResult(game::ApplySurfaceDecalEmissive(state.topologyMap, target, emissive), assets);
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return ApplySectorEditorSurfaceDecalEmissive(context, target, emissive, assets);
 }
 
 bool SectorEditor::ApplySurfaceDecalTint(
@@ -9369,23 +9311,9 @@ bool SectorEditor::ApplySurfaceDecalTint(
         Vector3 tint,
         engine::AssetManager* assets)
 {
-    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
-        return ApplyAuthoringSideMaterialAction(
-                target,
-                assets,
-                [target, tint](SectorTopologyMap& map) {
-                    return game::ApplySurfaceDecalTint(map, target, tint);
-                });
-    }
-    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
-        return ApplyAuthoringFaceAnchorFlatMaterialAction(
-                target,
-                assets,
-                [target, tint](SectorTopologyMap& map) {
-                    return game::ApplySurfaceDecalTint(map, target, tint);
-                });
-    }
-    return FinishMaterialActionResult(game::ApplySurfaceDecalTint(state.topologyMap, target, tint), assets);
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return ApplySectorEditorSurfaceDecalTint(context, target, tint, assets);
 }
 
 bool SectorEditor::ApplySurfaceDecalBloomIntensity(
@@ -9393,75 +9321,34 @@ bool SectorEditor::ApplySurfaceDecalBloomIntensity(
         float bloomIntensity,
         engine::AssetManager* assets)
 {
-    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
-        return ApplyAuthoringSideMaterialAction(
-                target,
-                assets,
-                [target, bloomIntensity](SectorTopologyMap& map) {
-                    return game::ApplySurfaceDecalBloomIntensity(map, target, bloomIntensity);
-                });
-    }
-    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
-        return ApplyAuthoringFaceAnchorFlatMaterialAction(
-                target,
-                assets,
-                [target, bloomIntensity](SectorTopologyMap& map) {
-                    return game::ApplySurfaceDecalBloomIntensity(map, target, bloomIntensity);
-                });
-    }
-    return FinishMaterialActionResult(
-            game::ApplySurfaceDecalBloomIntensity(state.topologyMap, target, bloomIntensity),
-            assets);
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return ApplySectorEditorSurfaceDecalBloomIntensity(context, target, bloomIntensity, assets);
 }
 
 bool SectorEditor::OpenDecalTintModal(TopologySurfaceEditTarget target)
 {
-    DecalTintModalState modal;
-    std::string status;
-    if (!game::BuildDecalTintModal(state.topologyMap, target, modal, status)) {
-        statusText = status;
-        return false;
-    }
-    state.decalTintModal = modal;
-    return true;
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return OpenSectorEditorDecalTintModal(context, target);
 }
 
 bool SectorEditor::ClearSurfaceDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
-    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
-        return ApplyAuthoringSideMaterialAction(
-                target,
-                assets,
-                [target](SectorTopologyMap& map) {
-                    return game::ClearSurfaceDecal(map, target);
-                });
-    }
-    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
-        return ApplyAuthoringFaceAnchorFlatMaterialAction(
-                target,
-                assets,
-                [target](SectorTopologyMap& map) {
-                    return game::ClearSurfaceDecal(map, target);
-                });
-    }
-    return FinishMaterialActionResult(game::ClearSurfaceDecal(state.topologyMap, target), assets);
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return ClearSectorEditorSurfaceDecal(context, target, assets);
 }
 
 bool SectorEditor::ClearMiddleTexture(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
-    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
-        return ApplyAuthoringSideMaterialAction(
-                target,
-                assets,
-                [target](SectorTopologyMap& map) {
-                    return game::ClearMiddleTexture(map, target);
-                });
-    }
-    return FinishMaterialActionResult(game::ClearMiddleTexture(state.topologyMap, target), assets);
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return ClearSectorEditorMiddleTexture(context, target, assets);
 }
 
 bool SectorEditor::ResetSurface3DUv(
@@ -9496,38 +9383,18 @@ bool SectorEditor::FitSelectedDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
-    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
-        return ApplyAuthoringSideMaterialAction(
-                target,
-                assets,
-                [target](SectorTopologyMap& map) {
-                    return game::FitSelectedDecal(map, target);
-                });
-    }
-    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
-        return ApplyAuthoringFaceAnchorFlatMaterialAction(
-                target,
-                assets,
-                [target](SectorTopologyMap& map) {
-                    return game::FitSelectedDecal(map, target);
-                });
-    }
-    return FinishMaterialActionResult(game::FitSelectedDecal(state.topologyMap, target), assets);
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return FitSectorEditorSelectedDecal(context, target, assets);
 }
 
 bool SectorEditor::FitSelectedFlatDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
 {
-    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData()) {
-        return ApplyAuthoringFaceAnchorFlatMaterialAction(
-                target,
-                assets,
-                [target](SectorTopologyMap& map) {
-                    return game::FitSelectedFlatDecal(map, target);
-                });
-    }
-    return FinishMaterialActionResult(game::FitSelectedFlatDecal(state.topologyMap, target), assets);
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return FitSectorEditorSelectedFlatDecal(context, target, assets);
 }
 
 bool SectorEditor::FitSelectedWallMaterial(
@@ -9536,17 +9403,9 @@ bool SectorEditor::FitSelectedWallMaterial(
         engine::AssetManager* assets,
         TopologyMaterialLayer layer)
 {
-    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
-        return ApplyAuthoringSideMaterialAction(
-                target,
-                assets,
-                [target, mode, layer](SectorTopologyMap& map) {
-                    return game::FitSelectedWallMaterial(map, target, mode, layer);
-                });
-    }
-    return FinishMaterialActionResult(
-            game::FitSelectedWallMaterial(state.topologyMap, target, mode, layer),
-            assets);
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return FitSectorEditorSelectedWallMaterial(context, target, mode, assets, layer);
 }
 
 bool SectorEditor::AlignSelectedWallMaterialVertical(
@@ -9554,17 +9413,9 @@ bool SectorEditor::AlignSelectedWallMaterialVertical(
         engine::AssetManager* assets,
         TopologyMaterialLayer layer)
 {
-    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
-        return ApplyAuthoringSideMaterialAction(
-                target,
-                assets,
-                [target, layer](SectorTopologyMap& map) {
-                    return game::AlignSelectedWallMaterialVertical(map, target, layer);
-                });
-    }
-    return FinishMaterialActionResult(
-            game::AlignSelectedWallMaterialVertical(state.topologyMap, target, layer),
-            assets);
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return AlignSectorEditorSelectedWallMaterialVertical(context, target, assets, layer);
 }
 
 bool SectorEditor::AlignSelectedWallMaterialU(
@@ -9573,17 +9424,9 @@ bool SectorEditor::AlignSelectedWallMaterialU(
         engine::AssetManager* assets,
         TopologyMaterialLayer layer)
 {
-    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData()) {
-        return ApplyAuthoringSideMaterialAction(
-                target,
-                assets,
-                [target, direction, layer](SectorTopologyMap& map) {
-                    return game::AlignSelectedWallMaterialU(map, target, direction, layer);
-                });
-    }
-    return FinishMaterialActionResult(
-            game::AlignSelectedWallMaterialU(state.topologyMap, target, direction, layer),
-            assets);
+    const SectorEditorMaterialEditBridgeCallbacks callbacks = BuildMaterialEditBridgeCallbacks();
+    SectorEditorMaterialEditBridgeContext context{state, uiState, statusText, callbacks};
+    return AlignSectorEditorSelectedWallMaterialU(context, target, direction, assets, layer);
 }
 
 bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& context)

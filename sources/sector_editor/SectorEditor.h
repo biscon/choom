@@ -24,6 +24,7 @@
 namespace game {
 
 struct SectorEditorToolContext;
+struct SectorEditorMaterialEditBridgeCallbacks;
 
 class SectorEditor {
 public:
@@ -356,6 +357,7 @@ private:
     bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets, TopologyMaterialLayer layer);
     bool AlignSelectedWallMaterialU(TopologySurfaceEditTarget target, TopologyUAlignDirection direction, engine::AssetManager* assets, TopologyMaterialLayer layer);
+    SectorEditorMaterialEditBridgeCallbacks BuildMaterialEditBridgeCallbacks();
     bool HasAuthoringGraphData() const;
     bool IsSelectedSurface3DFlatTarget(TopologySurfaceEditTarget target) const;
     bool EnsureSelectedSurface3DAuthoringMappingCurrent();
