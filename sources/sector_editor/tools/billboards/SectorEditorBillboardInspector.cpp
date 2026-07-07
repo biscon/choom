@@ -61,7 +61,7 @@ bool ResolveBillboardAspectFromAnimation(
   return std::isfinite(outAspect) && outAspect > 0.0f;
 }
 
-float ResolveBillboardAspect(const SectorEditorState &state,
+float ResolveBillboardAspect(const SectorRuntimeObjectState &runtimeObjects,
                              engine::EngineContext *engineContext,
                              const engine::AssetManager &assets,
                              const SectorPlacedRuntimeObject &object) {
@@ -72,7 +72,7 @@ float ResolveBillboardAspect(const SectorEditorState &state,
   engine::SpriteAnimationHandle animation = engine::NullSpriteAnimationHandle();
   uint32_t clipIndex = engine::InvalidSpriteClipIndex;
   for (const SectorPlacedRuntimeObjectEntity &entry :
-       state.runtimeObjects.placedObjectEntities) {
+       runtimeObjects.placedObjectEntities) {
     if (entry.placedObjectId != object.id ||
         !engineContext->world.IsAlive(entry.entity) ||
         !engineContext->world.Has<SectorBillboardSprite>(entry.entity)) {
@@ -121,7 +121,7 @@ float MeasureSectorEditorBillboardInspectorContentHeight(
       context.smallConfig, context.assets, context.smallFont,
       spriteLabel.c_str(), context.contentW, 1);
   const bool hasBillboardAspect =
-      ResolveBillboardAspect(context.state, context.engineContext,
+      ResolveBillboardAspect(context.runtimeObjects, context.engineContext,
                              context.assets, object) > 0.0f;
   const bool keepAspectWarningVisible =
       object.billboard.keepAspectRatio && !hasBillboardAspect;
@@ -168,7 +168,7 @@ void DrawSectorEditorBillboardInspector(
   y += spriteLabelHeight + gap;
 
   const float selectedBillboardAspect = ResolveBillboardAspect(
-      state, context.engineContext, assets, *selectedObject);
+      context.runtimeObjects, context.engineContext, assets, *selectedObject);
   const bool hasBillboardAspect = selectedBillboardAspect > 0.0f;
 
   auto drawObjectFloat =

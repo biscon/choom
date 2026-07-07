@@ -77,7 +77,7 @@ void RefreshSectorEditorPlacedObjectsAfterAuthoringEdit(
     SpawnPlacedRuntimeObjects(
             context.engineContext->world,
             context.engineContext->assets,
-            context.state.runtimeObjects,
+            context.runtimeObjects,
             context.state.topologyMap);
 }
 

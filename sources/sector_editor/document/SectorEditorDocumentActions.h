@@ -2,6 +2,7 @@
 
 #include "sector_editor/SectorEditorModalTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/preview/SectorEditorPreviewState.h"
 
 #include <filesystem>
 #include <functional>
@@ -40,7 +41,9 @@ struct SectorEditorLoadedDocument {
 bool IsValidLevelName(const std::string& name, std::string& error);
 bool BuildLevelPaths(const std::string& name, LevelPaths& paths, std::string& error);
 SectorTopologyMap CreateEmptySectorTopologyDocument();
-void ResetEditorTopologyDocumentState(SectorEditorState& state);
+void ResetEditorTopologyDocumentState(
+        SectorEditorState& state,
+        SectorEditorPreviewControllerState& previewControllerState);
 std::vector<LevelListEntry> ScanLevels(std::string& error);
 void OpenConfirmationModal(
         ConfirmationModalState& modalState,

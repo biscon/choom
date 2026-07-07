@@ -3,6 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
 #include "sector_editor/SectorEditorTextureModals.h"
+#include "sector_editor/preview/SectorEditorPreviewState.h"
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingState.h"
@@ -26,6 +27,7 @@ using SectorEditorAuthoringMaterialActionFn =
 
 struct SectorEditorMaterialEditingServiceContext {
     SectorEditorState& state;
+    SectorEditorPreviewSelectionState& previewSelectionState;
     SelectionState& selectionState;
     MaterialEditingState& materialState;
     MaterialEditingUiState& materialUiState;

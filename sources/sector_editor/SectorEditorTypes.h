@@ -3,16 +3,11 @@
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorLightmapAsyncTypes.h"
 #include "sector_editor/SectorEditorModalTypes.h"
-#include "sector_editor/SectorEditorPreviewTypes.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorSurfaceTypes.h"
 #include "sector_editor/SectorEditorTopologyRenderCacheTypes.h"
-#include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorAuthoringGraph.h"
-#include "sector_demo/SectorFpsController.h"
-#include "sector_demo/SectorFreeflyController.h"
 #include "sector_demo/SectorPointTypes.h"
-#include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyCreation.h"
 #include "sector_demo/SectorTopologyEdit.h"
@@ -117,32 +112,6 @@ struct SectorEditorState {
     std::string currentLevelPath;
     bool hasCurrentLevelPath = false;
     bool hasUnsavedChanges = false;
-    bool useBakedAmbientOcclusion = true;
-    bool showObjectProbeDebugOverlay = false;
-    SectorRuntimeObjectState runtimeObjects;
-    bool previewUiHidden = false;
-    PreviewDebugOverlayTab activePreviewDebugOverlayTab = PreviewDebugOverlayTab::None;
-    SectorPreviewControlMode previewControlMode = SectorPreviewControlMode::FreeFly;
-    SectorFreeflyControllerState freeflyController;
-    SectorFpsControllerConfig fpsControllerConfig;
-    SectorFpsControllerState fpsControllerState;
-    SectorCollisionWorld sectorCollisionWorld;
-    bool sectorCollisionWorldValid = false;
-    std::string sectorCollisionWorldWarning;
-    int previewCollisionSectorId = 0;
-    SectorFpsVerticalResult previewVerticalResult;
-    SectorCollisionMoveResult previewMoveResult;
-    bool previewCollisionNoclipFallback = false;
-    float visualStepOffsetY = 0.0f;
-    SectorFpsHeadBobState headBobState;
-    SectorFpsLandingDipState landingDipState;
-    bool hasPreviewPose = false;
-    SectorViewPose lastPreviewPose = {};
-    SpotLightPilotPreviewRestoreState spotLightPilotPreviewRestore;
-    SectorSurfaceHit hoveredSurface3D;
-    SectorSurfaceRef selectedSurface3D;
-    TopologySurfaceEditTarget selectedTopologySurface3D;
-
     TexturePickerState texturePicker;
     AddMapTextureState addMapTexture;
     SectorSpriteMetadataCatalog spriteMetadataCatalog;

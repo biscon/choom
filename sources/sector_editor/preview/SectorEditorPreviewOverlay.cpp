@@ -2,7 +2,6 @@
 
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
-#include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
@@ -29,81 +28,35 @@ struct OverlayLine {
     bool wrap;
 };
 
-bool IsPreviewOverlayMouseInteractive(const SectorEditorState& state)
+bool IsPreviewOverlayMouseInteractive(const SectorEditorPreviewControllerState& controllerState)
 {
-    return !state.freeflyController.mouseLookEnabled;
-}
-
-SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
-        SectorEditorUiState& uiState,
-        InspectorIdUiState& inspectorIdUiState)
-{
-    return SectorEditorSelectionUiDependencies{
-            uiState.floorInput,
-            uiState.ceilingInput,
-            uiState.ambientIntensityInput,
-            uiState.ambientRedInput,
-            uiState.ambientGreenInput,
-            uiState.ambientBlueInput,
-            uiState.lightXInput,
-            uiState.lightYInput,
-            uiState.lightZInput,
-            uiState.lightTargetXInput,
-            uiState.lightTargetYInput,
-            uiState.lightTargetZInput,
-            uiState.lightIntensityInput,
-            uiState.lightRadiusInput,
-            uiState.lightInnerConeInput,
-            uiState.lightOuterConeInput,
-            uiState.lightSourceRadiusInput,
-            uiState.lightFlickerSpeedInput,
-            uiState.lightFlickerAmountInput,
-            uiState.lightRedInput,
-            uiState.lightGreenInput,
-            uiState.lightBlueInput,
-            uiState.runtimeObjectXInput,
-            uiState.runtimeObjectYInput,
-            uiState.runtimeObjectZInput,
-            uiState.runtimeObjectYawInput,
-            uiState.runtimeObjectWidthInput,
-            uiState.runtimeObjectHeightInput,
-            uiState.runtimeObjectThicknessInput,
-            uiState.runtimeObjectNormalOffsetInput,
-            uiState.runtimeObjectOpenDistanceInput,
-            uiState.runtimeObjectSpeedInput,
-            uiState.runtimeObjectInitialOpenFractionInput,
-            uiState.runtimeObjectAutoOpenDistanceInput,
-            uiState.runtimeObjectInteractionDistanceInput,
-            uiState.runtimeObjectOriginXInput,
-            uiState.runtimeObjectOriginYInput,
-            uiState.inspectorScroll,
-            inspectorIdUiState};
+    return !controllerState.freeflyController.mouseLookEnabled;
 }
 
 bool IsValidPreviewSurfaceRef(
-        SectorEditorState& state,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
+        RuntimeObjectDragState& runtimeObjectDrag,
+        SectorEditorPreviewSelectionState& previewSelectionState,
         SelectionState& selectionState,
         ManipulationState& manipulationState,
-        SectorEditorUiState& uiState,
-        InspectorIdUiState& inspectorIdUiState,
+        SectorEditorSelectionUiDependencies selectionUi,
         MaterialEditingUiState& materialUiState,
         SectorSurfaceRef surface)
 {
-    const bool authoringDerivationCurrent =
-            state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
-            && !state.authoringDerivedTopologyStale
-            && state.authoringDerivation.success;
     SectorEditorSelectionServiceContext context{
-            state.topologyMap,
-            state.authoringGraph,
-            state.authoringDerivation,
+            topologyMap,
+            authoringGraph,
+            authoringDerivation,
             authoringDerivationCurrent,
             selectionState,
-            state.selectedSurface3D,
-            state.selectedTopologySurface3D,
+            previewSelectionState.selectedSurface3D,
+            previewSelectionState.selectedTopologySurface3D,
             manipulationState,
-            state.runtimeObjectDrag,
-            BuildSelectionUiDependencies(uiState, inspectorIdUiState),
+            runtimeObjectDrag,
+            selectionUi,
             materialUiState,
             nullptr,
             nullptr,
@@ -112,20 +65,20 @@ bool IsValidPreviewSurfaceRef(
 }
 
 const SectorTopologyStaticSpotLight* SelectedTopologyStaticSpotLight(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
         const SelectionState& selectionState)
 {
     return selectionState.topologySelectionKind == TopologySelectionKind::StaticSpotLight
-            ? FindSectorTopologyStaticSpotLight(state.topologyMap, selectionState.selectedTopologyStaticSpotLightId)
+            ? FindSectorTopologyStaticSpotLight(topologyMap, selectionState.selectedTopologyStaticSpotLightId)
             : nullptr;
 }
 
 const SectorTopologyDynamicSpotLight* SelectedTopologyDynamicSpotLight(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
         const SelectionState& selectionState)
 {
     return selectionState.topologySelectionKind == TopologySelectionKind::DynamicSpotLight
-            ? FindSectorTopologyDynamicSpotLight(state.topologyMap, selectionState.selectedTopologyDynamicSpotLightId)
+            ? FindSectorTopologyDynamicSpotLight(topologyMap, selectionState.selectedTopologyDynamicSpotLightId)
             : nullptr;
 }
 
@@ -224,28 +177,48 @@ Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab 
 }
 
 void DrawSectorEditorPreviewSurfaceHighlights(
-        SectorEditorState& state,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
+        RuntimeObjectDragState& runtimeObjectDrag,
+        SectorEditorPreviewSelectionState& previewSelectionState,
+        const SectorEditorPreviewControllerState& previewControllerState,
         SelectionState& selectionState,
         ManipulationState& manipulationState,
-        SectorEditorUiState& uiState,
-        InspectorIdUiState& inspectorIdUiState,
+        SectorEditorSelectionUiDependencies selectionUi,
         MaterialEditingUiState& materialUiState,
         const SectorMeshRenderer& preview)
 {
-    if (!preview.IsRendererReady() || state.freeflyController.mouseLookEnabled) {
+    if (!preview.IsRendererReady() || previewControllerState.freeflyController.mouseLookEnabled) {
         return;
     }
 
-    auto drawSurface = [&state, &selectionState, &manipulationState, &uiState, &inspectorIdUiState, &materialUiState, &preview](
+    auto drawSurface = [
+                               &topologyMap,
+                               &authoringGraph,
+                               &authoringDerivation,
+                               authoringDerivationCurrent,
+                               &runtimeObjectDrag,
+                               &previewSelectionState,
+                               &selectionState,
+                               &manipulationState,
+                               selectionUi,
+                               &materialUiState,
+                               &preview](
                                SectorSurfaceRef surface,
                                Color color,
                                float thickness) {
         if (!IsValidPreviewSurfaceRef(
-                    state,
+                    topologyMap,
+                    authoringGraph,
+                    authoringDerivation,
+                    authoringDerivationCurrent,
+                    runtimeObjectDrag,
+                    previewSelectionState,
                     selectionState,
                     manipulationState,
-                    uiState,
-                    inspectorIdUiState,
+                    selectionUi,
                     materialUiState,
                     surface)) {
             return;
@@ -273,22 +246,23 @@ void DrawSectorEditorPreviewSurfaceHighlights(
     };
 
     BeginMode3D(preview.RenderCamera());
-    if (state.hoveredSurface3D.hit
-            && !SameSectorEditorSurfaceRef(state.hoveredSurface3D.surface, state.selectedSurface3D)) {
-        drawSurface(state.hoveredSurface3D.surface, Color{248, 238, 124, 235}, 2.0f);
+    if (previewSelectionState.hoveredSurface3D.hit
+            && !SameSectorEditorSurfaceRef(previewSelectionState.hoveredSurface3D.surface, previewSelectionState.selectedSurface3D)) {
+        drawSurface(previewSelectionState.hoveredSurface3D.surface, Color{248, 238, 124, 235}, 2.0f);
     }
-    if (state.selectedSurface3D.kind != SectorSurfaceKind::None) {
-        drawSurface(state.selectedSurface3D, Color{84, 204, 255, 255}, 3.0f);
+    if (previewSelectionState.selectedSurface3D.kind != SectorSurfaceKind::None) {
+        drawSurface(previewSelectionState.selectedSurface3D, Color{84, 204, 255, 255}, 3.0f);
     }
     EndMode3D();
 }
 
 void DrawSectorEditorPreviewSpotLightOverlay(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorEditorPreviewControllerState& previewControllerState,
         const SelectionState& selectionState,
         const SectorMeshRenderer& preview)
 {
-    if (!preview.IsRendererReady() || state.freeflyController.mouseLookEnabled) {
+    if (!preview.IsRendererReady() || previewControllerState.freeflyController.mouseLookEnabled) {
         return;
     }
 
@@ -298,14 +272,14 @@ void DrawSectorEditorPreviewSpotLightOverlay(
     float innerConeDegrees = 0.0f;
     float outerConeDegrees = 0.0f;
     bool selectedStaticSpotLight = false;
-    if (const SectorTopologyStaticSpotLight* light = SelectedTopologyStaticSpotLight(state, selectionState)) {
+    if (const SectorTopologyStaticSpotLight* light = SelectedTopologyStaticSpotLight(topologyMap, selectionState)) {
         lightPosition = light->position;
         lightTarget = light->target;
         lightRange = light->range;
         innerConeDegrees = light->innerConeDegrees;
         outerConeDegrees = light->outerConeDegrees;
         selectedStaticSpotLight = true;
-    } else if (const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight(state, selectionState)) {
+    } else if (const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight(topologyMap, selectionState)) {
         lightPosition = light->position;
         lightTarget = light->target;
         lightRange = light->range;
@@ -353,21 +327,22 @@ void DrawSectorEditorPreviewSpotLightOverlay(
 }
 
 void DrawSectorEditorPreviewObjectProbeOverlay(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorEditorPreviewState& previewState,
         const SectorMeshRenderer& preview)
 {
     if (!preview.IsRendererReady()
-            || !state.showObjectProbeDebugOverlay
-            || state.runtimeObjects.objectLightProbes.probes.empty()) {
+            || !previewState.overlay.showObjectProbeDebugOverlay
+            || previewState.runtime.runtimeObjects.objectLightProbes.probes.empty()) {
         return;
     }
 
     constexpr float MarkerRadius = 0.08f;
     const Vector3 referencePosition = preview.RendererPose().position;
     const float maxDistanceWorld = NormalizeSectorPreviewSettings(
-            state.topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
+            topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
     BeginMode3D(preview.RenderCamera());
-    for (const SectorBakedObjectLightProbe& probe : state.runtimeObjects.objectLightProbes.probes) {
+    for (const SectorBakedObjectLightProbe& probe : previewState.runtime.runtimeObjects.objectLightProbes.probes) {
         if (!ShouldDrawObjectProbeDebugMarker(referencePosition, probe.position, maxDistanceWorld)) {
             continue;
         }
@@ -386,15 +361,17 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     engine::Input& input = context.input;
     engine::AssetManager& assets = context.assets;
     const engine::FontHandle smallFont = context.smallFont;
-    SectorEditorState& state = context.state;
+    SectorTopologyMap& topologyMap = context.topologyMap;
+    SectorEditorPreviewOverlayState& overlayState = context.previewState.overlay;
+    SectorEditorPreviewControllerState& controllerState = context.previewState.controller;
+    SectorEditorPreviewCollisionState& collisionState = context.previewState.collision;
     SelectionState& selectionState = context.selectionState;
-    SectorEditorUiState& uiState = context.uiState;
     MaterialEditingUiState& materialUiState = context.materialUiState;
     SectorMeshRenderer& preview = context.preview;
     SectorEditorPreviewOverlayResult result;
 
-    const bool mouseInteractive = IsPreviewOverlayMouseInteractive(state);
-    const bool drawExpanded = state.activePreviewDebugOverlayTab != PreviewDebugOverlayTab::None;
+    const bool mouseInteractive = IsPreviewOverlayMouseInteractive(controllerState);
+    const bool drawExpanded = overlayState.activePreviewDebugOverlayTab != PreviewDebugOverlayTab::None;
     const float panelW = 620.0f;
     const float padding = 10.0f;
     const float gap = 6.0f;
@@ -405,61 +382,61 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     const float contentW = panelW - padding * 2.0f;
     engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
 
-    const SectorViewPose pose = ActiveSectorEditorPreviewPose(state, preview);
+    const SectorViewPose pose = ActiveSectorEditorPreviewPose(controllerState, preview);
     const Vector3 position = pose.position;
     const RuntimePortalVisibilityResult& visibility = preview.VisibilityResult();
     const int compactSectorId =
-            state.previewControlMode == SectorPreviewControlMode::Gameplay
-                    ? state.fpsControllerState.currentSectorId
+            controllerState.previewControlMode == SectorPreviewControlMode::Gameplay
+                    ? controllerState.fpsControllerState.currentSectorId
                     : (visibility.validStartSector ? visibility.startSectorId : 0);
     std::string compactSector = compactSectorId > 0
             ? TextFormat("sector %d", compactSectorId)
             : "sector none";
-    const char* dirtyText = state.topologyDocumentDirty ? "unsaved" : "saved";
+    const char* dirtyText = context.topologyDocumentDirty ? "unsaved" : "saved";
     const std::string compactStatus = TextFormat(
             "3D %s | %s | assets %.0f%% | lightmap %s | %s",
-            PreviewControlModeName(state.previewControlMode),
+            PreviewControlModeName(controllerState.previewControlMode),
             compactSector.c_str(),
             preview.RendererAssetProgress(assets) * 100.0f,
             preview.RendererLightmapStatusText(),
             dirtyText);
 
     std::string collisionStatus;
-    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
-        if (state.sectorCollisionWorldValid) {
-            if (state.previewCollisionNoclipFallback) {
+    if (controllerState.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        if (collisionState.sectorCollisionWorldValid) {
+            if (collisionState.previewCollisionNoclipFallback) {
                 collisionStatus = "mode: gameplay collision | status: no sector / noclip";
-            } else if (state.fpsControllerState.currentSectorId == 0
-                    || !state.previewVerticalResult.hasSector) {
+            } else if (controllerState.fpsControllerState.currentSectorId == 0
+                    || !collisionState.previewVerticalResult.hasSector) {
                 collisionStatus = "mode: gameplay collision | status: no sector";
             } else {
                 std::string blockText;
-                if (state.previewMoveResult.hitWall) {
+                if (collisionState.previewMoveResult.hitWall) {
                     blockText += "wall ";
                 }
-                if (state.previewMoveResult.blockedByStep) {
+                if (collisionState.previewMoveResult.blockedByStep) {
                     blockText += "step ";
                 }
-                if (state.previewMoveResult.blockedByCeiling) {
+                if (collisionState.previewMoveResult.blockedByCeiling) {
                     blockText += "ceiling ";
                 }
                 if (blockText.empty()) {
                     blockText = "clear";
                 }
-                const char* verticalState = state.previewVerticalResult.cannotFit
+                const char* verticalState = collisionState.previewVerticalResult.cannotFit
                         ? "cannot fit"
-                        : (state.fpsControllerState.grounded
+                        : (controllerState.fpsControllerState.grounded
                                 ? "grounded"
-                                : (state.fpsControllerState.verticalVelocity > 0.0f ? "jumping" : "falling"));
+                                : (controllerState.fpsControllerState.verticalVelocity > 0.0f ? "jumping" : "falling"));
                 collisionStatus = TextFormat(
                         "mode: gameplay collision | sector: %d | vertical: %s / %s | block: %s | radius: %.2f | step: %.2f | jump: %.2f",
-                        state.fpsControllerState.currentSectorId,
+                        controllerState.fpsControllerState.currentSectorId,
                         verticalState,
-                        VerticalTransitionName(state.previewVerticalResult.transition),
+                        VerticalTransitionName(collisionState.previewVerticalResult.transition),
                         blockText.c_str(),
-                        state.fpsControllerConfig.playerRadius,
-                        state.fpsControllerConfig.stepHeight,
-                        state.fpsControllerConfig.jumpHeight);
+                        controllerState.fpsControllerConfig.playerRadius,
+                        controllerState.fpsControllerConfig.stepHeight,
+                        controllerState.fpsControllerConfig.jumpHeight);
             }
         } else {
             collisionStatus = "mode: gameplay collision | status: unavailable";
@@ -483,14 +460,18 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     };
 
     if (drawExpanded) {
-        switch (state.activePreviewDebugOverlayTab) {
+        switch (overlayState.activePreviewDebugOverlayTab) {
             case PreviewDebugOverlayTab::View:
-                addKeyValue("mode", PreviewControlModeName(state.previewControlMode));
+                addKeyValue("mode", PreviewControlModeName(controllerState.previewControlMode));
                 addKeyValue("position", TextFormat("%.2f, %.2f, %.2f", position.x, position.y, position.z));
                 addKeyValue("sector", compactSector);
                 addWrappedLine(collisionStatus);
-                if (!state.sectorCollisionWorldWarning.empty()) {
-                    addKeyValueStyled("warning", state.sectorCollisionWorldWarning, Color{236, 92, 92, 245}, true);
+                if (!collisionState.sectorCollisionWorldWarning.empty()) {
+                    addKeyValueStyled(
+                            "warning",
+                            collisionState.sectorCollisionWorldWarning,
+                            Color{236, 92, 92, 245},
+                            true);
                 }
                 break;
             case PreviewDebugOverlayTab::Render:
@@ -507,7 +488,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 break;
             case PreviewDebugOverlayTab::Lighting:
                 addKeyValue("dynamic", preview.DynamicLightingEnabled() ? "on" : "off");
-                addKeyValue("AO", state.useBakedAmbientOcclusion ? "on" : "off");
+                addKeyValue("AO", overlayState.useBakedAmbientOcclusion ? "on" : "off");
                 addKeyValue("lightmap", preview.RendererLightmapStatusText());
                 addKeyValue("door mode", SectorDoorLightingDebugModeName(preview.DoorLightingDebugMode()));
                 addKeyValue("selected dynamic", TextFormat(
@@ -544,11 +525,11 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         preview.DoorSkippedCount()));
                 addKeyValue("doors authored/valid", TextFormat(
                         "%zu / %zu",
-                        state.runtimeObjects.doorObjectCount,
-                        state.runtimeObjects.validDoorAnchorCount));
+                        context.previewState.runtime.runtimeObjects.doorObjectCount,
+                        context.previewState.runtime.runtimeObjects.validDoorAnchorCount));
                 break;
             case PreviewDebugOverlayTab::Objects: {
-                const SectorRuntimeObjectState& objects = state.runtimeObjects;
+                const SectorRuntimeObjectState& objects = context.previewState.runtime.runtimeObjects;
                 addKeyValue("placed/spawned/skipped", TextFormat(
                         "%zu / %zu / %zu",
                         objects.placedObjectCount,
@@ -576,30 +557,30 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 break;
             }
             case PreviewDebugOverlayTab::Probes: {
-                const char* objectProbeStatus = state.runtimeObjects.objectProbeStatus.empty()
+                const char* objectProbeStatus = context.previewState.runtime.runtimeObjects.objectProbeStatus.empty()
                         ? "none"
-                        : state.runtimeObjects.objectProbeStatus.c_str();
+                        : context.previewState.runtime.runtimeObjects.objectProbeStatus.c_str();
                 addKeyValueStyled("status", objectProbeStatus, smallConfig.mutedTextColor, true);
-                const size_t totalProbeCount = state.runtimeObjects.objectLightProbes.probes.size();
+                const size_t totalProbeCount = context.previewState.runtime.runtimeObjects.objectLightProbes.probes.size();
                 addKeyValue("probe count", TextFormat("%zu", totalProbeCount));
-                if (state.showObjectProbeDebugOverlay) {
+                if (overlayState.showObjectProbeDebugOverlay) {
                     const float maxDistanceWorld = NormalizeSectorPreviewSettings(
-                            state.topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
+                            topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
                     const size_t visibleProbeCount = CountVisibleObjectProbeDebugMarkers(
-                            state.runtimeObjects.objectLightProbes,
+                            context.previewState.runtime.runtimeObjects.objectLightProbes,
                             preview.RendererPose().position,
                             maxDistanceWorld);
                     addKeyValue("drawn", TextFormat("%zu / %zu", visibleProbeCount, totalProbeCount));
                 }
-                if (!state.runtimeObjects.objectSectorLookupWarning.empty()) {
-                    addKeyValueStyled("lookup warning", state.runtimeObjects.objectSectorLookupWarning, Color{236, 92, 92, 245}, true);
+                if (!context.previewState.runtime.runtimeObjects.objectSectorLookupWarning.empty()) {
+                    addKeyValueStyled("lookup warning", context.previewState.runtime.runtimeObjects.objectSectorLookupWarning, Color{236, 92, 92, 245}, true);
                 }
                 break;
             }
             case PreviewDebugOverlayTab::Controls:
                 if (context.lightState.spotLightPilot.active) {
                     addWrappedLine("pilot light: WASD move, mouse look, Space/Ctrl up/down. Unlock cursor with F11 to click Apply or Cancel.");
-                } else if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
+                } else if (controllerState.previewControlMode == SectorPreviewControlMode::Gameplay) {
                     addWrappedLine("movement: WASD move, Space jump, Shift run, mouse look. F11 unlocks cursor for UI tabs.");
                 } else {
                     addWrappedLine("movement: WASD move, mouse look, Space/Ctrl up/down. F11 unlocks cursor for UI tabs.");
@@ -621,13 +602,13 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     if (contentH > 0.0f) {
         contentH += gap;
     }
-    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
         contentH += (rowH + 6.0f) * 2.0f;
     }
-    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
         contentH += rowH + 6.0f;
     }
-    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
         contentH += rowH + 6.0f;
     }
     const Rectangle panel{
@@ -638,8 +619,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
-    const bool hasSelectedSpotLight = SelectedTopologyStaticSpotLight(state, selectionState) != nullptr
-            || SelectedTopologyDynamicSpotLight(state, selectionState) != nullptr;
+    const bool hasSelectedSpotLight = SelectedTopologyStaticSpotLight(topologyMap, selectionState) != nullptr
+            || SelectedTopologyDynamicSpotLight(topologyMap, selectionState) != nullptr;
     engine::Text(
             smallConfig,
             assets,
@@ -647,14 +628,14 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     panel.x + padding,
                     panel.y + padding,
                     mouseInteractive && (context.lightState.spotLightPilot.active
-                            || (hasSelectedSpotLight && state.previewControlMode == SectorPreviewControlMode::FreeFly))
+                            || (hasSelectedSpotLight && controllerState.previewControlMode == SectorPreviewControlMode::FreeFly))
                             ? contentW - 170.0f
                             : contentW,
                     stripH},
             smallFont,
             compactStatus.c_str(),
             engine::UITextJustify::Left,
-            state.topologyDocumentDirty ? Color{236, 196, 92, 255} : smallConfig.textColor,
+            context.topologyDocumentDirty ? Color{236, 196, 92, 255} : smallConfig.textColor,
             true);
 
     float actionsRight = panel.x + panel.width - padding;
@@ -684,7 +665,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         "Apply")) {
                 result.requestApplySpotLightPilot = true;
             }
-        } else if (hasSelectedSpotLight && state.previewControlMode == SectorPreviewControlMode::FreeFly) {
+        } else if (hasSelectedSpotLight && controllerState.previewControlMode == SectorPreviewControlMode::FreeFly) {
             if (engine::Button(
                         ui,
                         smallConfig,
@@ -722,10 +703,10 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 tabY,
                 tabW,
                 tabH};
-        const bool selected = state.activePreviewDebugOverlayTab == tabs[i].tab;
+        const bool selected = overlayState.activePreviewDebugOverlayTab == tabs[i].tab;
         if (mouseInteractive) {
             if (engine::ToolButton(ui, smallConfig, input, assets, tabs[i].id, tabRect, smallFont, tabs[i].label, selected)) {
-                state.activePreviewDebugOverlayTab = selected
+                overlayState.activePreviewDebugOverlayTab = selected
                         ? PreviewDebugOverlayTab::None
                         : tabs[i].tab;
             }
@@ -737,7 +718,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     }
 
     float y = tabY + tabH + gap;
-    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
         const char* doorModeOptions[] = {
                 "Normal",
                 "AlbedoOnly",
@@ -785,7 +766,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         }
         y += rowH + 6.0f;
     }
-    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Probes) {
         const Rectangle checkboxRect{panel.x + padding, y, 240.0f, rowH};
         if (mouseInteractive) {
             engine::Checkbox(
@@ -797,7 +778,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     checkboxRect,
                     smallFont,
                     "Show Object Probes",
-                    state.showObjectProbeDebugOverlay);
+                    overlayState.showObjectProbeDebugOverlay);
         } else {
             DrawRectangleRec(checkboxRect, Color{24, 30, 38, 155});
             DrawRectangleLinesEx(checkboxRect, config.borderThickness, config.borderColor);
@@ -809,7 +790,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     boxSize};
             DrawRectangleRec(box, Color{12, 15, 20, 205});
             DrawRectangleLinesEx(box, config.borderThickness, config.borderColor);
-            if (state.showObjectProbeDebugOverlay) {
+            if (overlayState.showObjectProbeDebugOverlay) {
                 constexpr float markPadding = 3.0f;
                 const Rectangle mark{
                         box.x + markPadding,
@@ -839,7 +820,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 distanceInputW,
                 rowH};
         const SectorPreviewSettings normalizedPreviewSettings =
-                NormalizeSectorPreviewSettings(state.topologyMap.previewSettings);
+                NormalizeSectorPreviewSettings(topologyMap.previewSettings);
         if (mouseInteractive) {
             const SectorEditorFloatInputResult distanceResult = DrawLabeledFloatInput(
                     ui,
@@ -853,17 +834,17 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     distanceInputRect,
                     engine::UITextJustify::Left,
                     normalizedPreviewSettings.objectProbeDebugDrawMaxDistanceWorld,
-                    uiState.objectProbeDebugDrawMaxDistanceInput,
+                    context.objectProbeDebugDrawMaxDistanceInput,
                     0.0f,
                     512.0f,
                     1);
             if (distanceResult.changed) {
-                SectorPreviewSettings editedPreviewSettings = state.topologyMap.previewSettings;
+                SectorPreviewSettings editedPreviewSettings = topologyMap.previewSettings;
                 editedPreviewSettings.objectProbeDebugDrawMaxDistanceWorld =
                         distanceResult.finite
                         ? distanceResult.value
                         : normalizedPreviewSettings.objectProbeDebugDrawMaxDistanceWorld;
-                state.topologyMap.previewSettings =
+                topologyMap.previewSettings =
                         NormalizeSectorPreviewSettings(editedPreviewSettings);
                 result.markTopologyDocumentEdited = true;
                 result.topologyDocumentEditStatus = "Object probe debug draw distance updated";
@@ -891,7 +872,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         }
         y += rowH + 6.0f;
     }
-    if (drawExpanded && state.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
         const Rectangle settingsRect{panel.x + padding, y, 112.0f, rowH};
         if (mouseInteractive) {
             if (engine::Button(

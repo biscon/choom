@@ -2,6 +2,7 @@
 
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/preview/SectorEditorPreviewState.h"
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 
 #include <functional>
@@ -209,6 +210,13 @@ std::string BuildSectorEditorSurface3DTargetLabel(
         const SectorEditorState& state,
         SectorSurfaceRef surface,
         TopologySurfaceEditTarget target);
+std::string BuildSectorEditorSurface3DTargetLabel(
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
+        SectorSurfaceRef surface,
+        TopologySurfaceEditTarget target);
 
 enum class SectorEditorAuthoringSurfaceTargetKind {
     None,
@@ -241,6 +249,7 @@ SectorAuthoringSelectionTarget MakeSectorEditorAuthoringSelectionTargetForSurfac
 
 bool ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
         SectorEditorState& state,
+        SectorEditorPreviewSelectionState& previewSelectionState,
         std::string* outStatus = nullptr);
 
 bool MutateSectorEditorAuthoringFaceAnchorForTopologySector(

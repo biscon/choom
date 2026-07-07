@@ -11,6 +11,7 @@
 namespace game {
 
 class SectorEditorTextureCatalogService;
+struct SectorRuntimeObjectState;
 
 struct SectorEditorPlacedObjectInspectorCallbacks {
     std::function<const SectorPlacedRuntimeObject*()> selectedRuntimeObject;
@@ -29,6 +30,7 @@ struct SectorEditorPlacedObjectInspectorMeasureContext {
     engine::FontHandle smallFont;
     const engine::UIConfig& smallConfig;
     SectorEditorState& state;
+    SectorRuntimeObjectState& runtimeObjects;
     engine::EngineContext* engineContext = nullptr;
     const SectorEditorPlacedObjectInspectorCallbacks& callbacks;
     SectorEditorTextureCatalogService& textureCatalog;
@@ -46,6 +48,7 @@ struct SectorEditorPlacedObjectInspectorContext {
     engine::FontHandle smallFont;
     engine::UIScrollAreaResult scroll;
     SectorEditorState& state;
+    SectorRuntimeObjectState& runtimeObjects;
     SectorEditorUiState& uiState;
     engine::EngineContext* engineContext = nullptr;
     const SectorEditorPlacedObjectInspectorCallbacks& callbacks;

@@ -72,7 +72,7 @@ Task Type:
 | REF-082 | `[x]` | High | Editor architecture | Pass TextureCatalogService to remaining texture UI clients | Codex task | Medium | Completed; remaining UI missing-texture checks use catalog service |
 | REF-083 | `[x]` | High | Editor architecture | SectorEditor state ownership and remaining code map | Audit first | Low | Completed; report recommends TextureCatalogState split next |
 | REF-084 | `[x]` | High | Editor architecture | Service-owned editor state migration runner plan | Runner plan | Low | Planning and implementation complete; preview/document ownership deferred to REF-085/REF-086 |
-| REF-085 | `[x]` | High | Editor architecture | Write PreviewState ownership runner plan | Runner plan | High | Runner-plan written/planning complete only; implementation phases remain open in `docs/plans/ref085_preview_state_ownership_runner_plan.md` |
+| REF-085 | `[x]` | High | Editor architecture | PreviewState ownership runner plan and implementation | Runner plan | High | Planning and implementation complete; final audit refreshed the ownership map. Manual preview smoke still recommended. |
 | REF-086 | `[x]` | High | Editor architecture | Write DocumentState ownership runner plan | Runner plan | High | Runner-plan written/planning complete only; implementation phases remain open in `docs/plans/ref086_document_state_ownership_runner_plan.md` |
 | REF-059 | `[x]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Completed; recommends material-specific picker routing extraction before MaterialEditBridge |
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
@@ -1119,9 +1119,21 @@ Task Type:
 - Completion notes:
   - Runner-compatible implementation plan created at
     `docs/plans/ref085_preview_state_ownership_runner_plan.md`.
-  - Planning only: no PreviewState implementation phase has been marked
-    complete, and no preview/runtime/controller/collision/renderer ownership
-    move was implemented by this backlog update.
+  - Implementation completed on 2026-07-07 through the runner plan's seven
+    phases, including the final dependency audit/backlog refresh.
+  - Added `sources/sector_editor/preview/SectorEditorPreviewState.h` with
+    narrow overlay, selection, controller, collision, and runtime sub-states,
+    composed by `SectorEditor`.
+  - Moved preview-owned overlay flags, 3D surface hover/selection state,
+    preview controller/camera/effect state, collision world/result/current
+    sector state, and `SectorRuntimeObjectState runtimeObjects` out of
+    `SectorEditorState`.
+  - `SectorMeshRenderer preview` ownership stayed in `SectorEditor`; preview
+    renderer GPU resource lifetime and explicit enter/rebuild/leave behavior
+    were preserved.
+  - Preview overlay and UV panel dependencies were narrowed so preview modules
+    and preview actions no longer take broad `SectorEditorState&` /
+    `SectorEditorUiState&` or include `SectorEditor.h`.
   - The plan keeps REF-086 separate for `DocumentState` ownership and keeps
     document/source-of-truth, authoring graph, topology derivation,
     save/load/reset/import/path/dirty/status, and serialization/schema ownership
@@ -1135,6 +1147,15 @@ Task Type:
     `SectorMeshRenderer` ownership in `SectorEditor`, require the final audit
     refresh, and require child-pass splits if broad preview phases are too
     large for one run.
+  - Remaining debt after implementation: REF-086 `DocumentState` ownership;
+    runtime object editing state (`runtimeObjectDrag`), sprite picker/catalog
+    and billboard metadata repair state; preview settings modal/UI input state;
+    material picker routing and inspector dependencies that still cross
+    document/UI boundaries; optional narrow preview controller follow-up if it
+    becomes justified; and manual preview smoke.
+  - Topology render-cache invalidation behavior, lightmap source-hash behavior,
+    serialization/schema behavior, rendering, collision, sector lookup,
+    physics, and camera behavior were intended unchanged by REF-085.
 
 #### REF-086 `[x]` Write DocumentState ownership runner plan
 

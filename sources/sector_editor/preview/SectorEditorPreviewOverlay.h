@@ -3,9 +3,9 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
-#include "sector_editor/inspector/SectorEditorInspectorUiState.h"
-#include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/preview/SectorEditorPreviewState.h"
 #include "sector_editor/selection/SectorEditorManipulationState.h"
+#include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingState.h"
@@ -26,11 +26,17 @@ struct SectorEditorPreviewOverlayContext {
     engine::FontHandle font;
     engine::FontHandle smallFont;
 
-    SectorEditorState& state;
+    SectorTopologyMap& topologyMap;
+    SectorAuthoringGraph& authoringGraph;
+    const SectorAuthoringDerivationResult& authoringDerivation;
+    bool authoringDerivationCurrent = false;
+    bool topologyDocumentDirty = false;
+    RuntimeObjectDragState& runtimeObjectDrag;
+    SectorEditorPreviewState& previewState;
     SelectionState& selectionState;
     ManipulationState& manipulationState;
-    SectorEditorUiState& uiState;
-    InspectorIdUiState& inspectorIdUiState;
+    SectorEditorSelectionUiDependencies selectionUi;
+    engine::UIFloatInputState& objectProbeDebugDrawMaxDistanceInput;
     MaterialEditingUiState& materialUiState;
     LightEditingState& lightState;
     std::string& statusText;
@@ -49,19 +55,26 @@ struct SectorEditorPreviewOverlayResult {
 Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab activeTab);
 
 void DrawSectorEditorPreviewSurfaceHighlights(
-        SectorEditorState& state,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
+        RuntimeObjectDragState& runtimeObjectDrag,
+        SectorEditorPreviewSelectionState& previewSelectionState,
+        const SectorEditorPreviewControllerState& previewControllerState,
         SelectionState& selectionState,
         ManipulationState& manipulationState,
-        SectorEditorUiState& uiState,
-        InspectorIdUiState& inspectorIdUiState,
+        SectorEditorSelectionUiDependencies selectionUi,
         MaterialEditingUiState& materialUiState,
         const SectorMeshRenderer& preview);
 void DrawSectorEditorPreviewSpotLightOverlay(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorEditorPreviewControllerState& previewControllerState,
         const SelectionState& selectionState,
         const SectorMeshRenderer& preview);
 void DrawSectorEditorPreviewObjectProbeOverlay(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorEditorPreviewState& previewState,
         const SectorMeshRenderer& preview);
 
 SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(

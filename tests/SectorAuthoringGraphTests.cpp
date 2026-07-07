@@ -537,6 +537,7 @@ game::TopologySurfaceEditTarget SideDefMaterialTarget(const game::SectorTopology
 
 game::MaterialEditingUiState& TestMaterialEditingUiState();
 game::SelectionState& TestSelectionState();
+game::SectorEditorPreviewSelectionState& TestPreviewSelectionState();
 
 game::SectorEditorMaterialEditingService MakeMaterialEditingService(
         game::SectorEditorState& state,
@@ -546,6 +547,7 @@ game::SectorEditorMaterialEditingService MakeMaterialEditingService(
 {
     static game::MaterialEditingState materialState;
     game::SelectionState& selectionState = TestSelectionState();
+    game::SectorEditorPreviewSelectionState& previewSelectionState = TestPreviewSelectionState();
     game::MaterialEditingUiState& materialUiState = TestMaterialEditingUiState();
     (void)uiState;
     selectionState = game::SelectionState{};
@@ -554,6 +556,7 @@ game::SectorEditorMaterialEditingService MakeMaterialEditingService(
     return game::SectorEditorMaterialEditingService{
             game::SectorEditorMaterialEditingServiceContext{
                     state,
+                    previewSelectionState,
                     selectionState,
                     materialState,
                     materialUiState,
@@ -571,6 +574,12 @@ game::MaterialEditingUiState& TestMaterialEditingUiState()
 {
     static game::MaterialEditingUiState materialUiState;
     return materialUiState;
+}
+
+game::SectorEditorPreviewSelectionState& TestPreviewSelectionState()
+{
+    static game::SectorEditorPreviewSelectionState previewSelectionState;
+    return previewSelectionState;
 }
 
 game::SelectionState& TestSelectionState()
@@ -621,8 +630,8 @@ game::SectorEditorLightEditingService MakeLightEditingService(
                             selectionState.selectedRuntimeObjectId,
                             selectionState.selectedTopologySideKind,
                             selectionState.inspectedTopologyVertexId,
-                            state.selectedSurface3D,
-                            state.selectedTopologySurface3D,
+                            TestPreviewSelectionState().selectedSurface3D,
+                            TestPreviewSelectionState().selectedTopologySurface3D,
                             selectionState.selectedAuthoring,
                             selectionState.hoveredTopologyLightId,
                             selectionState.hoveredTopologyStaticSpotLightId,
@@ -3786,8 +3795,8 @@ void TestEditorMaterialEditingServiceFlatDecalFitWritesThroughFaceAnchor()
     game::TopologySurfaceEditTarget target;
     target.kind = game::TopologySurfaceEditTargetKind::SectorFloor;
     target.sectorId = 200;
-    state.selectedSurface3D.kind = game::SectorSurfaceKind::Floor;
-    state.selectedSurface3D.topologySectorId = 200;
+    TestPreviewSelectionState().selectedSurface3D.kind = game::SectorSurfaceKind::Floor;
+    TestPreviewSelectionState().selectedSurface3D.topologySectorId = 200;
 
     game::SectorEditorUiState uiState;
     std::string statusText;
@@ -5284,17 +5293,17 @@ void TestEditorAuthoringSelectedSurfaceClearsWhenMappingBecomesStaleBeforeEdit()
         return;
     }
 
-    state.selectedSurface3D.kind = game::SectorSurfaceKind::Floor;
-    state.selectedSurface3D.topologySectorId = 200;
-    state.selectedTopologySurface3D.kind = game::TopologySurfaceEditTargetKind::SectorFloor;
-    state.selectedTopologySurface3D.sectorId = 200;
+    TestPreviewSelectionState().selectedSurface3D.kind = game::SectorSurfaceKind::Floor;
+    TestPreviewSelectionState().selectedSurface3D.topologySectorId = 200;
+    TestPreviewSelectionState().selectedTopologySurface3D.kind = game::TopologySurfaceEditTargetKind::SectorFloor;
+    TestPreviewSelectionState().selectedTopologySurface3D.sectorId = 200;
     const float originalScaleU = sector->floorUv.scale.x;
 
     game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed after 3D selection");
 
     std::string status;
     const bool mappingCurrent =
-            game::ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(state, &status);
+            game::ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(state, TestPreviewSelectionState(), &status);
     if (mappingCurrent) {
         game::SectorTopologySector* mutableSector =
                 game::FindSectorTopologySector(state.topologyMap, 200);
@@ -5306,9 +5315,9 @@ void TestEditorAuthoringSelectedSurfaceClearsWhenMappingBecomesStaleBeforeEdit()
     const game::SectorTopologySector* afterSector =
             game::FindSectorTopologySector(state.topologyMap, 200);
     Check(!mappingCurrent, "already-selected 3D surface stale mapping blocks attempted edit");
-    Check(state.selectedSurface3D.kind == game::SectorSurfaceKind::None,
+    Check(TestPreviewSelectionState().selectedSurface3D.kind == game::SectorSurfaceKind::None,
           "already-selected 3D surface stale mapping clears selected surface");
-    Check(state.selectedTopologySurface3D.kind == game::TopologySurfaceEditTargetKind::None,
+    Check(TestPreviewSelectionState().selectedTopologySurface3D.kind == game::TopologySurfaceEditTargetKind::None,
           "already-selected 3D surface stale mapping clears topology edit target");
     Check(status.find("derived topology is not current") != std::string::npos,
           "already-selected 3D surface stale mapping reports unavailable status");
@@ -5333,8 +5342,8 @@ void TestEditorAuthoringFlatSurfaceFloorUvWritesThroughFaceAnchor()
     game::TopologySurfaceEditTarget target;
     target.kind = game::TopologySurfaceEditTargetKind::SectorFloor;
     target.sectorId = 200;
-    state.selectedSurface3D = surface;
-    state.selectedTopologySurface3D = target;
+    TestPreviewSelectionState().selectedSurface3D = surface;
+    TestPreviewSelectionState().selectedTopologySurface3D = target;
 
     game::SectorEditorUiState uiState;
     std::string statusText;
@@ -5383,8 +5392,8 @@ void TestEditorAuthoringFlatSurfaceCeilingUvWritesThroughFaceAnchor()
     game::TopologySurfaceEditTarget target;
     target.kind = game::TopologySurfaceEditTargetKind::SectorCeiling;
     target.sectorId = 200;
-    state.selectedSurface3D = surface;
-    state.selectedTopologySurface3D = target;
+    TestPreviewSelectionState().selectedSurface3D = surface;
+    TestPreviewSelectionState().selectedTopologySurface3D = target;
 
     game::SectorEditorUiState uiState;
     std::string statusText;
@@ -5429,8 +5438,8 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
     game::TopologySurfaceEditTarget target;
     target.kind = game::TopologySurfaceEditTargetKind::SectorFloor;
     target.sectorId = 200;
-    state.selectedSurface3D = surface;
-    state.selectedTopologySurface3D = target;
+    TestPreviewSelectionState().selectedSurface3D = surface;
+    TestPreviewSelectionState().selectedTopologySurface3D = target;
 
     game::SectorEditorUiState uiState;
     std::string statusText;
@@ -5479,8 +5488,8 @@ void TestEditorAuthoringFlatSurfaceStaleMappingBlocksMaterialEdits()
     game::TopologySurfaceEditTarget target;
     target.kind = game::TopologySurfaceEditTargetKind::SectorFloor;
     target.sectorId = 200;
-    state.selectedSurface3D = surface;
-    state.selectedTopologySurface3D = target;
+    TestPreviewSelectionState().selectedSurface3D = surface;
+    TestPreviewSelectionState().selectedTopologySurface3D = target;
 
     const game::SectorAuthoringFaceAnchor* beforeAnchor =
             game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
@@ -5512,8 +5521,8 @@ void TestEditorAuthoringFlatSurfaceStaleMappingBlocksMaterialEdits()
             game::FindSectorTopologySector(state.topologyMap, 200);
     Check(statusText.find("derived topology is not current") != std::string::npos,
           "stale service 3D flat material edit reports stale mapping");
-    Check(state.selectedSurface3D.kind == game::SectorSurfaceKind::None
-                  && state.selectedTopologySurface3D.kind == game::TopologySurfaceEditTargetKind::None,
+    Check(TestPreviewSelectionState().selectedSurface3D.kind == game::SectorSurfaceKind::None
+                  && TestPreviewSelectionState().selectedTopologySurface3D.kind == game::TopologySurfaceEditTargetKind::None,
           "stale 3D flat material edit clears selected 3D surface");
     Check(afterAnchor != nullptr && afterAnchor->floorUv.scale.x == originalAnchorScale,
           "stale 3D flat material edit does not mutate face anchor");

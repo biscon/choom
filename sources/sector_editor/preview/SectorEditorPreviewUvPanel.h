@@ -3,8 +3,9 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "sector_editor/SectorEditorModalTypes.h"
+#include "sector_editor/preview/SectorEditorPreviewState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
-#include "sector_editor/SectorEditorTypes.h"
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 
 #include <raylib.h>
@@ -26,9 +27,13 @@ struct SectorEditorPreviewUvPanelContext {
 
     Rectangle panelRect;
 
-    SectorEditorState& state;
+    SectorTopologyMap& topologyMap;
+    SectorAuthoringGraph& authoringGraph;
+    const SectorAuthoringDerivationResult& authoringDerivation;
+    bool authoringDerivationCurrent = false;
+    TexturePickerState& texturePicker;
+    SectorEditorPreviewSelectionState& previewSelectionState;
     SelectionState& selectionState;
-    SectorEditorUiState& uiState;
     MaterialEditingUiState& materialUiState;
     std::string& statusText;
 

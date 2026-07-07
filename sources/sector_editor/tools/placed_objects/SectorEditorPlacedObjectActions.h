@@ -14,8 +14,11 @@ struct EngineContext;
 
 namespace game {
 
+struct SectorRuntimeObjectState;
+
 struct SectorEditorPlacedObjectActionContext {
     SectorEditorState& state;
+    SectorRuntimeObjectState& runtimeObjects;
     SelectionState& selectionState;
     std::string& statusText;
     engine::EngineContext* engineContext = nullptr;

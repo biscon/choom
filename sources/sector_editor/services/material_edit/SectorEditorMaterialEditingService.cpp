@@ -18,23 +18,27 @@ bool IsFlatTopologySurfaceTarget(TopologySurfaceEditTarget target)
             || target.kind == TopologySurfaceEditTargetKind::SectorCeiling;
 }
 
-bool IsSelectedSurface3DFlatTarget(const SectorEditorState& state, TopologySurfaceEditTarget target)
+bool IsSelectedSurface3DFlatTarget(
+        const SectorEditorPreviewSelectionState& previewSelectionState,
+        TopologySurfaceEditTarget target)
 {
     if (target.kind == TopologySurfaceEditTargetKind::SectorFloor) {
-        return state.selectedSurface3D.kind == SectorSurfaceKind::Floor
-                && state.selectedSurface3D.topologySectorId == target.sectorId;
+        return previewSelectionState.selectedSurface3D.kind == SectorSurfaceKind::Floor
+                && previewSelectionState.selectedSurface3D.topologySectorId == target.sectorId;
     }
     if (target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-        return state.selectedSurface3D.kind == SectorSurfaceKind::Ceiling
-                && state.selectedSurface3D.topologySectorId == target.sectorId;
+        return previewSelectionState.selectedSurface3D.kind == SectorSurfaceKind::Ceiling
+                && previewSelectionState.selectedSurface3D.topologySectorId == target.sectorId;
     }
     return false;
 }
 
-SectorSurfaceRef FlatSurfaceForTarget(const SectorEditorState& state, TopologySurfaceEditTarget target)
+SectorSurfaceRef FlatSurfaceForTarget(
+        const SectorEditorPreviewSelectionState& previewSelectionState,
+        TopologySurfaceEditTarget target)
 {
-    SectorSurfaceRef surface = state.selectedSurface3D;
-    if (!IsSelectedSurface3DFlatTarget(state, target) && IsFlatTopologySurfaceTarget(target)) {
+    SectorSurfaceRef surface = previewSelectionState.selectedSurface3D;
+    if (!IsSelectedSurface3DFlatTarget(previewSelectionState, target) && IsFlatTopologySurfaceTarget(target)) {
         surface = SectorSurfaceRef{};
         surface.kind = target.kind == TopologySurfaceEditTargetKind::SectorFloor
                 ? SectorSurfaceKind::Floor
@@ -279,14 +283,14 @@ bool SectorEditorMaterialEditingService::ApplyAuthoringFaceAnchorMaterialEdit(
     std::string unavailableStatus;
     if (!ResolveSectorEditorAuthoringSurfaceTarget(
                 context_.state,
-                FlatSurfaceForTarget(context_.state, target),
+                FlatSurfaceForTarget(context_.previewSelectionState, target),
                 authoringTarget,
                 &unavailableStatus)
             || authoringTarget.kind != SectorEditorAuthoringSurfaceTargetKind::FaceAnchor) {
-        if (context_.state.selectedSurface3D.kind != SectorSurfaceKind::None
-                && context_.state.selectedSurface3D.topologySectorId == target.sectorId) {
-            context_.state.selectedSurface3D = SectorSurfaceRef{};
-            context_.state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+        if (context_.previewSelectionState.selectedSurface3D.kind != SectorSurfaceKind::None
+                && context_.previewSelectionState.selectedSurface3D.topologySectorId == target.sectorId) {
+            context_.previewSelectionState.selectedSurface3D = SectorSurfaceRef{};
+            context_.previewSelectionState.selectedTopologySurface3D = TopologySurfaceEditTarget{};
         }
         context_.statusText = unavailableStatus.empty()
                 ? "3D flat surface edit unavailable: selected surface has no face anchor mapping"

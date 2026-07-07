@@ -1,28 +1,44 @@
 #pragma once
 
-#include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/preview/SectorEditorPreviewState.h"
 #include "sector_demo/SectorViewPose.h"
+
+#include <vector>
 
 namespace game {
 
 class SectorMeshRenderer;
+struct SectorTopologyMap;
 
 SectorViewPose ActiveSectorEditorPreviewPose(
-        const SectorEditorState& state,
+        const SectorEditorPreviewControllerState& controllerState,
         const SectorMeshRenderer& preview);
 void ApplySectorEditorGameplayPoseToPreview(
-        const SectorEditorState& state,
+        const SectorEditorPreviewControllerState& controllerState,
         SectorMeshRenderer& preview);
 bool ToggleSectorEditorPreviewControlMode(
-        SectorEditorState& state,
+        bool preview3DActive,
+        SectorEditorPreviewCollisionState& collisionState,
+        SectorEditorPreviewControllerState& controllerState,
         SectorMeshRenderer& preview);
-bool RebuildSectorEditorCollisionWorld(SectorEditorState& state);
+bool RebuildSectorEditorCollisionWorld(
+        const SectorTopologyMap& topologyMap,
+        SectorEditorPreviewCollisionState& collisionState,
+        SectorEditorPreviewControllerState& controllerState);
 SectorFpsVerticalContext BuildSectorEditorGameplayVerticalContext(
-        const SectorEditorState& state);
-void RefreshSectorEditorGameplaySectorAndVerticalContext(SectorEditorState& state);
-void InitializeSectorEditorGameplayVerticalState(SectorEditorState& state);
+        const SectorEditorPreviewCollisionState& collisionState,
+        const SectorEditorPreviewControllerState& controllerState);
+void RefreshSectorEditorGameplaySectorAndVerticalContext(
+        SectorEditorPreviewCollisionState& collisionState,
+        SectorEditorPreviewControllerState& controllerState);
+void InitializeSectorEditorGameplayVerticalState(
+        SectorEditorPreviewCollisionState& collisionState,
+        SectorEditorPreviewControllerState& controllerState);
 void UpdateSectorEditorGameplayPreview(
-        SectorEditorState& state,
+        const std::vector<SectorDynamicDoorCollider>& dynamicDoorColliders,
+        SectorEditorPreviewCollisionState& collisionState,
+        SectorEditorPreviewControllerState& controllerState,
+        bool previewSettingsModalOpen,
         const SectorFpsControllerInput& controllerInput,
         float previousVisualEyeY,
         float dt);

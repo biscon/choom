@@ -159,11 +159,13 @@ SectorTopologyMap CreateEmptySectorTopologyDocument()
     return map;
 }
 
-void ResetEditorTopologyDocumentState(SectorEditorState& state)
+void ResetEditorTopologyDocumentState(
+        SectorEditorState& state,
+        SectorEditorPreviewControllerState& previewControllerState)
 {
     state.topologyMap = CreateEmptySectorTopologyDocument();
     InitializeSectorEditorAuthoringStateFromTopology(state, state.topologyMap);
-    state.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
+    previewControllerState.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             state.topologyMap.previewSettings);
     state.topologyDocumentInitialized = true;
     state.topologyDocumentDirty = false;

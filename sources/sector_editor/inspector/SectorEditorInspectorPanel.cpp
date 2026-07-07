@@ -429,7 +429,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 if (selectedObject == nullptr || engineContext == nullptr) {
                     return false;
                 }
-                for (const SectorPlacedRuntimeObjectEntity& entry : state.runtimeObjects.placedObjectEntities) {
+                for (const SectorPlacedRuntimeObjectEntity& entry : placedObjectActions.runtimeObjects.placedObjectEntities) {
                     if (entry.placedObjectId != selectedObject->id
                             || !engineContext->world.IsAlive(entry.entity)
                             || !engineContext->world.Has<SectorDoorMotion>(entry.entity)) {
@@ -447,7 +447,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 if (selectedObject == nullptr || engineContext == nullptr) {
                     return;
                 }
-                for (const SectorPlacedRuntimeObjectEntity& entry : state.runtimeObjects.placedObjectEntities) {
+                for (const SectorPlacedRuntimeObjectEntity& entry : placedObjectActions.runtimeObjects.placedObjectEntities) {
                     if (entry.placedObjectId != selectedObject->id
                             || !engineContext->world.IsAlive(entry.entity)
                             || !engineContext->world.Has<SectorDoorMotion>(entry.entity)) {
@@ -472,6 +472,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     smallFont,
                     smallConfig,
                     state,
+                    placedObjectActions.runtimeObjects,
                     engineContext,
                     runtimeObjectInspectorCallbacks,
                     textureCatalog,
@@ -612,6 +613,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 smallFont,
                 scroll,
                 state,
+                placedObjectActions.runtimeObjects,
                 uiState,
                 engineContext,
                 runtimeObjectInspectorCallbacks,

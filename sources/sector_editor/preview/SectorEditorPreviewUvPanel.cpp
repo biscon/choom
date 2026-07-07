@@ -15,7 +15,9 @@
 namespace game {
 namespace {
 
-void ResetPreviewSurfaceUi(SectorEditorState& state, MaterialEditingUiState& materialUiState)
+void ResetPreviewSurfaceUi(
+        SectorEditorPreviewSelectionState& previewSelectionState,
+        MaterialEditingUiState& materialUiState)
 {
     materialUiState.surface3DUvScaleUInput = engine::UIFloatInputState{};
     materialUiState.surface3DUvScaleVInput = engine::UIFloatInputState{};
@@ -23,7 +25,8 @@ void ResetPreviewSurfaceUi(SectorEditorState& state, MaterialEditingUiState& mat
     materialUiState.surface3DUvOffsetVInput = engine::UIFloatInputState{};
     materialUiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
     materialUiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
-    state.selectedTopologySurface3D = SectorEditorTopologyEditTargetForSurface(state.selectedSurface3D);
+    previewSelectionState.selectedTopologySurface3D =
+            SectorEditorTopologyEditTargetForSurface(previewSelectionState.selectedSurface3D);
 }
 
 void OpenPreviewSurfaceTexturePicker(
@@ -31,18 +34,17 @@ void OpenPreviewSurfaceTexturePicker(
         TopologySurfaceEditTarget target,
         TopologyMaterialLayer layer)
 {
-    SectorEditorState& state = context.state;
     SectorEditorMaterialEditingService& materialEditing = context.materialEditing;
     bool opened = false;
     if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
             || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
         const TopologySectorTextureField field = TopologyEditTargetSectorTextureField(target.kind);
         opened = materialEditing.OpenMaterialPickerForDerivedSector(target.sectorId, field, layer);
-        if (opened && state.texturePicker.open && HasAuthoringGraphData(state)) {
-            state.texturePicker.authoringSurface3DFlatTarget = true;
+        if (opened && context.texturePicker.open && HasAuthoringGraphData(context.authoringGraph)) {
+            context.texturePicker.authoringSurface3DFlatTarget = true;
         }
         if (!opened) {
-            context.statusText = HasAuthoringGraphData(state)
+            context.statusText = HasAuthoringGraphData(context.authoringGraph)
                     ? "No derived sector authoring material target"
                     : "Cannot edit material: authoring data is required.";
         }
@@ -50,13 +52,13 @@ void OpenPreviewSurfaceTexturePicker(
         const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
         opened = materialEditing.OpenMaterialPickerForDerivedSideDef(target.sideDefId, wallPart, layer);
         if (!opened) {
-            context.statusText = HasAuthoringGraphData(state)
+            context.statusText = HasAuthoringGraphData(context.authoringGraph)
                     ? "No derived sidedef authoring material target"
                     : "Cannot edit material: authoring data is required.";
         }
     }
-    if (opened && state.texturePicker.open) {
-        state.texturePicker.rebuildPreviewOnApply = true;
+    if (opened && context.texturePicker.open) {
+        context.texturePicker.rebuildPreviewOnApply = true;
     }
 }
 
@@ -74,18 +76,17 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
     engine::Input& input = context.input;
     engine::AssetManager& assets = context.assets;
     const engine::FontHandle font = context.font;
-    SectorEditorState& state = context.state;
+    SectorEditorPreviewSelectionState& previewSelectionState = context.previewSelectionState;
     SelectionState& selectionState = context.selectionState;
-    SectorEditorUiState& uiState = context.uiState;
     MaterialEditingUiState& materialUiState = context.materialUiState;
     SectorEditorMaterialEditingService& materialEditing = context.materialEditing;
     SectorEditorTextureCatalogService& textureCatalog = context.textureCatalog;
 
-    const TopologySurfaceEditTarget target = state.selectedTopologySurface3D;
+    const TopologySurfaceEditTarget target = previewSelectionState.selectedTopologySurface3D;
     const bool targetIsMiddle = IsMiddleTopologyEditTarget(target.kind);
     if (targetIsMiddle && selectionState.activeTopologyMaterialLayer != TopologyMaterialLayer::Base) {
         selectionState.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
-        ResetPreviewSurfaceUi(state, materialUiState);
+        ResetPreviewSurfaceUi(previewSelectionState, materialUiState);
     }
     const TopologyMaterialLayer layer = EffectiveTopologyMaterialLayer(
             target.kind,
@@ -99,21 +100,21 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
 
     if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
             || target.kind == TopologySurfaceEditTargetKind::SectorCeiling) {
-        const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, target.sectorId);
+        const SectorTopologySector* sector = FindSectorTopologySector(context.topologyMap, target.sectorId);
         if (sector == nullptr) {
-            state.selectedSurface3D = SectorSurfaceRef{};
-            state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+            previewSelectionState.selectedSurface3D = SectorSurfaceRef{};
+            previewSelectionState.selectedTopologySurface3D = TopologySurfaceEditTarget{};
             return false;
         }
     } else {
-        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, target.sideDefId);
+        const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(context.topologyMap, target.sideDefId);
         if (sideDef == nullptr) {
-            state.selectedSurface3D = SectorSurfaceRef{};
-            state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+            previewSelectionState.selectedSurface3D = SectorSurfaceRef{};
+            previewSelectionState.selectedTopologySurface3D = TopologySurfaceEditTarget{};
             return false;
         }
         const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
-                state.topologyMap,
+                context.topologyMap,
                 sideDef->lineDefId);
         if (lineDef != nullptr
                 && lineDef->frontSideDefId != -1
@@ -123,7 +124,13 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
         }
     }
     const std::string targetLabel =
-            BuildSectorEditorSurface3DTargetLabel(state, state.selectedSurface3D, target);
+            BuildSectorEditorSurface3DTargetLabel(
+                    context.topologyMap,
+                    context.authoringGraph,
+                    context.authoringDerivation,
+                    context.authoringDerivationCurrent,
+                    previewSelectionState.selectedSurface3D,
+                    target);
 
     const float margin = 18.0f;
     const float top = panel.y + margin;
@@ -165,7 +172,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
                     "Base",
                     layer == TopologyMaterialLayer::Base)) {
             selectionState.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
-            ResetPreviewSurfaceUi(state, materialUiState);
+            ResetPreviewSurfaceUi(previewSelectionState, materialUiState);
         }
         if (engine::ToolButton(
                     ui,
@@ -178,7 +185,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
                     "Decal",
                     layer == TopologyMaterialLayer::Decal)) {
             selectionState.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
-            ResetPreviewSurfaceUi(state, materialUiState);
+            ResetPreviewSurfaceUi(previewSelectionState, materialUiState);
         }
     }
 
@@ -239,7 +246,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
                     layer,
                     component,
                     result.value,
-                    state.selectedSurface3D.kind,
+                    previewSelectionState.selectedSurface3D.kind,
                     assets);
         }
     };
@@ -297,7 +304,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
                     Rectangle{actionX, actionTop, smallActionW, actionH},
                     font,
                     "Reset UV")) {
-            materialEditing.ResetSurfaceUv(target, layer, state.selectedSurface3D.kind, assets);
+            materialEditing.ResetSurfaceUv(target, layer, previewSelectionState.selectedSurface3D.kind, assets);
         }
         actionX += smallActionW + gap;
     }

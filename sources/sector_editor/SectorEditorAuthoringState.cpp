@@ -1945,10 +1945,38 @@ std::string BuildSectorEditorSurface3DTargetLabel(
         SectorSurfaceRef surface,
         TopologySurfaceEditTarget target)
 {
+    const bool authoringDerivationCurrent =
+            state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
+            && !state.authoringDerivedTopologyStale
+            && state.authoringDerivation.success;
+    return BuildSectorEditorSurface3DTargetLabel(
+            state.topologyMap,
+            state.authoringGraph,
+            state.authoringDerivation,
+            authoringDerivationCurrent,
+            surface,
+            target);
+}
+
+std::string BuildSectorEditorSurface3DTargetLabel(
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
+        SectorSurfaceRef surface,
+        TopologySurfaceEditTarget target)
+{
     SectorEditorAuthoringSurfaceTarget authoringTarget;
     std::string status;
-    const bool mapped = HasAuthoringGraphData(state)
-            && ResolveSectorEditorAuthoringSurfaceTarget(state, surface, authoringTarget, &status);
+    const bool mapped = HasAuthoringGraphData(authoringGraph)
+            && ResolveSectorEditorAuthoringSurfaceTarget(
+                    topologyMap,
+                    authoringGraph,
+                    authoringDerivation,
+                    authoringDerivationCurrent,
+                    surface,
+                    authoringTarget,
+                    &status);
 
     std::ostringstream label;
     if (target.kind == TopologySurfaceEditTargetKind::SectorFloor
@@ -2108,13 +2136,14 @@ SectorAuthoringSelectionTarget MakeSectorEditorAuthoringSelectionTargetForSurfac
 
 bool ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
         SectorEditorState& state,
+        SectorEditorPreviewSelectionState& previewSelectionState,
         std::string* outStatus)
 {
     if (outStatus != nullptr) {
         outStatus->clear();
     }
 
-    if (!HasAuthoringGraphData(state) || state.selectedSurface3D.kind == SectorSurfaceKind::None) {
+    if (!HasAuthoringGraphData(state) || previewSelectionState.selectedSurface3D.kind == SectorSurfaceKind::None) {
         return true;
     }
 
@@ -2122,14 +2151,14 @@ bool ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
     std::string status;
     if (ResolveSectorEditorAuthoringSurfaceTarget(
                 state,
-                state.selectedSurface3D,
+                previewSelectionState.selectedSurface3D,
                 authoringTarget,
                 &status)) {
         return true;
     }
 
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    previewSelectionState.selectedSurface3D = SectorSurfaceRef{};
+    previewSelectionState.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     if (outStatus != nullptr) {
         *outStatus = status;
     }

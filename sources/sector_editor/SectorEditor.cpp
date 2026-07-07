@@ -119,6 +119,7 @@ SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
 
 SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
         SectorEditorState& state,
+        SectorEditorPreviewSelectionState& previewSelectionState,
         SelectionState& selectionState,
         ManipulationState& manipulationState,
         SectorEditorUiState& uiState,
@@ -139,8 +140,8 @@ SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
             state.authoringDerivation,
             authoringDerivationCurrent,
             selectionState,
-            state.selectedSurface3D,
-            state.selectedTopologySurface3D,
+            previewSelectionState.selectedSurface3D,
+            previewSelectionState.selectedTopologySurface3D,
             manipulationState,
             state.runtimeObjectDrag,
             BuildSelectionUiDependencies(uiState, inspectorIdUiState),
@@ -270,9 +271,9 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     engine::AssetManager& assets = context.assets;
     lightmapBake.Shutdown();
     if (initialized
-            || state.runtimeObjects.worldReserved
-            || !engine::IsNull(state.runtimeObjects.runtimeObjectAssetScope)) {
-        ClearSectorRuntimeObjects(context.world, assets, state.runtimeObjects);
+            || previewState.runtime.runtimeObjects.worldReserved
+            || !engine::IsNull(previewState.runtime.runtimeObjects.runtimeObjectAssetScope)) {
+        ClearSectorRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects);
     }
     preview.ShutdownRendererResources(assets);
     if (!engine::IsNull(textureCatalogState.editorTextureScope)) {
@@ -309,12 +310,12 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
     }
 
     if (state.mode == SectorEditorMode::Preview3D) {
-        const Vector3 playerPosition = state.freeflyController.pose.position;
-        UpdateSectorRuntimeObjects(context.world, assets, state.runtimeObjects, state.topologyMap, dt, &playerPosition);
-        state.runtimeObjects.dynamicDoorColliders.clear();
-        CollectSectorDoorDynamicColliders(context.world, state.runtimeObjects.dynamicDoorColliders);
-        state.runtimeObjects.dynamicPortalBlockers.clear();
-        CollectSectorDoorDynamicPortalBlockers(context.world, state.runtimeObjects.dynamicPortalBlockers);
+        const Vector3 playerPosition = previewState.controller.freeflyController.pose.position;
+        UpdateSectorRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, state.topologyMap, dt, &playerPosition);
+        previewState.runtime.runtimeObjects.dynamicDoorColliders.clear();
+        CollectSectorDoorDynamicColliders(context.world, previewState.runtime.runtimeObjects.dynamicDoorColliders);
+        previewState.runtime.runtimeObjects.dynamicPortalBlockers.clear();
+        CollectSectorDoorDynamicPortalBlockers(context.world, previewState.runtime.runtimeObjects.dynamicPortalBlockers);
         preview.AdvanceRuntime(dt);
         const bool hasBlockingModal = state.texturePicker.open
                 || state.spritePicker.open
@@ -322,8 +323,8 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         if (hasBlockingModal) {
             return;
         }
-        const bool canInteractWithDoors = state.previewControlMode == SectorPreviewControlMode::Gameplay
-                && state.freeflyController.mouseLookEnabled
+        const bool canInteractWithDoors = previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
+                && previewState.controller.freeflyController.mouseLookEnabled
                 && !uiState.keyboardCaptured;
         if (canInteractWithDoors) {
             input.ForEachEvent(
@@ -335,8 +336,8 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                         }
                         if (ToggleTargetedSectorDoorInteractionSystem(
                                     context.world,
-                                    state.freeflyController.pose.position,
-                                    PreviewForwardFromPose(state.freeflyController.pose))) {
+                                    previewState.controller.freeflyController.pose.position,
+                                    PreviewForwardFromPose(previewState.controller.freeflyController.pose))) {
                             engine::ConsumeEvent(event);
                         }
                     });
@@ -397,7 +398,7 @@ void SectorEditor::RenderUI(
             engine::EndUI(ui, config, input, assets);
             return;
         }
-        if (state.previewUiHidden) {
+        if (previewState.overlay.previewUiHidden) {
             ui.hotId = 0;
             ui.activeId = 0;
             ui.focusedId = 0;
@@ -405,7 +406,7 @@ void SectorEditor::RenderUI(
         } else {
             DrawPreviewOverlay(ui, config, input, assets, font, smallFont);
         }
-        if (!state.previewUiHidden
+        if (!previewState.overlay.previewUiHidden
                 && !state.texturePicker.open
                 && !state.spritePicker.open
                 && !state.decalTintModal.open
@@ -1501,8 +1502,8 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             true,
             [this, &assets, &controlModeToggled](engine::InputEvent& event) {
                 if (event.key.key == KEY_F1) {
-                    state.useBakedAmbientOcclusion = !state.useBakedAmbientOcclusion;
-                    statusText = state.useBakedAmbientOcclusion
+                    previewState.overlay.useBakedAmbientOcclusion = !previewState.overlay.useBakedAmbientOcclusion;
+                    statusText = previewState.overlay.useBakedAmbientOcclusion
                             ? "Baked AO enabled"
                             : "Baked AO disabled";
                     engine::ConsumeEvent(event);
@@ -1510,11 +1511,11 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_F2) {
-                    state.previewUiHidden = !state.previewUiHidden;
-                    if (state.previewUiHidden) {
-                        state.hoveredSurface3D = SectorSurfaceHit{};
+                    previewState.overlay.previewUiHidden = !previewState.overlay.previewUiHidden;
+                    if (previewState.overlay.previewUiHidden) {
+                        previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
                     }
-                    statusText = state.previewUiHidden
+                    statusText = previewState.overlay.previewUiHidden
                             ? "3D UI hidden"
                             : "3D UI shown";
                     engine::ConsumeEvent(event);
@@ -1556,14 +1557,14 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
     }
 
     if (state.mode == SectorEditorMode::Preview3D) {
-        if (state.previewControlMode == SectorPreviewControlMode::FreeFly) {
-            UpdateSectorFreeflyController(state.freeflyController, input, dt);
-            preview.ApplyRendererPose(state.freeflyController.pose);
+        if (previewState.controller.previewControlMode == SectorPreviewControlMode::FreeFly) {
+            UpdateSectorFreeflyController(previewState.controller.freeflyController, input, dt);
+            preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
             preview.UpdateVisibilityDebug(
                     0,
                     0.0f,
                     false,
-                    &state.runtimeObjects.dynamicPortalBlockers,
+                    &previewState.runtime.runtimeObjects.dynamicPortalBlockers,
                     &engineContext->world);
         } else {
             const float previousVisualEyeY = preview.RendererPose().position.y;
@@ -1576,8 +1577,8 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                         }
 
                         SetSectorFreeflyMouseLookEnabled(
-                                state.freeflyController,
-                                !state.freeflyController.mouseLookEnabled);
+                                previewState.controller.freeflyController,
+                                !previewState.controller.freeflyController.mouseLookEnabled);
                         engine::ConsumeEvent(event);
                     }
             );
@@ -1588,11 +1589,11 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             controllerInput.strafeLeft = input.IsKeyDown(KEY_A);
             controllerInput.strafeRight = input.IsKeyDown(KEY_D);
             controllerInput.run = input.IsKeyDown(KEY_LEFT_SHIFT) || input.IsKeyDown(KEY_RIGHT_SHIFT);
-            controllerInput.mouseLookEnabled = state.freeflyController.mouseLookEnabled;
+            controllerInput.mouseLookEnabled = previewState.controller.freeflyController.mouseLookEnabled;
             controllerInput.mouseDelta = input.MouseDelta();
             const bool canConsumeGameplayJump =
                     state.mode == SectorEditorMode::Preview3D
-                    && state.previewControlMode == SectorPreviewControlMode::Gameplay
+                    && previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
                     && !uiState.keyboardCaptured
                     && !state.texturePicker.open
                     && !state.decalTintModal.open
@@ -1610,17 +1611,24 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                         }
                 );
             }
-            UpdateSectorEditorGameplayPreview(state, controllerInput, previousVisualEyeY, dt);
+            UpdateSectorEditorGameplayPreview(
+                    previewState.runtime.runtimeObjects.dynamicDoorColliders,
+                    previewState.collision,
+                    previewState.controller,
+                    state.previewSettingsModal.open,
+                    controllerInput,
+                    previousVisualEyeY,
+                    dt);
             ApplyGameplayPoseToPreview();
             const SectorFpsControllerConfig normalizedVisibilityConfig =
-                    NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
+                    NormalizeSectorFpsControllerConfig(previewState.controller.fpsControllerConfig);
             preview.UpdateVisibilityDebug(
-                    state.fpsControllerState.currentSectorId,
+                    previewState.controller.fpsControllerState.currentSectorId,
                     ClampRuntimeVisibilitySeedRadiusWorld(normalizedVisibilityConfig.playerRadius),
                     true,
-                    &state.runtimeObjects.dynamicPortalBlockers,
+                    &previewState.runtime.runtimeObjects.dynamicPortalBlockers,
                     &engineContext->world);
-            state.freeflyController.pose = preview.RendererPose();
+            previewState.controller.freeflyController.pose = preview.RendererPose();
         }
         UpdatePreview3DSelection(input);
     }
@@ -1630,21 +1638,21 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
 {
     if (!initialized
             || !preview.IsRendererReady()
-            || state.freeflyController.mouseLookEnabled
-            || state.previewUiHidden
+            || previewState.controller.freeflyController.mouseLookEnabled
+            || previewState.overlay.previewUiHidden
             || state.texturePicker.open
             || lightEditingState.spotLightPilot.active) {
-        state.hoveredSurface3D = SectorSurfaceHit{};
+        previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
         return;
     }
 
     const Rectangle viewport{0.0f, 0.0f, EditorWidth, EditorHeight};
     const Vector2 mouse = input.MousePosition();
-    const bool overPanel = IsValidTopologySurfaceEditTarget(state.selectedTopologySurface3D)
+    const bool overPanel = IsValidTopologySurfaceEditTarget(previewState.selection.selectedTopologySurface3D)
             && Contains(BuildPreviewUvPanelRect(), mouse);
     const bool overPreviewOverlay = IsPreviewOverlayMouseInteractive()
             && Contains(BuildPreviewOverlayInteractionRect(), mouse);
-    state.hoveredSurface3D = overPanel
+    previewState.selection.hoveredSurface3D = overPanel
             || overPreviewOverlay
             ? SectorSurfaceHit{}
             : PickSectorSurface3D(mouse, viewport);
@@ -1663,9 +1671,9 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
                 if (overPreviewOverlay) {
                     return;
                 }
-                if (state.hoveredSurface3D.hit) {
-                    SelectSurface3D(state.hoveredSurface3D.surface);
-                    statusText = TextFormat("Selected 3D %s", SurfaceKindName(state.hoveredSurface3D.surface.kind));
+                if (previewState.selection.hoveredSurface3D.hit) {
+                    SelectSurface3D(previewState.selection.hoveredSurface3D.surface);
+                    statusText = TextFormat("Selected 3D %s", SurfaceKindName(previewState.selection.hoveredSurface3D.surface.kind));
                     engine::ConsumeEvent(event);
                 }
             }
@@ -2001,6 +2009,7 @@ SectorEditorSelectionServiceContext SectorEditor::BuildSelectionServiceContext()
 {
     return BuildSelectionServiceContextFromState(
             state,
+            previewState.selection,
             selectionState,
             manipulationState,
             uiState,
@@ -2024,6 +2033,7 @@ const SectorTopologySector* SectorEditor::SelectedTopologySector() const
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
             const_cast<SectorEditorUiState&>(uiState),
@@ -2042,6 +2052,7 @@ const SectorTopologyVertex* SectorEditor::SelectedTopologyVertex() const
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
             const_cast<SectorEditorUiState&>(uiState),
@@ -2060,6 +2071,7 @@ const SectorTopologySideDef* SectorEditor::SelectedTopologySideDef() const
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
             const_cast<SectorEditorUiState&>(uiState),
@@ -2078,6 +2090,7 @@ const SectorTopologyLineDef* SectorEditor::SelectedTopologyLineDef() const
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
             const_cast<SectorEditorUiState&>(uiState),
@@ -2096,6 +2109,7 @@ const SectorTopologyStaticPointLight* SectorEditor::SelectedTopologyLight() cons
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
             const_cast<SectorEditorUiState&>(uiState),
@@ -2114,6 +2128,7 @@ const SectorTopologyStaticSpotLight* SectorEditor::SelectedTopologyStaticSpotLig
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
             const_cast<SectorEditorUiState&>(uiState),
@@ -2132,6 +2147,7 @@ const SectorTopologyDynamicPointLight* SectorEditor::SelectedTopologyDynamicLigh
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
             const_cast<SectorEditorUiState&>(uiState),
@@ -2150,6 +2166,7 @@ const SectorTopologyDynamicSpotLight* SectorEditor::SelectedTopologyDynamicSpotL
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
             const_cast<SectorEditorUiState&>(uiState),
@@ -2168,6 +2185,7 @@ const SectorPlacedRuntimeObject* SectorEditor::SelectedRuntimeObject() const
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
             const_cast<SectorEditorUiState&>(uiState),
@@ -2224,9 +2242,9 @@ void SectorEditor::ClearTransientTopologyEditStateAfterGeometryChange()
 {
     ClearStaleTopologySelection();
     state.topologyRenderWarning.clear();
-    state.hoveredSurface3D = SectorSurfaceHit{};
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
+    previewState.selection.selectedSurface3D = SectorSurfaceRef{};
+    previewState.selection.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
 }
 
@@ -2323,13 +2341,13 @@ bool SectorEditor::OpenDeleteSelectedLightConfirmation()
                 const SectorEditorLightMutationResult result = lightEditing.DeleteSelectedLightConfirmed();
                 if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
                     ResetSectorFreeflyController(
-                            state.freeflyController,
-                            state.spotLightPilotPreviewRestore.originalPreviewPose);
+                            previewState.controller.freeflyController,
+                            previewState.controller.spotLightPilotPreviewRestore.originalPreviewPose);
                     SetSectorFreeflyMouseLookEnabled(
-                            state.freeflyController,
-                            state.spotLightPilotPreviewRestore.originalMouseLookEnabled);
-                    state.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
-                    preview.ApplyRendererPose(state.freeflyController.pose);
+                            previewState.controller.freeflyController,
+                            previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled);
+                    previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
+                    preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
                 }
                 if (result.dynamicLightRendererRefreshNeeded) {
                     preview.RefreshDynamicLightSources(state.topologyMap);
@@ -2367,6 +2385,7 @@ SectorEditorPlacedObjectActionContext SectorEditor::BuildRuntimeObjectActionCont
 {
     return SectorEditorPlacedObjectActionContext{
             state,
+            previewState.runtime.runtimeObjects,
             selectionState,
             statusText,
             engineContext,
@@ -2654,9 +2673,9 @@ void SectorEditor::RenderPreview3DScene(engine::EngineContext& context)
 {
     preview.DrawScene(
             context.assets,
-            state.useBakedAmbientOcclusion,
+            previewState.overlay.useBakedAmbientOcclusion,
             &context.world,
-            SectorRuntimeDoorLightingContext{&state.runtimeObjects.objectLightProbes, &state.topologyMap});
+            SectorRuntimeDoorLightingContext{&previewState.runtime.runtimeObjects.objectLightProbes, &state.topologyMap});
 }
 
 void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
@@ -2669,7 +2688,7 @@ void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTextu
 
 void SectorEditor::RenderPreview3DOverlays()
 {
-    if (!state.previewUiHidden) {
+    if (!previewState.overlay.previewUiHidden) {
         DrawPreviewSurfaceHighlights();
         DrawPreviewSpotLightOverlay();
         DrawPreviewObjectProbeOverlay();
@@ -2713,38 +2732,47 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
 void SectorEditor::DrawPreviewSurfaceHighlights() const
 {
     DrawSectorEditorPreviewSurfaceHighlights(
-            const_cast<SectorEditorState&>(state),
+            const_cast<SectorTopologyMap&>(state.topologyMap),
+            const_cast<SectorAuthoringGraph&>(state.authoringGraph),
+            state.authoringDerivation,
+            state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
+                    && !state.authoringDerivedTopologyStale
+                    && state.authoringDerivation.success,
+            const_cast<RuntimeObjectDragState&>(state.runtimeObjectDrag),
+            const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
+            previewState.controller,
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
-            const_cast<SectorEditorUiState&>(uiState),
-            const_cast<InspectorIdUiState&>(inspectorIdUiState),
+            BuildSelectionUiDependencies(
+                    const_cast<SectorEditorUiState&>(uiState),
+                    const_cast<InspectorIdUiState&>(inspectorIdUiState)),
             const_cast<MaterialEditingUiState&>(materialEditingUiState),
             preview);
 }
 
 void SectorEditor::DrawPreviewSpotLightOverlay() const
 {
-    DrawSectorEditorPreviewSpotLightOverlay(state, selectionState, preview);
+    DrawSectorEditorPreviewSpotLightOverlay(state.topologyMap, previewState.controller, selectionState, preview);
 }
 
 void SectorEditor::DrawPreviewObjectProbeOverlay() const
 {
-    DrawSectorEditorPreviewObjectProbeOverlay(state, preview);
+    DrawSectorEditorPreviewObjectProbeOverlay(state.topologyMap, previewState, preview);
 }
 
 void SectorEditor::RefreshPreviewObjectProbeDebugData()
 {
-    RefreshSectorRuntimeObjectMapData(state.runtimeObjects, state.topologyMap);
+    RefreshSectorRuntimeObjectMapData(previewState.runtime.runtimeObjects, state.topologyMap);
 }
 
 bool SectorEditor::IsPreviewOverlayMouseInteractive() const
 {
-    return !state.freeflyController.mouseLookEnabled;
+    return !previewState.controller.freeflyController.mouseLookEnabled;
 }
 
 Rectangle SectorEditor::BuildPreviewOverlayInteractionRect() const
 {
-    return BuildSectorEditorPreviewOverlayInteractionRect(state.activePreviewDebugOverlayTab);
+    return BuildSectorEditorPreviewOverlayInteractionRect(previewState.overlay.activePreviewDebugOverlayTab);
 }
 
 void SectorEditor::DrawPreviewOverlay(
@@ -2762,11 +2790,19 @@ void SectorEditor::DrawPreviewOverlay(
             assets,
             font,
             smallFont,
-            state,
+            state.topologyMap,
+            state.authoringGraph,
+            state.authoringDerivation,
+            state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
+                    && !state.authoringDerivedTopologyStale
+                    && state.authoringDerivation.success,
+            state.topologyDocumentDirty,
+            state.runtimeObjectDrag,
+            previewState,
             selectionState,
             manipulationState,
-            uiState,
-            inspectorIdUiState,
+            BuildSelectionUiDependencies(uiState, inspectorIdUiState),
+            uiState.objectProbeDebugDrawMaxDistanceInput,
             materialEditingUiState,
             lightEditingState,
             statusText,
@@ -2802,14 +2838,14 @@ void SectorEditor::DrawPreviewUvPanel(
         engine::AssetManager& assets,
         engine::FontHandle font)
 {
-    if (state.freeflyController.mouseLookEnabled) {
+    if (previewState.controller.freeflyController.mouseLookEnabled) {
         return;
     }
 
-    if (!IsValidSurfaceRef(state.selectedSurface3D)
-            || !IsValidTopologySurfaceEditTarget(state.selectedTopologySurface3D)) {
-        state.selectedSurface3D = SectorSurfaceRef{};
-        state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    if (!IsValidSurfaceRef(previewState.selection.selectedSurface3D)
+            || !IsValidTopologySurfaceEditTarget(previewState.selection.selectedTopologySurface3D)) {
+        previewState.selection.selectedSurface3D = SectorSurfaceRef{};
+        previewState.selection.selectedTopologySurface3D = TopologySurfaceEditTarget{};
         return;
     }
     if (!EnsureSelectedSurface3DAuthoringMappingCurrent()) {
@@ -2826,9 +2862,15 @@ void SectorEditor::DrawPreviewUvPanel(
             font,
             engine::FontHandle{},
             BuildPreviewUvPanelRect(),
-            state,
+            state.topologyMap,
+            state.authoringGraph,
+            state.authoringDerivation,
+            state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
+                    && !state.authoringDerivedTopologyStale
+                    && state.authoringDerivation.success,
+            state.texturePicker,
+            previewState.selection,
             selectionState,
-            uiState,
             materialEditingUiState,
             statusText,
             materialEditing,
@@ -4036,7 +4078,7 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
 {
     engine::AssetManager& assets = context.assets;
     lightmapBake.Shutdown();
-    ClearSectorRuntimeObjects(context.world, assets, state.runtimeObjects);
+    ClearSectorRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects);
     preview.ShutdownRendererResources(assets);
     if (!engine::IsNull(textureCatalogState.editorTextureScope)) {
         assets.UnloadScope(textureCatalogState.editorTextureScope);
@@ -4052,7 +4094,8 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     lightEditingState = LightEditingState{};
     materialEditingState = MaterialEditingState{};
     materialEditingUiState = MaterialEditingUiState{};
-    ResetEditorTopologyDocumentState(state);
+    previewState.controller = SectorEditorPreviewControllerState{};
+    ResetEditorTopologyDocumentState(state, previewState.controller);
     state.viewCenter = Vector2{9.0f, 6.0f};
     state.viewZoom = 48.0f;
     state.gridSize = 8;
@@ -4075,7 +4118,7 @@ bool SectorEditor::LoadLevel(
         return false;
     }
 
-    ClearSectorRuntimeObjects(context.world, assets, state.runtimeObjects);
+    ClearSectorRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects);
     preview.ShutdownRendererResources(assets);
     CancelAuthoringVertexDrag(nullptr);
     CancelLightDrag(nullptr);
@@ -4112,7 +4155,7 @@ bool SectorEditor::LoadLevel(
         InitializeSectorEditorAuthoringStateFromTopology(state, state.topologyMap);
     }
     InvalidateTopologyRenderCache();
-    state.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
+    previewState.controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             state.topologyMap.previewSettings);
     state.topologyDocumentInitialized = true;
     state.topologyDocumentDirty = false;
@@ -4126,8 +4169,8 @@ bool SectorEditor::LoadLevel(
     state.hasCurrentLevelPath = true;
     state.hasUnsavedChanges = false;
     state.mode = SectorEditorMode::Edit2D;
-    state.hasPreviewPose = false;
-    state.hoveredSurface3D = SectorSurfaceHit{};
+    previewState.controller.hasPreviewPose = false;
+    previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
     state.texturePicker = TexturePickerState{};
     state.loadLevelModal = LoadLevelModalState{};
     state.saveLevelModal = SaveLevelModalState{};
@@ -4147,7 +4190,7 @@ bool SectorEditor::LoadLevel(
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     textureCatalog.RefreshDefaultTextureIds();
     textureCatalog.RefreshTextureHandles(assets);
-    ResetSectorRuntimeObjectsForMap(context.world, assets, state.runtimeObjects, state.topologyMap);
+    ResetSectorRuntimeObjectsForMap(context.world, assets, previewState.runtime.runtimeObjects, state.topologyMap);
     if (loadedAuthoringGraph) {
         const char* loadedText = authoringDerivationCurrent
                 ? "Loaded authoring graph"
@@ -4298,21 +4341,21 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
 
     std::string error;
     if (!preview.RebuildRendererResources(assets, state.topologyMap, "sector_editor_preview", error)) {
-        state.runtimeObjects.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
-        state.runtimeObjects.objectProbeStatus.clear();
-        state.runtimeObjects.objectSectorLookupWorld = SectorCollisionWorld{};
-        state.runtimeObjects.objectSectorLookupWorldValid = false;
-        state.runtimeObjects.objectSectorLookupWarning.clear();
-        state.sectorCollisionWorldValid = false;
-        state.sectorCollisionWorldWarning.clear();
-        state.previewCollisionSectorId = 0;
-        state.fpsControllerState.currentSectorId = 0;
-        state.previewVerticalResult = SectorFpsVerticalResult{};
-        state.previewMoveResult = SectorCollisionMoveResult{};
-        state.previewCollisionNoclipFallback = false;
-        state.visualStepOffsetY = 0.0f;
-        ClearSectorFpsHeadBob(state.headBobState);
-        ClearSectorFpsLandingDip(state.landingDipState);
+        previewState.runtime.runtimeObjects.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
+        previewState.runtime.runtimeObjects.objectProbeStatus.clear();
+        previewState.runtime.runtimeObjects.objectSectorLookupWorld = SectorCollisionWorld{};
+        previewState.runtime.runtimeObjects.objectSectorLookupWorldValid = false;
+        previewState.runtime.runtimeObjects.objectSectorLookupWarning.clear();
+        previewState.collision.sectorCollisionWorldValid = false;
+        previewState.collision.sectorCollisionWorldWarning.clear();
+        previewState.collision.previewCollisionSectorId = 0;
+        previewState.controller.fpsControllerState.currentSectorId = 0;
+        previewState.collision.previewVerticalResult = SectorFpsVerticalResult{};
+        previewState.collision.previewMoveResult = SectorCollisionMoveResult{};
+        previewState.collision.previewCollisionNoclipFallback = false;
+        previewState.controller.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(previewState.controller.headBobState);
+        ClearSectorFpsLandingDip(previewState.controller.landingDipState);
         state.mode = SectorEditorMode::Edit2D;
         if (StartsWith(error, "Preview failed:")) {
             statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
@@ -4322,26 +4365,26 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
         return false;
     }
     RefreshPreviewObjectProbeDebugData();
-    EnsureSectorRuntimeObjectWorldReserved(context.world, state.runtimeObjects);
-    SpawnPlacedRuntimeObjects(context.world, assets, state.runtimeObjects, state.topologyMap);
+    EnsureSectorRuntimeObjectWorldReserved(context.world, previewState.runtime.runtimeObjects);
+    SpawnPlacedRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, state.topologyMap);
 
-    if (state.hasPreviewPose) {
-        preview.ApplyRendererPose(state.lastPreviewPose);
+    if (previewState.controller.hasPreviewPose) {
+        preview.ApplyRendererPose(previewState.controller.lastPreviewPose);
     }
 
-    state.previewControlMode = SectorPreviewControlMode::FreeFly;
-    ResetSectorFreeflyController(state.freeflyController, preview.RendererPose());
-    EnterSectorFreeflyController(state.freeflyController);
-    preview.ApplyRendererPose(state.freeflyController.pose);
-    state.visualStepOffsetY = 0.0f;
-    ClearSectorFpsHeadBob(state.headBobState);
-    ClearSectorFpsLandingDip(state.landingDipState);
-    state.fpsControllerConfig = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
+    previewState.controller.previewControlMode = SectorPreviewControlMode::FreeFly;
+    ResetSectorFreeflyController(previewState.controller.freeflyController, preview.RendererPose());
+    EnterSectorFreeflyController(previewState.controller.freeflyController);
+    preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
+    previewState.controller.visualStepOffsetY = 0.0f;
+    ClearSectorFpsHeadBob(previewState.controller.headBobState);
+    ClearSectorFpsLandingDip(previewState.controller.landingDipState);
+    previewState.controller.fpsControllerConfig = NormalizeSectorFpsControllerConfig(previewState.controller.fpsControllerConfig);
     state.mode = SectorEditorMode::Preview3D;
-    state.previewUiHidden = false;
-    state.hoveredSurface3D = SectorSurfaceHit{};
-    state.selectedSurface3D = SectorSurfaceRef{};
-    state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
+    previewState.overlay.previewUiHidden = false;
+    previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
+    previewState.selection.selectedSurface3D = SectorSurfaceRef{};
+    previewState.selection.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
     RebuildSectorCollisionWorld();
     statusText = TextFormat(
@@ -4355,18 +4398,18 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
 void SectorEditor::LeavePreview3D()
 {
     CancelSpotLightPilotWithPreviewRestore(nullptr);
-    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
-        ClearSectorFpsLandingDip(state.landingDipState);
+    if (previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        ClearSectorFpsLandingDip(previewState.controller.landingDipState);
         ApplyGameplayPoseToPreview();
     }
-    state.lastPreviewPose = ActivePreviewPose();
-    state.hasPreviewPose = true;
-    state.visualStepOffsetY = 0.0f;
-    ClearSectorFpsHeadBob(state.headBobState);
-    ClearSectorFpsLandingDip(state.landingDipState);
-    state.previewControlMode = SectorPreviewControlMode::FreeFly;
+    previewState.controller.lastPreviewPose = ActivePreviewPose();
+    previewState.controller.hasPreviewPose = true;
+    previewState.controller.visualStepOffsetY = 0.0f;
+    ClearSectorFpsHeadBob(previewState.controller.headBobState);
+    ClearSectorFpsLandingDip(previewState.controller.landingDipState);
+    previewState.controller.previewControlMode = SectorPreviewControlMode::FreeFly;
     state.mode = SectorEditorMode::Edit2D;
-    state.hoveredSurface3D = SectorSurfaceHit{};
+    previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
     LeaveSectorFreeflyController();
     statusText = "Returned to 2D editor";
@@ -4374,26 +4417,30 @@ void SectorEditor::LeavePreview3D()
 
 SectorViewPose SectorEditor::ActivePreviewPose() const
 {
-    return ActiveSectorEditorPreviewPose(state, preview);
+    return ActiveSectorEditorPreviewPose(previewState.controller, preview);
 }
 
 void SectorEditor::ApplyGameplayPoseToPreview()
 {
-    ApplySectorEditorGameplayPoseToPreview(state, preview);
+    ApplySectorEditorGameplayPoseToPreview(previewState.controller, preview);
 }
 
 void SectorEditor::TogglePreviewControlMode()
 {
-    if (!ToggleSectorEditorPreviewControlMode(state, preview)) {
+    if (!ToggleSectorEditorPreviewControlMode(
+                state.mode == SectorEditorMode::Preview3D,
+                previewState.collision,
+                previewState.controller,
+                preview)) {
         return;
     }
 
-    statusText = TextFormat("3D control mode: %s", PreviewControlModeName(state.previewControlMode));
+    statusText = TextFormat("3D control mode: %s", PreviewControlModeName(previewState.controller.previewControlMode));
 }
 
 bool SectorEditor::StartSpotLightPilot()
 {
-    if (state.mode != SectorEditorMode::Preview3D || state.previewControlMode != SectorPreviewControlMode::FreeFly) {
+    if (state.mode != SectorEditorMode::Preview3D || previewState.controller.previewControlMode != SectorPreviewControlMode::FreeFly) {
         statusText = "Spotlight pilot requires 3D FreeFly mode";
         return false;
     }
@@ -4432,15 +4479,15 @@ bool SectorEditor::StartSpotLightPilot()
     lightEditingState.spotLightPilot.lightId = lightId;
     lightEditingState.spotLightPilot.originalPosition = lightPosition;
     lightEditingState.spotLightPilot.originalTarget = lightTarget;
-    state.spotLightPilotPreviewRestore.originalPreviewPose = ActivePreviewPose();
-    state.spotLightPilotPreviewRestore.originalMouseLookEnabled = state.freeflyController.mouseLookEnabled;
+    previewState.controller.spotLightPilotPreviewRestore.originalPreviewPose = ActivePreviewPose();
+    previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled = previewState.controller.freeflyController.mouseLookEnabled;
     lightEditingState.spotLightPilot.targetDistanceWorld = targetDistanceWorld;
 
     const SectorViewPose pilotPose = PreviewPoseLookingAt(originWorld, targetWorld);
-    ResetSectorFreeflyController(state.freeflyController, pilotPose);
-    EnterSectorFreeflyController(state.freeflyController);
-    preview.ApplyRendererPose(state.freeflyController.pose);
-    state.hoveredSurface3D = SectorSurfaceHit{};
+    ResetSectorFreeflyController(previewState.controller.freeflyController, pilotPose);
+    EnterSectorFreeflyController(previewState.controller.freeflyController);
+    preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
+    previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
     statusText = pilotKind == SpotLightPilotKind::Static
             ? TextFormat("Piloting static spot %d", lightId)
             : TextFormat("Piloting dynamic spot %d", lightId);
@@ -4466,19 +4513,19 @@ bool SectorEditor::ApplySpotLightPilotFromPreviewPose()
             SectorWorldToAuthoringPosition(targetWorld));
     if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
         ResetSectorFreeflyController(
-                state.freeflyController,
-                state.spotLightPilotPreviewRestore.originalPreviewPose);
+                previewState.controller.freeflyController,
+                previewState.controller.spotLightPilotPreviewRestore.originalPreviewPose);
         SetSectorFreeflyMouseLookEnabled(
-                state.freeflyController,
-                state.spotLightPilotPreviewRestore.originalMouseLookEnabled);
-        state.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
-        preview.ApplyRendererPose(state.freeflyController.pose);
+                previewState.controller.freeflyController,
+                previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled);
+        previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
+        preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
     }
     if (result.dynamicLightRendererRefreshNeeded) {
         preview.RefreshDynamicLightSources(state.topologyMap);
     }
     if (result.changed) {
-        state.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
+        previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
     }
     return result.changed;
 }
@@ -4493,13 +4540,13 @@ void SectorEditor::CancelSpotLightPilotWithPreviewRestore(const char* message)
     const SectorEditorLightMutationResult result = lightEditing.CancelSpotLightPilotData(message);
     if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
         ResetSectorFreeflyController(
-                state.freeflyController,
-                state.spotLightPilotPreviewRestore.originalPreviewPose);
+                previewState.controller.freeflyController,
+                previewState.controller.spotLightPilotPreviewRestore.originalPreviewPose);
         SetSectorFreeflyMouseLookEnabled(
-                state.freeflyController,
-                state.spotLightPilotPreviewRestore.originalMouseLookEnabled);
-        state.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
-        preview.ApplyRendererPose(state.freeflyController.pose);
+                previewState.controller.freeflyController,
+                previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled);
+        previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
+        preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
     }
     if (result.dynamicLightRendererRefreshNeeded) {
         preview.RefreshDynamicLightSources(state.topologyMap);
@@ -4508,29 +4555,32 @@ void SectorEditor::CancelSpotLightPilotWithPreviewRestore(const char* message)
 
 bool SectorEditor::RebuildSectorCollisionWorld()
 {
-    return RebuildSectorEditorCollisionWorld(state);
+    return RebuildSectorEditorCollisionWorld(
+            state.topologyMap,
+            previewState.collision,
+            previewState.controller);
 }
 
 SectorFpsVerticalContext SectorEditor::BuildGameplayVerticalContext()
 {
-    return BuildSectorEditorGameplayVerticalContext(state);
+    return BuildSectorEditorGameplayVerticalContext(previewState.collision, previewState.controller);
 }
 
 void SectorEditor::RefreshGameplaySectorAndVerticalContext()
 {
-    RefreshSectorEditorGameplaySectorAndVerticalContext(state);
+    RefreshSectorEditorGameplaySectorAndVerticalContext(previewState.collision, previewState.controller);
 }
 
 void SectorEditor::InitializeGameplayVerticalState()
 {
-    InitializeSectorEditorGameplayVerticalState(state);
+    InitializeSectorEditorGameplayVerticalState(previewState.collision, previewState.controller);
 }
 
 void SectorEditor::OpenPreviewSettingsModal()
 {
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
     state.previewSettingsModal.open = true;
-    state.previewSettingsModal.draftConfig = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig);
+    state.previewSettingsModal.draftConfig = NormalizeSectorFpsControllerConfig(previewState.controller.fpsControllerConfig);
     state.previewSettingsModal.draftSkySettings = NormalizeSectorTopologySkySettings(state.topologyMap.skySettings);
     state.previewSettingsModal.draftDirectionalLight =
             NormalizeSectorTopologyDirectionalLightSettings(state.topologyMap.directionalLight);
@@ -4575,10 +4625,10 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
         return;
     }
 
-    const float previousGravity = NormalizeSectorFpsControllerConfig(state.fpsControllerConfig).gravity;
-    state.fpsControllerConfig = draftConfig;
-    if (previousGravity > 0.0f && state.fpsControllerConfig.gravity == 0.0f) {
-        state.fpsControllerState.verticalVelocity = 0.0f;
+    const float previousGravity = NormalizeSectorFpsControllerConfig(previewState.controller.fpsControllerConfig).gravity;
+    previewState.controller.fpsControllerConfig = draftConfig;
+    if (previousGravity > 0.0f && previewState.controller.fpsControllerConfig.gravity == 0.0f) {
+        previewState.controller.fpsControllerState.verticalVelocity = 0.0f;
     }
     state.topologyMap.previewSettings = draftPreviewSettings;
     state.topologyMap.skySettings = draftSkySettings;
@@ -4592,30 +4642,30 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
         }
     }
     if (state.mode == SectorEditorMode::Preview3D
-            && state.previewControlMode == SectorPreviewControlMode::Gameplay
+            && previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
             && preview.IsRendererReady()) {
-        state.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
-                state.fpsControllerState,
-                state.fpsControllerConfig,
+        previewState.collision.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
+                previewState.controller.fpsControllerState,
+                previewState.controller.fpsControllerConfig,
                 BuildGameplayVerticalContext(),
                 0.0f);
-        state.visualStepOffsetY = 0.0f;
-        ClearSectorFpsHeadBob(state.headBobState);
-        ClearSectorFpsLandingDip(state.landingDipState);
+        previewState.controller.visualStepOffsetY = 0.0f;
+        ClearSectorFpsHeadBob(previewState.controller.headBobState);
+        ClearSectorFpsLandingDip(previewState.controller.landingDipState);
         ApplyGameplayPoseToPreview();
     }
     statusText = TextFormat(
             "Preview settings updated: walk %.1f run %.1f eye %.1f gravity %.1f radius %.2f height %.2f step %.2f jump %.2f bob %.3f freq %.1f",
-            state.fpsControllerConfig.walkSpeed,
-            state.fpsControllerConfig.runSpeed,
-            state.fpsControllerConfig.eyeHeight,
-            state.fpsControllerConfig.gravity,
-            state.fpsControllerConfig.playerRadius,
-            state.fpsControllerConfig.playerHeight,
-            state.fpsControllerConfig.stepHeight,
-            state.fpsControllerConfig.jumpHeight,
-            state.fpsControllerConfig.headBobStrength,
-            state.fpsControllerConfig.headBobFrequency);
+            previewState.controller.fpsControllerConfig.walkSpeed,
+            previewState.controller.fpsControllerConfig.runSpeed,
+            previewState.controller.fpsControllerConfig.eyeHeight,
+            previewState.controller.fpsControllerConfig.gravity,
+            previewState.controller.fpsControllerConfig.playerRadius,
+            previewState.controller.fpsControllerConfig.playerHeight,
+            previewState.controller.fpsControllerConfig.stepHeight,
+            previewState.controller.fpsControllerConfig.jumpHeight,
+            previewState.controller.fpsControllerConfig.headBobStrength,
+            previewState.controller.fpsControllerConfig.headBobFrequency);
 }
 
 SectorEditorTextureCatalogService SectorEditor::MakeTextureCatalogService()
@@ -5122,6 +5172,7 @@ bool SectorEditor::IsValidSurfaceRef(SectorSurfaceRef surface) const
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
             const_cast<SectorEditorUiState&>(uiState),
@@ -5144,6 +5195,7 @@ bool SectorEditor::IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget ta
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
             const_cast<SectorEditorUiState&>(uiState),
@@ -5227,6 +5279,7 @@ bool SectorEditor::EnsureSelectedSurface3DAuthoringMappingCurrent()
     std::string unavailableStatus;
     if (ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
                 state,
+                previewState.selection,
                 &unavailableStatus)) {
         return true;
     }
@@ -5240,6 +5293,7 @@ SectorEditorMaterialEditingService SectorEditor::BuildMaterialEditingService()
     return SectorEditorMaterialEditingService{
             SectorEditorMaterialEditingServiceContext{
                     state,
+                    previewState.selection,
                     selectionState,
                     materialEditingState,
                     materialEditingUiState,
@@ -5280,8 +5334,8 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
                             selectionState.selectedRuntimeObjectId,
                             selectionState.selectedTopologySideKind,
                             selectionState.inspectedTopologyVertexId,
-                            state.selectedSurface3D,
-                            state.selectedTopologySurface3D,
+                            previewState.selection.selectedSurface3D,
+                            previewState.selection.selectedTopologySurface3D,
                             selectionState.selectedAuthoring,
                             selectionState.hoveredTopologyLightId,
                             selectionState.hoveredTopologyStaticSpotLightId,
@@ -5328,30 +5382,30 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
         return false;
     }
 
-    if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
-        ClearSectorFpsLandingDip(state.landingDipState);
+    if (previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        ClearSectorFpsLandingDip(previewState.controller.landingDipState);
         ApplyGameplayPoseToPreview();
     }
     const SectorViewPose pose = preview.RendererPose();
-    const bool mouseLook = state.freeflyController.mouseLookEnabled;
-    const SectorSurfaceRef selected = state.selectedSurface3D;
-    const TopologySurfaceEditTarget selectedTarget = state.selectedTopologySurface3D;
+    const bool mouseLook = previewState.controller.freeflyController.mouseLookEnabled;
+    const SectorSurfaceRef selected = previewState.selection.selectedSurface3D;
+    const TopologySurfaceEditTarget selectedTarget = previewState.selection.selectedTopologySurface3D;
 
     std::string error;
     if (!preview.RebuildRendererResources(assets, state.topologyMap, "sector_editor_preview", error)) {
-        state.runtimeObjects.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
-        state.runtimeObjects.objectProbeStatus.clear();
-        state.runtimeObjects.objectSectorLookupWorld = SectorCollisionWorld{};
-        state.runtimeObjects.objectSectorLookupWorldValid = false;
-        state.runtimeObjects.objectSectorLookupWarning.clear();
-        state.sectorCollisionWorldValid = false;
-        state.sectorCollisionWorldWarning.clear();
-        state.previewCollisionSectorId = 0;
-        state.fpsControllerState.currentSectorId = 0;
-        state.previewVerticalResult = SectorFpsVerticalResult{};
-        state.previewMoveResult = SectorCollisionMoveResult{};
-        state.previewCollisionNoclipFallback = false;
-        ClearSectorFpsLandingDip(state.landingDipState);
+        previewState.runtime.runtimeObjects.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
+        previewState.runtime.runtimeObjects.objectProbeStatus.clear();
+        previewState.runtime.runtimeObjects.objectSectorLookupWorld = SectorCollisionWorld{};
+        previewState.runtime.runtimeObjects.objectSectorLookupWorldValid = false;
+        previewState.runtime.runtimeObjects.objectSectorLookupWarning.clear();
+        previewState.collision.sectorCollisionWorldValid = false;
+        previewState.collision.sectorCollisionWorldWarning.clear();
+        previewState.collision.previewCollisionSectorId = 0;
+        previewState.controller.fpsControllerState.currentSectorId = 0;
+        previewState.collision.previewVerticalResult = SectorFpsVerticalResult{};
+        previewState.collision.previewMoveResult = SectorCollisionMoveResult{};
+        previewState.collision.previewCollisionNoclipFallback = false;
+        ClearSectorFpsLandingDip(previewState.controller.landingDipState);
         if (StartsWith(error, "Preview failed:")) {
             statusText = std::string{"3D mode failed:"} + error.substr(std::strlen("Preview failed:"));
         } else {
@@ -5362,15 +5416,15 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
         return false;
     }
     RefreshPreviewObjectProbeDebugData();
-    EnsureSectorRuntimeObjectWorldReserved(context.world, state.runtimeObjects);
-    SpawnPlacedRuntimeObjects(context.world, assets, state.runtimeObjects, state.topologyMap);
+    EnsureSectorRuntimeObjectWorldReserved(context.world, previewState.runtime.runtimeObjects);
+    SpawnPlacedRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, state.topologyMap);
 
     preview.ApplyRendererPose(pose);
-    ResetSectorFreeflyController(state.freeflyController, pose);
-    SetSectorFreeflyMouseLookEnabled(state.freeflyController, mouseLook);
+    ResetSectorFreeflyController(previewState.controller.freeflyController, pose);
+    SetSectorFreeflyMouseLookEnabled(previewState.controller.freeflyController, mouseLook);
     const bool selectedStillValid = IsValidSurfaceRef(selected);
-    state.selectedSurface3D = selectedStillValid ? selected : SectorSurfaceRef{};
-    state.selectedTopologySurface3D = selectedStillValid && IsValidTopologySurfaceEditTarget(selectedTarget)
+    previewState.selection.selectedSurface3D = selectedStillValid ? selected : SectorSurfaceRef{};
+    previewState.selection.selectedTopologySurface3D = selectedStillValid && IsValidTopologySurfaceEditTarget(selectedTarget)
             ? selectedTarget
             : TopologySurfaceEditTarget{};
     RebuildSectorCollisionWorld();
@@ -5382,6 +5436,7 @@ std::string SectorEditor::CurrentTextureForPickerTarget() const
     if (IsSectorEditorMaterialTexturePickerTarget(state.texturePicker.topologyTargetKind)) {
         SectorEditorMaterialEditingServiceContext serviceContext{
                 const_cast<SectorEditorState&>(state),
+                const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
                 const_cast<SelectionState&>(selectionState),
                 const_cast<MaterialEditingState&>(materialEditingState),
                 const_cast<MaterialEditingUiState&>(materialEditingUiState),
