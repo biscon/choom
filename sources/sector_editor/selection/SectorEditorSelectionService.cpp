@@ -328,20 +328,22 @@ void SyncSectorEditorSelectedLightIdBuffer(SectorEditorSelectionServiceContext& 
 
 void ResetSectorEditorSurface3DUiState(SectorEditorSelectionServiceContext& context)
 {
-    context.uiState.surface3DUvScaleUInput = engine::UIFloatInputState{};
-    context.uiState.surface3DUvScaleVInput = engine::UIFloatInputState{};
-    context.uiState.surface3DUvOffsetUInput = engine::UIFloatInputState{};
-    context.uiState.surface3DUvOffsetVInput = engine::UIFloatInputState{};
-    context.uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
-    context.uiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+    context.materialUiState.surface3DUvScaleUInput = engine::UIFloatInputState{};
+    context.materialUiState.surface3DUvScaleVInput = engine::UIFloatInputState{};
+    context.materialUiState.surface3DUvOffsetUInput = engine::UIFloatInputState{};
+    context.materialUiState.surface3DUvOffsetVInput = engine::UIFloatInputState{};
+    context.materialUiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
+    context.materialUiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
 }
 
 void ClearSectorEditorTopologySelectionOnly(SectorEditorSelectionServiceContext& context)
 {
     RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
     context.state.selectDragArm = SelectDragArmState{};
-    context.state.lightDrag = LightDragState{};
-    context.state.lightEditing = LightEditingState{};
+    if (context.lightState != nullptr) {
+        context.lightState->lightDrag = LightDragState{};
+        context.lightState->lightEdit = LightEditTransactionState{};
+    }
     context.state.runtimeObjectDrag = RuntimeObjectDragState{};
     context.state.topologySelectionKind = TopologySelectionKind::None;
     context.state.selectedTopologySectorId = -1;
@@ -430,7 +432,7 @@ void SelectSectorEditorTopologySector(SectorEditorSelectionServiceContext& conte
     context.uiState.ambientRedInput = engine::UIIntInputState{};
     context.uiState.ambientGreenInput = engine::UIIntInputState{};
     context.uiState.ambientBlueInput = engine::UIIntInputState{};
-    for (engine::UIFloatInputState& inputState : context.uiState.topologySectorUvInputs) {
+    for (engine::UIFloatInputState& inputState : context.materialUiState.topologySectorUvInputs) {
         inputState = engine::UIFloatInputState{};
     }
     SyncSectorEditorSelectedSectorIdBuffer(context);
@@ -507,7 +509,7 @@ void SelectSectorEditorTopologySideDef(
     ResetSectorEditorSurface3DUiState(context);
     context.uiState.idBufferLightIndex = -1;
     context.uiState.inspectorScroll.offset = Vector2{};
-    for (engine::UIFloatInputState& inputState : context.uiState.topologySideDefUvInputs) {
+    for (engine::UIFloatInputState& inputState : context.materialUiState.topologySideDefUvInputs) {
         inputState = engine::UIFloatInputState{};
     }
     SyncSectorEditorSelectedSectorIdBuffer(context);
@@ -547,7 +549,7 @@ void SelectSectorEditorTopologyLineDef(
     ResetSectorEditorSurface3DUiState(context);
     context.uiState.idBufferLightIndex = -1;
     context.uiState.inspectorScroll.offset = Vector2{};
-    for (engine::UIFloatInputState& inputState : context.uiState.topologySideDefUvInputs) {
+    for (engine::UIFloatInputState& inputState : context.materialUiState.topologySideDefUvInputs) {
         inputState = engine::UIFloatInputState{};
     }
     SyncSectorEditorSelectedSectorIdBuffer(context);
@@ -604,9 +606,10 @@ void SelectSectorEditorTopologyStaticSpotLight(SectorEditorSelectionServiceConte
         return;
     }
 
-    if (context.state.spotLightPilot.active
-            && (context.state.spotLightPilot.kind != SpotLightPilotKind::Static
-                    || context.state.spotLightPilot.lightId != topologyLightId)) {
+    if (context.lightState != nullptr
+            && context.lightState->spotLightPilot.active
+            && (context.lightState->spotLightPilot.kind != SpotLightPilotKind::Static
+                    || context.lightState->spotLightPilot.lightId != topologyLightId)) {
         RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
     }
     context.state.selectedTopologyStaticSpotLightId = topologyLightId;
@@ -694,9 +697,10 @@ void SelectSectorEditorTopologyDynamicSpotLight(SectorEditorSelectionServiceCont
         return;
     }
 
-    if (context.state.spotLightPilot.active
-            && (context.state.spotLightPilot.kind != SpotLightPilotKind::Dynamic
-                    || context.state.spotLightPilot.lightId != topologyLightId)) {
+    if (context.lightState != nullptr
+            && context.lightState->spotLightPilot.active
+            && (context.lightState->spotLightPilot.kind != SpotLightPilotKind::Dynamic
+                    || context.lightState->spotLightPilot.lightId != topologyLightId)) {
         RequestCancelSpotLightPilotWithPreviewRestore(context, nullptr);
     }
     context.state.selectedTopologyDynamicSpotLightId = topologyLightId;
@@ -790,7 +794,7 @@ void SelectSectorEditorAuthoringFaceAnchorTarget(SectorEditorSelectionServiceCon
     context.uiState.ambientRedInput = engine::UIIntInputState{};
     context.uiState.ambientGreenInput = engine::UIIntInputState{};
     context.uiState.ambientBlueInput = engine::UIIntInputState{};
-    for (engine::UIFloatInputState& inputState : context.uiState.topologySectorUvInputs) {
+    for (engine::UIFloatInputState& inputState : context.materialUiState.topologySectorUvInputs) {
         inputState = engine::UIFloatInputState{};
     }
 }

@@ -35,33 +35,33 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_01",
       "title": "TextureCatalogState",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02",
       "title": "MaterialEditingState And Material UI State",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02a",
       "title": "MaterialEditingState only",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_02b",
       "title": "MaterialEditingUiState / material input buffers",
       "type": "pass",
       "parent": "phase_02",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_03",
       "title": "LightEditingState",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_04",
@@ -95,15 +95,54 @@ When an agent is asked to execute this plan, it must:
 
 | Phase / Pass | Status | Date | Notes |
 | --- | --- | --- | --- |
-| Phase 1: TextureCatalogState | Not Started |  | Move editor texture scope/cache state out of `SectorEditorState`. |
-| Phase 2: MaterialEditingState And Material UI State | Not Started |  | Move material-specific edit/UI state behind material service boundaries. |
-| Phase 2A: MaterialEditingState only | Not Started |  | Move copied material and material-service transient state only. |
-| Phase 2B: MaterialEditingUiState / material input buffers | Not Started |  | Move sidedef/preview material input buffers only after Phase 2A is complete. |
-| Phase 3: LightEditingState | Not Started |  | Move light edit, drag, and light-data pilot state out of `SectorEditorState`. |
+| Phase 1: TextureCatalogState | Completed | 2026-07-07 | Source changed. Added `TextureCatalogState`; moved editor texture handle cache and editor texture scope out of `SectorEditorState`. `SectorTopologyMap::texturesById` remains the map-level registry. No serialization/schema, source-hash, or topology render-cache invalidation behavior changed. |
+| Phase 2: MaterialEditingState And Material UI State | Completed | 2026-07-07 | Source changed across Phase 2A and Phase 2B. Material copied payload and material UI input buffers now live outside the monolithic editor state/UI state. |
+| Phase 2A: MaterialEditingState only | Completed | 2026-07-07 | Source changed. Added `MaterialEditingState`; moved copied material payload out of `SectorEditorState` and into the material editing service context. Material UI input buffers, decal tint modal state, and generic texture picker lifecycle stayed in their existing owners. |
+| Phase 2B: MaterialEditingUiState / material input buffers | Completed | 2026-07-07 | Source changed. Added `MaterialEditingUiState`; moved sidedef, sector material, and preview material input buffers out of `SectorEditorUiState`. Generic picker lifecycle and decal tint modal state stayed in existing owners. |
+| Phase 3: LightEditingState | Completed | 2026-07-07 | Source changed. Added service-owned `LightEditingState`; moved light drag/edit transaction state and light-owned spotlight pilot restore data out of `SectorEditorState`. Preview pose/mouse-look restore stayed editor/preview-owned. |
 | Phase 4: SelectionState | Not Started |  | Move selected/hovered target state behind selection service boundaries. |
 | Phase 5: ManipulationState | Not Started |  | Move active drag/manipulation transaction state behind manipulation service boundaries. |
 | Phase 6: InspectorUiState Feature Input Groups | Not Started |  | Optional later split for feature-specific input buffers. |
 | Phase 7: PreviewState And DocumentState Planning Notes | Not Started |  | Planning-only checkpoint for separate future runner plans. |
+
+Phase 1 verification, 2026-07-07:
+
+- `cmake --build cmake-build-debug -j2`: passed.
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 16/16 tests.
+- `git diff --check`: passed.
+- `git diff --stat` and `git status --short`: reviewed.
+- Grep checks passed: texture catalog service has no `SectorEditorState&` and no `#include "sector_editor/SectorEditor.h"`; remaining `editorTextureScope` / `editorTextureHandlesById` references are in `TextureCatalogState`, `SectorEditor` lifecycle unload paths, and texture catalog service implementation.
+- Behavior notes: texture scope unload ordering is preserved through the same shutdown/reset/refresh points; add-map modal lifecycle and preview scope stayed outside the catalog service; texture registry mutations still do not invalidate the 2D topology render cache by themselves; lightmap source-hash behavior was unchanged.
+
+Phase 2A verification, 2026-07-07:
+
+- `cmake --build cmake-build-debug -j2`: passed.
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 16/16 tests.
+- `git diff --check`: passed.
+- `git diff --stat` and `git status --short`: reviewed.
+- Grep checks: `copiedTopologyMaterial` has no remaining matches; no `Scratch`, `writeback`, `no-authoring`, `TopologyOnly`, or `Legacy` matches remain in material service/tool/preview paths; `SectorEditorState&` / `SectorEditorUiState&` references still remain in `services/material_edit` for document/authoring access and Phase 2B UI-buffer reset behavior.
+- Behavior notes: authoring graph remains the source of truth for material edits; material edit dirty/cache invalidation and preview rebuild behavior were unchanged; no map JSON/schema, lightmap source-hash, rendering, collision, texture picker lifecycle, or material UI input-buffer ownership behavior changed.
+
+Phase 2B verification, 2026-07-07:
+
+- Source changed. Added `MaterialEditingUiState` with preview surface UV/decal inputs, sidedef material UV/decal inputs, and sector material UV/decal inputs; composed it in `SectorEditor` and passed it to material, selection, inspector, and preview UI contexts that reset or draw those buffers.
+- `cmake --build cmake-build-debug -j2`: passed.
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 16/16 tests.
+- `git diff --check`: passed.
+- `git diff --stat` and `git status --short`: reviewed.
+- Grep checks: `copiedTopologyMaterial` has no remaining matches; no `Scratch`, `writeback`, `no-authoring`, `TopologyOnly`, or `Legacy` matches remain in material service/tool/preview paths; `SectorEditorUiState&` has no remaining matches in `services/material_edit`; `SectorEditorState&` remains in `services/material_edit` for document/authoring access and material picker routing.
+- Behavior notes: authoring graph remains the source of truth for material edits; `ApplyMaterialUiResetFlags()` still resets the same material input buffers, now through `MaterialEditingUiState`; material edit dirty/cache invalidation and preview mesh rebuild behavior were unchanged; texture picker lifecycle stayed in `TexturePickerState` / `TexturePickerService`; no map JSON/schema, lightmap source-hash, rendering, collision, or manual GUI-verified behavior changed.
+
+Phase 3 verification, 2026-07-07:
+
+- Source changed. Added `LightEditingState` in `services/lights`; moved `lightDrag` and the active light edit transaction out of `SectorEditorState`; renamed the old transaction payload to `LightEditTransactionState`.
+- Split spotlight pilot state: light-owned pilot data (`active`, kind, light ID, original light position/target, and target distance) now lives in `LightEditingState`; preview pose and mouse-look restore remain editor/preview-owned in `SectorEditorState`.
+- `cmake --build cmake-build-debug -j2`: passed.
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 16/16 tests.
+- `git diff --check`: passed.
+- `git diff --stat` and `git status --short`: reviewed.
+- Grep checks: `services/lights` has no `SectorEditorState&` / `SectorEditorUiState&` references and no `#include "sector_editor/SectorEditor.h"`; remaining `lightDrag` / `spotLightPilot` references are routed through `LightEditingState` or the preview restore field.
+- Behavior notes: light object storage remains in `SectorTopologyMap`; light mutation dirty/cache invalidation behavior is preserved through the same topology-document edited semantics; dynamic renderer refresh behavior and lightmap bake behavior were unchanged; source-hash behavior did not change; rendering, collision, sector lookup, and physics were unchanged. No manual GUI verification was performed.
 
 ## Execution Tracking Rules
 

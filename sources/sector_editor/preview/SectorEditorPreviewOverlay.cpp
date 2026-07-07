@@ -34,9 +34,13 @@ bool IsPreviewOverlayMouseInteractive(const SectorEditorState& state)
     return !state.freeflyController.mouseLookEnabled;
 }
 
-bool IsValidPreviewSurfaceRef(SectorEditorState& state, SectorEditorUiState& uiState, SectorSurfaceRef surface)
+bool IsValidPreviewSurfaceRef(
+        SectorEditorState& state,
+        SectorEditorUiState& uiState,
+        MaterialEditingUiState& materialUiState,
+        SectorSurfaceRef surface)
 {
-    SectorEditorSelectionServiceContext context{state, uiState, nullptr, nullptr, nullptr};
+    SectorEditorSelectionServiceContext context{state, uiState, materialUiState, nullptr, nullptr, nullptr};
     return IsValidSectorEditorSurfaceRef(context, surface);
 }
 
@@ -151,14 +155,15 @@ Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab 
 void DrawSectorEditorPreviewSurfaceHighlights(
         SectorEditorState& state,
         SectorEditorUiState& uiState,
+        MaterialEditingUiState& materialUiState,
         const SectorMeshRenderer& preview)
 {
     if (!preview.IsRendererReady() || state.freeflyController.mouseLookEnabled) {
         return;
     }
 
-    auto drawSurface = [&state, &uiState, &preview](SectorSurfaceRef surface, Color color, float thickness) {
-        if (!IsValidPreviewSurfaceRef(state, uiState, surface)) {
+    auto drawSurface = [&state, &uiState, &materialUiState, &preview](SectorSurfaceRef surface, Color color, float thickness) {
+        if (!IsValidPreviewSurfaceRef(state, uiState, materialUiState, surface)) {
             return;
         }
         const float lift = IsWallSurface(surface.kind) ? PreviewHighlightLift : PreviewHighlightLift * 2.0f;
@@ -298,6 +303,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     const engine::FontHandle smallFont = context.smallFont;
     SectorEditorState& state = context.state;
     SectorEditorUiState& uiState = context.uiState;
+    MaterialEditingUiState& materialUiState = context.materialUiState;
     SectorMeshRenderer& preview = context.preview;
     SectorEditorPreviewOverlayResult result;
 
@@ -505,7 +511,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 break;
             }
             case PreviewDebugOverlayTab::Controls:
-                if (state.spotLightPilot.active) {
+                if (context.lightState.spotLightPilot.active) {
                     addWrappedLine("pilot light: WASD move, mouse look, Space/Ctrl up/down. Unlock cursor with F11 to click Apply or Cancel.");
                 } else if (state.previewControlMode == SectorPreviewControlMode::Gameplay) {
                     addWrappedLine("movement: WASD move, Space jump, Shift run, mouse look. F11 unlocks cursor for UI tabs.");
@@ -554,7 +560,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             Rectangle{
                     panel.x + padding,
                     panel.y + padding,
-                    mouseInteractive && (state.spotLightPilot.active
+                    mouseInteractive && (context.lightState.spotLightPilot.active
                             || (hasSelectedSpotLight && state.previewControlMode == SectorPreviewControlMode::FreeFly))
                             ? contentW - 170.0f
                             : contentW,
@@ -568,7 +574,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     float actionsRight = panel.x + panel.width - padding;
     const float actionY = panel.y + padding - 2.0f;
     if (mouseInteractive) {
-        if (state.spotLightPilot.active) {
+        if (context.lightState.spotLightPilot.active) {
             if (engine::Button(
                         ui,
                         smallConfig,

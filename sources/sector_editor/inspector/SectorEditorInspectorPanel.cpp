@@ -66,6 +66,7 @@ void OpenSelectedBillboardSpritePickerForInspector(
 
 void OpenSelectedDoorTexturePickerForInspector(
         SectorEditorState& state,
+        SectorEditorTextureCatalogService& textureCatalog,
         std::string& statusText,
         const SectorPlacedRuntimeObject* object)
 {
@@ -73,7 +74,7 @@ void OpenSelectedDoorTexturePickerForInspector(
         statusText = "Select a door first.";
         return;
     }
-    if (!OpenRuntimeDoorTexturePicker(state, object->id)) {
+    if (!OpenRuntimeDoorTexturePicker(state, textureCatalog, object->id)) {
         statusText = "No door texture target";
     }
 }
@@ -278,6 +279,7 @@ bool DrawTopologySideDefInspector(
     const engine::FontHandle smallFont = context.smallFont;
     SectorEditorState& state = context.state;
     SectorEditorUiState& uiState = context.uiState;
+    MaterialEditingUiState& materialUiState = context.materialUiState;
     std::string& statusText = context.statusText;
     SectorEditorTextureCatalogService& textureCatalog = context.textureCatalog;
 
@@ -302,6 +304,7 @@ bool DrawTopologySideDefInspector(
             gap,
             state,
             uiState,
+            materialUiState,
             statusText,
             callbacks,
             materialEditing,
@@ -323,6 +326,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     const engine::FontHandle smallFont = context.smallFont;
     SectorEditorState& state = context.state;
     SectorEditorUiState& uiState = context.uiState;
+    MaterialEditingUiState& materialUiState = context.materialUiState;
     std::string& statusText = context.statusText;
     SectorEditorSelectionServiceContext& selection = context.selection;
     SectorEditorPlacedObjectActionContext& placedObjectActions = context.placedObjectActions;
@@ -411,7 +415,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 return MutateSelectedSectorEditorPlacedObject(placedObjectActions, status, mutate);
             },
             [&]() { OpenSelectedBillboardSpritePickerForInspector(state, statusText, selectedRuntimeObject()); },
-            [&]() { OpenSelectedDoorTexturePickerForInspector(state, statusText, selectedRuntimeObject()); },
+            [&]() { OpenSelectedDoorTexturePickerForInspector(state, textureCatalog, statusText, selectedRuntimeObject()); },
             [&]() { OpenSectorEditorDoorTextureSettingsModal(state.doorTextureSettingsModal, selectedRuntimeObject(), statusText); },
             [&]() {
                 AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedRuntimeObject);
@@ -820,6 +824,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     *selectedTopologySector(),
                     state,
                     uiState,
+                    context.materialUiState,
                     materialEditing,
                     textureCatalog,
                     callbacks)) {
@@ -1248,7 +1253,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                         opacityLayout.inputRect,
                                         engine::UITextJustify::Left,
                                         decal.opacity,
-                                        uiState.topologySideDefDecalOpacityInput,
+                                        materialUiState.topologySideDefDecalOpacityInput,
                                         0.0f,
                                         1.0f,
                                         3);
@@ -1307,7 +1312,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                             bloomLayout.inputRect,
                                             engine::UITextJustify::Left,
                                             decal.bloomIntensity,
-                                            uiState.topologySideDefDecalBloomIntensityInput,
+                                            materialUiState.topologySideDefDecalBloomIntensityInput,
                                             0.0f,
                                             10.0f,
                                             3);
@@ -1721,7 +1726,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                             opacityLayout.inputRect,
                             engine::UITextJustify::Left,
                             decal.opacity,
-                            uiState.topologySectorDecalOpacityInputs[inputIndex],
+                            materialUiState.topologySectorDecalOpacityInputs[inputIndex],
                             0.0f,
                             1.0f,
                             3);
@@ -1782,7 +1787,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 bloomLayout.inputRect,
                                 engine::UITextJustify::Left,
                                 decal.bloomIntensity,
-                                uiState.topologySectorDecalBloomIntensityInputs[inputIndex],
+                                materialUiState.topologySectorDecalBloomIntensityInputs[inputIndex],
                                 0.0f,
                                 10.0f,
                                 3);
@@ -1930,7 +1935,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                             opacityLayout.inputRect,
                             engine::UITextJustify::Left,
                             decal.opacity,
-                            uiState.topologySectorDecalOpacityInputs[inputIndex],
+                            materialUiState.topologySectorDecalOpacityInputs[inputIndex],
                             0.0f,
                             1.0f,
                             3);
@@ -1987,7 +1992,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 bloomLayout.inputRect,
                                 engine::UITextJustify::Left,
                                 decal.bloomIntensity,
-                                uiState.topologySectorDecalBloomIntensityInputs[inputIndex],
+                                materialUiState.topologySectorDecalBloomIntensityInputs[inputIndex],
                                 0.0f,
                                 10.0f,
                                 3);

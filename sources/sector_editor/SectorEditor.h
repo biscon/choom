@@ -7,8 +7,10 @@
 #include "sector_editor/SectorEditorLightmapAsyncTypes.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
+#include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogState.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectActions.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectDrag.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
@@ -354,7 +356,11 @@ private:
     void PollLightmapBakeResult(engine::AssetManager& assets);
     bool InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
     SectorEditorState state;
+    LightEditingState lightEditingState;
     SectorEditorUiState uiState;
+    TextureCatalogState textureCatalogState;
+    MaterialEditingState materialEditingState;
+    MaterialEditingUiState materialEditingUiState;
     SectorEditorLightmapBakeController lightmapBake;
     Rectangle canvasRect = {};
     std::string statusText;

@@ -4,6 +4,7 @@
 #include "sector_editor/SectorEditorMaterialActions.h"
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialEditingState.h"
 
 #include <functional>
 #include <string>
@@ -24,7 +25,8 @@ using SectorEditorAuthoringMaterialActionFn =
 
 struct SectorEditorMaterialEditingServiceContext {
     SectorEditorState& state;
-    SectorEditorUiState& uiState;
+    MaterialEditingState& materialState;
+    MaterialEditingUiState& materialUiState;
     TexturePickerState& texturePicker;
     std::string& statusText;
     std::function<bool(engine::AssetManager*)> requestPreviewMaterialMeshRebuild;

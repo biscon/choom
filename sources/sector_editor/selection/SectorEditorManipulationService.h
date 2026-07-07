@@ -5,6 +5,7 @@
 #include "sector_editor/selection/SectorEditorSelectionTarget.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 
 #include <raylib.h>
 
@@ -17,6 +18,7 @@ namespace game {
 struct SectorEditorManipulationServiceContext {
     SectorEditorState& state;
     SectorEditorUiState& uiState;
+    LightEditingState& lightState;
     std::string& statusText;
     void* userData = nullptr;
 

@@ -27,6 +27,7 @@ struct SectorEditorPreviewUvPanelContext {
 
     SectorEditorState& state;
     SectorEditorUiState& uiState;
+    MaterialEditingUiState& materialUiState;
     std::string& statusText;
 
     SectorEditorMaterialEditingService& materialEditing;

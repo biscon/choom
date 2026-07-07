@@ -31,6 +31,7 @@ struct SectorEditorMaterialInspectorContext {
     float gap = 0.0f;
     SectorEditorState& state;
     SectorEditorUiState& uiState;
+    MaterialEditingUiState& materialUiState;
     std::string& statusText;
     const SectorEditorMaterialInspectorCallbacks& callbacks;
     SectorEditorMaterialEditingService& materialEditing;

@@ -218,7 +218,9 @@ std::string CurrentTextureForPickerTarget(const SectorEditorState& state)
     return std::string{};
 }
 
-bool OpenMapSkyTexturePicker(SectorEditorState& state)
+bool OpenMapSkyTexturePicker(
+        SectorEditorState& state,
+        SectorEditorTextureCatalogService& textureCatalog)
 {
     TexturePickerState& picker = state.texturePicker;
     if (!state.previewSettingsModal.open) {
@@ -236,12 +238,15 @@ bool OpenMapSkyTexturePicker(SectorEditorState& state)
 
     OpenSectorEditorTexturePicker(
             picker,
-            SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}.TextureIds(),
+            textureCatalog.TextureIds(),
             CurrentTextureForPickerTarget(state));
     return true;
 }
 
-bool OpenRuntimeDoorTexturePicker(SectorEditorState& state, int runtimeObjectId)
+bool OpenRuntimeDoorTexturePicker(
+        SectorEditorState& state,
+        SectorEditorTextureCatalogService& textureCatalog,
+        int runtimeObjectId)
 {
     TexturePickerState& picker = state.texturePicker;
     const SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(state.topologyMap, runtimeObjectId);
@@ -264,7 +269,7 @@ bool OpenRuntimeDoorTexturePicker(SectorEditorState& state, int runtimeObjectId)
 
     OpenSectorEditorTexturePicker(
             picker,
-            SectorEditorTextureCatalogService{SectorEditorTextureCatalogServiceContext{state}}.TextureIds(),
+            textureCatalog.TextureIds(),
             CurrentTextureForPickerTarget(state));
     return true;
 }

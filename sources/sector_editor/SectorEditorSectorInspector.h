@@ -41,6 +41,7 @@ bool DrawTopologySectorInspector(
         SectorTopologySector& sector,
         SectorEditorState& state,
         SectorEditorUiState& uiState,
+        MaterialEditingUiState& materialUiState,
         SectorEditorMaterialEditingService& materialEditing,
         SectorEditorTextureCatalogService& textureCatalog,
         const SectorEditorSectorInspectorCallbacks& callbacks);

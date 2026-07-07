@@ -3,6 +3,8 @@
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorSurfaceTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialEditingState.h"
+#include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 
 #include <string>
 
@@ -11,9 +13,11 @@ namespace game {
 struct SectorEditorSelectionServiceContext {
     SectorEditorState& state;
     SectorEditorUiState& uiState;
+    MaterialEditingUiState& materialUiState;
     std::string* statusText = nullptr;
     void* userData = nullptr;
     void (*requestCancelSpotLightPilotWithPreviewRestore)(void* userData, const char* message) = nullptr;
+    LightEditingState* lightState = nullptr;
 };
 
 SectorTopologySector* SelectedSectorEditorTopologySector(SectorEditorSelectionServiceContext& context);

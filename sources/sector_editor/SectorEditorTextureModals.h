@@ -111,8 +111,13 @@ bool RepairBillboardClipsForSpriteMetadata(
         const SectorSpriteMetadata& metadata,
         bool repairInvalidNonEmpty);
 
-bool OpenMapSkyTexturePicker(SectorEditorState& state);
-bool OpenRuntimeDoorTexturePicker(SectorEditorState& state, int runtimeObjectId);
+bool OpenMapSkyTexturePicker(
+        SectorEditorState& state,
+        SectorEditorTextureCatalogService& textureCatalog);
+bool OpenRuntimeDoorTexturePicker(
+        SectorEditorState& state,
+        SectorEditorTextureCatalogService& textureCatalog,
+        int runtimeObjectId);
 std::string CurrentTextureForPickerTarget(const SectorEditorState& state);
 SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(SectorEditorState& state);
 

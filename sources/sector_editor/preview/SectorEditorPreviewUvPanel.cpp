@@ -15,10 +15,15 @@
 namespace game {
 namespace {
 
-void ResetPreviewSurfaceUi(SectorEditorState& state, SectorEditorUiState& uiState)
+void ResetPreviewSurfaceUi(SectorEditorState& state, MaterialEditingUiState& materialUiState)
 {
-    SectorEditorSelectionServiceContext context{state, uiState, nullptr, nullptr, nullptr};
-    ResetSectorEditorSurface3DUiState(context);
+    materialUiState.surface3DUvScaleUInput = engine::UIFloatInputState{};
+    materialUiState.surface3DUvScaleVInput = engine::UIFloatInputState{};
+    materialUiState.surface3DUvOffsetUInput = engine::UIFloatInputState{};
+    materialUiState.surface3DUvOffsetVInput = engine::UIFloatInputState{};
+    materialUiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
+    materialUiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+    state.selectedTopologySurface3D = SectorEditorTopologyEditTargetForSurface(state.selectedSurface3D);
 }
 
 void OpenPreviewSurfaceTexturePicker(
@@ -71,6 +76,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
     const engine::FontHandle font = context.font;
     SectorEditorState& state = context.state;
     SectorEditorUiState& uiState = context.uiState;
+    MaterialEditingUiState& materialUiState = context.materialUiState;
     SectorEditorMaterialEditingService& materialEditing = context.materialEditing;
     SectorEditorTextureCatalogService& textureCatalog = context.textureCatalog;
 
@@ -78,7 +84,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
     const bool targetIsMiddle = IsMiddleTopologyEditTarget(target.kind);
     if (targetIsMiddle && state.activeTopologyMaterialLayer != TopologyMaterialLayer::Base) {
         state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
-        ResetPreviewSurfaceUi(state, uiState);
+        ResetPreviewSurfaceUi(state, materialUiState);
     }
     const TopologyMaterialLayer layer = EffectiveTopologyMaterialLayer(
             target.kind,
@@ -158,7 +164,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
                     "Base",
                     layer == TopologyMaterialLayer::Base)) {
             state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
-            ResetPreviewSurfaceUi(state, uiState);
+            ResetPreviewSurfaceUi(state, materialUiState);
         }
         if (engine::ToolButton(
                     ui,
@@ -171,7 +177,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
                     "Decal",
                     layer == TopologyMaterialLayer::Decal)) {
             state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
-            ResetPreviewSurfaceUi(state, uiState);
+            ResetPreviewSurfaceUi(state, materialUiState);
         }
     }
 
@@ -238,10 +244,10 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
     };
 
     if (decalAssigned) {
-        drawFloat("sector_editor_3d_uv_scale_u", "Scale U", uvScale.x, uiState.surface3DUvScaleUInput, 0, TopologyUvScaleMin, TopologyUvScaleMax, startX);
-        drawFloat("sector_editor_3d_uv_scale_v", "Scale V", uvScale.y, uiState.surface3DUvScaleVInput, 1, TopologyUvScaleMin, TopologyUvScaleMax, startX + (colW + gap));
-        drawFloat("sector_editor_3d_uv_offset_u", "Offset U", uvOffset.x, uiState.surface3DUvOffsetUInput, 2, -1024.0f, 1024.0f, startX + (colW + gap) * 2.0f);
-        drawFloat("sector_editor_3d_uv_offset_v", "Offset V", uvOffset.y, uiState.surface3DUvOffsetVInput, 3, -1024.0f, 1024.0f, startX + (colW + gap) * 3.0f);
+        drawFloat("sector_editor_3d_uv_scale_u", "Scale U", uvScale.x, materialUiState.surface3DUvScaleUInput, 0, TopologyUvScaleMin, TopologyUvScaleMax, startX);
+        drawFloat("sector_editor_3d_uv_scale_v", "Scale V", uvScale.y, materialUiState.surface3DUvScaleVInput, 1, TopologyUvScaleMin, TopologyUvScaleMax, startX + (colW + gap));
+        drawFloat("sector_editor_3d_uv_offset_u", "Offset U", uvOffset.x, materialUiState.surface3DUvOffsetUInput, 2, -1024.0f, 1024.0f, startX + (colW + gap) * 2.0f);
+        drawFloat("sector_editor_3d_uv_offset_v", "Offset V", uvOffset.y, materialUiState.surface3DUvOffsetVInput, 3, -1024.0f, 1024.0f, startX + (colW + gap) * 3.0f);
     }
 
     const float actionTop = inputTop + 52.0f;
@@ -435,7 +441,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
                     Rectangle{startX + (colW + gap) * 4.0f, inputTop, colW, 38.0f},
                     engine::UITextJustify::Left,
                     decal->opacity,
-                    uiState.surface3DDecalOpacityInput,
+                    materialUiState.surface3DDecalOpacityInput,
                     0.0f,
                     1.0f,
                     3);
@@ -455,7 +461,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
                         Rectangle{startX + (colW + gap) * 5.0f, inputTop, colW, 38.0f},
                         engine::UITextJustify::Left,
                         decal->bloomIntensity,
-                        uiState.surface3DDecalBloomIntensityInput,
+                        materialUiState.surface3DDecalBloomIntensityInput,
                         0.0f,
                         10.0f,
                         3);

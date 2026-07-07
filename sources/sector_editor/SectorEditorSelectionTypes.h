@@ -124,22 +124,6 @@ struct SelectDragArmState {
     Vector2 pressPosition = {};
 };
 
-struct LightDragState {
-    bool active = false;
-    int topologyLightId = -1;
-    SpotLightHandle spotHandle = SpotLightHandle::Origin;
-    Vector3 snappedPosition = {};
-};
-
-struct LightEditingState {
-    bool active = false;
-    TopologySelectionKind kind = TopologySelectionKind::None;
-    int topologyLightId = -1;
-    SpotLightHandle spotHandle = SpotLightHandle::Origin;
-    Vector3 originalPosition = {};
-    Vector3 originalTarget = {};
-};
-
 struct RuntimeObjectDragState {
     bool active = false;
     int objectId = -1;

@@ -3,7 +3,8 @@
 #include "engine/assets/AssetManager.h"
 #include "sector_editor/SectorEditorModalTypes.h"
 #include "sector_editor/SectorEditorTextureModals.h"
-#include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogState.h"
+#include "sector_demo/SectorTopologyMap.h"
 
 #include <string>
 #include <vector>
@@ -11,7 +12,13 @@
 namespace game {
 
 struct SectorEditorTextureCatalogServiceContext {
-    SectorEditorState& state;
+    SectorTopologyMap& map;
+    TextureCatalogState& textureState;
+    std::string& defaultFloorTextureId;
+    std::string& defaultCeilingTextureId;
+    std::string& defaultWallTextureId;
+    std::string& defaultLowerWallTextureId;
+    std::string& defaultUpperWallTextureId;
 };
 
 class SectorEditorTextureCatalogService {

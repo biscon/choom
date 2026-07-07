@@ -195,8 +195,8 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
         ClearSectorRuntimeObjects(context.world, assets, state.runtimeObjects);
     }
     preview.ShutdownRendererResources(assets);
-    if (!engine::IsNull(state.editorTextureScope)) {
-        assets.UnloadScope(state.editorTextureScope);
+    if (!engine::IsNull(textureCatalogState.editorTextureScope)) {
+        assets.UnloadScope(textureCatalogState.editorTextureScope);
     }
     if (!engine::IsNull(state.addMapTexture.previewScope)) {
         assets.UnloadScope(state.addMapTexture.previewScope);
@@ -206,6 +206,10 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     }
     state = SectorEditorState{};
     uiState = SectorEditorUiState{};
+    textureCatalogState = TextureCatalogState{};
+    lightEditingState = LightEditingState{};
+    materialEditingState = MaterialEditingState{};
+    materialEditingUiState = MaterialEditingUiState{};
     canvasRect = {};
     statusText.clear();
     engineContext = nullptr;
@@ -1271,10 +1275,10 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
         if (!lightEditing.BeginLightDrag(TopologySelectionKind::StaticSpotLight, topologyLightId, spotHandle)) {
             return;
         }
-        state.lightDrag.active = true;
-        state.lightDrag.topologyLightId = topologyLightId;
-        state.lightDrag.spotHandle = spotHandle;
-        state.lightDrag.snappedPosition = spotHandle == SpotLightHandle::Target
+        lightEditingState.lightDrag.active = true;
+        lightEditingState.lightDrag.topologyLightId = topologyLightId;
+        lightEditingState.lightDrag.spotHandle = spotHandle;
+        lightEditingState.lightDrag.snappedPosition = spotHandle == SpotLightHandle::Target
                 ? light->target
                 : light->position;
         return;
@@ -1293,10 +1297,10 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
         if (!lightEditing.BeginLightDrag(TopologySelectionKind::DynamicSpotLight, topologyLightId, spotHandle)) {
             return;
         }
-        state.lightDrag.active = true;
-        state.lightDrag.topologyLightId = topologyLightId;
-        state.lightDrag.spotHandle = spotHandle;
-        state.lightDrag.snappedPosition = spotHandle == SpotLightHandle::Target
+        lightEditingState.lightDrag.active = true;
+        lightEditingState.lightDrag.topologyLightId = topologyLightId;
+        lightEditingState.lightDrag.spotHandle = spotHandle;
+        lightEditingState.lightDrag.snappedPosition = spotHandle == SpotLightHandle::Target
                 ? light->target
                 : light->position;
         return;
@@ -1315,10 +1319,10 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
         if (!lightEditing.BeginLightDrag(TopologySelectionKind::DynamicLight, topologyLightId, SpotLightHandle::Origin)) {
             return;
         }
-        state.lightDrag.active = true;
-        state.lightDrag.topologyLightId = topologyLightId;
-        state.lightDrag.spotHandle = SpotLightHandle::Origin;
-        state.lightDrag.snappedPosition = light->position;
+        lightEditingState.lightDrag.active = true;
+        lightEditingState.lightDrag.topologyLightId = topologyLightId;
+        lightEditingState.lightDrag.spotHandle = SpotLightHandle::Origin;
+        lightEditingState.lightDrag.snappedPosition = light->position;
         return;
     }
 
@@ -1333,36 +1337,36 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
     if (!lightEditing.BeginLightDrag(TopologySelectionKind::StaticLight, topologyLightId, SpotLightHandle::Origin)) {
         return;
     }
-    state.lightDrag.active = true;
-    state.lightDrag.topologyLightId = topologyLightId;
-    state.lightDrag.spotHandle = SpotLightHandle::Origin;
-    state.lightDrag.snappedPosition = light->position;
+    lightEditingState.lightDrag.active = true;
+    lightEditingState.lightDrag.topologyLightId = topologyLightId;
+    lightEditingState.lightDrag.spotHandle = SpotLightHandle::Origin;
+    lightEditingState.lightDrag.snappedPosition = light->position;
 }
 
 void SectorEditor::UpdateLightDrag(engine::Input& input)
 {
-    if (!state.lightDrag.active) {
+    if (!lightEditingState.lightDrag.active) {
         return;
     }
 
     const Vector2 snapped = SnapMapPoint(ScreenToMap(input.MousePosition()));
-    state.lightDrag.snappedPosition = Vector3{
+    lightEditingState.lightDrag.snappedPosition = Vector3{
             snapped.x,
             0.0f,
             snapped.y};
     SectorEditorLightEditingService lightEditing = BuildLightEditingService();
-    lightEditing.ApplyLightDragToSnappedPosition(state.lightDrag.snappedPosition);
+    lightEditing.ApplyLightDragToSnappedPosition(lightEditingState.lightDrag.snappedPosition);
 }
 
 void SectorEditor::FinishLightDrag()
 {
-    if (!state.lightDrag.active) {
+    if (!lightEditingState.lightDrag.active) {
         return;
     }
 
     SectorEditorLightEditingService lightEditing = BuildLightEditingService();
     const SectorEditorLightMutationResult result = lightEditing.FinishLightDrag();
-    state.lightDrag = LightDragState{};
+    lightEditingState.lightDrag = LightDragState{};
     if (result.dynamicLightRendererRefreshNeeded) {
         preview.RefreshDynamicLightSources(state.topologyMap);
     }
@@ -1370,7 +1374,7 @@ void SectorEditor::FinishLightDrag()
 
 void SectorEditor::CancelLightDrag(const char* message)
 {
-    if (state.lightDrag.active) {
+    if (lightEditingState.lightDrag.active) {
         SectorEditorLightEditingService lightEditing = BuildLightEditingService();
         const SectorEditorLightMutationResult result = lightEditing.CancelLightDragData(message);
         if (result.dynamicLightRendererRefreshNeeded) {
@@ -1378,7 +1382,7 @@ void SectorEditor::CancelLightDrag(const char* message)
         }
     }
 
-    state.lightDrag = LightDragState{};
+    lightEditingState.lightDrag = LightDragState{};
 }
 
 void SectorEditor::StartRuntimeObjectDrag(int objectId)
@@ -1434,7 +1438,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_F3) {
-                    if (state.spotLightPilot.active) {
+                    if (lightEditingState.spotLightPilot.active) {
                         statusText = "Finish spotlight pilot before changing 3D control mode";
                         engine::ConsumeEvent(event);
                         return;
@@ -1545,7 +1549,7 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
             || state.freeflyController.mouseLookEnabled
             || state.previewUiHidden
             || state.texturePicker.open
-            || state.spotLightPilot.active) {
+            || lightEditingState.spotLightPilot.active) {
         state.hoveredSurface3D = SectorSurfaceHit{};
         return;
     }
@@ -1648,7 +1652,7 @@ void SectorEditor::BeginPendingAuthoringInsertVertex(int lineId)
     if (state.authoringVertexDrag.active) {
         CancelAuthoringVertexDrag("Cancelled authoring vertex move");
     }
-    if (state.lightDrag.active) {
+    if (lightEditingState.lightDrag.active) {
         CancelLightDrag("Cancelled light move");
     }
 
@@ -1822,6 +1826,7 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
     SectorEditorManipulationServiceContext context{
             state,
             uiState,
+            lightEditingState,
             statusText};
     context.userData = this;
     context.currentPickSelectionTarget = [](void* userData) {
@@ -1913,11 +1918,13 @@ SectorEditorSelectionServiceContext SectorEditor::BuildSelectionServiceContext()
     SectorEditorSelectionServiceContext context{
             state,
             uiState,
+            materialEditingUiState,
             &statusText,
             this,
             [](void* userData, const char* message) {
                 static_cast<SectorEditor*>(userData)->CancelSpotLightPilotWithPreviewRestore(message);
-            }};
+            },
+            &lightEditingState};
     return context;
 }
 
@@ -1932,6 +1939,7 @@ const SectorTopologySector* SectorEditor::SelectedTopologySector() const
     SectorEditorSelectionServiceContext context{
             const_cast<SectorEditorState&>(state),
             const_cast<SectorEditorUiState&>(uiState),
+            const_cast<MaterialEditingUiState&>(materialEditingUiState),
             nullptr,
             nullptr,
             nullptr};
@@ -1949,6 +1957,7 @@ const SectorTopologyVertex* SectorEditor::SelectedTopologyVertex() const
     SectorEditorSelectionServiceContext context{
             const_cast<SectorEditorState&>(state),
             const_cast<SectorEditorUiState&>(uiState),
+            const_cast<MaterialEditingUiState&>(materialEditingUiState),
             nullptr,
             nullptr,
             nullptr};
@@ -1966,6 +1975,7 @@ const SectorTopologySideDef* SectorEditor::SelectedTopologySideDef() const
     SectorEditorSelectionServiceContext context{
             const_cast<SectorEditorState&>(state),
             const_cast<SectorEditorUiState&>(uiState),
+            const_cast<MaterialEditingUiState&>(materialEditingUiState),
             nullptr,
             nullptr,
             nullptr};
@@ -1983,6 +1993,7 @@ const SectorTopologyLineDef* SectorEditor::SelectedTopologyLineDef() const
     SectorEditorSelectionServiceContext context{
             const_cast<SectorEditorState&>(state),
             const_cast<SectorEditorUiState&>(uiState),
+            const_cast<MaterialEditingUiState&>(materialEditingUiState),
             nullptr,
             nullptr,
             nullptr};
@@ -2000,6 +2011,7 @@ const SectorTopologyStaticPointLight* SectorEditor::SelectedTopologyLight() cons
     SectorEditorSelectionServiceContext context{
             const_cast<SectorEditorState&>(state),
             const_cast<SectorEditorUiState&>(uiState),
+            const_cast<MaterialEditingUiState&>(materialEditingUiState),
             nullptr,
             nullptr,
             nullptr};
@@ -2017,6 +2029,7 @@ const SectorTopologyStaticSpotLight* SectorEditor::SelectedTopologyStaticSpotLig
     SectorEditorSelectionServiceContext context{
             const_cast<SectorEditorState&>(state),
             const_cast<SectorEditorUiState&>(uiState),
+            const_cast<MaterialEditingUiState&>(materialEditingUiState),
             nullptr,
             nullptr,
             nullptr};
@@ -2034,6 +2047,7 @@ const SectorTopologyDynamicPointLight* SectorEditor::SelectedTopologyDynamicLigh
     SectorEditorSelectionServiceContext context{
             const_cast<SectorEditorState&>(state),
             const_cast<SectorEditorUiState&>(uiState),
+            const_cast<MaterialEditingUiState&>(materialEditingUiState),
             nullptr,
             nullptr,
             nullptr};
@@ -2051,6 +2065,7 @@ const SectorTopologyDynamicSpotLight* SectorEditor::SelectedTopologyDynamicSpotL
     SectorEditorSelectionServiceContext context{
             const_cast<SectorEditorState&>(state),
             const_cast<SectorEditorUiState&>(uiState),
+            const_cast<MaterialEditingUiState&>(materialEditingUiState),
             nullptr,
             nullptr,
             nullptr};
@@ -2068,6 +2083,7 @@ const SectorPlacedRuntimeObject* SectorEditor::SelectedRuntimeObject() const
     SectorEditorSelectionServiceContext context{
             const_cast<SectorEditorState&>(state),
             const_cast<SectorEditorUiState&>(uiState),
+            const_cast<MaterialEditingUiState&>(materialEditingUiState),
             nullptr,
             nullptr,
             nullptr};
@@ -2220,10 +2236,13 @@ bool SectorEditor::OpenDeleteSelectedLightConfirmation()
                 SectorEditorLightEditingService lightEditing = BuildLightEditingService();
                 const SectorEditorLightMutationResult result = lightEditing.DeleteSelectedLightConfirmed();
                 if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
-                    ResetSectorFreeflyController(state.freeflyController, result.restoredSpotLightPilot.originalPreviewPose);
+                    ResetSectorFreeflyController(
+                            state.freeflyController,
+                            state.spotLightPilotPreviewRestore.originalPreviewPose);
                     SetSectorFreeflyMouseLookEnabled(
                             state.freeflyController,
-                            result.restoredSpotLightPilot.originalMouseLookEnabled);
+                            state.spotLightPilotPreviewRestore.originalMouseLookEnabled);
+                    state.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
                     preview.ApplyRendererPose(state.freeflyController.pose);
                 }
                 if (result.dynamicLightRendererRefreshNeeded) {
@@ -2609,6 +2628,7 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
     DrawSectorEditorPreviewSurfaceHighlights(
             const_cast<SectorEditorState&>(state),
             const_cast<SectorEditorUiState&>(uiState),
+            const_cast<MaterialEditingUiState&>(materialEditingUiState),
             preview);
 }
 
@@ -2654,6 +2674,8 @@ void SectorEditor::DrawPreviewOverlay(
             smallFont,
             state,
             uiState,
+            materialEditingUiState,
+            lightEditingState,
             statusText,
             preview};
     const SectorEditorPreviewOverlayResult result = DrawSectorEditorPreviewOverlay(overlayContext);
@@ -2713,6 +2735,7 @@ void SectorEditor::DrawPreviewUvPanel(
             BuildPreviewUvPanelRect(),
             state,
             uiState,
+            materialEditingUiState,
             statusText,
             materialEditing,
             textureCatalog,
@@ -3036,11 +3059,11 @@ void SectorEditor::DrawLightMoveOverlay() const
         return;
     }
 
-    if (state.lightDrag.active) {
+    if (lightEditingState.lightDrag.active) {
         if (state.topologySelectionKind == TopologySelectionKind::StaticSpotLight) {
             const SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
                     state.topologyMap,
-                    state.lightDrag.topologyLightId);
+                    lightEditingState.lightDrag.topologyLightId);
             if (light == nullptr) {
                 return;
             }
@@ -3053,13 +3076,13 @@ void SectorEditor::DrawLightMoveOverlay() const
             DrawCircleLines(
                     static_cast<int>(std::round(origin.x)),
                     static_cast<int>(std::round(origin.y)),
-                    state.lightDrag.spotHandle == SpotLightHandle::Origin ? 15.0f : 11.0f,
+                    lightEditingState.lightDrag.spotHandle == SpotLightHandle::Origin ? 15.0f : 11.0f,
                     Color{120, 230, 154, 255});
             DrawCircleV(origin, 6.5f, Color{120, 230, 154, 255});
             DrawCircleLines(
                     static_cast<int>(std::round(target.x)),
                     static_cast<int>(std::round(target.y)),
-                    state.lightDrag.spotHandle == SpotLightHandle::Target ? 15.0f : 10.0f,
+                    lightEditingState.lightDrag.spotHandle == SpotLightHandle::Target ? 15.0f : 10.0f,
                     Color{122, 220, 244, 255});
             DrawCircleV(target, 5.0f, Color{122, 220, 244, 255});
             return;
@@ -3068,7 +3091,7 @@ void SectorEditor::DrawLightMoveOverlay() const
         if (state.topologySelectionKind == TopologySelectionKind::DynamicSpotLight) {
             const SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(
                     state.topologyMap,
-                    state.lightDrag.topologyLightId);
+                    lightEditingState.lightDrag.topologyLightId);
             if (light == nullptr) {
                 return;
             }
@@ -3081,13 +3104,13 @@ void SectorEditor::DrawLightMoveOverlay() const
             DrawCircleLines(
                     static_cast<int>(std::round(origin.x)),
                     static_cast<int>(std::round(origin.y)),
-                    state.lightDrag.spotHandle == SpotLightHandle::Origin ? 15.0f : 11.0f,
+                    lightEditingState.lightDrag.spotHandle == SpotLightHandle::Origin ? 15.0f : 11.0f,
                     Color{120, 230, 154, 255});
             DrawCircleV(origin, 6.5f, Color{120, 230, 154, 255});
             DrawCircleLines(
                     static_cast<int>(std::round(target.x)),
                     static_cast<int>(std::round(target.y)),
-                    state.lightDrag.spotHandle == SpotLightHandle::Target ? 15.0f : 10.0f,
+                    lightEditingState.lightDrag.spotHandle == SpotLightHandle::Target ? 15.0f : 10.0f,
                     Color{122, 220, 244, 255});
             DrawCircleV(target, 5.0f, Color{122, 220, 244, 255});
             return;
@@ -3096,7 +3119,7 @@ void SectorEditor::DrawLightMoveOverlay() const
         if (state.topologySelectionKind == TopologySelectionKind::DynamicLight) {
             const SectorTopologyDynamicPointLight* light = FindSectorTopologyDynamicLight(
                     state.topologyMap,
-                    state.lightDrag.topologyLightId);
+                    lightEditingState.lightDrag.topologyLightId);
             if (light == nullptr) {
                 return;
             }
@@ -3118,7 +3141,7 @@ void SectorEditor::DrawLightMoveOverlay() const
 
         const SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
                 state.topologyMap,
-                state.lightDrag.topologyLightId);
+                lightEditingState.lightDrag.topologyLightId);
         if (light == nullptr) {
             return;
         }
@@ -3328,7 +3351,7 @@ void SectorEditor::DrawToolsPanel(
         if (state.authoringVertexDrag.active && tool != SectorEditorTool::AuthoringMove) {
             CancelAuthoringVertexDrag("Cancelled authoring vertex move");
         }
-        if (state.lightDrag.active
+        if (lightEditingState.lightDrag.active
                 && tool != SectorEditorTool::Move
                 && tool != SectorEditorTool::Select
                 && tool != SectorEditorTool::StaticLight
@@ -3558,6 +3581,7 @@ void SectorEditor::DrawSectorsPanel(
             BuildRightPanelRect(),
             state,
             uiState,
+            materialEditingUiState,
             statusText,
             selection,
             placedObjectActions,
@@ -3918,8 +3942,8 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     lightmapBake.Shutdown();
     ClearSectorRuntimeObjects(context.world, assets, state.runtimeObjects);
     preview.ShutdownRendererResources(assets);
-    if (!engine::IsNull(state.editorTextureScope)) {
-        assets.UnloadScope(state.editorTextureScope);
+    if (!engine::IsNull(textureCatalogState.editorTextureScope)) {
+        assets.UnloadScope(textureCatalogState.editorTextureScope);
     }
     if (!engine::IsNull(state.addMapTexture.previewScope)) {
         assets.UnloadScope(state.addMapTexture.previewScope);
@@ -3927,6 +3951,10 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
 
     state = SectorEditorState{};
     uiState = SectorEditorUiState{};
+    textureCatalogState = TextureCatalogState{};
+    lightEditingState = LightEditingState{};
+    materialEditingState = MaterialEditingState{};
+    materialEditingUiState = MaterialEditingUiState{};
     ResetEditorTopologyDocumentState(state);
     state.viewCenter = Vector2{9.0f, 6.0f};
     state.viewZoom = 48.0f;
@@ -4018,8 +4046,7 @@ bool SectorEditor::LoadLevel(
     state.hoveredTopologyVertexId = -1;
     state.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
     state.authoringVertexDrag = AuthoringVertexDragState{};
-    state.lightDrag = LightDragState{};
-    state.lightEditing = LightEditingState{};
+    lightEditingState = LightEditingState{};
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     textureCatalog.RefreshDefaultTextureIds();
     textureCatalog.RefreshTextureHandles(assets);
@@ -4303,14 +4330,14 @@ bool SectorEditor::StartSpotLightPilot()
         targetDistanceWorld = std::max(SectorAuthoringToWorldDistance(lightRange) * 0.5f, 4.0f);
     }
 
-    state.spotLightPilot.active = true;
-    state.spotLightPilot.kind = pilotKind;
-    state.spotLightPilot.lightId = lightId;
-    state.spotLightPilot.originalPosition = lightPosition;
-    state.spotLightPilot.originalTarget = lightTarget;
-    state.spotLightPilot.originalPreviewPose = ActivePreviewPose();
-    state.spotLightPilot.originalMouseLookEnabled = state.freeflyController.mouseLookEnabled;
-    state.spotLightPilot.targetDistanceWorld = targetDistanceWorld;
+    lightEditingState.spotLightPilot.active = true;
+    lightEditingState.spotLightPilot.kind = pilotKind;
+    lightEditingState.spotLightPilot.lightId = lightId;
+    lightEditingState.spotLightPilot.originalPosition = lightPosition;
+    lightEditingState.spotLightPilot.originalTarget = lightTarget;
+    state.spotLightPilotPreviewRestore.originalPreviewPose = ActivePreviewPose();
+    state.spotLightPilotPreviewRestore.originalMouseLookEnabled = state.freeflyController.mouseLookEnabled;
+    lightEditingState.spotLightPilot.targetDistanceWorld = targetDistanceWorld;
 
     const SectorViewPose pilotPose = PreviewPoseLookingAt(originWorld, targetWorld);
     ResetSectorFreeflyController(state.freeflyController, pilotPose);
@@ -4325,11 +4352,11 @@ bool SectorEditor::StartSpotLightPilot()
 
 bool SectorEditor::ApplySpotLightPilotFromPreviewPose()
 {
-    if (!state.spotLightPilot.active) {
+    if (!lightEditingState.spotLightPilot.active) {
         return false;
     }
 
-    const SpotLightPilotState pilot = state.spotLightPilot;
+    const SpotLightPilotLightState pilot = lightEditingState.spotLightPilot;
     const SectorViewPose pose = ActivePreviewPose();
     const Vector3 forward = PreviewForwardFromPose(pose);
     const Vector3 targetWorld = Vector3Add(
@@ -4341,29 +4368,40 @@ bool SectorEditor::ApplySpotLightPilotFromPreviewPose()
             SectorWorldToAuthoringPosition(pose.position),
             SectorWorldToAuthoringPosition(targetWorld));
     if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
-        ResetSectorFreeflyController(state.freeflyController, result.restoredSpotLightPilot.originalPreviewPose);
-        SetSectorFreeflyMouseLookEnabled(state.freeflyController, result.restoredSpotLightPilot.originalMouseLookEnabled);
+        ResetSectorFreeflyController(
+                state.freeflyController,
+                state.spotLightPilotPreviewRestore.originalPreviewPose);
+        SetSectorFreeflyMouseLookEnabled(
+                state.freeflyController,
+                state.spotLightPilotPreviewRestore.originalMouseLookEnabled);
+        state.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
         preview.ApplyRendererPose(state.freeflyController.pose);
     }
     if (result.dynamicLightRendererRefreshNeeded) {
         preview.RefreshDynamicLightSources(state.topologyMap);
+    }
+    if (result.changed) {
+        state.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
     }
     return result.changed;
 }
 
 void SectorEditor::CancelSpotLightPilotWithPreviewRestore(const char* message)
 {
-    if (!state.spotLightPilot.active) {
+    if (!lightEditingState.spotLightPilot.active) {
         return;
     }
 
     SectorEditorLightEditingService lightEditing = BuildLightEditingService();
     const SectorEditorLightMutationResult result = lightEditing.CancelSpotLightPilotData(message);
     if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
-        ResetSectorFreeflyController(state.freeflyController, result.restoredSpotLightPilot.originalPreviewPose);
+        ResetSectorFreeflyController(
+                state.freeflyController,
+                state.spotLightPilotPreviewRestore.originalPreviewPose);
         SetSectorFreeflyMouseLookEnabled(
                 state.freeflyController,
-                result.restoredSpotLightPilot.originalMouseLookEnabled);
+                state.spotLightPilotPreviewRestore.originalMouseLookEnabled);
+        state.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
         preview.ApplyRendererPose(state.freeflyController.pose);
     }
     if (result.dynamicLightRendererRefreshNeeded) {
@@ -4487,7 +4525,13 @@ SectorEditorTextureCatalogService SectorEditor::MakeTextureCatalogService()
 {
     return SectorEditorTextureCatalogService{
             SectorEditorTextureCatalogServiceContext{
-                    state}};
+                    state.topologyMap,
+                    textureCatalogState,
+                    state.defaultFloorTextureId,
+                    state.defaultCeilingTextureId,
+                    state.defaultWallTextureId,
+                    state.defaultLowerWallTextureId,
+                    state.defaultUpperWallTextureId}};
 }
 
 void SectorEditor::OpenAddMapTextureModal(engine::AssetManager& assets)
@@ -4982,6 +5026,7 @@ bool SectorEditor::IsValidSurfaceRef(SectorSurfaceRef surface) const
     SectorEditorSelectionServiceContext context{
             const_cast<SectorEditorState&>(state),
             const_cast<SectorEditorUiState&>(uiState),
+            const_cast<MaterialEditingUiState&>(materialEditingUiState),
             nullptr,
             nullptr,
             nullptr};
@@ -5003,6 +5048,7 @@ bool SectorEditor::IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget ta
     SectorEditorSelectionServiceContext context{
             const_cast<SectorEditorState&>(state),
             const_cast<SectorEditorUiState&>(uiState),
+            const_cast<MaterialEditingUiState&>(materialEditingUiState),
             nullptr,
             nullptr,
             nullptr};
@@ -5097,7 +5143,8 @@ SectorEditorMaterialEditingService SectorEditor::BuildMaterialEditingService()
     return SectorEditorMaterialEditingService{
             SectorEditorMaterialEditingServiceContext{
                     state,
-                    uiState,
+                    materialEditingState,
+                    materialEditingUiState,
                     state.texturePicker,
                     statusText,
                     [this](engine::AssetManager*) {
@@ -5114,8 +5161,66 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
 {
     return SectorEditorLightEditingService{
             SectorEditorLightEditingServiceContext{
-                    state,
-                    uiState,
+                    state.topologyMap,
+                    lightEditingState,
+                    state.topologyDocumentDirty,
+                    state.hasUnsavedChanges,
+                    state.topologyRenderRevision,
+                    state.topologyRenderCache,
+                    {
+                            state.selectDragArm,
+                            state.authoringVertexDrag,
+                            state.runtimeObjectDrag,
+                            state.topologySelectionKind,
+                            state.selectedTopologySectorId,
+                            state.selectedTopologyVertexId,
+                            state.selectedTopologySideDefId,
+                            state.selectedTopologyLineDefId,
+                            state.selectedTopologyLightId,
+                            state.selectedTopologyStaticSpotLightId,
+                            state.selectedTopologyDynamicLightId,
+                            state.selectedTopologyDynamicSpotLightId,
+                            state.selectedRuntimeObjectId,
+                            state.selectedTopologySideKind,
+                            state.inspectedTopologyVertexId,
+                            state.selectedSurface3D,
+                            state.selectedTopologySurface3D,
+                            state.selectedAuthoring,
+                            state.hoveredTopologyLightId,
+                            state.hoveredTopologyStaticSpotLightId,
+                            state.hoveredTopologyDynamicLightId,
+                            state.hoveredTopologyDynamicSpotLightId,
+                    },
+                    {
+                            uiState.inspectorScroll,
+                            uiState.lightXInput,
+                            uiState.lightYInput,
+                            uiState.lightZInput,
+                            uiState.lightTargetXInput,
+                            uiState.lightTargetYInput,
+                            uiState.lightTargetZInput,
+                            uiState.lightIntensityInput,
+                            uiState.lightRadiusInput,
+                            uiState.lightInnerConeInput,
+                            uiState.lightOuterConeInput,
+                            uiState.lightSourceRadiusInput,
+                            uiState.lightFlickerSpeedInput,
+                            uiState.lightFlickerAmountInput,
+                            uiState.lightShadowPriorityInput,
+                            uiState.lightShadowBiasInput,
+                            uiState.lightShadowStrengthInput,
+                            uiState.lightShadowSoftnessInput,
+                            uiState.lightRedInput,
+                            uiState.lightGreenInput,
+                            uiState.lightBlueInput,
+                            uiState.idBufferSectorIndex,
+                            uiState.idBufferLightIndex,
+                            uiState.selectedSectorIdBuffer,
+                            sizeof(uiState.selectedSectorIdBuffer),
+                            uiState.selectedLightIdBuffer,
+                            sizeof(uiState.selectedLightIdBuffer),
+                            uiState.idEditError,
+                    },
                     statusText}};
 }
 
@@ -5186,7 +5291,8 @@ std::string SectorEditor::CurrentTextureForPickerTarget() const
     if (IsSectorEditorMaterialTexturePickerTarget(state.texturePicker.topologyTargetKind)) {
         SectorEditorMaterialEditingServiceContext serviceContext{
                 const_cast<SectorEditorState&>(state),
-                const_cast<SectorEditorUiState&>(uiState),
+                const_cast<MaterialEditingState&>(materialEditingState),
+                const_cast<MaterialEditingUiState&>(materialEditingUiState),
                 const_cast<TexturePickerState&>(state.texturePicker),
                 const_cast<std::string&>(statusText),
                 nullptr};
@@ -5232,7 +5338,8 @@ void SectorEditor::ApplySelectedBillboardSpritePickerSelection()
 
 void SectorEditor::OpenMapSkyTexturePicker()
 {
-    if (!game::OpenMapSkyTexturePicker(state)) {
+    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
+    if (!game::OpenMapSkyTexturePicker(state, textureCatalog)) {
         statusText = "No sky texture target";
     }
 }
@@ -5245,7 +5352,8 @@ void SectorEditor::OpenSelectedDoorTexturePicker()
         return;
     }
 
-    if (!game::OpenRuntimeDoorTexturePicker(state, object->id)) {
+    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
+    if (!game::OpenRuntimeDoorTexturePicker(state, textureCatalog, object->id)) {
         statusText = "No door texture target";
     }
 }

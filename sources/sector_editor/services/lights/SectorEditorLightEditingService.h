@@ -1,17 +1,82 @@
 #pragma once
 
-#include "sector_editor/SectorEditorTypes.h"
+#include "engine/ui/UI.h"
+#include "sector_editor/SectorEditorSelectionTypes.h"
+#include "sector_editor/SectorEditorSurfaceTypes.h"
+#include "sector_editor/SectorEditorTopologyRenderCacheTypes.h"
+#include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
+#include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 
 namespace game {
 
 struct SectorEditorLightEditingServiceContext {
-    SectorEditorState& state;
-    SectorEditorUiState& uiState;
+    SectorTopologyMap& map;
+    LightEditingState& lightState;
+    bool& topologyDocumentDirty;
+    bool& hasUnsavedChanges;
+    uint64_t& topologyRenderRevision;
+    SectorEditorTopologyRenderCache& topologyRenderCache;
+    struct SelectionRefs {
+        SelectDragArmState& selectDragArm;
+        AuthoringVertexDragState& authoringVertexDrag;
+        RuntimeObjectDragState& runtimeObjectDrag;
+        TopologySelectionKind& topologySelectionKind;
+        int& selectedTopologySectorId;
+        int& selectedTopologyVertexId;
+        int& selectedTopologySideDefId;
+        int& selectedTopologyLineDefId;
+        int& selectedTopologyLightId;
+        int& selectedTopologyStaticSpotLightId;
+        int& selectedTopologyDynamicLightId;
+        int& selectedTopologyDynamicSpotLightId;
+        int& selectedRuntimeObjectId;
+        SectorTopologySideKind& selectedTopologySideKind;
+        int& inspectedTopologyVertexId;
+        SectorSurfaceRef& selectedSurface3D;
+        TopologySurfaceEditTarget& selectedTopologySurface3D;
+        SectorAuthoringSelectionTarget& selectedAuthoring;
+        int& hoveredTopologyLightId;
+        int& hoveredTopologyStaticSpotLightId;
+        int& hoveredTopologyDynamicLightId;
+        int& hoveredTopologyDynamicSpotLightId;
+    } selection;
+    struct UiRefs {
+        engine::UIScrollState& inspectorScroll;
+        engine::UIFloatInputState& lightXInput;
+        engine::UIFloatInputState& lightYInput;
+        engine::UIFloatInputState& lightZInput;
+        engine::UIFloatInputState& lightTargetXInput;
+        engine::UIFloatInputState& lightTargetYInput;
+        engine::UIFloatInputState& lightTargetZInput;
+        engine::UIFloatInputState& lightIntensityInput;
+        engine::UIFloatInputState& lightRadiusInput;
+        engine::UIFloatInputState& lightInnerConeInput;
+        engine::UIFloatInputState& lightOuterConeInput;
+        engine::UIFloatInputState& lightSourceRadiusInput;
+        engine::UIFloatInputState& lightFlickerSpeedInput;
+        engine::UIFloatInputState& lightFlickerAmountInput;
+        engine::UIIntInputState& lightShadowPriorityInput;
+        engine::UIFloatInputState& lightShadowBiasInput;
+        engine::UIFloatInputState& lightShadowStrengthInput;
+        engine::UIFloatInputState& lightShadowSoftnessInput;
+        engine::UIIntInputState& lightRedInput;
+        engine::UIIntInputState& lightGreenInput;
+        engine::UIIntInputState& lightBlueInput;
+        int& idBufferSectorIndex;
+        int& idBufferLightIndex;
+        char* selectedSectorIdBuffer;
+        std::size_t selectedSectorIdBufferSize;
+        char* selectedLightIdBuffer;
+        std::size_t selectedLightIdBufferSize;
+        std::string& idEditError;
+    } ui;
     std::string& statusText;
 };
 
@@ -19,7 +84,7 @@ struct SectorEditorLightMutationResult {
     bool changed = false;
     bool dynamicLightRendererRefreshNeeded = false;
     bool previewPoseRestoreNeeded = false;
-    SpotLightPilotState restoredSpotLightPilot;
+    SpotLightPilotLightState restoredSpotLightPilot;
 };
 
 class SectorEditorLightEditingService {

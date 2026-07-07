@@ -1,5 +1,6 @@
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 
+#include "sector_editor/SectorEditorTypes.h"
 #include "sector_demo/SectorUnits.h"
 
 #include <cmath>
@@ -36,13 +37,72 @@ game::SectorTopologyMap MakeMap()
 
 game::SectorEditorLightEditingService MakeService(
         game::SectorEditorState& state,
+        game::LightEditingState& lightState,
         game::SectorEditorUiState& uiState,
         std::string& statusText)
 {
     return game::SectorEditorLightEditingService{
             game::SectorEditorLightEditingServiceContext{
-                    state,
-                    uiState,
+                    state.topologyMap,
+                    lightState,
+                    state.topologyDocumentDirty,
+                    state.hasUnsavedChanges,
+                    state.topologyRenderRevision,
+                    state.topologyRenderCache,
+                    {
+                            state.selectDragArm,
+                            state.authoringVertexDrag,
+                            state.runtimeObjectDrag,
+                            state.topologySelectionKind,
+                            state.selectedTopologySectorId,
+                            state.selectedTopologyVertexId,
+                            state.selectedTopologySideDefId,
+                            state.selectedTopologyLineDefId,
+                            state.selectedTopologyLightId,
+                            state.selectedTopologyStaticSpotLightId,
+                            state.selectedTopologyDynamicLightId,
+                            state.selectedTopologyDynamicSpotLightId,
+                            state.selectedRuntimeObjectId,
+                            state.selectedTopologySideKind,
+                            state.inspectedTopologyVertexId,
+                            state.selectedSurface3D,
+                            state.selectedTopologySurface3D,
+                            state.selectedAuthoring,
+                            state.hoveredTopologyLightId,
+                            state.hoveredTopologyStaticSpotLightId,
+                            state.hoveredTopologyDynamicLightId,
+                            state.hoveredTopologyDynamicSpotLightId,
+                    },
+                    {
+                            uiState.inspectorScroll,
+                            uiState.lightXInput,
+                            uiState.lightYInput,
+                            uiState.lightZInput,
+                            uiState.lightTargetXInput,
+                            uiState.lightTargetYInput,
+                            uiState.lightTargetZInput,
+                            uiState.lightIntensityInput,
+                            uiState.lightRadiusInput,
+                            uiState.lightInnerConeInput,
+                            uiState.lightOuterConeInput,
+                            uiState.lightSourceRadiusInput,
+                            uiState.lightFlickerSpeedInput,
+                            uiState.lightFlickerAmountInput,
+                            uiState.lightShadowPriorityInput,
+                            uiState.lightShadowBiasInput,
+                            uiState.lightShadowStrengthInput,
+                            uiState.lightShadowSoftnessInput,
+                            uiState.lightRedInput,
+                            uiState.lightGreenInput,
+                            uiState.lightBlueInput,
+                            uiState.idBufferSectorIndex,
+                            uiState.idBufferLightIndex,
+                            uiState.selectedSectorIdBuffer,
+                            sizeof(uiState.selectedSectorIdBuffer),
+                            uiState.selectedLightIdBuffer,
+                            sizeof(uiState.selectedLightIdBuffer),
+                            uiState.idEditError,
+                    },
                     statusText}};
 }
 
@@ -78,10 +138,11 @@ void TestAddStaticLightDirtiesAndSelects()
     game::SectorEditorState state;
     state.topologyMap = MakeMap();
     game::SectorEditorUiState uiState;
+    game::LightEditingState lightState;
     std::string statusText;
     ResetDirty(state, statusText);
 
-    game::SectorEditorLightEditingService service = MakeService(state, uiState, statusText);
+    game::SectorEditorLightEditingService service = MakeService(state, lightState, uiState, statusText);
     const game::SectorEditorLightMutationResult result = service.AddStaticLight(1, Vector2{2.0f, 3.0f});
 
     Check(result.changed, "add static light reports changed");
@@ -100,10 +161,11 @@ void TestAddDynamicLightDirtiesAndSelects()
     game::SectorEditorState state;
     state.topologyMap = MakeMap();
     game::SectorEditorUiState uiState;
+    game::LightEditingState lightState;
     std::string statusText;
     ResetDirty(state, statusText);
 
-    game::SectorEditorLightEditingService service = MakeService(state, uiState, statusText);
+    game::SectorEditorLightEditingService service = MakeService(state, lightState, uiState, statusText);
     const game::SectorEditorLightMutationResult result = service.AddDynamicLight(1, Vector2{4.0f, 5.0f});
 
     Check(result.changed, "add dynamic light reports changed");
@@ -121,10 +183,11 @@ void TestAddNoOpDoesNotDirty()
     game::SectorEditorState state;
     state.topologyMap = MakeMap();
     game::SectorEditorUiState uiState;
+    game::LightEditingState lightState;
     std::string statusText;
     ResetDirty(state, statusText);
 
-    game::SectorEditorLightEditingService service = MakeService(state, uiState, statusText);
+    game::SectorEditorLightEditingService service = MakeService(state, lightState, uiState, statusText);
     const game::SectorEditorLightMutationResult result = service.AddStaticLight(99, Vector2{2.0f, 3.0f});
 
     Check(!result.changed, "failed add reports unchanged");
@@ -140,15 +203,16 @@ void TestDeleteSelectedStaticLightDirtiesAndClearsState()
     state.topologySelectionKind = game::TopologySelectionKind::StaticLight;
     state.selectedTopologyLightId = 7;
     state.hoveredTopologyLightId = 7;
-    state.lightDrag.active = true;
-    state.lightDrag.topologyLightId = 7;
-    state.lightEditing.active = true;
-    state.lightEditing.topologyLightId = 7;
     game::SectorEditorUiState uiState;
+    game::LightEditingState lightState;
+    lightState.lightDrag.active = true;
+    lightState.lightDrag.topologyLightId = 7;
+    lightState.lightEdit.active = true;
+    lightState.lightEdit.topologyLightId = 7;
     std::string statusText;
     ResetDirty(state, statusText);
 
-    game::SectorEditorLightEditingService service = MakeService(state, uiState, statusText);
+    game::SectorEditorLightEditingService service = MakeService(state, lightState, uiState, statusText);
     const game::SectorEditorLightMutationResult result = service.DeleteSelectedLightConfirmed();
 
     Check(result.changed, "delete selected static light reports changed");
@@ -157,7 +221,7 @@ void TestDeleteSelectedStaticLightDirtiesAndClearsState()
                   && state.selectedTopologyLightId < 0,
           "delete selected static light clears selection");
     Check(state.hoveredTopologyLightId < 0, "delete selected static light clears hover");
-    Check(!state.lightDrag.active && !state.lightEditing.active, "delete selected static light clears drag/edit state");
+    Check(!lightState.lightDrag.active && !lightState.lightEdit.active, "delete selected static light clears drag/edit state");
     CheckDirtyOnce(state, statusText, "Deleted static light 7");
 }
 
@@ -171,10 +235,11 @@ void TestDeleteSelectedDynamicLightDirties()
     state.topologySelectionKind = game::TopologySelectionKind::DynamicLight;
     state.selectedTopologyDynamicLightId = 8;
     game::SectorEditorUiState uiState;
+    game::LightEditingState lightState;
     std::string statusText;
     ResetDirty(state, statusText);
 
-    game::SectorEditorLightEditingService service = MakeService(state, uiState, statusText);
+    game::SectorEditorLightEditingService service = MakeService(state, lightState, uiState, statusText);
     const game::SectorEditorLightMutationResult result = service.DeleteSelectedLightConfirmed();
 
     Check(result.changed, "delete selected dynamic light reports changed");
@@ -193,10 +258,11 @@ void TestLightDragApplyFinishAndCancelTiming()
     light.target = Vector3{4.0f, 5.0f, 6.0f};
     state.topologyMap.staticSpotLights.push_back(light);
     game::SectorEditorUiState uiState;
+    game::LightEditingState lightState;
     std::string statusText;
     ResetDirty(state, statusText);
 
-    game::SectorEditorLightEditingService service = MakeService(state, uiState, statusText);
+    game::SectorEditorLightEditingService service = MakeService(state, lightState, uiState, statusText);
     Check(service.BeginLightDrag(game::TopologySelectionKind::StaticSpotLight, 9, game::SpotLightHandle::Origin),
           "begin static spot drag succeeds");
     service.ApplyLightDragToSnappedPosition(Vector3{3.0f, 0.0f, 8.0f});
@@ -241,10 +307,11 @@ void TestLightDragFinishNoOpDoesNotDirty()
     light.position = Vector3{1.0f, 2.0f, 3.0f};
     state.topologyMap.staticLights.push_back(light);
     game::SectorEditorUiState uiState;
+    game::LightEditingState lightState;
     std::string statusText;
     ResetDirty(state, statusText);
 
-    game::SectorEditorLightEditingService service = MakeService(state, uiState, statusText);
+    game::SectorEditorLightEditingService service = MakeService(state, lightState, uiState, statusText);
     Check(service.BeginLightDrag(game::TopologySelectionKind::StaticLight, 10, game::SpotLightHandle::Origin),
           "begin static light drag succeeds");
     service.ApplyLightDragToSnappedPosition(Vector3{1.0f, 0.0f, 3.0f});
@@ -263,16 +330,17 @@ void TestSpotLightPilotApplyAndCancelTiming()
     light.position = Vector3{1.0f, 2.0f, 3.0f};
     light.target = Vector3{4.0f, 5.0f, 6.0f};
     state.topologyMap.dynamicSpotLights.push_back(light);
-    state.spotLightPilot.active = true;
-    state.spotLightPilot.kind = game::SpotLightPilotKind::Dynamic;
-    state.spotLightPilot.lightId = 11;
-    state.spotLightPilot.originalPosition = light.position;
-    state.spotLightPilot.originalTarget = light.target;
     game::SectorEditorUiState uiState;
+    game::LightEditingState lightState;
+    lightState.spotLightPilot.active = true;
+    lightState.spotLightPilot.kind = game::SpotLightPilotKind::Dynamic;
+    lightState.spotLightPilot.lightId = 11;
+    lightState.spotLightPilot.originalPosition = light.position;
+    lightState.spotLightPilot.originalTarget = light.target;
     std::string statusText;
     ResetDirty(state, statusText);
 
-    game::SectorEditorLightEditingService service = MakeService(state, uiState, statusText);
+    game::SectorEditorLightEditingService service = MakeService(state, lightState, uiState, statusText);
     const game::SectorEditorLightMutationResult apply =
             service.ApplySpotLightPilot(Vector3{7.0f, 8.0f, 9.0f}, Vector3{10.0f, 11.0f, 12.0f});
     const game::SectorTopologyDynamicSpotLight* applied =
@@ -283,22 +351,22 @@ void TestSpotLightPilotApplyAndCancelTiming()
                   && Near(applied->position.x, 7.0f)
                   && Near(applied->target.z, 12.0f),
           "dynamic spotlight pilot apply mutates data");
-    Check(!state.spotLightPilot.active, "dynamic spotlight pilot apply clears pilot state");
+    Check(!lightState.spotLightPilot.active, "dynamic spotlight pilot apply clears pilot state");
     CheckDirtyOnce(state, statusText, "Applied dynamic spot 11 pilot pose");
 
     ResetDirty(state, statusText);
-    state.spotLightPilot.active = true;
-    state.spotLightPilot.kind = game::SpotLightPilotKind::Dynamic;
-    state.spotLightPilot.lightId = 11;
-    state.spotLightPilot.originalPosition = Vector3{7.0f, 8.0f, 9.0f};
-    state.spotLightPilot.originalTarget = Vector3{10.0f, 11.0f, 12.0f};
+    lightState.spotLightPilot.active = true;
+    lightState.spotLightPilot.kind = game::SpotLightPilotKind::Dynamic;
+    lightState.spotLightPilot.lightId = 11;
+    lightState.spotLightPilot.originalPosition = Vector3{7.0f, 8.0f, 9.0f};
+    lightState.spotLightPilot.originalTarget = Vector3{10.0f, 11.0f, 12.0f};
     service.ApplySpotLightPilot(Vector3{13.0f, 14.0f, 15.0f}, Vector3{16.0f, 17.0f, 18.0f});
     ResetDirty(state, statusText);
-    state.spotLightPilot.active = true;
-    state.spotLightPilot.kind = game::SpotLightPilotKind::Dynamic;
-    state.spotLightPilot.lightId = 11;
-    state.spotLightPilot.originalPosition = Vector3{7.0f, 8.0f, 9.0f};
-    state.spotLightPilot.originalTarget = Vector3{10.0f, 11.0f, 12.0f};
+    lightState.spotLightPilot.active = true;
+    lightState.spotLightPilot.kind = game::SpotLightPilotKind::Dynamic;
+    lightState.spotLightPilot.lightId = 11;
+    lightState.spotLightPilot.originalPosition = Vector3{7.0f, 8.0f, 9.0f};
+    lightState.spotLightPilot.originalTarget = Vector3{10.0f, 11.0f, 12.0f};
     const game::SectorEditorLightMutationResult cancel =
             service.CancelSpotLightPilotData("Spotlight pilot cancelled");
     const game::SectorTopologyDynamicSpotLight* cancelled =

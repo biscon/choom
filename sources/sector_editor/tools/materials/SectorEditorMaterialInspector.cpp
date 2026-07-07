@@ -26,6 +26,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
     const float gap = context.gap;
     SectorEditorState& state = context.state;
     SectorEditorUiState& uiState = context.uiState;
+    MaterialEditingUiState& materialUiState = context.materialUiState;
     std::string& statusText = context.statusText;
     const SectorEditorMaterialInspectorCallbacks& callbacks = context.callbacks;
     SectorEditorMaterialEditingService& materialEditing = context.materialEditing;
@@ -300,7 +301,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     TopologyWallPartName(part),
                     state.selectedTopologyWallPart == part)) {
             state.selectedTopologyWallPart = part;
-            for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+            for (engine::UIFloatInputState& inputState : materialUiState.topologySideDefUvInputs) {
                 inputState = engine::UIFloatInputState{};
             }
             statusText = TextFormat("Editing topology %s UV", TopologyWallPartStatusName(part));
@@ -311,11 +312,11 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
     const bool selectedMiddle = state.selectedTopologyWallPart == TopologyWallPart::Middle;
     if (selectedMiddle && state.activeTopologyMaterialLayer != TopologyMaterialLayer::Base) {
         state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
-        for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+        for (engine::UIFloatInputState& inputState : materialUiState.topologySideDefUvInputs) {
             inputState = engine::UIFloatInputState{};
         }
-        uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
-        uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
+        materialUiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
+        materialUiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
     }
     const TopologySurfaceEditTarget selectedMaterialTarget{
             TopologyWallPartEditTargetKind(state.selectedTopologyWallPart),
@@ -338,11 +339,11 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     "Base",
                     state.activeTopologyMaterialLayer == TopologyMaterialLayer::Base)) {
             state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
-            for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+            for (engine::UIFloatInputState& inputState : materialUiState.topologySideDefUvInputs) {
                 inputState = engine::UIFloatInputState{};
             }
-            uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
-            uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
+            materialUiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
+            materialUiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
         }
         if (engine::ToolButton(
                     ui,
@@ -355,11 +356,11 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     "Decal",
                     state.activeTopologyMaterialLayer == TopologyMaterialLayer::Decal)) {
             state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
-            for (engine::UIFloatInputState& inputState : uiState.topologySideDefUvInputs) {
+            for (engine::UIFloatInputState& inputState : materialUiState.topologySideDefUvInputs) {
                 inputState = engine::UIFloatInputState{};
             }
-            uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
-            uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
+            materialUiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
+            materialUiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
         }
         y += 36.0f + gap;
     }
@@ -447,7 +448,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{bounds.x, bounds.y + 26.0f, bounds.width, 36.0f},
                 engine::UITextJustify::Left,
                 value,
-                uiState.topologySideDefUvInputs[stateIndex],
+                materialUiState.topologySideDefUvInputs[stateIndex],
                 minValue,
                 maxValue,
                 3);
@@ -522,7 +523,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 Rectangle{82.0f, y, contentW - 82.0f, rowH},
                 engine::UITextJustify::Left,
                 selectedPart.decal.opacity,
-                uiState.topologySideDefDecalOpacityInput,
+                materialUiState.topologySideDefDecalOpacityInput,
                 0.0f,
                 1.0f,
                 3);
@@ -559,7 +560,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{82.0f, y, contentW - 82.0f, rowH},
                     engine::UITextJustify::Left,
                     selectedPart.decal.bloomIntensity,
-                    uiState.topologySideDefDecalBloomIntensityInput,
+                    materialUiState.topologySideDefDecalBloomIntensityInput,
                     0.0f,
                     10.0f,
                     3);

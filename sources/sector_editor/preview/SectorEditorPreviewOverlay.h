@@ -4,6 +4,8 @@
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/services/lights/SectorEditorLightEditingState.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialEditingState.h"
 
 #include <raylib.h>
 
@@ -23,6 +25,8 @@ struct SectorEditorPreviewOverlayContext {
 
     SectorEditorState& state;
     SectorEditorUiState& uiState;
+    MaterialEditingUiState& materialUiState;
+    LightEditingState& lightState;
     std::string& statusText;
     SectorMeshRenderer& preview;
 };
@@ -41,6 +45,7 @@ Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab 
 void DrawSectorEditorPreviewSurfaceHighlights(
         SectorEditorState& state,
         SectorEditorUiState& uiState,
+        MaterialEditingUiState& materialUiState,
         const SectorMeshRenderer& preview);
 void DrawSectorEditorPreviewSpotLightOverlay(
         const SectorEditorState& state,

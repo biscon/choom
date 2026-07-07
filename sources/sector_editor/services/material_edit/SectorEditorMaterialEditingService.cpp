@@ -2,7 +2,6 @@
 
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorHelpers.h"
-#include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
 
@@ -45,10 +44,14 @@ SectorSurfaceRef FlatSurfaceForTarget(const SectorEditorState& state, TopologySu
     return surface;
 }
 
-void ResetSurface3DUi(SectorEditorState& state, SectorEditorUiState& uiState)
+void ResetSurface3DUi(MaterialEditingUiState& materialUiState)
 {
-    SectorEditorSelectionServiceContext context{state, uiState, nullptr, nullptr, nullptr};
-    ResetSectorEditorSurface3DUiState(context);
+    materialUiState.surface3DUvScaleUInput = engine::UIFloatInputState{};
+    materialUiState.surface3DUvScaleVInput = engine::UIFloatInputState{};
+    materialUiState.surface3DUvOffsetUInput = engine::UIFloatInputState{};
+    materialUiState.surface3DUvOffsetVInput = engine::UIFloatInputState{};
+    materialUiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
+    materialUiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
 }
 
 void InvalidateTopologyRenderCache(SectorEditorState& state)
@@ -144,29 +147,29 @@ void SectorEditorMaterialEditingService::ApplyMaterialUiResetFlags(
         const SectorEditorMaterialActionResult& result)
 {
     if (result.resetSurface3DUi) {
-        ResetSurface3DUi(context_.state, context_.uiState);
+        ResetSurface3DUi(context_.materialUiState);
     }
     if (result.resetSectorUvInputs) {
-        for (engine::UIFloatInputState& inputState : context_.uiState.topologySectorUvInputs) {
+        for (engine::UIFloatInputState& inputState : context_.materialUiState.topologySectorUvInputs) {
             inputState = engine::UIFloatInputState{};
         }
     }
     if (result.resetSideDefUvInputs) {
-        for (engine::UIFloatInputState& inputState : context_.uiState.topologySideDefUvInputs) {
+        for (engine::UIFloatInputState& inputState : context_.materialUiState.topologySideDefUvInputs) {
             inputState = engine::UIFloatInputState{};
         }
     }
     if (result.resetDecalInputs) {
-        for (engine::UIFloatInputState& inputState : context_.uiState.topologySectorDecalOpacityInputs) {
+        for (engine::UIFloatInputState& inputState : context_.materialUiState.topologySectorDecalOpacityInputs) {
             inputState = engine::UIFloatInputState{};
         }
-        for (engine::UIFloatInputState& inputState : context_.uiState.topologySectorDecalBloomIntensityInputs) {
+        for (engine::UIFloatInputState& inputState : context_.materialUiState.topologySectorDecalBloomIntensityInputs) {
             inputState = engine::UIFloatInputState{};
         }
-        context_.uiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
-        context_.uiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
-        context_.uiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
-        context_.uiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+        context_.materialUiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
+        context_.materialUiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
+        context_.materialUiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
+        context_.materialUiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
     }
     if (result.closeDecalTintModal) {
         context_.state.decalTintModal = DecalTintModalState{};
@@ -346,7 +349,7 @@ bool SectorEditorMaterialEditingService::CopyMaterial(TopologySurfaceEditTarget 
         context_.statusText = status;
         return false;
     }
-    context_.state.copiedTopologyMaterial = payload;
+    context_.materialState.copiedMaterial = payload;
     context_.statusText = status;
     return true;
 }
@@ -365,7 +368,7 @@ bool SectorEditorMaterialEditingService::PasteMaterial(
                 }
                 return PasteMaterialToFields(
                         authoringTarget.target,
-                        context_.state.copiedTopologyMaterial,
+                        context_.materialState.copiedMaterial,
                         *authoringTarget.textureId,
                         *authoringTarget.uv);
             });
@@ -562,7 +565,7 @@ bool SectorEditorMaterialEditingService::ResetInspectorSideDefUv(
         context_.statusText = "Cannot edit sidedef UV: selected topology side is not mapped to an authoring line.";
         return false;
     }
-    for (engine::UIFloatInputState& inputState : context_.uiState.topologySideDefUvInputs) {
+    for (engine::UIFloatInputState& inputState : context_.materialUiState.topologySideDefUvInputs) {
         inputState = engine::UIFloatInputState{};
     }
     if (target.kind == TopologySurfaceEditTargetKind::SideDefMiddle

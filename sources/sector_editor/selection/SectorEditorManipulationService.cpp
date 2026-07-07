@@ -46,7 +46,7 @@ SectorEditorSelectionTarget MakeRuntimeObjectSelectionTarget(int objectId)
 bool IsAnySectorEditorManipulationActive(const SectorEditorManipulationServiceContext& context)
 {
     return context.state.authoringVertexDrag.active
-            || context.state.lightDrag.active
+            || context.lightState.lightDrag.active
             || context.state.runtimeObjectDrag.active;
 }
 
@@ -57,7 +57,7 @@ void UpdateActiveSectorEditorManipulation(
     if (context.state.authoringVertexDrag.active && context.updateAuthoringVertexDrag != nullptr) {
         context.updateAuthoringVertexDrag(context.userData, input);
     }
-    if (context.state.lightDrag.active && context.updateLightDrag != nullptr) {
+    if (context.lightState.lightDrag.active && context.updateLightDrag != nullptr) {
         context.updateLightDrag(context.userData, input);
     }
     if (context.state.runtimeObjectDrag.active) {
@@ -76,7 +76,7 @@ void FinishActiveSectorEditorManipulation(SectorEditorManipulationServiceContext
     if (context.state.authoringVertexDrag.active && context.finishAuthoringVertexDrag != nullptr) {
         context.finishAuthoringVertexDrag(context.userData);
     }
-    if (context.state.lightDrag.active && context.finishLightDrag != nullptr) {
+    if (context.lightState.lightDrag.active && context.finishLightDrag != nullptr) {
         context.finishLightDrag(context.userData);
     }
     if (context.state.runtimeObjectDrag.active) {
@@ -100,7 +100,7 @@ bool CancelFirstActiveSectorEditorManipulation(
         context.cancelAuthoringVertexDrag(context.userData, authoringVertexMessage);
         return true;
     }
-    if (context.state.lightDrag.active && context.cancelLightDrag != nullptr) {
+    if (context.lightState.lightDrag.active && context.cancelLightDrag != nullptr) {
         context.cancelLightDrag(context.userData, lightMessage);
         return true;
     }
@@ -126,7 +126,7 @@ void CancelActiveSectorEditorManipulation(
     if (context.state.authoringVertexDrag.active && context.cancelAuthoringVertexDrag != nullptr) {
         context.cancelAuthoringVertexDrag(context.userData, authoringVertexMessage);
     }
-    if (context.state.lightDrag.active && context.cancelLightDrag != nullptr) {
+    if (context.lightState.lightDrag.active && context.cancelLightDrag != nullptr) {
         context.cancelLightDrag(context.userData, lightMessage);
     }
     if (context.state.runtimeObjectDrag.active) {

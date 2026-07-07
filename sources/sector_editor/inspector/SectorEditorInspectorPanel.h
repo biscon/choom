@@ -48,6 +48,7 @@ struct SectorEditorInspectorPanelContext {
 
     SectorEditorState& state;
     SectorEditorUiState& uiState;
+    MaterialEditingUiState& materialUiState;
     std::string& statusText;
 
     SectorEditorSelectionServiceContext& selection;

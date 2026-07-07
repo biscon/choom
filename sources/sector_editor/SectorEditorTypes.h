@@ -23,7 +23,6 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace game {
@@ -128,8 +127,6 @@ struct SectorEditorState {
     PendingAuthoringRectangleDraw pendingAuthoringRectangle;
     PendingAuthoringInsertVertex pendingAuthoringInsertVertex;
     AuthoringVertexDragState authoringVertexDrag;
-    LightDragState lightDrag;
-    LightEditingState lightEditing;
     RuntimeObjectDragState runtimeObjectDrag;
     float defaultSectorFloorZ = 0.0f;
     float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);
@@ -167,14 +164,11 @@ struct SectorEditorState {
     SectorFpsLandingDipState landingDipState;
     bool hasPreviewPose = false;
     SectorViewPose lastPreviewPose = {};
-    SpotLightPilotState spotLightPilot;
+    SpotLightPilotPreviewRestoreState spotLightPilotPreviewRestore;
     SectorSurfaceHit hoveredSurface3D;
     SectorSurfaceRef selectedSurface3D;
     TopologySurfaceEditTarget selectedTopologySurface3D;
-    TopologyMaterialPayload copiedTopologyMaterial;
 
-    engine::AssetScopeHandle editorTextureScope = engine::NullAssetScopeHandle();
-    std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;
     TexturePickerState texturePicker;
     AddMapTextureState addMapTexture;
     SectorSpriteMetadataCatalog spriteMetadataCatalog;
@@ -239,18 +233,6 @@ struct SectorEditorUiState {
     engine::UIFloatInputState runtimeObjectInteractionDistanceInput;
     engine::UIFloatInputState runtimeObjectOriginXInput;
     engine::UIFloatInputState runtimeObjectOriginYInput;
-    engine::UIFloatInputState surface3DUvScaleUInput;
-    engine::UIFloatInputState surface3DUvScaleVInput;
-    engine::UIFloatInputState surface3DUvOffsetUInput;
-    engine::UIFloatInputState surface3DUvOffsetVInput;
-    engine::UIFloatInputState surface3DDecalOpacityInput;
-    engine::UIFloatInputState surface3DDecalBloomIntensityInput;
-    engine::UIFloatInputState topologySectorUvInputs[20];
-    engine::UIFloatInputState topologySectorDecalOpacityInputs[2];
-    engine::UIFloatInputState topologySectorDecalBloomIntensityInputs[2];
-    engine::UIFloatInputState topologySideDefUvInputs[4];
-    engine::UIFloatInputState topologySideDefDecalOpacityInput;
-    engine::UIFloatInputState topologySideDefDecalBloomIntensityInput;
     engine::UIScrollState toolsScroll;
     engine::UIScrollState inspectorScroll;
     char selectedSectorIdBuffer[64] = {};

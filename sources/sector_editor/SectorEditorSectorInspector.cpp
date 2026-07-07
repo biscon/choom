@@ -57,6 +57,7 @@ bool DrawTopologySectorInspector(
         SectorTopologySector& sector,
         SectorEditorState& state,
         SectorEditorUiState& uiState,
+        MaterialEditingUiState& materialUiState,
         SectorEditorMaterialEditingService& materialEditing,
         SectorEditorTextureCatalogService& textureCatalog,
         const SectorEditorSectorInspectorCallbacks& callbacks)
@@ -292,7 +293,7 @@ bool DrawTopologySectorInspector(
                     Rectangle{bounds.x, bounds.y + 26.0f, bounds.width, 36.0f},
                     engine::UITextJustify::Left,
                     value,
-                    uiState.topologySectorUvInputs[stateOffset + stateIndex],
+                    materialUiState.topologySectorUvInputs[stateOffset + stateIndex],
                     minValue,
                     maxValue,
                     3);
@@ -336,7 +337,7 @@ bool DrawTopologySectorInspector(
                     "Base",
                     state.activeTopologyMaterialLayer == TopologyMaterialLayer::Base)) {
             state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
-            for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+            for (engine::UIFloatInputState& inputState : materialUiState.topologySectorUvInputs) {
                 inputState = engine::UIFloatInputState{};
             }
         }
@@ -351,7 +352,7 @@ bool DrawTopologySectorInspector(
                     "Decal",
                     state.activeTopologyMaterialLayer == TopologyMaterialLayer::Decal)) {
             state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
-            for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+            for (engine::UIFloatInputState& inputState : materialUiState.topologySectorUvInputs) {
                 inputState = engine::UIFloatInputState{};
             }
         }
@@ -416,7 +417,7 @@ bool DrawTopologySectorInspector(
                 Rectangle{82.0f, y, contentW - 82.0f, rowH},
                 engine::UITextJustify::Left,
                 decal.opacity,
-                uiState.topologySectorDecalOpacityInputs[opacityStateIndex],
+                materialUiState.topologySectorDecalOpacityInputs[opacityStateIndex],
                 0.0f,
                 1.0f,
                 3);
@@ -452,7 +453,7 @@ bool DrawTopologySectorInspector(
                     Rectangle{82.0f, y, contentW - 82.0f, rowH},
                     engine::UITextJustify::Left,
                     decal.bloomIntensity,
-                    uiState.topologySectorDecalBloomIntensityInputs[opacityStateIndex],
+                    materialUiState.topologySectorDecalBloomIntensityInputs[opacityStateIndex],
                     0.0f,
                     10.0f,
                     3);

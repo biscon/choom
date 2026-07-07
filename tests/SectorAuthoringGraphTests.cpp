@@ -533,16 +533,24 @@ game::TopologySurfaceEditTarget SideDefMaterialTarget(const game::SectorTopology
             sideDef.side};
 }
 
+game::MaterialEditingUiState& TestMaterialEditingUiState();
+
 game::SectorEditorMaterialEditingService MakeMaterialEditingService(
         game::SectorEditorState& state,
         game::SectorEditorUiState& uiState,
         std::string& statusText,
         bool* previewRebuildRequested = nullptr)
 {
+    static game::MaterialEditingState materialState;
+    game::MaterialEditingUiState& materialUiState = TestMaterialEditingUiState();
+    (void)uiState;
+    materialState = game::MaterialEditingState{};
+    materialUiState = game::MaterialEditingUiState{};
     return game::SectorEditorMaterialEditingService{
             game::SectorEditorMaterialEditingServiceContext{
                     state,
-                    uiState,
+                    materialState,
+                    materialUiState,
                     state.texturePicker,
                     statusText,
                     [previewRebuildRequested](engine::AssetManager*) {
@@ -553,15 +561,81 @@ game::SectorEditorMaterialEditingService MakeMaterialEditingService(
                     }}};
 }
 
+game::MaterialEditingUiState& TestMaterialEditingUiState()
+{
+    static game::MaterialEditingUiState materialUiState;
+    return materialUiState;
+}
+
 game::SectorEditorLightEditingService MakeLightEditingService(
         game::SectorEditorState& state,
         game::SectorEditorUiState& uiState,
         std::string& statusText)
 {
+    static game::LightEditingState lightState;
+    lightState = game::LightEditingState{};
     return game::SectorEditorLightEditingService{
             game::SectorEditorLightEditingServiceContext{
-                    state,
-                    uiState,
+                    state.topologyMap,
+                    lightState,
+                    state.topologyDocumentDirty,
+                    state.hasUnsavedChanges,
+                    state.topologyRenderRevision,
+                    state.topologyRenderCache,
+                    {
+                            state.selectDragArm,
+                            state.authoringVertexDrag,
+                            state.runtimeObjectDrag,
+                            state.topologySelectionKind,
+                            state.selectedTopologySectorId,
+                            state.selectedTopologyVertexId,
+                            state.selectedTopologySideDefId,
+                            state.selectedTopologyLineDefId,
+                            state.selectedTopologyLightId,
+                            state.selectedTopologyStaticSpotLightId,
+                            state.selectedTopologyDynamicLightId,
+                            state.selectedTopologyDynamicSpotLightId,
+                            state.selectedRuntimeObjectId,
+                            state.selectedTopologySideKind,
+                            state.inspectedTopologyVertexId,
+                            state.selectedSurface3D,
+                            state.selectedTopologySurface3D,
+                            state.selectedAuthoring,
+                            state.hoveredTopologyLightId,
+                            state.hoveredTopologyStaticSpotLightId,
+                            state.hoveredTopologyDynamicLightId,
+                            state.hoveredTopologyDynamicSpotLightId,
+                    },
+                    {
+                            uiState.inspectorScroll,
+                            uiState.lightXInput,
+                            uiState.lightYInput,
+                            uiState.lightZInput,
+                            uiState.lightTargetXInput,
+                            uiState.lightTargetYInput,
+                            uiState.lightTargetZInput,
+                            uiState.lightIntensityInput,
+                            uiState.lightRadiusInput,
+                            uiState.lightInnerConeInput,
+                            uiState.lightOuterConeInput,
+                            uiState.lightSourceRadiusInput,
+                            uiState.lightFlickerSpeedInput,
+                            uiState.lightFlickerAmountInput,
+                            uiState.lightShadowPriorityInput,
+                            uiState.lightShadowBiasInput,
+                            uiState.lightShadowStrengthInput,
+                            uiState.lightShadowSoftnessInput,
+                            uiState.lightRedInput,
+                            uiState.lightGreenInput,
+                            uiState.lightBlueInput,
+                            uiState.idBufferSectorIndex,
+                            uiState.idBufferLightIndex,
+                            uiState.selectedSectorIdBuffer,
+                            sizeof(uiState.selectedSectorIdBuffer),
+                            uiState.selectedLightIdBuffer,
+                            sizeof(uiState.selectedLightIdBuffer),
+                            uiState.idEditError,
+                    },
                     statusText}};
 }
 
@@ -3465,12 +3539,13 @@ void TestEditorMaterialEditingServiceSideDefBaseUvResetWritesThroughAuthoringSid
     }
 
     game::SectorEditorUiState uiState;
-    uiState.topologySideDefUvInputs[0].buffer[0] = 'x';
-    uiState.topologySideDefUvInputs[0].editing = true;
     std::string statusText;
     engine::AssetManager assets;
     game::SectorEditorMaterialEditingService service =
             MakeMaterialEditingService(state, uiState, statusText);
+    game::MaterialEditingUiState& materialUiState = TestMaterialEditingUiState();
+    materialUiState.topologySideDefUvInputs[0].buffer[0] = 'x';
+    materialUiState.topologySideDefUvInputs[0].editing = true;
 
     Check(service.ResetInspectorSideDefUv(
                   SideDefMaterialTarget(*sideDef),
@@ -3495,8 +3570,8 @@ void TestEditorMaterialEditingServiceSideDefBaseUvResetWritesThroughAuthoringSid
                   && Near(projectedSideDef->wall.uv.scale.x, 1.0f)
                   && Near(projectedSideDef->wall.uv.offset.x, 0.0f),
           "service sidedef base UV reset refreshes derived topology");
-    Check(uiState.topologySideDefUvInputs[0].buffer[0] == '\0'
-                  && !uiState.topologySideDefUvInputs[0].editing,
+    Check(materialUiState.topologySideDefUvInputs[0].buffer[0] == '\0'
+                  && !materialUiState.topologySideDefUvInputs[0].editing,
           "service sidedef base UV reset clears inspector input buffers");
 }
 
@@ -5659,7 +5734,18 @@ void TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture()
     object.door.textureId = "old_door";
     state.topologyMap.runtimeObjects.push_back(object);
 
-    Check(game::OpenRuntimeDoorTexturePicker(state, 77),
+    game::TextureCatalogState textureCatalogState;
+    game::SectorEditorTextureCatalogService catalog{
+            game::SectorEditorTextureCatalogServiceContext{
+                    state.topologyMap,
+                    textureCatalogState,
+                    state.defaultFloorTextureId,
+                    state.defaultCeilingTextureId,
+                    state.defaultWallTextureId,
+                    state.defaultLowerWallTextureId,
+                    state.defaultUpperWallTextureId}};
+
+    Check(game::OpenRuntimeDoorTexturePicker(state, catalog, 77),
           "runtime door texture picker opens for authored door");
     Check(state.texturePicker.topologyTargetKind == game::TopologyTexturePickerTargetKind::RuntimeDoor,
           "runtime door texture picker records door target kind");
@@ -5699,8 +5785,16 @@ void TestEditorMapTextureImportPreservesMapLevelRegistryOnly()
             "imported_wall");
     state.addMapTexture.filter = game::SectorTextureFilter::Point;
 
+    game::TextureCatalogState textureCatalogState;
     game::SectorEditorTextureCatalogService catalog{
-            game::SectorEditorTextureCatalogServiceContext{state}};
+            game::SectorEditorTextureCatalogServiceContext{
+                    state.topologyMap,
+                    textureCatalogState,
+                    state.defaultFloorTextureId,
+                    state.defaultCeilingTextureId,
+                    state.defaultWallTextureId,
+                    state.defaultLowerWallTextureId,
+                    state.defaultUpperWallTextureId}};
     const game::SectorEditorAddTextureResult result =
             catalog.RegisterSelectedMapTexture(state.addMapTexture);
 
