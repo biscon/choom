@@ -72,8 +72,8 @@ Task Type:
 | REF-082 | `[x]` | High | Editor architecture | Pass TextureCatalogService to remaining texture UI clients | Codex task | Medium | Completed; remaining UI missing-texture checks use catalog service |
 | REF-083 | `[x]` | High | Editor architecture | SectorEditor state ownership and remaining code map | Audit first | Low | Completed; report recommends TextureCatalogState split next |
 | REF-084 | `[x]` | High | Editor architecture | Service-owned editor state migration runner plan | Runner plan | Low | Planning and implementation complete; preview/document ownership deferred to REF-085/REF-086 |
-| REF-085 | `[ ]` | High | Editor architecture | Write PreviewState ownership runner plan | Runner plan | High | Plan before moving preview/runtime/controller/collision/renderer resource state |
-| REF-086 | `[ ]` | High | Editor architecture | Write DocumentState ownership runner plan | Runner plan | High | Plan before moving authoring graph, derived topology, dirty/path/status, load/save/reset/import ownership |
+| REF-085 | `[x]` | High | Editor architecture | Write PreviewState ownership runner plan | Runner plan | High | Runner-plan written/planning complete only; implementation phases remain open in `docs/plans/ref085_preview_state_ownership_runner_plan.md` |
+| REF-086 | `[x]` | High | Editor architecture | Write DocumentState ownership runner plan | Runner plan | High | Runner-plan written/planning complete only; implementation phases remain open in `docs/plans/ref086_document_state_ownership_runner_plan.md` |
 | REF-059 | `[x]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Completed; recommends material-specific picker routing extraction before MaterialEditBridge |
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
 | REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
@@ -1088,7 +1088,7 @@ Task Type:
     rendering/collision/sector lookup/physics behavior, and map
     serialization/schema behavior were intended to remain unchanged.
 
-#### REF-085 `[ ]` Write PreviewState ownership runner plan
+#### REF-085 `[x]` Write PreviewState ownership runner plan
 
 - Source/audit reference:
   `docs/plans/ref084_service_state_ownership_runner_plan.md`,
@@ -1117,8 +1117,26 @@ Task Type:
   - Must account for preview-surface selection and material panel highlights
     without pulling document ownership into preview state.
 - Completion notes:
+  - Runner-compatible implementation plan created at
+    `docs/plans/ref085_preview_state_ownership_runner_plan.md`.
+  - Planning only: no PreviewState implementation phase has been marked
+    complete, and no preview/runtime/controller/collision/renderer ownership
+    move was implemented by this backlog update.
+  - The plan keeps REF-086 separate for `DocumentState` ownership and keeps
+    document/source-of-truth, authoring graph, topology derivation,
+    save/load/reset/import/path/dirty/status, and serialization/schema ownership
+    out of REF-085.
+  - The plan phases cover low-risk preview control flags, preview 3D surface
+    selection, controller/camera state, collision/sector lookup state, runtime
+    object/world adapter state, renderer lifecycle dependency cleanup, and final
+    dependency audit/backlog refresh.
+  - Plan amended to make preview responsibility sub-states the default, add
+    serialized/settings ownership checks for controller/config fields, keep
+    `SectorMeshRenderer` ownership in `SectorEditor`, require the final audit
+    refresh, and require child-pass splits if broad preview phases are too
+    large for one run.
 
-#### REF-086 `[ ]` Write DocumentState ownership runner plan
+#### REF-086 `[x]` Write DocumentState ownership runner plan
 
 - Source/audit reference:
   `docs/architecture/sector_editor_architectural_principles.md`,
@@ -1145,6 +1163,35 @@ Task Type:
   - Must explicitly account for topology render-cache invalidation and
     lightmap source-hash behavior for any document mutation paths touched.
 - Completion notes:
+  - Runner-compatible implementation plan created at
+    `docs/plans/ref086_document_state_ownership_runner_plan.md`.
+  - Planning only: no DocumentState implementation phase has been marked
+    complete, and no authoring graph, derived topology, dirty/path/status,
+    load/save/reset/import/migration, cache, source-hash, source code, test, or
+    CMake change was implemented by this backlog update.
+  - The plan keeps REF-085 preview/runtime/controller/collision/camera state
+    separate and keeps modal UI state, inspector input buffers, tool transaction
+    state, texture picker modal state, runtime object editing state, and
+    renderer ownership out of DocumentState.
+  - The plan phases cover document-state inventory and root/sub-state skeleton,
+    authoring source state, derived topology and derivation state, lifecycle
+    dirty/path/status state, load/save/reset/import/migration retargeting,
+    topology render cache and invalidation ownership, document dependency
+    cleanup, and final dependency audit/backlog refresh.
+  - The plan requires the final implementation phase to refresh
+    `docs/audit/sector_editor_state_ownership_and_remaining_map.md` with
+    remaining document fields/debt, new document sub-states, preview/renderer
+    separation, authoring graph source-of-truth status, topology map derived
+    output status, cache invalidation behavior, serialization/schema behavior,
+    lightmap source-hash behavior, and rendering/collision/sector
+    lookup/physics/camera behavior.
+  - Plan amended to make Phase 1 skeleton/inventory-only, pre-split high-risk
+    Phase 3 into derivation bookkeeping, document map ownership, and consumer
+    retargeting passes, clarify `topologyMap` as compiled/derived output plus
+    documented map-level metadata/runtime definitions, prohibit a
+    `SectorEditorDocumentController` by default, default topology render-cache
+    movement to defer unless clearly document-owned, and require REF-086 to be
+    executable independently of REF-085 implementation status.
 
 #### REF-059 `[x]` Audit MaterialEditBridge and material-specific picker routing
 
