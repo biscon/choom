@@ -23,6 +23,11 @@ struct SectorEditorToolContext {
     // Transitional v0 glue: tool modules can inspect editor state directly while
     // mutation/commit paths stay behind narrow callbacks.
     SectorEditorState& state;
+    SectorEditorTool& currentTool;
+    PendingAuthoringLineDraw& pendingAuthoringLine;
+    PendingAuthoringRectangleDraw& pendingAuthoringRectangle;
+    PendingAuthoringInsertVertex& pendingAuthoringInsertVertex;
+    SectorAuthoringGraph& authoringGraph;
     SelectionState& selectionState;
     std::string& statusText;
     engine::Input* input = nullptr;

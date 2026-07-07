@@ -14,7 +14,7 @@ void StartSectorEditorPlacedObjectDrag(
         int objectId)
 {
     const SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
-            context.state.topologyMap,
+            context.topologyMap,
             objectId);
     if (object == nullptr) {
         return;
@@ -27,10 +27,10 @@ void StartSectorEditorPlacedObjectDrag(
     if (context.selectRuntimeObject) {
         context.selectRuntimeObject(objectId);
     }
-    context.state.runtimeObjectDrag.active = true;
-    context.state.runtimeObjectDrag.objectId = objectId;
-    context.state.runtimeObjectDrag.originalPosition = object->position;
-    context.state.runtimeObjectDrag.snappedPosition = object->position;
+    context.runtimeObjectDrag.active = true;
+    context.runtimeObjectDrag.objectId = objectId;
+    context.runtimeObjectDrag.originalPosition = object->position;
+    context.runtimeObjectDrag.snappedPosition = object->position;
     context.statusText = TextFormat("Moving object %d", objectId);
 }
 
@@ -38,15 +38,15 @@ void UpdateSectorEditorPlacedObjectDrag(
         SectorEditorPlacedObjectDragContext& context,
         Vector2 mousePosition)
 {
-    if (!context.state.runtimeObjectDrag.active) {
+    if (!context.runtimeObjectDrag.active) {
         return;
     }
 
     SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
-            context.state.topologyMap,
-            context.state.runtimeObjectDrag.objectId);
+            context.topologyMap,
+            context.runtimeObjectDrag.objectId);
     if (object == nullptr) {
-        context.state.runtimeObjectDrag = RuntimeObjectDragState{};
+        context.runtimeObjectDrag = RuntimeObjectDragState{};
         return;
     }
 
@@ -56,11 +56,11 @@ void UpdateSectorEditorPlacedObjectDrag(
     const Vector2 snapped = context.snapMapPoint
             ? context.snapMapPoint(mapPoint)
             : mapPoint;
-    context.state.runtimeObjectDrag.snappedPosition = Vector3{
+    context.runtimeObjectDrag.snappedPosition = Vector3{
             snapped.x,
-            context.state.runtimeObjectDrag.originalPosition.y,
+            context.runtimeObjectDrag.originalPosition.y,
             snapped.y};
-    object->position = context.state.runtimeObjectDrag.snappedPosition;
+    object->position = context.runtimeObjectDrag.snappedPosition;
     if (context.updateCachedRuntimeObjectDraw) {
         context.updateCachedRuntimeObjectDraw(*object);
     }
@@ -70,16 +70,16 @@ void UpdateSectorEditorPlacedObjectDrag(
 void FinishSectorEditorPlacedObjectDrag(
         SectorEditorPlacedObjectDragContext& context)
 {
-    if (!context.state.runtimeObjectDrag.active) {
+    if (!context.runtimeObjectDrag.active) {
         return;
     }
 
-    const int objectId = context.state.runtimeObjectDrag.objectId;
-    const Vector3 original = context.state.runtimeObjectDrag.originalPosition;
-    context.state.runtimeObjectDrag = RuntimeObjectDragState{};
+    const int objectId = context.runtimeObjectDrag.objectId;
+    const Vector3 original = context.runtimeObjectDrag.originalPosition;
+    context.runtimeObjectDrag = RuntimeObjectDragState{};
 
     SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
-            context.state.topologyMap,
+            context.topologyMap,
             objectId);
     if (object == nullptr) {
         return;
@@ -111,12 +111,12 @@ void CancelSectorEditorPlacedObjectDrag(
         SectorEditorPlacedObjectDragContext& context,
         const char* message)
 {
-    if (context.state.runtimeObjectDrag.active) {
+    if (context.runtimeObjectDrag.active) {
         SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
-                context.state.topologyMap,
-                context.state.runtimeObjectDrag.objectId);
+                context.topologyMap,
+                context.runtimeObjectDrag.objectId);
         if (object != nullptr) {
-            object->position = context.state.runtimeObjectDrag.originalPosition;
+            object->position = context.runtimeObjectDrag.originalPosition;
             if (context.updateCachedRuntimeObjectDraw) {
                 context.updateCachedRuntimeObjectDraw(*object);
             }
@@ -126,7 +126,7 @@ void CancelSectorEditorPlacedObjectDrag(
         }
     }
 
-    context.state.runtimeObjectDrag = RuntimeObjectDragState{};
+    context.runtimeObjectDrag = RuntimeObjectDragState{};
     if (message != nullptr && message[0] != '\0') {
         context.statusText = message;
     }

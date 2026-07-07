@@ -2,6 +2,7 @@
 
 #include "engine/ui/UI.h"
 #include "sector_editor/inspector/SectorEditorInspectorUiState.h"
+#include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorSurfaceTypes.h"
 #include "sector_editor/SectorEditorTopologyRenderCacheTypes.h"
@@ -21,8 +22,7 @@ namespace game {
 struct SectorEditorLightEditingServiceContext {
     SectorTopologyMap& map;
     LightEditingState& lightState;
-    bool& topologyDocumentDirty;
-    bool& hasUnsavedChanges;
+    SectorEditorDocumentLifecycleAccess lifecycle;
     uint64_t& topologyRenderRevision;
     SectorEditorTopologyRenderCache& topologyRenderCache;
     struct SelectionRefs {

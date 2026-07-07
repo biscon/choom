@@ -58,12 +58,6 @@ void ResetSurface3DUi(MaterialEditingUiState& materialUiState)
     materialUiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
 }
 
-void InvalidateTopologyRenderCache(SectorEditorState& state)
-{
-    ++state.topologyRenderRevision;
-    state.topologyRenderCache.valid = false;
-}
-
 bool ValidateUvComponentValue(int component, float value)
 {
     if (!std::isfinite(value)) {
@@ -139,9 +133,10 @@ SectorEditorMaterialEditingService::SectorEditorMaterialEditingService(
 
 void SectorEditorMaterialEditingService::MarkTopologyDocumentEdited(const char* status)
 {
-    context_.state.topologyDocumentDirty = true;
-    context_.state.hasUnsavedChanges = true;
-    InvalidateTopologyRenderCache(context_.state);
+    context_.lifecycle.topologyDocumentDirty = true;
+    context_.lifecycle.hasUnsavedChanges = true;
+    ++context_.topologyRenderRevision;
+    context_.topologyRenderCache.valid = false;
     if (status != nullptr && status[0] != '\0') {
         context_.statusText = status;
     }
@@ -176,7 +171,7 @@ void SectorEditorMaterialEditingService::ApplyMaterialUiResetFlags(
         context_.materialUiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
     }
     if (result.closeDecalTintModal) {
-        context_.state.decalTintModal = DecalTintModalState{};
+        context_.decalTintModal = DecalTintModalState{};
     }
 }
 
@@ -211,18 +206,17 @@ bool SectorEditorMaterialEditingService::ApplyAuthoringSideMaterialEdit(
         TopologyMaterialLayer layer,
         const SectorEditorAuthoringMaterialActionFn& action)
 {
-    if (!IsWallTopologyEditTarget(target.kind) || !HasAuthoringGraphData(context_.state)) {
+    if (!IsWallTopologyEditTarget(target.kind) || !HasAuthoringGraphData(context_.authoringGraph)) {
         return false;
     }
-    if (context_.state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-            || context_.state.authoringDerivedTopologyStale
-            || !context_.state.authoringDerivation.success) {
+    if (!IsSectorEditorAuthoringDerivationCurrent(context_.derivation)) {
         context_.statusText = "Wall material edit unavailable: derived topology is not current";
         return true;
     }
     SectorAuthoringSideId sideId;
     if (!FindSectorEditorAuthoringSideIdForTopologySideDef(
-                context_.state,
+                context_.authoringGraph,
+                context_.derivation.authoringDerivation,
                 target.sideDefId,
                 sideId)) {
         context_.statusText = "Wall material edit unavailable: selected sidedef has no authoring side mapping";
@@ -235,9 +229,14 @@ bool SectorEditorMaterialEditingService::ApplyAuthoringSideMaterialEdit(
     const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
     const TopologyMaterialLayer effectiveLayer = EffectiveTopologyMaterialLayer(target.kind, layer);
     SectorEditorMaterialActionResult result;
-    context_.state.topologyRenderWarning.clear();
+    context_.topologyRenderWarning.clear();
     const bool refreshed = MutateSectorEditorAuthoringSideForTopologySideDef(
-            context_.state,
+            context_.lifecycle,
+            context_.topologyRenderRevision,
+            context_.topologyRenderCache,
+            context_.topologyMap,
+            context_.authoringGraph,
+            context_.derivation,
             target.sideDefId,
             "Updated authoring side material",
             [&](SectorAuthoringLineSide& side) {
@@ -271,7 +270,7 @@ bool SectorEditorMaterialEditingService::ApplyAuthoringFaceAnchorMaterialEdit(
         TopologyMaterialLayer layer,
         const SectorEditorAuthoringMaterialActionFn& action)
 {
-    if (!HasAuthoringGraphData(context_.state) || !IsFlatTopologySurfaceTarget(target)) {
+    if (!HasAuthoringGraphData(context_.authoringGraph) || !IsFlatTopologySurfaceTarget(target)) {
         return false;
     }
     if (!action) {
@@ -282,7 +281,10 @@ bool SectorEditorMaterialEditingService::ApplyAuthoringFaceAnchorMaterialEdit(
     SectorEditorAuthoringSurfaceTarget authoringTarget;
     std::string unavailableStatus;
     if (!ResolveSectorEditorAuthoringSurfaceTarget(
-                context_.state,
+                context_.topologyMap,
+                context_.authoringGraph,
+                context_.derivation.authoringDerivation,
+                IsSectorEditorAuthoringDerivationCurrent(context_.derivation),
                 FlatSurfaceForTarget(context_.previewSelectionState, target),
                 authoringTarget,
                 &unavailableStatus)
@@ -299,9 +301,14 @@ bool SectorEditorMaterialEditingService::ApplyAuthoringFaceAnchorMaterialEdit(
     }
 
     SectorEditorMaterialActionResult result;
-    context_.state.topologyRenderWarning.clear();
+    context_.topologyRenderWarning.clear();
     const bool refreshed = MutateSectorEditorAuthoringFaceAnchorById(
-            context_.state,
+            context_.lifecycle,
+            context_.topologyRenderRevision,
+            context_.topologyRenderCache,
+            context_.topologyMap,
+            context_.authoringGraph,
+            context_.derivation,
             authoringTarget.faceAnchorId,
             "Updated authoring face anchor material",
             [&](SectorAuthoringFaceAnchor& anchor) {
@@ -333,13 +340,13 @@ bool SectorEditorMaterialEditingService::ApplyMaterialAction(
         TopologyMaterialLayer layer,
         const SectorEditorAuthoringMaterialActionFn& action)
 {
-    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData(context_.state)) {
+    if (IsWallTopologyEditTarget(target.kind) && HasAuthoringGraphData(context_.authoringGraph)) {
         return ApplyAuthoringSideMaterialEdit(target, assets, layer, action);
     }
-    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData(context_.state)) {
+    if (IsFlatTopologySurfaceTarget(target) && HasAuthoringGraphData(context_.authoringGraph)) {
         return ApplyAuthoringFaceAnchorMaterialEdit(target, assets, layer, action);
     }
-    context_.statusText = HasAuthoringGraphData(context_.state)
+    context_.statusText = HasAuthoringGraphData(context_.authoringGraph)
             ? "Cannot edit material: selected derived target has no authoring material route."
             : "Cannot edit material: authoring data is required.";
     return false;
@@ -349,7 +356,7 @@ bool SectorEditorMaterialEditingService::CopyMaterial(TopologySurfaceEditTarget 
 {
     TopologyMaterialPayload payload;
     std::string status;
-    if (!CopyMaterialSurface(context_.state.topologyMap, target, payload, status)) {
+    if (!CopyMaterialSurface(context_.topologyMap, target, payload, status)) {
         context_.statusText = status;
         return false;
     }
@@ -443,7 +450,7 @@ bool SectorEditorMaterialEditingService::ApplyInspectorSideDefUvValue(
     }
     const TopologyMaterialLayer effectiveLayer = EffectiveTopologyMaterialLayer(target.kind, layer);
     const SectorTopologyUvSettings* derivedUv =
-            UvForMaterialSurface(context_.state.topologyMap, target, effectiveLayer);
+            UvForMaterialSurface(context_.topologyMap, target, effectiveLayer);
     if (derivedUv == nullptr) {
         context_.statusText = layer == TopologyMaterialLayer::Decal
                 ? "No decal assigned."
@@ -456,20 +463,19 @@ bool SectorEditorMaterialEditingService::ApplyInspectorSideDefUvValue(
             TopologyWallPartStatusName(TopologyEditTargetWallPart(target.kind)),
             TopologyMaterialLayerStatusName(effectiveLayer));
 
-    if (!HasAuthoringGraphData(context_.state)) {
+    if (!HasAuthoringGraphData(context_.authoringGraph)) {
         context_.statusText = "Cannot edit sidedef UV: material UV editor requires authoring data.";
         return false;
     }
-    if (context_.state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-            || context_.state.authoringDerivedTopologyStale
-            || !context_.state.authoringDerivation.success) {
+    if (!IsSectorEditorAuthoringDerivationCurrent(context_.derivation)) {
         context_.statusText = "Cannot edit sidedef UV: derived topology is not current.";
         return false;
     }
 
     SectorAuthoringSideId sideId;
     if (!FindSectorEditorAuthoringSideIdForTopologySideDef(
-                context_.state,
+                context_.authoringGraph,
+                context_.derivation.authoringDerivation,
                 target.sideDefId,
                 sideId)) {
         context_.statusText = "Cannot edit sidedef UV: selected topology side is not mapped to an authoring line.";
@@ -477,9 +483,14 @@ bool SectorEditorMaterialEditingService::ApplyInspectorSideDefUvValue(
     }
 
     const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
-    context_.state.topologyRenderWarning.clear();
+    context_.topologyRenderWarning.clear();
     const bool refreshed = MutateSectorEditorAuthoringSideForTopologySideDef(
-            context_.state,
+            context_.lifecycle,
+            context_.topologyRenderRevision,
+            context_.topologyRenderCache,
+            context_.topologyMap,
+            context_.authoringGraph,
+            context_.derivation,
             target.sideDefId,
             status,
             [wallPart, effectiveLayer, component, value](SectorAuthoringLineSide& side) {
@@ -512,7 +523,7 @@ bool SectorEditorMaterialEditingService::ResetInspectorSideDefUv(
     }
     const TopologyMaterialLayer effectiveLayer = EffectiveTopologyMaterialLayer(target.kind, layer);
     const SectorTopologyUvSettings* derivedUv =
-            UvForMaterialSurface(context_.state.topologyMap, target, effectiveLayer);
+            UvForMaterialSurface(context_.topologyMap, target, effectiveLayer);
     if (derivedUv == nullptr) {
         context_.statusText = layer == TopologyMaterialLayer::Decal
                 ? "No decal assigned."
@@ -520,20 +531,19 @@ bool SectorEditorMaterialEditingService::ResetInspectorSideDefUv(
         return false;
     }
 
-    if (!HasAuthoringGraphData(context_.state)) {
+    if (!HasAuthoringGraphData(context_.authoringGraph)) {
         context_.statusText = "Cannot edit sidedef UV: material UV editor requires authoring data.";
         return false;
     }
-    if (context_.state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-            || context_.state.authoringDerivedTopologyStale
-            || !context_.state.authoringDerivation.success) {
+    if (!IsSectorEditorAuthoringDerivationCurrent(context_.derivation)) {
         context_.statusText = "Cannot edit sidedef UV: derived topology is not current.";
         return false;
     }
 
     SectorAuthoringSideId sideId;
     if (!FindSectorEditorAuthoringSideIdForTopologySideDef(
-                context_.state,
+                context_.authoringGraph,
+                context_.derivation.authoringDerivation,
                 target.sideDefId,
                 sideId)) {
         context_.statusText = "Cannot edit sidedef UV: selected topology side is not mapped to an authoring line.";
@@ -552,9 +562,14 @@ bool SectorEditorMaterialEditingService::ResetInspectorSideDefUv(
                     TopologyMaterialLayerStatusName(effectiveLayer));
 
     const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
-    context_.state.topologyRenderWarning.clear();
+    context_.topologyRenderWarning.clear();
     const bool refreshed = MutateSectorEditorAuthoringSideForTopologySideDef(
-            context_.state,
+            context_.lifecycle,
+            context_.topologyRenderRevision,
+            context_.topologyRenderCache,
+            context_.topologyMap,
+            context_.authoringGraph,
+            context_.derivation,
             target.sideDefId,
             status,
             [wallPart, effectiveLayer](SectorAuthoringLineSide& side) {
@@ -661,17 +676,17 @@ bool SectorEditorMaterialEditingService::ApplyDecalBloomIntensity(
 
 bool SectorEditorMaterialEditingService::OpenDecalTintModal(TopologySurfaceEditTarget target)
 {
-    if (!HasAuthoringGraphData(context_.state)) {
+    if (!HasAuthoringGraphData(context_.authoringGraph)) {
         context_.statusText = "Cannot edit material: authoring data is required.";
         return false;
     }
     DecalTintModalState modal;
     std::string status;
-    if (!BuildDecalTintModal(context_.state.topologyMap, target, modal, status)) {
+    if (!BuildDecalTintModal(context_.topologyMap, target, modal, status)) {
         context_.statusText = status;
         return false;
     }
-    context_.state.decalTintModal = modal;
+    context_.decalTintModal = modal;
     return true;
 }
 
@@ -722,7 +737,7 @@ bool SectorEditorMaterialEditingService::FitSelectedDecal(
                     return SectorEditorMaterialActionResult{};
                 }
                 return game::FitSelectedDecalToAuthoring(
-                        context_.state.topologyMap,
+                        context_.topologyMap,
                         authoringTarget.target,
                         *authoringTarget.uv);
             });
@@ -741,7 +756,7 @@ bool SectorEditorMaterialEditingService::FitSelectedFlatDecal(
                     return SectorEditorMaterialActionResult{};
                 }
                 return game::FitSelectedFlatDecalToUv(
-                        context_.state.topologyMap,
+                        context_.topologyMap,
                         authoringTarget.target,
                         *authoringTarget.uv);
             });
@@ -762,7 +777,7 @@ bool SectorEditorMaterialEditingService::FitSelectedWallMaterial(
                     return SectorEditorMaterialActionResult{};
                 }
                 return game::FitSelectedWallMaterialToUv(
-                        context_.state.topologyMap,
+                        context_.topologyMap,
                         authoringTarget.target,
                         mode,
                         EffectiveTopologyMaterialLayer(authoringTarget.target.kind, layer),
@@ -784,7 +799,7 @@ bool SectorEditorMaterialEditingService::AlignSelectedWallMaterialVertical(
                     return SectorEditorMaterialActionResult{};
                 }
                 return game::AlignSelectedWallMaterialVerticalToUv(
-                        context_.state.topologyMap,
+                        context_.topologyMap,
                         authoringTarget.target,
                         EffectiveTopologyMaterialLayer(authoringTarget.target.kind, layer),
                         *authoringTarget.uv);
@@ -806,7 +821,7 @@ bool SectorEditorMaterialEditingService::AlignSelectedWallMaterialU(
                     return SectorEditorMaterialActionResult{};
                 }
                 return game::AlignSelectedWallMaterialUToUv(
-                        context_.state.topologyMap,
+                        context_.topologyMap,
                         authoringTarget.target,
                         direction,
                         EffectiveTopologyMaterialLayer(authoringTarget.target.kind, layer),
@@ -817,36 +832,40 @@ bool SectorEditorMaterialEditingService::AlignSelectedWallMaterialU(
 const SectorTopologyDecalLayer* SectorEditorMaterialEditingService::DecalForSurface(
         TopologySurfaceEditTarget target) const
 {
-    return game::DecalForMaterialSurface(context_.state.topologyMap, target);
+    return game::DecalForMaterialSurface(context_.topologyMap, target);
 }
 
 const SectorTopologyUvSettings* SectorEditorMaterialEditingService::UvForSurface(
         TopologySurfaceEditTarget target,
         TopologyMaterialLayer layer) const
 {
-    return game::UvForMaterialSurface(context_.state.topologyMap, target, layer);
+    return game::UvForMaterialSurface(context_.topologyMap, target, layer);
 }
 
 bool SectorEditorMaterialEditingService::IsDecalAssigned(TopologySurfaceEditTarget target) const
 {
-    return game::IsMaterialDecalAssigned(context_.state.topologyMap, target);
+    return game::IsMaterialDecalAssigned(context_.topologyMap, target);
 }
 
 bool SectorEditorMaterialEditingService::IsValidSurfaceTarget(TopologySurfaceEditTarget target) const
 {
-    return game::IsValidMaterialSurfaceTarget(context_.state.topologyMap, target);
+    return game::IsValidMaterialSurfaceTarget(context_.topologyMap, target);
 }
 
 std::string SectorEditorMaterialEditingService::CurrentTextureForSurface(
         TopologySurfaceEditTarget target,
         TopologyMaterialLayer layer) const
 {
-    return game::CurrentTextureForMaterialSurface(context_.state.topologyMap, target, layer);
+    return game::CurrentTextureForMaterialSurface(context_.topologyMap, target, layer);
 }
 
 std::string SectorEditorMaterialEditingService::CurrentTextureForPickerTarget() const
 {
-    return CurrentSectorEditorMaterialPickerTexture(context_.state, context_.texturePicker);
+    return CurrentSectorEditorMaterialPickerTexture(
+            context_.topologyMap,
+            context_.authoringGraph,
+            game::MakeSectorEditorConstDerivationDocumentAccess(context_.derivation),
+            context_.texturePicker);
 }
 
 bool SectorEditorMaterialEditingService::OpenMaterialPickerForDerivedSector(
@@ -855,7 +874,10 @@ bool SectorEditorMaterialEditingService::OpenMaterialPickerForDerivedSector(
         TopologyMaterialLayer layer)
 {
     return OpenSectorEditorMaterialPickerForDerivedSector(
-            context_.state,
+            context_.texturePicker,
+            context_.topologyMap,
+            context_.authoringGraph,
+            game::MakeSectorEditorConstDerivationDocumentAccess(context_.derivation),
             topologySectorId,
             field,
             layer);
@@ -867,7 +889,10 @@ bool SectorEditorMaterialEditingService::OpenMaterialPickerForAuthoringFaceAncho
         TopologyMaterialLayer layer)
 {
     return OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
-            context_.state,
+            context_.texturePicker,
+            context_.topologyMap,
+            context_.authoringGraph,
+            game::MakeSectorEditorConstDerivationDocumentAccess(context_.derivation),
             faceAnchorId,
             field,
             layer);
@@ -879,7 +904,10 @@ bool SectorEditorMaterialEditingService::OpenMaterialPickerForDerivedSideDef(
         TopologyMaterialLayer layer)
 {
     return OpenSectorEditorMaterialPickerForDerivedSideDef(
-            context_.state,
+            context_.texturePicker,
+            context_.topologyMap,
+            context_.authoringGraph,
+            game::MakeSectorEditorConstDerivationDocumentAccess(context_.derivation),
             topologySideDefId,
             wallPart,
             layer);
@@ -891,7 +919,10 @@ bool SectorEditorMaterialEditingService::OpenMaterialPickerForAuthoringSide(
         TopologyMaterialLayer layer)
 {
     return OpenSectorEditorMaterialPickerForAuthoringSide(
-            context_.state,
+            context_.texturePicker,
+            context_.topologyMap,
+            context_.authoringGraph,
+            game::MakeSectorEditorConstDerivationDocumentAccess(context_.derivation),
             sideId,
             wallPart,
             layer);
@@ -912,7 +943,13 @@ SectorEditorTexturePickerApplyResult SectorEditorMaterialEditingService::ApplyTe
     }
 
     SectorEditorMaterialPickerRoutingContext routingContext{
-            context_.state,
+            context_.texturePicker,
+            context_.lifecycle,
+            context_.topologyMap,
+            context_.authoringGraph,
+            context_.derivation,
+            context_.topologyRenderRevision,
+            context_.topologyRenderCache,
             context_.statusText,
             [this, assets]() {
                 return context_.requestPreviewMaterialMeshRebuild

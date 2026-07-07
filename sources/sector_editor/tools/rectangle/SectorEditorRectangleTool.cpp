@@ -16,8 +16,8 @@ namespace {
 
 bool CancelRectangleTool(SectorEditorToolContext& context, const char* message)
 {
-    const bool wasActive = context.state.pendingAuthoringRectangle.active;
-    context.state.pendingAuthoringRectangle = PendingAuthoringRectangleDraw{};
+    const bool wasActive = context.pendingAuthoringRectangle.active;
+    context.pendingAuthoringRectangle = PendingAuthoringRectangleDraw{};
     if (message != nullptr && message[0] != '\0') {
         context.statusText = message;
     }
@@ -34,16 +34,16 @@ void CommitRectanglePoint(SectorEditorToolContext& context, SectorPoint point)
     SectorTopologyCoordPoint topologyPoint;
     if (!context.toTopologyCoordPoint
             || !context.toTopologyCoordPoint(point, topologyPoint, error)) {
-        context.state.pendingAuthoringRectangle.errorMessage = error;
+        context.pendingAuthoringRectangle.errorMessage = error;
         context.statusText = error;
         return;
     }
 
-    if (!context.state.pendingAuthoringRectangle.active) {
-        context.state.pendingAuthoringRectangle.active = true;
-        context.state.pendingAuthoringRectangle.firstCorner = topologyPoint;
-        context.state.pendingAuthoringRectangle.currentCorner = topologyPoint;
-        context.state.pendingAuthoringRectangle.errorMessage.clear();
+    if (!context.pendingAuthoringRectangle.active) {
+        context.pendingAuthoringRectangle.active = true;
+        context.pendingAuthoringRectangle.firstCorner = topologyPoint;
+        context.pendingAuthoringRectangle.currentCorner = topologyPoint;
+        context.pendingAuthoringRectangle.errorMessage.clear();
         context.statusText = "Rectangle: click opposite corner, right click/Esc cancels";
         return;
     }
@@ -51,18 +51,18 @@ void CommitRectanglePoint(SectorEditorToolContext& context, SectorPoint point)
     SectorEditorAuthoringRectangleResult result;
     if (!context.commitAuthoringRectangle
             || !context.commitAuthoringRectangle(
-                    context.state.pendingAuthoringRectangle.firstCorner,
+                    context.pendingAuthoringRectangle.firstCorner,
                     topologyPoint,
                     &result)) {
-        context.state.pendingAuthoringRectangle.currentCorner = topologyPoint;
-        context.state.pendingAuthoringRectangle.errorMessage = result.errorMessage.empty()
+        context.pendingAuthoringRectangle.currentCorner = topologyPoint;
+        context.pendingAuthoringRectangle.errorMessage = result.errorMessage.empty()
                 ? "Rectangle needs non-zero width and height"
                 : result.errorMessage;
-        context.statusText = context.state.pendingAuthoringRectangle.errorMessage;
+        context.statusText = context.pendingAuthoringRectangle.errorMessage;
         return;
     }
 
-    context.state.pendingAuthoringRectangle = PendingAuthoringRectangleDraw{};
+    context.pendingAuthoringRectangle = PendingAuthoringRectangleDraw{};
     if (context.clearSelection) {
         context.clearSelection();
     }
@@ -88,7 +88,7 @@ bool UpdateRectangleTool(SectorEditorToolContext& context)
                 }
 
                 if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
-                    if (context.state.pendingAuthoringRectangle.active) {
+                    if (context.pendingAuthoringRectangle.active) {
                         CancelRectangleTool(context, "Rectangle cancelled");
                         engine::ConsumeEvent(event);
                         handled = true;
@@ -111,17 +111,17 @@ bool UpdateRectangleTool(SectorEditorToolContext& context)
 
 void DrawRectangleToolOverlay(SectorEditorToolContext& context)
 {
-    if (!context.state.pendingAuthoringRectangle.active || !context.mapToScreen) {
+    if (!context.pendingAuthoringRectangle.active || !context.mapToScreen) {
         return;
     }
 
     const SectorPoint first = SectorTopologyCoordPointToSectorPoint(
-            context.state.pendingAuthoringRectangle.firstCorner);
+            context.pendingAuthoringRectangle.firstCorner);
     const SectorPoint cursor = SectorTopologyCoordPointToSectorPoint(
-            context.state.pendingAuthoringRectangle.currentCorner);
+            context.pendingAuthoringRectangle.currentCorner);
     const bool invalid = first.x == cursor.x
             || first.y == cursor.y
-            || !context.state.pendingAuthoringRectangle.errorMessage.empty();
+            || !context.pendingAuthoringRectangle.errorMessage.empty();
     const Color lineColor = invalid ? Color{220, 88, 88, 190} : Color{122, 220, 244, 205};
     const Color firstColor = Color{245, 226, 154, 255};
     const Color cursorColor = invalid ? Color{220, 88, 88, 255} : Color{120, 230, 154, 255};

@@ -48,7 +48,7 @@ float MeasureSectorEditorDoorInspectorContentHeight(
     const SectorEditorPlacedObjectInspectorMeasureContext &context,
     const SectorPlacedRuntimeObject &object) {
   const SectorResolvedDoorAnchor resolved =
-      ResolveSectorDoorAnchor(context.state.topologyMap, object.door);
+      ResolveSectorDoorAnchor(context.topologyMap, object.door);
   const std::string anchorStatus =
       resolved.valid
           ? TextFormat("Anchor valid: line %d, sectors %d -> %d",
@@ -84,7 +84,6 @@ void DrawSectorEditorDoorInspector(
   engine::AssetManager &assets = context.assets;
   const engine::FontHandle font = context.font;
   const engine::FontHandle smallFont = context.smallFont;
-  SectorEditorState &state = context.state;
   SectorEditorUiState &uiState = context.uiState;
   const SectorEditorPlacedObjectInspectorCallbacks &callbacks =
       context.callbacks;
@@ -101,7 +100,7 @@ void DrawSectorEditorDoorInspector(
   }
 
   const SectorResolvedDoorAnchor resolved =
-      ResolveSectorDoorAnchor(state.topologyMap, selectedObject->door);
+      ResolveSectorDoorAnchor(context.topologyMap, selectedObject->door);
   const std::string anchorStatus =
       resolved.valid
           ? TextFormat("Anchor valid: line %d, sectors %d -> %d",

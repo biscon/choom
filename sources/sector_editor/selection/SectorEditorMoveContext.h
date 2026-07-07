@@ -1,6 +1,7 @@
 #pragma once
 
-#include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/SectorEditorSelectionTypes.h"
+#include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
 
@@ -10,7 +11,8 @@
 namespace game {
 
 struct SectorEditorMoveContext {
-    SectorEditorState& state;
+    SectorTopologyMap& topologyMap;
+    RuntimeObjectDragState& runtimeObjectDrag;
     std::string& statusText;
 
     std::function<Vector2(Vector2)> screenToMap;

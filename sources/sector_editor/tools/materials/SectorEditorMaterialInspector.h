@@ -30,9 +30,10 @@ struct SectorEditorMaterialInspectorContext {
     float contentW = 0.0f;
     float rowH = 0.0f;
     float gap = 0.0f;
-    SectorEditorState& state;
+    SectorTopologyMap& topologyMap;
+    const SectorAuthoringGraph& authoringGraph;
     SelectionState& selectionState;
-    SectorEditorUiState& uiState;
+    engine::UIScrollState& inspectorScroll;
     MaterialEditingUiState& materialUiState;
     std::string& statusText;
     const SectorEditorMaterialInspectorCallbacks& callbacks;

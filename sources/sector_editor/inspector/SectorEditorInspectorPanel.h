@@ -5,6 +5,7 @@
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/inspector/SectorEditorInspectorUiState.h"
+#include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
@@ -49,6 +50,10 @@ struct SectorEditorInspectorPanelContext {
     Rectangle panelRect;
 
     SectorEditorState& state;
+    SectorEditorDocumentLifecycleAccess lifecycle;
+    SectorTopologyMap& topologyMap;
+    SectorAuthoringGraph& authoringGraph;
+    SectorEditorDerivationDocumentAccess derivation;
     SelectionState& selectionState;
     SectorEditorUiState& uiState;
     InspectorIdUiState& inspectorIdUiState;

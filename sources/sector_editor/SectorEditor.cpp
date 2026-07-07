@@ -117,8 +117,27 @@ SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
             inspectorIdUiState};
 }
 
+SectorEditorDerivationDocumentAccess MakeLiveDerivationAccess(SectorEditorDerivationState& derivation)
+{
+    return MakeSectorEditorDerivationDocumentAccess(derivation);
+}
+
+SectorEditorConstDerivationDocumentAccess MakeLiveDerivationAccess(const SectorEditorDerivationState& derivation)
+{
+    return MakeSectorEditorDerivationDocumentAccess(derivation);
+}
+
+SectorEditorConstDerivationDocumentAccess MakeLiveConstDerivationAccess(
+        const SectorEditorDerivationState& derivation)
+{
+    return MakeLiveDerivationAccess(derivation);
+}
+
 SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
         SectorEditorState& state,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorConstDerivationDocumentAccess derivation,
         SectorEditorPreviewSelectionState& previewSelectionState,
         SelectionState& selectionState,
         ManipulationState& manipulationState,
@@ -130,15 +149,13 @@ SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
         void (*requestCancelSpotLightPilotWithPreviewRestore)(void*, const char*) = nullptr,
         LightEditingState* lightState = nullptr)
 {
-    const bool authoringDerivationCurrent =
-            state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
-            && !state.authoringDerivedTopologyStale
-            && state.authoringDerivation.success;
+    SectorEditorAuthoringDocumentAccess authoring =
+            MakeSectorEditorAuthoringDocumentAccess(authoringGraph);
     return SectorEditorSelectionServiceContext{
-            state.topologyMap,
-            state.authoringGraph,
-            state.authoringDerivation,
-            authoringDerivationCurrent,
+            topologyMap,
+            authoring.graph,
+            derivation.authoringDerivation,
+            IsSectorEditorAuthoringDerivationCurrent(derivation),
             selectionState,
             previewSelectionState.selectedSurface3D,
             previewSelectionState.selectedTopologySurface3D,
@@ -311,7 +328,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
 
     if (state.mode == SectorEditorMode::Preview3D) {
         const Vector3 playerPosition = previewState.controller.freeflyController.pose.position;
-        UpdateSectorRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, state.topologyMap, dt, &playerPosition);
+        UpdateSectorRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, TopologyMap(), dt, &playerPosition);
         previewState.runtime.runtimeObjects.dynamicDoorColliders.clear();
         CollectSectorDoorDynamicColliders(context.world, previewState.runtime.runtimeObjects.dynamicDoorColliders);
         previewState.runtime.runtimeObjects.dynamicPortalBlockers.clear();
@@ -532,6 +549,11 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
 {
     SectorEditorToolContext context{
             state,
+            state.currentTool,
+            state.pendingAuthoringLine,
+            state.pendingAuthoringRectangle,
+            state.pendingAuthoringInsertVertex,
+            AuthoringGraph(),
             selectionState,
             statusText,
             input,
@@ -558,16 +580,25 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
         ClearSelection();
     };
     context.selectAuthoringLine = [this](int lineId) {
-        SelectSectorEditorAuthoringLine(state.authoringGraph, selectionState, lineId);
+        SectorAuthoringGraph& authoringGraph = AuthoringGraph();
+        SelectSectorEditorAuthoringLine(authoringGraph, selectionState, lineId);
     };
     context.hoverAuthoringLine = [this](int lineId) {
-        SetHoveredSectorEditorAuthoringLine(state.authoringGraph, selectionState, lineId);
+        SectorAuthoringGraph& authoringGraph = AuthoringGraph();
+        SetHoveredSectorEditorAuthoringLine(authoringGraph, selectionState, lineId);
     };
     context.findAuthoringLineNearScreenPoint = [this](Vector2 screenPoint) {
         return FindAuthoringLineNearScreenPoint(screenPoint);
     };
     context.commitAuthoringLinePoint = [this](SectorTopologyCoordPoint point) {
-        return ClickSectorEditorAuthoringLineTool(state, selectionState, point);
+        return ClickSectorEditorAuthoringLineTool(
+                state,
+                Lifecycle(),
+                TopologyMap(),
+                AuthoringGraph(),
+                MakeLiveDerivationAccess(documentState.derivation),
+                selectionState,
+                point);
     };
     context.cancelAuthoringLineChain = [this]() {
         CancelSectorEditorAuthoringLineToolChain(state);
@@ -576,7 +607,15 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
             SectorTopologyCoordPoint firstCorner,
             SectorTopologyCoordPoint oppositeCorner,
             SectorEditorAuthoringRectangleResult* outResult) {
-        return AddSectorEditorAuthoringRectangle(state, firstCorner, oppositeCorner, outResult);
+        return AddSectorEditorAuthoringRectangle(
+                state,
+                Lifecycle(),
+                TopologyMap(),
+                AuthoringGraph(),
+                MakeLiveDerivationAccess(documentState.derivation),
+                firstCorner,
+                oppositeCorner,
+                outResult);
     };
     context.resolveAuthoringInsertVertexPoint = [this](
             int lineId,
@@ -589,7 +628,16 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
             int lineId,
             SectorTopologyCoordPoint point,
             SectorAuthoringInsertVertexResult* outResult) {
-        return InsertSectorEditorAuthoringVertexOnLine(state, selectionState, lineId, point, outResult);
+        return InsertSectorEditorAuthoringVertexOnLine(
+                state,
+                Lifecycle(),
+                TopologyMap(),
+                AuthoringGraph(),
+                MakeLiveDerivationAccess(documentState.derivation),
+                selectionState,
+                lineId,
+                point,
+                outResult);
     };
     context.buildSelectPickCandidates = [this](Vector2 screenPoint) {
         return BuildSelectPickCandidates(screenPoint);
@@ -604,6 +652,36 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
         return BuildManipulationServiceContext();
     };
     return context;
+}
+
+SectorAuthoringGraph& SectorEditor::AuthoringGraph()
+{
+    return documentState.authoring.authoringGraph;
+}
+
+const SectorAuthoringGraph& SectorEditor::AuthoringGraph() const
+{
+    return documentState.authoring.authoringGraph;
+}
+
+SectorEditorDocumentLifecycleAccess SectorEditor::Lifecycle()
+{
+    return MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle);
+}
+
+SectorEditorConstDocumentLifecycleAccess SectorEditor::Lifecycle() const
+{
+    return MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle);
+}
+
+SectorTopologyMap& SectorEditor::TopologyMap()
+{
+    return documentState.map.topologyMap;
+}
+
+const SectorTopologyMap& SectorEditor::TopologyMap() const
+{
+    return documentState.map.topologyMap;
 }
 
 Vector2 SectorEditor::CanvasWorldToScreen(Vector2 canvasWorld) const
@@ -644,7 +722,8 @@ Vector2 SectorEditor::SnapMapPoint(Vector2 map) const
     Vector2 best = snapped;
     if (state.currentTool == SectorEditorTool::AuthoringLine
             || state.currentTool == SectorEditorTool::AuthoringRectangle) {
-        for (const SectorAuthoringVertex& authoringVertex : state.authoringGraph.vertices) {
+        const SectorAuthoringGraph& authoringGraph = AuthoringGraph();
+        for (const SectorAuthoringVertex& authoringVertex : authoringGraph.vertices) {
             const Vector2 vertex{
                     SectorCoordToVisibleAuthoring(authoringVertex.x),
                     SectorCoordToVisibleAuthoring(authoringVertex.y)};
@@ -658,7 +737,7 @@ Vector2 SectorEditor::SnapMapPoint(Vector2 map) const
             }
         }
     } else {
-        for (const SectorTopologyVertex& topologyVertex : state.topologyMap.vertices) {
+        for (const SectorTopologyVertex& topologyVertex : TopologyMap().vertices) {
             const Vector2 vertex = SectorTopologyVertexToMap(topologyVertex);
             const float dx = vertex.x - map.x;
             const float dy = vertex.y - map.y;
@@ -743,13 +822,14 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
     }
 
     if (state.currentTool == SectorEditorTool::AuthoringMove) {
+        SectorAuthoringGraph& authoringGraph = AuthoringGraph();
         int authoringVertexId = -1;
         SectorTopologyCoordPoint authoringVertexPoint{};
         if (FindAuthoringVertexNearScreenPoint(
                     input.MousePosition(),
                     authoringVertexId,
                     authoringVertexPoint)) {
-            SetHoveredSectorEditorAuthoringVertex(state.authoringGraph, selectionState, authoringVertexId);
+            SetHoveredSectorEditorAuthoringVertex(authoringGraph, selectionState, authoringVertexId);
         }
         selectionState.inspectedTopologyVertexId = -1;
         return;
@@ -757,8 +837,9 @@ void SectorEditor::UpdateHoverAndMouse(engine::Input& input)
 
     if (state.currentTool == SectorEditorTool::AuthoringInsertVertex) {
         if (state.pendingAuthoringInsertVertex.lineId >= 0) {
+            SectorAuthoringGraph& authoringGraph = AuthoringGraph();
             SetHoveredSectorEditorAuthoringLine(
-                    state.authoringGraph,
+                    authoringGraph,
                     selectionState,
                     state.pendingAuthoringInsertVertex.lineId);
         }
@@ -1155,11 +1236,11 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
 {
     std::vector<SectorEditorPickCandidate> candidates;
     candidates.reserve(
-            state.topologyMap.runtimeObjects.size()
-            + state.topologyMap.dynamicSpotLights.size()
-            + state.topologyMap.dynamicPointLights.size()
-            + state.topologyMap.staticSpotLights.size()
-            + state.topologyMap.staticLights.size()
+            TopologyMap().runtimeObjects.size()
+            + TopologyMap().dynamicSpotLights.size()
+            + TopologyMap().dynamicPointLights.size()
+            + TopologyMap().staticSpotLights.size()
+            + TopologyMap().staticLights.size()
             + 3);
 
     const auto addPointCandidate = [&](SectorEditorPickKind kind, int id, Vector2 center) {
@@ -1189,33 +1270,33 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
                 distance2});
     };
 
-    for (const SectorPlacedRuntimeObject& object : state.topologyMap.runtimeObjects) {
+    for (const SectorPlacedRuntimeObject& object : TopologyMap().runtimeObjects) {
         addPointCandidate(
                 SectorEditorPickKind::RuntimeObject,
                 object.id,
                 MapToScreen(Vector2{object.position.x, object.position.z}));
     }
-    for (const SectorTopologyDynamicSpotLight& light : state.topologyMap.dynamicSpotLights) {
+    for (const SectorTopologyDynamicSpotLight& light : TopologyMap().dynamicSpotLights) {
         addSpotCandidate(
                 SectorEditorPickKind::DynamicSpotLight,
                 light.id,
                 MapToScreen(Vector2{light.position.x, light.position.z}),
                 MapToScreen(Vector2{light.target.x, light.target.z}));
     }
-    for (const SectorTopologyDynamicPointLight& light : state.topologyMap.dynamicPointLights) {
+    for (const SectorTopologyDynamicPointLight& light : TopologyMap().dynamicPointLights) {
         addPointCandidate(
                 SectorEditorPickKind::DynamicLight,
                 light.id,
                 MapToScreen(Vector2{light.position.x, light.position.z}));
     }
-    for (const SectorTopologyStaticSpotLight& light : state.topologyMap.staticSpotLights) {
+    for (const SectorTopologyStaticSpotLight& light : TopologyMap().staticSpotLights) {
         addSpotCandidate(
                 SectorEditorPickKind::StaticSpotLight,
                 light.id,
                 MapToScreen(Vector2{light.position.x, light.position.z}),
                 MapToScreen(Vector2{light.target.x, light.target.z}));
     }
-    for (const SectorTopologyStaticPointLight& light : state.topologyMap.staticLights) {
+    for (const SectorTopologyStaticPointLight& light : TopologyMap().staticLights) {
         addPointCandidate(
                 SectorEditorPickKind::StaticLight,
                 light.id,
@@ -1245,8 +1326,9 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
 
 void SectorEditor::StartAuthoringVertexDrag(int vertexId, SectorTopologyCoordPoint point)
 {
+    SectorAuthoringGraph& authoringGraph = AuthoringGraph();
     if (!IsValidSectorAuthoringId(vertexId)
-            || FindSectorAuthoringVertex(state.authoringGraph, vertexId) == nullptr) {
+            || FindSectorAuthoringVertex(authoringGraph, vertexId) == nullptr) {
         return;
     }
 
@@ -1260,7 +1342,7 @@ void SectorEditor::StartAuthoringVertexDrag(int vertexId, SectorTopologyCoordPoi
     manipulationState.authoringVertexDrag.errorMessage.clear();
 
     size_t connectedCount = 0;
-    for (const SectorAuthoringLine& line : state.authoringGraph.lines) {
+    for (const SectorAuthoringLine& line : authoringGraph.lines) {
         if (line.startVertexId == vertexId || line.endVertexId == vertexId) {
             ++connectedCount;
         }
@@ -1319,7 +1401,15 @@ void SectorEditor::FinishAuthoringVertexDrag()
         return;
     }
 
-    if (!MoveSectorEditorAuthoringVertex(state, selectionState, vertexId, target)) {
+    if (!MoveSectorEditorAuthoringVertex(
+                state,
+                Lifecycle(),
+                TopologyMap(),
+                AuthoringGraph(),
+                MakeLiveDerivationAccess(documentState.derivation),
+                selectionState,
+                vertexId,
+                target)) {
         manipulationState.authoringVertexDrag = AuthoringVertexDragState{};
         statusText = "Authoring vertex move rejected";
         return;
@@ -1349,7 +1439,7 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
 
     if (staticSpotSelected || state.currentTool == SectorEditorTool::StaticSpotLight) {
         const SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
-                state.topologyMap,
+                TopologyMap(),
                 topologyLightId);
         if (light == nullptr) {
             return;
@@ -1371,7 +1461,7 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
 
     if (dynamicSpotSelected || state.currentTool == SectorEditorTool::DynamicSpotLight) {
         const SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(
-                state.topologyMap,
+                TopologyMap(),
                 topologyLightId);
         if (light == nullptr) {
             return;
@@ -1393,7 +1483,7 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
 
     if (dynamicLightSelected || state.currentTool == SectorEditorTool::DynamicLight) {
         const SectorTopologyDynamicPointLight* light = FindSectorTopologyDynamicLight(
-                state.topologyMap,
+                TopologyMap(),
                 topologyLightId);
         if (light == nullptr) {
             return;
@@ -1412,7 +1502,7 @@ void SectorEditor::StartLightDrag(int topologyLightId, SpotLightHandle spotHandl
     }
 
     const SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
-            state.topologyMap,
+            TopologyMap(),
             topologyLightId);
     if (light == nullptr) {
         return;
@@ -1453,7 +1543,7 @@ void SectorEditor::FinishLightDrag()
     const SectorEditorLightMutationResult result = lightEditing.FinishLightDrag();
     lightEditingState.lightDrag = LightDragState{};
     if (result.dynamicLightRendererRefreshNeeded) {
-        preview.RefreshDynamicLightSources(state.topologyMap);
+        preview.RefreshDynamicLightSources(TopologyMap());
     }
 }
 
@@ -1463,7 +1553,7 @@ void SectorEditor::CancelLightDrag(const char* message)
         SectorEditorLightEditingService lightEditing = BuildLightEditingService();
         const SectorEditorLightMutationResult result = lightEditing.CancelLightDragData(message);
         if (result.dynamicLightRendererRefreshNeeded) {
-            preview.RefreshDynamicLightSources(state.topologyMap);
+            preview.RefreshDynamicLightSources(TopologyMap());
         }
     }
 
@@ -1730,7 +1820,8 @@ void SectorEditor::CancelPendingAuthoringInsertVertex(const char* message)
 
 void SectorEditor::BeginPendingAuthoringInsertVertex(int lineId)
 {
-    if (FindSectorAuthoringLine(state.authoringGraph, lineId) == nullptr) {
+    SectorAuthoringGraph& authoringGraph = AuthoringGraph();
+    if (FindSectorAuthoringLine(authoringGraph, lineId) == nullptr) {
         statusText = "Insert Vertex: select or click an authoring line";
         return;
     }
@@ -1749,7 +1840,7 @@ void SectorEditor::BeginPendingAuthoringInsertVertex(int lineId)
     }
 
     ClearTopologySelectionOnly();
-    SelectSectorEditorAuthoringLine(state.authoringGraph, selectionState, lineId);
+    SelectSectorEditorAuthoringLine(authoringGraph, selectionState, lineId);
     state.currentTool = SectorEditorTool::AuthoringInsertVertex;
     state.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
     state.pendingAuthoringInsertVertex.active = true;
@@ -1766,16 +1857,17 @@ bool SectorEditor::TryResolveAuthoringInsertVertexPoint(
     outPoint = SectorTopologyCoordPoint{};
     error.clear();
 
-    const SectorAuthoringLine* line = FindSectorAuthoringLine(state.authoringGraph, lineId);
+    const SectorAuthoringGraph& authoringGraph = AuthoringGraph();
+    const SectorAuthoringLine* line = FindSectorAuthoringLine(authoringGraph, lineId);
     if (line == nullptr) {
         error = "Insert Vertex: select or click an authoring line";
         return false;
     }
 
     const SectorAuthoringVertex* start =
-            FindSectorAuthoringVertex(state.authoringGraph, line->startVertexId);
+            FindSectorAuthoringVertex(authoringGraph, line->startVertexId);
     const SectorAuthoringVertex* end =
-            FindSectorAuthoringVertex(state.authoringGraph, line->endVertexId);
+            FindSectorAuthoringVertex(authoringGraph, line->endVertexId);
     if (start == nullptr || end == nullptr
             || (start->x == end->x && start->y == end->y)) {
         error = "Insert Vertex unavailable: selected authoring line is invalid";
@@ -1916,9 +2008,12 @@ bool SectorEditor::ToCanonicalSectorPoint(
 SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceContext()
 {
     SectorEditorManipulationServiceContext context{
-            state,
+            state.currentTool,
+            TopologyMap(),
+            AuthoringGraph(),
             manipulationState,
             lightEditingState,
+            state.runtimeObjectDrag,
             statusText};
     context.userData = this;
     context.currentPickSelectionTarget = [](void* userData) {
@@ -2009,6 +2104,9 @@ SectorEditorSelectionServiceContext SectorEditor::BuildSelectionServiceContext()
 {
     return BuildSelectionServiceContextFromState(
             state,
+            TopologyMap(),
+            AuthoringGraph(),
+            MakeLiveConstDerivationAccess(documentState.derivation),
             previewState.selection,
             selectionState,
             manipulationState,
@@ -2033,6 +2131,9 @@ const SectorTopologySector* SectorEditor::SelectedTopologySector() const
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorTopologyMap&>(TopologyMap()),
+            const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
+            MakeLiveConstDerivationAccess(documentState.derivation),
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
@@ -2052,6 +2153,9 @@ const SectorTopologyVertex* SectorEditor::SelectedTopologyVertex() const
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorTopologyMap&>(TopologyMap()),
+            const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
+            MakeLiveConstDerivationAccess(documentState.derivation),
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
@@ -2071,6 +2175,9 @@ const SectorTopologySideDef* SectorEditor::SelectedTopologySideDef() const
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorTopologyMap&>(TopologyMap()),
+            const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
+            MakeLiveConstDerivationAccess(documentState.derivation),
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
@@ -2090,6 +2197,9 @@ const SectorTopologyLineDef* SectorEditor::SelectedTopologyLineDef() const
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorTopologyMap&>(TopologyMap()),
+            const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
+            MakeLiveConstDerivationAccess(documentState.derivation),
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
@@ -2109,6 +2219,9 @@ const SectorTopologyStaticPointLight* SectorEditor::SelectedTopologyLight() cons
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorTopologyMap&>(TopologyMap()),
+            const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
+            MakeLiveConstDerivationAccess(documentState.derivation),
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
@@ -2128,6 +2241,9 @@ const SectorTopologyStaticSpotLight* SectorEditor::SelectedTopologyStaticSpotLig
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorTopologyMap&>(TopologyMap()),
+            const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
+            MakeLiveConstDerivationAccess(documentState.derivation),
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
@@ -2147,6 +2263,9 @@ const SectorTopologyDynamicPointLight* SectorEditor::SelectedTopologyDynamicLigh
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorTopologyMap&>(TopologyMap()),
+            const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
+            MakeLiveConstDerivationAccess(documentState.derivation),
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
@@ -2166,6 +2285,9 @@ const SectorTopologyDynamicSpotLight* SectorEditor::SelectedTopologyDynamicSpotL
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorTopologyMap&>(TopologyMap()),
+            const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
+            MakeLiveConstDerivationAccess(documentState.derivation),
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
@@ -2185,6 +2307,9 @@ const SectorPlacedRuntimeObject* SectorEditor::SelectedRuntimeObject() const
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorTopologyMap&>(TopologyMap()),
+            const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
+            MakeLiveConstDerivationAccess(documentState.derivation),
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
@@ -2202,7 +2327,12 @@ void SectorEditor::ClearStaleTopologySelection()
 
 void SectorEditor::MarkTopologyDocumentEdited(const char* status)
 {
-    MarkSectorEditorTopologyDocumentEdited(state, statusText, status);
+    MarkSectorEditorTopologyDocumentEdited(
+            Lifecycle(),
+            state.topologyRenderRevision,
+            state.topologyRenderCache,
+            statusText,
+            status);
 }
 
 bool SectorEditor::FinishTopologyActionResult(const SectorEditorTopologyActionResult& result)
@@ -2223,6 +2353,10 @@ bool SectorEditor::SetAuthoringLineDefBlocksPlayer(int lineDefId, bool blocksPla
     std::string status;
     const bool changed = SetSectorEditorAuthoringLineDefBlocksPlayer(
             state,
+            Lifecycle(),
+            TopologyMap(),
+            AuthoringGraph(),
+            MakeLiveDerivationAccess(documentState.derivation),
             lineDefId,
             blocksPlayer,
             &status);
@@ -2281,20 +2415,26 @@ bool SectorEditor::TryRenameSelectedDerivedSectorAuthoringName()
         statusText = inspectorIdUiState.idEditError;
         return true;
     }
-    if (hasAuthoringGraph
-            && (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-                    || state.authoringDerivedTopologyStale
-                    || !state.authoringDerivation.success)) {
+    const SectorEditorConstDerivationDocumentAccess derivation =
+            MakeLiveConstDerivationAccess(documentState.derivation);
+    if (hasAuthoringGraph && !IsSectorEditorAuthoringDerivationCurrent(derivation)) {
         inspectorIdUiState.idEditError = "Sector name edit unavailable: derived topology is not current";
         statusText = inspectorIdUiState.idEditError;
         return true;
     }
 
     const bool hasFaceAnchorMapping =
-            FindSectorEditorAuthoringFaceAnchorIdForTopologySector(state, sector->id) >= 0;
+            FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
+                    AuthoringGraph(),
+                    derivation.authoringDerivation,
+                    sector->id) >= 0;
     if (hasFaceAnchorMapping) {
         MutateSectorEditorAuthoringFaceAnchorForTopologySector(
                 state,
+                Lifecycle(),
+                TopologyMap(),
+                AuthoringGraph(),
+                MakeLiveDerivationAccess(documentState.derivation),
                 sector->id,
                 TextFormat("Renamed authoring face anchor %d", sector->id),
                 [&newName](SectorAuthoringFaceAnchor& anchor) {
@@ -2350,7 +2490,7 @@ bool SectorEditor::OpenDeleteSelectedLightConfirmation()
                     preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
                 }
                 if (result.dynamicLightRendererRefreshNeeded) {
-                    preview.RefreshDynamicLightSources(state.topologyMap);
+                    preview.RefreshDynamicLightSources(TopologyMap());
                 }
             });
     return true;
@@ -2359,7 +2499,8 @@ bool SectorEditor::OpenDeleteSelectedLightConfirmation()
 SectorEditorPlacedObjectDragContext SectorEditor::BuildRuntimeObjectDragContext()
 {
     return SectorEditorPlacedObjectDragContext{
-            state,
+            TopologyMap(),
+            state.runtimeObjectDrag,
             statusText,
             [this](Vector2 screenPoint) {
                 return ScreenToMap(screenPoint);
@@ -2385,6 +2526,7 @@ SectorEditorPlacedObjectActionContext SectorEditor::BuildRuntimeObjectActionCont
 {
     return SectorEditorPlacedObjectActionContext{
             state,
+            TopologyMap(),
             previewState.runtime.runtimeObjects,
             selectionState,
             statusText,
@@ -2482,25 +2624,27 @@ bool SectorEditor::StartLightmapBake()
         return false;
     }
 
-    if (!state.hasCurrentLevelPath) {
+    if (!Lifecycle().hasCurrentLevelPath) {
         statusText = "Save the level before baking lightmaps";
         return false;
     }
 
     std::string gateMessage;
-    if (!CanUseCurrentAuthoringDerivedTopologyForLightmapBake(state, &gateMessage)) {
+    if (!CanUseCurrentAuthoringDerivedTopologyForLightmapBake(
+                MakeLiveConstDerivationAccess(documentState.derivation),
+                &gateMessage)) {
         statusText = gateMessage.empty() ? "Bake failed: derived topology is not current" : gateMessage;
         return false;
     }
 
-    if (state.topologyMap.sectors.empty()) {
+    if (TopologyMap().sectors.empty()) {
         statusText = "Bake failed: no sectors";
         return false;
     }
 
     LevelPaths levelPaths;
     std::string pathError;
-    if (!BuildLevelPaths(state.currentLevelName, levelPaths, pathError)) {
+    if (!BuildLevelPaths(Lifecycle().currentLevelName, levelPaths, pathError)) {
         statusText = TextFormat("Bake failed: %s", pathError.c_str());
         return false;
     }
@@ -2508,8 +2652,8 @@ bool SectorEditor::StartLightmapBake()
     const std::string temporaryOutputPath = MakeTemporaryLightmapPath(finalOutputPath);
 
     SectorEditorLightmapBakeRequest request;
-    request.mapSnapshot = state.topologyMap;
-    request.expectedSourceHash = ComputeSectorLightmapSourceHash(state.topologyMap);
+    request.mapSnapshot = TopologyMap();
+    request.expectedSourceHash = ComputeSectorLightmapSourceHash(TopologyMap());
     request.finalOutputPath = finalOutputPath;
     request.temporaryOutputPath = temporaryOutputPath;
 
@@ -2550,7 +2694,7 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
     SectorEditorLightmapBakeInstallPayload installPayload;
     if (!lightmapBake.InstallCompletedResultFiles(
                 result,
-                ComputeSectorLightmapSourceHash(state.topologyMap),
+                ComputeSectorLightmapSourceHash(TopologyMap()),
                 installPayload)) {
         statusText = installPayload.status;
         return false;
@@ -2558,17 +2702,17 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
 
     LevelPaths levelPaths;
     std::string pathError;
-    if (!BuildLevelPaths(state.currentLevelName, levelPaths, pathError)) {
+    if (!BuildLevelPaths(Lifecycle().currentLevelName, levelPaths, pathError)) {
         statusText = TextFormat("Bake failed: %s", pathError.c_str());
         return false;
     }
-    state.topologyMap.bakedLightmap.path = levelPaths.lightmapAssetPath;
-    state.topologyMap.bakedLightmap.width = installPayload.bakeResult.width;
-    state.topologyMap.bakedLightmap.height = installPayload.bakeResult.height;
-    state.topologyMap.bakedLightmap.sourceHash = installPayload.bakeResult.sourceHash;
-    state.topologyMap.bakedLightmap.objectProbes = installPayload.bakeResult.objectProbes;
-    state.hasUnsavedChanges = true;
-    state.topologyDocumentDirty = true;
+    TopologyMap().bakedLightmap.path = levelPaths.lightmapAssetPath;
+    TopologyMap().bakedLightmap.width = installPayload.bakeResult.width;
+    TopologyMap().bakedLightmap.height = installPayload.bakeResult.height;
+    TopologyMap().bakedLightmap.sourceHash = installPayload.bakeResult.sourceHash;
+    TopologyMap().bakedLightmap.objectProbes = installPayload.bakeResult.objectProbes;
+    Lifecycle().hasUnsavedChanges = true;
+    Lifecycle().topologyDocumentDirty = true;
 
     std::istringstream report(result.bakeReportText);
     std::string line;
@@ -2596,7 +2740,7 @@ bool SectorEditor::FindTopologyVertexNearScreenPoint(
     int bestVertexId = -1;
     SectorTopologyCoordPoint bestPoint{};
 
-    for (const SectorTopologyVertex& vertex : state.topologyMap.vertices) {
+    for (const SectorTopologyVertex& vertex : TopologyMap().vertices) {
         const Vector2 screenVertex = MapToScreen(SectorTopologyVertexToMap(vertex));
         const float dx = screenVertex.x - screenPoint.x;
         const float dy = screenVertex.y - screenPoint.y;
@@ -2675,7 +2819,7 @@ void SectorEditor::RenderPreview3DScene(engine::EngineContext& context)
             context.assets,
             previewState.overlay.useBakedAmbientOcclusion,
             &context.world,
-            SectorRuntimeDoorLightingContext{&previewState.runtime.runtimeObjects.objectLightProbes, &state.topologyMap});
+            SectorRuntimeDoorLightingContext{&previewState.runtime.runtimeObjects.objectLightProbes, &TopologyMap()});
 }
 
 void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
@@ -2731,13 +2875,13 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
 
 void SectorEditor::DrawPreviewSurfaceHighlights() const
 {
+    const SectorEditorConstDerivationDocumentAccess derivation =
+            MakeLiveConstDerivationAccess(documentState.derivation);
     DrawSectorEditorPreviewSurfaceHighlights(
-            const_cast<SectorTopologyMap&>(state.topologyMap),
-            const_cast<SectorAuthoringGraph&>(state.authoringGraph),
-            state.authoringDerivation,
-            state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
-                    && !state.authoringDerivedTopologyStale
-                    && state.authoringDerivation.success,
+            const_cast<SectorTopologyMap&>(TopologyMap()),
+            const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
+            derivation.authoringDerivation,
+            IsSectorEditorAuthoringDerivationCurrent(derivation),
             const_cast<RuntimeObjectDragState&>(state.runtimeObjectDrag),
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             previewState.controller,
@@ -2752,17 +2896,17 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
 
 void SectorEditor::DrawPreviewSpotLightOverlay() const
 {
-    DrawSectorEditorPreviewSpotLightOverlay(state.topologyMap, previewState.controller, selectionState, preview);
+    DrawSectorEditorPreviewSpotLightOverlay(TopologyMap(), previewState.controller, selectionState, preview);
 }
 
 void SectorEditor::DrawPreviewObjectProbeOverlay() const
 {
-    DrawSectorEditorPreviewObjectProbeOverlay(state.topologyMap, previewState, preview);
+    DrawSectorEditorPreviewObjectProbeOverlay(TopologyMap(), previewState, preview);
 }
 
 void SectorEditor::RefreshPreviewObjectProbeDebugData()
 {
-    RefreshSectorRuntimeObjectMapData(previewState.runtime.runtimeObjects, state.topologyMap);
+    RefreshSectorRuntimeObjectMapData(previewState.runtime.runtimeObjects, TopologyMap());
 }
 
 bool SectorEditor::IsPreviewOverlayMouseInteractive() const
@@ -2783,6 +2927,8 @@ void SectorEditor::DrawPreviewOverlay(
         engine::FontHandle font,
         engine::FontHandle smallFont)
 {
+    const SectorEditorConstDerivationDocumentAccess derivation =
+            MakeLiveConstDerivationAccess(documentState.derivation);
     SectorEditorPreviewOverlayContext overlayContext{
             ui,
             config,
@@ -2790,13 +2936,11 @@ void SectorEditor::DrawPreviewOverlay(
             assets,
             font,
             smallFont,
-            state.topologyMap,
-            state.authoringGraph,
-            state.authoringDerivation,
-            state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
-                    && !state.authoringDerivedTopologyStale
-                    && state.authoringDerivation.success,
-            state.topologyDocumentDirty,
+            TopologyMap(),
+            AuthoringGraph(),
+            derivation.authoringDerivation,
+            IsSectorEditorAuthoringDerivationCurrent(derivation),
+            Lifecycle().topologyDocumentDirty,
             state.runtimeObjectDrag,
             previewState,
             selectionState,
@@ -2854,6 +2998,8 @@ void SectorEditor::DrawPreviewUvPanel(
 
     SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
+    const SectorEditorConstDerivationDocumentAccess derivation =
+            MakeLiveConstDerivationAccess(documentState.derivation);
     SectorEditorPreviewUvPanelContext panelContext{
             ui,
             config,
@@ -2862,12 +3008,10 @@ void SectorEditor::DrawPreviewUvPanel(
             font,
             engine::FontHandle{},
             BuildPreviewUvPanelRect(),
-            state.topologyMap,
-            state.authoringGraph,
-            state.authoringDerivation,
-            state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
-                    && !state.authoringDerivedTopologyStale
-                    && state.authoringDerivation.success,
+            TopologyMap(),
+            AuthoringGraph(),
+            derivation.authoringDerivation,
+            IsSectorEditorAuthoringDerivationCurrent(derivation),
             state.texturePicker,
             previewState.selection,
             selectionState,
@@ -2927,10 +3071,12 @@ void SectorEditor::EnsureTopologyRenderCache()
 {
     if (!state.topologyRenderCache.valid
             || state.topologyRenderCache.revision != state.topologyRenderRevision) {
+        const SectorEditorConstDerivationDocumentAccess derivation =
+                MakeLiveConstDerivationAccess(documentState.derivation);
         state.topologyRenderCache = BuildSectorEditorTopologyRenderCache(
-                state.topologyMap,
-                state.authoringGraph,
-                state.authoringDerivation,
+                TopologyMap(),
+                AuthoringGraph(),
+                derivation.authoringDerivation,
                 state.topologyRenderRevision);
         state.topologyRenderWarning = state.topologyRenderCache.warning;
     }
@@ -2949,12 +3095,14 @@ void SectorEditor::DrawTopologyDocument()
     const bool hasAuthoringGraph = HasAuthoringGraphData();
     const bool drawLegacyTopologySelection =
             ShouldDrawLegacyTopologySelectionHighlight(hasAuthoringGraph, selectionState.topologySelectionKind);
+    const SectorEditorConstDerivationDocumentAccess derivation =
+            MakeLiveConstDerivationAccess(documentState.derivation);
     const SectorEditorTopologyDrawContext drawContext{
             canvasRect,
             state.viewCenter,
             state.viewZoom,
             state.showSectorIds,
-            state.authoringDerivedTopologyStale,
+            derivation.authoringDerivedTopologyStale,
             state.currentTool,
             drawLegacyTopologySelection ? selectionState.topologySelectionKind : TopologySelectionKind::None,
             drawLegacyTopologySelection ? selectionState.selectedTopologySectorId : -1,
@@ -3012,7 +3160,7 @@ void SectorEditor::DrawTopologyDocument()
                 Color{236, 196, 92, 255}
         );
     }
-    if (state.authoringDerivedTopologyStale) {
+    if (derivation.authoringDerivedTopologyStale) {
         DrawText(
                 "Authoring graph changed; derived sector fills are stale",
                 static_cast<int>(canvasRect.x + 16.0f),
@@ -3037,7 +3185,7 @@ void SectorEditor::DrawTopologySelectedLineHighlight() const
 
     const SectorTopologyVertex* start = nullptr;
     const SectorTopologyVertex* end = nullptr;
-    if (!GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end)) {
+    if (!GetSectorTopologyLineVertices(TopologyMap(), *lineDef, start, end)) {
         return;
     }
 
@@ -3102,8 +3250,9 @@ void SectorEditor::DrawAuthoringVertexMoveOverlay() const
 
     if (!manipulationState.authoringVertexDrag.active
             && selectionState.hoveredAuthoring.kind == SectorAuthoringSelectionKind::Vertex) {
+        const SectorAuthoringGraph& authoringGraph = AuthoringGraph();
         const SectorAuthoringVertex* vertex =
-                FindSectorAuthoringVertex(state.authoringGraph, selectionState.hoveredAuthoring.vertexId);
+                FindSectorAuthoringVertex(authoringGraph, selectionState.hoveredAuthoring.vertexId);
         if (vertex == nullptr) {
             return;
         }
@@ -3146,7 +3295,8 @@ void SectorEditor::DrawAuthoringVertexMoveOverlay() const
     const Vector2 previewMap{
             SectorCoordToVisibleAuthoring(manipulationState.authoringVertexDrag.previewPoint.x),
             SectorCoordToVisibleAuthoring(manipulationState.authoringVertexDrag.previewPoint.y)};
-    for (const SectorAuthoringLine& line : state.authoringGraph.lines) {
+    const SectorAuthoringGraph& authoringGraph = AuthoringGraph();
+    for (const SectorAuthoringLine& line : authoringGraph.lines) {
         if (line.startVertexId != draggedVertexId && line.endVertexId != draggedVertexId) {
             continue;
         }
@@ -3155,7 +3305,7 @@ void SectorEditor::DrawAuthoringVertexMoveOverlay() const
                 ? line.endVertexId
                 : line.startVertexId;
         const SectorAuthoringVertex* otherVertex =
-                FindSectorAuthoringVertex(state.authoringGraph, otherVertexId);
+                FindSectorAuthoringVertex(authoringGraph, otherVertexId);
         if (otherVertex == nullptr) {
             continue;
         }
@@ -3198,7 +3348,7 @@ void SectorEditor::DrawLightMoveOverlay() const
     if (lightEditingState.lightDrag.active) {
         if (selectionState.topologySelectionKind == TopologySelectionKind::StaticSpotLight) {
             const SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
-                    state.topologyMap,
+                    TopologyMap(),
                     lightEditingState.lightDrag.topologyLightId);
             if (light == nullptr) {
                 return;
@@ -3226,7 +3376,7 @@ void SectorEditor::DrawLightMoveOverlay() const
 
         if (selectionState.topologySelectionKind == TopologySelectionKind::DynamicSpotLight) {
             const SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(
-                    state.topologyMap,
+                    TopologyMap(),
                     lightEditingState.lightDrag.topologyLightId);
             if (light == nullptr) {
                 return;
@@ -3254,7 +3404,7 @@ void SectorEditor::DrawLightMoveOverlay() const
 
         if (selectionState.topologySelectionKind == TopologySelectionKind::DynamicLight) {
             const SectorTopologyDynamicPointLight* light = FindSectorTopologyDynamicLight(
-                    state.topologyMap,
+                    TopologyMap(),
                     lightEditingState.lightDrag.topologyLightId);
             if (light == nullptr) {
                 return;
@@ -3276,7 +3426,7 @@ void SectorEditor::DrawLightMoveOverlay() const
         }
 
         const SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
-                state.topologyMap,
+                TopologyMap(),
                 lightEditingState.lightDrag.topologyLightId);
         if (light == nullptr) {
             return;
@@ -3299,7 +3449,7 @@ void SectorEditor::DrawLightMoveOverlay() const
 
     if (selectionState.hoveredTopologyStaticSpotLightId >= 0) {
         const SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
-                state.topologyMap,
+                TopologyMap(),
                 selectionState.hoveredTopologyStaticSpotLightId);
         if (light == nullptr) {
             return;
@@ -3322,7 +3472,7 @@ void SectorEditor::DrawLightMoveOverlay() const
 
     if (selectionState.hoveredTopologyDynamicSpotLightId >= 0) {
         const SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(
-                state.topologyMap,
+                TopologyMap(),
                 selectionState.hoveredTopologyDynamicSpotLightId);
         if (light == nullptr) {
             return;
@@ -3345,7 +3495,7 @@ void SectorEditor::DrawLightMoveOverlay() const
 
     if (selectionState.hoveredTopologyDynamicLightId >= 0) {
         const SectorTopologyDynamicPointLight* light = FindSectorTopologyDynamicLight(
-                state.topologyMap,
+                TopologyMap(),
                 selectionState.hoveredTopologyDynamicLightId);
         if (light == nullptr) {
             return;
@@ -3357,7 +3507,7 @@ void SectorEditor::DrawLightMoveOverlay() const
     }
 
     const SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
-            state.topologyMap,
+            TopologyMap(),
             selectionState.hoveredTopologyLightId);
     if (light == nullptr) {
         return;
@@ -3503,9 +3653,10 @@ void SectorEditor::DrawToolsPanel(
         if (tool == SectorEditorTool::AuthoringLine) {
             statusText = "Line: click start point";
         } else if (tool == SectorEditorTool::AuthoringInsertVertex) {
+            const SectorAuthoringGraph& authoringGraph = AuthoringGraph();
             state.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
             if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
-                    && FindSectorAuthoringLine(state.authoringGraph, selectionState.selectedAuthoring.lineId) != nullptr) {
+                    && FindSectorAuthoringLine(authoringGraph, selectionState.selectedAuthoring.lineId) != nullptr) {
                 state.pendingAuthoringInsertVertex.active = true;
                 state.pendingAuthoringInsertVertex.lineId = selectionState.selectedAuthoring.lineId;
                 statusText = "Insert Vertex: click point on selected line, Esc/right click cancels";
@@ -3598,21 +3749,21 @@ void SectorEditor::DrawToolsPanel(
                 decimals);
         if (result.changed && result.value != value) {
             value = result.value;
-            state.hasUnsavedChanges = true;
-            state.topologyDocumentDirty = true;
+            Lifecycle().hasUnsavedChanges = true;
+            Lifecycle().topologyDocumentDirty = true;
             statusText = status;
         }
         y += rowH + gap;
     };
 
-    state.topologyMap.lightmapSettings.ambientOcclusionRadius = ClampAmbientOcclusionRadius(state.topologyMap.lightmapSettings.ambientOcclusionRadius);
-    state.topologyMap.lightmapSettings.ambientOcclusionStrength = ClampAmbientOcclusionStrength(state.topologyMap.lightmapSettings.ambientOcclusionStrength);
-    state.topologyMap.lightmapSettings.indirectBounceRadius = ClampIndirectBounceRadius(state.topologyMap.lightmapSettings.indirectBounceRadius);
-    state.topologyMap.lightmapSettings.indirectBounceStrength = ClampIndirectBounceStrength(state.topologyMap.lightmapSettings.indirectBounceStrength);
+    TopologyMap().lightmapSettings.ambientOcclusionRadius = ClampAmbientOcclusionRadius(TopologyMap().lightmapSettings.ambientOcclusionRadius);
+    TopologyMap().lightmapSettings.ambientOcclusionStrength = ClampAmbientOcclusionStrength(TopologyMap().lightmapSettings.ambientOcclusionStrength);
+    TopologyMap().lightmapSettings.indirectBounceRadius = ClampIndirectBounceRadius(TopologyMap().lightmapSettings.indirectBounceRadius);
+    TopologyMap().lightmapSettings.indirectBounceStrength = ClampIndirectBounceStrength(TopologyMap().lightmapSettings.indirectBounceStrength);
     drawLightmapSetting(
             "sector_editor_ao_radius",
             "AO radius",
-            state.topologyMap.lightmapSettings.ambientOcclusionRadius,
+            TopologyMap().lightmapSettings.ambientOcclusionRadius,
             uiState.ambientOcclusionRadiusInput,
             SectorWorldToAuthoringDistance(0.05f),
             SectorWorldToAuthoringDistance(16.0f),
@@ -3622,7 +3773,7 @@ void SectorEditor::DrawToolsPanel(
     drawLightmapSetting(
             "sector_editor_ao_strength",
             "AO strength",
-            state.topologyMap.lightmapSettings.ambientOcclusionStrength,
+            TopologyMap().lightmapSettings.ambientOcclusionStrength,
             uiState.ambientOcclusionStrengthInput,
             0.0f,
             1.0f,
@@ -3632,7 +3783,7 @@ void SectorEditor::DrawToolsPanel(
     drawLightmapSetting(
             "sector_editor_bounce_radius",
             "Bounce radius",
-            state.topologyMap.lightmapSettings.indirectBounceRadius,
+            TopologyMap().lightmapSettings.indirectBounceRadius,
             uiState.indirectBounceRadiusInput,
             SectorWorldToAuthoringDistance(0.05f),
             SectorWorldToAuthoringDistance(16.0f),
@@ -3642,7 +3793,7 @@ void SectorEditor::DrawToolsPanel(
     drawLightmapSetting(
             "sector_editor_bounce_strength",
             "Bounce strength",
-            state.topologyMap.lightmapSettings.indirectBounceStrength,
+            TopologyMap().lightmapSettings.indirectBounceStrength,
             uiState.indirectBounceStrengthInput,
             0.0f,
             1.0f,
@@ -3716,6 +3867,10 @@ void SectorEditor::DrawSectorsPanel(
             smallFont,
             BuildRightPanelRect(),
             state,
+            Lifecycle(),
+            TopologyMap(),
+            AuthoringGraph(),
+            MakeLiveDerivationAccess(documentState.derivation),
             selectionState,
             uiState,
             inspectorIdUiState,
@@ -3849,7 +4004,7 @@ void SectorEditor::DrawLoadLevelModal(
             return;
         }
         const LevelListEntry selected = loadState.levels[static_cast<size_t>(loadState.selectedIndex)];
-        if (state.topologyDocumentDirty) {
+        if (Lifecycle().topologyDocumentDirty) {
             OpenConfirmation(
                     "Load Level",
                     "Discard unsaved changes and load selected level?",
@@ -3948,7 +4103,7 @@ void SectorEditor::DrawDoorTextureSettingsModal(
             font,
             smallFont,
             state.doorTextureSettingsModal,
-            state.topologyMap,
+            TopologyMap(),
             selectionState.selectedRuntimeObjectId,
             statusText,
             callbacks};
@@ -4038,10 +4193,10 @@ void SectorEditor::DrawStatusPanel(
     } else if (manipulationState.authoringVertexDrag.active) {
         pendingText = " | authoring vertex move";
     }
-    const std::string shortMapPath = state.hasCurrentLevelPath
-            ? state.currentLevelPath
+    const std::string shortMapPath = Lifecycle().hasCurrentLevelPath
+            ? Lifecycle().currentLevelPath
             : std::string{"<untitled>"};
-    const char* lightmapText = SectorLightmapStatusText(GetSectorLightmapStatus(state.topologyMap));
+    const char* lightmapText = SectorLightmapStatusText(GetSectorLightmapStatus(TopologyMap()));
     std::string status = statusText.empty() ? "Ready" : statusText;
     if (!state.topologyRenderWarning.empty()) {
         status += " | ";
@@ -4050,11 +4205,11 @@ void SectorEditor::DrawStatusPanel(
     const char* text = TextFormat(
             "%s%s | %s%s | map %s%s | grid %d | %s | selected %s",
             status.c_str(),
-            state.topologyDocumentDirty ? " *modified" : "",
+            Lifecycle().topologyDocumentDirty ? " *modified" : "",
             ToolHelpText(state.currentTool),
             pendingText.c_str(),
             shortMapPath.c_str(),
-            state.topologyDocumentDirty ? "*" : "",
+            Lifecycle().topologyDocumentDirty ? "*" : "",
             state.gridSize,
             lightmapText,
             selectedLabel.c_str()
@@ -4095,7 +4250,12 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     materialEditingState = MaterialEditingState{};
     materialEditingUiState = MaterialEditingUiState{};
     previewState.controller = SectorEditorPreviewControllerState{};
-    ResetEditorTopologyDocumentState(state, previewState.controller);
+    ResetEditorTopologyDocumentState(
+            Lifecycle(),
+            TopologyMap(),
+            AuthoringGraph(),
+            MakeLiveDerivationAccess(documentState.derivation),
+            previewState.controller);
     state.viewCenter = Vector2{9.0f, 6.0f};
     state.viewZoom = 48.0f;
     state.gridSize = 8;
@@ -4124,15 +4284,18 @@ bool SectorEditor::LoadLevel(
     CancelLightDrag(nullptr);
     bool loadedAuthoringGraph = false;
     bool authoringDerivationCurrent = false;
+    SectorTopologyMap& topologyMap = TopologyMap();
     if (loaded.format == SectorEditorDocumentFormat::AuthoringGraph) {
         loadedAuthoringGraph = true;
-        state.topologyMap = std::move(loaded.mapData);
-        const SectorLightmapMetadata loadedBakedLightmap = state.topologyMap.bakedLightmap;
-        state.authoringGraph = std::move(loaded.authoringGraph);
-        state.authoringDerivation = SectorAuthoringDerivationResult{};
-        state.lastValidAuthoringDerivedTopology.reset();
-        state.authoringDerivationState = SectorEditorAuthoringDerivationState::InvalidNoDerived;
-        state.authoringDerivedTopologyStale = true;
+        topologyMap = std::move(loaded.mapData);
+        const SectorLightmapMetadata loadedBakedLightmap = topologyMap.bakedLightmap;
+        AuthoringGraph() = std::move(loaded.authoringGraph);
+        SectorEditorDerivationDocumentAccess derivation =
+                MakeLiveDerivationAccess(documentState.derivation);
+        derivation.authoringDerivation = SectorAuthoringDerivationResult{};
+        derivation.lastValidAuthoringDerivedTopology.reset();
+        derivation.authoringDerivationState = SectorEditorAuthoringDerivationState::InvalidNoDerived;
+        derivation.authoringDerivedTopologyStale = true;
         const std::string successStatus = TextFormat(
                 "Authoring graph: loaded %s; derived topology current",
                 jsonAssetPath.c_str());
@@ -4141,33 +4304,40 @@ bool SectorEditor::LoadLevel(
                 jsonAssetPath.c_str());
         authoringDerivationCurrent = RefreshSectorEditorAuthoringDerivation(
                 state,
+                Lifecycle(),
+                topologyMap,
+                AuthoringGraph(),
+                derivation,
                 successStatus.c_str(),
                 failureStatus.c_str());
         if (authoringDerivationCurrent) {
-            state.topologyMap.bakedLightmap = loadedBakedLightmap;
-            state.authoringDerivation.topology.bakedLightmap = loadedBakedLightmap;
-            if (state.lastValidAuthoringDerivedTopology.has_value()) {
-                state.lastValidAuthoringDerivedTopology->bakedLightmap = loadedBakedLightmap;
+            topologyMap.bakedLightmap = loadedBakedLightmap;
+            derivation.authoringDerivation.topology.bakedLightmap = loadedBakedLightmap;
+            if (derivation.lastValidAuthoringDerivedTopology.has_value()) {
+                derivation.lastValidAuthoringDerivedTopology->bakedLightmap = loadedBakedLightmap;
             }
         }
     } else {
-        state.topologyMap = std::move(loaded.mapData);
-        InitializeSectorEditorAuthoringStateFromTopology(state, state.topologyMap);
+        topologyMap = std::move(loaded.mapData);
+        InitializeSectorEditorAuthoringStateFromTopology(
+                AuthoringGraph(),
+                MakeLiveDerivationAccess(documentState.derivation),
+                topologyMap);
     }
     InvalidateTopologyRenderCache();
     previewState.controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
-            state.topologyMap.previewSettings);
-    state.topologyDocumentInitialized = true;
-    state.topologyDocumentDirty = false;
+            topologyMap.previewSettings);
+    Lifecycle().topologyDocumentInitialized = true;
+    Lifecycle().topologyDocumentDirty = false;
     if (!loadedAuthoringGraph) {
-        state.topologyDocumentStatus = TextFormat(
+        Lifecycle().topologyDocumentStatus = TextFormat(
                 "Topology document: imported legacy topology %s",
                 jsonAssetPath.c_str());
     }
-    state.currentLevelName = levelName;
-    state.currentLevelPath = jsonAssetPath;
-    state.hasCurrentLevelPath = true;
-    state.hasUnsavedChanges = false;
+    Lifecycle().currentLevelName = levelName;
+    Lifecycle().currentLevelPath = jsonAssetPath;
+    Lifecycle().hasCurrentLevelPath = true;
+    Lifecycle().hasUnsavedChanges = false;
     state.mode = SectorEditorMode::Edit2D;
     previewState.controller.hasPreviewPose = false;
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
@@ -4190,7 +4360,7 @@ bool SectorEditor::LoadLevel(
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     textureCatalog.RefreshDefaultTextureIds();
     textureCatalog.RefreshTextureHandles(assets);
-    ResetSectorRuntimeObjectsForMap(context.world, assets, previewState.runtime.runtimeObjects, state.topologyMap);
+    ResetSectorRuntimeObjectsForMap(context.world, assets, previewState.runtime.runtimeObjects, topologyMap);
     if (loadedAuthoringGraph) {
         const char* loadedText = authoringDerivationCurrent
                 ? "Loaded authoring graph"
@@ -4224,12 +4394,12 @@ void SectorEditor::OpenNewConfirmation(engine::AssetManager& assets)
 void SectorEditor::OpenReloadConfirmation(engine::AssetManager& assets)
 {
     (void)assets;
-    if (!state.hasCurrentLevelPath) {
+    if (!Lifecycle().hasCurrentLevelPath) {
         statusText = "No saved level to reload.";
         return;
     }
-    const std::string name = state.currentLevelName;
-    const std::string path = state.currentLevelPath;
+    const std::string name = Lifecycle().currentLevelName;
+    const std::string path = Lifecycle().currentLevelPath;
     OpenConfirmation(
             "Reload Level",
             "Reload current level from disk and discard unsaved changes?",
@@ -4245,8 +4415,8 @@ void SectorEditor::OpenSaveLevelModal()
 {
     OpenSaveLevelModalState(
             state.saveLevelModal,
-            state.hasCurrentLevelPath,
-            state.currentLevelName);
+            Lifecycle().hasCurrentLevelPath,
+            Lifecycle().currentLevelName);
 }
 
 void SectorEditor::RefreshLevelList()
@@ -4266,8 +4436,8 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
     SectorEditorSaveLevelPlan savePlan;
     if (!PrepareSaveLevelPlan(
                 name,
-                state.hasCurrentLevelPath,
-                state.currentLevelPath,
+                Lifecycle().hasCurrentLevelPath,
+                Lifecycle().currentLevelPath,
                 overwriteConfirmed,
                 savePlan,
                 modal.errorMessage)) {
@@ -4287,18 +4457,23 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
         return false;
     }
 
-    if (!SaveSectorEditorAuthoringDocument(savePlan.paths, state, modal.errorMessage)) {
+    if (!SaveSectorEditorAuthoringDocument(
+                savePlan.paths,
+                documentState.authoring,
+                documentState.map,
+                documentState.derivation,
+                modal.errorMessage)) {
         statusText = TextFormat("Save failed: %s", savePlan.paths.jsonAssetPath.c_str());
         return false;
     }
 
-    state.currentLevelName = name;
-    state.currentLevelPath = savePlan.paths.jsonAssetPath;
-    state.hasCurrentLevelPath = true;
-    state.hasUnsavedChanges = false;
-    state.topologyDocumentInitialized = true;
-    state.topologyDocumentDirty = false;
-    state.topologyDocumentStatus = TextFormat("Authoring graph: saved %s", savePlan.paths.jsonAssetPath.c_str());
+    Lifecycle().currentLevelName = name;
+    Lifecycle().currentLevelPath = savePlan.paths.jsonAssetPath;
+    Lifecycle().hasCurrentLevelPath = true;
+    Lifecycle().hasUnsavedChanges = false;
+    Lifecycle().topologyDocumentInitialized = true;
+    Lifecycle().topologyDocumentDirty = false;
+    Lifecycle().topologyDocumentStatus = TextFormat("Authoring graph: saved %s", savePlan.paths.jsonAssetPath.c_str());
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
     state.decalTintModal = DecalTintModalState{};
@@ -4334,13 +4509,15 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     uiState.keyboardCaptured = false;
 
     std::string gateMessage;
-    if (!CanUseCurrentAuthoringDerivedTopologyForPreview(state, &gateMessage)) {
+    if (!CanUseCurrentAuthoringDerivedTopologyForPreview(
+                MakeLiveConstDerivationAccess(documentState.derivation),
+                &gateMessage)) {
         statusText = gateMessage.empty() ? "3D mode failed: derived topology is not current" : gateMessage;
         return false;
     }
 
     std::string error;
-    if (!preview.RebuildRendererResources(assets, state.topologyMap, "sector_editor_preview", error)) {
+    if (!preview.RebuildRendererResources(assets, TopologyMap(), "sector_editor_preview", error)) {
         previewState.runtime.runtimeObjects.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
         previewState.runtime.runtimeObjects.objectProbeStatus.clear();
         previewState.runtime.runtimeObjects.objectSectorLookupWorld = SectorCollisionWorld{};
@@ -4366,7 +4543,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     }
     RefreshPreviewObjectProbeDebugData();
     EnsureSectorRuntimeObjectWorldReserved(context.world, previewState.runtime.runtimeObjects);
-    SpawnPlacedRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, state.topologyMap);
+    SpawnPlacedRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, TopologyMap());
 
     if (previewState.controller.hasPreviewPose) {
         preview.ApplyRendererPose(previewState.controller.lastPreviewPose);
@@ -4522,7 +4699,7 @@ bool SectorEditor::ApplySpotLightPilotFromPreviewPose()
         preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
     }
     if (result.dynamicLightRendererRefreshNeeded) {
-        preview.RefreshDynamicLightSources(state.topologyMap);
+        preview.RefreshDynamicLightSources(TopologyMap());
     }
     if (result.changed) {
         previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
@@ -4549,14 +4726,14 @@ void SectorEditor::CancelSpotLightPilotWithPreviewRestore(const char* message)
         preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
     }
     if (result.dynamicLightRendererRefreshNeeded) {
-        preview.RefreshDynamicLightSources(state.topologyMap);
+        preview.RefreshDynamicLightSources(TopologyMap());
     }
 }
 
 bool SectorEditor::RebuildSectorCollisionWorld()
 {
     return RebuildSectorEditorCollisionWorld(
-            state.topologyMap,
+            TopologyMap(),
             previewState.collision,
             previewState.controller);
 }
@@ -4581,11 +4758,11 @@ void SectorEditor::OpenPreviewSettingsModal()
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
     state.previewSettingsModal.open = true;
     state.previewSettingsModal.draftConfig = NormalizeSectorFpsControllerConfig(previewState.controller.fpsControllerConfig);
-    state.previewSettingsModal.draftSkySettings = NormalizeSectorTopologySkySettings(state.topologyMap.skySettings);
+    state.previewSettingsModal.draftSkySettings = NormalizeSectorTopologySkySettings(TopologyMap().skySettings);
     state.previewSettingsModal.draftDirectionalLight =
-            NormalizeSectorTopologyDirectionalLightSettings(state.topologyMap.directionalLight);
+            NormalizeSectorTopologyDirectionalLightSettings(TopologyMap().directionalLight);
     state.previewSettingsModal.draftLightmapSettings =
-            NormalizeSectorPreviewObjectProbeSettings(state.topologyMap.lightmapSettings);
+            NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
 }
 
 void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
@@ -4599,7 +4776,7 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     SectorPreviewSettings draftPreviewSettings = SectorPreviewSettingsFromFpsControllerConfig(draftConfig);
     draftPreviewSettings.objectProbeDebugDrawMaxDistanceWorld =
             NormalizeSectorPreviewSettings(
-                    state.topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
+                    TopologyMap().previewSettings).objectProbeDebugDrawMaxDistanceWorld;
     const SectorTopologySkySettings draftSkySettings = NormalizeSectorTopologySkySettings(
             state.previewSettingsModal.draftSkySettings);
     const SectorTopologyDirectionalLightSettings draftDirectionalLight =
@@ -4608,14 +4785,14 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const SectorLightmapBakeSettings draftLightmapSettings =
             NormalizeSectorPreviewObjectProbeSettings(state.previewSettingsModal.draftLightmapSettings);
     const bool previewChanged = !SamePreviewSettings(
-            state.topologyMap.previewSettings,
+            TopologyMap().previewSettings,
             draftPreviewSettings);
-    const bool skyChanged = !SameSkySettings(state.topologyMap.skySettings, draftSkySettings);
+    const bool skyChanged = !SameSkySettings(TopologyMap().skySettings, draftSkySettings);
     const bool directionalChanged = !SameDirectionalLightSettings(
-            state.topologyMap.directionalLight,
+            TopologyMap().directionalLight,
             draftDirectionalLight);
     const SectorLightmapBakeSettings currentLightmapSettings =
-            NormalizeSectorPreviewObjectProbeSettings(state.topologyMap.lightmapSettings);
+            NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
     const bool objectProbeSettingsChanged =
             currentLightmapSettings.objectProbeSpacingWorld != draftLightmapSettings.objectProbeSpacingWorld
             || currentLightmapSettings.objectProbeHeightWorld != draftLightmapSettings.objectProbeHeightWorld;
@@ -4630,10 +4807,10 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     if (previousGravity > 0.0f && previewState.controller.fpsControllerConfig.gravity == 0.0f) {
         previewState.controller.fpsControllerState.verticalVelocity = 0.0f;
     }
-    state.topologyMap.previewSettings = draftPreviewSettings;
-    state.topologyMap.skySettings = draftSkySettings;
-    state.topologyMap.directionalLight = draftDirectionalLight;
-    ApplySectorPreviewObjectProbeSettings(state.topologyMap, draftLightmapSettings);
+    TopologyMap().previewSettings = draftPreviewSettings;
+    TopologyMap().skySettings = draftSkySettings;
+    TopologyMap().directionalLight = draftDirectionalLight;
+    ApplySectorPreviewObjectProbeSettings(TopologyMap(), draftLightmapSettings);
     MarkTopologyDocumentEdited("Preview settings updated");
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
     if (skyChanged && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
@@ -4672,7 +4849,7 @@ SectorEditorTextureCatalogService SectorEditor::MakeTextureCatalogService()
 {
     return SectorEditorTextureCatalogService{
             SectorEditorTextureCatalogServiceContext{
-                    state.topologyMap,
+                    TopologyMap(),
                     textureCatalogState,
                     state.defaultFloorTextureId,
                     state.defaultCeilingTextureId,
@@ -4711,8 +4888,8 @@ bool SectorEditor::AddSelectedMapTexture(engine::AssetManager& assets)
     }
 
     textureCatalog.RefreshTextureHandles(assets);
-    state.hasUnsavedChanges = true;
-    state.topologyDocumentDirty = true;
+    Lifecycle().hasUnsavedChanges = true;
+    Lifecycle().topologyDocumentDirty = true;
     statusText = TextFormat("%s texture %s", result.replacing ? "Updated" : "Added", result.textureId.c_str());
     CloseAddMapTextureModal(assets);
     return true;
@@ -4723,7 +4900,7 @@ bool SectorEditor::PointInTopologyLoop(Vector2 mapPoint, const SectorTopologyLoo
     std::vector<SectorPoint> points;
     points.reserve(loop.vertexIds.size());
     for (int vertexId : loop.vertexIds) {
-        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
+        const SectorTopologyVertex* vertex = FindSectorTopologyVertex(TopologyMap(), vertexId);
         if (vertex == nullptr) {
             return false;
         }
@@ -4737,7 +4914,7 @@ bool SectorEditor::PointInTopologySector(Vector2 mapPoint, const SectorTopologyS
 {
     SectorTopologyLoopSet loops;
     std::vector<SectorTopologyValidationIssue> loopIssues;
-    if (!ExtractSectorTopologyLoops(state.topologyMap, sector.id, loops, &loopIssues)) {
+    if (!ExtractSectorTopologyLoops(TopologyMap(), sector.id, loops, &loopIssues)) {
         return false;
     }
     if (!PointInTopologyLoop(mapPoint, loops.outer)) {
@@ -4759,7 +4936,7 @@ int SectorEditor::FindTopologySectorAt(Vector2 mapPoint, bool* outMultipleMatche
 
     int selectedId = -1;
     int matchCount = 0;
-    for (const SectorTopologySector& sector : state.topologyMap.sectors) {
+    for (const SectorTopologySector& sector : TopologyMap().sectors) {
         if (!PointInTopologySector(mapPoint, sector)) {
             continue;
         }
@@ -4779,7 +4956,7 @@ int SectorEditor::FindTopologyLightNearScreenPoint(Vector2 screenPoint) const
 {
     float bestDistance2 = ScreenLightPickPixels * ScreenLightPickPixels;
     int bestId = -1;
-    for (const SectorTopologyStaticPointLight& light : state.topologyMap.staticLights) {
+    for (const SectorTopologyStaticPointLight& light : TopologyMap().staticLights) {
         const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
         const float dx = center.x - screenPoint.x;
         const float dy = center.y - screenPoint.y;
@@ -4798,7 +4975,7 @@ int SectorEditor::FindTopologyStaticSpotLightNearScreenPoint(Vector2 screenPoint
 {
     float bestDistance2 = ScreenLightPickPixels * ScreenLightPickPixels;
     int bestId = -1;
-    for (const SectorTopologyStaticSpotLight& light : state.topologyMap.staticSpotLights) {
+    for (const SectorTopologyStaticSpotLight& light : TopologyMap().staticSpotLights) {
         const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
         const float dx = center.x - screenPoint.x;
         const float dy = center.y - screenPoint.y;
@@ -4817,7 +4994,7 @@ int SectorEditor::FindTopologyDynamicLightNearScreenPoint(Vector2 screenPoint) c
 {
     float bestDistance2 = ScreenLightPickPixels * ScreenLightPickPixels;
     int bestId = -1;
-    for (const SectorTopologyDynamicPointLight& light : state.topologyMap.dynamicPointLights) {
+    for (const SectorTopologyDynamicPointLight& light : TopologyMap().dynamicPointLights) {
         const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
         const float dx = center.x - screenPoint.x;
         const float dy = center.y - screenPoint.y;
@@ -4836,7 +5013,7 @@ int SectorEditor::FindTopologyDynamicSpotLightNearScreenPoint(Vector2 screenPoin
 {
     float bestDistance2 = ScreenLightPickPixels * ScreenLightPickPixels;
     int bestId = -1;
-    for (const SectorTopologyDynamicSpotLight& light : state.topologyMap.dynamicSpotLights) {
+    for (const SectorTopologyDynamicSpotLight& light : TopologyMap().dynamicSpotLights) {
         const Vector2 center = MapToScreen(Vector2{light.position.x, light.position.z});
         const float dx = center.x - screenPoint.x;
         const float dy = center.y - screenPoint.y;
@@ -4875,7 +5052,7 @@ bool SectorEditor::FindTopologyStaticSpotLightHandleNearScreenPoint(
         }
     };
 
-    for (const SectorTopologyStaticSpotLight& light : state.topologyMap.staticSpotLights) {
+    for (const SectorTopologyStaticSpotLight& light : TopologyMap().staticSpotLights) {
         considerHandle(
                 light.id,
                 SpotLightHandle::Target,
@@ -4913,7 +5090,7 @@ bool SectorEditor::FindTopologyDynamicSpotLightHandleNearScreenPoint(
         }
     };
 
-    for (const SectorTopologyDynamicSpotLight& light : state.topologyMap.dynamicSpotLights) {
+    for (const SectorTopologyDynamicSpotLight& light : TopologyMap().dynamicSpotLights) {
         considerHandle(
                 light.id,
                 SpotLightHandle::Target,
@@ -4931,7 +5108,7 @@ int SectorEditor::FindRuntimeObjectNearScreenPoint(Vector2 screenPoint) const
 {
     float bestDistance2 = ScreenLightPickPixels * ScreenLightPickPixels;
     int bestId = -1;
-    for (const SectorPlacedRuntimeObject& object : state.topologyMap.runtimeObjects) {
+    for (const SectorPlacedRuntimeObject& object : TopologyMap().runtimeObjects) {
         const Vector2 center = MapToScreen(Vector2{object.position.x, object.position.z});
         const float dx = center.x - screenPoint.x;
         const float dy = center.y - screenPoint.y;
@@ -4964,10 +5141,10 @@ bool SectorEditor::FindTopologyLineNearScreenPoint(
     Vector2 bestStart{};
     Vector2 bestEnd{};
 
-    for (const SectorTopologyLineDef& lineDef : state.topologyMap.lineDefs) {
+    for (const SectorTopologyLineDef& lineDef : TopologyMap().lineDefs) {
         const SectorTopologyVertex* start = nullptr;
         const SectorTopologyVertex* end = nullptr;
-        if (!GetSectorTopologyLineVertices(state.topologyMap, lineDef, start, end)) {
+        if (!GetSectorTopologyLineVertices(TopologyMap(), lineDef, start, end)) {
             continue;
         }
 
@@ -4995,9 +5172,9 @@ bool SectorEditor::FindTopologyLineNearScreenPoint(
     }
 
     const bool hasFront = bestLine->frontSideDefId >= 0
-            && FindSectorTopologySideDef(state.topologyMap, bestLine->frontSideDefId) != nullptr;
+            && FindSectorTopologySideDef(TopologyMap(), bestLine->frontSideDefId) != nullptr;
     const bool hasBack = bestLine->backSideDefId >= 0
-            && FindSectorTopologySideDef(state.topologyMap, bestLine->backSideDefId) != nullptr;
+            && FindSectorTopologySideDef(TopologyMap(), bestLine->backSideDefId) != nullptr;
 
     SectorTopologySideKind preferredSide = SectorTopologySideKind::Front;
     const float sideCross = Cross(bestStart, bestEnd, mapPoint);
@@ -5038,8 +5215,9 @@ int SectorEditor::FindAuthoringLineNearScreenPoint(Vector2 screenPoint) const
     int lineId = -1;
     const float maxDistance = SectorWorldToAuthoringDistance(
             ScreenEdgePickPixels / std::max(1.0f, state.viewZoom));
+    const SectorAuthoringGraph& authoringGraph = AuthoringGraph();
     if (!FindSectorEditorAuthoringLineNearMapPoint(
-                state.authoringGraph,
+                authoringGraph,
                 ScreenToMap(screenPoint),
                 maxDistance,
                 &lineId)) {
@@ -5059,7 +5237,8 @@ bool SectorEditor::FindAuthoringVertexNearScreenPoint(
     float bestDistance2 = ScreenVertexSnapPixels * ScreenVertexSnapPixels;
     int bestVertexId = -1;
     SectorTopologyCoordPoint bestPoint{};
-    for (const SectorAuthoringVertex& vertex : state.authoringGraph.vertices) {
+    const SectorAuthoringGraph& authoringGraph = AuthoringGraph();
+    for (const SectorAuthoringVertex& vertex : authoringGraph.vertices) {
         const Vector2 screenVertex = MapToScreen(Vector2{
                 SectorCoordToVisibleAuthoring(vertex.x),
                 SectorCoordToVisibleAuthoring(vertex.y)});
@@ -5096,8 +5275,14 @@ bool SectorEditor::FindAuthoringSelectionNearScreenPoint(
             ScreenVertexSnapPixels / std::max(1.0f, state.viewZoom));
     const float lineMaxDistance = SectorWorldToAuthoringDistance(
             ScreenEdgePickPixels / std::max(1.0f, state.viewZoom));
+    const SectorEditorConstDerivationDocumentAccess derivation =
+            MakeLiveConstDerivationAccess(documentState.derivation);
+    const bool authoringDerivationCurrent =
+            IsSectorEditorAuthoringDerivationCurrent(derivation);
     return FindSectorEditorAuthoringSelectionAtMapPoint(
-            state,
+            AuthoringGraph(),
+            derivation.authoringDerivation,
+            authoringDerivationCurrent,
             ScreenToMap(screenPoint),
             vertexMaxDistance,
             lineMaxDistance,
@@ -5172,6 +5357,9 @@ bool SectorEditor::IsValidSurfaceRef(SectorSurfaceRef surface) const
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorTopologyMap&>(TopologyMap()),
+            const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
+            MakeLiveConstDerivationAccess(documentState.derivation),
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
@@ -5195,6 +5383,9 @@ bool SectorEditor::IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget ta
 {
     SectorEditorSelectionServiceContext context = BuildSelectionServiceContextFromState(
             const_cast<SectorEditorState&>(state),
+            const_cast<SectorTopologyMap&>(TopologyMap()),
+            const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
+            MakeLiveConstDerivationAccess(documentState.derivation),
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
@@ -5231,7 +5422,13 @@ void SectorEditor::SelectAuthoringLine(int lineId)
 bool SectorEditor::DeleteSelectedAuthoringLine()
 {
     const int lineId = selectionState.selectedAuthoring.lineId;
-    if (!DeleteSectorEditorSelectedAuthoringLine(state, selectionState)) {
+    if (!DeleteSectorEditorSelectedAuthoringLine(
+                state,
+                Lifecycle(),
+                TopologyMap(),
+                AuthoringGraph(),
+                MakeLiveDerivationAccess(documentState.derivation),
+                selectionState)) {
         statusText = "Select an authoring line to delete.";
         return false;
     }
@@ -5255,10 +5452,18 @@ void SectorEditor::SelectAuthoringFaceAnchor(int faceAnchorId)
 bool SectorEditor::DeleteSelectedAuthoringVertex()
 {
     const int vertexId = selectionState.selectedAuthoring.vertexId;
-    if (!DeleteSectorEditorSelectedAuthoringVertex(state, selectionState)) {
-        statusText = state.authoringDerivationStatus.empty()
+    if (!DeleteSectorEditorSelectedAuthoringVertex(
+                state,
+                Lifecycle(),
+                TopologyMap(),
+                AuthoringGraph(),
+                MakeLiveDerivationAccess(documentState.derivation),
+                selectionState)) {
+        const SectorEditorConstDerivationDocumentAccess derivation =
+                MakeLiveConstDerivationAccess(documentState.derivation);
+        statusText = derivation.authoringDerivationStatus.empty()
                 ? "Select an isolated authoring vertex to delete."
-                : state.authoringDerivationStatus;
+                : derivation.authoringDerivationStatus;
         return false;
     }
 
@@ -5268,17 +5473,25 @@ bool SectorEditor::DeleteSelectedAuthoringVertex()
 
 bool SectorEditor::HasAuthoringGraphData() const
 {
-    return !state.authoringGraph.vertices.empty()
-            || !state.authoringGraph.lines.empty()
-            || !state.authoringGraph.lineSides.empty()
-            || !state.authoringGraph.faceAnchors.empty();
+    const SectorAuthoringGraph& authoringGraph = AuthoringGraph();
+    return !authoringGraph.vertices.empty()
+            || !authoringGraph.lines.empty()
+            || !authoringGraph.lineSides.empty()
+            || !authoringGraph.faceAnchors.empty();
 }
 
 bool SectorEditor::EnsureSelectedSurface3DAuthoringMappingCurrent()
 {
     std::string unavailableStatus;
+    const SectorEditorConstDerivationDocumentAccess derivation =
+            MakeLiveConstDerivationAccess(documentState.derivation);
+    const bool authoringDerivationCurrent =
+            IsSectorEditorAuthoringDerivationCurrent(derivation);
     if (ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
-                state,
+                TopologyMap(),
+                AuthoringGraph(),
+                derivation.authoringDerivation,
+                authoringDerivationCurrent,
                 previewState.selection,
                 &unavailableStatus)) {
         return true;
@@ -5292,12 +5505,19 @@ SectorEditorMaterialEditingService SectorEditor::BuildMaterialEditingService()
 {
     return SectorEditorMaterialEditingService{
             SectorEditorMaterialEditingServiceContext{
-                    state,
+                    Lifecycle(),
+                    TopologyMap(),
+                    AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    state.topologyRenderWarning,
+                    state.topologyRenderRevision,
+                    state.topologyRenderCache,
                     previewState.selection,
                     selectionState,
                     materialEditingState,
                     materialEditingUiState,
                     state.texturePicker,
+                    state.decalTintModal,
                     statusText,
                     [this](engine::AssetManager*) {
                         if (state.mode == SectorEditorMode::Preview3D
@@ -5313,10 +5533,9 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
 {
     return SectorEditorLightEditingService{
             SectorEditorLightEditingServiceContext{
-                    state.topologyMap,
+                    TopologyMap(),
                     lightEditingState,
-                    state.topologyDocumentDirty,
-                    state.hasUnsavedChanges,
+                    Lifecycle(),
                     state.topologyRenderRevision,
                     state.topologyRenderCache,
                     {
@@ -5377,7 +5596,9 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
     }
 
     std::string gateMessage;
-    if (!CanUseCurrentAuthoringDerivedTopologyForPreview(state, &gateMessage)) {
+    if (!CanUseCurrentAuthoringDerivedTopologyForPreview(
+                MakeLiveConstDerivationAccess(documentState.derivation),
+                &gateMessage)) {
         statusText = gateMessage.empty() ? "3D mode rebuild failed: derived topology is not current" : gateMessage;
         return false;
     }
@@ -5392,7 +5613,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
     const TopologySurfaceEditTarget selectedTarget = previewState.selection.selectedTopologySurface3D;
 
     std::string error;
-    if (!preview.RebuildRendererResources(assets, state.topologyMap, "sector_editor_preview", error)) {
+    if (!preview.RebuildRendererResources(assets, TopologyMap(), "sector_editor_preview", error)) {
         previewState.runtime.runtimeObjects.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
         previewState.runtime.runtimeObjects.objectProbeStatus.clear();
         previewState.runtime.runtimeObjects.objectSectorLookupWorld = SectorCollisionWorld{};
@@ -5417,7 +5638,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
     }
     RefreshPreviewObjectProbeDebugData();
     EnsureSectorRuntimeObjectWorldReserved(context.world, previewState.runtime.runtimeObjects);
-    SpawnPlacedRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, state.topologyMap);
+    SpawnPlacedRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, TopologyMap());
 
     preview.ApplyRendererPose(pose);
     ResetSectorFreeflyController(previewState.controller.freeflyController, pose);
@@ -5435,18 +5656,30 @@ std::string SectorEditor::CurrentTextureForPickerTarget() const
 {
     if (IsSectorEditorMaterialTexturePickerTarget(state.texturePicker.topologyTargetKind)) {
         SectorEditorMaterialEditingServiceContext serviceContext{
-                const_cast<SectorEditorState&>(state),
+                MakeSectorEditorDocumentLifecycleAccess(
+                        const_cast<SectorEditorDocumentLifecycleState&>(documentState.lifecycle)),
+                const_cast<SectorTopologyMap&>(TopologyMap()),
+                const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
+                MakeLiveDerivationAccess(const_cast<SectorEditorDerivationState&>(documentState.derivation)),
+                const_cast<std::string&>(state.topologyRenderWarning),
+                const_cast<uint64_t&>(state.topologyRenderRevision),
+                const_cast<SectorEditorTopologyRenderCache&>(state.topologyRenderCache),
                 const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
                 const_cast<SelectionState&>(selectionState),
                 const_cast<MaterialEditingState&>(materialEditingState),
                 const_cast<MaterialEditingUiState&>(materialEditingUiState),
                 const_cast<TexturePickerState&>(state.texturePicker),
+                const_cast<DecalTintModalState&>(state.decalTintModal),
                 const_cast<std::string&>(statusText),
                 nullptr};
         SectorEditorMaterialEditingService materialEditing{serviceContext};
         return materialEditing.CurrentTextureForPickerTarget();
     }
-    return game::CurrentTextureForPickerTarget(state);
+    return game::CurrentTextureForPickerTarget(
+            state,
+            TopologyMap(),
+            AuthoringGraph(),
+            MakeLiveConstDerivationAccess(documentState.derivation));
 }
 
 void SectorEditor::OpenSelectedBillboardSpritePicker()
@@ -5486,7 +5719,7 @@ void SectorEditor::ApplySelectedBillboardSpritePickerSelection()
 void SectorEditor::OpenMapSkyTexturePicker()
 {
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    if (!game::OpenMapSkyTexturePicker(state, textureCatalog)) {
+    if (!game::OpenMapSkyTexturePicker(state, TopologyMap(), AuthoringGraph(), textureCatalog)) {
         statusText = "No sky texture target";
     }
 }
@@ -5500,7 +5733,7 @@ void SectorEditor::OpenSelectedDoorTexturePicker()
     }
 
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    if (!game::OpenRuntimeDoorTexturePicker(state, textureCatalog, object->id)) {
+    if (!game::OpenRuntimeDoorTexturePicker(state, TopologyMap(), AuthoringGraph(), textureCatalog, object->id)) {
         statusText = "No door texture target";
     }
 }
@@ -5554,7 +5787,12 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
         return;
     }
 
-    game::ApplyTexturePickerSelection(state);
+    game::ApplyTexturePickerSelection(
+            state,
+            Lifecycle(),
+            TopologyMap(),
+            AuthoringGraph(),
+            MakeLiveDerivationAccess(documentState.derivation));
 }
 
 } // namespace game

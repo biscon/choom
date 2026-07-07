@@ -18,6 +18,7 @@ struct SectorRuntimeObjectState;
 
 struct SectorEditorPlacedObjectActionContext {
     SectorEditorState& state;
+    SectorTopologyMap& topologyMap;
     SectorRuntimeObjectState& runtimeObjects;
     SelectionState& selectionState;
     std::string& statusText;

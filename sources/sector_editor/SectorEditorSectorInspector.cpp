@@ -56,6 +56,7 @@ bool DrawTopologySectorInspector(
         float gap,
         SectorTopologySector& sector,
         SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
         SelectionState& selectionState,
         SectorEditorUiState& uiState,
         InspectorIdUiState& inspectorIdUiState,
@@ -270,7 +271,7 @@ bool DrawTopologySectorInspector(
                 missing ? config.invalidColor : config.mutedTextColor);
         if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
             if (!materialEditing.OpenMaterialPickerForDerivedSector(sector.id, field, layer)) {
-                callbacks.setStatusText(HasAuthoringGraphData(state)
+                callbacks.setStatusText(HasAuthoringGraphData(authoringGraph)
                         ? "No derived sector authoring material target"
                         : "Cannot edit material: authoring data is required.");
             }

@@ -73,7 +73,8 @@ Task Type:
 | REF-083 | `[x]` | High | Editor architecture | SectorEditor state ownership and remaining code map | Audit first | Low | Completed; report recommends TextureCatalogState split next |
 | REF-084 | `[x]` | High | Editor architecture | Service-owned editor state migration runner plan | Runner plan | Low | Planning and implementation complete; preview/document ownership deferred to REF-085/REF-086 |
 | REF-085 | `[x]` | High | Editor architecture | PreviewState ownership runner plan and implementation | Runner plan | High | Planning and implementation complete; final audit refreshed the ownership map. Manual preview smoke still recommended. |
-| REF-086 | `[x]` | High | Editor architecture | Write DocumentState ownership runner plan | Runner plan | High | Runner-plan written/planning complete only; implementation phases remain open in `docs/plans/ref086_document_state_ownership_runner_plan.md` |
+| REF-086 | `[x]` | High | Editor architecture | DocumentState ownership runner plan and implementation | Runner plan | High | Planning and implementation complete; final audit refreshed the ownership map. Manual editor smoke still recommended. |
+| REF-087 | `[x]` | High | Editor architecture | Audit REF-085/REF-086 PreviewState and DocumentState implementation | Audit first | Low | Completed; report is `docs/audit/ref085_ref086_implementation_review.md`; recommends scoped runtime object editing state split next |
 | REF-059 | `[x]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Completed; recommends material-specific picker routing extraction before MaterialEditBridge |
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
 | REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
@@ -1157,7 +1158,7 @@ Task Type:
     serialization/schema behavior, rendering, collision, sector lookup,
     physics, and camera behavior were intended unchanged by REF-085.
 
-#### REF-086 `[x]` Write DocumentState ownership runner plan
+#### REF-086 `[x]` DocumentState ownership runner plan and implementation
 
 - Source/audit reference:
   `docs/architecture/sector_editor_architectural_principles.md`,
@@ -1169,13 +1170,13 @@ Task Type:
 - Why it helps: authoring graph, derived topology, dirty/path/status, last-valid
   derivation, save/load/reset/import/migration, and source-of-truth boundaries
   need a dedicated plan before ownership moves out of monolithic editor state.
-- Likely files: a new runner plan under `docs/plans/`; source files only in
-  later implementation phases.
+- Likely files: completed runner plan under `docs/plans/`, document state
+  ownership in `sources/sector_editor/document/`, and focused editor/tool/
+  service call-site retargeting.
 - Suggested task type: Runner plan.
 - Risk: High.
-- Suggested verification: planning phase can use documentation checks only;
-  later implementation phases need build, ctest, serialization/load/save
-  coverage, cache invalidation notes, and source-hash behavior notes.
+- Suggested verification: build, ctest, grep checks, serialization/load/save
+  behavior notes, cache invalidation notes, and source-hash behavior notes.
 - Notes:
   - Must preserve the architecture contract that the authoring graph is the
     editable source of truth and `SectorTopologyMap` is derived output, except
@@ -1186,33 +1187,75 @@ Task Type:
 - Completion notes:
   - Runner-compatible implementation plan created at
     `docs/plans/ref086_document_state_ownership_runner_plan.md`.
-  - Planning only: no DocumentState implementation phase has been marked
-    complete, and no authoring graph, derived topology, dirty/path/status,
-    load/save/reset/import/migration, cache, source-hash, source code, test, or
-    CMake change was implemented by this backlog update.
-  - The plan keeps REF-085 preview/runtime/controller/collision/camera state
-    separate and keeps modal UI state, inspector input buffers, tool transaction
-    state, texture picker modal state, runtime object editing state, and
-    renderer ownership out of DocumentState.
-  - The plan phases cover document-state inventory and root/sub-state skeleton,
-    authoring source state, derived topology and derivation state, lifecycle
-    dirty/path/status state, load/save/reset/import/migration retargeting,
-    topology render cache and invalidation ownership, document dependency
-    cleanup, and final dependency audit/backlog refresh.
-  - The plan requires the final implementation phase to refresh
-    `docs/audit/sector_editor_state_ownership_and_remaining_map.md` with
-    remaining document fields/debt, new document sub-states, preview/renderer
-    separation, authoring graph source-of-truth status, topology map derived
-    output status, cache invalidation behavior, serialization/schema behavior,
-    lightmap source-hash behavior, and rendering/collision/sector
-    lookup/physics/camera behavior.
-  - Plan amended to make Phase 1 skeleton/inventory-only, pre-split high-risk
-    Phase 3 into derivation bookkeeping, document map ownership, and consumer
-    retargeting passes, clarify `topologyMap` as compiled/derived output plus
-    documented map-level metadata/runtime definitions, prohibit a
-    `SectorEditorDocumentController` by default, default topology render-cache
-    movement to defer unless clearly document-owned, and require REF-086 to be
-    executable independently of REF-085 implementation status.
+  - Implementation completed through Phase 8. `SectorEditorDocumentState` is
+    now composed by `SectorEditor` and owns authoring source state, derivation
+    bookkeeping, the document map, and lifecycle dirty/path/status state through
+    narrow sub-states.
+  - `SectorEditorAuthoringDocumentState` owns `authoringGraph`, which remains
+    the editable source of truth for normal geometry, sector property, and
+    material edits.
+  - `SectorEditorDerivationState` owns `authoringDerivation`,
+    `lastValidAuthoringDerivedTopology`, `authoringDerivationState`,
+    `authoringDerivedTopologyStale`, and `authoringDerivationStatus`.
+  - `SectorEditorDocumentMapState` owns `topologyMap`, which remains compiled/
+    derived output plus documented map-level metadata/runtime definitions,
+    including texture registry, lights, runtime objects, preview settings, sky,
+    directional light, lightmap settings, and baked metadata.
+  - `SectorEditorDocumentLifecycleState` owns
+    `topologyDocumentInitialized`, `topologyDocumentDirty`,
+    `topologyDocumentStatus`, `currentLevelName`, `currentLevelPath`,
+    `hasCurrentLevelPath`, and `hasUnsavedChanges`.
+  - No `SectorEditorDocumentController` was created.
+  - REF-085 preview/runtime/controller/collision/camera state remained
+    separate. Modal UI state, inspector input buffers, tool transaction state,
+    texture picker modal state, runtime object editing state, and renderer
+    ownership stayed outside DocumentState.
+  - Topology render-cache ownership was deferred: `topologyRenderWarning`,
+    `topologyRenderRevision`, and `topologyRenderCache` remain in
+    `SectorEditorState` as 2D derived render/view cache state. Existing
+    invalidation helpers remain the contract.
+  - `docs/audit/sector_editor_state_ownership_and_remaining_map.md` was
+    refreshed after final implementation with remaining document fields/debt,
+    new document sub-states, preview/renderer separation, authoring graph
+    source-of-truth status, topology map derived-output status, cache
+    invalidation behavior, serialization/schema behavior, lightmap source-hash
+    behavior, and rendering/collision/sector lookup/physics/camera behavior.
+  - Verification across the final phase: `cmake --build cmake-build-debug -j2`,
+    `ctest --test-dir cmake-build-debug --output-on-failure`, `git diff
+    --check`, `git diff --stat`, `git status --short`, and the final REF-086
+    grep checks. No manual GUI verification was performed.
+
+#### REF-087 `[x]` Audit REF-085/REF-086 PreviewState and DocumentState implementation
+
+- Source/audit reference:
+  `docs/plans/ref085_preview_state_ownership_runner_plan.md`,
+  `docs/plans/ref086_document_state_ownership_runner_plan.md`,
+  `docs/audit/sector_editor_state_ownership_and_remaining_map.md`,
+  `sources/sector_editor/SectorEditorTypes.h`,
+  `sources/sector_editor/preview/SectorEditorPreviewState.h`,
+  `sources/sector_editor/document/SectorEditorDocumentState.h`, and
+  relevant preview/document/editor orchestration code.
+- Why it helps: verifies whether REF-085 and REF-086 actually improved
+  ownership and dependency direction instead of replacing one monolithic state
+  object with new god-state dumps.
+- Suggested task type: Audit first.
+- Risk: Low.
+- Completion notes:
+  - Completed in `docs/audit/ref085_ref086_implementation_review.md`.
+  - Verdict: mostly green. `PreviewState` and `DocumentState` match the runner
+    plans in meaningful ownership terms, use responsibility-based sub-states,
+    and did not move renderer lifetime, document source data, preview runtime
+    state, modal UI, inspector buffers, or tool transactions into the wrong
+    owners.
+  - `SectorEditorState` still owns central 2D view/cache, tool transaction,
+    modal/picker, runtime-object editing, sprite picker/catalog, and default
+    authoring/material state. This is remaining debt, not a REF-085/REF-086
+    regression.
+  - Recommended next task: a scoped runtime object editing state split covering
+    `runtimeObjectDrag`, sprite picker/catalog, billboard metadata repair
+    fields, runtime object inspector UI inputs, and placed-object callback debt.
+    Keep authored `SectorTopologyMap::runtimeObjects` in document map state and
+    preview `SectorRuntimeObjectState` in preview runtime state.
 
 #### REF-059 `[x]` Audit MaterialEditBridge and material-specific picker routing
 

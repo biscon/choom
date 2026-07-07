@@ -30,6 +30,7 @@ struct SectorEditorPlacedObjectInspectorMeasureContext {
     engine::FontHandle smallFont;
     const engine::UIConfig& smallConfig;
     SectorEditorState& state;
+    SectorTopologyMap& topologyMap;
     SectorRuntimeObjectState& runtimeObjects;
     engine::EngineContext* engineContext = nullptr;
     const SectorEditorPlacedObjectInspectorCallbacks& callbacks;
@@ -48,6 +49,7 @@ struct SectorEditorPlacedObjectInspectorContext {
     engine::FontHandle smallFont;
     engine::UIScrollAreaResult scroll;
     SectorEditorState& state;
+    SectorTopologyMap& topologyMap;
     SectorRuntimeObjectState& runtimeObjects;
     SectorEditorUiState& uiState;
     engine::EngineContext* engineContext = nullptr;

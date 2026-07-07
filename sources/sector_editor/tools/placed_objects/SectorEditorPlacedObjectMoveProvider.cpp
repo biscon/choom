@@ -10,7 +10,8 @@ namespace {
 SectorEditorPlacedObjectDragContext MakePlacedObjectDragContext(SectorEditorMoveContext& context)
 {
     return SectorEditorPlacedObjectDragContext{
-            context.state,
+            context.topologyMap,
+            context.runtimeObjectDrag,
             context.statusText,
             context.screenToMap,
             context.snapMapPoint,
@@ -36,7 +37,7 @@ bool BeginPlacedObjectMove(
 
     SectorEditorPlacedObjectDragContext dragContext = MakePlacedObjectDragContext(context);
     StartSectorEditorPlacedObjectDrag(dragContext, target.id);
-    return context.state.runtimeObjectDrag.active;
+    return context.runtimeObjectDrag.active;
 }
 
 void UpdatePlacedObjectMove(SectorEditorMoveContext& context, Vector2 mousePosition)

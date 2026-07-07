@@ -22,7 +22,7 @@ void AddSectorEditorDoor(SectorEditorPlacedObjectActionContext &context,
   }
 
   const SectorEditorAddDoorResult result =
-      AddDoorToPortal(context.state.topologyMap, lineDefId);
+      AddDoorToPortal(context.topologyMap, lineDefId);
   if (!result.changed) {
     if (!result.status.empty()) {
       context.statusText = result.status;

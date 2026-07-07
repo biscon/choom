@@ -199,19 +199,27 @@ bool RepairBillboardClipsForSpriteMetadata(
     return changed;
 }
 
-std::string CurrentTextureForPickerTarget(const SectorEditorState& state)
+std::string CurrentTextureForPickerTarget(
+        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        SectorEditorConstDerivationDocumentAccess derivation)
 {
     if (IsSectorEditorMaterialTexturePickerTarget(state.texturePicker.topologyTargetKind)) {
-        return CurrentSectorEditorMaterialPickerTexture(state, state.texturePicker);
+        return CurrentSectorEditorMaterialPickerTexture(
+                topologyMap,
+                authoringGraph,
+                derivation,
+                state.texturePicker);
     }
     if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::MapSky) {
         return state.previewSettingsModal.open
                 ? state.previewSettingsModal.draftSkySettings.textureId
-                : state.topologyMap.skySettings.textureId;
+                : topologyMap.skySettings.textureId;
     }
     if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDoor) {
         const SectorPlacedRuntimeObject* object =
-                FindSectorPlacedRuntimeObject(state.topologyMap, state.texturePicker.runtimeObjectId);
+                FindSectorPlacedRuntimeObject(topologyMap, state.texturePicker.runtimeObjectId);
         return object != nullptr && object->kind == "door" ? object->door.textureId : std::string{};
     }
 
@@ -220,6 +228,8 @@ std::string CurrentTextureForPickerTarget(const SectorEditorState& state)
 
 bool OpenMapSkyTexturePicker(
         SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
         SectorEditorTextureCatalogService& textureCatalog)
 {
     TexturePickerState& picker = state.texturePicker;
@@ -239,17 +249,21 @@ bool OpenMapSkyTexturePicker(
     OpenSectorEditorTexturePicker(
             picker,
             textureCatalog.TextureIds(),
-            CurrentTextureForPickerTarget(state));
+            state.previewSettingsModal.open
+                    ? state.previewSettingsModal.draftSkySettings.textureId
+                    : topologyMap.skySettings.textureId);
     return true;
 }
 
 bool OpenRuntimeDoorTexturePicker(
         SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
         SectorEditorTextureCatalogService& textureCatalog,
         int runtimeObjectId)
 {
     TexturePickerState& picker = state.texturePicker;
-    const SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(state.topologyMap, runtimeObjectId);
+    const SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(topologyMap, runtimeObjectId);
     if (object == nullptr || object->kind != "door") {
         CloseSectorEditorTexturePicker(picker);
         return false;
@@ -270,16 +284,28 @@ bool OpenRuntimeDoorTexturePicker(
     OpenSectorEditorTexturePicker(
             picker,
             textureCatalog.TextureIds(),
-            CurrentTextureForPickerTarget(state));
+            object->door.textureId);
     return true;
 }
 
-SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(SectorEditorState& state)
+SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation)
 {
     SectorEditorTexturePickerApplyResult result;
     TexturePickerState& picker = state.texturePicker;
     if (IsSectorEditorMaterialTexturePickerTarget(picker.topologyTargetKind)) {
-        return ApplySectorEditorMaterialTexturePickerSelection(state);
+        return ApplySectorEditorMaterialTexturePickerSelection(
+                state.texturePicker,
+                lifecycle,
+                state.topologyRenderRevision,
+                state.topologyRenderCache,
+                topologyMap,
+                authoringGraph,
+                derivation);
     }
 
     const SectorEditorSelectedTexture selected = CurrentSectorEditorTexturePickerSelection(picker);
@@ -303,7 +329,7 @@ SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(SectorEditorSta
 
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDoor) {
         SectorPlacedRuntimeObject* object =
-                FindSectorPlacedRuntimeObject(state.topologyMap, picker.runtimeObjectId);
+                FindSectorPlacedRuntimeObject(topologyMap, picker.runtimeObjectId);
         if (object != nullptr && object->kind == "door" && object->door.textureId != selectedTexture) {
             object->door.textureId = selectedTexture;
             result.changed = true;

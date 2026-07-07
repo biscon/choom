@@ -24,9 +24,10 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
     const float contentW = context.contentW;
     const float rowH = context.rowH;
     const float gap = context.gap;
-    SectorEditorState& state = context.state;
+    SectorTopologyMap& topologyMap = context.topologyMap;
+    const SectorAuthoringGraph& authoringGraph = context.authoringGraph;
     SelectionState& selectionState = context.selectionState;
-    SectorEditorUiState& uiState = context.uiState;
+    engine::UIScrollState& inspectorScroll = context.inspectorScroll;
     MaterialEditingUiState& materialUiState = context.materialUiState;
     std::string& statusText = context.statusText;
     const SectorEditorMaterialInspectorCallbacks& callbacks = context.callbacks;
@@ -37,7 +38,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
     const SectorTopologyLineDef* lineDef =
             (selectionState.topologySelectionKind == TopologySelectionKind::LineDef
              || selectionState.topologySelectionKind == TopologySelectionKind::SideDef)
-            ? FindSectorTopologyLineDef(state.topologyMap, selectionState.selectedTopologyLineDefId)
+            ? FindSectorTopologyLineDef(topologyMap, selectionState.selectedTopologyLineDefId)
             : nullptr;
     if (lineDef == nullptr) {
         return false;
@@ -45,15 +46,15 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
 
     const SectorTopologyVertex* start = nullptr;
     const SectorTopologyVertex* end = nullptr;
-    const bool hasEndpoints = GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end);
+    const bool hasEndpoints = GetSectorTopologyLineVertices(topologyMap, *lineDef, start, end);
 
     float y = 0.0f;
     SectorTopologySideDef* sideDef = selectionState.topologySelectionKind == TopologySelectionKind::SideDef
-            ? FindSectorTopologySideDef(state.topologyMap, selectionState.selectedTopologySideDefId)
+            ? FindSectorTopologySideDef(topologyMap, selectionState.selectedTopologySideDefId)
             : nullptr;
     if (sideDef != nullptr) {
         selectionState.selectedTopologyWallPart = ValidTopologyWallPartForSideDef(
-                state.topologyMap,
+                topologyMap,
                 sideDef,
                 selectionState.selectedTopologyWallPart);
     }
@@ -132,10 +133,10 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 ? lineDef->frontSideDefId
                 : lineDef->backSideDefId;
         const SectorTopologySideDef* preferredSideDef = FindSectorTopologySideDef(
-                state.topologyMap,
+                topologyMap,
                 preferredSideDefId);
         const SectorTopologySideDef* opposite = preferredSideDef != nullptr
-                ? FindOppositeSectorTopologySideDef(state.topologyMap, preferredSideDef->id)
+                ? FindOppositeSectorTopologySideDef(topologyMap, preferredSideDef->id)
                 : nullptr;
         if (preferredSideDef != nullptr && opposite != nullptr
                 && preferredSideDef->sectorId != opposite->sectorId) {
@@ -177,9 +178,9 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
     y += 34.0f;
 
     const SectorTopologySideDef* opposite = FindOppositeSectorTopologySideDef(
-            state.topologyMap,
+            topologyMap,
             sideDef->id);
-    const bool middleEligible = IsTopologyMiddleEligible(state.topologyMap, sideDef);
+    const bool middleEligible = IsTopologyMiddleEligible(topologyMap, sideDef);
     if (opposite != nullptr) {
         if (opposite->sectorId != sideDef->sectorId) {
             engine::Text(
@@ -218,8 +219,8 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
             callbacks.selectTopologySideDef(
                     oppositeId,
                     ValidTopologyWallPartForSideDef(
-                            state.topologyMap,
-                            FindSectorTopologySideDef(state.topologyMap, oppositeId),
+                            topologyMap,
+                            FindSectorTopologySideDef(topologyMap, oppositeId),
                             selectionState.selectedTopologyWallPart));
             statusText = TextFormat("Selected opposite topology sidedef %d", oppositeId);
             return true;
@@ -273,7 +274,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 missing ? config.invalidColor : config.mutedTextColor);
         if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
             if (!materialEditing.OpenMaterialPickerForDerivedSideDef(sideDef->id, wallPart, layer)) {
-                statusText = HasAuthoringGraphData(state)
+                statusText = HasAuthoringGraphData(authoringGraph)
                         ? "No derived sidedef authoring material target"
                         : "Cannot edit material: authoring data is required.";
             }
@@ -589,7 +590,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
         }
         const Rectangle swatchScreen{
                 scroll.viewport.x + swatchLocal.x,
-                scroll.viewport.y - uiState.inspectorScroll.offset.y + swatchLocal.y,
+                scroll.viewport.y - inspectorScroll.offset.y + swatchLocal.y,
                 swatchLocal.width,
                 swatchLocal.height};
         DrawColorSwatch(config, swatchScreen, DecalTintPreviewColor(selectedPart.decal.tint), config.borderThickness);

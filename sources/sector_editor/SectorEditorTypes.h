@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/ui/UI.h"
+#include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/SectorEditorLightmapAsyncTypes.h"
 #include "sector_editor/SectorEditorModalTypes.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
@@ -42,13 +43,6 @@ enum class SectorEditorMode {
     Preview3D
 };
 
-enum class SectorEditorAuthoringDerivationState {
-    InvalidNoDerived,
-    ValidCurrent,
-    ValidStale,
-    InvalidLastValid
-};
-
 enum class TopologyUvFitMode {
     Width,
     Height,
@@ -68,17 +62,6 @@ struct TopologyMaterialPayload {
 };
 
 struct SectorEditorState {
-    SectorTopologyMap topologyMap;
-    SectorAuthoringGraph authoringGraph;
-    SectorAuthoringDerivationResult authoringDerivation;
-    std::optional<SectorTopologyMap> lastValidAuthoringDerivedTopology;
-    SectorEditorAuthoringDerivationState authoringDerivationState =
-            SectorEditorAuthoringDerivationState::InvalidNoDerived;
-    bool authoringDerivedTopologyStale = true;
-    std::string authoringDerivationStatus;
-    bool topologyDocumentInitialized = false;
-    bool topologyDocumentDirty = false;
-    std::string topologyDocumentStatus;
     std::string topologyRenderWarning;
     uint64_t topologyRenderRevision = 1;
     SectorEditorTopologyRenderCache topologyRenderCache;
@@ -108,10 +91,6 @@ struct SectorEditorState {
     bool showGrid = true;
     bool showAxes = true;
     bool showSectorIds = true;
-    std::string currentLevelName;
-    std::string currentLevelPath;
-    bool hasCurrentLevelPath = false;
-    bool hasUnsavedChanges = false;
     TexturePickerState texturePicker;
     AddMapTextureState addMapTexture;
     SectorSpriteMetadataCatalog spriteMetadataCatalog;

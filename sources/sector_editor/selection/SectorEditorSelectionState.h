@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sector_editor/SectorEditorSelectionTypes.h"
+#include "sector_editor/SectorEditorSurfaceTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 namespace game {

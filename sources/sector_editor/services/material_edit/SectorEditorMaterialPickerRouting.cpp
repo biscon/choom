@@ -14,12 +14,12 @@ bool IsSidePickerTarget(TopologyTexturePickerTargetKind kind)
             || kind == TopologyTexturePickerTargetKind::AuthoringSide;
 }
 
-bool HasCurrentAuthoringDerivation(const SectorEditorState& state)
+bool HasCurrentAuthoringDerivation(
+        SectorEditorConstDerivationDocumentAccess derivation,
+        const SectorAuthoringGraph& authoringGraph)
 {
-    return HasAuthoringGraphData(state)
-            && state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
-            && !state.authoringDerivedTopologyStale
-            && state.authoringDerivation.success;
+    return HasAuthoringGraphData(authoringGraph)
+            && IsSectorEditorAuthoringDerivationCurrent(derivation);
 }
 
 bool IsAuthoringFaceAnchorDecalTextureField(TopologySectorTextureField field)
@@ -32,28 +32,30 @@ bool IsAuthoringFaceAnchorDecalTextureField(TopologySectorTextureField field)
 }
 
 bool ResolveAuthoringFaceAnchorPickerTarget(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        SectorEditorConstDerivationDocumentAccess derivation,
+        const SectorAuthoringGraph& authoringGraph,
         const TexturePickerState& picker,
         std::string& outStatus)
 {
     outStatus.clear();
 
-    if (!HasCurrentAuthoringDerivation(state)) {
+    if (!HasCurrentAuthoringDerivation(derivation, authoringGraph)) {
         outStatus = "Authoring face texture edit unavailable: derived topology is not current";
         return false;
     }
-    if (FindSectorTopologySector(state.topologyMap, picker.topologySectorId) == nullptr) {
+    if (FindSectorTopologySector(topologyMap, picker.topologySectorId) == nullptr) {
         outStatus = "Authoring face texture edit unavailable: selected sector is not current";
         return false;
     }
 
     int matchCount = 0;
-    for (const SectorAuthoringDerivedSectorMapping& mapping : state.authoringDerivation.mapping.sectors) {
+    for (const SectorAuthoringDerivedSectorMapping& mapping : derivation.authoringDerivation.mapping.sectors) {
         if (mapping.topologySectorId != picker.topologySectorId) {
             continue;
         }
         if (!IsValidSectorAuthoringId(mapping.faceAnchorId)
-                || FindSectorAuthoringFaceAnchor(state.authoringGraph, mapping.faceAnchorId) == nullptr) {
+                || FindSectorAuthoringFaceAnchor(authoringGraph, mapping.faceAnchorId) == nullptr) {
             continue;
         }
         ++matchCount;
@@ -71,23 +73,24 @@ bool ResolveAuthoringFaceAnchorPickerTarget(
 }
 
 bool ResolveDirectAuthoringFaceAnchorPickerTarget(
-        const SectorEditorState& state,
+        SectorEditorConstDerivationDocumentAccess derivation,
+        const SectorAuthoringGraph& authoringGraph,
         const TexturePickerState& picker,
         std::string& outStatus)
 {
     outStatus.clear();
 
-    if (!HasCurrentAuthoringDerivation(state)) {
+    if (!HasCurrentAuthoringDerivation(derivation, authoringGraph)) {
         outStatus = "Authoring face texture edit unavailable: derived topology is not current";
         return false;
     }
-    if (FindSectorAuthoringFaceAnchor(state.authoringGraph, picker.authoringFaceAnchorId) == nullptr) {
+    if (FindSectorAuthoringFaceAnchor(authoringGraph, picker.authoringFaceAnchorId) == nullptr) {
         outStatus = "Authoring face texture edit unavailable: selected face anchor is not current";
         return false;
     }
 
     int matchCount = 0;
-    for (const SectorAuthoringDerivedSectorMapping& mapping : state.authoringDerivation.mapping.sectors) {
+    for (const SectorAuthoringDerivedSectorMapping& mapping : derivation.authoringDerivation.mapping.sectors) {
         if (mapping.faceAnchorId == picker.authoringFaceAnchorId) {
             ++matchCount;
         }
@@ -104,36 +107,38 @@ bool ResolveDirectAuthoringFaceAnchorPickerTarget(
 }
 
 bool ResolveAuthoringSidePickerTarget(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        SectorEditorConstDerivationDocumentAccess derivation,
+        const SectorAuthoringGraph& authoringGraph,
         const TexturePickerState& picker,
         std::string& outStatus)
 {
     outStatus.clear();
 
-    if (!HasCurrentAuthoringDerivation(state)) {
+    if (!HasCurrentAuthoringDerivation(derivation, authoringGraph)) {
         outStatus = "Authoring side texture edit unavailable: derived topology is not current";
         return false;
     }
 
     const SectorTopologySideDef* sideDef =
-            FindSectorTopologySideDef(state.topologyMap, picker.topologySideDefId);
+            FindSectorTopologySideDef(topologyMap, picker.topologySideDefId);
     if (sideDef == nullptr) {
         outStatus = "Authoring side texture edit unavailable: selected sidedef is not current";
         return false;
     }
     if (picker.topologyWallPart == TopologyWallPart::Middle
-            && !IsTopologyMiddleEligible(state.topologyMap, sideDef)) {
+            && !IsTopologyMiddleEligible(topologyMap, sideDef)) {
         outStatus = "Authoring side texture edit unavailable: selected sidedef cannot use a middle texture";
         return false;
     }
 
     int matchCount = 0;
-    for (const SectorAuthoringDerivedSideMapping& mapping : state.authoringDerivation.mapping.sides) {
+    for (const SectorAuthoringDerivedSideMapping& mapping : derivation.authoringDerivation.mapping.sides) {
         if (mapping.topologySideDefId != picker.topologySideDefId) {
             continue;
         }
         if (!IsValidSectorAuthoringId(mapping.authoringLineId)
-                || FindSectorAuthoringLine(state.authoringGraph, mapping.authoringLineId) == nullptr) {
+                || FindSectorAuthoringLine(authoringGraph, mapping.authoringLineId) == nullptr) {
             continue;
         }
         ++matchCount;
@@ -151,23 +156,24 @@ bool ResolveAuthoringSidePickerTarget(
 }
 
 bool ResolveDirectAuthoringSidePickerTarget(
-        const SectorEditorState& state,
+        SectorEditorConstDerivationDocumentAccess derivation,
+        const SectorAuthoringGraph& authoringGraph,
         const TexturePickerState& picker,
         std::string& outStatus)
 {
     outStatus.clear();
 
-    if (!HasCurrentAuthoringDerivation(state)) {
+    if (!HasCurrentAuthoringDerivation(derivation, authoringGraph)) {
         outStatus = "Authoring side texture edit unavailable: derived topology is not current";
         return false;
     }
-    if (FindSectorAuthoringLine(state.authoringGraph, picker.authoringLineId) == nullptr) {
+    if (FindSectorAuthoringLine(authoringGraph, picker.authoringLineId) == nullptr) {
         outStatus = "Authoring side texture edit unavailable: selected authoring line is not current";
         return false;
     }
 
     int matchCount = 0;
-    for (const SectorAuthoringDerivedSideMapping& mapping : state.authoringDerivation.mapping.sides) {
+    for (const SectorAuthoringDerivedSideMapping& mapping : derivation.authoringDerivation.mapping.sides) {
         if (mapping.authoringLineId == picker.authoringLineId
                 && mapping.authoringSide == picker.authoringSide) {
             ++matchCount;
@@ -328,7 +334,9 @@ bool IsSectorEditorMaterialTexturePickerTarget(TopologyTexturePickerTargetKind k
 }
 
 std::string CurrentSectorEditorMaterialPickerTexture(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        SectorEditorConstDerivationDocumentAccess derivation,
         const TexturePickerState& picker)
 {
     if (IsSidePickerTarget(picker.topologyTargetKind)) {
@@ -336,13 +344,14 @@ std::string CurrentSectorEditorMaterialPickerTexture(
             SectorAuthoringSideId sideId{picker.authoringLineId, picker.authoringSide};
             if (!IsValidSectorAuthoringId(sideId.lineId)) {
                 FindSectorEditorAuthoringSideIdForTopologySideDef(
-                        state,
+                        authoringGraph,
+                        derivation.authoringDerivation,
                         picker.topologySideDefId,
                         sideId);
             }
             if (IsValidSectorAuthoringId(sideId.lineId)) {
                 const SectorAuthoringLineSide* authoringSide =
-                        FindSectorAuthoringLineSide(state.authoringGraph, sideId);
+                        FindSectorAuthoringLineSide(authoringGraph, sideId);
                 if (authoringSide != nullptr) {
                     const SectorTopologyWallPartSettings& part =
                             TopologyWallPartSettingsFor(*authoringSide, picker.topologyWallPart);
@@ -356,7 +365,7 @@ std::string CurrentSectorEditorMaterialPickerTexture(
             }
         } else {
             const SectorTopologySideDef* sideDef =
-                    FindSectorTopologySideDef(state.topologyMap, picker.topologySideDefId);
+                    FindSectorTopologySideDef(topologyMap, picker.topologySideDefId);
             if (sideDef != nullptr) {
                 const SectorTopologyWallPartSettings& part =
                         TopologyWallPartSettingsFor(*sideDef, picker.topologyWallPart);
@@ -375,11 +384,12 @@ std::string CurrentSectorEditorMaterialPickerTexture(
         int faceAnchorId = picker.authoringFaceAnchorId;
         if (!IsValidSectorAuthoringId(faceAnchorId)) {
             faceAnchorId = FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
-                    state,
+                    authoringGraph,
+                    derivation.authoringDerivation,
                     picker.topologySectorId);
         }
         const SectorAuthoringFaceAnchor* anchor =
-                FindSectorAuthoringFaceAnchor(state.authoringGraph, faceAnchorId);
+                FindSectorAuthoringFaceAnchor(authoringGraph, faceAnchorId);
         if (anchor == nullptr) {
             return std::string{};
         }
@@ -410,7 +420,7 @@ std::string CurrentSectorEditorMaterialPickerTexture(
         return std::string{};
     }
 
-    const SectorTopologySector* sector = FindSectorTopologySector(state.topologyMap, picker.topologySectorId);
+    const SectorTopologySector* sector = FindSectorTopologySector(topologyMap, picker.topologySectorId);
     if (sector == nullptr) {
         return std::string{};
     }
@@ -435,18 +445,30 @@ std::string CurrentSectorEditorMaterialPickerTexture(
     return std::string{};
 }
 
+std::string CurrentSectorEditorMaterialPickerTexture(
+        const SectorTopologyMap& topologyMap,
+        SectorEditorConstAuthoringDocumentAccess authoring,
+        SectorEditorConstDerivationDocumentAccess derivation,
+        const TexturePickerState& picker)
+{
+    return CurrentSectorEditorMaterialPickerTexture(topologyMap, authoring.graph, derivation, picker);
+}
+
 bool OpenSectorEditorMaterialPickerForDerivedSector(
-        SectorEditorState& state,
+        TexturePickerState& picker,
+        const SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorConstDerivationDocumentAccess derivation,
         int topologySectorId,
         TopologySectorTextureField field,
         TopologyMaterialLayer layer)
 {
-    TexturePickerState& picker = state.texturePicker;
-    if (!HasAuthoringGraphData(state)
-            || state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-            || state.authoringDerivedTopologyStale
-            || !state.authoringDerivation.success
-            || FindSectorEditorAuthoringFaceAnchorIdForTopologySector(state, topologySectorId) < 0
+    if (!HasAuthoringGraphData(authoringGraph)
+            || !IsSectorEditorAuthoringDerivationCurrent(derivation)
+            || FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
+                    authoringGraph,
+                    derivation.authoringDerivation,
+                    topologySectorId) < 0
             || field == TopologySectorTextureField::None
             || (layer == TopologyMaterialLayer::Decal
                     && !IsAuthoringFaceAnchorDecalTextureField(field))) {
@@ -468,20 +490,41 @@ bool OpenSectorEditorMaterialPickerForDerivedSector(
 
     OpenSectorEditorTexturePicker(
             picker,
-            SortedSectorTopologyTextureIds(state.topologyMap),
-            CurrentSectorEditorMaterialPickerTexture(state, picker));
+            SortedSectorTopologyTextureIds(topologyMap),
+            CurrentSectorEditorMaterialPickerTexture(topologyMap, authoringGraph, derivation, picker));
     return true;
 }
 
+bool OpenSectorEditorMaterialPickerForDerivedSector(
+        TexturePickerState& picker,
+        const SectorTopologyMap& topologyMap,
+        SectorEditorAuthoringDocumentAccess authoring,
+        SectorEditorConstDerivationDocumentAccess derivation,
+        int topologySectorId,
+        TopologySectorTextureField field,
+        TopologyMaterialLayer layer)
+{
+    return OpenSectorEditorMaterialPickerForDerivedSector(
+            picker,
+            topologyMap,
+            authoring.graph,
+            derivation,
+            topologySectorId,
+            field,
+            layer);
+}
+
 bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
-        SectorEditorState& state,
+        TexturePickerState& picker,
+        const SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorConstDerivationDocumentAccess derivation,
         int faceAnchorId,
         TopologySectorTextureField field,
         TopologyMaterialLayer layer)
 {
-    TexturePickerState& picker = state.texturePicker;
-    if (!HasCurrentAuthoringDerivation(state)
-            || FindSectorAuthoringFaceAnchor(state.authoringGraph, faceAnchorId) == nullptr
+    if (!HasCurrentAuthoringDerivation(derivation, authoringGraph)
+            || FindSectorAuthoringFaceAnchor(authoringGraph, faceAnchorId) == nullptr
             || field == TopologySectorTextureField::None
             || (layer == TopologyMaterialLayer::Decal
                     && !IsAuthoringFaceAnchorDecalTextureField(field))) {
@@ -502,35 +545,58 @@ bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
     picker.authoringSide = SectorTopologySideKind::Front;
 
     std::string status;
-    if (!ResolveDirectAuthoringFaceAnchorPickerTarget(state, picker, status)) {
+    if (!ResolveDirectAuthoringFaceAnchorPickerTarget(derivation, authoringGraph, picker, status)) {
         CloseSectorEditorTexturePicker(picker);
         return false;
     }
 
     OpenSectorEditorTexturePicker(
             picker,
-            SortedSectorTopologyTextureIds(state.topologyMap),
-            CurrentSectorEditorMaterialPickerTexture(state, picker));
+            SortedSectorTopologyTextureIds(topologyMap),
+            CurrentSectorEditorMaterialPickerTexture(topologyMap, authoringGraph, derivation, picker));
     return true;
 }
 
+bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
+        TexturePickerState& picker,
+        const SectorTopologyMap& topologyMap,
+        SectorEditorAuthoringDocumentAccess authoring,
+        SectorEditorConstDerivationDocumentAccess derivation,
+        int faceAnchorId,
+        TopologySectorTextureField field,
+        TopologyMaterialLayer layer)
+{
+    return OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
+            picker,
+            topologyMap,
+            authoring.graph,
+            derivation,
+            faceAnchorId,
+            field,
+            layer);
+}
+
 bool OpenSectorEditorMaterialPickerForDerivedSideDef(
-        SectorEditorState& state,
+        TexturePickerState& picker,
+        const SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorConstDerivationDocumentAccess derivation,
         int topologySideDefId,
         TopologyWallPart wallPart,
         TopologyMaterialLayer layer)
 {
-    TexturePickerState& picker = state.texturePicker;
-    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(state.topologyMap, topologySideDefId);
+    const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(topologyMap, topologySideDefId);
     SectorAuthoringSideId sideId;
-    if (!HasAuthoringGraphData(state)
-            || state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-            || state.authoringDerivedTopologyStale
-            || !state.authoringDerivation.success
+    if (!HasAuthoringGraphData(authoringGraph)
+            || !IsSectorEditorAuthoringDerivationCurrent(derivation)
             || sideDef == nullptr
-            || !FindSectorEditorAuthoringSideIdForTopologySideDef(state, topologySideDefId, sideId)
+            || !FindSectorEditorAuthoringSideIdForTopologySideDef(
+                    authoringGraph,
+                    derivation.authoringDerivation,
+                    topologySideDefId,
+                    sideId)
             || (wallPart == TopologyWallPart::Middle
-                    && !IsTopologyMiddleEligible(state.topologyMap, sideDef))) {
+                    && !IsTopologyMiddleEligible(topologyMap, sideDef))) {
         CloseSectorEditorTexturePicker(picker);
         return false;
     }
@@ -551,20 +617,41 @@ bool OpenSectorEditorMaterialPickerForDerivedSideDef(
 
     OpenSectorEditorTexturePicker(
             picker,
-            SortedSectorTopologyTextureIds(state.topologyMap),
-            CurrentSectorEditorMaterialPickerTexture(state, picker));
+            SortedSectorTopologyTextureIds(topologyMap),
+            CurrentSectorEditorMaterialPickerTexture(topologyMap, authoringGraph, derivation, picker));
     return true;
 }
 
+bool OpenSectorEditorMaterialPickerForDerivedSideDef(
+        TexturePickerState& picker,
+        const SectorTopologyMap& topologyMap,
+        SectorEditorAuthoringDocumentAccess authoring,
+        SectorEditorConstDerivationDocumentAccess derivation,
+        int topologySideDefId,
+        TopologyWallPart wallPart,
+        TopologyMaterialLayer layer)
+{
+    return OpenSectorEditorMaterialPickerForDerivedSideDef(
+            picker,
+            topologyMap,
+            authoring.graph,
+            derivation,
+            topologySideDefId,
+            wallPart,
+            layer);
+}
+
 bool OpenSectorEditorMaterialPickerForAuthoringSide(
-        SectorEditorState& state,
+        TexturePickerState& picker,
+        const SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorConstDerivationDocumentAccess derivation,
         SectorAuthoringSideId sideId,
         TopologyWallPart wallPart,
         TopologyMaterialLayer layer)
 {
-    TexturePickerState& picker = state.texturePicker;
-    if (!HasCurrentAuthoringDerivation(state)
-            || FindSectorAuthoringLine(state.authoringGraph, sideId.lineId) == nullptr) {
+    if (!HasCurrentAuthoringDerivation(derivation, authoringGraph)
+            || FindSectorAuthoringLine(authoringGraph, sideId.lineId) == nullptr) {
         CloseSectorEditorTexturePicker(picker);
         return false;
     }
@@ -584,28 +671,54 @@ bool OpenSectorEditorMaterialPickerForAuthoringSide(
     picker.authoringSide = sideId.side;
 
     std::string status;
-    if (!ResolveDirectAuthoringSidePickerTarget(state, picker, status)) {
+    if (!ResolveDirectAuthoringSidePickerTarget(derivation, authoringGraph, picker, status)) {
         CloseSectorEditorTexturePicker(picker);
         return false;
     }
 
     OpenSectorEditorTexturePicker(
             picker,
-            SortedSectorTopologyTextureIds(state.topologyMap),
-            CurrentSectorEditorMaterialPickerTexture(state, picker));
+            SortedSectorTopologyTextureIds(topologyMap),
+            CurrentSectorEditorMaterialPickerTexture(topologyMap, authoringGraph, derivation, picker));
     return true;
 }
 
-SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelection(SectorEditorState& state)
+bool OpenSectorEditorMaterialPickerForAuthoringSide(
+        TexturePickerState& picker,
+        const SectorTopologyMap& topologyMap,
+        SectorEditorAuthoringDocumentAccess authoring,
+        SectorEditorConstDerivationDocumentAccess derivation,
+        SectorAuthoringSideId sideId,
+        TopologyWallPart wallPart,
+        TopologyMaterialLayer layer)
 {
-    TexturePickerState picker = state.texturePicker;
+    return OpenSectorEditorMaterialPickerForAuthoringSide(
+            picker,
+            topologyMap,
+            authoring.graph,
+            derivation,
+            sideId,
+            wallPart,
+            layer);
+}
+
+SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelection(
+        TexturePickerState& texturePicker,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation)
+{
+    TexturePickerState picker = texturePicker;
     if (!picker.open || !IsSectorEditorMaterialTexturePickerTarget(picker.topologyTargetKind)) {
         return SectorEditorTexturePickerApplyResult{};
     }
 
     SectorEditorTexturePickerApplyResult result;
-    const auto closeAndReturn = [&state, &result]() {
-        CloseSectorEditorTexturePicker(state.texturePicker);
+    const auto closeAndReturn = [&texturePicker, &result]() {
+        CloseSectorEditorTexturePicker(texturePicker);
         return result;
     };
 
@@ -616,16 +729,27 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
 
     const std::string selectedTexture = selected.textureId;
     result.rebuildPreviewOnApply = picker.rebuildPreviewOnApply;
+    const SectorEditorConstDerivationDocumentAccess constDerivation =
+            MakeSectorEditorConstDerivationDocumentAccess(derivation);
 
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringFaceAnchor) {
         if (IsValidSectorAuthoringId(picker.authoringFaceAnchorId)) {
-            if (!ResolveDirectAuthoringFaceAnchorPickerTarget(state, picker, result.status)) {
+            if (!ResolveDirectAuthoringFaceAnchorPickerTarget(
+                        constDerivation,
+                        authoringGraph,
+                        picker,
+                        result.status)) {
                 return closeAndReturn();
             }
 
             const char* status = "Updated authoring face texture";
             if (MutateSectorEditorAuthoringFaceAnchorById(
-                        state,
+                        lifecycle,
+                        topologyRenderRevision,
+                        topologyRenderCache,
+                        topologyMap,
+                        authoringGraph,
+                        derivation,
                         picker.authoringFaceAnchorId,
                         status,
                         [picker, selectedTexture](SectorAuthoringFaceAnchor& anchor) {
@@ -706,12 +830,22 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
             return closeAndReturn();
         }
 
-        if (!ResolveAuthoringFaceAnchorPickerTarget(state, picker, result.status)) {
+        if (!ResolveAuthoringFaceAnchorPickerTarget(
+                    topologyMap,
+                    constDerivation,
+                    authoringGraph,
+                    picker,
+                    result.status)) {
             return closeAndReturn();
         }
 
         if (!MutateSectorEditorAuthoringFaceAnchorForTopologySector(
-                    state,
+                    lifecycle,
+                    topologyRenderRevision,
+                    topologyRenderCache,
+                    topologyMap,
+                    authoringGraph,
+                    derivation,
                     picker.topologySectorId,
                     "Updated authoring face anchor texture",
                     [picker, selectedTexture, &result](SectorAuthoringFaceAnchor& anchor) {
@@ -728,7 +862,11 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
 
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringSide) {
         if (IsValidSectorAuthoringId(picker.authoringLineId)) {
-            if (!ResolveDirectAuthoringSidePickerTarget(state, picker, result.status)) {
+            if (!ResolveDirectAuthoringSidePickerTarget(
+                        constDerivation,
+                        authoringGraph,
+                        picker,
+                        result.status)) {
                 return closeAndReturn();
             }
 
@@ -737,7 +875,12 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
                     : picker.topologyLayer;
             const char* status = "Updated authoring side texture";
             if (MutateSectorEditorAuthoringSideById(
-                        state,
+                        lifecycle,
+                        topologyRenderRevision,
+                        topologyRenderCache,
+                        topologyMap,
+                        authoringGraph,
+                        derivation,
                         SectorAuthoringSideId{picker.authoringLineId, picker.authoringSide},
                         status,
                         [picker, layer, selectedTexture](SectorAuthoringLineSide& side) {
@@ -758,12 +901,22 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
             return closeAndReturn();
         }
 
-        if (!ResolveAuthoringSidePickerTarget(state, picker, result.status)) {
+        if (!ResolveAuthoringSidePickerTarget(
+                    topologyMap,
+                    constDerivation,
+                    authoringGraph,
+                    picker,
+                    result.status)) {
             return closeAndReturn();
         }
 
         if (!MutateSectorEditorAuthoringSideForTopologySideDef(
-                    state,
+                    lifecycle,
+                    topologyRenderRevision,
+                    topologyRenderCache,
+                    topologyMap,
+                    authoringGraph,
+                    derivation,
                     picker.topologySideDefId,
                     "Updated authoring side texture",
                     [picker, selectedTexture, &result](SectorAuthoringLineSide& side) {
@@ -783,12 +936,30 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
 }
 
 SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelection(
+        TexturePickerState& texturePicker,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorTopologyMap& topologyMap,
+        SectorEditorAuthoringDocumentAccess authoring,
+        SectorEditorDerivationDocumentAccess derivation)
+{
+    return ApplySectorEditorMaterialTexturePickerSelection(
+            texturePicker,
+            lifecycle,
+            topologyRenderRevision,
+            topologyRenderCache,
+            topologyMap,
+            authoring.graph,
+            derivation);
+}
+
+SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelection(
         SectorEditorMaterialPickerRoutingContext& context,
         engine::AssetManager* assets)
 {
     (void)assets;
-    SectorEditorState& state = context.state;
-    TexturePickerState picker = state.texturePicker;
+    TexturePickerState picker = context.texturePicker;
     if (!picker.open || !IsSectorEditorMaterialTexturePickerTarget(picker.topologyTargetKind)) {
         return SectorEditorTexturePickerApplyResult{};
     }
@@ -796,7 +967,14 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringFaceAnchor
             || picker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringSide) {
         SectorEditorTexturePickerApplyResult result =
-                ApplySectorEditorMaterialTexturePickerSelection(state);
+                ApplySectorEditorMaterialTexturePickerSelection(
+                        context.texturePicker,
+                        context.lifecycle,
+                        context.topologyRenderRevision,
+                        context.topologyRenderCache,
+                        context.topologyMap,
+                        context.authoringGraph,
+                        context.derivation);
         if (!result.status.empty()) {
             context.statusText = result.status;
         }
@@ -804,45 +982,47 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
         return result;
     }
 
-    if (!HasAuthoringGraphData(state)) {
+    if (!HasAuthoringGraphData(context.authoringGraph)) {
         context.statusText = "Cannot edit material: authoring data is required.";
-        CloseSectorEditorTexturePicker(state.texturePicker);
+        CloseSectorEditorTexturePicker(context.texturePicker);
         return SectorEditorTexturePickerApplyResult{};
     }
 
     const bool routeAuthoringSideMaterial =
-            HasAuthoringGraphData(state)
+            HasAuthoringGraphData(context.authoringGraph)
             && picker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef;
     const bool routeAuthoringFlatMaterial =
-            HasAuthoringGraphData(state)
+            HasAuthoringGraphData(context.authoringGraph)
             && picker.authoringSurface3DFlatTarget
             && picker.topologyTargetKind == TopologyTexturePickerTargetKind::Sector
             && (picker.topologyField == TopologySectorTextureField::Floor
                     || picker.topologyField == TopologySectorTextureField::Ceiling);
     if (routeAuthoringSideMaterial || routeAuthoringFlatMaterial) {
-        if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-                || state.authoringDerivedTopologyStale
-                || !state.authoringDerivation.success) {
+        if (!IsSectorEditorAuthoringDerivationCurrent(context.derivation)) {
             context.statusText = routeAuthoringSideMaterial
                     ? "Wall material edit unavailable: derived topology is not current"
                     : "3D surface edit unavailable: derived topology is not current";
-            CloseSectorEditorTexturePicker(state.texturePicker);
+            CloseSectorEditorTexturePicker(context.texturePicker);
             return SectorEditorTexturePickerApplyResult{};
         }
     }
 
     if (routeAuthoringSideMaterial) {
         SectorAuthoringSideId sideId;
-        if (!FindSectorEditorAuthoringSideIdForTopologySideDef(state, picker.topologySideDefId, sideId)) {
+        if (!FindSectorEditorAuthoringSideIdForTopologySideDef(
+                    context.authoringGraph,
+                    context.derivation.authoringDerivation,
+                    picker.topologySideDefId,
+                    sideId)) {
             context.statusText = "Wall material edit unavailable: selected sidedef has no authoring side mapping";
-            CloseSectorEditorTexturePicker(state.texturePicker);
+            CloseSectorEditorTexturePicker(context.texturePicker);
             return SectorEditorTexturePickerApplyResult{};
         }
         const SectorTopologySideDef* sideDef =
-                FindSectorTopologySideDef(state.topologyMap, picker.topologySideDefId);
+                FindSectorTopologySideDef(context.topologyMap, picker.topologySideDefId);
         if (sideDef == nullptr) {
             context.statusText = "Wall material edit unavailable: selected sidedef is not current";
-            CloseSectorEditorTexturePicker(state.texturePicker);
+            CloseSectorEditorTexturePicker(context.texturePicker);
             return SectorEditorTexturePickerApplyResult{};
         }
     }
@@ -851,7 +1031,10 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
         SectorEditorAuthoringSurfaceTarget surfaceTarget;
         std::string unavailableStatus;
         if (!ResolveSectorEditorAuthoringSurfaceTarget(
-                    state,
+                    context.topologyMap,
+                    context.authoringGraph,
+                    context.derivation.authoringDerivation,
+                    IsSectorEditorAuthoringDerivationCurrent(context.derivation),
                     BuildFlatSurface(picker),
                     surfaceTarget,
                     &unavailableStatus)
@@ -859,28 +1042,33 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
             context.statusText = unavailableStatus.empty()
                     ? "3D flat surface edit unavailable: selected surface has no face anchor mapping"
                     : unavailableStatus;
-            CloseSectorEditorTexturePicker(state.texturePicker);
+            CloseSectorEditorTexturePicker(context.texturePicker);
             return SectorEditorTexturePickerApplyResult{};
         }
     }
 
     if (!routeAuthoringSideMaterial && !routeAuthoringFlatMaterial) {
         context.statusText = "Cannot edit material: selected derived target has no authoring material route.";
-        CloseSectorEditorTexturePicker(state.texturePicker);
+        CloseSectorEditorTexturePicker(context.texturePicker);
         return SectorEditorTexturePickerApplyResult{};
     }
 
     SectorEditorTexturePickerApplyResult result;
     const SectorEditorSelectedTexture selected = CurrentSectorEditorTexturePickerSelection(picker);
     if (!selected.valid) {
-        CloseSectorEditorTexturePicker(state.texturePicker);
+        CloseSectorEditorTexturePicker(context.texturePicker);
         return result;
     }
     result.rebuildPreviewOnApply = picker.rebuildPreviewOnApply;
-    CloseSectorEditorTexturePicker(state.texturePicker);
+    CloseSectorEditorTexturePicker(context.texturePicker);
     if (routeAuthoringSideMaterial) {
         const bool refreshed = MutateSectorEditorAuthoringSideForTopologySideDef(
-                state,
+                context.lifecycle,
+                context.topologyRenderRevision,
+                context.topologyRenderCache,
+                context.topologyMap,
+                context.authoringGraph,
+                context.derivation,
                 picker.topologySideDefId,
                 "Updated authoring side texture",
                 [&](SectorAuthoringLineSide& side) {
@@ -902,7 +1090,12 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
 
     if (routeAuthoringFlatMaterial) {
         const bool refreshed = MutateSectorEditorAuthoringFaceAnchorForTopologySector(
-                state,
+                context.lifecycle,
+                context.topologyRenderRevision,
+                context.topologyRenderCache,
+                context.topologyMap,
+                context.authoringGraph,
+                context.derivation,
                 picker.topologySectorId,
                 "Updated authoring face anchor texture",
                 [&](SectorAuthoringFaceAnchor& anchor) {

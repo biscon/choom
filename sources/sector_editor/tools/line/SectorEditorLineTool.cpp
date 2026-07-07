@@ -15,7 +15,7 @@ namespace {
 
 bool CancelLineTool(SectorEditorToolContext& context, const char* message)
 {
-    const bool wasActive = context.state.pendingAuthoringLine.active;
+    const bool wasActive = context.pendingAuthoringLine.active;
     if (context.cancelAuthoringLineChain) {
         context.cancelAuthoringLineChain();
     }
@@ -35,7 +35,7 @@ void CommitLinePoint(SectorEditorToolContext& context, SectorPoint point)
     SectorTopologyCoordPoint topologyPoint;
     if (!context.toTopologyCoordPoint
             || !context.toTopologyCoordPoint(point, topologyPoint, error)) {
-        context.state.pendingAuthoringLine.errorMessage = error;
+        context.pendingAuthoringLine.errorMessage = error;
         context.statusText = error;
         return;
     }
@@ -61,12 +61,12 @@ void CommitLinePoint(SectorEditorToolContext& context, SectorPoint point)
             context.statusText = "Created authoring line segment";
             return;
         case SectorEditorAuthoringLineToolClickStatus::ZeroLength:
-            context.statusText = context.state.pendingAuthoringLine.errorMessage;
+            context.statusText = context.pendingAuthoringLine.errorMessage;
             return;
         case SectorEditorAuthoringLineToolClickStatus::Rejected:
-            context.statusText = context.state.pendingAuthoringLine.errorMessage.empty()
+            context.statusText = context.pendingAuthoringLine.errorMessage.empty()
                     ? "Authoring line segment rejected"
-                    : context.state.pendingAuthoringLine.errorMessage;
+                    : context.pendingAuthoringLine.errorMessage;
             return;
     }
 }
@@ -87,7 +87,7 @@ bool UpdateLineTool(SectorEditorToolContext& context)
                 }
 
                 if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
-                    if (context.state.pendingAuthoringLine.active) {
+                    if (context.pendingAuthoringLine.active) {
                         CancelLineTool(context, "Line chain stopped");
                         engine::ConsumeEvent(event);
                         handled = true;
@@ -110,17 +110,17 @@ bool UpdateLineTool(SectorEditorToolContext& context)
 
 void DrawLineToolOverlay(SectorEditorToolContext& context)
 {
-    if (!context.state.pendingAuthoringLine.active
+    if (!context.pendingAuthoringLine.active
             || !context.currentSnappedSectorPoint
             || !context.mapToScreen) {
         return;
     }
 
     const SectorPoint start = SectorTopologyCoordPointToSectorPoint(
-            context.state.pendingAuthoringLine.startPoint);
+            context.pendingAuthoringLine.startPoint);
     const SectorPoint cursor = context.currentSnappedSectorPoint();
     const bool invalid = SamePoint(start, cursor)
-            || !context.state.pendingAuthoringLine.errorMessage.empty();
+            || !context.pendingAuthoringLine.errorMessage.empty();
     const Color lineColor = invalid ? Color{220, 88, 88, 190} : Color{122, 220, 244, 205};
     const Color startColor = Color{245, 226, 154, 255};
     const Color cursorColor = invalid ? Color{220, 88, 88, 255} : Color{120, 230, 154, 255};

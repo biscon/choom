@@ -3,14 +3,16 @@
 namespace game {
 
 void MarkSectorEditorTopologyDocumentEdited(
-        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
         std::string& statusText,
         const char* status)
 {
-    state.topologyDocumentDirty = true;
-    state.hasUnsavedChanges = true;
-    ++state.topologyRenderRevision;
-    state.topologyRenderCache.valid = false;
+    lifecycle.topologyDocumentDirty = true;
+    lifecycle.hasUnsavedChanges = true;
+    ++topologyRenderRevision;
+    topologyRenderCache.valid = false;
     if (status != nullptr && status[0] != '\0') {
         statusText = status;
     }

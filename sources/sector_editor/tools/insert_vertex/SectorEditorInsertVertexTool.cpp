@@ -35,9 +35,9 @@ const char* InsertVertexFailureStatus(SectorAuthoringInsertVertexStatus status)
 
 bool CancelInsertVertexTool(SectorEditorToolContext& context, const char* message)
 {
-    const bool wasActive = context.state.pendingAuthoringInsertVertex.active
-            || context.state.currentTool == SectorEditorTool::AuthoringInsertVertex;
-    context.state.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
+    const bool wasActive = context.pendingAuthoringInsertVertex.active
+            || context.currentTool == SectorEditorTool::AuthoringInsertVertex;
+    context.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
     if (message != nullptr && message[0] != '\0') {
         context.statusText = message;
     }
@@ -46,7 +46,7 @@ bool CancelInsertVertexTool(SectorEditorToolContext& context, const char* messag
 
 void UpdateInsertVertexToolHover(SectorEditorToolContext& context, Vector2 mapPoint)
 {
-    PendingAuthoringInsertVertex& pending = context.state.pendingAuthoringInsertVertex;
+    PendingAuthoringInsertVertex& pending = context.pendingAuthoringInsertVertex;
     pending.hasPreviewPoint = false;
     pending.errorMessage.clear();
 
@@ -60,7 +60,7 @@ void UpdateInsertVertexToolHover(SectorEditorToolContext& context, Vector2 mapPo
         lineId = context.findAuthoringLineNearScreenPoint(context.mapToScreen(mapPoint));
     }
 
-    if (FindSectorAuthoringLine(context.state.authoringGraph, lineId) == nullptr) {
+    if (FindSectorAuthoringLine(context.authoringGraph, lineId) == nullptr) {
         pending.lineId = -1;
         pending.errorMessage = "Insert Vertex: select or click an authoring line";
         return;
@@ -85,12 +85,12 @@ void UpdateInsertVertexToolHover(SectorEditorToolContext& context, Vector2 mapPo
 
 void CommitInsertVertexTool(SectorEditorToolContext& context, Vector2 screenPoint)
 {
-    const int lineId = context.state.pendingAuthoringInsertVertex.active
-            ? context.state.pendingAuthoringInsertVertex.lineId
+    const int lineId = context.pendingAuthoringInsertVertex.active
+            ? context.pendingAuthoringInsertVertex.lineId
             : (context.findAuthoringLineNearScreenPoint
                     ? context.findAuthoringLineNearScreenPoint(screenPoint)
                     : -1);
-    if (FindSectorAuthoringLine(context.state.authoringGraph, lineId) == nullptr) {
+    if (FindSectorAuthoringLine(context.authoringGraph, lineId) == nullptr) {
         context.statusText = "Insert Vertex: select or click an authoring line";
         return;
     }
@@ -104,7 +104,7 @@ void CommitInsertVertexTool(SectorEditorToolContext& context, Vector2 screenPoin
                     context.screenToMap(screenPoint),
                     point,
                     error)) {
-        context.state.pendingAuthoringInsertVertex.errorMessage = error;
+        context.pendingAuthoringInsertVertex.errorMessage = error;
         context.statusText = error;
         return;
     }
@@ -113,11 +113,11 @@ void CommitInsertVertexTool(SectorEditorToolContext& context, Vector2 screenPoin
     if (!context.commitAuthoringInsertVertex
             || !context.commitAuthoringInsertVertex(lineId, point, &result)) {
         context.statusText = InsertVertexFailureStatus(result.status);
-        context.state.pendingAuthoringInsertVertex.errorMessage = context.statusText;
+        context.pendingAuthoringInsertVertex.errorMessage = context.statusText;
         return;
     }
 
-    context.state.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
+    context.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
     context.statusText = "Inserted vertex on authoring line";
 }
 
@@ -137,8 +137,8 @@ bool UpdateInsertVertexTool(SectorEditorToolContext& context)
                 }
 
                 if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
-                    if (context.state.pendingAuthoringInsertVertex.active
-                            || context.state.currentTool == SectorEditorTool::AuthoringInsertVertex) {
+                    if (context.pendingAuthoringInsertVertex.active
+                            || context.currentTool == SectorEditorTool::AuthoringInsertVertex) {
                         CancelInsertVertexTool(context, "Insert Vertex cancelled");
                         engine::ConsumeEvent(event);
                         handled = true;
@@ -159,24 +159,24 @@ bool UpdateInsertVertexTool(SectorEditorToolContext& context)
 
 void DrawInsertVertexToolOverlay(SectorEditorToolContext& context)
 {
-    if (context.state.currentTool != SectorEditorTool::AuthoringInsertVertex
-            && !context.state.pendingAuthoringInsertVertex.active) {
+    if (context.currentTool != SectorEditorTool::AuthoringInsertVertex
+            && !context.pendingAuthoringInsertVertex.active) {
         return;
     }
     if (!context.mapToScreen) {
         return;
     }
 
-    const PendingAuthoringInsertVertex& pending = context.state.pendingAuthoringInsertVertex;
+    const PendingAuthoringInsertVertex& pending = context.pendingAuthoringInsertVertex;
     const SectorAuthoringLine* line =
-            FindSectorAuthoringLine(context.state.authoringGraph, pending.lineId);
+            FindSectorAuthoringLine(context.authoringGraph, pending.lineId);
     if (line == nullptr) {
         return;
     }
     const SectorAuthoringVertex* start =
-            FindSectorAuthoringVertex(context.state.authoringGraph, line->startVertexId);
+            FindSectorAuthoringVertex(context.authoringGraph, line->startVertexId);
     const SectorAuthoringVertex* end =
-            FindSectorAuthoringVertex(context.state.authoringGraph, line->endVertexId);
+            FindSectorAuthoringVertex(context.authoringGraph, line->endVertexId);
     if (start == nullptr || end == nullptr) {
         return;
     }

@@ -42,6 +42,7 @@ bool DrawTopologySectorInspector(
         float gap,
         SectorTopologySector& sector,
         SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
         SelectionState& selectionState,
         SectorEditorUiState& uiState,
         InspectorIdUiState& inspectorIdUiState,

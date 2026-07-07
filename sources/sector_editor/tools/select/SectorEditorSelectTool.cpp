@@ -84,12 +84,12 @@ void UpdateSelectHover(SectorEditorToolContext& context, Vector2)
         const SectorEditorPickTarget target = candidates.front().target;
         if (target.kind == SectorEditorPickKind::AuthoringVertex) {
             SetHoveredSectorEditorAuthoringVertex(
-                    context.state.authoringGraph,
+                    context.authoringGraph,
                     context.selectionState,
                     target.id);
         } else if (target.kind == SectorEditorPickKind::AuthoringLine) {
             SetHoveredSectorEditorAuthoringLine(
-                    context.state.authoringGraph,
+                    context.authoringGraph,
                     context.selectionState,
                     target.id);
         } else if (target.kind == SectorEditorPickKind::StaticLight) {

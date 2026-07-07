@@ -11,7 +11,7 @@ void AddSectorEditorBillboard(SectorEditorPlacedObjectActionContext &context,
                            ? context.findTopologySectorAt(mapPoint)
                            : -1;
   const SectorEditorAddBillboardResult result =
-      AddBillboardToSector(context.state.topologyMap, sectorId, mapPoint);
+      AddBillboardToSector(context.topologyMap, sectorId, mapPoint);
   if (!result.changed) {
     if (!result.status.empty()) {
       context.statusText = result.status;

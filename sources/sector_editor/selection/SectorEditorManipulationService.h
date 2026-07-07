@@ -5,8 +5,8 @@
 #include "sector_editor/selection/SectorEditorSelectionTarget.h"
 #include "sector_editor/selection/SectorEditorManipulationState.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
-#include "sector_editor/SectorEditorTypes.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
+#include "sector_demo/SectorAuthoringGraph.h"
 
 #include <raylib.h>
 
@@ -16,10 +16,15 @@
 
 namespace game {
 
+enum class SectorEditorTool;
+
 struct SectorEditorManipulationServiceContext {
-    SectorEditorState& state;
+    SectorEditorTool& currentTool;
+    SectorTopologyMap& topologyMap;
+    SectorAuthoringGraph& authoringGraph;
     ManipulationState& manipulationState;
     LightEditingState& lightState;
+    RuntimeObjectDragState& runtimeObjectDrag;
     std::string& statusText;
     void* userData = nullptr;
 

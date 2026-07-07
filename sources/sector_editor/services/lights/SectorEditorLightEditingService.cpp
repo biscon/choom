@@ -156,8 +156,8 @@ SectorEditorLightEditingService::SectorEditorLightEditingService(
 
 void SectorEditorLightEditingService::MarkEdited(const char* status)
 {
-    context_.topologyDocumentDirty = true;
-    context_.hasUnsavedChanges = true;
+    context_.lifecycle.topologyDocumentDirty = true;
+    context_.lifecycle.hasUnsavedChanges = true;
     ++context_.topologyRenderRevision;
     context_.topologyRenderCache.valid = false;
     if (status != nullptr && status[0] != '\0') {

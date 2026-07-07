@@ -113,12 +113,25 @@ bool RepairBillboardClipsForSpriteMetadata(
 
 bool OpenMapSkyTexturePicker(
         SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
         SectorEditorTextureCatalogService& textureCatalog);
 bool OpenRuntimeDoorTexturePicker(
         SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
         SectorEditorTextureCatalogService& textureCatalog,
         int runtimeObjectId);
-std::string CurrentTextureForPickerTarget(const SectorEditorState& state);
-SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(SectorEditorState& state);
+std::string CurrentTextureForPickerTarget(
+        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        SectorEditorConstDerivationDocumentAccess derivation);
+SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation);
 
 } // namespace game

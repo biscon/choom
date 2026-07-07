@@ -136,17 +136,19 @@ SectorEditorDocumentFormat DetectSectorEditorDocumentFormat(
     }
 }
 
-SectorAuthoringDocument BuildSectorAuthoringDocumentFromEditorState(
-        const SectorEditorState& state)
+SectorAuthoringDocument BuildSectorAuthoringDocument(
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringDerivationResult& authoringDerivation)
 {
     SectorAuthoringDocument document;
-    document.graph = state.authoringGraph;
-    document.mapData = state.topologyMap;
+    document.graph = authoringGraph;
+    document.mapData = topologyMap;
     document.mapData.vertices.clear();
     document.mapData.lineDefs.clear();
     document.mapData.sideDefs.clear();
     document.mapData.sectors.clear();
-    document.derivation = state.authoringDerivation;
+    document.derivation = authoringDerivation;
     return document;
 }
 
@@ -160,16 +162,38 @@ SectorTopologyMap CreateEmptySectorTopologyDocument()
 }
 
 void ResetEditorTopologyDocumentState(
-        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         SectorEditorPreviewControllerState& previewControllerState)
 {
-    state.topologyMap = CreateEmptySectorTopologyDocument();
-    InitializeSectorEditorAuthoringStateFromTopology(state, state.topologyMap);
+    topologyMap = CreateEmptySectorTopologyDocument();
+    InitializeSectorEditorAuthoringStateFromTopology(
+            authoringGraph,
+            derivation,
+            topologyMap);
     previewControllerState.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
-            state.topologyMap.previewSettings);
-    state.topologyDocumentInitialized = true;
-    state.topologyDocumentDirty = false;
-    state.topologyDocumentStatus = "Topology document: empty";
+            topologyMap.previewSettings);
+    lifecycle.topologyDocumentInitialized = true;
+    lifecycle.topologyDocumentDirty = false;
+    lifecycle.currentLevelName.clear();
+    lifecycle.currentLevelPath.clear();
+    lifecycle.hasCurrentLevelPath = false;
+    lifecycle.hasUnsavedChanges = false;
+    lifecycle.topologyDocumentStatus = "Topology document: empty";
+}
+
+void ResetEditorTopologyDocumentState(
+        SectorEditorDocumentState& documentState,
+        SectorEditorPreviewControllerState& previewControllerState)
+{
+    ResetEditorTopologyDocumentState(
+            MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+            documentState.map.topologyMap,
+            documentState.authoring.authoringGraph,
+            MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            previewControllerState);
 }
 
 std::vector<LevelListEntry> ScanLevels(std::string& error)
@@ -370,16 +394,18 @@ bool EnsureSaveLevelDirectory(const LevelPaths& paths, std::string& errorMessage
 
 bool SaveSectorEditorAuthoringDocument(
         const LevelPaths& paths,
-        const SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringDerivationResult& authoringDerivation,
         std::string& errorMessage)
 {
-    if (!HasAuthoringGraphData(state)) {
+    if (!HasAuthoringGraphData(authoringGraph)) {
         errorMessage = "Cannot save authoring graph document: no authoring graph data";
         return false;
     }
 
     const SectorAuthoringDocument document =
-            BuildSectorAuthoringDocumentFromEditorState(state);
+            BuildSectorAuthoringDocument(authoringGraph, topologyMap, authoringDerivation);
 
     std::string saveError;
     if (!SaveSectorAuthoringDocument(paths.jsonFilePath.string().c_str(), document, &saveError)) {
@@ -390,6 +416,21 @@ bool SaveSectorEditorAuthoringDocument(
     }
     errorMessage.clear();
     return true;
+}
+
+bool SaveSectorEditorAuthoringDocument(
+        const LevelPaths& paths,
+        const SectorEditorAuthoringDocumentState& authoring,
+        const SectorEditorDocumentMapState& map,
+        const SectorEditorDerivationState& derivation,
+        std::string& errorMessage)
+{
+    return SaveSectorEditorAuthoringDocument(
+            paths,
+            authoring.authoringGraph,
+            map.topologyMap,
+            derivation.authoringDerivation,
+            errorMessage);
 }
 
 } // namespace game

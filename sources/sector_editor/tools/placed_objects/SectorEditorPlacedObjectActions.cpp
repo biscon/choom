@@ -10,7 +10,7 @@ SectorEditorPlacedObjectDeleteConfirmation RequestDeleteSelectedSectorEditorPlac
         SectorEditorPlacedObjectActionContext& context)
 {
     const SectorPlacedRuntimeObject* object =
-            FindSectorPlacedRuntimeObject(context.state.topologyMap, context.selectionState.selectedRuntimeObjectId);
+            FindSectorPlacedRuntimeObject(context.topologyMap, context.selectionState.selectedRuntimeObjectId);
     if (object == nullptr) {
         return SectorEditorPlacedObjectDeleteConfirmation{};
     }
@@ -26,14 +26,14 @@ bool DeleteSectorEditorPlacedObjectById(
         SectorEditorPlacedObjectActionContext& context,
         int objectId)
 {
-    if (FindSectorPlacedRuntimeObject(context.state.topologyMap, objectId) == nullptr) {
+    if (FindSectorPlacedRuntimeObject(context.topologyMap, objectId) == nullptr) {
         if (context.clearStaleTopologySelection) {
             context.clearStaleTopologySelection();
         }
         return false;
     }
 
-    if (!RemoveSectorPlacedRuntimeObject(context.state.topologyMap, objectId)) {
+    if (!RemoveSectorPlacedRuntimeObject(context.topologyMap, objectId)) {
         return false;
     }
     if (context.selectionState.selectedRuntimeObjectId == objectId && context.clearSelection) {
@@ -55,7 +55,7 @@ bool MutateSelectedSectorEditorPlacedObject(
         const std::function<bool(SectorPlacedRuntimeObject&)>& mutate)
 {
     SectorPlacedRuntimeObject* object =
-            FindSectorPlacedRuntimeObject(context.state.topologyMap, context.selectionState.selectedRuntimeObjectId);
+            FindSectorPlacedRuntimeObject(context.topologyMap, context.selectionState.selectedRuntimeObjectId);
     if (object == nullptr || !mutate || !mutate(*object)) {
         return false;
     }
@@ -78,7 +78,7 @@ void RefreshSectorEditorPlacedObjectsAfterAuthoringEdit(
             context.engineContext->world,
             context.engineContext->assets,
             context.runtimeObjects,
-            context.state.topologyMap);
+            context.topologyMap);
 }
 
 } // namespace game

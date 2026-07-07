@@ -6,6 +6,7 @@
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorLightmapAsyncTypes.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
+#include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/inspector/SectorEditorInspectorUiState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
@@ -283,6 +284,8 @@ private:
     bool AddSelectedMapTexture(engine::AssetManager& assets);
     SectorEditorManipulationServiceContext BuildManipulationServiceContext();
     SectorEditorSelectionServiceContext BuildSelectionServiceContext();
+    SectorAuthoringGraph& AuthoringGraph();
+    const SectorAuthoringGraph& AuthoringGraph() const;
     SectorTopologySector* SelectedTopologySector();
     const SectorTopologySector* SelectedTopologySector() const;
     SectorTopologyVertex* SelectedTopologyVertex();
@@ -329,6 +332,10 @@ private:
     SectorEditorMaterialEditingService BuildMaterialEditingService();
     SectorEditorLightEditingService BuildLightEditingService();
     SectorEditorTextureCatalogService MakeTextureCatalogService();
+    SectorEditorDocumentLifecycleAccess Lifecycle();
+    SectorEditorConstDocumentLifecycleAccess Lifecycle() const;
+    SectorTopologyMap& TopologyMap();
+    const SectorTopologyMap& TopologyMap() const;
     bool HasAuthoringGraphData() const;
     bool EnsureSelectedSurface3DAuthoringMappingCurrent();
     bool FinishTopologyActionResult(const SectorEditorTopologyActionResult& result);
@@ -360,6 +367,7 @@ private:
     void PollLightmapBakeResult(engine::AssetManager& assets);
     bool InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
     SectorEditorState state;
+    SectorEditorDocumentState documentState;
     SectorEditorPreviewState previewState;
     SelectionState selectionState;
     ManipulationState manipulationState;

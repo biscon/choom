@@ -1,6 +1,7 @@
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_editor/SectorEditorTypes.h"
 #include "sector_demo/SectorAuthoringGraph.h"
 
 namespace game {
@@ -26,7 +27,8 @@ std::vector<SectorEditorPickCandidate> SelectPickCandidatesForManipulation(
 SectorEditorMoveContext BuildMoveContext(SectorEditorManipulationServiceContext& context)
 {
     return SectorEditorMoveContext{
-            context.state,
+            context.topologyMap,
+            context.runtimeObjectDrag,
             context.statusText,
             context.screenToMap,
             context.snapMapPoint,
@@ -47,7 +49,7 @@ bool IsAnySectorEditorManipulationActive(const SectorEditorManipulationServiceCo
 {
     return context.manipulationState.authoringVertexDrag.active
             || context.lightState.lightDrag.active
-            || context.state.runtimeObjectDrag.active;
+            || context.runtimeObjectDrag.active;
 }
 
 void UpdateActiveSectorEditorManipulation(
@@ -60,7 +62,7 @@ void UpdateActiveSectorEditorManipulation(
     if (context.lightState.lightDrag.active && context.updateLightDrag != nullptr) {
         context.updateLightDrag(context.userData, input);
     }
-    if (context.state.runtimeObjectDrag.active) {
+    if (context.runtimeObjectDrag.active) {
         if (context.placedObjectMoveProvider != nullptr
                 && context.placedObjectMoveProvider->updateMove != nullptr) {
             SectorEditorMoveContext moveContext = BuildMoveContext(context);
@@ -79,7 +81,7 @@ void FinishActiveSectorEditorManipulation(SectorEditorManipulationServiceContext
     if (context.lightState.lightDrag.active && context.finishLightDrag != nullptr) {
         context.finishLightDrag(context.userData);
     }
-    if (context.state.runtimeObjectDrag.active) {
+    if (context.runtimeObjectDrag.active) {
         if (context.placedObjectMoveProvider != nullptr
                 && context.placedObjectMoveProvider->finishMove != nullptr) {
             SectorEditorMoveContext moveContext = BuildMoveContext(context);
@@ -104,7 +106,7 @@ bool CancelFirstActiveSectorEditorManipulation(
         context.cancelLightDrag(context.userData, lightMessage);
         return true;
     }
-    if (context.state.runtimeObjectDrag.active) {
+    if (context.runtimeObjectDrag.active) {
         if (context.placedObjectMoveProvider != nullptr
                 && context.placedObjectMoveProvider->cancelMove != nullptr) {
             SectorEditorMoveContext moveContext = BuildMoveContext(context);
@@ -129,7 +131,7 @@ void CancelActiveSectorEditorManipulation(
     if (context.lightState.lightDrag.active && context.cancelLightDrag != nullptr) {
         context.cancelLightDrag(context.userData, lightMessage);
     }
-    if (context.state.runtimeObjectDrag.active) {
+    if (context.runtimeObjectDrag.active) {
         if (context.placedObjectMoveProvider != nullptr
                 && context.placedObjectMoveProvider->cancelMove != nullptr) {
             SectorEditorMoveContext moveContext = BuildMoveContext(context);
@@ -147,7 +149,7 @@ void UpdateSectorEditorSelectDragArm(
     if (!context.manipulationState.selectDragArm.active) {
         return;
     }
-    if (context.state.currentTool != SectorEditorTool::Select
+    if (context.currentTool != SectorEditorTool::Select
             || !input.IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
         context.manipulationState.selectDragArm = SelectDragArmState{};
         return;
@@ -215,7 +217,7 @@ void StartSectorEditorSelectedManipulation(
         case SectorEditorPickKind::AuthoringVertex: {
             (void) screenPoint;
             const SectorAuthoringVertex* vertex = FindSectorAuthoringVertex(
-                    context.state.authoringGraph,
+                    context.authoringGraph,
                     target.id);
             if (vertex != nullptr && context.startAuthoringVertexDrag != nullptr) {
                 context.startAuthoringVertexDrag(

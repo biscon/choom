@@ -2,6 +2,7 @@
 
 #include "sector_editor/SectorEditorModalTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/preview/SectorEditorPreviewState.h"
 
 #include <filesystem>
@@ -42,7 +43,13 @@ bool IsValidLevelName(const std::string& name, std::string& error);
 bool BuildLevelPaths(const std::string& name, LevelPaths& paths, std::string& error);
 SectorTopologyMap CreateEmptySectorTopologyDocument();
 void ResetEditorTopologyDocumentState(
-        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SectorEditorPreviewControllerState& previewControllerState);
+void ResetEditorTopologyDocumentState(
+        SectorEditorDocumentState& documentState,
         SectorEditorPreviewControllerState& previewControllerState);
 std::vector<LevelListEntry> ScanLevels(std::string& error);
 void OpenConfirmationModal(
@@ -70,7 +77,15 @@ bool PrepareSaveLevelPlan(
 bool EnsureSaveLevelDirectory(const LevelPaths& paths, std::string& errorMessage);
 bool SaveSectorEditorAuthoringDocument(
         const LevelPaths& paths,
-        const SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        std::string& errorMessage);
+bool SaveSectorEditorAuthoringDocument(
+        const LevelPaths& paths,
+        const SectorEditorAuthoringDocumentState& authoring,
+        const SectorEditorDocumentMapState& map,
+        const SectorEditorDerivationState& derivation,
         std::string& errorMessage);
 
 } // namespace game

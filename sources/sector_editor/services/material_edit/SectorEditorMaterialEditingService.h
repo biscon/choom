@@ -3,6 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
 #include "sector_editor/SectorEditorTextureModals.h"
+#include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/preview/SectorEditorPreviewState.h"
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_editor/selection/SectorEditorSelectionState.h"
@@ -26,12 +27,19 @@ using SectorEditorAuthoringMaterialActionFn =
         std::function<SectorEditorMaterialActionResult(SectorEditorAuthoringMaterialTarget&)>;
 
 struct SectorEditorMaterialEditingServiceContext {
-    SectorEditorState& state;
+    SectorEditorDocumentLifecycleAccess lifecycle;
+    SectorTopologyMap& topologyMap;
+    SectorAuthoringGraph& authoringGraph;
+    SectorEditorDerivationDocumentAccess derivation;
+    std::string& topologyRenderWarning;
+    uint64_t& topologyRenderRevision;
+    SectorEditorTopologyRenderCache& topologyRenderCache;
     SectorEditorPreviewSelectionState& previewSelectionState;
     SelectionState& selectionState;
     MaterialEditingState& materialState;
     MaterialEditingUiState& materialUiState;
     TexturePickerState& texturePicker;
+    DecalTintModalState& decalTintModal;
     std::string& statusText;
     std::function<bool(engine::AssetManager*)> requestPreviewMaterialMeshRebuild;
 };

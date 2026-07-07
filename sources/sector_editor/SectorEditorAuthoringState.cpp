@@ -17,11 +17,6 @@
 
 namespace game {
 
-bool HasAuthoringGraphData(const SectorEditorState& state)
-{
-    return HasAuthoringGraphData(state.authoringGraph);
-}
-
 bool HasAuthoringGraphData(const SectorAuthoringGraph& graph)
 {
     return !graph.vertices.empty()
@@ -52,19 +47,33 @@ void CopyEditorMapLevelFields(SectorTopologyMap& target, const SectorTopologyMap
     target.bakedLightmap = source.bakedLightmap;
 }
 
+void InvalidateEditorTopologyRenderCache(
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache)
+{
+    topologyRenderCache.valid = false;
+    ++topologyRenderRevision;
+}
+
 void InvalidateEditorTopologyRenderCache(SectorEditorState& state)
 {
-    state.topologyRenderCache.valid = false;
-    ++state.topologyRenderRevision;
+    InvalidateEditorTopologyRenderCache(state.topologyRenderRevision, state.topologyRenderCache);
+}
+
+void InvalidateEditorTopologyRenderCacheIfNeeded(
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache)
+{
+    if (topologyRenderCache.valid) {
+        InvalidateEditorTopologyRenderCache(topologyRenderRevision, topologyRenderCache);
+        return;
+    }
+    topologyRenderCache.valid = false;
 }
 
 void InvalidateEditorTopologyRenderCacheIfNeeded(SectorEditorState& state)
 {
-    if (state.topologyRenderCache.valid) {
-        InvalidateEditorTopologyRenderCache(state);
-        return;
-    }
-    state.topologyRenderCache.valid = false;
+    InvalidateEditorTopologyRenderCacheIfNeeded(state.topologyRenderRevision, state.topologyRenderCache);
 }
 
 SectorAuthoringSelectionTarget EmptyAuthoringSelectionTarget()
@@ -73,7 +82,9 @@ SectorAuthoringSelectionTarget EmptyAuthoringSelectionTarget()
 }
 
 bool CanUseCurrentAuthoringDerivedTopology(
-        const SectorEditorState& state,
+        SectorEditorAuthoringDerivationState derivationState,
+        bool derivedTopologyStale,
+        const SectorAuthoringDerivationResult& authoringDerivation,
         const char* action,
         std::string* outMessage)
 {
@@ -83,27 +94,27 @@ bool CanUseCurrentAuthoringDerivedTopology(
         }
     };
 
-    if (state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
-            && !state.authoringDerivedTopologyStale
-            && state.authoringDerivation.success) {
+    if (derivationState == SectorEditorAuthoringDerivationState::ValidCurrent
+            && !derivedTopologyStale
+            && authoringDerivation.success) {
         if (outMessage != nullptr) {
             outMessage->clear();
         }
         return true;
     }
 
-    if (state.authoringDerivationState == SectorEditorAuthoringDerivationState::InvalidLastValid) {
+    if (derivationState == SectorEditorAuthoringDerivationState::InvalidLastValid) {
         setMessage("latest derivation failed; fix authoring diagnostics first");
         return false;
     }
 
-    if (state.authoringDerivationState == SectorEditorAuthoringDerivationState::InvalidNoDerived) {
+    if (derivationState == SectorEditorAuthoringDerivationState::InvalidNoDerived) {
         setMessage("no valid derived topology is available");
         return false;
     }
 
-    if (state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidStale
-            || state.authoringDerivedTopologyStale) {
+    if (derivationState == SectorEditorAuthoringDerivationState::ValidStale
+            || derivedTopologyStale) {
         setMessage("authoring graph changed; re-derive before using runtime topology");
         return false;
     }
@@ -112,11 +123,11 @@ bool CanUseCurrentAuthoringDerivedTopology(
     return false;
 }
 
-bool CurrentAuthoringDerivationAvailable(const SectorEditorState& state)
+bool CurrentAuthoringDerivationAvailable(
+        bool authoringDerivationCurrent,
+        const SectorAuthoringDerivationResult& authoringDerivation)
 {
-    return state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
-            && !state.authoringDerivedTopologyStale
-            && state.authoringDerivation.success;
+    return authoringDerivationCurrent && authoringDerivation.success;
 }
 
 SectorEditorInspectorTarget UnavailableInspectorTarget(const char* status)
@@ -128,24 +139,27 @@ SectorEditorInspectorTarget UnavailableInspectorTarget(const char* status)
 }
 
 SectorEditorInspectorTarget ResolveMappedTopologySectorInspectorTarget(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
         int topologySectorId)
 {
-    if (!CurrentAuthoringDerivationAvailable(state)) {
+    if (!CurrentAuthoringDerivationAvailable(authoringDerivationCurrent, authoringDerivation)) {
         return UnavailableInspectorTarget("Authoring inspector unavailable: derived topology is not current");
     }
-    if (FindSectorTopologySector(state.topologyMap, topologySectorId) == nullptr) {
+    if (FindSectorTopologySector(topologyMap, topologySectorId) == nullptr) {
         return UnavailableInspectorTarget("Authoring inspector unavailable: selected sector is not current");
     }
 
     bool found = false;
     int faceAnchorId = -1;
-    for (const SectorAuthoringDerivedSectorMapping& mapping : state.authoringDerivation.mapping.sectors) {
+    for (const SectorAuthoringDerivedSectorMapping& mapping : authoringDerivation.mapping.sectors) {
         if (mapping.topologySectorId != topologySectorId) {
             continue;
         }
         if (!IsValidSectorAuthoringId(mapping.faceAnchorId)
-                || FindSectorAuthoringFaceAnchor(state.authoringGraph, mapping.faceAnchorId) == nullptr) {
+                || FindSectorAuthoringFaceAnchor(authoringGraph, mapping.faceAnchorId) == nullptr) {
             continue;
         }
         if (found && faceAnchorId != mapping.faceAnchorId) {
@@ -165,24 +179,27 @@ SectorEditorInspectorTarget ResolveMappedTopologySectorInspectorTarget(
 }
 
 SectorEditorInspectorTarget ResolveMappedTopologySideInspectorTarget(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
         int topologySideDefId)
 {
-    if (!CurrentAuthoringDerivationAvailable(state)) {
+    if (!CurrentAuthoringDerivationAvailable(authoringDerivationCurrent, authoringDerivation)) {
         return UnavailableInspectorTarget("Authoring inspector unavailable: derived topology is not current");
     }
-    if (FindSectorTopologySideDef(state.topologyMap, topologySideDefId) == nullptr) {
+    if (FindSectorTopologySideDef(topologyMap, topologySideDefId) == nullptr) {
         return UnavailableInspectorTarget("Authoring inspector unavailable: selected sidedef is not current");
     }
 
     bool found = false;
     SectorAuthoringSideId sideId;
-    for (const SectorAuthoringDerivedSideMapping& mapping : state.authoringDerivation.mapping.sides) {
+    for (const SectorAuthoringDerivedSideMapping& mapping : authoringDerivation.mapping.sides) {
         if (mapping.topologySideDefId != topologySideDefId) {
             continue;
         }
         if (!IsValidSectorAuthoringId(mapping.authoringLineId)
-                || FindSectorAuthoringLine(state.authoringGraph, mapping.authoringLineId) == nullptr) {
+                || FindSectorAuthoringLine(authoringGraph, mapping.authoringLineId) == nullptr) {
             continue;
         }
         const SectorAuthoringSideId candidate{mapping.authoringLineId, mapping.authoringSide};
@@ -204,24 +221,27 @@ SectorEditorInspectorTarget ResolveMappedTopologySideInspectorTarget(
 }
 
 SectorEditorInspectorTarget ResolveMappedTopologyLineInspectorTarget(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
         int topologyLineDefId)
 {
-    if (!CurrentAuthoringDerivationAvailable(state)) {
+    if (!CurrentAuthoringDerivationAvailable(authoringDerivationCurrent, authoringDerivation)) {
         return UnavailableInspectorTarget("Authoring inspector unavailable: derived topology is not current");
     }
-    if (FindSectorTopologyLineDef(state.topologyMap, topologyLineDefId) == nullptr) {
+    if (FindSectorTopologyLineDef(topologyMap, topologyLineDefId) == nullptr) {
         return UnavailableInspectorTarget("Authoring inspector unavailable: selected linedef is not current");
     }
 
     bool found = false;
     int authoringLineId = -1;
-    for (const SectorAuthoringDerivedLineMapping& mapping : state.authoringDerivation.mapping.lines) {
+    for (const SectorAuthoringDerivedLineMapping& mapping : authoringDerivation.mapping.lines) {
         if (mapping.topologyLineDefId != topologyLineDefId) {
             continue;
         }
         if (!IsValidSectorAuthoringId(mapping.authoringLineId)
-                || FindSectorAuthoringLine(state.authoringGraph, mapping.authoringLineId) == nullptr) {
+                || FindSectorAuthoringLine(authoringGraph, mapping.authoringLineId) == nullptr) {
             continue;
         }
         if (found && authoringLineId != mapping.authoringLineId) {
@@ -347,48 +367,6 @@ bool TryComputeTopologySectorArea(
 
     if (outArea != nullptr) {
         *outArea = area;
-    }
-    return true;
-}
-
-bool FindUniqueMappedFaceAnchorForTopologySector(
-        const SectorEditorState& state,
-        int topologySectorId,
-        int* outFaceAnchorId,
-        std::string* outStatus)
-{
-    if (outFaceAnchorId != nullptr) {
-        *outFaceAnchorId = -1;
-    }
-
-    int faceAnchorId = -1;
-    int anchorMatchCount = 0;
-    for (const SectorAuthoringDerivedSectorMapping& mapping
-            : state.authoringDerivation.mapping.sectors) {
-        if (mapping.topologySectorId != topologySectorId
-                || !IsValidSectorAuthoringId(mapping.faceAnchorId)
-                || FindSectorAuthoringFaceAnchor(state.authoringGraph, mapping.faceAnchorId) == nullptr) {
-            continue;
-        }
-        faceAnchorId = mapping.faceAnchorId;
-        ++anchorMatchCount;
-    }
-
-    if (anchorMatchCount == 0) {
-        if (outStatus != nullptr) {
-            *outStatus = "Authoring face selection unavailable: derived face has no face anchor mapping";
-        }
-        return false;
-    }
-    if (anchorMatchCount > 1) {
-        if (outStatus != nullptr) {
-            *outStatus = "Authoring face selection unavailable: derived face has ambiguous face anchor mapping";
-        }
-        return false;
-    }
-
-    if (outFaceAnchorId != nullptr) {
-        *outFaceAnchorId = faceAnchorId;
     }
     return true;
 }
@@ -615,7 +593,7 @@ bool BuildExistingFaceAnchorClaims(
 }
 
 bool ReconcileMissingDerivedFaceAnchors(
-        SectorEditorState& state,
+        SectorAuthoringGraph& authoringGraph,
         const SectorAuthoringDerivationResult& result,
         int* outAddedCount,
         bool* outFailed)
@@ -632,7 +610,7 @@ bool ReconcileMissingDerivedFaceAnchors(
 
     const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(result.topology);
     std::map<int, int> claimedAnchorIdBySectorId;
-    if (!BuildExistingFaceAnchorClaims(state.authoringGraph, result, indexes, claimedAnchorIdBySectorId)) {
+    if (!BuildExistingFaceAnchorClaims(authoringGraph, result, indexes, claimedAnchorIdBySectorId)) {
         if (outFailed != nullptr) {
             *outFailed = true;
         }
@@ -661,15 +639,15 @@ bool ReconcileMissingDerivedFaceAnchors(
         }
 
         SectorAuthoringFaceAnchor anchor;
-        anchor.id = AllocateSectorAuthoringFaceAnchorId(state.authoringGraph);
+        anchor.id = AllocateSectorAuthoringFaceAnchorId(authoringGraph);
         if (!IsValidSectorAuthoringId(anchor.id)) {
             continue;
         }
-        anchor.name = AllocateGeneratedFaceAnchorName(state.authoringGraph);
+        anchor.name = AllocateGeneratedFaceAnchorName(authoringGraph);
         anchor.x = anchorPoint.x;
         anchor.y = anchorPoint.y;
         CopyTopologySectorDefaultsToFaceAnchor(sector, anchor);
-        state.authoringGraph.faceAnchors.push_back(std::move(anchor));
+        authoringGraph.faceAnchors.push_back(std::move(anchor));
         ++addedCount;
     }
 
@@ -834,12 +812,14 @@ bool SetHoveredSectorEditorAuthoringVertex(
     return true;
 }
 
-void PruneSectorEditorAuthoringSelectionToGraph(SectorEditorState& state, SelectionState& selectionState)
+void PruneSectorEditorAuthoringSelectionToGraph(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState)
 {
-    if (!IsSectorAuthoringSelectionTargetValid(state.authoringGraph, selectionState.selectedAuthoring)) {
+    if (!IsSectorAuthoringSelectionTargetValid(graph, selectionState.selectedAuthoring)) {
         ClearSectorEditorAuthoringSelection(selectionState);
     }
-    if (!IsSectorAuthoringSelectionTargetValid(state.authoringGraph, selectionState.hoveredAuthoring)) {
+    if (!IsSectorAuthoringSelectionTargetValid(graph, selectionState.hoveredAuthoring)) {
         ClearSectorEditorAuthoringHover(selectionState);
     }
 }
@@ -1338,7 +1318,9 @@ bool FindSectorEditorAuthoringSelectionNearMapPoint(
 }
 
 bool FindSectorEditorAuthoringFaceAnchorAtMapPoint(
-        const SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
         Vector2 mapPoint,
         int* outFaceAnchorId,
         std::string* outStatus)
@@ -1350,10 +1332,9 @@ bool FindSectorEditorAuthoringFaceAnchorAtMapPoint(
         outStatus->clear();
     }
 
-    std::string message;
-    if (!CanUseCurrentAuthoringDerivedTopology(state, "Authoring face selection", &message)) {
+    if (!CurrentAuthoringDerivationAvailable(authoringDerivationCurrent, authoringDerivation)) {
         if (outStatus != nullptr) {
-            *outStatus = message;
+            *outStatus = "Authoring face selection requires current valid derived topology: no valid derived topology is available";
         }
         return false;
     }
@@ -1362,8 +1343,8 @@ bool FindSectorEditorAuthoringFaceAnchorAtMapPoint(
     double bestArea = 0.0;
     bool foundCandidate = false;
     bool foundContainingFace = false;
-    for (const SectorAuthoringExtractedFace& face : state.authoringDerivation.faces.faces) {
-        if (!SectorAuthoringFaceContainsMapPoint(state.authoringDerivation.planar, face, mapPoint)) {
+    for (const SectorAuthoringExtractedFace& face : authoringDerivation.faces.faces) {
+        if (!SectorAuthoringFaceContainsMapPoint(authoringDerivation.planar, face, mapPoint)) {
             continue;
         }
         foundContainingFace = true;
@@ -1371,10 +1352,10 @@ bool FindSectorEditorAuthoringFaceAnchorAtMapPoint(
         int faceAnchorId = -1;
         bool foundMapping = false;
         for (const SectorAuthoringResolvedFaceMapping& mapping
-                : state.authoringDerivation.mapping.resolvedFaces) {
+                : authoringDerivation.mapping.resolvedFaces) {
             if (mapping.extractedFaceId != face.id
                     || !IsValidSectorAuthoringId(mapping.faceAnchorId)
-                    || FindSectorAuthoringFaceAnchor(state.authoringGraph, mapping.faceAnchorId) == nullptr) {
+                    || FindSectorAuthoringFaceAnchor(authoringGraph, mapping.faceAnchorId) == nullptr) {
                 continue;
             }
             if (foundMapping) {
@@ -1422,7 +1403,9 @@ bool FindSectorEditorAuthoringFaceAnchorAtMapPoint(
 }
 
 bool FindSectorEditorAuthoringSelectionAtMapPoint(
-        const SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
         Vector2 mapPoint,
         float vertexMaxDistance,
         float lineMaxDistance,
@@ -1435,7 +1418,7 @@ bool FindSectorEditorAuthoringSelectionAtMapPoint(
     }
 
     if (FindSectorEditorAuthoringSelectionNearMapPoint(
-                state.authoringGraph,
+                authoringGraph,
                 mapPoint,
                 vertexMaxDistance,
                 lineMaxDistance,
@@ -1446,7 +1429,9 @@ bool FindSectorEditorAuthoringSelectionAtMapPoint(
 
     int faceAnchorId = -1;
     if (FindSectorEditorAuthoringFaceAnchorAtMapPoint(
-                state,
+                authoringGraph,
+                authoringDerivation,
+                authoringDerivationCurrent,
                 mapPoint,
                 &faceAnchorId,
                 outStatus)) {
@@ -1470,13 +1455,17 @@ bool FindSectorEditorAuthoringSelectionAtMapPoint(
 
 bool AddSectorEditorAuthoringLineSegment(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         SelectionState& selectionState,
         SectorTopologyCoordPoint start,
         SectorTopologyCoordPoint end,
         int* outLineId,
         SectorEditorAuthoringLineSegmentResult* outResult)
 {
-    SectorAuthoringGraph candidate = state.authoringGraph;
+    SectorAuthoringGraph candidate = authoringGraph;
     SectorEditorAuthoringSegmentInsertResult insertResult;
     if (!InsertSectorEditorAuthoringLineSegmentIntoGraphWithSplits(
                 candidate,
@@ -1486,8 +1475,8 @@ bool AddSectorEditorAuthoringLineSegment(
         return false;
     }
 
-    state.authoringGraph = std::move(candidate);
-    PruneSectorEditorAuthoringSelectionToGraph(state, selectionState);
+    authoringGraph = std::move(candidate);
+    PruneSectorEditorAuthoringSelectionToGraph(authoringGraph, selectionState);
 
     const SectorEditorAuthoringLineSegmentResult segment = insertResult.segments.back();
     if (outLineId != nullptr) {
@@ -1498,16 +1487,25 @@ bool AddSectorEditorAuthoringLineSegment(
     }
     MarkSectorEditorAuthoringGraphEdited(
             state,
+            lifecycle,
+            derivation,
             TextFormat("Added authoring line %d", segment.lineId));
     RefreshSectorEditorAuthoringDerivation(
             state,
+            lifecycle,
+            topologyMap,
+            authoringGraph,
+            derivation,
             TextFormat("Added authoring line %d; derived topology current", segment.lineId),
             TextFormat("Added authoring line %d; derivation failed", segment.lineId));
     return true;
 }
-
 SectorEditorAuthoringLineToolClickResult ClickSectorEditorAuthoringLineTool(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         SelectionState& selectionState,
         SectorTopologyCoordPoint point)
 {
@@ -1519,7 +1517,7 @@ SectorEditorAuthoringLineToolClickResult ClickSectorEditorAuthoringLineTool(
         state.pendingAuthoringLine.errorMessage.clear();
         state.pendingAuthoringLine.startVertexId = -1;
         FindSectorAuthoringVertexAtPoint(
-                state.authoringGraph,
+                authoringGraph,
                 point,
                 &state.pendingAuthoringLine.startVertexId);
         result.status = SectorEditorAuthoringLineToolClickStatus::StartedChain;
@@ -1537,6 +1535,10 @@ SectorEditorAuthoringLineToolClickResult ClickSectorEditorAuthoringLineTool(
     SectorEditorAuthoringLineSegmentResult segment;
     if (!AddSectorEditorAuthoringLineSegment(
                 state,
+                lifecycle,
+                topologyMap,
+                authoringGraph,
+                derivation,
                 selectionState,
                 state.pendingAuthoringLine.startPoint,
                 point,
@@ -1555,7 +1557,6 @@ SectorEditorAuthoringLineToolClickResult ClickSectorEditorAuthoringLineTool(
     result.segment = segment;
     return result;
 }
-
 void CancelSectorEditorAuthoringLineToolChain(SectorEditorState& state)
 {
     state.pendingAuthoringLine = PendingAuthoringLineDraw{};
@@ -1632,13 +1633,17 @@ bool CreateSectorAuthoringRectangle(
 
 bool AddSectorEditorAuthoringRectangle(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         SectorTopologyCoordPoint firstCorner,
         SectorTopologyCoordPoint oppositeCorner,
         SectorEditorAuthoringRectangleResult* outResult)
 {
     SectorEditorAuthoringRectangleResult result;
     if (!CreateSectorAuthoringRectangle(
-                state.authoringGraph,
+                authoringGraph,
                 firstCorner,
                 oppositeCorner,
                 &result)) {
@@ -1648,9 +1653,13 @@ bool AddSectorEditorAuthoringRectangle(
         return false;
     }
 
-    MarkSectorEditorAuthoringGraphEdited(state, "Created authoring rectangle");
+    MarkSectorEditorAuthoringGraphEdited(state, lifecycle, derivation, "Created authoring rectangle");
     RefreshSectorEditorAuthoringDerivation(
             state,
+            lifecycle,
+            topologyMap,
+            authoringGraph,
+            derivation,
             "Created authoring rectangle; derived topology current",
             "Created authoring rectangle; derivation failed");
     if (outResult != nullptr) {
@@ -1658,27 +1667,34 @@ bool AddSectorEditorAuthoringRectangle(
     }
     return true;
 }
-
 bool InsertSectorEditorAuthoringVertexOnLine(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         SelectionState& selectionState,
         int lineId,
         SectorTopologyCoordPoint point,
         SectorAuthoringInsertVertexResult* outResult)
 {
     SectorAuthoringInsertVertexResult result;
-    if (!InsertSectorAuthoringVertexOnLine(state.authoringGraph, lineId, point, &result)) {
+    if (!InsertSectorAuthoringVertexOnLine(authoringGraph, lineId, point, &result)) {
         if (outResult != nullptr) {
             *outResult = result;
         }
         return false;
     }
 
-    PruneSectorEditorAuthoringSelectionToGraph(state, selectionState);
-    SelectSectorEditorAuthoringVertex(state.authoringGraph, selectionState, result.vertexId);
-    MarkSectorEditorAuthoringGraphEdited(state, "Inserted vertex on authoring line");
+    PruneSectorEditorAuthoringSelectionToGraph(authoringGraph, selectionState);
+    SelectSectorEditorAuthoringVertex(authoringGraph, selectionState, result.vertexId);
+    MarkSectorEditorAuthoringGraphEdited(state, lifecycle, derivation, "Inserted vertex on authoring line");
     RefreshSectorEditorAuthoringDerivation(
             state,
+            lifecycle,
+            topologyMap,
+            authoringGraph,
+            derivation,
             "Inserted vertex on authoring line; derived topology current",
             "Inserted vertex on authoring line; derivation failed");
     if (outResult != nullptr) {
@@ -1686,14 +1702,17 @@ bool InsertSectorEditorAuthoringVertexOnLine(
     }
     return true;
 }
-
 bool MoveSectorEditorAuthoringVertex(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         SelectionState& selectionState,
         int vertexId,
         SectorTopologyCoordPoint target)
 {
-    SectorAuthoringVertex* vertex = FindSectorAuthoringVertex(state.authoringGraph, vertexId);
+    SectorAuthoringVertex* vertex = FindSectorAuthoringVertex(authoringGraph, vertexId);
     if (vertex == nullptr) {
         return false;
     }
@@ -1703,131 +1722,175 @@ bool MoveSectorEditorAuthoringVertex(
 
     vertex->x = target.x;
     vertex->y = target.y;
-    PruneSectorEditorAuthoringSelectionToGraph(state, selectionState);
+    PruneSectorEditorAuthoringSelectionToGraph(authoringGraph, selectionState);
     MarkSectorEditorAuthoringGraphEdited(
             state,
+            lifecycle,
+            derivation,
             TextFormat("Moved authoring vertex %d", vertexId));
     RefreshSectorEditorAuthoringDerivation(
             state,
+            lifecycle,
+            topologyMap,
+            authoringGraph,
+            derivation,
             TextFormat("Moved authoring vertex %d; derived topology current", vertexId),
             TextFormat("Moved authoring vertex %d; derivation failed", vertexId));
     return true;
 }
-
-bool DeleteSectorEditorSelectedAuthoringLine(SectorEditorState& state, SelectionState& selectionState)
+bool DeleteSectorEditorSelectedAuthoringLine(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SelectionState& selectionState)
 {
     if (selectionState.selectedAuthoring.kind != SectorAuthoringSelectionKind::Line
             || !IsSectorAuthoringSelectionTargetValid(
-                    state.authoringGraph,
+                    authoringGraph,
                     selectionState.selectedAuthoring)) {
         return false;
     }
 
     const int lineId = selectionState.selectedAuthoring.lineId;
-    state.authoringGraph.lines.erase(
+    authoringGraph.lines.erase(
             std::remove_if(
-                    state.authoringGraph.lines.begin(),
-                    state.authoringGraph.lines.end(),
+                    authoringGraph.lines.begin(),
+                    authoringGraph.lines.end(),
                     [lineId](const SectorAuthoringLine& line) {
                         return line.id == lineId;
                     }),
-            state.authoringGraph.lines.end());
-    state.authoringGraph.lineSides.erase(
+            authoringGraph.lines.end());
+    authoringGraph.lineSides.erase(
             std::remove_if(
-                    state.authoringGraph.lineSides.begin(),
-                    state.authoringGraph.lineSides.end(),
+                    authoringGraph.lineSides.begin(),
+                    authoringGraph.lineSides.end(),
                     [lineId](const SectorAuthoringLineSide& side) {
                         return side.id.lineId == lineId;
                     }),
-            state.authoringGraph.lineSides.end());
-    PruneSectorEditorAuthoringSelectionToGraph(state, selectionState);
+            authoringGraph.lineSides.end());
+    PruneSectorEditorAuthoringSelectionToGraph(authoringGraph, selectionState);
     MarkSectorEditorAuthoringGraphEdited(
             state,
+            lifecycle,
+            derivation,
             TextFormat("Deleted authoring line %d", lineId));
     RefreshSectorEditorAuthoringDerivation(
             state,
+            lifecycle,
+            topologyMap,
+            authoringGraph,
+            derivation,
             TextFormat("Deleted authoring line %d; derived topology current", lineId),
             TextFormat("Deleted authoring line %d; derivation failed", lineId));
     return true;
 }
-
-bool DeleteSectorEditorSelectedAuthoringVertex(SectorEditorState& state, SelectionState& selectionState)
+bool DeleteSectorEditorSelectedAuthoringVertex(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SelectionState& selectionState)
 {
     if (selectionState.selectedAuthoring.kind != SectorAuthoringSelectionKind::Vertex
             || !IsSectorAuthoringSelectionTargetValid(
-                    state.authoringGraph,
+                    authoringGraph,
                     selectionState.selectedAuthoring)) {
         return false;
     }
 
     const int vertexId = selectionState.selectedAuthoring.vertexId;
-    for (const SectorAuthoringLine& line : state.authoringGraph.lines) {
+    for (const SectorAuthoringLine& line : authoringGraph.lines) {
         if (line.startVertexId == vertexId || line.endVertexId == vertexId) {
-            state.authoringDerivationStatus =
+            derivation.authoringDerivationStatus =
                     "Authoring vertex is connected; delete its lines first.";
-            state.topologyDocumentStatus = state.authoringDerivationStatus;
+            lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
             return false;
         }
     }
 
-    state.authoringGraph.vertices.erase(
+    authoringGraph.vertices.erase(
             std::remove_if(
-                    state.authoringGraph.vertices.begin(),
-                    state.authoringGraph.vertices.end(),
+                    authoringGraph.vertices.begin(),
+                    authoringGraph.vertices.end(),
                     [vertexId](const SectorAuthoringVertex& vertex) {
                         return vertex.id == vertexId;
                     }),
-            state.authoringGraph.vertices.end());
-    PruneSectorEditorAuthoringSelectionToGraph(state, selectionState);
+            authoringGraph.vertices.end());
+    PruneSectorEditorAuthoringSelectionToGraph(authoringGraph, selectionState);
     MarkSectorEditorAuthoringGraphEdited(
             state,
+            lifecycle,
+            derivation,
             TextFormat("Deleted authoring vertex %d", vertexId));
     RefreshSectorEditorAuthoringDerivation(
             state,
+            lifecycle,
+            topologyMap,
+            authoringGraph,
+            derivation,
             TextFormat("Deleted authoring vertex %d; derived topology current", vertexId),
             TextFormat("Deleted authoring vertex %d; derivation failed", vertexId));
     return true;
 }
-
 void InitializeSectorEditorAuthoringStateFromTopology(
-        SectorEditorState& state,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         const SectorTopologyMap& sourceMap)
 {
-    state.authoringGraph = ImportSectorTopologyMapToAuthoringGraph(sourceMap);
-    state.authoringDerivation = DeriveSectorTopologyMapFromAuthoringGraph(state.authoringGraph);
-    if (state.authoringDerivation.success) {
-        CopyEditorMapLevelFields(state.authoringDerivation.topology, sourceMap);
-        state.lastValidAuthoringDerivedTopology = sourceMap;
-        state.authoringDerivationState = SectorEditorAuthoringDerivationState::ValidCurrent;
-        state.authoringDerivedTopologyStale = false;
-        state.authoringDerivationStatus = "Authoring graph: derived topology current";
+    authoringGraph = ImportSectorTopologyMapToAuthoringGraph(sourceMap);
+    derivation.authoringDerivation = DeriveSectorTopologyMapFromAuthoringGraph(authoringGraph);
+    if (derivation.authoringDerivation.success) {
+        CopyEditorMapLevelFields(derivation.authoringDerivation.topology, sourceMap);
+        derivation.lastValidAuthoringDerivedTopology = sourceMap;
+        derivation.authoringDerivationState = SectorEditorAuthoringDerivationState::ValidCurrent;
+        derivation.authoringDerivedTopologyStale = false;
+        derivation.authoringDerivationStatus = "Authoring graph: derived topology current";
     } else {
-        state.lastValidAuthoringDerivedTopology.reset();
-        state.authoringDerivationState = SectorEditorAuthoringDerivationState::InvalidNoDerived;
-        state.authoringDerivedTopologyStale = true;
-        state.authoringDerivationStatus = "Authoring graph: no valid derived topology";
+        derivation.lastValidAuthoringDerivedTopology.reset();
+        derivation.authoringDerivationState = SectorEditorAuthoringDerivationState::InvalidNoDerived;
+        derivation.authoringDerivedTopologyStale = true;
+        derivation.authoringDerivationStatus = "Authoring graph: no valid derived topology";
     }
+}
+void MarkSectorEditorAuthoringGraphEdited(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorEditorDerivationDocumentAccess derivation,
+        const char* status)
+{
+    MarkSectorEditorAuthoringGraphEdited(
+            lifecycle,
+            state.topologyRenderRevision,
+            state.topologyRenderCache,
+            derivation,
+            status);
 }
 
 void MarkSectorEditorAuthoringGraphEdited(
-        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorEditorDerivationDocumentAccess derivation,
         const char* status)
 {
-    state.topologyDocumentDirty = true;
-    state.hasUnsavedChanges = true;
-    state.authoringDerivedTopologyStale = true;
-    state.authoringDerivationState = state.lastValidAuthoringDerivedTopology.has_value()
+    lifecycle.topologyDocumentDirty = true;
+    lifecycle.hasUnsavedChanges = true;
+    derivation.authoringDerivedTopologyStale = true;
+    derivation.authoringDerivationState = derivation.lastValidAuthoringDerivedTopology.has_value()
             ? SectorEditorAuthoringDerivationState::ValidStale
             : SectorEditorAuthoringDerivationState::InvalidNoDerived;
-    state.authoringDerivationStatus = status == nullptr || status[0] == '\0'
+    derivation.authoringDerivationStatus = status == nullptr || status[0] == '\0'
             ? "Authoring graph edited; derived topology stale"
             : status;
-    state.topologyDocumentStatus = state.authoringDerivationStatus;
-    InvalidateEditorTopologyRenderCache(state);
+    lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
+    InvalidateEditorTopologyRenderCache(topologyRenderRevision, topologyRenderCache);
 }
-
 int FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
-        const SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
         int topologySectorId)
 {
     if (!IsValidSectorTopologyId(topologySectorId)) {
@@ -1835,11 +1898,11 @@ int FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
     }
 
     for (const SectorAuthoringDerivedSectorMapping& mapping
-            : state.authoringDerivation.mapping.sectors) {
+            : authoringDerivation.mapping.sectors) {
         if (mapping.topologySectorId == topologySectorId
                 && IsValidSectorAuthoringId(mapping.faceAnchorId)
                 && FindSectorAuthoringFaceAnchor(
-                        state.authoringGraph,
+                        authoringGraph,
                         mapping.faceAnchorId) != nullptr) {
             return mapping.faceAnchorId;
         }
@@ -1848,7 +1911,8 @@ int FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
 }
 
 bool FindSectorEditorAuthoringSideIdForTopologySideDef(
-        const SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
         int topologySideDefId,
         SectorAuthoringSideId& outSideId)
 {
@@ -1858,11 +1922,11 @@ bool FindSectorEditorAuthoringSideIdForTopologySideDef(
     }
 
     for (const SectorAuthoringDerivedSideMapping& mapping
-            : state.authoringDerivation.mapping.sides) {
+            : authoringDerivation.mapping.sides) {
         if (mapping.topologySideDefId == topologySideDefId
                 && IsValidSectorAuthoringId(mapping.authoringLineId)
                 && FindSectorAuthoringLine(
-                        state.authoringGraph,
+                        authoringGraph,
                         mapping.authoringLineId) != nullptr) {
             outSideId = SectorAuthoringSideId{mapping.authoringLineId, mapping.authoringSide};
             return true;
@@ -1872,7 +1936,8 @@ bool FindSectorEditorAuthoringSideIdForTopologySideDef(
 }
 
 int FindSectorEditorAuthoringLineIdForTopologyLineDef(
-        const SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
         int topologyLineDefId)
 {
     if (!IsValidSectorTopologyId(topologyLineDefId)) {
@@ -1880,11 +1945,11 @@ int FindSectorEditorAuthoringLineIdForTopologyLineDef(
     }
 
     for (const SectorAuthoringDerivedLineMapping& mapping
-            : state.authoringDerivation.mapping.lines) {
+            : authoringDerivation.mapping.lines) {
         if (mapping.topologyLineDefId == topologyLineDefId
                 && IsValidSectorAuthoringId(mapping.authoringLineId)
                 && FindSectorAuthoringLine(
-                        state.authoringGraph,
+                        authoringGraph,
                         mapping.authoringLineId) != nullptr) {
             return mapping.authoringLineId;
         }
@@ -1893,32 +1958,35 @@ int FindSectorEditorAuthoringLineIdForTopologyLineDef(
 }
 
 SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
         const SelectionState& selectionState)
 {
     if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
-            && FindSectorAuthoringLine(state.authoringGraph, selectionState.selectedAuthoring.lineId) != nullptr) {
+            && FindSectorAuthoringLine(authoringGraph, selectionState.selectedAuthoring.lineId) != nullptr) {
         SectorEditorInspectorTarget target;
         target.kind = SectorEditorInspectorTargetKind::AuthoringLine;
         target.lineId = selectionState.selectedAuthoring.lineId;
         return target;
     }
     if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
-            && FindSectorAuthoringFaceAnchor(state.authoringGraph, selectionState.selectedAuthoring.faceAnchorId) != nullptr) {
+            && FindSectorAuthoringFaceAnchor(authoringGraph, selectionState.selectedAuthoring.faceAnchorId) != nullptr) {
         SectorEditorInspectorTarget target;
         target.kind = SectorEditorInspectorTargetKind::AuthoringFaceAnchor;
         target.faceAnchorId = selectionState.selectedAuthoring.faceAnchorId;
         return target;
     }
     if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex
-            && FindSectorAuthoringVertex(state.authoringGraph, selectionState.selectedAuthoring.vertexId) != nullptr) {
+            && FindSectorAuthoringVertex(authoringGraph, selectionState.selectedAuthoring.vertexId) != nullptr) {
         SectorEditorInspectorTarget target;
         target.kind = SectorEditorInspectorTargetKind::AuthoringVertex;
         target.vertexId = selectionState.selectedAuthoring.vertexId;
         return target;
     }
 
-    if (!HasAuthoringGraphData(state)) {
+    if (!HasAuthoringGraphData(authoringGraph)) {
         SectorEditorInspectorTarget target;
         target.kind = SectorEditorInspectorTargetKind::LegacyTopology;
         return target;
@@ -1926,36 +1994,33 @@ SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(
 
     if (selectionState.topologySelectionKind == TopologySelectionKind::Sector
             && IsValidSectorTopologyId(selectionState.selectedTopologySectorId)) {
-        return ResolveMappedTopologySectorInspectorTarget(state, selectionState.selectedTopologySectorId);
+        return ResolveMappedTopologySectorInspectorTarget(
+                topologyMap,
+                authoringGraph,
+                authoringDerivation,
+                authoringDerivationCurrent,
+                selectionState.selectedTopologySectorId);
     }
     if (selectionState.topologySelectionKind == TopologySelectionKind::SideDef
             && IsValidSectorTopologyId(selectionState.selectedTopologySideDefId)) {
-        return ResolveMappedTopologySideInspectorTarget(state, selectionState.selectedTopologySideDefId);
+        return ResolveMappedTopologySideInspectorTarget(
+                topologyMap,
+                authoringGraph,
+                authoringDerivation,
+                authoringDerivationCurrent,
+                selectionState.selectedTopologySideDefId);
     }
     if (selectionState.topologySelectionKind == TopologySelectionKind::LineDef
             && IsValidSectorTopologyId(selectionState.selectedTopologyLineDefId)) {
-        return ResolveMappedTopologyLineInspectorTarget(state, selectionState.selectedTopologyLineDefId);
+        return ResolveMappedTopologyLineInspectorTarget(
+                topologyMap,
+                authoringGraph,
+                authoringDerivation,
+                authoringDerivationCurrent,
+                selectionState.selectedTopologyLineDefId);
     }
 
     return SectorEditorInspectorTarget{};
-}
-
-std::string BuildSectorEditorSurface3DTargetLabel(
-        const SectorEditorState& state,
-        SectorSurfaceRef surface,
-        TopologySurfaceEditTarget target)
-{
-    const bool authoringDerivationCurrent =
-            state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
-            && !state.authoringDerivedTopologyStale
-            && state.authoringDerivation.success;
-    return BuildSectorEditorSurface3DTargetLabel(
-            state.topologyMap,
-            state.authoringGraph,
-            state.authoringDerivation,
-            authoringDerivationCurrent,
-            surface,
-            target);
 }
 
 std::string BuildSectorEditorSurface3DTargetLabel(
@@ -2003,26 +2068,6 @@ std::string BuildSectorEditorSurface3DTargetLabel(
           << " | sideDef " << target.sideDefId
           << " line " << target.lineDefId;
     return label.str();
-}
-
-bool ResolveSectorEditorAuthoringSurfaceTarget(
-        const SectorEditorState& state,
-        SectorSurfaceRef surface,
-        SectorEditorAuthoringSurfaceTarget& outTarget,
-        std::string* outStatus)
-{
-    const bool authoringDerivationCurrent =
-            state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
-            && !state.authoringDerivedTopologyStale
-            && state.authoringDerivation.success;
-    return ResolveSectorEditorAuthoringSurfaceTarget(
-            state.topologyMap,
-            state.authoringGraph,
-            state.authoringDerivation,
-            authoringDerivationCurrent,
-            surface,
-            outTarget,
-            outStatus);
 }
 
 bool ResolveSectorEditorAuthoringSurfaceTarget(
@@ -2135,7 +2180,10 @@ SectorAuthoringSelectionTarget MakeSectorEditorAuthoringSelectionTargetForSurfac
 }
 
 bool ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
-        SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
         SectorEditorPreviewSelectionState& previewSelectionState,
         std::string* outStatus)
 {
@@ -2143,14 +2191,18 @@ bool ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
         outStatus->clear();
     }
 
-    if (!HasAuthoringGraphData(state) || previewSelectionState.selectedSurface3D.kind == SectorSurfaceKind::None) {
+    if (!HasAuthoringGraphData(authoringGraph)
+            || previewSelectionState.selectedSurface3D.kind == SectorSurfaceKind::None) {
         return true;
     }
 
     SectorEditorAuthoringSurfaceTarget authoringTarget;
     std::string status;
     if (ResolveSectorEditorAuthoringSurfaceTarget(
-                state,
+                topologyMap,
+                authoringGraph,
+                authoringDerivation,
+                authoringDerivationCurrent,
                 previewSelectionState.selectedSurface3D,
                 authoringTarget,
                 &status)) {
@@ -2167,6 +2219,33 @@ bool ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
 
 bool MutateSectorEditorAuthoringFaceAnchorForTopologySector(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        int topologySectorId,
+        const char* status,
+        const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate)
+{
+    return MutateSectorEditorAuthoringFaceAnchorForTopologySector(
+            lifecycle,
+            state.topologyRenderRevision,
+            state.topologyRenderCache,
+            topologyMap,
+            authoringGraph,
+            derivation,
+            topologySectorId,
+            status,
+            mutate);
+}
+
+bool MutateSectorEditorAuthoringFaceAnchorForTopologySector(
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         int topologySectorId,
         const char* status,
         const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate)
@@ -2176,12 +2255,51 @@ bool MutateSectorEditorAuthoringFaceAnchorForTopologySector(
     }
 
     const int faceAnchorId =
-            FindSectorEditorAuthoringFaceAnchorIdForTopologySector(state, topologySectorId);
-    return MutateSectorEditorAuthoringFaceAnchorById(state, faceAnchorId, status, mutate);
+            FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
+                    authoringGraph,
+                    derivation.authoringDerivation,
+                    topologySectorId);
+    return MutateSectorEditorAuthoringFaceAnchorById(
+            lifecycle,
+            topologyRenderRevision,
+            topologyRenderCache,
+            topologyMap,
+            authoringGraph,
+            derivation,
+            faceAnchorId,
+            status,
+            mutate);
 }
 
 bool MutateSectorEditorAuthoringFaceAnchorById(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        int faceAnchorId,
+        const char* status,
+        const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate)
+{
+    return MutateSectorEditorAuthoringFaceAnchorById(
+            lifecycle,
+            state.topologyRenderRevision,
+            state.topologyRenderCache,
+            topologyMap,
+            authoringGraph,
+            derivation,
+            faceAnchorId,
+            status,
+            mutate);
+}
+
+bool MutateSectorEditorAuthoringFaceAnchorById(
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         int faceAnchorId,
         const char* status,
         const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate)
@@ -2191,7 +2309,7 @@ bool MutateSectorEditorAuthoringFaceAnchorById(
     }
 
     SectorAuthoringFaceAnchor* anchor =
-            FindSectorAuthoringFaceAnchor(state.authoringGraph, faceAnchorId);
+            FindSectorAuthoringFaceAnchor(authoringGraph, faceAnchorId);
     if (anchor == nullptr) {
         return false;
     }
@@ -2200,15 +2318,52 @@ bool MutateSectorEditorAuthoringFaceAnchorById(
         return false;
     }
 
-    MarkSectorEditorAuthoringGraphEdited(state, status);
+    MarkSectorEditorAuthoringGraphEdited(
+            lifecycle,
+            topologyRenderRevision,
+            topologyRenderCache,
+            derivation,
+            status);
     return RefreshSectorEditorAuthoringDerivation(
-            state,
+            lifecycle,
+            topologyRenderRevision,
+            topologyRenderCache,
+            topologyMap,
+            authoringGraph,
+            derivation,
             status,
             "Updated authoring face anchor; derivation failed");
 }
 
 bool MutateSectorEditorAuthoringSideForTopologySideDef(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        int topologySideDefId,
+        const char* status,
+        const std::function<bool(SectorAuthoringLineSide&)>& mutate)
+{
+    return MutateSectorEditorAuthoringSideForTopologySideDef(
+            lifecycle,
+            state.topologyRenderRevision,
+            state.topologyRenderCache,
+            topologyMap,
+            authoringGraph,
+            derivation,
+            topologySideDefId,
+            status,
+            mutate);
+}
+
+bool MutateSectorEditorAuthoringSideForTopologySideDef(
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         int topologySideDefId,
         const char* status,
         const std::function<bool(SectorAuthoringLineSide&)>& mutate)
@@ -2219,16 +2374,17 @@ bool MutateSectorEditorAuthoringSideForTopologySideDef(
 
     SectorAuthoringSideId sideId;
     if (!FindSectorEditorAuthoringSideIdForTopologySideDef(
-                state,
+                authoringGraph,
+                derivation.authoringDerivation,
                 topologySideDefId,
                 sideId)) {
         return false;
     }
 
-    SectorAuthoringLineSide* side = FindSectorAuthoringLineSide(state.authoringGraph, sideId);
+    SectorAuthoringLineSide* side = FindSectorAuthoringLineSide(authoringGraph, sideId);
     if (side == nullptr) {
         const SectorTopologySideDef* topologySide =
-                FindSectorTopologySideDef(state.topologyMap, topologySideDefId);
+                FindSectorTopologySideDef(topologyMap, topologySideDefId);
         SectorAuthoringLineSide newSide;
         newSide.id = sideId;
         if (topologySide != nullptr) {
@@ -2237,54 +2393,105 @@ bool MutateSectorEditorAuthoringSideForTopologySideDef(
             newSide.upper = topologySide->upper;
             newSide.middle = topologySide->middle;
         }
-        state.authoringGraph.lineSides.push_back(newSide);
-        side = &state.authoringGraph.lineSides.back();
+        authoringGraph.lineSides.push_back(newSide);
+        side = &authoringGraph.lineSides.back();
     }
 
     if (!mutate(*side)) {
         return false;
     }
 
-    MarkSectorEditorAuthoringGraphEdited(state, status);
+    MarkSectorEditorAuthoringGraphEdited(
+            lifecycle,
+            topologyRenderRevision,
+            topologyRenderCache,
+            derivation,
+            status);
     return RefreshSectorEditorAuthoringDerivation(
-            state,
+            lifecycle,
+            topologyRenderRevision,
+            topologyRenderCache,
+            topologyMap,
+            authoringGraph,
+            derivation,
             status,
             "Updated authoring side material; derivation failed");
 }
 
 bool MutateSectorEditorAuthoringSideById(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SectorAuthoringSideId sideId,
+        const char* status,
+        const std::function<bool(SectorAuthoringLineSide&)>& mutate)
+{
+    return MutateSectorEditorAuthoringSideById(
+            lifecycle,
+            state.topologyRenderRevision,
+            state.topologyRenderCache,
+            topologyMap,
+            authoringGraph,
+            derivation,
+            sideId,
+            status,
+            mutate);
+}
+
+bool MutateSectorEditorAuthoringSideById(
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         SectorAuthoringSideId sideId,
         const char* status,
         const std::function<bool(SectorAuthoringLineSide&)>& mutate)
 {
     if (!mutate
             || !IsValidSectorAuthoringId(sideId.lineId)
-            || FindSectorAuthoringLine(state.authoringGraph, sideId.lineId) == nullptr) {
+            || FindSectorAuthoringLine(authoringGraph, sideId.lineId) == nullptr) {
         return false;
     }
 
-    SectorAuthoringLineSide* side = FindSectorAuthoringLineSide(state.authoringGraph, sideId);
+    SectorAuthoringLineSide* side = FindSectorAuthoringLineSide(authoringGraph, sideId);
     if (side == nullptr) {
         SectorAuthoringLineSide newSide;
         newSide.id = sideId;
-        state.authoringGraph.lineSides.push_back(newSide);
-        side = &state.authoringGraph.lineSides.back();
+        authoringGraph.lineSides.push_back(newSide);
+        side = &authoringGraph.lineSides.back();
     }
 
     if (!mutate(*side)) {
         return false;
     }
 
-    MarkSectorEditorAuthoringGraphEdited(state, status);
+    MarkSectorEditorAuthoringGraphEdited(
+            lifecycle,
+            topologyRenderRevision,
+            topologyRenderCache,
+            derivation,
+            status);
     return RefreshSectorEditorAuthoringDerivation(
-            state,
+            lifecycle,
+            topologyRenderRevision,
+            topologyRenderCache,
+            topologyMap,
+            authoringGraph,
+            derivation,
             status,
             "Updated authoring side material; derivation failed");
 }
 
 bool MutateSectorEditorAuthoringLineForTopologyLineDef(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         int topologyLineDefId,
         const char* status,
         const std::function<bool(SectorAuthoringLine&)>& mutate)
@@ -2294,12 +2501,27 @@ bool MutateSectorEditorAuthoringLineForTopologyLineDef(
     }
 
     const int authoringLineId =
-            FindSectorEditorAuthoringLineIdForTopologyLineDef(state, topologyLineDefId);
-    return MutateSectorEditorAuthoringLineById(state, authoringLineId, status, mutate);
+            FindSectorEditorAuthoringLineIdForTopologyLineDef(
+                    authoringGraph,
+                    derivation.authoringDerivation,
+                    topologyLineDefId);
+    return MutateSectorEditorAuthoringLineById(
+            state,
+            lifecycle,
+            topologyMap,
+            authoringGraph,
+            derivation,
+            authoringLineId,
+            status,
+            mutate);
 }
 
 bool MutateSectorEditorAuthoringLineById(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         int lineId,
         const char* status,
         const std::function<bool(SectorAuthoringLine&)>& mutate)
@@ -2309,7 +2531,7 @@ bool MutateSectorEditorAuthoringLineById(
     }
 
     SectorAuthoringLine* line =
-            FindSectorAuthoringLine(state.authoringGraph, lineId);
+            FindSectorAuthoringLine(authoringGraph, lineId);
     if (line == nullptr) {
         return false;
     }
@@ -2318,15 +2540,23 @@ bool MutateSectorEditorAuthoringLineById(
         return false;
     }
 
-    MarkSectorEditorAuthoringGraphEdited(state, status);
+    MarkSectorEditorAuthoringGraphEdited(state, lifecycle, derivation, status);
     return RefreshSectorEditorAuthoringDerivation(
             state,
+            lifecycle,
+            topologyMap,
+            authoringGraph,
+            derivation,
             status,
             "Updated authoring line flags; derivation failed");
 }
 
 bool SetSectorEditorAuthoringLineDefBlocksPlayer(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         int topologyLineDefId,
         bool blocksPlayer,
         std::string* outStatus)
@@ -2339,7 +2569,7 @@ bool SetSectorEditorAuthoringLineDefBlocksPlayer(
     };
 
     const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(
-            state.topologyMap,
+            topologyMap,
             topologyLineDefId);
     if (lineDef == nullptr) {
         return fail("Selected linedef is no longer valid.");
@@ -2347,19 +2577,22 @@ bool SetSectorEditorAuthoringLineDefBlocksPlayer(
     if (lineDef->frontSideDefId == -1 || lineDef->backSideDefId == -1) {
         return fail("Blocks Player is only editable on two-sided portals.");
     }
-    if (!HasAuthoringGraphData(state)) {
+    if (!HasAuthoringGraphData(authoringGraph)) {
         return fail("Cannot edit line flag: authoring data is required.");
     }
-    if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-            || state.authoringDerivedTopologyStale
-            || !state.authoringDerivation.success) {
+    if (derivation.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
+            || derivation.authoringDerivedTopologyStale
+            || !derivation.authoringDerivation.success) {
         return fail("Blocks Player unavailable: derived topology is not current.");
     }
 
     const int authoringLineId =
-            FindSectorEditorAuthoringLineIdForTopologyLineDef(state, topologyLineDefId);
+            FindSectorEditorAuthoringLineIdForTopologyLineDef(
+                    authoringGraph,
+                    derivation.authoringDerivation,
+                    topologyLineDefId);
     const SectorAuthoringLine* authoringLine =
-            FindSectorAuthoringLine(state.authoringGraph, authoringLineId);
+            FindSectorAuthoringLine(authoringGraph, authoringLineId);
     if (authoringLine == nullptr) {
         return fail("Blocks Player unavailable: selected derived linedef has no authoring line mapping.");
     }
@@ -2375,6 +2608,10 @@ bool SetSectorEditorAuthoringLineDefBlocksPlayer(
             : "Disabled player blocking on authoring portal.";
     const bool changed = MutateSectorEditorAuthoringLineById(
             state,
+            lifecycle,
+            topologyMap,
+            authoringGraph,
+            derivation,
             authoringLineId,
             status,
             [blocksPlayer](SectorAuthoringLine& line) {
@@ -2392,90 +2629,136 @@ bool SetSectorEditorAuthoringLineDefBlocksPlayer(
 
 bool RefreshSectorEditorAuthoringDerivation(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        const char* successStatus,
+        const char* failureStatus)
+{
+    return RefreshSectorEditorAuthoringDerivation(
+            lifecycle,
+            state.topologyRenderRevision,
+            state.topologyRenderCache,
+            topologyMap,
+            authoringGraph,
+            derivation,
+            successStatus,
+            failureStatus);
+}
+
+bool RefreshSectorEditorAuthoringDerivation(
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         const char* successStatus,
         const char* failureStatus)
 {
     SectorAuthoringDerivationResult result =
-            DeriveSectorTopologyMapFromAuthoringGraph(state.authoringGraph);
+            DeriveSectorTopologyMapFromAuthoringGraph(authoringGraph);
     if (result.success) {
         int reconciledAnchorCount = 0;
         bool reconciliationFailed = false;
         if (ReconcileMissingDerivedFaceAnchors(
-                    state,
+                    authoringGraph,
                     result,
                     &reconciledAnchorCount,
                     &reconciliationFailed)) {
             MarkSectorEditorAuthoringGraphEdited(
-                    state,
+                    lifecycle,
+                    topologyRenderRevision,
+                    topologyRenderCache,
+                    derivation,
                     TextFormat("Added %d generated authoring face anchor%s",
                             reconciledAnchorCount,
                             reconciledAnchorCount == 1 ? "" : "s"));
-            result = DeriveSectorTopologyMapFromAuthoringGraph(state.authoringGraph);
+            result = DeriveSectorTopologyMapFromAuthoringGraph(authoringGraph);
             if (!result.success
-                    || !AllDerivedSectorsHaveUniqueFaceAnchorMappings(state.authoringGraph, result)) {
-                state.authoringDerivation = std::move(result);
-                state.authoringDerivedTopologyStale = true;
-                state.authoringDerivationState = state.lastValidAuthoringDerivedTopology.has_value()
+                    || !AllDerivedSectorsHaveUniqueFaceAnchorMappings(authoringGraph, result)) {
+                derivation.authoringDerivation = std::move(result);
+                derivation.authoringDerivedTopologyStale = true;
+                derivation.authoringDerivationState = derivation.lastValidAuthoringDerivedTopology.has_value()
                         ? SectorEditorAuthoringDerivationState::InvalidLastValid
                         : SectorEditorAuthoringDerivationState::InvalidNoDerived;
-                state.authoringDerivationStatus =
+                derivation.authoringDerivationStatus =
                         "Authoring graph: generated face-anchor reconciliation failed";
-                state.topologyDocumentStatus = state.authoringDerivationStatus;
-                InvalidateEditorTopologyRenderCacheIfNeeded(state);
+                lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
+                InvalidateEditorTopologyRenderCacheIfNeeded(
+                        topologyRenderRevision,
+                        topologyRenderCache);
                 return false;
             }
         } else if (reconciliationFailed) {
-            state.authoringDerivation = std::move(result);
-            state.authoringDerivedTopologyStale = true;
-            state.authoringDerivationState = state.lastValidAuthoringDerivedTopology.has_value()
+            derivation.authoringDerivation = std::move(result);
+            derivation.authoringDerivedTopologyStale = true;
+            derivation.authoringDerivationState = derivation.lastValidAuthoringDerivedTopology.has_value()
                     ? SectorEditorAuthoringDerivationState::InvalidLastValid
                     : SectorEditorAuthoringDerivationState::InvalidNoDerived;
-            state.authoringDerivationStatus =
+            derivation.authoringDerivationStatus =
                     "Authoring graph: generated face-anchor reconciliation failed";
-            state.topologyDocumentStatus = state.authoringDerivationStatus;
-            InvalidateEditorTopologyRenderCacheIfNeeded(state);
+            lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
+            InvalidateEditorTopologyRenderCacheIfNeeded(
+                    topologyRenderRevision,
+                    topologyRenderCache);
             return false;
         }
-        CopyEditorMapLevelFields(result.topology, state.topologyMap);
-        state.topologyMap = result.topology;
-        state.lastValidAuthoringDerivedTopology = result.topology;
-        state.authoringDerivation = std::move(result);
-        state.authoringDerivedTopologyStale = false;
-        state.authoringDerivationState = SectorEditorAuthoringDerivationState::ValidCurrent;
-        state.authoringDerivationStatus = successStatus == nullptr || successStatus[0] == '\0'
+        CopyEditorMapLevelFields(result.topology, topologyMap);
+        topologyMap = result.topology;
+        derivation.lastValidAuthoringDerivedTopology = result.topology;
+        derivation.authoringDerivation = std::move(result);
+        derivation.authoringDerivedTopologyStale = false;
+        derivation.authoringDerivationState = SectorEditorAuthoringDerivationState::ValidCurrent;
+        derivation.authoringDerivationStatus = successStatus == nullptr || successStatus[0] == '\0'
                 ? "Authoring graph: derived topology current"
                 : successStatus;
-        state.topologyDocumentStatus = state.authoringDerivationStatus;
-        InvalidateEditorTopologyRenderCacheIfNeeded(state);
+        lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
+        InvalidateEditorTopologyRenderCacheIfNeeded(
+                topologyRenderRevision,
+                topologyRenderCache);
         return true;
     }
 
-    state.authoringDerivation = std::move(result);
-    state.authoringDerivedTopologyStale = true;
-    state.authoringDerivationState = state.lastValidAuthoringDerivedTopology.has_value()
+    derivation.authoringDerivation = std::move(result);
+    derivation.authoringDerivedTopologyStale = true;
+    derivation.authoringDerivationState = derivation.lastValidAuthoringDerivedTopology.has_value()
             ? SectorEditorAuthoringDerivationState::InvalidLastValid
             : SectorEditorAuthoringDerivationState::InvalidNoDerived;
-    const int diagnosticCount = static_cast<int>(state.authoringDerivation.diagnostics.size());
-    state.authoringDerivationStatus = failureStatus == nullptr || failureStatus[0] == '\0'
+    const int diagnosticCount = static_cast<int>(derivation.authoringDerivation.diagnostics.size());
+    derivation.authoringDerivationStatus = failureStatus == nullptr || failureStatus[0] == '\0'
             ? TextFormat("Authoring graph: derivation failed (%d diagnostics)", diagnosticCount)
             : failureStatus;
-    state.topologyDocumentStatus = state.authoringDerivationStatus;
-    InvalidateEditorTopologyRenderCacheIfNeeded(state);
+    lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
+    InvalidateEditorTopologyRenderCacheIfNeeded(
+            topologyRenderRevision,
+            topologyRenderCache);
     return false;
 }
 
 bool CanUseCurrentAuthoringDerivedTopologyForPreview(
-        const SectorEditorState& state,
+        SectorEditorConstDerivationDocumentAccess derivation,
         std::string* outMessage)
 {
-    return CanUseCurrentAuthoringDerivedTopology(state, "3D preview", outMessage);
+    return CanUseCurrentAuthoringDerivedTopology(
+            derivation.authoringDerivationState,
+            derivation.authoringDerivedTopologyStale,
+            derivation.authoringDerivation,
+            "3D preview",
+            outMessage);
 }
 
 bool CanUseCurrentAuthoringDerivedTopologyForLightmapBake(
-        const SectorEditorState& state,
+        SectorEditorConstDerivationDocumentAccess derivation,
         std::string* outMessage)
 {
-    return CanUseCurrentAuthoringDerivedTopology(state, "Lightmap bake", outMessage);
+    return CanUseCurrentAuthoringDerivedTopology(
+            derivation.authoringDerivationState,
+            derivation.authoringDerivedTopologyStale,
+            derivation.authoringDerivation,
+            "Lightmap bake",
+            outMessage);
 }
 
 } // namespace game

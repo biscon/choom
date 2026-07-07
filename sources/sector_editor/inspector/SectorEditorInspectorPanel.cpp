@@ -66,6 +66,8 @@ void OpenSelectedBillboardSpritePickerForInspector(
 
 void OpenSelectedDoorTexturePickerForInspector(
         SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
         SectorEditorTextureCatalogService& textureCatalog,
         std::string& statusText,
         const SectorPlacedRuntimeObject* object)
@@ -74,13 +76,17 @@ void OpenSelectedDoorTexturePickerForInspector(
         statusText = "Select a door first.";
         return;
     }
-    if (!OpenRuntimeDoorTexturePicker(state, textureCatalog, object->id)) {
+    if (!OpenRuntimeDoorTexturePicker(state, topologyMap, authoringGraph, textureCatalog, object->id)) {
         statusText = "No door texture target";
     }
 }
 
 bool TryRenameSelectedDerivedSectorAuthoringNameForInspector(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorEditorDerivationDocumentAccess derivation,
+        SectorAuthoringGraph& authoringGraph,
         InspectorIdUiState& inspectorIdUiState,
         std::string& statusText,
         SectorTopologySector* sector)
@@ -97,25 +103,30 @@ bool TryRenameSelectedDerivedSectorAuthoringNameForInspector(
         return true;
     }
 
-    const bool hasAuthoringGraph = HasAuthoringGraphData(state);
+    const bool hasAuthoringGraph = HasAuthoringGraphData(authoringGraph);
     if (!hasAuthoringGraph) {
         inspectorIdUiState.idEditError = "Cannot edit sector property: authoring data is required.";
         statusText = inspectorIdUiState.idEditError;
         return true;
     }
-    if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-            || state.authoringDerivedTopologyStale
-            || !state.authoringDerivation.success) {
+    if (!IsSectorEditorAuthoringDerivationCurrent(derivation)) {
         inspectorIdUiState.idEditError = "Sector name edit unavailable: derived topology is not current";
         statusText = inspectorIdUiState.idEditError;
         return true;
     }
 
     const bool hasFaceAnchorMapping =
-            FindSectorEditorAuthoringFaceAnchorIdForTopologySector(state, sector->id) >= 0;
+            FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
+                    authoringGraph,
+                    derivation.authoringDerivation,
+                    sector->id) >= 0;
     if (hasFaceAnchorMapping) {
         MutateSectorEditorAuthoringFaceAnchorForTopologySector(
                 state,
+                lifecycle,
+                topologyMap,
+                authoringGraph,
+                derivation,
                 sector->id,
                 TextFormat("Renamed authoring face anchor %d", sector->id),
                 [&newName](SectorAuthoringFaceAnchor& anchor) {
@@ -135,6 +146,10 @@ bool TryRenameSelectedDerivedSectorAuthoringNameForInspector(
 
 bool SetAuthoringLineDefBlocksPlayerForInspector(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorEditorDerivationDocumentAccess derivation,
+        SectorAuthoringGraph& authoringGraph,
         std::string& statusText,
         SectorEditorInspectorPanelResult& result,
         int lineDefId,
@@ -143,6 +158,10 @@ bool SetAuthoringLineDefBlocksPlayerForInspector(
     std::string status;
     const bool changed = SetSectorEditorAuthoringLineDefBlocksPlayer(
             state,
+            lifecycle,
+            topologyMap,
+            authoringGraph,
+            derivation,
             lineDefId,
             blocksPlayer,
             &status);
@@ -277,7 +296,6 @@ bool DrawTopologySideDefInspector(
     engine::AssetManager& assets = context.assets;
     const engine::FontHandle font = context.font;
     const engine::FontHandle smallFont = context.smallFont;
-    SectorEditorState& state = context.state;
     SelectionState& selectionState = context.selectionState;
     SectorEditorUiState& uiState = context.uiState;
     MaterialEditingUiState& materialUiState = context.materialUiState;
@@ -289,7 +307,16 @@ bool DrawTopologySideDefInspector(
                 SelectSectorEditorTopologySideDef(context.selection, sideDefId, wallPart);
             },
             [&](int lineDefId, bool blocksPlayer) {
-                return SetAuthoringLineDefBlocksPlayerForInspector(context.state, context.statusText, result, lineDefId, blocksPlayer);
+                return SetAuthoringLineDefBlocksPlayerForInspector(
+                        context.state,
+                        context.lifecycle,
+                        context.topologyMap,
+                        context.derivation,
+                        context.authoringGraph,
+                        context.statusText,
+                        result,
+                        lineDefId,
+                        blocksPlayer);
             }};
     SectorEditorMaterialEditingService& materialEditing = context.materialEditing;
     SectorEditorMaterialInspectorContext materialContext{
@@ -303,9 +330,10 @@ bool DrawTopologySideDefInspector(
             contentW,
             rowH,
             gap,
-            state,
+            context.topologyMap,
+            context.authoringGraph,
             context.selectionState,
-            uiState,
+            uiState.inspectorScroll,
             materialUiState,
             statusText,
             callbacks,
@@ -327,6 +355,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     const engine::FontHandle font = context.font;
     const engine::FontHandle smallFont = context.smallFont;
     SectorEditorState& state = context.state;
+    SectorAuthoringGraph& authoringGraph = context.authoringGraph;
     SelectionState& selectionState = context.selectionState;
     SectorEditorUiState& uiState = context.uiState;
     MaterialEditingUiState& materialUiState = context.materialUiState;
@@ -372,24 +401,32 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     const bool hasSelectedDynamicLight = selectedDynamicLight() != nullptr;
     const bool hasSelectedDynamicSpotLight = selectedDynamicSpotLight() != nullptr;
     const bool hasSelectedRuntimeObject = selectedRuntimeObject() != nullptr;
-    const SectorEditorInspectorTarget inspectorTarget = ResolveSectorEditorInspectorTarget(state, selectionState);
+    const bool authoringDerivationCurrent =
+            IsSectorEditorAuthoringDerivationCurrent(context.derivation);
+    const SectorEditorInspectorTarget inspectorTarget =
+            ResolveSectorEditorInspectorTarget(
+                    context.topologyMap,
+                    authoringGraph,
+                    context.derivation.authoringDerivation,
+                    authoringDerivationCurrent,
+                    selectionState);
     const bool allowLegacyTopologyInspector =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::LegacyTopology
             || inspectorTarget.kind == SectorEditorInspectorTargetKind::None;
     const SectorAuthoringLine* selectedAuthoringLine =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringLine
-            ? FindSectorAuthoringLine(state.authoringGraph, inspectorTarget.lineId)
+            ? FindSectorAuthoringLine(authoringGraph, inspectorTarget.lineId)
             : nullptr;
     const SectorAuthoringFaceAnchor* selectedAuthoringFaceAnchor =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringFaceAnchor
-            ? FindSectorAuthoringFaceAnchor(state.authoringGraph, inspectorTarget.faceAnchorId)
+            ? FindSectorAuthoringFaceAnchor(authoringGraph, inspectorTarget.faceAnchorId)
             : nullptr;
     const SectorAuthoringVertex* selectedAuthoringVertex =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringVertex
-            ? FindSectorAuthoringVertex(state.authoringGraph, inspectorTarget.vertexId)
+            ? FindSectorAuthoringVertex(authoringGraph, inspectorTarget.vertexId)
             : nullptr;
     const SectorTopologyVertex* inspectedVertex = FindSectorTopologyVertex(
-            state.topologyMap,
+            context.topologyMap,
             selectionState.inspectedTopologyVertexId);
     const bool hasInspectedVertex = !hasSelectedTopologySector
             && !hasSelectedTopologyVertex
@@ -418,7 +455,15 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 return MutateSelectedSectorEditorPlacedObject(placedObjectActions, status, mutate);
             },
             [&]() { OpenSelectedBillboardSpritePickerForInspector(state, statusText, selectedRuntimeObject()); },
-            [&]() { OpenSelectedDoorTexturePickerForInspector(state, textureCatalog, statusText, selectedRuntimeObject()); },
+            [&]() {
+                OpenSelectedDoorTexturePickerForInspector(
+                        state,
+                        context.topologyMap,
+                        context.authoringGraph,
+                        textureCatalog,
+                        statusText,
+                        selectedRuntimeObject());
+            },
             [&]() { OpenSectorEditorDoorTextureSettingsModal(state.doorTextureSettingsModal, selectedRuntimeObject(), statusText); },
             [&]() {
                 AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedRuntimeObject);
@@ -472,6 +517,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     smallFont,
                     smallConfig,
                     state,
+                    context.topologyMap,
                     placedObjectActions.runtimeObjects,
                     engineContext,
                     runtimeObjectInspectorCallbacks,
@@ -520,9 +566,9 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         }
         if (selectedAuthoringLine != nullptr) {
             const SectorAuthoringVertex* start =
-                    FindSectorAuthoringVertex(state.authoringGraph, selectedAuthoringLine->startVertexId);
+                    FindSectorAuthoringVertex(authoringGraph, selectedAuthoringLine->startVertexId);
             const SectorAuthoringVertex* end =
-                    FindSectorAuthoringVertex(state.authoringGraph, selectedAuthoringLine->endVertexId);
+                    FindSectorAuthoringVertex(authoringGraph, selectedAuthoringLine->endVertexId);
             const float endpointSummaryHeight = MeasureSectorEditorWrappedTextHeight(
                     smallConfig,
                     assets,
@@ -538,7 +584,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     scrollContentW);
             return AuthoringLineInspectorContentHeight(
                     *selectedAuthoringLine,
-                    state.authoringGraph,
+                    authoringGraph,
                     rowH,
                     gap,
                     endpointSummaryHeight);
@@ -613,6 +659,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 smallFont,
                 scroll,
                 state,
+                context.topologyMap,
                 placedObjectActions.runtimeObjects,
                 uiState,
                 engineContext,
@@ -630,10 +677,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedTopologySector && allowLegacyTopologyInspector) {
         const auto hasAuthoringGraph = [&]() {
-            return !state.authoringGraph.vertices.empty()
-                    || !state.authoringGraph.lines.empty()
-                    || !state.authoringGraph.lineSides.empty()
-                    || !state.authoringGraph.faceAnchors.empty();
+            return !authoringGraph.vertices.empty()
+                    || !authoringGraph.lines.empty()
+                    || !authoringGraph.lineSides.empty()
+                    || !authoringGraph.faceAnchors.empty();
         };
         const auto selectedAuthoringFaceAnchorUnavailable = [&, hasAuthoringGraph]() {
             const SectorTopologySector* selectedSector = selectedTopologySector();
@@ -643,13 +690,12 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             if (!hasAuthoringGraph()) {
                 return true;
             }
-            if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-                    || state.authoringDerivedTopologyStale
-                    || !state.authoringDerivation.success) {
+            if (!IsSectorEditorAuthoringDerivationCurrent(context.derivation)) {
                 return true;
             }
             return FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
-                           state,
+                           authoringGraph,
+                           context.derivation.authoringDerivation,
                            selectedSector->id) < 0;
         };
         const auto reportAuthoringFaceAnchorUnavailable = [&, hasAuthoringGraph]() {
@@ -665,18 +711,21 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     if (selectedSector == nullptr) {
                         return false;
                     }
-                    if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-                            || state.authoringDerivedTopologyStale
-                            || !state.authoringDerivation.success) {
+                    if (!IsSectorEditorAuthoringDerivationCurrent(context.derivation)) {
                         return false;
                     }
                     if (FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
-                                state,
+                                authoringGraph,
+                                context.derivation.authoringDerivation,
                                 selectedSector->id) < 0) {
                         return false;
                     }
                     MutateSectorEditorAuthoringFaceAnchorForTopologySector(
                             state,
+                            context.lifecycle,
+                            context.topologyMap,
+                            authoringGraph,
+                            context.derivation,
                             selectedSector->id,
                             status,
                             mutate);
@@ -686,6 +735,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 [&]() {
                     return TryRenameSelectedDerivedSectorAuthoringNameForInspector(
                             state,
+                            context.lifecycle,
+                            context.topologyMap,
+                            context.derivation,
+                            authoringGraph,
                             context.inspectorIdUiState,
                             statusText,
                             selectedTopologySector());
@@ -834,6 +887,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     gap,
                     *selectedTopologySector(),
                     state,
+                    authoringGraph,
                     selectionState,
                     uiState,
                     context.inspectorIdUiState,
@@ -982,7 +1036,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 gap,
                 inspectedVertex,
                 hasSelectedTopologyVertex,
-                state,
+                context.topologyMap,
                 selectionState,
                 callbacks);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
@@ -992,9 +1046,9 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (selectedAuthoringLine != nullptr) {
         const SectorAuthoringVertex* start =
-                FindSectorAuthoringVertex(state.authoringGraph, selectedAuthoringLine->startVertexId);
+                FindSectorAuthoringVertex(authoringGraph, selectedAuthoringLine->startVertexId);
         const SectorAuthoringVertex* end =
-                FindSectorAuthoringVertex(state.authoringGraph, selectedAuthoringLine->endVertexId);
+                FindSectorAuthoringVertex(authoringGraph, selectedAuthoringLine->endVertexId);
         engine::Text(
                 ui,
                 config,
@@ -1071,6 +1125,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             const int lineId = selectedAuthoringLine->id;
             MutateSectorEditorAuthoringLineById(
                     state,
+                    context.lifecycle,
+                    context.topologyMap,
+                    authoringGraph,
+                    context.derivation,
                     lineId,
                     "Updated authoring line flags",
                     [blocksPlayer](SectorAuthoringLine& line) {
@@ -1095,7 +1153,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
                     const SectorAuthoringSideId sideId{selectedAuthoringLine->id, sideKind};
                     const SectorAuthoringLineSide* authoringSide =
-                            FindSectorAuthoringLineSide(state.authoringGraph, sideId);
+                            FindSectorAuthoringLineSide(authoringGraph, sideId);
                     const auto textureForPart = [authoringSide](TopologyWallPart part) -> std::string {
                         if (authoringSide == nullptr) {
                             return std::string{};
@@ -1109,17 +1167,16 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                         return TopologyWallPartSettingsFor(*authoringSide, part).decal;
                     };
                     const auto mappedTargetForPart = [&, sideId](TopologyWallPart part, TopologySurfaceEditTarget& outTarget) {
-                        if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-                                || state.authoringDerivedTopologyStale
-                                || !state.authoringDerivation.success) {
+                        if (!IsSectorEditorAuthoringDerivationCurrent(context.derivation)) {
                             return false;
                         }
-                        for (const SectorAuthoringDerivedSideMapping& mapping : state.authoringDerivation.mapping.sides) {
+                        for (const SectorAuthoringDerivedSideMapping& mapping
+                                : context.derivation.authoringDerivation.mapping.sides) {
                             if (mapping.authoringLineId != sideId.lineId || mapping.authoringSide != sideId.side) {
                                 continue;
                             }
                             const SectorTopologySideDef* sideDef =
-                                    FindSectorTopologySideDef(state.topologyMap, mapping.topologySideDefId);
+                                    FindSectorTopologySideDef(context.topologyMap, mapping.topologySideDefId);
                             if (sideDef == nullptr) {
                                 continue;
                             }
@@ -1133,7 +1190,15 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                         return false;
                     };
                     const auto mutateSide = [&, sideId](const char* status, const std::function<bool(SectorAuthoringLineSide&)>& mutate) {
-                        return MutateSectorEditorAuthoringSideById(state, sideId, status, mutate);
+                        return MutateSectorEditorAuthoringSideById(
+                                state,
+                                context.lifecycle,
+                                context.topologyMap,
+                                authoringGraph,
+                                context.derivation,
+                                sideId,
+                                status,
+                                mutate);
                     };
                     const auto drawTextureRow =
                             [&](const char* suffix, const char* label, TopologyWallPart part) {
@@ -1443,7 +1508,15 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         const int faceAnchorId = selectedAuthoringFaceAnchor->id;
         const auto mutateFaceAnchor =
                 [&, faceAnchorId](const char* status, const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate) {
-                    return MutateSectorEditorAuthoringFaceAnchorById(state, faceAnchorId, status, mutate);
+                    return MutateSectorEditorAuthoringFaceAnchorById(
+                            state,
+                            context.lifecycle,
+                            context.topologyMap,
+                            authoringGraph,
+                            context.derivation,
+                            faceAnchorId,
+                            status,
+                            mutate);
                 };
 
         bool isVoidFace = selectedAuthoringFaceAnchor->isVoid;
@@ -1641,16 +1714,15 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             y += row.height + gap;
         };
         const auto mappedFlatTargetForField = [&, faceAnchorId](TopologySectorTextureField field, TopologySurfaceEditTarget& outTarget) {
-            if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-                    || state.authoringDerivedTopologyStale
-                    || !state.authoringDerivation.success) {
+            if (!IsSectorEditorAuthoringDerivationCurrent(context.derivation)) {
                 return false;
             }
-            for (const SectorAuthoringDerivedSectorMapping& mapping : state.authoringDerivation.mapping.sectors) {
+            for (const SectorAuthoringDerivedSectorMapping& mapping
+                    : context.derivation.authoringDerivation.mapping.sectors) {
                 if (mapping.faceAnchorId != faceAnchorId) {
                     continue;
                 }
-                if (FindSectorTopologySector(state.topologyMap, mapping.topologySectorId) == nullptr) {
+                if (FindSectorTopologySector(context.topologyMap, mapping.topologySectorId) == nullptr) {
                     continue;
                 }
                 if (field == TopologySectorTextureField::Floor) {
