@@ -56,7 +56,9 @@ bool DrawTopologySectorInspector(
         float gap,
         SectorTopologySector& sector,
         SectorEditorState& state,
+        SelectionState& selectionState,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         MaterialEditingUiState& materialUiState,
         SectorEditorMaterialEditingService& materialEditing,
         SectorEditorTextureCatalogService& textureCatalog,
@@ -86,18 +88,18 @@ bool DrawTopologySectorInspector(
             "sector_editor_selected_topology_sector_name",
             Rectangle{labelW, y, contentW - labelW, rowH},
             font,
-            uiState.selectedSectorIdBuffer,
-            sizeof(uiState.selectedSectorIdBuffer),
+            inspectorIdUiState.selectedSectorIdBuffer,
+            sizeof(inspectorIdUiState.selectedSectorIdBuffer),
             0,
-            sizeof(uiState.selectedSectorIdBuffer) - 1,
+            sizeof(inspectorIdUiState.selectedSectorIdBuffer) - 1,
             engine::UITextJustify::Left);
     if (nameResult.submitted) {
         callbacks.tryRenameSelectedTopologySector();
     }
     y += rowH + gap;
 
-    if (!uiState.idEditError.empty()) {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, uiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
+    if (!inspectorIdUiState.idEditError.empty()) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, inspectorIdUiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
         y += 36.0f;
     }
 
@@ -335,8 +337,8 @@ bool DrawTopologySectorInspector(
                     Rectangle{labelColumnW, y, buttonW, 36.0f},
                     font,
                     "Base",
-                    state.activeTopologyMaterialLayer == TopologyMaterialLayer::Base)) {
-            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
+                    selectionState.activeTopologyMaterialLayer == TopologyMaterialLayer::Base)) {
+            selectionState.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
             for (engine::UIFloatInputState& inputState : materialUiState.topologySectorUvInputs) {
                 inputState = engine::UIFloatInputState{};
             }
@@ -350,8 +352,8 @@ bool DrawTopologySectorInspector(
                     Rectangle{labelColumnW + buttonW + gap, y, buttonW, 36.0f},
                     font,
                     "Decal",
-                    state.activeTopologyMaterialLayer == TopologyMaterialLayer::Decal)) {
-            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
+                    selectionState.activeTopologyMaterialLayer == TopologyMaterialLayer::Decal)) {
+            selectionState.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
             for (engine::UIFloatInputState& inputState : materialUiState.topologySectorUvInputs) {
                 inputState = engine::UIFloatInputState{};
             }
@@ -366,7 +368,7 @@ bool DrawTopologySectorInspector(
         y += 30.0f;
         const TopologySurfaceEditTarget target{materialKind, sector.id};
         drawLayerToggle(uvPrefix);
-        const TopologyMaterialLayer layer = state.activeTopologyMaterialLayer;
+        const TopologyMaterialLayer layer = selectionState.activeTopologyMaterialLayer;
         if (layer == TopologyMaterialLayer::Base) {
             const float buttonW = (contentW - gap) * 0.5f;
             if (engine::Button(

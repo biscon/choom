@@ -25,6 +25,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
     const float rowH = context.rowH;
     const float gap = context.gap;
     SectorEditorState& state = context.state;
+    SelectionState& selectionState = context.selectionState;
     SectorEditorUiState& uiState = context.uiState;
     MaterialEditingUiState& materialUiState = context.materialUiState;
     std::string& statusText = context.statusText;
@@ -34,9 +35,9 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
 
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     const SectorTopologyLineDef* lineDef =
-            (state.topologySelectionKind == TopologySelectionKind::LineDef
-             || state.topologySelectionKind == TopologySelectionKind::SideDef)
-            ? FindSectorTopologyLineDef(state.topologyMap, state.selectedTopologyLineDefId)
+            (selectionState.topologySelectionKind == TopologySelectionKind::LineDef
+             || selectionState.topologySelectionKind == TopologySelectionKind::SideDef)
+            ? FindSectorTopologyLineDef(state.topologyMap, selectionState.selectedTopologyLineDefId)
             : nullptr;
     if (lineDef == nullptr) {
         return false;
@@ -47,14 +48,14 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
     const bool hasEndpoints = GetSectorTopologyLineVertices(state.topologyMap, *lineDef, start, end);
 
     float y = 0.0f;
-    SectorTopologySideDef* sideDef = state.topologySelectionKind == TopologySelectionKind::SideDef
-            ? FindSectorTopologySideDef(state.topologyMap, state.selectedTopologySideDefId)
+    SectorTopologySideDef* sideDef = selectionState.topologySelectionKind == TopologySelectionKind::SideDef
+            ? FindSectorTopologySideDef(state.topologyMap, selectionState.selectedTopologySideDefId)
             : nullptr;
     if (sideDef != nullptr) {
-        state.selectedTopologyWallPart = ValidTopologyWallPartForSideDef(
+        selectionState.selectedTopologyWallPart = ValidTopologyWallPartForSideDef(
                 state.topologyMap,
                 sideDef,
-                state.selectedTopologyWallPart);
+                selectionState.selectedTopologyWallPart);
     }
     engine::Text(
             ui,
@@ -127,7 +128,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
     y += 38.0f + gap;
 
     if (sideDef == nullptr) {
-        const int preferredSideDefId = state.selectedTopologySideKind == SectorTopologySideKind::Front
+        const int preferredSideDefId = selectionState.selectedTopologySideKind == SectorTopologySideKind::Front
                 ? lineDef->frontSideDefId
                 : lineDef->backSideDefId;
         const SectorTopologySideDef* preferredSideDef = FindSectorTopologySideDef(
@@ -219,7 +220,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     ValidTopologyWallPartForSideDef(
                             state.topologyMap,
                             FindSectorTopologySideDef(state.topologyMap, oppositeId),
-                            state.selectedTopologyWallPart));
+                            selectionState.selectedTopologyWallPart));
             statusText = TextFormat("Selected opposite topology sidedef %d", oppositeId);
             return true;
         }
@@ -299,8 +300,8 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{static_cast<float>(i) * (partButtonW + gap), y, partButtonW, 38.0f},
                     font,
                     TopologyWallPartName(part),
-                    state.selectedTopologyWallPart == part)) {
-            state.selectedTopologyWallPart = part;
+                    selectionState.selectedTopologyWallPart == part)) {
+            selectionState.selectedTopologyWallPart = part;
             for (engine::UIFloatInputState& inputState : materialUiState.topologySideDefUvInputs) {
                 inputState = engine::UIFloatInputState{};
             }
@@ -309,9 +310,9 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
     }
     y += 38.0f + gap;
 
-    const bool selectedMiddle = state.selectedTopologyWallPart == TopologyWallPart::Middle;
-    if (selectedMiddle && state.activeTopologyMaterialLayer != TopologyMaterialLayer::Base) {
-        state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
+    const bool selectedMiddle = selectionState.selectedTopologyWallPart == TopologyWallPart::Middle;
+    if (selectedMiddle && selectionState.activeTopologyMaterialLayer != TopologyMaterialLayer::Base) {
+        selectionState.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
         for (engine::UIFloatInputState& inputState : materialUiState.topologySideDefUvInputs) {
             inputState = engine::UIFloatInputState{};
         }
@@ -319,7 +320,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
         materialUiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
     }
     const TopologySurfaceEditTarget selectedMaterialTarget{
-            TopologyWallPartEditTargetKind(state.selectedTopologyWallPart),
+            TopologyWallPartEditTargetKind(selectionState.selectedTopologyWallPart),
             sideDef->sectorId,
             sideDef->lineDefId,
             sideDef->id,
@@ -337,8 +338,8 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{layerLabelW, y, layerButtonW, 36.0f},
                     font,
                     "Base",
-                    state.activeTopologyMaterialLayer == TopologyMaterialLayer::Base)) {
-            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
+                    selectionState.activeTopologyMaterialLayer == TopologyMaterialLayer::Base)) {
+            selectionState.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
             for (engine::UIFloatInputState& inputState : materialUiState.topologySideDefUvInputs) {
                 inputState = engine::UIFloatInputState{};
             }
@@ -354,8 +355,8 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     Rectangle{layerLabelW + layerButtonW + gap, y, layerButtonW, 36.0f},
                     font,
                     "Decal",
-                    state.activeTopologyMaterialLayer == TopologyMaterialLayer::Decal)) {
-            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
+                    selectionState.activeTopologyMaterialLayer == TopologyMaterialLayer::Decal)) {
+            selectionState.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
             for (engine::UIFloatInputState& inputState : materialUiState.topologySideDefUvInputs) {
                 inputState = engine::UIFloatInputState{};
             }
@@ -365,15 +366,15 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
         y += 36.0f + gap;
     }
 
-    SectorTopologyWallPartSettings& selectedPart = TopologyWallPartSettingsFor(*sideDef, state.selectedTopologyWallPart);
+    SectorTopologyWallPartSettings& selectedPart = TopologyWallPartSettingsFor(*sideDef, selectionState.selectedTopologyWallPart);
     const TopologyMaterialLayer layer = selectedMiddle
             ? TopologyMaterialLayer::Base
-            : state.activeTopologyMaterialLayer;
+            : selectionState.activeTopologyMaterialLayer;
     drawTextureRow(
             "sector_editor_topology_sidedef_pick_selected_part",
             "Texture:",
             layer == TopologyMaterialLayer::Decal ? selectedPart.decal.textureId : selectedPart.textureId,
-            state.selectedTopologyWallPart,
+            selectionState.selectedTopologyWallPart,
             layer);
 
     if (selectedMiddle && selectedPart.textureId.empty()) {
@@ -411,7 +412,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     "sector_editor_material_sidedef_copy_material",
                     Rectangle{0.0f, y, contentW, 38.0f},
                     font,
-                    TextFormat("Copy %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
+                    TextFormat("Copy %s Material", TopologyWallPartName(selectionState.selectedTopologyWallPart)))) {
             materialEditing.CopyMaterial(selectedMaterialTarget);
         }
         y += 38.0f + gap;
@@ -424,7 +425,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                     "sector_editor_material_sidedef_paste_material",
                     Rectangle{0.0f, y, contentW, 38.0f},
                     font,
-                    TextFormat("Paste %s Material", TopologyWallPartName(state.selectedTopologyWallPart)))) {
+                    TextFormat("Paste %s Material", TopologyWallPartName(selectionState.selectedTopologyWallPart)))) {
             materialEditing.PasteMaterial(selectedMaterialTarget, assets);
         }
         y += 38.0f + gap;
@@ -628,7 +629,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 "sector_editor_topology_sidedef_reset_uv",
                 Rectangle{0.0f, y, contentW, 38.0f},
                 font,
-                TextFormat("Reset %s UV", TopologyWallPartName(state.selectedTopologyWallPart)))) {
+                TextFormat("Reset %s UV", TopologyWallPartName(selectionState.selectedTopologyWallPart)))) {
         if (materialEditing.ResetInspectorSideDefUv(selectedMaterialTarget, layer, assets)) {
             return true;
         }

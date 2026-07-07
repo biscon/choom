@@ -1,18 +1,73 @@
 #pragma once
 
+#include "engine/ui/UI.h"
+#include "sector_editor/inspector/SectorEditorInspectorUiState.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorSurfaceTypes.h"
-#include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/selection/SectorEditorManipulationState.h"
+#include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
+#include "sector_demo/SectorAuthoringGraph.h"
+#include "sector_demo/SectorTopologyMap.h"
 
 #include <string>
 
 namespace game {
 
+struct SectorEditorSelectionUiDependencies {
+    engine::UIFloatInputState& floorInput;
+    engine::UIFloatInputState& ceilingInput;
+    engine::UIFloatInputState& ambientIntensityInput;
+    engine::UIIntInputState& ambientRedInput;
+    engine::UIIntInputState& ambientGreenInput;
+    engine::UIIntInputState& ambientBlueInput;
+    engine::UIFloatInputState& lightXInput;
+    engine::UIFloatInputState& lightYInput;
+    engine::UIFloatInputState& lightZInput;
+    engine::UIFloatInputState& lightTargetXInput;
+    engine::UIFloatInputState& lightTargetYInput;
+    engine::UIFloatInputState& lightTargetZInput;
+    engine::UIFloatInputState& lightIntensityInput;
+    engine::UIFloatInputState& lightRadiusInput;
+    engine::UIFloatInputState& lightInnerConeInput;
+    engine::UIFloatInputState& lightOuterConeInput;
+    engine::UIFloatInputState& lightSourceRadiusInput;
+    engine::UIFloatInputState& lightFlickerSpeedInput;
+    engine::UIFloatInputState& lightFlickerAmountInput;
+    engine::UIIntInputState& lightRedInput;
+    engine::UIIntInputState& lightGreenInput;
+    engine::UIIntInputState& lightBlueInput;
+    engine::UIFloatInputState& runtimeObjectXInput;
+    engine::UIFloatInputState& runtimeObjectYInput;
+    engine::UIFloatInputState& runtimeObjectZInput;
+    engine::UIFloatInputState& runtimeObjectYawInput;
+    engine::UIFloatInputState& runtimeObjectWidthInput;
+    engine::UIFloatInputState& runtimeObjectHeightInput;
+    engine::UIFloatInputState& runtimeObjectThicknessInput;
+    engine::UIFloatInputState& runtimeObjectNormalOffsetInput;
+    engine::UIFloatInputState& runtimeObjectOpenDistanceInput;
+    engine::UIFloatInputState& runtimeObjectSpeedInput;
+    engine::UIFloatInputState& runtimeObjectInitialOpenFractionInput;
+    engine::UIFloatInputState& runtimeObjectAutoOpenDistanceInput;
+    engine::UIFloatInputState& runtimeObjectInteractionDistanceInput;
+    engine::UIFloatInputState& runtimeObjectOriginXInput;
+    engine::UIFloatInputState& runtimeObjectOriginYInput;
+    engine::UIScrollState& inspectorScroll;
+    InspectorIdUiState& inspectorIdUiState;
+};
+
 struct SectorEditorSelectionServiceContext {
-    SectorEditorState& state;
-    SectorEditorUiState& uiState;
+    SectorTopologyMap& topologyMap;
+    SectorAuthoringGraph& authoringGraph;
+    const SectorAuthoringDerivationResult& authoringDerivation;
+    bool authoringDerivationCurrent = false;
+    SelectionState& selectionState;
+    SectorSurfaceRef& selectedSurface3D;
+    TopologySurfaceEditTarget& selectedTopologySurface3D;
+    ManipulationState& manipulationState;
+    RuntimeObjectDragState& runtimeObjectDrag;
+    SectorEditorSelectionUiDependencies ui;
     MaterialEditingUiState& materialUiState;
     std::string* statusText = nullptr;
     void* userData = nullptr;

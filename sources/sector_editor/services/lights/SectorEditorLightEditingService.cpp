@@ -84,8 +84,8 @@ void ClearLightSelection(
         SectorEditorLightEditingServiceContext::SelectionRefs& state,
         SectorEditorLightEditingServiceContext::UiRefs& uiState)
 {
-    state.selectDragArm = SelectDragArmState{};
-    state.authoringVertexDrag = AuthoringVertexDragState{};
+    state.manipulationState.selectDragArm = SelectDragArmState{};
+    state.manipulationState.authoringVertexDrag = AuthoringVertexDragState{};
     state.runtimeObjectDrag = RuntimeObjectDragState{};
     state.topologySelectionKind = TopologySelectionKind::None;
     state.selectedTopologySectorId = -1;
@@ -103,10 +103,10 @@ void ClearLightSelection(
     state.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     state.selectedAuthoring = SectorAuthoringSelectionTarget{};
     ResetLightInspectorUiState(uiState);
-    uiState.idBufferSectorIndex = -1;
-    uiState.idBufferLightIndex = -1;
-    uiState.selectedSectorIdBuffer[0] = '\0';
-    uiState.selectedLightIdBuffer[0] = '\0';
+    uiState.inspectorIdUiState.idBufferSectorIndex = -1;
+    uiState.inspectorIdUiState.idBufferLightIndex = -1;
+    uiState.inspectorIdUiState.selectedSectorIdBuffer[0] = '\0';
+    uiState.inspectorIdUiState.selectedLightIdBuffer[0] = '\0';
 }
 
 void SelectLight(
@@ -132,11 +132,11 @@ void SelectLight(
     state.selectedTopologyStaticSpotLightId = kind == TopologySelectionKind::StaticSpotLight ? lightId : -1;
     state.selectedTopologyDynamicLightId = kind == TopologySelectionKind::DynamicLight ? lightId : -1;
     state.selectedTopologyDynamicSpotLightId = kind == TopologySelectionKind::DynamicSpotLight ? lightId : -1;
-    std::snprintf(uiState.selectedLightIdBuffer, uiState.selectedLightIdBufferSize, "%d", lightId);
-    uiState.idBufferLightIndex = lightId;
-    uiState.idBufferSectorIndex = -1;
-    uiState.selectedSectorIdBuffer[0] = '\0';
-    uiState.idEditError.clear();
+    std::snprintf(uiState.inspectorIdUiState.selectedLightIdBuffer, sizeof(uiState.inspectorIdUiState.selectedLightIdBuffer), "%d", lightId);
+    uiState.inspectorIdUiState.idBufferLightIndex = lightId;
+    uiState.inspectorIdUiState.idBufferSectorIndex = -1;
+    uiState.inspectorIdUiState.selectedSectorIdBuffer[0] = '\0';
+    uiState.inspectorIdUiState.idEditError.clear();
 }
 
 SectorEditorLightMutationResult FinishLightMutationResult(bool changed)

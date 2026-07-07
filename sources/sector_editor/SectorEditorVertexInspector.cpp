@@ -26,11 +26,12 @@ bool DrawTopologyVertexInspector(
         const SectorTopologyVertex* inspectedVertex,
         bool hasSelectedTopologyVertex,
         SectorEditorState& state,
+        SelectionState& selectionState,
         const SectorEditorVertexInspectorCallbacks& callbacks)
 {
     (void)input;
     float y = 0.0f;
-    const int vertexId = hasSelectedTopologyVertex ? state.selectedTopologyVertexId : inspectedVertex->id;
+    const int vertexId = hasSelectedTopologyVertex ? selectionState.selectedTopologyVertexId : inspectedVertex->id;
     const SectorTopologyVertex* vertex = FindSectorTopologyVertex(state.topologyMap, vertexId);
     if (vertex != nullptr) {
         int incidentLineCount = 0;
@@ -115,7 +116,7 @@ bool DrawTopologyVertexInspector(
                     config.mutedTextColor);
         }
     } else {
-        state.inspectedTopologyVertexId = -1;
+        selectionState.inspectedTopologyVertexId = -1;
         if (hasSelectedTopologyVertex) {
             callbacks.clearStaleTopologySelection();
         }

@@ -1,9 +1,11 @@
 #pragma once
 
 #include "engine/ui/UI.h"
+#include "sector_editor/inspector/SectorEditorInspectorUiState.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorSurfaceTypes.h"
 #include "sector_editor/SectorEditorTopologyRenderCacheTypes.h"
+#include "sector_editor/selection/SectorEditorManipulationState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_demo/SectorTopologyMap.h"
@@ -24,8 +26,7 @@ struct SectorEditorLightEditingServiceContext {
     uint64_t& topologyRenderRevision;
     SectorEditorTopologyRenderCache& topologyRenderCache;
     struct SelectionRefs {
-        SelectDragArmState& selectDragArm;
-        AuthoringVertexDragState& authoringVertexDrag;
+        ManipulationState& manipulationState;
         RuntimeObjectDragState& runtimeObjectDrag;
         TopologySelectionKind& topologySelectionKind;
         int& selectedTopologySectorId;
@@ -69,13 +70,7 @@ struct SectorEditorLightEditingServiceContext {
         engine::UIIntInputState& lightRedInput;
         engine::UIIntInputState& lightGreenInput;
         engine::UIIntInputState& lightBlueInput;
-        int& idBufferSectorIndex;
-        int& idBufferLightIndex;
-        char* selectedSectorIdBuffer;
-        std::size_t selectedSectorIdBufferSize;
-        char* selectedLightIdBuffer;
-        std::size_t selectedLightIdBufferSize;
-        std::string& idEditError;
+        InspectorIdUiState& inspectorIdUiState;
     } ui;
     std::string& statusText;
 };

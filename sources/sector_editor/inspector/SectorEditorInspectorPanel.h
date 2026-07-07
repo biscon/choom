@@ -4,7 +4,9 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "sector_editor/inspector/SectorEditorInspectorUiState.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
+#include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectActions.h"
@@ -47,7 +49,9 @@ struct SectorEditorInspectorPanelContext {
     Rectangle panelRect;
 
     SectorEditorState& state;
+    SelectionState& selectionState;
     SectorEditorUiState& uiState;
+    InspectorIdUiState& inspectorIdUiState;
     MaterialEditingUiState& materialUiState;
     std::string& statusText;
 

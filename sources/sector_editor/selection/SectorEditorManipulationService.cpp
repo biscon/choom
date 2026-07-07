@@ -45,7 +45,7 @@ SectorEditorSelectionTarget MakeRuntimeObjectSelectionTarget(int objectId)
 
 bool IsAnySectorEditorManipulationActive(const SectorEditorManipulationServiceContext& context)
 {
-    return context.state.authoringVertexDrag.active
+    return context.manipulationState.authoringVertexDrag.active
             || context.lightState.lightDrag.active
             || context.state.runtimeObjectDrag.active;
 }
@@ -54,7 +54,7 @@ void UpdateActiveSectorEditorManipulation(
         SectorEditorManipulationServiceContext& context,
         engine::Input& input)
 {
-    if (context.state.authoringVertexDrag.active && context.updateAuthoringVertexDrag != nullptr) {
+    if (context.manipulationState.authoringVertexDrag.active && context.updateAuthoringVertexDrag != nullptr) {
         context.updateAuthoringVertexDrag(context.userData, input);
     }
     if (context.lightState.lightDrag.active && context.updateLightDrag != nullptr) {
@@ -73,7 +73,7 @@ void UpdateActiveSectorEditorManipulation(
 
 void FinishActiveSectorEditorManipulation(SectorEditorManipulationServiceContext& context)
 {
-    if (context.state.authoringVertexDrag.active && context.finishAuthoringVertexDrag != nullptr) {
+    if (context.manipulationState.authoringVertexDrag.active && context.finishAuthoringVertexDrag != nullptr) {
         context.finishAuthoringVertexDrag(context.userData);
     }
     if (context.lightState.lightDrag.active && context.finishLightDrag != nullptr) {
@@ -96,7 +96,7 @@ bool CancelFirstActiveSectorEditorManipulation(
         const char* lightMessage,
         const char* runtimeObjectMessage)
 {
-    if (context.state.authoringVertexDrag.active && context.cancelAuthoringVertexDrag != nullptr) {
+    if (context.manipulationState.authoringVertexDrag.active && context.cancelAuthoringVertexDrag != nullptr) {
         context.cancelAuthoringVertexDrag(context.userData, authoringVertexMessage);
         return true;
     }
@@ -123,7 +123,7 @@ void CancelActiveSectorEditorManipulation(
         const char* lightMessage,
         const char* runtimeObjectMessage)
 {
-    if (context.state.authoringVertexDrag.active && context.cancelAuthoringVertexDrag != nullptr) {
+    if (context.manipulationState.authoringVertexDrag.active && context.cancelAuthoringVertexDrag != nullptr) {
         context.cancelAuthoringVertexDrag(context.userData, authoringVertexMessage);
     }
     if (context.lightState.lightDrag.active && context.cancelLightDrag != nullptr) {
@@ -144,22 +144,22 @@ void UpdateSectorEditorSelectDragArm(
         SectorEditorManipulationServiceContext& context,
         engine::Input& input)
 {
-    if (!context.state.selectDragArm.active) {
+    if (!context.manipulationState.selectDragArm.active) {
         return;
     }
     if (context.state.currentTool != SectorEditorTool::Select
             || !input.IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-        context.state.selectDragArm = SelectDragArmState{};
+        context.manipulationState.selectDragArm = SelectDragArmState{};
         return;
     }
     if (!ShouldStartSectorEditorSelectDrag(
-                context.state.selectDragArm.pressPosition,
+                context.manipulationState.selectDragArm.pressPosition,
                 input.MousePosition())) {
         return;
     }
 
-    const SectorEditorPickTarget target = context.state.selectDragArm.target;
-    context.state.selectDragArm = SelectDragArmState{};
+    const SectorEditorPickTarget target = context.manipulationState.selectDragArm.target;
+    context.manipulationState.selectDragArm = SelectDragArmState{};
     StartSectorEditorSelectedManipulation(context, target, input.MousePosition());
 }
 
@@ -167,14 +167,14 @@ void ArmSectorEditorSelectedDrag(
         SectorEditorManipulationServiceContext& context,
         Vector2 pressPosition)
 {
-    context.state.selectDragArm = SelectDragArmState{};
+    context.manipulationState.selectDragArm = SelectDragArmState{};
     SectorEditorPickTarget target;
     if (!FindSectorEditorSelectedMovablePickTargetAtScreenPoint(context, pressPosition, target)) {
         return;
     }
-    context.state.selectDragArm.active = true;
-    context.state.selectDragArm.target = target;
-    context.state.selectDragArm.pressPosition = pressPosition;
+    context.manipulationState.selectDragArm.active = true;
+    context.manipulationState.selectDragArm.target = target;
+    context.manipulationState.selectDragArm.pressPosition = pressPosition;
 }
 
 void StartSectorEditorSelectedManipulation(

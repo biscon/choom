@@ -81,33 +81,33 @@ void OpenSelectedDoorTexturePickerForInspector(
 
 bool TryRenameSelectedDerivedSectorAuthoringNameForInspector(
         SectorEditorState& state,
-        SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         std::string& statusText,
         SectorTopologySector* sector)
 {
     if (sector == nullptr) {
-        uiState.idEditError = "No topology sector selected";
-        statusText = uiState.idEditError;
+        inspectorIdUiState.idEditError = "No topology sector selected";
+        statusText = inspectorIdUiState.idEditError;
         return false;
     }
 
-    const std::string newName = uiState.selectedSectorIdBuffer;
+    const std::string newName = inspectorIdUiState.selectedSectorIdBuffer;
     if (newName == sector->name) {
-        uiState.idEditError.clear();
+        inspectorIdUiState.idEditError.clear();
         return true;
     }
 
     const bool hasAuthoringGraph = HasAuthoringGraphData(state);
     if (!hasAuthoringGraph) {
-        uiState.idEditError = "Cannot edit sector property: authoring data is required.";
-        statusText = uiState.idEditError;
+        inspectorIdUiState.idEditError = "Cannot edit sector property: authoring data is required.";
+        statusText = inspectorIdUiState.idEditError;
         return true;
     }
     if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
             || state.authoringDerivedTopologyStale
             || !state.authoringDerivation.success) {
-        uiState.idEditError = "Sector name edit unavailable: derived topology is not current";
-        statusText = uiState.idEditError;
+        inspectorIdUiState.idEditError = "Sector name edit unavailable: derived topology is not current";
+        statusText = inspectorIdUiState.idEditError;
         return true;
     }
 
@@ -125,11 +125,11 @@ bool TryRenameSelectedDerivedSectorAuthoringNameForInspector(
                     anchor.name = newName;
                     return true;
                 });
-        uiState.idEditError.clear();
+        inspectorIdUiState.idEditError.clear();
         return true;
     }
-    uiState.idEditError = "Sector name edit unavailable: selected sector has no face anchor mapping";
-    statusText = uiState.idEditError;
+    inspectorIdUiState.idEditError = "Sector name edit unavailable: selected sector has no face anchor mapping";
+    statusText = inspectorIdUiState.idEditError;
     return true;
 }
 
@@ -278,6 +278,7 @@ bool DrawTopologySideDefInspector(
     const engine::FontHandle font = context.font;
     const engine::FontHandle smallFont = context.smallFont;
     SectorEditorState& state = context.state;
+    SelectionState& selectionState = context.selectionState;
     SectorEditorUiState& uiState = context.uiState;
     MaterialEditingUiState& materialUiState = context.materialUiState;
     std::string& statusText = context.statusText;
@@ -303,6 +304,7 @@ bool DrawTopologySideDefInspector(
             rowH,
             gap,
             state,
+            context.selectionState,
             uiState,
             materialUiState,
             statusText,
@@ -325,6 +327,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     const engine::FontHandle font = context.font;
     const engine::FontHandle smallFont = context.smallFont;
     SectorEditorState& state = context.state;
+    SelectionState& selectionState = context.selectionState;
     SectorEditorUiState& uiState = context.uiState;
     MaterialEditingUiState& materialUiState = context.materialUiState;
     std::string& statusText = context.statusText;
@@ -362,14 +365,14 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     const bool hasSelectedTopologySector = selectedTopologySector() != nullptr;
     const bool hasSelectedTopologyVertex = selectedTopologyVertex() != nullptr;
     const bool hasSelectedTopologySideDef = selectedTopologySideDef() != nullptr;
-    const bool hasSelectedTopologyLineDef = state.topologySelectionKind == TopologySelectionKind::LineDef
+    const bool hasSelectedTopologyLineDef = selectionState.topologySelectionKind == TopologySelectionKind::LineDef
             && selectedTopologyLineDef() != nullptr;
     const bool hasSelectedLight = selectedStaticLight() != nullptr;
     const bool hasSelectedStaticSpotLight = selectedStaticSpotLight() != nullptr;
     const bool hasSelectedDynamicLight = selectedDynamicLight() != nullptr;
     const bool hasSelectedDynamicSpotLight = selectedDynamicSpotLight() != nullptr;
     const bool hasSelectedRuntimeObject = selectedRuntimeObject() != nullptr;
-    const SectorEditorInspectorTarget inspectorTarget = ResolveSectorEditorInspectorTarget(state);
+    const SectorEditorInspectorTarget inspectorTarget = ResolveSectorEditorInspectorTarget(state, selectionState);
     const bool allowLegacyTopologyInspector =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::LegacyTopology
             || inspectorTarget.kind == SectorEditorInspectorTargetKind::None;
@@ -387,7 +390,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             : nullptr;
     const SectorTopologyVertex* inspectedVertex = FindSectorTopologyVertex(
             state.topologyMap,
-            state.inspectedTopologyVertexId);
+            selectionState.inspectedTopologyVertexId);
     const bool hasInspectedVertex = !hasSelectedTopologySector
             && !hasSelectedTopologyVertex
             && !hasSelectedTopologySideDef
@@ -479,13 +482,13 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             return MeasureSectorEditorPlacedObjectInspectorContentHeight(runtimeObjectMeasureContext);
         }
         if (hasSelectedLight) {
-            return StaticLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
+            return StaticLightInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
         }
         if (hasSelectedStaticSpotLight) {
-            return StaticSpotLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
+            return StaticSpotLightInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
         }
         if (hasSelectedDynamicLight) {
-            return DynamicLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
+            return DynamicLightInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
         }
         if (hasSelectedDynamicSpotLight) {
             const float shadowNoteHeight = MeasureSectorEditorWrappedTextHeight(
@@ -497,10 +500,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                             MaxDynamicSpotLightShadowCasters),
                     scrollContentW,
                     2);
-            return DynamicSpotLightInspectorContentHeight(rowH, gap, !uiState.idEditError.empty(), shadowNoteHeight);
+            return DynamicSpotLightInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty(), shadowNoteHeight);
         }
         if (hasSelectedTopologySector && allowLegacyTopologyInspector) {
-            return SectorInspectorContentHeight(rowH, gap, !uiState.idEditError.empty());
+            return SectorInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
         }
         if (hasSelectedTopologyVertex && allowLegacyTopologyInspector) {
             return SelectedVertexInspectorContentHeight();
@@ -678,7 +681,13 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     return true;
                 };
             const SectorEditorSectorInspectorCallbacks callbacks{
-                [&]() { return TryRenameSelectedDerivedSectorAuthoringNameForInspector(state, uiState, statusText, selectedTopologySector()); },
+                [&]() {
+                    return TryRenameSelectedDerivedSectorAuthoringNameForInspector(
+                            state,
+                            context.inspectorIdUiState,
+                            statusText,
+                            selectedTopologySector());
+                },
                 [&](const char* status) { statusText = status != nullptr ? status : ""; },
                 [&](const char* status) { statusText = status != nullptr ? status : ""; },
                 [mutateSelectedAuthoringFaceAnchor,
@@ -823,7 +832,9 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     gap,
                     *selectedTopologySector(),
                     state,
+                    selectionState,
                     uiState,
+                    context.inspectorIdUiState,
                     context.materialUiState,
                     materialEditing,
                     textureCatalog,
@@ -857,6 +868,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 gap,
                 *selectedStaticLight(),
                 uiState,
+                context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
                 bakeRequested);
@@ -886,6 +898,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 gap,
                 *selectedStaticSpotLight(),
                 uiState,
+                context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
                 bakeRequested);
@@ -914,6 +927,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 gap,
                 *selectedDynamicLight(),
                 uiState,
+                context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested);
         if (deleteRequested) {
@@ -939,6 +953,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 gap,
                 *selectedDynamicSpotLight(),
                 uiState,
+                context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested);
         if (deleteRequested) {
@@ -966,6 +981,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 inspectedVertex,
                 hasSelectedTopologyVertex,
                 state,
+                selectionState,
                 callbacks);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);

@@ -75,6 +75,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
     engine::AssetManager& assets = context.assets;
     const engine::FontHandle font = context.font;
     SectorEditorState& state = context.state;
+    SelectionState& selectionState = context.selectionState;
     SectorEditorUiState& uiState = context.uiState;
     MaterialEditingUiState& materialUiState = context.materialUiState;
     SectorEditorMaterialEditingService& materialEditing = context.materialEditing;
@@ -82,13 +83,13 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
 
     const TopologySurfaceEditTarget target = state.selectedTopologySurface3D;
     const bool targetIsMiddle = IsMiddleTopologyEditTarget(target.kind);
-    if (targetIsMiddle && state.activeTopologyMaterialLayer != TopologyMaterialLayer::Base) {
-        state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
+    if (targetIsMiddle && selectionState.activeTopologyMaterialLayer != TopologyMaterialLayer::Base) {
+        selectionState.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
         ResetPreviewSurfaceUi(state, materialUiState);
     }
     const TopologyMaterialLayer layer = EffectiveTopologyMaterialLayer(
             target.kind,
-            state.activeTopologyMaterialLayer);
+            selectionState.activeTopologyMaterialLayer);
     const Rectangle panel = context.panelRect;
     DrawRectangleRec(panel, Color{12, 15, 20, 230});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
@@ -163,7 +164,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
                     font,
                     "Base",
                     layer == TopologyMaterialLayer::Base)) {
-            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
+            selectionState.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
             ResetPreviewSurfaceUi(state, materialUiState);
         }
         if (engine::ToolButton(
@@ -176,7 +177,7 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
                     font,
                     "Decal",
                     layer == TopologyMaterialLayer::Decal)) {
-            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
+            selectionState.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
             ResetPreviewSurfaceUi(state, materialUiState);
         }
     }

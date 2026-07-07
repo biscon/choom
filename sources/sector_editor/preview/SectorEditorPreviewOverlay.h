@@ -3,7 +3,10 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "sector_editor/inspector/SectorEditorInspectorUiState.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/selection/SectorEditorManipulationState.h"
+#include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingState.h"
 
@@ -24,7 +27,10 @@ struct SectorEditorPreviewOverlayContext {
     engine::FontHandle smallFont;
 
     SectorEditorState& state;
+    SelectionState& selectionState;
+    ManipulationState& manipulationState;
     SectorEditorUiState& uiState;
+    InspectorIdUiState& inspectorIdUiState;
     MaterialEditingUiState& materialUiState;
     LightEditingState& lightState;
     std::string& statusText;
@@ -44,11 +50,15 @@ Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab 
 
 void DrawSectorEditorPreviewSurfaceHighlights(
         SectorEditorState& state,
+        SelectionState& selectionState,
+        ManipulationState& manipulationState,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         MaterialEditingUiState& materialUiState,
         const SectorMeshRenderer& preview);
 void DrawSectorEditorPreviewSpotLightOverlay(
         const SectorEditorState& state,
+        const SelectionState& selectionState,
         const SectorMeshRenderer& preview);
 void DrawSectorEditorPreviewObjectProbeOverlay(
         const SectorEditorState& state,

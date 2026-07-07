@@ -95,38 +95,12 @@ struct SectorEditorState {
     float viewZoom = 48.0f;
     int gridSize = 8;
 
-    TopologySelectionKind topologySelectionKind = TopologySelectionKind::None;
-    int selectedTopologySectorId = -1;
-    int selectedTopologyVertexId = -1;
-    int selectedTopologySideDefId = -1;
-    int selectedTopologyLineDefId = -1;
-    SectorTopologySideKind selectedTopologySideKind = SectorTopologySideKind::Front;
-    TopologyWallPart selectedTopologyWallPart = TopologyWallPart::Wall;
-    TopologyMaterialLayer activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
-    int selectedTopologyLightId = -1;
-    int selectedTopologyStaticSpotLightId = -1;
-    int selectedTopologyDynamicLightId = -1;
-    int selectedTopologyDynamicSpotLightId = -1;
-    int selectedRuntimeObjectId = -1;
-    SelectDragArmState selectDragArm;
-    int hoveredTopologyLightId = -1;
-    int hoveredTopologyStaticSpotLightId = -1;
-    int hoveredTopologyDynamicLightId = -1;
-    int hoveredTopologyDynamicSpotLightId = -1;
-    bool hasHoveredVertex = false;
-    int hoveredTopologyVertexId = -1;
-    SectorTopologyCoordPoint hoveredTopologyVertexPoint = {};
-    int inspectedTopologyVertexId = -1;
-    SectorAuthoringSelectionTarget selectedAuthoring;
-    SectorAuthoringSelectionTarget hoveredAuthoring;
-
     Vector2 snappedMouseMap = {0.0f, 0.0f};
     Vector2 rawMouseMap = {0.0f, 0.0f};
 
     PendingAuthoringLineDraw pendingAuthoringLine;
     PendingAuthoringRectangleDraw pendingAuthoringRectangle;
     PendingAuthoringInsertVertex pendingAuthoringInsertVertex;
-    AuthoringVertexDragState authoringVertexDrag;
     RuntimeObjectDragState runtimeObjectDrag;
     float defaultSectorFloorZ = 0.0f;
     float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);
@@ -235,11 +209,6 @@ struct SectorEditorUiState {
     engine::UIFloatInputState runtimeObjectOriginYInput;
     engine::UIScrollState toolsScroll;
     engine::UIScrollState inspectorScroll;
-    char selectedSectorIdBuffer[64] = {};
-    int idBufferSectorIndex = -1;
-    char selectedLightIdBuffer[64] = {};
-    int idBufferLightIndex = -1;
-    std::string idEditError;
     bool keyboardCaptured = false;
 };
 

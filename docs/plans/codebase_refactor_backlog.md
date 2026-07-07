@@ -71,7 +71,9 @@ Task Type:
 | REF-081 | `[x]` | High | Editor architecture | Clean up TextureCatalogService integration debt | Codex task | Medium | Completed; obsolete wrappers removed while add-map lifecycle stayed central |
 | REF-082 | `[x]` | High | Editor architecture | Pass TextureCatalogService to remaining texture UI clients | Codex task | Medium | Completed; remaining UI missing-texture checks use catalog service |
 | REF-083 | `[x]` | High | Editor architecture | SectorEditor state ownership and remaining code map | Audit first | Low | Completed; report recommends TextureCatalogState split next |
-| REF-084 | `[x]` | High | Editor architecture | Write service-owned editor state migration runner plan | Runner plan | Low | Planning complete; implementation phases remain Not Started in the runner plan |
+| REF-084 | `[x]` | High | Editor architecture | Service-owned editor state migration runner plan | Runner plan | Low | Planning and implementation complete; preview/document ownership deferred to REF-085/REF-086 |
+| REF-085 | `[ ]` | High | Editor architecture | Write PreviewState ownership runner plan | Runner plan | High | Plan before moving preview/runtime/controller/collision/renderer resource state |
+| REF-086 | `[ ]` | High | Editor architecture | Write DocumentState ownership runner plan | Runner plan | High | Plan before moving authoring graph, derived topology, dirty/path/status, load/save/reset/import ownership |
 | REF-059 | `[x]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Completed; recommends material-specific picker routing extraction before MaterialEditBridge |
 | REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
 | REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
@@ -1030,50 +1032,119 @@ Task Type:
   - No source code, tests, CMake, editor behavior, topology mutation behavior,
     lightmap behavior, or source-hash behavior was intentionally changed.
 
-#### REF-084 `[x]` Write service-owned editor state migration runner plan
+#### REF-084 `[x]` Service-owned editor state migration runner plan
 
 - Source/audit reference:
   `docs/architecture/sector_editor_architectural_principles.md`,
   `docs/audit/sector_editor_state_ownership_and_remaining_map.md`, and
   current post-REF-083 sector editor service/state boundaries.
-- Why it helps: creates a runner-compatible phased plan for moving
+- Why it helps: creates and executes a runner-compatible phased plan for moving
   service-specific state out of `SectorEditorState` / `SectorEditorUiState`
-  without implementing the migration in one broad refactor.
-- Likely files: documentation only for this planning task; future
-  implementation phases are scoped in the runner plan.
+  without doing one broad refactor.
+- Likely files: `docs/plans/ref084_service_state_ownership_runner_plan.md`,
+  sector editor service/state headers and call sites touched by each runner
+  phase.
 - Suggested task type: Runner plan.
-- Risk: Low for planning; implementation phases range from low/medium
-  `TextureCatalogState` work to higher-risk selection/manipulation and future
+- Risk: Low for planning; implementation phases ranged from low/medium
+  `TextureCatalogState` work to higher-risk selection/manipulation and
   preview/document planning.
 - Suggested verification: `git diff --check`, `git diff --stat`,
   `git status --short`; build optional because this is documentation-only.
 - Notes:
   - Planning output:
     `docs/plans/ref084_service_state_ownership_runner_plan.md`.
-  - The generated plan keeps implementation phases separate and initially
-    `Not Started`: `TextureCatalogState`, `MaterialEditingState`,
-    `LightEditingState`, `SelectionState`, `ManipulationState`, optional
-    `InspectorUiState` feature input groups, and preview/document planning
-    notes.
+  - The generated plan kept implementation phases separate:
+    `TextureCatalogState`, `MaterialEditingState`, `MaterialEditingUiState`,
+    `LightEditingState`, `SelectionState`, `ManipulationState`,
+    `InspectorIdUiState`, and preview/document planning notes.
   - Plan amendment: tightened Phase 1 texture scope ownership so
     `editorTextureHandlesById` moves first and `editorTextureScope` only moves
     if lifetime/order is clearly catalog-owned; split Phase 2 into
     `MaterialEditingState` and `MaterialEditingUiState` child passes; deferred
     preview-surface selection by default from Phase 4.
-  - Future implementation phase 1 should start with `TextureCatalogState`,
-    keeping `SectorTopologyMap::texturesById` as map-level registry and keeping
-    add-map modal/apply semantics outside `TextureCatalogService`.
-  - Future implementation phases must compile and pass tests independently
-    before moving to the next phase.
+  - Implementation began with `TextureCatalogState`, kept
+    `SectorTopologyMap::texturesById` as map-level registry, and kept add-map
+    modal/apply semantics outside `TextureCatalogService`.
+  - Implementation phases were built and tested independently before moving to
+    the next phase, except the final documentation-only phase where build/ctest
+    were optional.
   - Separate future runner plans are still needed for broad `PreviewState` and
     `DocumentState` ownership work.
 - Completion notes:
-  - Runner-compatible plan written at
+  - Runner-compatible plan and implementation completed at
     `docs/plans/ref084_service_state_ownership_runner_plan.md`.
-  - Planning is complete, but no implementation phase is complete.
-  - No source code, tests, CMake, editor behavior, topology mutation behavior,
-    rendering/collision behavior, lightmap behavior, or source-hash behavior
-    was intentionally changed.
+  - Moved editor texture scope/cache into `TextureCatalogState`; copied
+    material into `MaterialEditingState`; material UV/decal input buffers into
+    `MaterialEditingUiState`; light drag/edit/pilot-light state into
+    `LightEditingState`; core 2D selection/hover state into `SelectionState`;
+    select drag-arm and authoring vertex drag into `ManipulationState`; and
+    sector/light ID edit buffers into `InspectorIdUiState`.
+  - Preview-surface selection, preview/runtime/controller/collision state,
+    document/source-of-truth state, runtime object drag/editing state, most
+    light inspector UI inputs, and broad modal state remain deferred.
+  - Separate future runner plans are needed for broad `PreviewState` and
+    `DocumentState` ownership work; tracked as REF-085 and REF-086.
+  - Topology cache invalidation behavior, lightmap source-hash behavior,
+    rendering/collision/sector lookup/physics behavior, and map
+    serialization/schema behavior were intended to remain unchanged.
+
+#### REF-085 `[ ]` Write PreviewState ownership runner plan
+
+- Source/audit reference:
+  `docs/plans/ref084_service_state_ownership_runner_plan.md`,
+  `docs/audit/sector_editor_state_ownership_and_remaining_map.md`,
+  `sources/sector_editor/SectorEditorTypes.h`,
+  `sources/sector_editor/SectorEditorPreviewTypes.h`,
+  `sources/sector_editor/SectorEditor.cpp`,
+  `sources/sector_demo/renderer/`, and
+  `sources/sector_demo/SectorCollisionWorld.*`.
+- Why it helps: preview/runtime state is still mixed with editor document,
+  modal, and inspector state; future game-mode/runtime reuse needs a dedicated
+  plan before moving controller, collision, runtime object, preview selection,
+  object-probe, and renderer resource lifetime state.
+- Likely files: a new runner plan under `docs/plans/`; source files only in
+  later implementation phases.
+- Suggested task type: Runner plan.
+- Risk: High.
+- Suggested verification: planning phase can use documentation checks only;
+  later implementation phases need build, ctest, render/collision behavior
+  notes, and manual preview smoke when visual parity is claimed.
+- Notes:
+  - Must preserve the rule that visual camera effects such as step smoothing,
+    headbob, and landing dip never feed collision, sector lookup, or physics.
+  - Must preserve preview renderer GPU resource lifetime and explicit
+    enter/rebuild/leave behavior.
+  - Must account for preview-surface selection and material panel highlights
+    without pulling document ownership into preview state.
+- Completion notes:
+
+#### REF-086 `[ ]` Write DocumentState ownership runner plan
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md`,
+  `docs/plans/ref084_service_state_ownership_runner_plan.md`,
+  `docs/audit/sector_editor_state_ownership_and_remaining_map.md`,
+  `sources/sector_editor/SectorEditorTypes.h`,
+  `sources/sector_editor/SectorEditorAuthoringState.*`, and
+  `sources/sector_editor/document/`.
+- Why it helps: authoring graph, derived topology, dirty/path/status, last-valid
+  derivation, save/load/reset/import/migration, and source-of-truth boundaries
+  need a dedicated plan before ownership moves out of monolithic editor state.
+- Likely files: a new runner plan under `docs/plans/`; source files only in
+  later implementation phases.
+- Suggested task type: Runner plan.
+- Risk: High.
+- Suggested verification: planning phase can use documentation checks only;
+  later implementation phases need build, ctest, serialization/load/save
+  coverage, cache invalidation notes, and source-hash behavior notes.
+- Notes:
+  - Must preserve the architecture contract that the authoring graph is the
+    editable source of truth and `SectorTopologyMap` is derived output, except
+    for intentionally topology-owned global/runtime metadata already documented.
+  - Must not reintroduce no-authoring topology edit fallback behavior.
+  - Must explicitly account for topology render-cache invalidation and
+    lightmap source-hash behavior for any document mutation paths touched.
+- Completion notes:
 
 #### REF-059 `[x]` Audit MaterialEditBridge and material-specific picker routing
 

@@ -67,25 +67,53 @@ When an agent is asked to execute this plan, it must:
       "id": "phase_04",
       "title": "SelectionState",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
+    },
+    {
+      "id": "phase_04a",
+      "title": "SelectionState Core 2D Selection Fields",
+      "type": "pass",
+      "parent": "phase_04",
+      "status": "Completed"
+    },
+    {
+      "id": "phase_04b",
+      "title": "Authoring Selection Helper Retarget",
+      "type": "pass",
+      "parent": "phase_04",
+      "status": "Completed"
+    },
+    {
+      "id": "phase_04c",
+      "title": "Hover And Render-Cache Selection Context",
+      "type": "pass",
+      "parent": "phase_04",
+      "status": "Completed"
+    },
+    {
+      "id": "phase_04d",
+      "title": "Selection Service Dependency Narrowing",
+      "type": "pass",
+      "parent": "phase_04",
+      "status": "Completed"
     },
     {
       "id": "phase_05",
       "title": "ManipulationState",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_06",
       "title": "InspectorUiState Feature Input Groups",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     },
     {
       "id": "phase_07",
       "title": "PreviewState And DocumentState Planning Notes",
       "type": "phase",
-      "status": "Not Started"
+      "status": "Completed"
     }
   ]
 }
@@ -100,10 +128,14 @@ When an agent is asked to execute this plan, it must:
 | Phase 2A: MaterialEditingState only | Completed | 2026-07-07 | Source changed. Added `MaterialEditingState`; moved copied material payload out of `SectorEditorState` and into the material editing service context. Material UI input buffers, decal tint modal state, and generic texture picker lifecycle stayed in their existing owners. |
 | Phase 2B: MaterialEditingUiState / material input buffers | Completed | 2026-07-07 | Source changed. Added `MaterialEditingUiState`; moved sidedef, sector material, and preview material input buffers out of `SectorEditorUiState`. Generic picker lifecycle and decal tint modal state stayed in existing owners. |
 | Phase 3: LightEditingState | Completed | 2026-07-07 | Source changed. Added service-owned `LightEditingState`; moved light drag/edit transaction state and light-owned spotlight pilot restore data out of `SectorEditorState`. Preview pose/mouse-look restore stayed editor/preview-owned. |
-| Phase 4: SelectionState | Not Started |  | Move selected/hovered target state behind selection service boundaries. |
-| Phase 5: ManipulationState | Not Started |  | Move active drag/manipulation transaction state behind manipulation service boundaries. |
-| Phase 6: InspectorUiState Feature Input Groups | Not Started |  | Optional later split for feature-specific input buffers. |
-| Phase 7: PreviewState And DocumentState Planning Notes | Not Started |  | Planning-only checkpoint for separate future runner plans. |
+| Phase 4: SelectionState | Completed | 2026-07-07 | Source changed across Phase 4A through Phase 4D. Selection state now owns core 2D/editor selected and hovered targets; selection service dependencies were narrowed while preview-surface selection ownership and manipulation transaction ownership remain deferred. |
+| Phase 4A: SelectionState Core 2D Selection Fields | Completed | 2026-07-07 | Source changed. Added `SelectionState`, composed it in `SectorEditor`, and moved core non-preview selected target fields out of `SectorEditorState`: topology selection kind/IDs, selected side kind/wall part/material layer, selected runtime object ID, inspected topology vertex ID, and selected authoring target. Hover, preview-surface, and manipulation fields stayed in their existing owners/deferred passes. |
+| Phase 4B: Authoring Selection Helper Retarget | Completed | 2026-07-07 | Source changed. Retargeted authoring selection helper functions for line, vertex, and face-anchor selection to take `const SectorAuthoringGraph&` plus `SelectionState&` instead of broad `SectorEditorState&`. Hover helper state remains in `SectorEditorState` for Phase 4C. |
+| Phase 4C: Hover And Render-Cache Selection Context | Completed | 2026-07-07 | Source changed. Moved 2D hover fields into `SelectionState`; hover/update paths, select tool hover, light-service hover references, and topology render-cache draw-context creation now read/write those values through `SelectionState` without storing selection-state references in the cache. Preview-surface hover stayed deferred. |
+| Phase 4D: Selection Service Dependency Narrowing | Completed | 2026-07-07 | Source changed. Narrowed `SectorEditorSelectionServiceContext` around `SelectionState`, topology map, authoring graph, authoring derivation read state, preview-surface references, drag reset references, explicit UI reset/input dependencies, material UI state, and light state. Preview-surface selection ownership stayed deferred. |
+| Phase 5: ManipulationState | Completed | 2026-07-07 | Source changed. Added `ManipulationState`; moved select drag-arm and authoring vertex drag transaction state out of `SectorEditorState`. Light drag remains in `LightEditingState`; runtime object drag remains in placed-object/SectorEditor state as explicit debt. |
+| Phase 6: InspectorUiState Feature Input Groups | Completed | 2026-07-07 | Source changed. Added `InspectorIdUiState`; moved selected sector/light ID buffers and shared ID edit error out of `SectorEditorUiState`. Other feature input groups stayed in top-level UI state or their existing narrow owners. |
+| Phase 7: PreviewState And DocumentState Planning Notes | Completed | 2026-07-07 | Documentation-only checkpoint completed. Preview/runtime state and document/source-of-truth state remain deferred to separate future runner plans; backlog entries were added for those plans. |
 
 Phase 1 verification, 2026-07-07:
 
@@ -143,6 +175,85 @@ Phase 3 verification, 2026-07-07:
 - `git diff --stat` and `git status --short`: reviewed.
 - Grep checks: `services/lights` has no `SectorEditorState&` / `SectorEditorUiState&` references and no `#include "sector_editor/SectorEditor.h"`; remaining `lightDrag` / `spotLightPilot` references are routed through `LightEditingState` or the preview restore field.
 - Behavior notes: light object storage remains in `SectorTopologyMap`; light mutation dirty/cache invalidation behavior is preserved through the same topology-document edited semantics; dynamic renderer refresh behavior and lightmap bake behavior were unchanged; source-hash behavior did not change; rendering, collision, sector lookup, and physics were unchanged. No manual GUI verification was performed.
+
+Phase 4A verification, 2026-07-07:
+
+- Source changed. Added `SelectionState` in `sources/sector_editor/selection/`; composed `SelectionState selectionState` in `SectorEditor`; moved topology selection kind/IDs, selected side kind/wall part/material layer, selected runtime object ID, inspected topology vertex ID, and selected authoring target out of `SectorEditorState`.
+- Updated selection, authoring helper, light/material service context, inspector, preview UI, select-tool, placed-object action, and affected tests to read/write those moved fields through `SelectionState`.
+- `cmake --build cmake-build-debug -j2`: passed.
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 16/16 tests.
+- `git diff --check`: passed.
+- `git diff --stat` and `git status --short`: reviewed.
+- Grep checks: moved core fields are routed through `SelectionState`/selection contexts; remaining `selectedTopologySurface3D` matches are deferred preview-surface state by design; `sources/sector_editor/selection` still has broad `SectorEditorState&` / `SectorEditorUiState&` references as allowed for Phase 4A and scheduled for Phase 4D narrowing.
+- Behavior notes: selection behavior, picking semantics, selected ID buffer sync, preview-surface selection/highlight behavior, rendering, collision, sector lookup, and physics were intended to remain unchanged. Hover state, preview-surface fields, and manipulation fields were not moved. No map JSON/schema or lightmap source-hash behavior changed. Topology render-cache invalidation behavior was unchanged; this pass changed selection state ownership only and did not add topology mutations. No manual GUI verification was performed.
+
+Phase 4B verification, 2026-07-07:
+
+- Source changed. `SelectSectorEditorAuthoringLine()`, `SelectSectorEditorAuthoringVertex()`, and `SelectSectorEditorAuthoringFaceAnchor()` now validate against `const SectorAuthoringGraph&` and write selected authoring state through `SelectionState&`; call sites were updated accordingly.
+- `cmake --build cmake-build-debug -j2`: passed.
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 16/16 tests.
+- `git diff --check`: passed.
+- `git diff --stat` and `git status --short`: reviewed.
+- Grep checks: `selectedAuthoring` writes in authoring selection helpers route through `SelectionState`; `hoveredAuthoring` remains in `SectorEditorState` by design for Phase 4C; `sources/sector_editor/selection` still has broad `SectorEditorState&` / `SectorEditorUiState&` references as expected before Phase 4D.
+- Behavior notes: authoring graph remains the source of truth for selection validation and authoring edits; selection behavior, picking semantics, rendering, collision, sector lookup, and physics were intended to remain unchanged. No topology mutations were added, so topology render-cache invalidation behavior was unchanged. No map JSON/schema or lightmap source-hash behavior changed. Preview-surface selection stayed deferred. No manual GUI verification was performed.
+
+Phase 4C verification, 2026-07-07:
+
+- Source changed. Moved `hoveredTopologyLightId`, `hoveredTopologyStaticSpotLightId`, `hoveredTopologyDynamicLightId`, `hoveredTopologyDynamicSpotLightId`, `hasHoveredVertex`, `hoveredTopologyVertexId`, `hoveredTopologyVertexPoint`, and `hoveredAuthoring` out of `SectorEditorState` and into `SelectionState`.
+- Updated 2D hover reset/update paths, select-tool hover writes, authoring hover helpers, light-service hover references, and topology draw-context construction to use `SelectionState`. The topology render cache still receives copied draw-context values and does not store `SelectionState` references.
+- `cmake --build cmake-build-debug -j2`: passed.
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 16/16 tests.
+- `git diff --check`: passed.
+- `git diff --stat` and `git status --short`: reviewed.
+- Grep checks: `hoveredTopology`, `hasHoveredVertex`, and `hoveredAuthoring` references are routed through `SelectionState`, light-service transitional reference fields, or topology draw-context copy fields; `selectedAuthoring` / `hoveredAuthoring` render-cache and `SectorEditor.cpp` references use `SelectionState` at context creation and copied draw-context values inside the cache.
+- Behavior notes: selection behavior, hover/picking semantics, rendering, collision, sector lookup, and physics were intended to remain unchanged. Preview-surface hover (`hoveredSurface3D`) stayed deferred. No topology mutations were added, so topology render-cache invalidation behavior was unchanged. No map JSON/schema or lightmap source-hash behavior changed. No manual GUI verification was performed.
+
+Phase 4D verification, 2026-07-07:
+
+- Source changed. Narrowed `SectorEditorSelectionServiceContext` so `SectorEditorSelectionService.*` no longer depends on `SectorEditorState&`, `SectorEditorUiState&`, or `SectorEditor.h`; it now receives explicit topology map, authoring graph, authoring derivation read state, `SelectionState`, preview-surface references, drag reset references, light editing state, material UI state, and a narrow UI reset/input dependency bundle.
+- Added narrow authoring helper overloads for authoring graph presence and 3D surface authoring target resolution, preserving the existing full-state wrapper behavior for other callers.
+- `cmake --build cmake-build-debug -j2`: passed.
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 16/16 tests.
+- `git diff --check`: passed.
+- `git diff --stat` and `git status --short`: reviewed.
+- Grep checks: `SectorEditorSelectionService.*` has no `SectorEditorState&`, `SectorEditorUiState&`, or `#include "sector_editor/SectorEditor.h"` matches; selection-service `requestCancelSpotLightPilotWithPreviewRestore` / `userData` remains as documented preview-restore debt. The broader `sources/sector_editor/selection` directory still contains broad state references in `SectorEditorManipulationService` and `SectorEditorMoveContext`, deferred to Phase 5.
+- Behavior notes: selection behavior, picking semantics, preview surface highlight behavior, rendering, collision, sector lookup, and physics were intended to remain unchanged. Preview-surface selection fields (`selectedSurface3D`, `selectedTopologySurface3D`, `hoveredSurface3D`) stayed in existing preview/editor state and were only passed by reference to the selection service. No topology mutations were added, so topology render-cache invalidation behavior was unchanged. No map JSON/schema or lightmap source-hash behavior changed. No manual GUI verification was performed.
+
+Phase 5 verification, 2026-07-07:
+
+- Source changed. Added `ManipulationState` in `sources/sector_editor/selection/`; composed it in `SectorEditor`; moved `selectDragArm` and `authoringVertexDrag` out of `SectorEditorState`.
+- Updated manipulation, selection, light editing, select-tool, preview-overlay validation, editor lifecycle/reset paths, and affected tests to route moved fields through `ManipulationState`.
+- Light drag state stayed in `LightEditingState` from Phase 3. Runtime object drag state stayed in existing placed-object/editor state because moving it would require broader placed-object editing ownership work.
+- Removed unused `SelectionState&` and `SectorEditorUiState&` references from `SectorEditorManipulationServiceContext`. Existing manipulation callbacks for authoring vertex, runtime object, and light drag lifecycle remain as cleanup debt.
+- `cmake --build cmake-build-debug -j2`: passed.
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 16/16 tests.
+- `git diff --check`: passed.
+- `git diff --stat` and `git status --short`: reviewed.
+- Grep checks: `selectDragArm` and `authoringVertexDrag` are routed through `ManipulationState`; `lightDrag` remains in `LightEditingState`; `runtimeObjectDrag` remains in placed-object/editor state. `sources/sector_editor/selection` still has `SectorEditorState&` in `SectorEditorManipulationServiceContext` / `SectorEditorMoveContext` for topology, authoring graph, current tool, and placed-object drag dependencies; `SectorEditorUiState&` no longer appears there. Existing drag lifecycle callback names remain in `SectorEditorManipulationService` as documented debt.
+- Behavior notes: drag start/update/finish/cancel behavior, selection/picking semantics, input routing, rendering, collision, sector lookup, and physics were intended to remain unchanged. No topology mutations were added; authoring vertex move completion still uses the existing authoring mutation path, so document edited/topology render-cache invalidation behavior was unchanged. No map JSON/schema or lightmap source-hash behavior changed. No manual GUI verification was performed.
+
+Phase 6 verification, 2026-07-07:
+
+- Source changed. Added `InspectorIdUiState` in `sources/sector_editor/inspector/`; composed it in `SectorEditor`; moved `selectedSectorIdBuffer`, `selectedLightIdBuffer`, `idBufferSectorIndex`, `idBufferLightIndex`, and `idEditError` out of `SectorEditorUiState`.
+- Updated inspector, sector inspector, light inspector, selection service, light editing service, preview overlay validation, and affected test fixtures to receive the narrow selected-ID/error state explicitly.
+- `cmake --build cmake-build-debug -j2`: passed.
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed, 16/16 tests.
+- `git diff --check`: passed.
+- `git diff --stat` and `git status --short`: reviewed.
+- Grep checks: no `uiState.selectedSectorIdBuffer`, `uiState.selectedLightIdBuffer`, `uiState.idBufferSectorIndex`, `uiState.idBufferLightIndex`, or `uiState.idEditError` matches remain in `sources/sector_editor` or tests. Broad `SectorEditorUiState&` references remain in touched inspector/preview/selection/light modules for the feature input groups intentionally left in place.
+- Behavior notes: selected ID buffer sync, ID edit error display/reset timing, UI focus/capture, inspector scroll behavior, rendering, collision, sector lookup, and physics were intended to remain unchanged. No topology mutations were added, so topology render-cache invalidation behavior was unchanged. No map JSON/schema or lightmap source-hash behavior changed. No manual GUI verification was performed.
+- Remaining `SectorEditorUiState` feature groups: grid size input, sector floor/ceiling/ambient inputs, light inspector inputs, runtime object inspector inputs, top-level tool/inspector scroll, and keyboard capture. Material input buffers remain in `MaterialEditingUiState`.
+
+Phase 7 verification, 2026-07-07:
+
+- Documentation changed only. No source code, tests, CMake files, generated data, serialization/schema, runtime/editor behavior, rendering, collision, sector lookup, physics, topology render-cache invalidation, or lightmap source-hash behavior was changed.
+- Remaining preview state debt recorded: preview control mode, preview UI hidden/debug overlay state, freefly/gameplay controller state, collision world/results/warnings, visual step/headbob/landing pose effects, preview pose restore, preview-surface selection, runtime object preview state, object-probe debug data, renderer resource rebuild/lifetime, and manual render smoke requirements.
+- Remaining document state debt recorded: authoring graph, derived topology and derivation status, last-valid derived topology, dirty/path/status fields, unsaved/current-level state, load/save/reset/import/migration flows, topology document initialization, and source-of-truth boundaries.
+- Backlog entries added: `REF-085` for a dedicated `PreviewState` runner plan and `REF-086` for a dedicated `DocumentState` runner plan.
+- `git diff --check`: passed.
+- `git diff --stat` and `git status --short`: reviewed.
+- Build and ctest were not run because Phase 7 is documentation-only and the plan lists them as optional for this phase.
+- No manual GUI verification was performed.
 
 ## Execution Tracking Rules
 
@@ -589,6 +700,161 @@ Files likely to modify:
 - `sources/sector_editor/SectorEditor.cpp`
 - `sources/sector_editor/SectorEditorAuthoringState.*` if authoring selection helpers are retargeted.
 - `sources/sector_editor/SectorEditorTopologyRenderCache.*` contexts if selected/hovered fields are read there.
+
+Execution order:
+
+- Phase 4A must complete before Phase 4B starts.
+- Phase 4B must complete before Phase 4C starts.
+- Phase 4C must complete before Phase 4D starts.
+- Phase 4 remains a parent/planning item until all child passes complete.
+- Do not execute more than one Phase 4 child pass in one runner invocation.
+
+Phase 4 split rationale, 2026-07-07:
+
+- The original Phase 4 scope was too broad for one runner pass. Inspection showed selected/hovered state reaches `SectorEditorSelectionService`, `SectorEditorManipulationService`, `SectorEditorLightEditingService`, `SectorEditorAuthoringState`, `SectorEditorTopologyRenderCache`, `SectorEditorSelectTool`, inspector routing, preview UV/overlay modules, and central `SectorEditor` routing/drawing.
+- Preview-surface selection (`hoveredSurface3D`, `selectedSurface3D`, `selectedTopologySurface3D`) is intentionally deferred by default per the Phase 4 guardrails.
+- This split is documentation-only; no source code changed in the split pass.
+
+### Phase 4A: SelectionState Core 2D Selection Fields
+
+Goal:
+
+Add `SelectionState`, compose it in `SectorEditor`, and move core non-preview selected target state out of `SectorEditorState` without changing behavior.
+
+Fields to move:
+
+- `topologySelectionKind`
+- `selectedTopologySectorId`
+- `selectedTopologyVertexId`
+- `selectedTopologySideDefId`
+- `selectedTopologyLineDefId`
+- `selectedTopologySideKind`
+- `selectedTopologyWallPart`
+- `activeTopologyMaterialLayer`
+- `selectedTopologyLightId`
+- `selectedTopologyStaticSpotLightId`
+- `selectedTopologyDynamicLightId`
+- `selectedTopologyDynamicSpotLightId`
+- `selectedRuntimeObjectId`
+- `inspectedTopologyVertexId`
+- `selectedAuthoring`
+
+Fields to leave for later Phase 4 child passes:
+
+- Hover fields: `hoveredTopologyLightId`, `hoveredTopologyStaticSpotLightId`, `hoveredTopologyDynamicLightId`, `hoveredTopologyDynamicSpotLightId`, `hasHoveredVertex`, `hoveredTopologyVertexId`, `hoveredTopologyVertexPoint`, `hoveredAuthoring`.
+- Preview-surface fields: `hoveredSurface3D`, `selectedSurface3D`, `selectedTopologySurface3D`.
+- Manipulation fields: `selectDragArm`, `authoringVertexDrag`, `runtimeObjectDrag`.
+
+Implementation notes:
+
+1. Add `sources/sector_editor/selection/SectorEditorSelectionState.h`.
+2. Add `SelectionState selectionState;` to `SectorEditor`.
+3. Retarget direct reads/writes of the moved fields to `selectionState`.
+4. Keep `SectorEditorSelectionServiceContext` broad if necessary for this first pass, but pass `SelectionState&` and use it inside the service for moved fields.
+5. Preserve selected ID buffer sync behavior through the existing UI state.
+6. Do not move preview-surface selection, hover state, manipulation state, picking, preview renderer ownership, collision state, or document lifecycle.
+
+Phase 4A checks:
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+- Grep checks:
+  - `rg -n "topologySelectionKind|selectedTopology|selectedRuntimeObjectId|activeTopologyMaterialLayer|inspectedTopologyVertexId|selectedAuthoring" sources/sector_editor`
+  - `rg -n "SectorEditorState&|SectorEditorUiState&" sources/sector_editor/selection`
+
+### Phase 4B: Authoring Selection Helper Retarget
+
+Goal:
+
+Retarget authoring selection helper functions so selected authoring state is owned by `SelectionState`, while authoring graph data remains document/source-of-truth state.
+
+Fields in scope:
+
+- `selectedAuthoring`
+- Any helper-local use of moved core selected target fields from Phase 4A.
+
+Implementation notes:
+
+1. Update `SectorEditorAuthoringState.*` helper signatures only where needed to take `SelectionState&` plus `SectorEditorState&` or narrower authoring/document references.
+2. Preserve authoring graph source-of-truth behavior.
+3. Avoid a broad authoring document split.
+4. Do not move hover fields in this pass unless a helper signature must mention them; prefer leaving hover for Phase 4C.
+
+Phase 4B checks:
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+- Grep checks:
+  - `rg -n "selectedAuthoring|hoveredAuthoring" sources/sector_editor/SectorEditorAuthoringState.* sources/sector_editor`
+  - `rg -n "SectorEditorState&|SectorEditorUiState&" sources/sector_editor/selection`
+
+### Phase 4C: Hover And Render-Cache Selection Context
+
+Goal:
+
+Move 2D hover fields into `SelectionState` and update drawing/picking-visible context construction so cached topology rendering reads the same selected/hovered state from the new owner.
+
+Fields to move:
+
+- `hoveredTopologyLightId`
+- `hoveredTopologyStaticSpotLightId`
+- `hoveredTopologyDynamicLightId`
+- `hoveredTopologyDynamicSpotLightId`
+- `hasHoveredVertex`
+- `hoveredTopologyVertexId`
+- `hoveredTopologyVertexPoint`
+- `hoveredAuthoring`
+
+Implementation notes:
+
+1. Retarget hover updates in `SectorEditor::UpdateHoverAndMouse()` and `tools/select`.
+2. Update `SectorEditorTopologyDrawContext` creation to read selection and hover values from `SelectionState`.
+3. Do not store references to `SelectionState` inside the render cache.
+4. Keep picking behavior consistent with what is drawn.
+5. Do not move preview-surface hover (`hoveredSurface3D`) in this pass.
+
+Phase 4C checks:
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+- Grep checks:
+  - `rg -n "hoveredTopology|hasHoveredVertex|hoveredAuthoring" sources/sector_editor`
+  - `rg -n "selectedAuthoring|hoveredAuthoring" sources/sector_editor/SectorEditorTopologyRenderCache.* sources/sector_editor/SectorEditor.cpp`
+
+### Phase 4D: Selection Service Dependency Narrowing
+
+Goal:
+
+Narrow `SectorEditorSelectionServiceContext` around `SelectionState` and required narrow dependencies after the selected/hovered state has moved.
+
+Implementation notes:
+
+1. Replace broad selection service state access with `SelectionState&`, `SectorTopologyMap&`, `SectorAuthoringGraph&`, material UI reset state, light editing state, runtime object access, and specific UI buffer/reset dependencies as needed.
+2. Remove `SectorEditorState&` and `SectorEditorUiState&` from `SectorEditorSelectionServiceContext` only if selected ID buffer sync and reset behavior can remain behavior-preserving.
+3. Do not move inspector UI buffers; defer those to Phase 6 unless a very small explicit dependency object is required.
+4. Keep the existing spotlight preview-restore callback bridge if removing it would require preview/camera ownership changes. Report it as remaining debt.
+5. Keep preview-surface selection fields deferred unless the remaining service dependency cleanup proves their move is trivial and does not pull in preview renderer, camera, or material panel ownership.
+
+Phase 4D checks:
+
+- `cmake --build cmake-build-debug -j2`
+- `ctest --test-dir cmake-build-debug --output-on-failure`
+- `git diff --check`
+- `git diff --stat`
+- `git status --short`
+- Grep checks:
+  - `rg -n "selectedAuthoring|hoveredAuthoring|selectedTopology|hoveredTopology|selectedSurface3D|hoveredSurface3D|selectedRuntimeObjectId" sources/sector_editor`
+  - `rg -n "SectorEditorState&|SectorEditorUiState&" sources/sector_editor/selection`
+  - `rg -n "requestCancelSpotLightPilotWithPreviewRestore|userData" sources/sector_editor/selection`
 
 Exact implementation steps:
 

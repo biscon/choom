@@ -34,27 +34,98 @@ bool IsPreviewOverlayMouseInteractive(const SectorEditorState& state)
     return !state.freeflyController.mouseLookEnabled;
 }
 
+SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
+        SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState)
+{
+    return SectorEditorSelectionUiDependencies{
+            uiState.floorInput,
+            uiState.ceilingInput,
+            uiState.ambientIntensityInput,
+            uiState.ambientRedInput,
+            uiState.ambientGreenInput,
+            uiState.ambientBlueInput,
+            uiState.lightXInput,
+            uiState.lightYInput,
+            uiState.lightZInput,
+            uiState.lightTargetXInput,
+            uiState.lightTargetYInput,
+            uiState.lightTargetZInput,
+            uiState.lightIntensityInput,
+            uiState.lightRadiusInput,
+            uiState.lightInnerConeInput,
+            uiState.lightOuterConeInput,
+            uiState.lightSourceRadiusInput,
+            uiState.lightFlickerSpeedInput,
+            uiState.lightFlickerAmountInput,
+            uiState.lightRedInput,
+            uiState.lightGreenInput,
+            uiState.lightBlueInput,
+            uiState.runtimeObjectXInput,
+            uiState.runtimeObjectYInput,
+            uiState.runtimeObjectZInput,
+            uiState.runtimeObjectYawInput,
+            uiState.runtimeObjectWidthInput,
+            uiState.runtimeObjectHeightInput,
+            uiState.runtimeObjectThicknessInput,
+            uiState.runtimeObjectNormalOffsetInput,
+            uiState.runtimeObjectOpenDistanceInput,
+            uiState.runtimeObjectSpeedInput,
+            uiState.runtimeObjectInitialOpenFractionInput,
+            uiState.runtimeObjectAutoOpenDistanceInput,
+            uiState.runtimeObjectInteractionDistanceInput,
+            uiState.runtimeObjectOriginXInput,
+            uiState.runtimeObjectOriginYInput,
+            uiState.inspectorScroll,
+            inspectorIdUiState};
+}
+
 bool IsValidPreviewSurfaceRef(
         SectorEditorState& state,
+        SelectionState& selectionState,
+        ManipulationState& manipulationState,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         MaterialEditingUiState& materialUiState,
         SectorSurfaceRef surface)
 {
-    SectorEditorSelectionServiceContext context{state, uiState, materialUiState, nullptr, nullptr, nullptr};
+    const bool authoringDerivationCurrent =
+            state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
+            && !state.authoringDerivedTopologyStale
+            && state.authoringDerivation.success;
+    SectorEditorSelectionServiceContext context{
+            state.topologyMap,
+            state.authoringGraph,
+            state.authoringDerivation,
+            authoringDerivationCurrent,
+            selectionState,
+            state.selectedSurface3D,
+            state.selectedTopologySurface3D,
+            manipulationState,
+            state.runtimeObjectDrag,
+            BuildSelectionUiDependencies(uiState, inspectorIdUiState),
+            materialUiState,
+            nullptr,
+            nullptr,
+            nullptr};
     return IsValidSectorEditorSurfaceRef(context, surface);
 }
 
-const SectorTopologyStaticSpotLight* SelectedTopologyStaticSpotLight(const SectorEditorState& state)
+const SectorTopologyStaticSpotLight* SelectedTopologyStaticSpotLight(
+        const SectorEditorState& state,
+        const SelectionState& selectionState)
 {
-    return state.topologySelectionKind == TopologySelectionKind::StaticSpotLight
-            ? FindSectorTopologyStaticSpotLight(state.topologyMap, state.selectedTopologyStaticSpotLightId)
+    return selectionState.topologySelectionKind == TopologySelectionKind::StaticSpotLight
+            ? FindSectorTopologyStaticSpotLight(state.topologyMap, selectionState.selectedTopologyStaticSpotLightId)
             : nullptr;
 }
 
-const SectorTopologyDynamicSpotLight* SelectedTopologyDynamicSpotLight(const SectorEditorState& state)
+const SectorTopologyDynamicSpotLight* SelectedTopologyDynamicSpotLight(
+        const SectorEditorState& state,
+        const SelectionState& selectionState)
 {
-    return state.topologySelectionKind == TopologySelectionKind::DynamicSpotLight
-            ? FindSectorTopologyDynamicSpotLight(state.topologyMap, state.selectedTopologyDynamicSpotLightId)
+    return selectionState.topologySelectionKind == TopologySelectionKind::DynamicSpotLight
+            ? FindSectorTopologyDynamicSpotLight(state.topologyMap, selectionState.selectedTopologyDynamicSpotLightId)
             : nullptr;
 }
 
@@ -154,7 +225,10 @@ Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab 
 
 void DrawSectorEditorPreviewSurfaceHighlights(
         SectorEditorState& state,
+        SelectionState& selectionState,
+        ManipulationState& manipulationState,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         MaterialEditingUiState& materialUiState,
         const SectorMeshRenderer& preview)
 {
@@ -162,8 +236,18 @@ void DrawSectorEditorPreviewSurfaceHighlights(
         return;
     }
 
-    auto drawSurface = [&state, &uiState, &materialUiState, &preview](SectorSurfaceRef surface, Color color, float thickness) {
-        if (!IsValidPreviewSurfaceRef(state, uiState, materialUiState, surface)) {
+    auto drawSurface = [&state, &selectionState, &manipulationState, &uiState, &inspectorIdUiState, &materialUiState, &preview](
+                               SectorSurfaceRef surface,
+                               Color color,
+                               float thickness) {
+        if (!IsValidPreviewSurfaceRef(
+                    state,
+                    selectionState,
+                    manipulationState,
+                    uiState,
+                    inspectorIdUiState,
+                    materialUiState,
+                    surface)) {
             return;
         }
         const float lift = IsWallSurface(surface.kind) ? PreviewHighlightLift : PreviewHighlightLift * 2.0f;
@@ -201,6 +285,7 @@ void DrawSectorEditorPreviewSurfaceHighlights(
 
 void DrawSectorEditorPreviewSpotLightOverlay(
         const SectorEditorState& state,
+        const SelectionState& selectionState,
         const SectorMeshRenderer& preview)
 {
     if (!preview.IsRendererReady() || state.freeflyController.mouseLookEnabled) {
@@ -213,14 +298,14 @@ void DrawSectorEditorPreviewSpotLightOverlay(
     float innerConeDegrees = 0.0f;
     float outerConeDegrees = 0.0f;
     bool selectedStaticSpotLight = false;
-    if (const SectorTopologyStaticSpotLight* light = SelectedTopologyStaticSpotLight(state)) {
+    if (const SectorTopologyStaticSpotLight* light = SelectedTopologyStaticSpotLight(state, selectionState)) {
         lightPosition = light->position;
         lightTarget = light->target;
         lightRange = light->range;
         innerConeDegrees = light->innerConeDegrees;
         outerConeDegrees = light->outerConeDegrees;
         selectedStaticSpotLight = true;
-    } else if (const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight(state)) {
+    } else if (const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight(state, selectionState)) {
         lightPosition = light->position;
         lightTarget = light->target;
         lightRange = light->range;
@@ -302,6 +387,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     engine::AssetManager& assets = context.assets;
     const engine::FontHandle smallFont = context.smallFont;
     SectorEditorState& state = context.state;
+    SelectionState& selectionState = context.selectionState;
     SectorEditorUiState& uiState = context.uiState;
     MaterialEditingUiState& materialUiState = context.materialUiState;
     SectorMeshRenderer& preview = context.preview;
@@ -552,8 +638,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
-    const bool hasSelectedSpotLight = SelectedTopologyStaticSpotLight(state) != nullptr
-            || SelectedTopologyDynamicSpotLight(state) != nullptr;
+    const bool hasSelectedSpotLight = SelectedTopologyStaticSpotLight(state, selectionState) != nullptr
+            || SelectedTopologyDynamicSpotLight(state, selectionState) != nullptr;
     engine::Text(
             smallConfig,
             assets,

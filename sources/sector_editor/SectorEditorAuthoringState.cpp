@@ -19,10 +19,15 @@ namespace game {
 
 bool HasAuthoringGraphData(const SectorEditorState& state)
 {
-    return !state.authoringGraph.vertices.empty()
-            || !state.authoringGraph.lines.empty()
-            || !state.authoringGraph.lineSides.empty()
-            || !state.authoringGraph.faceAnchors.empty();
+    return HasAuthoringGraphData(state.authoringGraph);
+}
+
+bool HasAuthoringGraphData(const SectorAuthoringGraph& graph)
+{
+    return !graph.vertices.empty()
+            || !graph.lines.empty()
+            || !graph.lineSides.empty()
+            || !graph.faceAnchors.empty();
 }
 
 namespace {
@@ -739,88 +744,103 @@ bool IsSectorAuthoringSelectionTargetValid(
     return false;
 }
 
-void ClearSectorEditorAuthoringSelection(SectorEditorState& state)
+void ClearSectorEditorAuthoringSelection(SelectionState& selectionState)
 {
-    state.selectedAuthoring = EmptyAuthoringSelectionTarget();
+    selectionState.selectedAuthoring = EmptyAuthoringSelectionTarget();
 }
 
-bool SelectSectorEditorAuthoringLine(SectorEditorState& state, int lineId)
+bool SelectSectorEditorAuthoringLine(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int lineId)
 {
     const SectorAuthoringSelectionTarget target =
             MakeSectorAuthoringLineSelectionTarget(lineId);
     if (target.kind != SectorAuthoringSelectionKind::Line
-            || !IsSectorAuthoringSelectionTargetValid(state.authoringGraph, target)) {
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
         return false;
     }
 
-    state.selectedAuthoring = target;
+    selectionState.selectedAuthoring = target;
     return true;
 }
 
-bool SelectSectorEditorAuthoringVertex(SectorEditorState& state, int vertexId)
+bool SelectSectorEditorAuthoringVertex(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int vertexId)
 {
     const SectorAuthoringSelectionTarget target =
             MakeSectorAuthoringVertexSelectionTarget(vertexId);
     if (target.kind != SectorAuthoringSelectionKind::Vertex
-            || !IsSectorAuthoringSelectionTargetValid(state.authoringGraph, target)) {
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
         return false;
     }
 
-    state.selectedAuthoring = target;
+    selectionState.selectedAuthoring = target;
     return true;
 }
 
-bool SelectSectorEditorAuthoringFaceAnchor(SectorEditorState& state, int faceAnchorId)
+bool SelectSectorEditorAuthoringFaceAnchor(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int faceAnchorId)
 {
     const SectorAuthoringSelectionTarget target =
             MakeSectorAuthoringFaceAnchorSelectionTarget(faceAnchorId);
     if (target.kind != SectorAuthoringSelectionKind::FaceAnchor
-            || !IsSectorAuthoringSelectionTargetValid(state.authoringGraph, target)) {
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
         return false;
     }
 
-    state.selectedAuthoring = target;
+    selectionState.selectedAuthoring = target;
     return true;
 }
 
-void ClearSectorEditorAuthoringHover(SectorEditorState& state)
+void ClearSectorEditorAuthoringHover(SelectionState& selectionState)
 {
-    state.hoveredAuthoring = EmptyAuthoringSelectionTarget();
+    selectionState.hoveredAuthoring = EmptyAuthoringSelectionTarget();
 }
 
-bool SetHoveredSectorEditorAuthoringLine(SectorEditorState& state, int lineId)
+bool SetHoveredSectorEditorAuthoringLine(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int lineId)
 {
     const SectorAuthoringSelectionTarget target =
             MakeSectorAuthoringLineSelectionTarget(lineId);
     if (target.kind != SectorAuthoringSelectionKind::Line
-            || !IsSectorAuthoringSelectionTargetValid(state.authoringGraph, target)) {
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
         return false;
     }
 
-    state.hoveredAuthoring = target;
+    selectionState.hoveredAuthoring = target;
     return true;
 }
 
-bool SetHoveredSectorEditorAuthoringVertex(SectorEditorState& state, int vertexId)
+bool SetHoveredSectorEditorAuthoringVertex(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int vertexId)
 {
     const SectorAuthoringSelectionTarget target =
             MakeSectorAuthoringVertexSelectionTarget(vertexId);
     if (target.kind != SectorAuthoringSelectionKind::Vertex
-            || !IsSectorAuthoringSelectionTargetValid(state.authoringGraph, target)) {
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
         return false;
     }
 
-    state.hoveredAuthoring = target;
+    selectionState.hoveredAuthoring = target;
     return true;
 }
 
-void PruneSectorEditorAuthoringSelectionToGraph(SectorEditorState& state)
+void PruneSectorEditorAuthoringSelectionToGraph(SectorEditorState& state, SelectionState& selectionState)
 {
-    if (!IsSectorAuthoringSelectionTargetValid(state.authoringGraph, state.selectedAuthoring)) {
-        ClearSectorEditorAuthoringSelection(state);
+    if (!IsSectorAuthoringSelectionTargetValid(state.authoringGraph, selectionState.selectedAuthoring)) {
+        ClearSectorEditorAuthoringSelection(selectionState);
     }
-    if (!IsSectorAuthoringSelectionTargetValid(state.authoringGraph, state.hoveredAuthoring)) {
-        ClearSectorEditorAuthoringHover(state);
+    if (!IsSectorAuthoringSelectionTargetValid(state.authoringGraph, selectionState.hoveredAuthoring)) {
+        ClearSectorEditorAuthoringHover(selectionState);
     }
 }
 
@@ -1450,6 +1470,7 @@ bool FindSectorEditorAuthoringSelectionAtMapPoint(
 
 bool AddSectorEditorAuthoringLineSegment(
         SectorEditorState& state,
+        SelectionState& selectionState,
         SectorTopologyCoordPoint start,
         SectorTopologyCoordPoint end,
         int* outLineId,
@@ -1466,7 +1487,7 @@ bool AddSectorEditorAuthoringLineSegment(
     }
 
     state.authoringGraph = std::move(candidate);
-    PruneSectorEditorAuthoringSelectionToGraph(state);
+    PruneSectorEditorAuthoringSelectionToGraph(state, selectionState);
 
     const SectorEditorAuthoringLineSegmentResult segment = insertResult.segments.back();
     if (outLineId != nullptr) {
@@ -1487,6 +1508,7 @@ bool AddSectorEditorAuthoringLineSegment(
 
 SectorEditorAuthoringLineToolClickResult ClickSectorEditorAuthoringLineTool(
         SectorEditorState& state,
+        SelectionState& selectionState,
         SectorTopologyCoordPoint point)
 {
     SectorEditorAuthoringLineToolClickResult result;
@@ -1515,6 +1537,7 @@ SectorEditorAuthoringLineToolClickResult ClickSectorEditorAuthoringLineTool(
     SectorEditorAuthoringLineSegmentResult segment;
     if (!AddSectorEditorAuthoringLineSegment(
                 state,
+                selectionState,
                 state.pendingAuthoringLine.startPoint,
                 point,
                 &lineId,
@@ -1638,6 +1661,7 @@ bool AddSectorEditorAuthoringRectangle(
 
 bool InsertSectorEditorAuthoringVertexOnLine(
         SectorEditorState& state,
+        SelectionState& selectionState,
         int lineId,
         SectorTopologyCoordPoint point,
         SectorAuthoringInsertVertexResult* outResult)
@@ -1650,8 +1674,8 @@ bool InsertSectorEditorAuthoringVertexOnLine(
         return false;
     }
 
-    PruneSectorEditorAuthoringSelectionToGraph(state);
-    SelectSectorEditorAuthoringVertex(state, result.vertexId);
+    PruneSectorEditorAuthoringSelectionToGraph(state, selectionState);
+    SelectSectorEditorAuthoringVertex(state.authoringGraph, selectionState, result.vertexId);
     MarkSectorEditorAuthoringGraphEdited(state, "Inserted vertex on authoring line");
     RefreshSectorEditorAuthoringDerivation(
             state,
@@ -1665,6 +1689,7 @@ bool InsertSectorEditorAuthoringVertexOnLine(
 
 bool MoveSectorEditorAuthoringVertex(
         SectorEditorState& state,
+        SelectionState& selectionState,
         int vertexId,
         SectorTopologyCoordPoint target)
 {
@@ -1678,7 +1703,7 @@ bool MoveSectorEditorAuthoringVertex(
 
     vertex->x = target.x;
     vertex->y = target.y;
-    PruneSectorEditorAuthoringSelectionToGraph(state);
+    PruneSectorEditorAuthoringSelectionToGraph(state, selectionState);
     MarkSectorEditorAuthoringGraphEdited(
             state,
             TextFormat("Moved authoring vertex %d", vertexId));
@@ -1689,16 +1714,16 @@ bool MoveSectorEditorAuthoringVertex(
     return true;
 }
 
-bool DeleteSectorEditorSelectedAuthoringLine(SectorEditorState& state)
+bool DeleteSectorEditorSelectedAuthoringLine(SectorEditorState& state, SelectionState& selectionState)
 {
-    if (state.selectedAuthoring.kind != SectorAuthoringSelectionKind::Line
+    if (selectionState.selectedAuthoring.kind != SectorAuthoringSelectionKind::Line
             || !IsSectorAuthoringSelectionTargetValid(
                     state.authoringGraph,
-                    state.selectedAuthoring)) {
+                    selectionState.selectedAuthoring)) {
         return false;
     }
 
-    const int lineId = state.selectedAuthoring.lineId;
+    const int lineId = selectionState.selectedAuthoring.lineId;
     state.authoringGraph.lines.erase(
             std::remove_if(
                     state.authoringGraph.lines.begin(),
@@ -1715,7 +1740,7 @@ bool DeleteSectorEditorSelectedAuthoringLine(SectorEditorState& state)
                         return side.id.lineId == lineId;
                     }),
             state.authoringGraph.lineSides.end());
-    PruneSectorEditorAuthoringSelectionToGraph(state);
+    PruneSectorEditorAuthoringSelectionToGraph(state, selectionState);
     MarkSectorEditorAuthoringGraphEdited(
             state,
             TextFormat("Deleted authoring line %d", lineId));
@@ -1726,16 +1751,16 @@ bool DeleteSectorEditorSelectedAuthoringLine(SectorEditorState& state)
     return true;
 }
 
-bool DeleteSectorEditorSelectedAuthoringVertex(SectorEditorState& state)
+bool DeleteSectorEditorSelectedAuthoringVertex(SectorEditorState& state, SelectionState& selectionState)
 {
-    if (state.selectedAuthoring.kind != SectorAuthoringSelectionKind::Vertex
+    if (selectionState.selectedAuthoring.kind != SectorAuthoringSelectionKind::Vertex
             || !IsSectorAuthoringSelectionTargetValid(
                     state.authoringGraph,
-                    state.selectedAuthoring)) {
+                    selectionState.selectedAuthoring)) {
         return false;
     }
 
-    const int vertexId = state.selectedAuthoring.vertexId;
+    const int vertexId = selectionState.selectedAuthoring.vertexId;
     for (const SectorAuthoringLine& line : state.authoringGraph.lines) {
         if (line.startVertexId == vertexId || line.endVertexId == vertexId) {
             state.authoringDerivationStatus =
@@ -1753,7 +1778,7 @@ bool DeleteSectorEditorSelectedAuthoringVertex(SectorEditorState& state)
                         return vertex.id == vertexId;
                     }),
             state.authoringGraph.vertices.end());
-    PruneSectorEditorAuthoringSelectionToGraph(state);
+    PruneSectorEditorAuthoringSelectionToGraph(state, selectionState);
     MarkSectorEditorAuthoringGraphEdited(
             state,
             TextFormat("Deleted authoring vertex %d", vertexId));
@@ -1867,27 +1892,29 @@ int FindSectorEditorAuthoringLineIdForTopologyLineDef(
     return -1;
 }
 
-SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(const SectorEditorState& state)
+SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(
+        const SectorEditorState& state,
+        const SelectionState& selectionState)
 {
-    if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
-            && FindSectorAuthoringLine(state.authoringGraph, state.selectedAuthoring.lineId) != nullptr) {
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
+            && FindSectorAuthoringLine(state.authoringGraph, selectionState.selectedAuthoring.lineId) != nullptr) {
         SectorEditorInspectorTarget target;
         target.kind = SectorEditorInspectorTargetKind::AuthoringLine;
-        target.lineId = state.selectedAuthoring.lineId;
+        target.lineId = selectionState.selectedAuthoring.lineId;
         return target;
     }
-    if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
-            && FindSectorAuthoringFaceAnchor(state.authoringGraph, state.selectedAuthoring.faceAnchorId) != nullptr) {
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
+            && FindSectorAuthoringFaceAnchor(state.authoringGraph, selectionState.selectedAuthoring.faceAnchorId) != nullptr) {
         SectorEditorInspectorTarget target;
         target.kind = SectorEditorInspectorTargetKind::AuthoringFaceAnchor;
-        target.faceAnchorId = state.selectedAuthoring.faceAnchorId;
+        target.faceAnchorId = selectionState.selectedAuthoring.faceAnchorId;
         return target;
     }
-    if (state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex
-            && FindSectorAuthoringVertex(state.authoringGraph, state.selectedAuthoring.vertexId) != nullptr) {
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex
+            && FindSectorAuthoringVertex(state.authoringGraph, selectionState.selectedAuthoring.vertexId) != nullptr) {
         SectorEditorInspectorTarget target;
         target.kind = SectorEditorInspectorTargetKind::AuthoringVertex;
-        target.vertexId = state.selectedAuthoring.vertexId;
+        target.vertexId = selectionState.selectedAuthoring.vertexId;
         return target;
     }
 
@@ -1897,17 +1924,17 @@ SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(const SectorEdito
         return target;
     }
 
-    if (state.topologySelectionKind == TopologySelectionKind::Sector
-            && IsValidSectorTopologyId(state.selectedTopologySectorId)) {
-        return ResolveMappedTopologySectorInspectorTarget(state, state.selectedTopologySectorId);
+    if (selectionState.topologySelectionKind == TopologySelectionKind::Sector
+            && IsValidSectorTopologyId(selectionState.selectedTopologySectorId)) {
+        return ResolveMappedTopologySectorInspectorTarget(state, selectionState.selectedTopologySectorId);
     }
-    if (state.topologySelectionKind == TopologySelectionKind::SideDef
-            && IsValidSectorTopologyId(state.selectedTopologySideDefId)) {
-        return ResolveMappedTopologySideInspectorTarget(state, state.selectedTopologySideDefId);
+    if (selectionState.topologySelectionKind == TopologySelectionKind::SideDef
+            && IsValidSectorTopologyId(selectionState.selectedTopologySideDefId)) {
+        return ResolveMappedTopologySideInspectorTarget(state, selectionState.selectedTopologySideDefId);
     }
-    if (state.topologySelectionKind == TopologySelectionKind::LineDef
-            && IsValidSectorTopologyId(state.selectedTopologyLineDefId)) {
-        return ResolveMappedTopologyLineInspectorTarget(state, state.selectedTopologyLineDefId);
+    if (selectionState.topologySelectionKind == TopologySelectionKind::LineDef
+            && IsValidSectorTopologyId(selectionState.selectedTopologyLineDefId)) {
+        return ResolveMappedTopologyLineInspectorTarget(state, selectionState.selectedTopologyLineDefId);
     }
 
     return SectorEditorInspectorTarget{};
@@ -1956,6 +1983,29 @@ bool ResolveSectorEditorAuthoringSurfaceTarget(
         SectorEditorAuthoringSurfaceTarget& outTarget,
         std::string* outStatus)
 {
+    const bool authoringDerivationCurrent =
+            state.authoringDerivationState == SectorEditorAuthoringDerivationState::ValidCurrent
+            && !state.authoringDerivedTopologyStale
+            && state.authoringDerivation.success;
+    return ResolveSectorEditorAuthoringSurfaceTarget(
+            state.topologyMap,
+            state.authoringGraph,
+            state.authoringDerivation,
+            authoringDerivationCurrent,
+            surface,
+            outTarget,
+            outStatus);
+}
+
+bool ResolveSectorEditorAuthoringSurfaceTarget(
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
+        SectorSurfaceRef surface,
+        SectorEditorAuthoringSurfaceTarget& outTarget,
+        std::string* outStatus)
+{
     outTarget = SectorEditorAuthoringSurfaceTarget{};
     const auto fail = [outStatus](const char* status) {
         if (outStatus != nullptr) {
@@ -1967,33 +2017,31 @@ bool ResolveSectorEditorAuthoringSurfaceTarget(
     if (surface.kind == SectorSurfaceKind::None) {
         return fail("3D surface edit unavailable: no selected surface");
     }
-    if (state.authoringDerivationState != SectorEditorAuthoringDerivationState::ValidCurrent
-            || state.authoringDerivedTopologyStale
-            || !state.authoringDerivation.success) {
+    if (!authoringDerivationCurrent) {
         return fail("3D surface edit unavailable: derived topology is not current");
     }
 
     if (IsWallSurface(surface.kind)) {
         const SectorTopologySideDef* sideDef =
-                FindSectorTopologySideDef(state.topologyMap, surface.topologySideDefId);
+                FindSectorTopologySideDef(topologyMap, surface.topologySideDefId);
         if (sideDef == nullptr
                 || sideDef->lineDefId != surface.topologyLineDefId
                 || sideDef->side != surface.topologySide
                 || (surface.kind == SectorSurfaceKind::Middle
-                        && !IsTopologyMiddleEligible(state.topologyMap, sideDef))) {
+                        && !IsTopologyMiddleEligible(topologyMap, sideDef))) {
             return fail("3D surface edit unavailable: selected sidedef is not current");
         }
 
         bool found = false;
         SectorAuthoringSideId resolvedSide;
         for (const SectorAuthoringDerivedSideMapping& mapping
-                : state.authoringDerivation.mapping.sides) {
+                : authoringDerivation.mapping.sides) {
             if (mapping.topologySideDefId != surface.topologySideDefId) {
                 continue;
             }
             if (!IsValidSectorAuthoringId(mapping.authoringLineId)
                     || FindSectorAuthoringLine(
-                            state.authoringGraph,
+                            authoringGraph,
                             mapping.authoringLineId) == nullptr) {
                 continue;
             }
@@ -2014,20 +2062,20 @@ bool ResolveSectorEditorAuthoringSurfaceTarget(
         return true;
     }
 
-    if (FindSectorTopologySector(state.topologyMap, surface.topologySectorId) == nullptr) {
+    if (FindSectorTopologySector(topologyMap, surface.topologySectorId) == nullptr) {
         return fail("3D surface edit unavailable: selected sector is not current");
     }
 
     bool found = false;
     int resolvedFaceAnchorId = -1;
     for (const SectorAuthoringDerivedSectorMapping& mapping
-            : state.authoringDerivation.mapping.sectors) {
+            : authoringDerivation.mapping.sectors) {
         if (mapping.topologySectorId != surface.topologySectorId) {
             continue;
         }
         if (!IsValidSectorAuthoringId(mapping.faceAnchorId)
                 || FindSectorAuthoringFaceAnchor(
-                        state.authoringGraph,
+                        authoringGraph,
                         mapping.faceAnchorId) == nullptr) {
             continue;
         }

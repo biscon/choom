@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/selection/SectorEditorSelectionState.h"
 
 #include <raylib.h>
 
@@ -15,6 +16,7 @@ namespace game {
 
 struct SectorEditorPlacedObjectActionContext {
     SectorEditorState& state;
+    SelectionState& selectionState;
     std::string& statusText;
     engine::EngineContext* engineContext = nullptr;
 

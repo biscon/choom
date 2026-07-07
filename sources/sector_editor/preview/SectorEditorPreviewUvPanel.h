@@ -5,6 +5,7 @@
 #include "engine/ui/UI.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/selection/SectorEditorSelectionState.h"
 
 #include <raylib.h>
 
@@ -26,6 +27,7 @@ struct SectorEditorPreviewUvPanelContext {
     Rectangle panelRect;
 
     SectorEditorState& state;
+    SelectionState& selectionState;
     SectorEditorUiState& uiState;
     MaterialEditingUiState& materialUiState;
     std::string& statusText;

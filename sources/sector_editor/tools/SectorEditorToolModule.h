@@ -3,6 +3,7 @@
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
+#include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/SectorEditorTypes.h"
 
 #include <raylib.h>
@@ -22,6 +23,7 @@ struct SectorEditorToolContext {
     // Transitional v0 glue: tool modules can inspect editor state directly while
     // mutation/commit paths stay behind narrow callbacks.
     SectorEditorState& state;
+    SelectionState& selectionState;
     std::string& statusText;
     engine::Input* input = nullptr;
     Rectangle canvasRect = {};

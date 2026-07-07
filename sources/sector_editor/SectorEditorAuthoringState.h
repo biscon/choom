@@ -2,6 +2,7 @@
 
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/selection/SectorEditorSelectionState.h"
 
 #include <functional>
 #include <string>
@@ -21,16 +22,31 @@ bool IsSectorAuthoringSelectionTargetValid(
         const SectorAuthoringGraph& graph,
         SectorAuthoringSelectionTarget target);
 
-void ClearSectorEditorAuthoringSelection(SectorEditorState& state);
-bool SelectSectorEditorAuthoringLine(SectorEditorState& state, int lineId);
-bool SelectSectorEditorAuthoringVertex(SectorEditorState& state, int vertexId);
-bool SelectSectorEditorAuthoringFaceAnchor(SectorEditorState& state, int faceAnchorId);
+void ClearSectorEditorAuthoringSelection(SelectionState& selectionState);
+bool SelectSectorEditorAuthoringLine(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int lineId);
+bool SelectSectorEditorAuthoringVertex(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int vertexId);
+bool SelectSectorEditorAuthoringFaceAnchor(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int faceAnchorId);
 
-void ClearSectorEditorAuthoringHover(SectorEditorState& state);
-bool SetHoveredSectorEditorAuthoringLine(SectorEditorState& state, int lineId);
-bool SetHoveredSectorEditorAuthoringVertex(SectorEditorState& state, int vertexId);
+void ClearSectorEditorAuthoringHover(SelectionState& selectionState);
+bool SetHoveredSectorEditorAuthoringLine(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int lineId);
+bool SetHoveredSectorEditorAuthoringVertex(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int vertexId);
 
-void PruneSectorEditorAuthoringSelectionToGraph(SectorEditorState& state);
+void PruneSectorEditorAuthoringSelectionToGraph(SectorEditorState& state, SelectionState& selectionState);
 
 bool FindSectorAuthoringVertexAtPoint(
         const SectorAuthoringGraph& graph,
@@ -83,6 +99,7 @@ struct SectorEditorAuthoringLineSegmentResult {
 
 bool AddSectorEditorAuthoringLineSegment(
         SectorEditorState& state,
+        SelectionState& selectionState,
         SectorTopologyCoordPoint start,
         SectorTopologyCoordPoint end,
         int* outLineId = nullptr,
@@ -103,6 +120,7 @@ struct SectorEditorAuthoringLineToolClickResult {
 
 SectorEditorAuthoringLineToolClickResult ClickSectorEditorAuthoringLineTool(
         SectorEditorState& state,
+        SelectionState& selectionState,
         SectorTopologyCoordPoint point);
 
 void CancelSectorEditorAuthoringLineToolChain(SectorEditorState& state);
@@ -128,22 +146,25 @@ bool AddSectorEditorAuthoringRectangle(
 
 bool InsertSectorEditorAuthoringVertexOnLine(
         SectorEditorState& state,
+        SelectionState& selectionState,
         int lineId,
         SectorTopologyCoordPoint point,
         SectorAuthoringInsertVertexResult* outResult = nullptr);
 
-bool DeleteSectorEditorSelectedAuthoringLine(SectorEditorState& state);
+bool DeleteSectorEditorSelectedAuthoringLine(SectorEditorState& state, SelectionState& selectionState);
 bool MoveSectorEditorAuthoringVertex(
         SectorEditorState& state,
+        SelectionState& selectionState,
         int vertexId,
         SectorTopologyCoordPoint target);
-bool DeleteSectorEditorSelectedAuthoringVertex(SectorEditorState& state);
+bool DeleteSectorEditorSelectedAuthoringVertex(SectorEditorState& state, SelectionState& selectionState);
 
 void InitializeSectorEditorAuthoringStateFromTopology(
         SectorEditorState& state,
         const SectorTopologyMap& sourceMap);
 
 bool HasAuthoringGraphData(const SectorEditorState& state);
+bool HasAuthoringGraphData(const SectorAuthoringGraph& graph);
 
 void MarkSectorEditorAuthoringGraphEdited(
         SectorEditorState& state,
@@ -180,7 +201,9 @@ struct SectorEditorInspectorTarget {
     std::string status;
 };
 
-SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(const SectorEditorState& state);
+SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(
+        const SectorEditorState& state,
+        const SelectionState& selectionState);
 
 std::string BuildSectorEditorSurface3DTargetLabel(
         const SectorEditorState& state,
@@ -201,6 +224,14 @@ struct SectorEditorAuthoringSurfaceTarget {
 
 bool ResolveSectorEditorAuthoringSurfaceTarget(
         const SectorEditorState& state,
+        SectorSurfaceRef surface,
+        SectorEditorAuthoringSurfaceTarget& outTarget,
+        std::string* outStatus = nullptr);
+bool ResolveSectorEditorAuthoringSurfaceTarget(
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
         SectorSurfaceRef surface,
         SectorEditorAuthoringSurfaceTarget& outTarget,
         std::string* outStatus = nullptr);

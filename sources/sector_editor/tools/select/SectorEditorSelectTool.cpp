@@ -35,36 +35,36 @@ bool SelectPickTarget(SectorEditorToolContext& context, SectorEditorPickTarget t
         return false;
     }
 
-    context.state.selectDragArm = SelectDragArmState{};
     SectorEditorSelectionServiceContext selectionContext = context.buildSelectionServiceContext();
+    selectionContext.manipulationState.selectDragArm = SelectDragArmState{};
     switch (target.kind) {
         case SectorEditorPickKind::RuntimeObject:
             SelectSectorEditorRuntimeObject(selectionContext, target.id);
-            return context.state.selectedRuntimeObjectId == target.id;
+            return context.selectionState.selectedRuntimeObjectId == target.id;
         case SectorEditorPickKind::DynamicSpotLight:
             SelectSectorEditorTopologyDynamicSpotLight(selectionContext, target.id);
-            return context.state.selectedTopologyDynamicSpotLightId == target.id;
+            return context.selectionState.selectedTopologyDynamicSpotLightId == target.id;
         case SectorEditorPickKind::DynamicLight:
             SelectSectorEditorTopologyDynamicLight(selectionContext, target.id);
-            return context.state.selectedTopologyDynamicLightId == target.id;
+            return context.selectionState.selectedTopologyDynamicLightId == target.id;
         case SectorEditorPickKind::StaticSpotLight:
             SelectSectorEditorTopologyStaticSpotLight(selectionContext, target.id);
-            return context.state.selectedTopologyStaticSpotLightId == target.id;
+            return context.selectionState.selectedTopologyStaticSpotLightId == target.id;
         case SectorEditorPickKind::StaticLight:
             SelectSectorEditorTopologyLight(selectionContext, target.id);
-            return context.state.selectedTopologyLightId == target.id;
+            return context.selectionState.selectedTopologyLightId == target.id;
         case SectorEditorPickKind::AuthoringVertex:
             SelectSectorEditorAuthoringVertexTarget(selectionContext, target.id);
-            return context.state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex
-                    && context.state.selectedAuthoring.vertexId == target.id;
+            return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex
+                    && context.selectionState.selectedAuthoring.vertexId == target.id;
         case SectorEditorPickKind::AuthoringLine:
             SelectSectorEditorAuthoringLineTarget(selectionContext, target.id);
-            return context.state.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
-                    && context.state.selectedAuthoring.lineId == target.id;
+            return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
+                    && context.selectionState.selectedAuthoring.lineId == target.id;
         case SectorEditorPickKind::AuthoringFaceAnchor:
             SelectSectorEditorAuthoringFaceAnchorTarget(selectionContext, target.id);
-            return context.state.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
-                    && context.state.selectedAuthoring.faceAnchorId == target.id;
+            return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
+                    && context.selectionState.selectedAuthoring.faceAnchorId == target.id;
         case SectorEditorPickKind::None:
             ClearSectorEditorSelection(selectionContext);
             return true;
@@ -83,20 +83,26 @@ void UpdateSelectHover(SectorEditorToolContext& context, Vector2)
     if (!candidates.empty()) {
         const SectorEditorPickTarget target = candidates.front().target;
         if (target.kind == SectorEditorPickKind::AuthoringVertex) {
-            SetHoveredSectorEditorAuthoringVertex(context.state, target.id);
+            SetHoveredSectorEditorAuthoringVertex(
+                    context.state.authoringGraph,
+                    context.selectionState,
+                    target.id);
         } else if (target.kind == SectorEditorPickKind::AuthoringLine) {
-            SetHoveredSectorEditorAuthoringLine(context.state, target.id);
+            SetHoveredSectorEditorAuthoringLine(
+                    context.state.authoringGraph,
+                    context.selectionState,
+                    target.id);
         } else if (target.kind == SectorEditorPickKind::StaticLight) {
-            context.state.hoveredTopologyLightId = target.id;
+            context.selectionState.hoveredTopologyLightId = target.id;
         } else if (target.kind == SectorEditorPickKind::StaticSpotLight) {
-            context.state.hoveredTopologyStaticSpotLightId = target.id;
+            context.selectionState.hoveredTopologyStaticSpotLightId = target.id;
         } else if (target.kind == SectorEditorPickKind::DynamicLight) {
-            context.state.hoveredTopologyDynamicLightId = target.id;
+            context.selectionState.hoveredTopologyDynamicLightId = target.id;
         } else if (target.kind == SectorEditorPickKind::DynamicSpotLight) {
-            context.state.hoveredTopologyDynamicSpotLightId = target.id;
+            context.selectionState.hoveredTopologyDynamicSpotLightId = target.id;
         }
     }
-    context.state.inspectedTopologyVertexId = -1;
+    context.selectionState.inspectedTopologyVertexId = -1;
 }
 
 bool UpdateSelectToolEarly(SectorEditorToolContext& context)
@@ -107,9 +113,9 @@ bool UpdateSelectToolEarly(SectorEditorToolContext& context)
 
     SectorEditorManipulationServiceContext manipulationContext =
             context.buildManipulationServiceContext();
-    const bool wasArmed = context.state.selectDragArm.active;
+    const bool wasArmed = manipulationContext.manipulationState.selectDragArm.active;
     UpdateSectorEditorSelectDragArm(manipulationContext, *context.input);
-    return wasArmed && !context.state.selectDragArm.active;
+    return wasArmed && !manipulationContext.manipulationState.selectDragArm.active;
 }
 
 bool HandleSelectMousePress(SectorEditorToolContext& context, const engine::InputEvent& event)
@@ -123,7 +129,7 @@ bool HandleSelectMousePress(SectorEditorToolContext& context, const engine::Inpu
     SectorEditorManipulationServiceContext manipulationContext =
             context.buildManipulationServiceContext();
     ArmSectorEditorSelectedDrag(manipulationContext, event.mouseButton.position);
-    return context.state.selectDragArm.active;
+    return manipulationContext.manipulationState.selectDragArm.active;
 }
 
 bool UpdateSelectTool(SectorEditorToolContext& context)

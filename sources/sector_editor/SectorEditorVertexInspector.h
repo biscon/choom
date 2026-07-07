@@ -4,6 +4,7 @@
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/selection/SectorEditorSelectionState.h"
 
 #include <raylib.h>
 
@@ -30,6 +31,7 @@ bool DrawTopologyVertexInspector(
         const SectorTopologyVertex* inspectedVertex,
         bool hasSelectedTopologyVertex,
         SectorEditorState& state,
+        SelectionState& selectionState,
         const SectorEditorVertexInspectorCallbacks& callbacks);
 
 } // namespace game

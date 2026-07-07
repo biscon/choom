@@ -85,6 +85,7 @@ bool DrawSelectedStaticLightInspector(
         float gap,
         SectorTopologyStaticPointLight& light,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
         bool& bakeRequested)
@@ -98,8 +99,8 @@ bool DrawSelectedStaticLightInspector(
     engine::Text(ui, config, assets, Rectangle{labelW, y, contentW - labelW, rowH}, font, TextFormat("%d", light.id), engine::UITextJustify::Left, config.textColor);
     y += rowH + gap;
 
-    if (!uiState.idEditError.empty()) {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, uiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
+    if (!inspectorIdUiState.idEditError.empty()) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, inspectorIdUiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
         y += 36.0f;
     }
 
@@ -247,6 +248,7 @@ bool DrawSelectedStaticSpotLightInspector(
         float gap,
         SectorTopologyStaticSpotLight& light,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
         bool& bakeRequested)
@@ -260,8 +262,8 @@ bool DrawSelectedStaticSpotLightInspector(
     engine::Text(ui, config, assets, Rectangle{labelW, y, contentW - labelW, rowH}, font, TextFormat("%d", light.id), engine::UITextJustify::Left, config.textColor);
     y += rowH + gap;
 
-    if (!uiState.idEditError.empty()) {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, uiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
+    if (!inspectorIdUiState.idEditError.empty()) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, inspectorIdUiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
         y += 36.0f;
     }
 
@@ -435,6 +437,7 @@ bool DrawSelectedDynamicLightInspector(
         float gap,
         SectorTopologyDynamicPointLight& light,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested)
 {
@@ -447,8 +450,8 @@ bool DrawSelectedDynamicLightInspector(
     engine::Text(ui, config, assets, Rectangle{labelW, y, contentW - labelW, rowH}, font, TextFormat("%d", light.id), engine::UITextJustify::Left, config.textColor);
     y += rowH + gap;
 
-    if (!uiState.idEditError.empty()) {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, uiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
+    if (!inspectorIdUiState.idEditError.empty()) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, inspectorIdUiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
         y += 36.0f;
     }
 
@@ -606,6 +609,7 @@ bool DrawSelectedDynamicSpotLightInspector(
         float gap,
         SectorTopologyDynamicSpotLight& light,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested)
 {
@@ -619,8 +623,8 @@ bool DrawSelectedDynamicSpotLightInspector(
     engine::Text(ui, config, assets, Rectangle{labelW, y, contentW - labelW, rowH}, font, TextFormat("%d", light.id), engine::UITextJustify::Left, config.textColor);
     y += rowH + gap;
 
-    if (!uiState.idEditError.empty()) {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, uiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
+    if (!inspectorIdUiState.idEditError.empty()) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, inspectorIdUiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
         y += 36.0f;
     }
 

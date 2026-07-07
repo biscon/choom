@@ -3,8 +3,10 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "sector_editor/inspector/SectorEditorInspectorUiState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/selection/SectorEditorSelectionState.h"
 
 #include <raylib.h>
 
@@ -40,7 +42,9 @@ bool DrawTopologySectorInspector(
         float gap,
         SectorTopologySector& sector,
         SectorEditorState& state,
+        SelectionState& selectionState,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         MaterialEditingUiState& materialUiState,
         SectorEditorMaterialEditingService& materialEditing,
         SectorEditorTextureCatalogService& textureCatalog,

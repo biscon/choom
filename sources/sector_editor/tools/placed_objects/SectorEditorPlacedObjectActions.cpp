@@ -10,7 +10,7 @@ SectorEditorPlacedObjectDeleteConfirmation RequestDeleteSelectedSectorEditorPlac
         SectorEditorPlacedObjectActionContext& context)
 {
     const SectorPlacedRuntimeObject* object =
-            FindSectorPlacedRuntimeObject(context.state.topologyMap, context.state.selectedRuntimeObjectId);
+            FindSectorPlacedRuntimeObject(context.state.topologyMap, context.selectionState.selectedRuntimeObjectId);
     if (object == nullptr) {
         return SectorEditorPlacedObjectDeleteConfirmation{};
     }
@@ -36,7 +36,7 @@ bool DeleteSectorEditorPlacedObjectById(
     if (!RemoveSectorPlacedRuntimeObject(context.state.topologyMap, objectId)) {
         return false;
     }
-    if (context.state.selectedRuntimeObjectId == objectId && context.clearSelection) {
+    if (context.selectionState.selectedRuntimeObjectId == objectId && context.clearSelection) {
         context.clearSelection();
     }
     if (context.state.runtimeObjectDrag.objectId == objectId) {
@@ -55,7 +55,7 @@ bool MutateSelectedSectorEditorPlacedObject(
         const std::function<bool(SectorPlacedRuntimeObject&)>& mutate)
 {
     SectorPlacedRuntimeObject* object =
-            FindSectorPlacedRuntimeObject(context.state.topologyMap, context.state.selectedRuntimeObjectId);
+            FindSectorPlacedRuntimeObject(context.state.topologyMap, context.selectionState.selectedRuntimeObjectId);
     if (object == nullptr || !mutate || !mutate(*object)) {
         return false;
     }

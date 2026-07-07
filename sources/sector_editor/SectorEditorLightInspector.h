@@ -3,6 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "sector_editor/inspector/SectorEditorInspectorUiState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/SectorEditorTypes.h"
 
@@ -27,6 +28,7 @@ bool DrawSelectedStaticLightInspector(
         float gap,
         SectorTopologyStaticPointLight& light,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
         bool& bakeRequested);
@@ -43,6 +45,7 @@ bool DrawSelectedStaticSpotLightInspector(
         float gap,
         SectorTopologyStaticSpotLight& light,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
         bool& bakeRequested);
@@ -59,6 +62,7 @@ bool DrawSelectedDynamicLightInspector(
         float gap,
         SectorTopologyDynamicPointLight& light,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested);
 
@@ -75,6 +79,7 @@ bool DrawSelectedDynamicSpotLightInspector(
         float gap,
         SectorTopologyDynamicSpotLight& light,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested);
 
