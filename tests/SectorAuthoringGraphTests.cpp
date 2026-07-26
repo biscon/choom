@@ -5265,6 +5265,22 @@ void TestEditorAuthoringRefreshPreservesUnresolvedExistingAnchors()
                   && unresolved->x == 512
                   && unresolved->y == 512,
           "unresolved existing anchor is preserved unchanged");
+    Check(documentState.derivation.authoringDerivationStatus.find("Face anchor 201")
+                  != std::string::npos
+                  && documentState.derivation.authoringDerivationStatus.find(
+                          "does not resolve to a derived closed face") != std::string::npos,
+          "failed anchor refresh status includes the actionable diagnostic and anchor ID");
+
+    documentState.derivation.authoringDerivationStatus.clear();
+    const std::string fallbackDisplayStatus =
+            game::BuildSectorEditorAuthoringDerivationDisplayStatus(
+                    game::MakeSectorEditorDerivationDocumentAccess(
+                            documentState.derivation),
+                    "Authoring graph changed; derived sector fills are stale");
+    Check(fallbackDisplayStatus.find("Face anchor 201") != std::string::npos
+                  && fallbackDisplayStatus.find(
+                          "does not resolve to a derived closed face") != std::string::npos,
+          "empty stored status falls back to the actionable derivation diagnostic");
 }
 
 void TestDeriveGeneratedFaceLabelsAreUnique()
@@ -6563,6 +6579,8 @@ void TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics()
           "failed editor derivation keeps current topology unchanged");
     Check(documentState.derivation.lastValidAuthoringDerivedTopology.has_value(),
           "failed editor derivation keeps memory-only last-valid topology");
+    Check(!documentState.derivation.lastValidFaceAnchorBindings.empty(),
+          "failed editor derivation keeps last-valid face bindings for later safe repair");
 }
 
 void TestEditorAuthoringPreviewAndBakeGateAllowsCurrentDerivedTopology()
@@ -8306,6 +8324,258 @@ void TestEditorAuthoringMoveNestedLoopVertexRederivesValidTopology()
           "nested authoring move bumps topology render revision once");
 }
 
+void TestEditorAuthoringRectangleAnchorUsesHighClearanceOffsetPoint()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+
+    Check(game::AddSectorEditorAuthoringRectangle(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64}),
+          "high-clearance anchor setup creates authoring rectangle");
+    Check(authoringGraph.faceAnchors.size() == 1,
+          "high-clearance anchor setup creates one face anchor");
+    if (authoringGraph.faceAnchors.empty()) {
+        return;
+    }
+
+    const game::SectorAuthoringFaceAnchor& anchor = authoringGraph.faceAnchors.front();
+    const game::SectorCoord boundaryClearance = std::min({
+            anchor.x,
+            anchor.y,
+            static_cast<game::SectorCoord>(64 - anchor.x),
+            static_cast<game::SectorCoord>(64 - anchor.y)});
+    Check(boundaryClearance >= 16,
+          "generated face anchor has substantial clearance from rectangle boundaries");
+    Check(anchor.x != 32 || anchor.y != 32,
+          "generated face anchor is offset from exact symmetry axes");
+    Check(documentState.derivation.lastValidFaceAnchorBindings.size() == 1,
+          "successful rectangle derivation records one last-valid face binding");
+}
+
+void TestEditorAuthoringMoveVertexAutoFollowsDisplacedFaceAnchor()
+{
+    constexpr game::SectorCoord subdivisions = game::SectorCoordSubdivisions;
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+
+    Check(game::AddSectorEditorAuthoringRectangle(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  game::SectorTopologyCoordPoint{24 * subdivisions, 16 * subdivisions},
+                  game::SectorTopologyCoordPoint{88 * subdivisions, 64 * subdivisions}),
+          "face-anchor auto-follow setup creates screenshot rectangle");
+    Check(authoringGraph.faceAnchors.size() == 1,
+          "face-anchor auto-follow setup creates one anchor");
+    if (authoringGraph.faceAnchors.empty()) {
+        return;
+    }
+
+    const int anchorId = authoringGraph.faceAnchors.front().id;
+    game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, anchorId);
+    Check(anchor != nullptr, "face-anchor auto-follow setup finds generated anchor");
+    if (anchor == nullptr) {
+        return;
+    }
+    anchor->x = 52 * subdivisions;
+    anchor->y = 280;
+    anchor->floorZ = -7.0f;
+    anchor->ceilingZ = 37.0f;
+    anchor->floorTextureId = "kept_floor";
+    anchor->ceilingTextureId = "kept_ceiling";
+    Check(game::RefreshSectorEditorAuthoringDerivation(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "legacy near-edge face anchor resolves before screenshot moves");
+
+    Check(game::MoveSectorEditorAuthoringVertex(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState,
+                  1,
+                  game::SectorTopologyCoordPoint{32 * subdivisions, 16 * subdivisions}),
+          "first screenshot vertex move commits");
+    Check(documentState.derivation.authoringDerivation.success,
+          "first screenshot vertex move keeps derivation valid");
+
+    state.topologyRenderCache.valid = true;
+    const uint64_t revisionBeforeSecondMove = state.topologyRenderRevision;
+    Check(game::MoveSectorEditorAuthoringVertex(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState,
+                  1,
+                  game::SectorTopologyCoordPoint{40 * subdivisions, 24 * subdivisions}),
+          "second screenshot vertex move commits");
+
+    Check(documentState.derivation.authoringDerivation.success,
+          "second screenshot vertex move auto-repairs displaced anchor");
+    Check(documentState.derivation.authoringDerivationState
+                  == game::SectorEditorAuthoringDerivationState::ValidCurrent,
+          "auto-followed face anchor leaves derivation current");
+    Check(!documentState.derivation.authoringDerivedTopologyStale,
+          "auto-followed face anchor clears stale derived topology");
+    Check(documentState.derivation.authoringDerivationStatus.find("auto-followed 1 face anchor")
+                  != std::string::npos,
+          "auto-followed face anchor is reported in derivation status");
+    Check(state.topologyRenderRevision == revisionBeforeSecondMove + 1,
+          "auto-follow repair shares the vertex move cache invalidation");
+    Check(!state.topologyRenderCache.valid,
+          "auto-follow repair leaves topology render cache invalidated");
+    Check(authoringGraph.faceAnchors.size() == 1,
+          "auto-follow repair does not synthesize a duplicate anchor");
+
+    anchor = game::FindSectorAuthoringFaceAnchor(authoringGraph, anchorId);
+    Check(anchor != nullptr
+                  && (anchor->x != 52 * subdivisions || anchor->y != 280),
+          "auto-follow repair relocates the displaced anchor");
+    Check(anchor != nullptr
+                  && anchor->floorZ == -7.0f
+                  && anchor->ceilingZ == 37.0f
+                  && anchor->floorTextureId == "kept_floor"
+                  && anchor->ceilingTextureId == "kept_ceiling",
+          "auto-follow repair preserves anchor identity and authored properties");
+    Check(FindSectorMappingForAnchor(
+                  documentState.derivation.authoringDerivation.mapping,
+                  anchorId) != nullptr,
+          "relocated anchor maps back to the reshaped sector");
+
+    const game::SectorTopologyVertex* movedTopologyVertex =
+            game::FindSectorTopologyVertex(documentState.map.topologyMap, 1);
+    Check(movedTopologyVertex != nullptr
+                  && movedTopologyVertex->x == 40 * subdivisions
+                  && movedTopologyVertex->y == 24 * subdivisions,
+          "auto-followed derivation contains the requested moved geometry");
+}
+
+void TestEditorAuthoringSingleCornerMoveRecoversMissingFaceBinding()
+{
+    constexpr game::SectorCoord subdivisions = game::SectorCoordSubdivisions;
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph =
+            documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+
+    Check(game::AddSectorEditorAuthoringRectangle(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation),
+                  game::SectorTopologyCoordPoint{
+                          8 * subdivisions,
+                          8 * subdivisions},
+                  game::SectorTopologyCoordPoint{
+                          72 * subdivisions,
+                          64 * subdivisions}),
+          "single-corner regression setup creates a rectangle");
+    Check(authoringGraph.faceAnchors.size() == 1,
+          "single-corner regression setup creates one face anchor");
+    if (authoringGraph.faceAnchors.empty()) {
+        return;
+    }
+
+    const int anchorId = authoringGraph.faceAnchors.front().id;
+    game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, anchorId);
+    Check(anchor != nullptr,
+          "single-corner regression setup finds the generated anchor");
+    if (anchor == nullptr) {
+        return;
+    }
+    anchor->x = 36 * subdivisions;
+    anchor->y = 10 * subdivisions;
+    anchor->floorZ = -5.0f;
+    anchor->ceilingZ = 29.0f;
+    anchor->floorTextureId = "single_move_floor";
+    Check(game::RefreshSectorEditorAuthoringDerivation(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation)),
+          "single-corner legacy near-edge anchor initially resolves");
+    Check(documentState.derivation.lastValidFaceAnchorBindings.size() == 1,
+          "single-corner setup records the valid face binding");
+
+    documentState.derivation.lastValidFaceAnchorBindings.clear();
+    state.topologyRenderCache.valid = true;
+    const uint64_t revisionBeforeMove = state.topologyRenderRevision;
+
+    Check(game::MoveSectorEditorAuthoringVertex(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation),
+                  selectionState,
+                  1,
+                  game::SectorTopologyCoordPoint{
+                          16 * subdivisions,
+                          16 * subdivisions}),
+          "single inward corner move commits");
+    Check(documentState.derivation.authoringDerivation.success
+                  && documentState.derivation.authoringDerivationState
+                          == game::SectorEditorAuthoringDerivationState::ValidCurrent
+                  && !documentState.derivation.authoringDerivedTopologyStale,
+          "single inward corner move recovers its binding and derives current topology");
+    Check(documentState.derivation.lastValidFaceAnchorBindings.size() == 1,
+          "single inward corner move restores the editor-only face binding");
+    Check(documentState.derivation.authoringDerivationStatus.find(
+                  "auto-followed 1 face anchor") != std::string::npos,
+          "single inward corner move reports face-anchor auto-follow");
+    Check(state.topologyRenderRevision == revisionBeforeMove + 1
+                  && !state.topologyRenderCache.valid,
+          "single inward corner move invalidates the topology render cache once");
+
+    anchor = game::FindSectorAuthoringFaceAnchor(authoringGraph, anchorId);
+    Check(anchor != nullptr
+                  && (anchor->x != 36 * subdivisions
+                          || anchor->y != 10 * subdivisions),
+          "single inward corner move relocates the displaced face anchor");
+    Check(anchor != nullptr
+                  && anchor->floorZ == -5.0f
+                  && anchor->ceilingZ == 29.0f
+                  && anchor->floorTextureId == "single_move_floor",
+          "single inward corner move preserves face-anchor identity and properties");
+
+    const game::SectorTopologyVertex* movedTopologyVertex =
+            game::FindSectorTopologyVertex(documentState.map.topologyMap, 1);
+    Check(movedTopologyVertex != nullptr
+                  && movedTopologyVertex->x == 16 * subdivisions
+                  && movedTopologyVertex->y == 16 * subdivisions,
+          "single inward corner move reaches the derived topology");
+}
+
 void TestEditorAuthoringDeleteConnectedVertexIsExplicitlyRejected()
 {
     game::SectorEditorState state;
@@ -9614,6 +9884,9 @@ int main()
     TestEditorAuthoringSelectionPickingPrefersVerticesThenLines();
     TestEditorAuthoringMoveVertexUpdatesConnectedLinesAndInvalidates();
     TestEditorAuthoringMoveNestedLoopVertexRederivesValidTopology();
+    TestEditorAuthoringRectangleAnchorUsesHighClearanceOffsetPoint();
+    TestEditorAuthoringMoveVertexAutoFollowsDisplacedFaceAnchor();
+    TestEditorAuthoringSingleCornerMoveRecoversMissingFaceBinding();
     TestEditorAuthoringDeleteConnectedVertexIsExplicitlyRejected();
     TestEditorAuthoringDeleteIsolatedVertexOnlyMutatesGraphAndInvalidates();
     TestEditorAuthoringEditsRefreshValidCrossingDerivation();

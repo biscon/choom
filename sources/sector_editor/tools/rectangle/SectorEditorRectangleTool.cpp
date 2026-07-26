@@ -69,7 +69,9 @@ void CommitRectanglePoint(SectorEditorToolContext& context, SectorPoint point)
     if (context.selectAuthoringLine) {
         context.selectAuthoringLine(result.lineIds[0]);
     }
-    context.statusText = "Created authoring rectangle";
+    context.statusText = context.authoringDerivationStatus.empty()
+            ? "Created authoring rectangle"
+            : context.authoringDerivationStatus;
 }
 
 bool UpdateRectangleTool(SectorEditorToolContext& context)
