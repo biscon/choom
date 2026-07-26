@@ -424,6 +424,9 @@ bool RefreshSectorEditorAuthoringDerivation(
         const char* successStatus = nullptr,
         const char* failureStatus = nullptr);
 
+std::string BuildSectorEditorAuthoringDerivationDisplayStatus(
+        SectorEditorConstDerivationDocumentAccess derivation,
+        const char* fallbackStatus = nullptr);
 
 bool CanUseCurrentAuthoringDerivedTopologyForPreview(
         SectorEditorConstDerivationDocumentAccess derivation,

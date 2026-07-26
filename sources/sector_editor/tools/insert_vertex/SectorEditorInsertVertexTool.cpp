@@ -118,7 +118,9 @@ void CommitInsertVertexTool(SectorEditorToolContext& context, Vector2 screenPoin
     }
 
     context.pendingAuthoringInsertVertex = PendingAuthoringInsertVertex{};
-    context.statusText = "Inserted vertex on authoring line";
+    context.statusText = context.authoringDerivationStatus.empty()
+            ? "Inserted vertex on authoring line"
+            : context.authoringDerivationStatus;
 }
 
 bool UpdateInsertVertexTool(SectorEditorToolContext& context)

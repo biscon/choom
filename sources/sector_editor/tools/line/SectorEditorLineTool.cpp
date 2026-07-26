@@ -58,7 +58,9 @@ void CommitLinePoint(SectorEditorToolContext& context, SectorPoint point)
             if (context.selectAuthoringLine) {
                 context.selectAuthoringLine(result.segment.lineId);
             }
-            context.statusText = "Created authoring line segment";
+            context.statusText = context.authoringDerivationStatus.empty()
+                    ? "Created authoring line segment"
+                    : context.authoringDerivationStatus;
             return;
         case SectorEditorAuthoringLineToolClickStatus::ZeroLength:
             context.statusText = context.pendingAuthoringLine.errorMessage;

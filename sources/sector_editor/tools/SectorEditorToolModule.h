@@ -30,6 +30,7 @@ struct SectorEditorToolContext {
     SectorAuthoringGraph& authoringGraph;
     SelectionState& selectionState;
     std::string& statusText;
+    const std::string& authoringDerivationStatus;
     engine::Input* input = nullptr;
     Rectangle canvasRect = {};
 

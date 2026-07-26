@@ -2,12 +2,14 @@
 
 #include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_editor/SectorEditorHelpers.h"
+#include "util/earcut.h"
 
 #include <raylib.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <set>
 #include <sstream>
@@ -446,37 +448,668 @@ bool TryFindInteriorPointForTopologySector(
         return false;
     }
 
-    const auto tryPoint = [&](SectorCoord x, SectorCoord y, SectorTopologyCoordPoint* point) {
+    const auto pointSegmentDistanceSquared = [](
+            double px,
+            double py,
+            const SectorTopologyVertex& start,
+            const SectorTopologyVertex& end) {
+        const double ax = static_cast<double>(start.x);
+        const double ay = static_cast<double>(start.y);
+        const double bx = static_cast<double>(end.x);
+        const double by = static_cast<double>(end.y);
+        const double dx = bx - ax;
+        const double dy = by - ay;
+        const double lengthSquared = dx * dx + dy * dy;
+        if (lengthSquared <= 0.0) {
+            const double offsetX = px - ax;
+            const double offsetY = py - ay;
+            return offsetX * offsetX + offsetY * offsetY;
+        }
+        const double t = std::clamp(
+                ((px - ax) * dx + (py - ay) * dy) / lengthSquared,
+                0.0,
+                1.0);
+        const double closestX = ax + t * dx;
+        const double closestY = ay + t * dy;
+        const double offsetX = px - closestX;
+        const double offsetY = py - closestY;
+        return offsetX * offsetX + offsetY * offsetY;
+    };
+    const auto boundaryClearanceSquared = [&](SectorCoord x, SectorCoord y) {
+        double clearanceSquared = std::numeric_limits<double>::max();
+        const auto scoreLoop = [&](const SectorTopologyLoop& loop) {
+            if (loop.vertexIds.size() < 2) {
+                return false;
+            }
+            for (std::size_t index = 0; index < loop.vertexIds.size(); ++index) {
+                const SectorTopologyVertex* start =
+                        FindSectorTopologyVertex(map, loop.vertexIds[index]);
+                const SectorTopologyVertex* end = FindSectorTopologyVertex(
+                        map,
+                        loop.vertexIds[(index + 1) % loop.vertexIds.size()]);
+                if (start == nullptr || end == nullptr) {
+                    return false;
+                }
+                clearanceSquared = std::min(
+                        clearanceSquared,
+                        pointSegmentDistanceSquared(
+                                static_cast<double>(x),
+                                static_cast<double>(y),
+                                *start,
+                                *end));
+            }
+            return true;
+        };
+        if (!scoreLoop(loops.outer)) {
+            return -1.0;
+        }
+        for (const SectorTopologyLoop& hole : loops.holes) {
+            if (!scoreLoop(hole)) {
+                return -1.0;
+            }
+        }
+        return clearanceSquared;
+    };
+
+    bool found = false;
+    SectorTopologyCoordPoint bestPoint{};
+    double bestClearanceSquared = -1.0;
+    const auto considerPoint = [&](SectorCoord x, SectorCoord y) {
         const Vector2 mapPoint{
                 SectorCoordToVisibleAuthoring(x),
                 SectorCoordToVisibleAuthoring(y)};
         if (!PointStrictlyInTopologySector(map, indexes, mapPoint, topologySectorId)) {
-            return false;
+            return;
         }
-        if (point != nullptr) {
-            point->x = x;
-            point->y = y;
+        const double clearanceSquared = boundaryClearanceSquared(x, y);
+        if (clearanceSquared < 0.0) {
+            return;
         }
-        return true;
+        constexpr double scoreEpsilon = 1.0e-9;
+        if (!found
+                || clearanceSquared > bestClearanceSquared + scoreEpsilon
+                || (std::fabs(clearanceSquared - bestClearanceSquared) <= scoreEpsilon
+                        && (y < bestPoint.y || (y == bestPoint.y && x < bestPoint.x)))) {
+            found = true;
+            bestPoint = SectorTopologyCoordPoint{x, y};
+            bestClearanceSquared = clearanceSquared;
+        }
     };
+
+    const SectorCoord boundsCenterX = static_cast<SectorCoord>(
+            static_cast<int64_t>(minX)
+            + (static_cast<int64_t>(maxX) - static_cast<int64_t>(minX)) / 2);
+    const SectorCoord boundsCenterY = static_cast<SectorCoord>(
+            static_cast<int64_t>(minY)
+            + (static_cast<int64_t>(maxY) - static_cast<int64_t>(minY)) / 2);
+    considerPoint(boundsCenterX, boundsCenterY);
 
     constexpr int divisions = 32;
     for (int yIndex = 1; yIndex < divisions; ++yIndex) {
         const SectorCoord y = static_cast<SectorCoord>(
                 static_cast<int64_t>(minY)
                 + (static_cast<int64_t>(maxY) - static_cast<int64_t>(minY)) * yIndex / divisions);
-        for (int xOffset = 0; xOffset < divisions - 1; ++xOffset) {
-            const int xIndex = ((yIndex * 13 + xOffset * 7) % (divisions - 1)) + 1;
+        for (int xIndex = 1; xIndex < divisions; ++xIndex) {
             const SectorCoord x = static_cast<SectorCoord>(
                     static_cast<int64_t>(minX)
                     + (static_cast<int64_t>(maxX) - static_cast<int64_t>(minX)) * xIndex / divisions);
-            if (tryPoint(x, y, outPoint)) {
-                return true;
+            considerPoint(x, y);
+        }
+    }
+
+    using EarcutPoint = std::array<double, 2>;
+    std::vector<std::vector<EarcutPoint>> polygon;
+    std::vector<SectorTopologyCoordPoint> flattened;
+    const auto appendLoop = [&](const SectorTopologyLoop& loop) {
+        polygon.emplace_back();
+        polygon.back().reserve(loop.vertexIds.size());
+        for (int vertexId : loop.vertexIds) {
+            const SectorTopologyVertex* vertex = FindSectorTopologyVertex(map, vertexId);
+            if (vertex == nullptr) {
+                return false;
+            }
+            polygon.back().push_back(EarcutPoint{
+                    static_cast<double>(vertex->x),
+                    static_cast<double>(vertex->y)});
+            flattened.push_back(SectorTopologyCoordPoint{vertex->x, vertex->y});
+        }
+        return true;
+    };
+    if (!appendLoop(loops.outer)) {
+        return false;
+    }
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        if (!appendLoop(hole)) {
+            return false;
+        }
+    }
+
+    const std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
+    for (std::size_t index = 0; index + 2 < indices.size(); index += 3) {
+        if (indices[index] >= flattened.size()
+                || indices[index + 1] >= flattened.size()
+                || indices[index + 2] >= flattened.size()) {
+            continue;
+        }
+        const SectorTopologyCoordPoint a = flattened[indices[index]];
+        const SectorTopologyCoordPoint b = flattened[indices[index + 1]];
+        const SectorTopologyCoordPoint c = flattened[indices[index + 2]];
+        const double oppositeA = std::hypot(
+                static_cast<double>(b.x) - c.x,
+                static_cast<double>(b.y) - c.y);
+        const double oppositeB = std::hypot(
+                static_cast<double>(a.x) - c.x,
+                static_cast<double>(a.y) - c.y);
+        const double oppositeC = std::hypot(
+                static_cast<double>(a.x) - b.x,
+                static_cast<double>(a.y) - b.y);
+        const double perimeter = oppositeA + oppositeB + oppositeC;
+        if (perimeter <= 0.0) {
+            continue;
+        }
+        const double incenterX =
+                (oppositeA * a.x + oppositeB * b.x + oppositeC * c.x) / perimeter;
+        const double incenterY =
+                (oppositeA * a.y + oppositeB * b.y + oppositeC * c.y) / perimeter;
+        const SectorCoord roundedX = static_cast<SectorCoord>(std::llround(incenterX));
+        const SectorCoord roundedY = static_cast<SectorCoord>(std::llround(incenterY));
+        for (SectorCoord yOffset = -1; yOffset <= 1; ++yOffset) {
+            for (SectorCoord xOffset = -1; xOffset <= 1; ++xOffset) {
+                considerPoint(
+                        static_cast<SectorCoord>(roundedX + xOffset),
+                        static_cast<SectorCoord>(roundedY + yOffset));
             }
         }
     }
 
-    return false;
+    if (!found) {
+        return false;
+    }
+    constexpr std::array<SectorTopologyCoordPoint, 8> interiorOffsets{{
+            {-1, -2},
+            {1, -2},
+            {-2, -1},
+            {2, -1},
+            {-2, 1},
+            {2, 1},
+            {-1, 2},
+            {1, 2},
+    }};
+    for (SectorTopologyCoordPoint offset : interiorOffsets) {
+        const SectorTopologyCoordPoint candidate{
+                static_cast<SectorCoord>(bestPoint.x + offset.x),
+                static_cast<SectorCoord>(bestPoint.y + offset.y)};
+        const Vector2 mapPoint{
+                SectorCoordToVisibleAuthoring(candidate.x),
+                SectorCoordToVisibleAuthoring(candidate.y)};
+        if (!PointStrictlyInTopologySector(
+                    map,
+                    indexes,
+                    mapPoint,
+                    topologySectorId)) {
+            continue;
+        }
+        const double clearanceSquared =
+                boundaryClearanceSquared(candidate.x, candidate.y);
+        if (clearanceSquared >= bestClearanceSquared * 0.75) {
+            bestPoint = candidate;
+            break;
+        }
+    }
+    if (outPoint != nullptr) {
+        *outPoint = bestPoint;
+    }
+    return true;
+}
+
+const SectorAuthoringExtractedFace* FindExtractedFaceById(
+        const SectorAuthoringFaceExtractionResult& faces,
+        int faceId)
+{
+    for (const SectorAuthoringExtractedFace& face : faces.faces) {
+        if (face.id == faceId) {
+            return &face;
+        }
+    }
+    return nullptr;
+}
+
+bool AuthoringSideIdLess(SectorAuthoringSideId lhs, SectorAuthoringSideId rhs)
+{
+    if (lhs.lineId != rhs.lineId) {
+        return lhs.lineId < rhs.lineId;
+    }
+    return static_cast<int>(lhs.side) < static_cast<int>(rhs.side);
+}
+
+std::vector<SectorAuthoringSideId> BuildFaceBoundaryIdentity(
+        const SectorAuthoringExtractedFace& face)
+{
+    std::vector<SectorAuthoringSideId> identity;
+    identity.reserve(face.boundary.size());
+    for (const SectorAuthoringFaceBoundaryEdge& boundary : face.boundary) {
+        if (!IsValidSectorAuthoringId(boundary.sourceLineId)) {
+            continue;
+        }
+        identity.push_back(SectorAuthoringSideId{
+                boundary.sourceLineId,
+                boundary.sourceSide});
+    }
+    std::sort(identity.begin(), identity.end(), AuthoringSideIdLess);
+    identity.erase(
+            std::unique(
+                    identity.begin(),
+                    identity.end(),
+                    [](SectorAuthoringSideId lhs, SectorAuthoringSideId rhs) {
+                        return SectorAuthoringSideIdsEqual(lhs, rhs);
+                    }),
+            identity.end());
+    return identity;
+}
+
+bool FaceBoundaryIdentitiesEqual(
+        const std::vector<SectorAuthoringSideId>& lhs,
+        const std::vector<SectorAuthoringSideId>& rhs)
+{
+    if (lhs.size() != rhs.size()) {
+        return false;
+    }
+    for (std::size_t index = 0; index < lhs.size(); ++index) {
+        if (!SectorAuthoringSideIdsEqual(lhs[index], rhs[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+const SectorAuthoringExtractedFace* FindUniqueFaceWithBoundaryIdentity(
+        const SectorAuthoringFaceExtractionResult& faces,
+        const std::vector<SectorAuthoringSideId>& boundarySides,
+        bool& outAmbiguous)
+{
+    outAmbiguous = false;
+    const SectorAuthoringExtractedFace* matchedFace = nullptr;
+    for (const SectorAuthoringExtractedFace& face : faces.faces) {
+        if (!FaceBoundaryIdentitiesEqual(
+                    boundarySides,
+                    BuildFaceBoundaryIdentity(face))) {
+            continue;
+        }
+        if (matchedFace != nullptr) {
+            outAmbiguous = true;
+            return nullptr;
+        }
+        matchedFace = &face;
+    }
+    return matchedFace;
+}
+
+std::vector<SectorEditorFaceAnchorBinding> BuildFaceAnchorBindings(
+        const SectorAuthoringDerivationResult& result)
+{
+    std::vector<SectorEditorFaceAnchorBinding> bindings;
+    if (!result.success) {
+        return bindings;
+    }
+
+    bindings.reserve(result.mapping.resolvedFaces.size());
+    for (const SectorAuthoringResolvedFaceMapping& mapping : result.mapping.resolvedFaces) {
+        if (!IsValidSectorAuthoringId(mapping.faceAnchorId)) {
+            continue;
+        }
+        const SectorAuthoringExtractedFace* face =
+                FindExtractedFaceById(result.faces, mapping.extractedFaceId);
+        if (face == nullptr) {
+            continue;
+        }
+        SectorEditorFaceAnchorBinding binding;
+        binding.faceAnchorId = mapping.faceAnchorId;
+        binding.boundarySides = BuildFaceBoundaryIdentity(*face);
+        if (!binding.boundarySides.empty()) {
+            bindings.push_back(std::move(binding));
+        }
+    }
+    std::sort(
+            bindings.begin(),
+            bindings.end(),
+            [](const SectorEditorFaceAnchorBinding& lhs,
+                    const SectorEditorFaceAnchorBinding& rhs) {
+                return lhs.faceAnchorId < rhs.faceAnchorId;
+            });
+    return bindings;
+}
+
+const SectorEditorFaceAnchorBinding* FindFaceAnchorBinding(
+        const std::vector<SectorEditorFaceAnchorBinding>& bindings,
+        int faceAnchorId)
+{
+    for (const SectorEditorFaceAnchorBinding& binding : bindings) {
+        if (binding.faceAnchorId == faceAnchorId) {
+            return &binding;
+        }
+    }
+    return nullptr;
+}
+
+const SectorAuthoringResolvedFaceMapping* FindResolvedFaceMappingForAnchor(
+        const SectorAuthoringDerivationResult& result,
+        int faceAnchorId)
+{
+    const SectorAuthoringResolvedFaceMapping* found = nullptr;
+    for (const SectorAuthoringResolvedFaceMapping& mapping : result.mapping.resolvedFaces) {
+        if (mapping.faceAnchorId != faceAnchorId) {
+            continue;
+        }
+        if (found != nullptr) {
+            return nullptr;
+        }
+        found = &mapping;
+    }
+    return found;
+}
+
+std::vector<int> CollectFaceAnchorIdsWithChangedBindings(
+        const SectorAuthoringDerivationResult& result,
+        const SectorAuthoringGraph& graph,
+        const std::vector<SectorEditorFaceAnchorBinding>& lastValidBindings)
+{
+    std::vector<int> anchorIds;
+    if (!result.success) {
+        return anchorIds;
+    }
+
+    for (const SectorEditorFaceAnchorBinding& binding : lastValidBindings) {
+        if (FindSectorAuthoringFaceAnchor(graph, binding.faceAnchorId) == nullptr) {
+            continue;
+        }
+        const SectorAuthoringResolvedFaceMapping* mapping =
+                FindResolvedFaceMappingForAnchor(result, binding.faceAnchorId);
+        if (mapping == nullptr) {
+            continue;
+        }
+        const SectorAuthoringExtractedFace* face =
+                FindExtractedFaceById(result.faces, mapping->extractedFaceId);
+        if (face == nullptr
+                || !FaceBoundaryIdentitiesEqual(
+                        binding.boundarySides,
+                        BuildFaceBoundaryIdentity(*face))) {
+            anchorIds.push_back(binding.faceAnchorId);
+        }
+    }
+    std::sort(anchorIds.begin(), anchorIds.end());
+    anchorIds.erase(
+            std::unique(anchorIds.begin(), anchorIds.end()),
+            anchorIds.end());
+    return anchorIds;
+}
+
+int FindTopologySectorIdForExtractedFace(
+        const SectorAuthoringDerivationResult& result,
+        int extractedFaceId)
+{
+    int topologySectorId = -1;
+    for (const SectorAuthoringResolvedFaceMapping& mapping : result.mapping.resolvedFaces) {
+        if (mapping.extractedFaceId != extractedFaceId
+                || mapping.kind != SectorAuthoringFaceResolutionKind::DerivedSector
+                || !IsValidSectorTopologyId(mapping.topologySectorId)) {
+            continue;
+        }
+        if (IsValidSectorTopologyId(topologySectorId)
+                && topologySectorId != mapping.topologySectorId) {
+            return -1;
+        }
+        topologySectorId = mapping.topologySectorId;
+    }
+    return topologySectorId;
+}
+
+enum class FaceAnchorAutoFollowOutcome {
+    NotNeeded,
+    Repaired,
+    Failed
+};
+
+FaceAnchorAutoFollowOutcome TryAutoFollowFaceAnchors(
+        const SectorAuthoringGraph& graph,
+        const SectorAuthoringDerivationResult& currentResult,
+        const std::vector<SectorEditorFaceAnchorBinding>& lastValidBindings,
+        SectorAuthoringGraph& outGraph,
+        SectorAuthoringDerivationResult& outResult,
+        int& outRelocatedAnchorCount,
+        int& outFailureAnchorId,
+        std::string& outFailureReason)
+{
+    outRelocatedAnchorCount = 0;
+    outFailureAnchorId = -1;
+    outFailureReason.clear();
+
+    std::vector<int> anchorIds = currentResult.success
+            ? CollectFaceAnchorIdsWithChangedBindings(
+                    currentResult,
+                    graph,
+                    lastValidBindings)
+            : std::vector<int>{};
+    if (currentResult.success && anchorIds.empty()) {
+        return FaceAnchorAutoFollowOutcome::NotNeeded;
+    }
+
+    SectorAuthoringGraph geometryGraph = graph;
+    geometryGraph.faceAnchors.clear();
+    const SectorAuthoringDerivationResult geometryResult =
+            DeriveSectorTopologyMapFromAuthoringGraph(geometryGraph);
+    if (!geometryResult.success) {
+        return FaceAnchorAutoFollowOutcome::NotNeeded;
+    }
+
+    if (!currentResult.success) {
+        for (const SectorAuthoringFaceAnchor& anchor : graph.faceAnchors) {
+            const SectorEditorFaceAnchorBinding* binding =
+                    FindFaceAnchorBinding(lastValidBindings, anchor.id);
+            SectorAuthoringGraph singleAnchorGraph = geometryGraph;
+            singleAnchorGraph.faceAnchors.push_back(anchor);
+            const SectorAuthoringDerivationResult singleAnchorResult =
+                    DeriveSectorTopologyMapFromAuthoringGraph(singleAnchorGraph);
+            if (singleAnchorResult.success) {
+                if (binding == nullptr || binding->boundarySides.empty()) {
+                    continue;
+                }
+                const SectorAuthoringResolvedFaceMapping* mapping =
+                        FindResolvedFaceMappingForAnchor(
+                                singleAnchorResult,
+                                anchor.id);
+                const SectorAuthoringExtractedFace* resolvedFace =
+                        mapping == nullptr
+                        ? nullptr
+                        : FindExtractedFaceById(
+                                singleAnchorResult.faces,
+                                mapping->extractedFaceId);
+                if (resolvedFace != nullptr
+                        && FaceBoundaryIdentitiesEqual(
+                                binding->boundarySides,
+                                BuildFaceBoundaryIdentity(*resolvedFace))) {
+                    continue;
+                }
+
+                bool ambiguousMatch = false;
+                const SectorAuthoringExtractedFace* previousFace =
+                        FindUniqueFaceWithBoundaryIdentity(
+                                geometryResult.faces,
+                                binding->boundarySides,
+                                ambiguousMatch);
+                if (ambiguousMatch) {
+                    outFailureAnchorId = anchor.id;
+                    outFailureReason =
+                            "the previous boundary matches more than one edited face";
+                    return FaceAnchorAutoFollowOutcome::Failed;
+                }
+                if (previousFace == nullptr) {
+                    continue;
+                }
+                anchorIds.push_back(anchor.id);
+                continue;
+            }
+
+            if (binding == nullptr || binding->boundarySides.empty()) {
+                outFailureAnchorId = anchor.id;
+                outFailureReason =
+                        "previous face binding is unavailable, so the editor cannot safely choose a replacement face";
+                return FaceAnchorAutoFollowOutcome::Failed;
+            }
+            anchorIds.push_back(anchor.id);
+        }
+        std::sort(anchorIds.begin(), anchorIds.end());
+        anchorIds.erase(
+                std::unique(anchorIds.begin(), anchorIds.end()),
+                anchorIds.end());
+        if (anchorIds.empty()) {
+            return FaceAnchorAutoFollowOutcome::NotNeeded;
+        }
+    }
+
+    const SectorTopologyIndexes geometryIndexes =
+            BuildSectorTopologyIndexes(geometryResult.topology);
+
+    SectorAuthoringGraph repairedGraph = graph;
+    int relocatedAnchorCount = 0;
+    for (int anchorId : anchorIds) {
+        const SectorEditorFaceAnchorBinding* binding =
+                FindFaceAnchorBinding(lastValidBindings, anchorId);
+        if (binding == nullptr || binding->boundarySides.empty()) {
+            outFailureAnchorId = anchorId;
+            outFailureReason =
+                    "previous face binding is unavailable, so the editor cannot safely choose a replacement face";
+            return FaceAnchorAutoFollowOutcome::Failed;
+        }
+
+        bool ambiguousMatch = false;
+        const SectorAuthoringExtractedFace* matchedFace =
+                FindUniqueFaceWithBoundaryIdentity(
+                        geometryResult.faces,
+                        binding->boundarySides,
+                        ambiguousMatch);
+        if (ambiguousMatch) {
+            outFailureAnchorId = anchorId;
+            outFailureReason =
+                    "the previous boundary matches more than one edited face";
+            return FaceAnchorAutoFollowOutcome::Failed;
+        }
+        if (matchedFace == nullptr) {
+            if (currentResult.success) {
+                continue;
+            }
+            outFailureAnchorId = anchorId;
+            outFailureReason =
+                    "the edited geometry no longer has one face with the previous boundary";
+            return FaceAnchorAutoFollowOutcome::Failed;
+        }
+
+        const int topologySectorId =
+                FindTopologySectorIdForExtractedFace(geometryResult, matchedFace->id);
+        SectorTopologyCoordPoint interiorPoint{};
+        if (!IsValidSectorTopologyId(topologySectorId)
+                || !TryFindInteriorPointForTopologySector(
+                        geometryResult.topology,
+                        geometryIndexes,
+                        topologySectorId,
+                        &interiorPoint)) {
+            outFailureAnchorId = anchorId;
+            outFailureReason =
+                    "the matched edited face has no safe interior anchor position";
+            return FaceAnchorAutoFollowOutcome::Failed;
+        }
+
+        SectorAuthoringFaceAnchor* anchor =
+                FindSectorAuthoringFaceAnchor(repairedGraph, anchorId);
+        if (anchor == nullptr) {
+            outFailureAnchorId = anchorId;
+            outFailureReason = "the bound face anchor no longer exists";
+            return FaceAnchorAutoFollowOutcome::Failed;
+        }
+        anchor->x = interiorPoint.x;
+        anchor->y = interiorPoint.y;
+        ++relocatedAnchorCount;
+    }
+
+    if (relocatedAnchorCount == 0) {
+        return FaceAnchorAutoFollowOutcome::NotNeeded;
+    }
+
+    SectorAuthoringDerivationResult repairedResult =
+            DeriveSectorTopologyMapFromAuthoringGraph(repairedGraph);
+    if (!repairedResult.success) {
+        outFailureReason =
+                "relocated anchors still do not produce a valid derived topology";
+        return FaceAnchorAutoFollowOutcome::Failed;
+    }
+
+    outRelocatedAnchorCount = relocatedAnchorCount;
+    outGraph = std::move(repairedGraph);
+    outResult = std::move(repairedResult);
+    return FaceAnchorAutoFollowOutcome::Repaired;
+}
+
+std::string FormatAuthoringDerivationDiagnostic(
+        const SectorAuthoringDerivationDiagnostic& diagnostic)
+{
+    const char* objectLabel = "Object";
+    switch (diagnostic.kind) {
+    case SectorAuthoringDerivationDiagnosticKind::UnresolvedFaceAnchor:
+    case SectorAuthoringDerivationDiagnosticKind::AmbiguousFaceAnchor:
+        objectLabel = "Face anchor";
+        break;
+    case SectorAuthoringDerivationDiagnosticKind::DanglingLine:
+    case SectorAuthoringDerivationDiagnosticKind::ZeroLengthLine:
+    case SectorAuthoringDerivationDiagnosticKind::DuplicateLine:
+    case SectorAuthoringDerivationDiagnosticKind::CollinearOverlap:
+    case SectorAuthoringDerivationDiagnosticKind::NearMiss:
+    case SectorAuthoringDerivationDiagnosticKind::InvalidSideProjection:
+        objectLabel = "Authoring line";
+        break;
+    case SectorAuthoringDerivationDiagnosticKind::NonIntegerVertex:
+        objectLabel = "Vertex";
+        break;
+    case SectorAuthoringDerivationDiagnosticKind::AuthoringReference:
+    case SectorAuthoringDerivationDiagnosticKind::Planarization:
+    case SectorAuthoringDerivationDiagnosticKind::FaceExtraction:
+    case SectorAuthoringDerivationDiagnosticKind::TinySliverFace:
+    case SectorAuthoringDerivationDiagnosticKind::InvalidTopology:
+        break;
+    }
+
+    if (diagnostic.objectId > 0) {
+        return std::string{objectLabel} + " " + std::to_string(diagnostic.objectId)
+                + ": " + diagnostic.message;
+    }
+    return diagnostic.message;
+}
+
+std::string BuildAuthoringDerivationFailureStatus(
+        const std::string& failureStatus,
+        const SectorAuthoringDerivationResult& result)
+{
+    std::string status = failureStatus.empty()
+            ? "Authoring graph: derivation failed"
+            : failureStatus;
+    if (result.diagnostics.empty()) {
+        return status;
+    }
+
+    const SectorAuthoringDerivationDiagnostic* primaryDiagnostic =
+            &result.diagnostics.front();
+    for (const SectorAuthoringDerivationDiagnostic& diagnostic : result.diagnostics) {
+        if (diagnostic.severity == SectorAuthoringValidationSeverity::Error) {
+            primaryDiagnostic = &diagnostic;
+            break;
+        }
+    }
+    status += ": ";
+    status += FormatAuthoringDerivationDiagnostic(*primaryDiagnostic);
+    if (result.diagnostics.size() > 1) {
+        status += " (+";
+        status += std::to_string(result.diagnostics.size() - 1);
+        status += " more)";
+    }
+    return status;
 }
 
 bool MappingHasValidFaceAnchor(
@@ -658,6 +1291,27 @@ bool ReconcileMissingDerivedFaceAnchors(
 }
 
 } // namespace
+
+std::string BuildSectorEditorAuthoringDerivationDisplayStatus(
+        SectorEditorConstDerivationDocumentAccess derivation,
+        const char* fallbackStatus)
+{
+    if (!derivation.authoringDerivationStatus.empty()) {
+        return derivation.authoringDerivationStatus;
+    }
+
+    const std::string fallback =
+            fallbackStatus == nullptr ? std::string{} : std::string{fallbackStatus};
+    if (!derivation.authoringDerivation.success
+            || !derivation.authoringDerivation.diagnostics.empty()) {
+        return BuildAuthoringDerivationFailureStatus(
+                fallback,
+                derivation.authoringDerivation);
+    }
+    return fallback.empty()
+            ? "Authoring graph: derived topology status unavailable"
+            : fallback;
+}
 
 SectorAuthoringSelectionTarget MakeSectorAuthoringLineSelectionTarget(int lineId)
 {
@@ -1845,11 +2499,14 @@ void InitializeSectorEditorAuthoringStateFromTopology(
     if (derivation.authoringDerivation.success) {
         CopyEditorMapLevelFields(derivation.authoringDerivation.topology, sourceMap);
         derivation.lastValidAuthoringDerivedTopology = sourceMap;
+        derivation.lastValidFaceAnchorBindings =
+                BuildFaceAnchorBindings(derivation.authoringDerivation);
         derivation.authoringDerivationState = SectorEditorAuthoringDerivationState::ValidCurrent;
         derivation.authoringDerivedTopologyStale = false;
         derivation.authoringDerivationStatus = "Authoring graph: derived topology current";
     } else {
         derivation.lastValidAuthoringDerivedTopology.reset();
+        derivation.lastValidFaceAnchorBindings.clear();
         derivation.authoringDerivationState = SectorEditorAuthoringDerivationState::InvalidNoDerived;
         derivation.authoringDerivedTopologyStale = true;
         derivation.authoringDerivationStatus = "Authoring graph: no valid derived topology";
@@ -2657,8 +3314,73 @@ bool RefreshSectorEditorAuthoringDerivation(
         const char* successStatus,
         const char* failureStatus)
 {
+    const std::string ownedSuccessStatus =
+            successStatus == nullptr ? std::string{} : std::string{successStatus};
+    const std::string ownedFailureStatus =
+            failureStatus == nullptr ? std::string{} : std::string{failureStatus};
+
+    std::vector<SectorEditorFaceAnchorBinding> effectiveBindings =
+            derivation.lastValidFaceAnchorBindings;
+    if (derivation.authoringDerivation.success) {
+        const std::vector<SectorEditorFaceAnchorBinding> previousBindings =
+                BuildFaceAnchorBindings(derivation.authoringDerivation);
+        bool recoveredBinding = false;
+        for (const SectorEditorFaceAnchorBinding& binding : previousBindings) {
+            if (FindFaceAnchorBinding(
+                        effectiveBindings,
+                        binding.faceAnchorId) != nullptr) {
+                continue;
+            }
+            effectiveBindings.push_back(binding);
+            recoveredBinding = true;
+        }
+        if (recoveredBinding) {
+            std::sort(
+                    effectiveBindings.begin(),
+                    effectiveBindings.end(),
+                    [](const SectorEditorFaceAnchorBinding& lhs,
+                            const SectorEditorFaceAnchorBinding& rhs) {
+                        return lhs.faceAnchorId < rhs.faceAnchorId;
+                    });
+            derivation.lastValidFaceAnchorBindings = effectiveBindings;
+        }
+    }
+
     SectorAuthoringDerivationResult result =
             DeriveSectorTopologyMapFromAuthoringGraph(authoringGraph);
+    int relocatedAnchorCount = 0;
+    int repairFailureAnchorId = -1;
+    std::string repairFailureReason;
+    SectorAuthoringGraph repairedGraph;
+    SectorAuthoringDerivationResult repairedResult;
+    bool repairFailureAddedAsDiagnostic = false;
+    const FaceAnchorAutoFollowOutcome repairOutcome = TryAutoFollowFaceAnchors(
+                authoringGraph,
+                result,
+                effectiveBindings,
+                repairedGraph,
+                repairedResult,
+                relocatedAnchorCount,
+                repairFailureAnchorId,
+                repairFailureReason);
+    if (repairOutcome == FaceAnchorAutoFollowOutcome::Repaired) {
+        authoringGraph = std::move(repairedGraph);
+        result = std::move(repairedResult);
+    } else if (repairOutcome == FaceAnchorAutoFollowOutcome::Failed
+            && result.success) {
+        SectorAuthoringDerivationDiagnostic diagnostic;
+        diagnostic.severity = SectorAuthoringValidationSeverity::Error;
+        diagnostic.kind =
+                SectorAuthoringDerivationDiagnosticKind::UnresolvedFaceAnchor;
+        diagnostic.objectId = repairFailureAnchorId;
+        diagnostic.message = "Face-anchor auto-follow failed: "
+                + repairFailureReason;
+        result.diagnostics.push_back(std::move(diagnostic));
+        result.success = false;
+        result.topology = SectorTopologyMap{};
+        result.mapping = SectorAuthoringDerivationMapping{};
+        repairFailureAddedAsDiagnostic = true;
+    }
     if (result.success) {
         int reconciledAnchorCount = 0;
         bool reconciliationFailed = false;
@@ -2709,11 +3431,19 @@ bool RefreshSectorEditorAuthoringDerivation(
         topologyMap = result.topology;
         derivation.lastValidAuthoringDerivedTopology = result.topology;
         derivation.authoringDerivation = std::move(result);
+        derivation.lastValidFaceAnchorBindings =
+                BuildFaceAnchorBindings(derivation.authoringDerivation);
         derivation.authoringDerivedTopologyStale = false;
         derivation.authoringDerivationState = SectorEditorAuthoringDerivationState::ValidCurrent;
-        derivation.authoringDerivationStatus = successStatus == nullptr || successStatus[0] == '\0'
+        derivation.authoringDerivationStatus = ownedSuccessStatus.empty()
                 ? "Authoring graph: derived topology current"
-                : successStatus;
+                : ownedSuccessStatus;
+        if (relocatedAnchorCount > 0) {
+            derivation.authoringDerivationStatus += TextFormat(
+                    "; auto-followed %d face anchor%s",
+                    relocatedAnchorCount,
+                    relocatedAnchorCount == 1 ? "" : "s");
+        }
         lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
         InvalidateEditorTopologyRenderCacheIfNeeded(
                 topologyRenderRevision,
@@ -2726,10 +3456,21 @@ bool RefreshSectorEditorAuthoringDerivation(
     derivation.authoringDerivationState = derivation.lastValidAuthoringDerivedTopology.has_value()
             ? SectorEditorAuthoringDerivationState::InvalidLastValid
             : SectorEditorAuthoringDerivationState::InvalidNoDerived;
-    const int diagnosticCount = static_cast<int>(derivation.authoringDerivation.diagnostics.size());
-    derivation.authoringDerivationStatus = failureStatus == nullptr || failureStatus[0] == '\0'
-            ? TextFormat("Authoring graph: derivation failed (%d diagnostics)", diagnosticCount)
-            : failureStatus;
+    derivation.authoringDerivationStatus =
+            BuildAuthoringDerivationFailureStatus(
+                    ownedFailureStatus,
+                    derivation.authoringDerivation);
+    if (repairOutcome == FaceAnchorAutoFollowOutcome::Failed
+            && !repairFailureAddedAsDiagnostic
+            && !repairFailureReason.empty()) {
+        derivation.authoringDerivationStatus += "; ";
+        if (IsValidSectorAuthoringId(repairFailureAnchorId)) {
+            derivation.authoringDerivationStatus +=
+                    "Face anchor " + std::to_string(repairFailureAnchorId) + " ";
+        }
+        derivation.authoringDerivationStatus +=
+                "auto-follow failed: " + repairFailureReason;
+    }
     lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
     InvalidateEditorTopologyRenderCacheIfNeeded(
             topologyRenderRevision,

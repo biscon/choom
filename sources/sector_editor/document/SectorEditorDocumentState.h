@@ -5,6 +5,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace game {
 
@@ -26,6 +27,11 @@ struct SectorEditorConstAuthoringDocumentAccess {
 struct SectorEditorConstDerivationDocumentAccess;
 struct SectorEditorConstDocumentLifecycleAccess;
 
+struct SectorEditorFaceAnchorBinding {
+    int faceAnchorId = -1;
+    std::vector<SectorAuthoringSideId> boundarySides;
+};
+
 struct SectorEditorDocumentMapAccess {
     SectorTopologyMap& topologyMap;
 };
@@ -37,6 +43,7 @@ struct SectorEditorConstDocumentMapAccess {
 struct SectorEditorDerivationDocumentAccess {
     SectorAuthoringDerivationResult& authoringDerivation;
     std::optional<SectorTopologyMap>& lastValidAuthoringDerivedTopology;
+    std::vector<SectorEditorFaceAnchorBinding>& lastValidFaceAnchorBindings;
     SectorEditorAuthoringDerivationState& authoringDerivationState;
     bool& authoringDerivedTopologyStale;
     std::string& authoringDerivationStatus;
@@ -47,6 +54,7 @@ struct SectorEditorDerivationDocumentAccess {
 struct SectorEditorConstDerivationDocumentAccess {
     const SectorAuthoringDerivationResult& authoringDerivation;
     const std::optional<SectorTopologyMap>& lastValidAuthoringDerivedTopology;
+    const std::vector<SectorEditorFaceAnchorBinding>& lastValidFaceAnchorBindings;
     SectorEditorAuthoringDerivationState authoringDerivationState;
     bool authoringDerivedTopologyStale;
     const std::string& authoringDerivationStatus;
@@ -81,6 +89,7 @@ struct SectorEditorAuthoringDocumentState {
 struct SectorEditorDerivationState {
     SectorAuthoringDerivationResult authoringDerivation;
     std::optional<SectorTopologyMap> lastValidAuthoringDerivedTopology;
+    std::vector<SectorEditorFaceAnchorBinding> lastValidFaceAnchorBindings;
     SectorEditorAuthoringDerivationState authoringDerivationState =
             SectorEditorAuthoringDerivationState::InvalidNoDerived;
     bool authoringDerivedTopologyStale = true;
@@ -147,6 +156,7 @@ inline SectorEditorConstDocumentMapAccess MakeSectorEditorDocumentMapAccess(
 inline SectorEditorDerivationDocumentAccess MakeSectorEditorDerivationDocumentAccess(
         SectorAuthoringDerivationResult& authoringDerivation,
         std::optional<SectorTopologyMap>& lastValidAuthoringDerivedTopology,
+        std::vector<SectorEditorFaceAnchorBinding>& lastValidFaceAnchorBindings,
         SectorEditorAuthoringDerivationState& authoringDerivationState,
         bool& authoringDerivedTopologyStale,
         std::string& authoringDerivationStatus)
@@ -154,6 +164,7 @@ inline SectorEditorDerivationDocumentAccess MakeSectorEditorDerivationDocumentAc
     return SectorEditorDerivationDocumentAccess{
             authoringDerivation,
             lastValidAuthoringDerivedTopology,
+            lastValidFaceAnchorBindings,
             authoringDerivationState,
             authoringDerivedTopologyStale,
             authoringDerivationStatus};
@@ -165,6 +176,7 @@ inline SectorEditorDerivationDocumentAccess MakeSectorEditorDerivationDocumentAc
     return MakeSectorEditorDerivationDocumentAccess(
             derivation.authoringDerivation,
             derivation.lastValidAuthoringDerivedTopology,
+            derivation.lastValidFaceAnchorBindings,
             derivation.authoringDerivationState,
             derivation.authoringDerivedTopologyStale,
             derivation.authoringDerivationStatus);
@@ -173,6 +185,7 @@ inline SectorEditorDerivationDocumentAccess MakeSectorEditorDerivationDocumentAc
 inline SectorEditorConstDerivationDocumentAccess MakeSectorEditorDerivationDocumentAccess(
         const SectorAuthoringDerivationResult& authoringDerivation,
         const std::optional<SectorTopologyMap>& lastValidAuthoringDerivedTopology,
+        const std::vector<SectorEditorFaceAnchorBinding>& lastValidFaceAnchorBindings,
         SectorEditorAuthoringDerivationState authoringDerivationState,
         bool authoringDerivedTopologyStale,
         const std::string& authoringDerivationStatus)
@@ -180,6 +193,7 @@ inline SectorEditorConstDerivationDocumentAccess MakeSectorEditorDerivationDocum
     return SectorEditorConstDerivationDocumentAccess{
             authoringDerivation,
             lastValidAuthoringDerivedTopology,
+            lastValidFaceAnchorBindings,
             authoringDerivationState,
             authoringDerivedTopologyStale,
             authoringDerivationStatus};
@@ -191,6 +205,7 @@ inline SectorEditorConstDerivationDocumentAccess MakeSectorEditorDerivationDocum
     return MakeSectorEditorDerivationDocumentAccess(
             derivation.authoringDerivation,
             derivation.lastValidAuthoringDerivedTopology,
+            derivation.lastValidFaceAnchorBindings,
             derivation.authoringDerivationState,
             derivation.authoringDerivedTopologyStale,
             derivation.authoringDerivationStatus);
@@ -202,6 +217,7 @@ inline SectorEditorConstDerivationDocumentAccess MakeSectorEditorConstDerivation
     return SectorEditorConstDerivationDocumentAccess{
             derivation.authoringDerivation,
             derivation.lastValidAuthoringDerivedTopology,
+            derivation.lastValidFaceAnchorBindings,
             derivation.authoringDerivationState,
             derivation.authoringDerivedTopologyStale,
             derivation.authoringDerivationStatus};

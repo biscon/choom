@@ -556,6 +556,7 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
             AuthoringGraph(),
             selectionState,
             statusText,
+            documentState.derivation.authoringDerivationStatus,
             input,
             canvasRect};
     context.currentSnappedSectorPoint = [this]() {
@@ -1417,7 +1418,11 @@ void SectorEditor::FinishAuthoringVertexDrag()
 
     SelectAuthoringVertex(vertexId);
     manipulationState.authoringVertexDrag = AuthoringVertexDragState{};
-    statusText = TextFormat("Moved authoring vertex %d", vertexId);
+    const std::string fallbackStatus =
+            TextFormat("Moved authoring vertex %d", vertexId);
+    statusText = BuildSectorEditorAuthoringDerivationDisplayStatus(
+            MakeLiveConstDerivationAccess(documentState.derivation),
+            fallbackStatus.c_str());
 }
 
 void SectorEditor::CancelAuthoringVertexDrag(const char* message)
@@ -3161,8 +3166,12 @@ void SectorEditor::DrawTopologyDocument()
         );
     }
     if (derivation.authoringDerivedTopologyStale) {
+        const std::string staleStatus =
+                BuildSectorEditorAuthoringDerivationDisplayStatus(
+                        derivation,
+                        "Authoring graph changed; derived sector fills are stale");
         DrawText(
-                "Authoring graph changed; derived sector fills are stale",
+                staleStatus.c_str(),
                 static_cast<int>(canvasRect.x + 16.0f),
                 static_cast<int>(canvasRect.y + 64.0f),
                 18,
@@ -4294,6 +4303,7 @@ bool SectorEditor::LoadLevel(
                 MakeLiveDerivationAccess(documentState.derivation);
         derivation.authoringDerivation = SectorAuthoringDerivationResult{};
         derivation.lastValidAuthoringDerivedTopology.reset();
+        derivation.lastValidFaceAnchorBindings.clear();
         derivation.authoringDerivationState = SectorEditorAuthoringDerivationState::InvalidNoDerived;
         derivation.authoringDerivedTopologyStale = true;
         const std::string successStatus = TextFormat(
@@ -5433,7 +5443,9 @@ bool SectorEditor::DeleteSelectedAuthoringLine()
         return false;
     }
 
-    statusText = TextFormat("Deleted authoring line %d", lineId);
+    statusText = documentState.derivation.authoringDerivationStatus.empty()
+            ? TextFormat("Deleted authoring line %d", lineId)
+            : documentState.derivation.authoringDerivationStatus;
     return true;
 }
 
@@ -5467,7 +5479,9 @@ bool SectorEditor::DeleteSelectedAuthoringVertex()
         return false;
     }
 
-    statusText = TextFormat("Deleted authoring vertex %d", vertexId);
+    statusText = documentState.derivation.authoringDerivationStatus.empty()
+            ? TextFormat("Deleted authoring vertex %d", vertexId)
+            : documentState.derivation.authoringDerivationStatus;
     return true;
 }
 
