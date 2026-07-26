@@ -1,4 +1,5 @@
 #include "sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.h"
+#include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTopologyGeometry.h"
@@ -6,6 +7,7 @@
 #include <raymath.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
@@ -222,9 +224,14 @@ game::SectorLightmapBakeAsyncResult MakeInstallTestResult(const std::filesystem:
     result.bakeResult.sourceHash = "hash-a";
     result.bakeResult.objectProbes.path =
             game::MakeSectorObjectProbeSidecarPathForLightmapPath(result.temporaryOutputPath);
+    result.bakeResult.objectProbes.version =
+            game::kSectorBakedObjectLightProbeSidecarVersion;
     result.bakeResult.objectProbes.sourceHash = "stale-probe-hash";
     result.bakeResult.objectProbes.count = 7;
-    result.bakeResult.objectProbes.format = "test-format";
+    result.bakeResult.objectProbes.probeSpacingWorld = 4.0f;
+    result.bakeResult.objectProbes.probeHeightWorld = 1.2f;
+    result.bakeResult.objectProbes.format =
+            game::kSectorBakedObjectLightProbeSidecarFormat;
     result.bakeResult.totalBakeSeconds = 1.25;
     return result;
 }
@@ -232,7 +239,62 @@ game::SectorLightmapBakeAsyncResult MakeInstallTestResult(const std::filesystem:
 void WriteInstallTestTemps(const game::SectorLightmapBakeAsyncResult& result)
 {
     WriteTextFile(result.temporaryOutputPath, "lightmap");
-    WriteTextFile(result.bakeResult.objectProbes.path, "probes");
+    std::vector<game::SectorBakedObjectLightProbe> probes(
+            static_cast<size_t>(result.bakeResult.objectProbes.count));
+    std::string error;
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(
+                  result.bakeResult.objectProbes.path,
+                  probes,
+                  result.bakeResult.objectProbes.probeSpacingWorld,
+                  result.bakeResult.objectProbes.probeHeightWorld,
+                  error),
+          "install fixture writes a valid object probe sidecar");
+}
+
+void AddInstallTestStaticModelSidecar(
+        game::SectorLightmapBakeAsyncResult& result)
+{
+    game::SectorStaticModelLightmapData data;
+    data.sourceHash = result.bakeResult.sourceHash;
+    game::SectorStaticModelLightmapModel model;
+    model.modelPath = "assets/models/install_fixture.gltf";
+    model.geometryFingerprint = "install-geometry";
+    game::SectorStaticModelLightmapMesh mesh;
+    mesh.originalVertexCount = 3;
+    mesh.sourceVertexIndices = {0, 1, 2};
+    mesh.localLightmapUvs = {
+            Vector2{0.0f, 0.0f},
+            Vector2{1.0f, 0.0f},
+            Vector2{0.0f, 1.0f}};
+    mesh.indices = {0, 1, 2};
+    model.meshes.push_back(mesh);
+    data.models.push_back(model);
+    game::SectorStaticModelLightmapObject object;
+    object.objectId = 12;
+    object.modelIndex = 0;
+    object.containingSectorId = 10;
+    object.meshPlacements.resize(1);
+    object.meshPlacements[0].atlasScale = Vector2{0.1f, 0.1f};
+    object.meshPlacements[0].atlasBias = Vector2{0.2f, 0.3f};
+    data.objects.push_back(object);
+
+    result.bakeResult.staticModels.path =
+            game::MakeSectorStaticModelSidecarPathForLightmapPath(
+                    result.temporaryOutputPath);
+    result.bakeResult.staticModels.version =
+            game::kSectorStaticModelLightmapSidecarVersion;
+    result.bakeResult.staticModels.sourceHash =
+            result.bakeResult.sourceHash;
+    result.bakeResult.staticModels.modelCount = 1;
+    result.bakeResult.staticModels.objectCount = 1;
+    result.bakeResult.staticModels.format =
+            game::kSectorStaticModelLightmapSidecarFormat;
+    std::string error;
+    Check(game::WriteSectorStaticModelLightmapSidecar(
+                  result.bakeResult.staticModels.path,
+                  data,
+                  error),
+          "install fixture writes a valid static model sidecar");
 }
 
 void TestLightmapBakeInstallBoundaryRejectsStaleAndCleansTemps()
@@ -262,7 +324,16 @@ void TestLightmapBakeInstallBoundaryMissingTempsCleanUp()
 
     {
         game::SectorLightmapBakeAsyncResult result = MakeInstallTestResult(sandbox / "lightmap");
-        WriteTextFile(result.bakeResult.objectProbes.path, "probes");
+        std::vector<game::SectorBakedObjectLightProbe> probes(
+                static_cast<size_t>(result.bakeResult.objectProbes.count));
+        std::string error;
+        Check(game::WriteSectorBakedObjectLightProbeSidecar(
+                      result.bakeResult.objectProbes.path,
+                      probes,
+                      result.bakeResult.objectProbes.probeSpacingWorld,
+                      result.bakeResult.objectProbes.probeHeightWorld,
+                      error),
+              "missing-lightmap fixture writes a valid probe sidecar");
 
         game::SectorEditorLightmapBakeController controller;
         game::SectorEditorLightmapBakeInstallPayload payload;
@@ -372,6 +443,81 @@ void TestLightmapBakeInstallBoundarySuccessfulPayload()
           "install payload rewrites object probe metadata to final asset path");
     Check(payload.bakeResult.objectProbes.sourceHash == result.bakeResult.sourceHash,
           "install payload rewrites object probe source hash to lightmap source hash");
+    std::filesystem::remove_all(sandbox);
+}
+
+void TestLightmapBakeInstallBoundaryStaticModelSidecarIsAtomic()
+{
+    const std::filesystem::path sandbox =
+            Ref077Phase05aSandboxDir() / "static_models";
+    std::filesystem::remove_all(sandbox);
+    {
+        game::SectorLightmapBakeAsyncResult result =
+                MakeInstallTestResult(sandbox / "corrupt");
+        WriteInstallTestTemps(result);
+        AddInstallTestStaticModelSidecar(result);
+        WriteTextFile(result.bakeResult.staticModels.path, "bad");
+        game::SectorEditorLightmapBakeController controller;
+        game::SectorEditorLightmapBakeInstallPayload payload;
+        Check(!controller.InstallCompletedResultFiles(
+                       result,
+                       result.expectedSourceHash,
+                       payload)
+                      && payload.status.find(
+                                 "Bake failed: invalid static model lightmap sidecar:")
+                              == 0,
+              "corrupt required static model sidecar rejects all-or-nothing installation");
+        Check(!std::filesystem::exists(result.temporaryOutputPath)
+                      && !std::filesystem::exists(
+                              result.bakeResult.objectProbes.path)
+                      && !std::filesystem::exists(
+                              result.bakeResult.staticModels.path),
+              "rejected static model sidecar cleans all temporary bake outputs");
+    }
+    {
+        game::SectorLightmapBakeAsyncResult result =
+                MakeInstallTestResult(sandbox / "missing_metadata_path");
+        WriteInstallTestTemps(result);
+        AddInstallTestStaticModelSidecar(result);
+        const std::string temporaryStaticPath =
+                result.bakeResult.staticModels.path;
+        result.bakeResult.staticModels.path.clear();
+        game::SectorEditorLightmapBakeController controller;
+        game::SectorEditorLightmapBakeInstallPayload payload;
+        Check(!controller.InstallCompletedResultFiles(
+                       result,
+                       result.expectedSourceHash,
+                       payload)
+                      && payload.status
+                              == "Bake failed: incomplete static model lightmap metadata",
+              "incomplete required static model metadata rejects installation");
+        Check(!std::filesystem::exists(result.temporaryOutputPath)
+                      && !std::filesystem::exists(
+                              result.bakeResult.objectProbes.path)
+                      && !std::filesystem::exists(temporaryStaticPath),
+              "incomplete static model metadata cleans every temporary artifact");
+    }
+    {
+        game::SectorLightmapBakeAsyncResult result =
+                MakeInstallTestResult(sandbox / "success");
+        WriteInstallTestTemps(result);
+        AddInstallTestStaticModelSidecar(result);
+        game::SectorEditorLightmapBakeController controller;
+        game::SectorEditorLightmapBakeInstallPayload payload;
+        Check(controller.InstallCompletedResultFiles(
+                      result,
+                      result.expectedSourceHash,
+                      payload),
+              "valid static model sidecar installs with the atlas and probes");
+        Check(std::filesystem::exists(payload.finalLightmapPath)
+                      && std::filesystem::exists(
+                              payload.finalObjectProbePath)
+                      && std::filesystem::exists(
+                              payload.finalStaticModelPath)
+                      && payload.bakeResult.staticModels.path
+                              == payload.finalStaticModelAssetPath,
+              "successful install publishes all three bake artifacts and final metadata paths");
+    }
     std::filesystem::remove_all(sandbox);
 }
 
@@ -1031,6 +1177,33 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedDynamicSpotLight) == hash,
           "hash ignores dynamic spot light edits including shadow settings");
 
+    game::SectorTopologyMap changedStaticModel = base;
+    game::SectorPlacedRuntimeObject staticModel;
+    staticModel.id = 30;
+    staticModel.kind = "static_model";
+    staticModel.position = Vector3{8.0f, base.sectors[0].floorZ, 8.0f};
+    staticModel.yawRadians = 0.25f;
+    staticModel.staticModel.modelPath = "assets/models/props/crate.glb";
+    staticModel.staticModel.heightOffsetWorld = 0.5f;
+    changedStaticModel.runtimeObjects.push_back(staticModel);
+    const std::string staticModelHash =
+            game::ComputeSectorLightmapSourceHash(changedStaticModel);
+    Check(staticModelHash != hash,
+          "hash includes added assigned static props");
+    game::SectorTopologyMap changedStaticModelScale = changedStaticModel;
+    changedStaticModelScale.runtimeObjects[0].staticModel.scale = 2.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticModelScale)
+                  != staticModelHash,
+          "hash includes static prop scale edits");
+    changedStaticModel.runtimeObjects[0].position = Vector3{24.0f, 12.0f, 20.0f};
+    changedStaticModel.runtimeObjects[0].yawRadians = 1.5f;
+    changedStaticModel.runtimeObjects[0].staticModel.modelPath =
+            "assets/models/props/replacement.gltf";
+    changedStaticModel.runtimeObjects[0].staticModel.heightOffsetWorld = 3.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticModel)
+                  != staticModelHash,
+          "hash includes static prop transform, asset, and height-offset edits");
+
     game::SectorTopologyMap doorUvMap = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
     game::SectorPlacedRuntimeObject doorObject;
     doorObject.id = 1;
@@ -1187,12 +1360,33 @@ void TestSourceHashStableWhenVectorsReordered()
     std::reverse(reordered.staticSpotLights.begin(), reordered.staticSpotLights.end());
     Check(game::ComputeSectorLightmapSourceHash(reordered) == spotHash,
           "hash is stable when static spot light vector is reordered");
+
+    game::SectorPlacedRuntimeObject firstProp;
+    firstProp.id = 20;
+    firstProp.kind = "static_model";
+    firstProp.position = Vector3{8.0f, 0.0f, 8.0f};
+    firstProp.staticModel.modelPath = "assets/models/first.glb";
+    firstProp.staticModel.geometryFingerprint = "first-geometry";
+    game::SectorPlacedRuntimeObject secondProp = firstProp;
+    secondProp.id = 10;
+    secondProp.position.x = 24.0f;
+    secondProp.staticModel.modelPath = "assets/models/second.glb";
+    secondProp.staticModel.geometryFingerprint = "second-geometry";
+    reordered.runtimeObjects.push_back(firstProp);
+    reordered.runtimeObjects.push_back(secondProp);
+    const std::string propHash =
+            game::ComputeSectorLightmapSourceHash(reordered);
+    std::reverse(
+            reordered.runtimeObjects.begin(),
+            reordered.runtimeObjects.end());
+    Check(game::ComputeSectorLightmapSourceHash(reordered) == propHash,
+          "hash is stable when assigned static prop records are reordered");
 }
 
 void TestBakeVersionInvalidatesOldLightmaps()
 {
-    Check(game::kSectorLightmapBakeVersion == 10,
-          "lightmap bake version is bumped for baked object lighting probes");
+    Check(game::kSectorLightmapBakeVersion == 11,
+          "lightmap bake version is bumped for baked static model lightmaps");
 
     const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase06a_status_lightmap.png";
     WriteSolidAlphaTestTexture(lightmapPath, 255);
@@ -2599,6 +2793,543 @@ void TestObjectLightProbeAmbientAndDegenerateFiniteOutput()
     }
 }
 
+struct CpuMeshFixture {
+    std::vector<float> positions;
+    std::vector<float> normals;
+    std::vector<float> uv2;
+    std::vector<unsigned short> indices;
+    Mesh mesh = {};
+
+    void Bind()
+    {
+        mesh.vertexCount = static_cast<int>(positions.size() / 3);
+        mesh.triangleCount = static_cast<int>(indices.size() / 3);
+        mesh.vertices = positions.data();
+        mesh.normals = normals.empty() ? nullptr : normals.data();
+        mesh.texcoords2 = uv2.empty() ? nullptr : uv2.data();
+        mesh.indices = indices.empty() ? nullptr : indices.data();
+    }
+};
+
+CpuMeshFixture MakeAuthoredUv2Quad()
+{
+    CpuMeshFixture fixture;
+    fixture.positions = {
+            0.0f, 0.0f, 0.0f,
+            2.0f, 0.0f, 0.0f,
+            2.0f, 0.0f, 1.0f,
+            0.0f, 0.0f, 1.0f};
+    fixture.normals = {
+            0.0f, 1.0f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+            0.0f, 1.0f, 0.0f};
+    fixture.uv2 = {
+            0.0f, 0.0f,
+            1.0f, 0.0f,
+            1.0f, 1.0f,
+            0.0f, 1.0f};
+    fixture.indices = {0, 1, 2, 0, 2, 3};
+    fixture.Bind();
+    return fixture;
+}
+
+CpuMeshFixture MakeSharedVertexCubeWithInvalidUv2()
+{
+    CpuMeshFixture fixture;
+    fixture.positions = {
+            -1.0f, -1.0f, -1.0f,
+             1.0f, -1.0f, -1.0f,
+             1.0f,  1.0f, -1.0f,
+            -1.0f,  1.0f, -1.0f,
+            -1.0f, -1.0f,  1.0f,
+             1.0f, -1.0f,  1.0f,
+             1.0f,  1.0f,  1.0f,
+            -1.0f,  1.0f,  1.0f};
+    fixture.normals.resize(fixture.positions.size(), 0.0f);
+    fixture.uv2.resize(8 * 2, 0.0f);
+    fixture.indices = {
+            0, 2, 1, 0, 3, 2,
+            4, 5, 6, 4, 6, 7,
+            0, 1, 5, 0, 5, 4,
+            3, 7, 6, 3, 6, 2,
+            0, 4, 7, 0, 7, 3,
+            1, 2, 6, 1, 6, 5};
+    fixture.Bind();
+    return fixture;
+}
+
+void TestStaticModelUvPreparationAndImportedTransforms()
+{
+    CpuMeshFixture authored = MakeAuthoredUv2Quad();
+    CpuMeshFixture invalid = MakeSharedVertexCubeWithInvalidUv2();
+    std::array<Mesh, 2> meshes{authored.mesh, invalid.mesh};
+    Model model = {};
+    model.transform = MatrixMultiply(
+            MatrixScale(2.0f, 1.0f, 0.5f),
+            MatrixTranslate(3.0f, 4.0f, 5.0f));
+    model.meshCount = static_cast<int>(meshes.size());
+    model.meshes = meshes.data();
+
+    game::SectorStaticModelLightmapModel prepared;
+    std::string error;
+    Check(game::CopySectorStaticModelForLightmap(
+                  "fixture.gltf",
+                  "geometry-a",
+                  model,
+                  prepared,
+                  error),
+          "mixed static model meshes prepare for lightmapping");
+    Check(prepared.meshes.size() == 2,
+          "mixed static model preserves mesh boundaries");
+    if (prepared.meshes.size() != 2) {
+        return;
+    }
+    Check(prepared.meshes[0].preservesAuthoredUv2,
+          "finite non-overlapping authored UV2 is preserved");
+    Check(!prepared.meshes[1].preservesAuthoredUv2,
+          "degenerate authored UV2 is automatically unwrapped");
+    Check(prepared.meshes[1].sourceVertexIndices.size() > 8,
+          "xatlas duplicates shared cube vertices at lightmap seams");
+    const Vector3 expected = Vector3Transform(
+            Vector3{
+                    authored.positions[0],
+                    authored.positions[1],
+                    authored.positions[2]},
+            model.transform);
+    Check(SameVector(prepared.meshes[0].importedPositions[0], expected),
+          "imported model transform is applied before lightmap density and bake geometry");
+
+    game::SectorStaticModelLightmapModel repeated;
+    Check(game::CopySectorStaticModelForLightmap(
+                  "fixture.gltf",
+                  "geometry-a",
+                  model,
+                  repeated,
+                  error),
+          "static model unwrap can be repeated");
+    Check(repeated.meshes.size() == prepared.meshes.size()
+                  && repeated.meshes[1].sourceVertexIndices
+                          == prepared.meshes[1].sourceVertexIndices
+                  && repeated.meshes[1].indices
+                          == prepared.meshes[1].indices,
+          "xatlas vertex remaps and indices are deterministic");
+    bool sameUvs = repeated.meshes.size() == prepared.meshes.size()
+            && repeated.meshes[1].localLightmapUvs.size()
+                    == prepared.meshes[1].localLightmapUvs.size();
+    for (size_t i = 0;
+            sameUvs && i < prepared.meshes[1].localLightmapUvs.size();
+            ++i) {
+        const Vector2 a = repeated.meshes[1].localLightmapUvs[i];
+        const Vector2 b = prepared.meshes[1].localLightmapUvs[i];
+        sameUvs = Near(a.x, b.x) && Near(a.y, b.y);
+    }
+    Check(sameUvs, "xatlas local UV output is deterministic");
+}
+
+void TestStaticModelPreparationReusesReadyEditorModels()
+{
+    const std::filesystem::path root =
+            Phase01bSandboxDir() / "static_model_ready_reuse";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root);
+    const std::filesystem::path bufferPath = root / "mesh.bin";
+    const std::filesystem::path modelPath = root / "mesh.gltf";
+    WriteTextFile(bufferPath, "abc");
+    WriteTextFile(
+            modelPath,
+            R"({"asset":{"version":"2.0"},"buffers":[{"uri":"mesh.bin","byteLength":3}],"bufferViews":[],"accessors":[],"meshes":[]})");
+
+    CpuMeshFixture fixture = MakeAuthoredUv2Quad();
+    std::array<Mesh, 1> meshes{fixture.mesh};
+    Model readyModel = {};
+    readyModel.transform = MatrixIdentity();
+    readyModel.meshCount = static_cast<int>(meshes.size());
+    readyModel.meshes = meshes.data();
+
+    game::SectorTopologyMap map = MakeSquare();
+    game::SectorPlacedRuntimeObject first;
+    first.id = 91;
+    first.kind = "static_model";
+    first.position = Vector3{2.0f, 0.0f, 2.0f};
+    first.staticModel.modelPath = modelPath.string();
+    first.staticModel.scale = 1.5f;
+    map.runtimeObjects.push_back(first);
+    game::SectorPlacedRuntimeObject repeated = first;
+    repeated.id = 92;
+    repeated.position.x = 3.0f;
+    map.runtimeObjects.push_back(repeated);
+
+    engine::AssetManager assets;
+    int readyLookupCount = 0;
+    game::SectorStaticModelLightmapData prepared;
+    std::string error;
+    const bool preparationSucceeded =
+            game::PrepareSectorStaticModelsForLightmapBake(
+                    map,
+                    assets,
+                    {},
+                    prepared,
+                    error,
+                    [&readyModel, &readyLookupCount](
+                            const std::string&) {
+                        ++readyLookupCount;
+                        return &readyModel;
+                    });
+    if (!preparationSucceeded) {
+        std::fprintf(
+                stderr,
+                "Static model reuse preparation error: %s\n",
+                error.c_str());
+    }
+    Check(preparationSucceeded,
+          "static model bake preparation reuses ready editor model data");
+    Check(readyLookupCount == 1
+                  && prepared.models.size() == 1
+                  && prepared.objects.size() == 2
+                  && prepared.objects[0].modelIndex
+                          == prepared.objects[1].modelIndex
+                  && Near(prepared.objects[0].scale, 1.5f)
+                  && Near(prepared.objects[1].scale, 1.5f),
+          "reused ready models are looked up and copied once for repeated prop paths");
+
+    Check(assets.Initialize()
+                  && assets.GlobalScope().index == 0,
+          "reuse-only bake preparation creates no temporary asset scope or reload request");
+    assets.Shutdown();
+    std::filesystem::remove_all(root);
+}
+
+game::SectorStaticModelLightmapData MakeStaticModelSidecarFixture()
+{
+    game::SectorStaticModelLightmapData data;
+    data.sourceHash = "static-model-source-hash";
+    game::SectorStaticModelLightmapModel model;
+    model.modelPath = "assets/models/fixture.gltf";
+    model.geometryFingerprint = "geometry-a";
+    game::SectorStaticModelLightmapMesh mesh;
+    mesh.originalVertexCount = 3;
+    mesh.sourceVertexIndices = {0, 1, 2};
+    mesh.localLightmapUvs = {
+            Vector2{0.0f, 0.0f},
+            Vector2{1.0f, 0.0f},
+            Vector2{0.0f, 1.0f}};
+    mesh.indices = {0, 1, 2};
+    mesh.usableWidth = 16;
+    mesh.usableHeight = 16;
+    model.meshes.push_back(mesh);
+    data.models.push_back(model);
+    game::SectorStaticModelLightmapObject object;
+    object.objectId = 17;
+    object.modelIndex = 0;
+    object.containingSectorId = 10;
+    object.meshPlacements.resize(1);
+    data.objects.push_back(object);
+    return data;
+}
+
+void TestStaticModelChartPackingAndSidecarLifecycle()
+{
+    game::SectorStaticModelLightmapData data =
+            MakeStaticModelSidecarFixture();
+    data.objects.push_back(data.objects.front());
+    data.objects.back().objectId = 18;
+    std::string error;
+    Check(game::PackSectorStaticModelLightmapCharts(
+                  data,
+                  2048,
+                  2048,
+                  2,
+                  game::SectorStaticModelLightmapPackCursor{100, 20, 24},
+                  error),
+          "static model charts append after a supplied topology shelf cursor");
+    Check(data.objects[0].meshPlacements[0].x == 100
+                  && data.objects[0].meshPlacements[0].y == 20
+                  && data.objects[1].meshPlacements[0].x
+                          > data.objects[0].meshPlacements[0].x,
+          "static model chart packing preserves the preceding topology placement");
+
+    game::SectorStaticModelLightmapData overflow =
+            MakeStaticModelSidecarFixture();
+    overflow.models[0].meshes[0].usableWidth = 2048;
+    Check(!game::PackSectorStaticModelLightmapCharts(
+                   overflow,
+                   2048,
+                   2048,
+                   2,
+                   {},
+                   error)
+                  && error.find("larger than the 2048 atlas")
+                          != std::string::npos,
+          "oversized static model charts fail with an atlas diagnostic");
+
+    const std::filesystem::path path =
+            Phase01bSandboxDir() / "static_models_round_trip.bin";
+    std::filesystem::create_directories(path.parent_path());
+    Check(game::WriteSectorStaticModelLightmapSidecar(
+                  path.string(),
+                  data,
+                  error),
+          "static model lightmap sidecar writes");
+    game::SectorBakedStaticModelLightmapMetadata metadata;
+    metadata.path = path.string();
+    metadata.version = game::kSectorStaticModelLightmapSidecarVersion;
+    metadata.sourceHash = data.sourceHash;
+    metadata.modelCount = static_cast<int>(data.models.size());
+    metadata.objectCount = static_cast<int>(data.objects.size());
+    metadata.format = game::kSectorStaticModelLightmapSidecarFormat;
+    game::SectorStaticModelLightmapData loaded;
+    Check(game::ReadSectorStaticModelLightmapSidecar(
+                  path.string(),
+                  &metadata,
+                  loaded,
+                  error),
+          "static model lightmap sidecar round-trips");
+    Check(loaded.models.size() == data.models.size()
+                  && loaded.objects.size() == data.objects.size()
+                  && loaded.models[0].meshes[0].sourceVertexIndices
+                          == data.models[0].meshes[0].sourceVertexIndices
+                  && Near(
+                          loaded.objects[0].meshPlacements[0].atlasScale.x,
+                          data.objects[0].meshPlacements[0].atlasScale.x)
+                  && Near(
+                          loaded.objects[0].meshPlacements[0].atlasBias.y,
+                          data.objects[0].meshPlacements[0].atlasBias.y),
+          "static model sidecar preserves remaps and object atlas transforms");
+
+    game::SectorBakedStaticModelLightmapMetadata stale = metadata;
+    stale.sourceHash = "different";
+    Check(!game::ReadSectorStaticModelLightmapSidecar(
+                   path.string(),
+                   &stale,
+                   loaded,
+                   error),
+          "static model sidecar rejects stale metadata");
+    WriteTextFile(path, "truncated");
+    Check(!game::ReadSectorStaticModelLightmapSidecar(
+                   path.string(),
+                   &metadata,
+                   loaded,
+                   error),
+          "static model sidecar rejects truncated data");
+}
+
+void TestStaticModelFingerprintRefreshAndHashInputs()
+{
+    const std::filesystem::path root =
+            Phase01bSandboxDir() / "static_model_fingerprint";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root);
+    const std::filesystem::path bufferPath = root / "mesh.bin";
+    const std::filesystem::path modelPath = root / "mesh.gltf";
+    WriteTextFile(bufferPath, "abc");
+    WriteTextFile(
+            modelPath,
+            R"({"asset":{"version":"2.0"},"buffers":[{"uri":"mesh.bin","byteLength":3}],"bufferViews":[],"accessors":[],"meshes":[]})");
+
+    game::SectorTopologyMap map = MakeSquare();
+    game::SectorPlacedRuntimeObject object;
+    object.id = 91;
+    object.kind = "static_model";
+    object.position = Vector3{16.0f, 0.0f, 16.0f};
+    object.staticModel.modelPath = modelPath.string();
+    map.runtimeObjects.push_back(object);
+    std::string error;
+    Check(game::RefreshSectorStaticModelGeometryFingerprints(map, error),
+          "glTF geometry fingerprint refresh reads referenced buffers");
+    const std::string fingerprint =
+            map.runtimeObjects[0].staticModel.geometryFingerprint;
+    const std::string hash = game::ComputeSectorLightmapSourceHash(map);
+    WriteTextFile(bufferPath, "abcd");
+    Check(game::RefreshSectorStaticModelGeometryFingerprints(map, error)
+                  && map.runtimeObjects[0].staticModel.geometryFingerprint
+                          != fingerprint
+                  && game::ComputeSectorLightmapSourceHash(map) != hash,
+          "referenced glTF buffer changes refresh the geometry fingerprint and source hash");
+
+    const std::string geometryHash =
+            game::ComputeSectorLightmapSourceHash(map);
+    map.runtimeObjects[0].staticModel.geometryFingerprint = "manual-change";
+    Check(game::ComputeSectorLightmapSourceHash(map) != geometryHash,
+          "static model geometry fingerprint participates in the source hash");
+
+    game::SectorTopologyMap empty = MakeSquare();
+    game::SectorPlacedRuntimeObject unassigned = object;
+    unassigned.staticModel.modelPath.clear();
+    unassigned.staticModel.geometryFingerprint.clear();
+    empty.runtimeObjects.push_back(unassigned);
+    const std::string emptyHash =
+            game::ComputeSectorLightmapSourceHash(MakeSquare());
+    Check(game::ComputeSectorLightmapSourceHash(empty) == emptyHash,
+          "empty static model assignments remain excluded from the source hash");
+    std::filesystem::remove_all(root);
+}
+
+void TestStaticModelReceivesAndCastsBakedLighting()
+{
+    game::SectorTopologyMap map = MakeSquare();
+    for (game::SectorTopologyVertex& vertex : map.vertices) {
+        vertex.x *= 16;
+        vertex.y *= 16;
+    }
+    map.staticLights.clear();
+    map.staticLights.push_back(game::SectorTopologyStaticPointLight{
+            501,
+            Vector3{32.0f, game::SectorWorldToAuthoringDistance(3.0f), 32.0f},
+            WHITE,
+            3.0f,
+            game::SectorWorldToAuthoringDistance(8.0f),
+            0.0f});
+    map.lightmapSettings.indirectBounceStrength = 0.0f;
+    game::SectorPlacedRuntimeObject object;
+    object.id = 77;
+    object.kind = "static_model";
+    object.position = Vector3{32.0f, 0.0f, 32.0f};
+    object.staticModel.modelPath = "assets/models/test_fixture.gltf";
+    object.staticModel.geometryFingerprint = "fixture-geometry";
+    map.runtimeObjects.push_back(object);
+
+    game::SectorStaticModelLightmapData staticModels;
+    game::SectorStaticModelLightmapModel model;
+    model.modelPath = object.staticModel.modelPath;
+    model.geometryFingerprint = object.staticModel.geometryFingerprint;
+    game::SectorStaticModelLightmapMesh mesh;
+    mesh.originalVertexCount = 4;
+    mesh.preservesAuthoredUv2 = true;
+    mesh.usableWidth = 16;
+    mesh.usableHeight = 16;
+    mesh.sourceVertexIndices = {0, 1, 2, 3};
+    mesh.importedPositions = {
+            Vector3{-1.0f, 1.0f, -1.0f},
+            Vector3{ 1.0f, 1.0f, -1.0f},
+            Vector3{ 1.0f, 1.0f,  1.0f},
+            Vector3{-1.0f, 1.0f,  1.0f}};
+    mesh.importedNormals = {
+            Vector3{0.0f, 1.0f, 0.0f},
+            Vector3{0.0f, 1.0f, 0.0f},
+            Vector3{0.0f, 1.0f, 0.0f},
+            Vector3{0.0f, 1.0f, 0.0f}};
+    mesh.localLightmapUvs = {
+            Vector2{0.0f, 0.0f},
+            Vector2{1.0f, 0.0f},
+            Vector2{1.0f, 1.0f},
+            Vector2{0.0f, 1.0f}};
+    mesh.indices = {0, 2, 1, 0, 3, 2};
+    model.meshes.push_back(mesh);
+    staticModels.models.push_back(model);
+    game::SectorStaticModelLightmapObject preparedObject;
+    preparedObject.objectId = object.id;
+    preparedObject.modelIndex = 0;
+    preparedObject.containingSectorId = 10;
+    preparedObject.worldPosition = Vector3{4.0f, 0.0f, 4.0f};
+    preparedObject.meshPlacements.resize(1);
+    staticModels.objects.push_back(preparedObject);
+
+    const std::filesystem::path propPath =
+            Phase01bSandboxDir() / "static_model_integrated.lightmap.png";
+    game::SectorTopologyLightmapBakeInput input;
+    input.mapSnapshot = map;
+    input.staticModels = staticModels;
+    input.expectedSourceHash = game::ComputeSectorLightmapSourceHash(map);
+    input.temporaryOutputPath = propPath.string();
+    game::SectorLightmapBakeResult propResult;
+    std::string error;
+    Check(game::BakeSectorLightmap(
+                  input,
+                  {},
+                  propResult,
+                  error),
+          "prepared static model bakes through the integrated atlas and BVH path");
+    Check(propResult.staticModels.objectCount == 1
+                  && propResult.staticModels.modelCount == 1
+                  && propResult.staticGeometryTriangles > 12,
+          "integrated static model bake reports sidecar metadata and prop triangles");
+
+    game::SectorStaticModelLightmapData installedData;
+    Check(game::ReadSectorStaticModelLightmapSidecar(
+                  propResult.staticModels.path,
+                  &propResult.staticModels,
+                  installedData,
+                  error),
+          "integrated static model bake writes readable runtime remap metadata");
+    Image propImage = LoadImage(propPath.string().c_str());
+    Check(propImage.data != nullptr,
+          "integrated static model lightmap image loads");
+    if (propImage.data != nullptr
+            && !installedData.objects.empty()
+            && !installedData.objects[0].meshPlacements.empty()) {
+        const auto& placement =
+                installedData.objects[0].meshPlacements[0];
+        const int x = static_cast<int>(std::floor(
+                (placement.atlasBias.x + placement.atlasScale.x * 0.5f)
+                * static_cast<float>(propImage.width)));
+        const int y = static_cast<int>(std::floor(
+                (placement.atlasBias.y + placement.atlasScale.y * 0.5f)
+                * static_cast<float>(propImage.height)));
+        const Color sample = GetImageColor(propImage, x, y);
+        Check(sample.r + sample.g + sample.b > 30,
+              "static model texels receive baked static direct lighting");
+    }
+    if (propImage.data != nullptr) {
+        UnloadImage(propImage);
+    }
+
+    game::SectorGeneratedGeometry geometry;
+    game::SectorLightmapLayout layout;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error)
+                  && game::BuildSectorLightmapLayout(map, layout, error),
+          "integrated prop shadow fixture builds stable topology layout");
+    int floorSurfaceIndex = -1;
+    for (size_t i = 0; i < geometry.surfaces.size(); ++i) {
+        if (geometry.surfaces[i].ref.kind
+                == game::SectorGeneratedSurfaceKind::Floor) {
+            floorSurfaceIndex = static_cast<int>(i);
+            break;
+        }
+    }
+    Color propFloorSample = {};
+    if (floorSurfaceIndex >= 0
+            && floorSurfaceIndex < static_cast<int>(layout.charts.size())) {
+        const game::SectorLightmapChart& chart =
+                layout.charts[static_cast<size_t>(floorSurfaceIndex)];
+        Image baked = LoadImage(propPath.string().c_str());
+        propFloorSample = GetImageColor(
+                baked,
+                chart.usableX + chart.usableWidth / 2,
+                chart.usableY + chart.usableHeight / 2);
+        UnloadImage(baked);
+    }
+
+    game::SectorTopologyMap baselineMap = map;
+    baselineMap.runtimeObjects.clear();
+    const std::filesystem::path baselinePath =
+            Phase01bSandboxDir() / "static_model_baseline.lightmap.png";
+    game::SectorLightmapBakeResult baselineResult;
+    Check(game::BakeSectorLightmap(
+                  baselineMap,
+                  layout,
+                  baselinePath.string().c_str(),
+                  baselineResult,
+                  error),
+          "static model shadow comparison baseline bakes");
+    if (floorSurfaceIndex >= 0
+            && floorSurfaceIndex < static_cast<int>(layout.charts.size())) {
+        const game::SectorLightmapChart& chart =
+                layout.charts[static_cast<size_t>(floorSurfaceIndex)];
+        Image baked = LoadImage(baselinePath.string().c_str());
+        const Color baselineFloorSample = GetImageColor(
+                baked,
+                chart.usableX + chart.usableWidth / 2,
+                chart.usableY + chart.usableHeight / 2);
+        UnloadImage(baked);
+        Check(baselineFloorSample.r + baselineFloorSample.g
+                          + baselineFloorSample.b
+                      > propFloorSample.r + propFloorSample.g
+                              + propFloorSample.b + 20,
+              "opaque double-sided static model triangles cast baked shadows onto sector floors");
+    }
+}
+
 } // namespace
 
 int main()
@@ -2609,6 +3340,7 @@ int main()
     TestLightmapBakeInstallBoundaryMissingTempsCleanUp();
     TestLightmapBakeInstallBoundaryCopyFailureCleanup();
     TestLightmapBakeInstallBoundarySuccessfulPayload();
+    TestLightmapBakeInstallBoundaryStaticModelSidecarIsAtomic();
     TestObjectLightProbeSidecarRoundTrip();
     TestObjectLightProbeSidecarRejectsInvalidFiles();
     TestObjectLightProbeRuntimeDataLoadsAndBuildsSectorRanges();
@@ -2643,6 +3375,11 @@ int main()
     TestAlphaAwareStaticLightBakePaths();
     TestDirectionalLightBakeBehavior();
     TestStaticSpotlightBakeBehavior();
+    TestStaticModelUvPreparationAndImportedTransforms();
+    TestStaticModelPreparationReusesReadyEditorModels();
+    TestStaticModelChartPackingAndSidecarLifecycle();
+    TestStaticModelFingerprintRefreshAndHashInputs();
+    TestStaticModelReceivesAndCastsBakedLighting();
 
     if (failures != 0) {
         std::fprintf(stderr, "%d sector topology lightmap test(s) failed\n", failures);

@@ -973,6 +973,96 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && placeholderAuthoringLoaded.mapData.runtimeObjects[0].billboard.spriteAnimationPath.empty(),
           "graph-native empty billboard sprite path placeholder survives load");
 
+    SectorTopologyMap staticModelMap = MakeSquare();
+    SectorPlacedRuntimeObject staticModel;
+    staticModel.id = 18;
+    staticModel.kind = "static_model";
+    staticModel.position = Vector3{12.0f, -2.5f, 20.0f};
+    staticModel.yawRadians = 0.5f;
+    staticModel.staticModel.modelPath = "assets/models/props/nested/crate.glb";
+    staticModel.staticModel.heightOffsetWorld = 0.75f;
+    staticModel.staticModel.scale = 1.5f;
+    staticModelMap.runtimeObjects.push_back(staticModel);
+    const Json staticModelSaved = Json::parse(SaveText(staticModelMap));
+    Check(staticModelSaved["runtimeObjects"][0]["kind"] == "static_model"
+                  && staticModelSaved["runtimeObjects"][0]["staticModel"]["modelPath"]
+                             == "assets/models/props/nested/crate.glb"
+                  && Near(
+                          staticModelSaved["runtimeObjects"][0]["staticModel"]["heightOffsetWorld"]
+                                  .get<float>(),
+                          0.75f)
+                  && Near(
+                          staticModelSaved["runtimeObjects"][0]["staticModel"]["scale"]
+                                  .get<float>(),
+                          1.5f)
+                  && Near(
+                          staticModelSaved["runtimeObjects"][0]["position"][1].get<float>(),
+                          -2.5f),
+          "static prop save writes model path, height offset, scale, and authored floor height");
+    SectorTopologyMap staticModelLoaded;
+    Check(LoadText(staticModelSaved.dump(), staticModelLoaded, error),
+          "static prop JSON loads");
+    const SectorPlacedRuntimeObject* loadedStaticModel =
+            game::FindSectorPlacedRuntimeObject(staticModelLoaded, 18);
+    Check(loadedStaticModel != nullptr
+                  && loadedStaticModel->kind == "static_model"
+                  && loadedStaticModel->staticModel.modelPath
+                          == "assets/models/props/nested/crate.glb"
+                  && Near(loadedStaticModel->staticModel.heightOffsetWorld, 0.75f)
+                  && Near(loadedStaticModel->staticModel.scale, 1.5f)
+                  && Near(loadedStaticModel->position, Vector3{12.0f, -2.5f, 20.0f})
+                  && Near(loadedStaticModel->yawRadians, 0.5f),
+          "static prop JSON round-trip preserves payload and common transform");
+
+    staticModelMap.runtimeObjects[0].staticModel = game::SectorPlacedStaticModel{};
+    const Json unassignedStaticModelSaved = Json::parse(SaveText(staticModelMap));
+    Check(unassignedStaticModelSaved["runtimeObjects"][0]["staticModel"].is_object()
+                  && unassignedStaticModelSaved["runtimeObjects"][0]["staticModel"].empty(),
+          "unassigned static prop saves an empty payload and omits default fields");
+    SectorTopologyMap unassignedStaticModelLoaded;
+    Check(LoadText(unassignedStaticModelSaved.dump(), unassignedStaticModelLoaded, error),
+          "unassigned static prop with missing optional fields loads");
+    const SectorPlacedRuntimeObject* unassignedStaticModel =
+            game::FindSectorPlacedRuntimeObject(unassignedStaticModelLoaded, 18);
+    Check(unassignedStaticModel != nullptr
+                  && unassignedStaticModel->staticModel.modelPath.empty()
+                  && Near(unassignedStaticModel->staticModel.heightOffsetWorld, 0.0f)
+                  && Near(unassignedStaticModel->staticModel.scale, 1.0f),
+          "missing static prop payload fields use backward-compatible defaults");
+
+    Json missingModelPath = staticModelSaved;
+    missingModelPath["runtimeObjects"][0]["staticModel"].erase("modelPath");
+    SectorTopologyMap missingModelPathLoaded;
+    Check(LoadText(missingModelPath.dump(), missingModelPathLoaded, error),
+          "static prop payload without model path loads");
+    loadedStaticModel = game::FindSectorPlacedRuntimeObject(missingModelPathLoaded, 18);
+    Check(loadedStaticModel != nullptr
+                  && loadedStaticModel->staticModel.modelPath.empty()
+                  && Near(loadedStaticModel->staticModel.heightOffsetWorld, 0.75f),
+          "missing static prop model path defaults empty without losing height offset");
+
+    Json missingScale = staticModelSaved;
+    missingScale["runtimeObjects"][0]["staticModel"].erase("scale");
+    SectorTopologyMap missingScaleLoaded;
+    Check(LoadText(missingScale.dump(), missingScaleLoaded, error),
+          "static prop payload without scale loads");
+    loadedStaticModel = game::FindSectorPlacedRuntimeObject(missingScaleLoaded, 18);
+    Check(loadedStaticModel != nullptr
+                  && Near(loadedStaticModel->staticModel.scale, 1.0f),
+          "missing static prop scale defaults to one");
+
+    SectorTopologyMap invalidStaticModel = staticModelMap;
+    invalidStaticModel.runtimeObjects[0].staticModel.heightOffsetWorld =
+            std::numeric_limits<float>::infinity();
+    ExpectSaveRejected(
+            invalidStaticModel,
+            "non-finite static prop height offset is rejected on save");
+    invalidStaticModel = staticModelMap;
+    invalidStaticModel.runtimeObjects[0].staticModel.scale = 0.0f;
+    ExpectSaveRejected(
+            invalidStaticModel,
+            "non-positive static prop scale is rejected on save");
+
     SectorTopologyMap authoringSource = original;
     game::SectorAuthoringDocument document = MakeAuthoringDocumentFromMap(authoringSource);
     const Json graphSaved = Json::parse(SaveAuthoringText(document));
@@ -3140,6 +3230,13 @@ void TestGraphNativeMapLevelRoundTrip()
     source.bakedLightmap.objectProbes.probeSpacingWorld = 5.5f;
     source.bakedLightmap.objectProbes.probeHeightWorld = 1.4f;
     source.bakedLightmap.objectProbes.format = "ambientCubeF32LE";
+    source.bakedLightmap.staticModels.path =
+            "assets/levels/test/test.lightmap.static_models.bin";
+    source.bakedLightmap.staticModels.version = 1;
+    source.bakedLightmap.staticModels.sourceHash = "abc123";
+    source.bakedLightmap.staticModels.modelCount = 2;
+    source.bakedLightmap.staticModels.objectCount = 5;
+    source.bakedLightmap.staticModels.format = "staticModelUvRemapF32LE";
 
     const game::SectorAuthoringDocument original = MakeAuthoringDocumentFromMap(source);
     const Json saved = Json::parse(SaveAuthoringText(original));
@@ -3193,6 +3290,15 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(saved["bakedLightmap"]["objectProbes"]["probeHeightWorld"].get<float>(), 1.4f)
                   && saved["bakedLightmap"]["objectProbes"]["format"] == "ambientCubeF32LE",
           "graph-native baked object probe sidecar metadata is persisted");
+    Check(saved["bakedLightmap"]["staticModels"]["path"]
+                      == "assets/levels/test/test.lightmap.static_models.bin"
+                  && saved["bakedLightmap"]["staticModels"]["version"] == 1
+                  && saved["bakedLightmap"]["staticModels"]["sourceHash"] == "abc123"
+                  && saved["bakedLightmap"]["staticModels"]["modelCount"] == 2
+                  && saved["bakedLightmap"]["staticModels"]["objectCount"] == 5
+                  && saved["bakedLightmap"]["staticModels"]["format"]
+                          == "staticModelUvRemapF32LE",
+          "graph-native baked static model lightmap metadata is persisted");
 
     game::SectorAuthoringDocument loaded;
     std::string error;
@@ -3234,7 +3340,11 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.mapData.bakedLightmap.objectProbes.count == 7
                   && Near(loaded.mapData.bakedLightmap.objectProbes.probeSpacingWorld, 5.5f)
                   && Near(loaded.mapData.bakedLightmap.objectProbes.probeHeightWorld, 1.4f)
-                  && loaded.mapData.bakedLightmap.objectProbes.format == "ambientCubeF32LE",
+                  && loaded.mapData.bakedLightmap.objectProbes.format == "ambientCubeF32LE"
+                  && loaded.mapData.bakedLightmap.staticModels.path
+                          == "assets/levels/test/test.lightmap.static_models.bin"
+                  && loaded.mapData.bakedLightmap.staticModels.modelCount == 2
+                  && loaded.mapData.bakedLightmap.staticModels.objectCount == 5,
           "graph-native map-level fields round-trip");
     Check(loaded.derivation.success
                   && loaded.derivation.topology.texturesById.count("sky") == 1
@@ -3258,7 +3368,9 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.derivation.topology.bakedLightmap.sourceHash == "abc123"
                   && loaded.derivation.topology.bakedLightmap.objectProbes.path
                           == "assets/levels/test/test.lightmap.object_probes.bin"
-                  && loaded.derivation.topology.bakedLightmap.objectProbes.count == 7,
+                  && loaded.derivation.topology.bakedLightmap.objectProbes.count == 7
+                  && loaded.derivation.topology.bakedLightmap.staticModels.path
+                          == "assets/levels/test/test.lightmap.static_models.bin",
           "derived topology receives map-level fields after load");
 
     const Json resaved = Json::parse(SaveAuthoringText(loaded));
@@ -3266,7 +3378,8 @@ void TestGraphNativeMapLevelRoundTrip()
                   && resaved["bakedLightmap"]["width"] == saved["bakedLightmap"]["width"]
                   && resaved["bakedLightmap"]["height"] == saved["bakedLightmap"]["height"]
                   && resaved["bakedLightmap"]["sourceHash"] == saved["bakedLightmap"]["sourceHash"]
-                  && resaved["bakedLightmap"]["objectProbes"] == saved["bakedLightmap"]["objectProbes"],
+                  && resaved["bakedLightmap"]["objectProbes"] == saved["bakedLightmap"]["objectProbes"]
+                  && resaved["bakedLightmap"]["staticModels"] == saved["bakedLightmap"]["staticModels"],
           "graph-native save/load/save preserves baked lightmap metadata");
 }
 

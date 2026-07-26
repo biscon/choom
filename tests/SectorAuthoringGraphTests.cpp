@@ -14,7 +14,10 @@
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
+#include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
+#include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
+#include "engine/assets/AssetManager.h"
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -710,6 +713,12 @@ game::ManipulationState& TestManipulationState()
     return manipulationState;
 }
 
+game::RuntimeObjectDragState& TestRuntimeObjectDragState()
+{
+    static game::RuntimeObjectDragState runtimeObjectDragState;
+    return runtimeObjectDragState;
+}
+
 game::SectorEditorLightEditingService MakeLightEditingService(
         game::SectorEditorState& state,
         game::SectorEditorDocumentState& documentState,
@@ -725,6 +734,7 @@ game::SectorEditorLightEditingService MakeLightEditingService(
     inspectorIdUiState = game::InspectorIdUiState{};
     selectionState = game::SelectionState{};
     manipulationState = game::ManipulationState{};
+    TestRuntimeObjectDragState() = game::RuntimeObjectDragState{};
     return game::SectorEditorLightEditingService{
             game::SectorEditorLightEditingServiceContext{
                     topologyMap,
@@ -734,7 +744,7 @@ game::SectorEditorLightEditingService MakeLightEditingService(
                     state.topologyRenderCache,
                     {
                             manipulationState,
-                            state.runtimeObjectDrag,
+                            TestRuntimeObjectDragState(),
                             selectionState.topologySelectionKind,
                             selectionState.selectedTopologySectorId,
                             selectionState.selectedTopologyVertexId,
@@ -9687,6 +9697,435 @@ void TestEditorGraphNativeRuntimeObjectsSurviveLoadDerivation()
     std::filesystem::remove(path, removeError);
 }
 
+void FillRuntimeObjectTestSectorCache(
+        game::SectorEditorTopologyRenderCache& cache,
+        const game::SectorTopologyMap& map)
+{
+    cache.valid = true;
+    cache.sectors.clear();
+    cache.runtimeObjects.clear();
+
+    game::CachedTopologySectorDraw left;
+    left.sectorId = 200;
+    left.fillTrianglePoints = {
+            Vector2{0.0f, 0.0f},
+            Vector2{64.0f, 0.0f},
+            Vector2{64.0f, 64.0f},
+            Vector2{0.0f, 0.0f},
+            Vector2{64.0f, 64.0f},
+            Vector2{0.0f, 64.0f}};
+    cache.sectors.push_back(left);
+
+    game::CachedTopologySectorDraw right;
+    right.sectorId = 201;
+    right.fillTrianglePoints = {
+            Vector2{64.0f, 0.0f},
+            Vector2{128.0f, 0.0f},
+            Vector2{128.0f, 64.0f},
+            Vector2{64.0f, 0.0f},
+            Vector2{128.0f, 64.0f},
+            Vector2{64.0f, 64.0f}};
+    cache.sectors.push_back(right);
+
+    for (const game::SectorPlacedRuntimeObject& object : map.runtimeObjects) {
+        game::CachedRuntimeObjectDraw draw;
+        draw.objectId = object.id;
+        draw.map = Vector2{object.position.x, object.position.z};
+        draw.yawRadians = object.yawRadians;
+        draw.definitionKnown =
+                object.kind == "billboard"
+                || object.kind == "door"
+                || object.kind == "static_model";
+        cache.runtimeObjects.push_back(draw);
+    }
+}
+
+game::SectorEditorRuntimeObjectEditingService MakeRuntimeObjectEditingServiceForTest(
+        game::SectorTopologyMap& map,
+        game::SectorRuntimeObjectState& runtimeObjects,
+        game::RuntimeObjectEditingState& editingState,
+        game::RuntimeObjectEditingUiState& uiState,
+        game::SelectionState& selectionState,
+        game::SectorEditorDocumentState& documentState,
+        uint64_t& renderRevision,
+        game::SectorEditorTopologyRenderCache& renderCache,
+        std::string& statusText,
+        bool derivationCurrent)
+{
+    return game::SectorEditorRuntimeObjectEditingService{
+            game::SectorEditorRuntimeObjectEditingServiceContext{
+                    map,
+                    runtimeObjects,
+                    editingState,
+                    uiState,
+                    selectionState,
+                    nullptr,
+                    game::MakeSectorEditorDocumentLifecycleAccess(
+                            documentState.lifecycle),
+                    renderRevision,
+                    renderCache,
+                    statusText,
+                    nullptr,
+                    derivationCurrent}};
+}
+
+void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
+{
+    const std::filesystem::path root =
+            TempDirectoryPath("sector_editor_static_model_picker_test");
+    RecreateTempDirectory(root);
+    std::error_code error;
+    std::filesystem::create_directories(root / "nested" / "deeper", error);
+    Check(!error, "static model picker creates nested temp fixture directory");
+    WriteTextFile(root / "alpha.gltf", "{}");
+    WriteTextFile(root / "nested" / "beta.GLB", "");
+    WriteTextFile(root / "nested" / "deeper" / "gamma.gLtF", "{}");
+    WriteTextFile(root / "nested" / "mesh.bin", "");
+    WriteTextFile(root / "nested" / "albedo.png", "");
+    WriteTextFile(root / "notes.txt", "");
+
+    game::StaticModelPickerState state;
+    state.requestedModelPath = "assets/models/nested/beta.GLB";
+    std::string status;
+    game::SectorEditorStaticModelPickerService picker(state, status);
+    Check(picker.RefreshFromRoot(root, "assets/models"),
+          "static model picker recursively scans a temporary model root");
+    const std::vector<std::string> expected{
+            "assets/models/alpha.gltf",
+            "assets/models/nested/beta.GLB",
+            "assets/models/nested/deeper/gamma.gLtF"};
+    Check(state.modelPaths == expected,
+          "static model picker filters formats and sorts normalized asset-relative paths");
+    Check(state.optionLabels.size() == expected.size()
+                  && std::string(state.optionLabels[1]) == expected[1],
+          "static model picker rebuilds stable list labels");
+    Check(state.selectedModelIndex == 1
+                  && picker.SelectedModelPath() == expected[1],
+          "static model picker preselects the current assigned model");
+
+    Check(picker.SelectIndex(2)
+                  && picker.HasSelection()
+                  && picker.SelectedModelPath() == expected[2],
+          "static model picker selection returns the chosen asset-relative path");
+    picker.Open(expected[0]);
+    Check(state.open && state.selectedModelIndex == 0,
+          "opening an already-scanned picker preselects the supplied current path");
+    WriteTextFile(root / "nested" / "aardvark.glb", "");
+    Check(picker.RefreshFromRoot(root, "assets/models")
+                  && state.modelPaths.size() == 4
+                  && state.modelPaths[1] == "assets/models/nested/aardvark.glb",
+          "static model picker refresh discovers newly added nested models in order");
+    picker.Close();
+    Check(!state.open, "static model picker closes on cancel");
+
+    std::filesystem::remove_all(root, error);
+}
+
+void TestStaticModelAssetRequestsDeduplicateAndUnloadByScope()
+{
+    engine::AssetManager assets;
+    Check(assets.Initialize(), "asset manager initializes for model request tests");
+    const engine::AssetScopeHandle firstScope =
+            assets.CreateScope("static-model-first");
+    const engine::AssetScopeHandle secondScope =
+            assets.CreateScope("static-model-second");
+
+    const engine::ModelHandle first =
+            assets.RequestModel(firstScope, "crate", "/tmp/models/crate.glb");
+    const engine::ModelHandle duplicate =
+            assets.RequestModel(firstScope, "different-key", "/tmp/models/crate.glb");
+    const engine::ModelHandle distinct =
+            assets.RequestModel(firstScope, "barrel", "/tmp/models/barrel.gltf");
+    const engine::ModelHandle otherScope =
+            assets.RequestModel(secondScope, "crate", "/tmp/models/crate.glb");
+    Check(!engine::IsNull(first)
+                  && first == duplicate
+                  && distinct != first,
+          "model requests deduplicate identical paths only within one scope");
+    Check(otherScope != first,
+          "identical model paths in different scopes receive distinct handles");
+    Check(!assets.IsReady(first)
+                  && !assets.IsFinished(first)
+                  && assets.GetModel(first) == nullptr
+                  && engine::IsNull(
+                          assets.FindReadyModelByPath(
+                                  "/tmp/models/crate.glb")),
+          "queued model exposes pending state and no immediate model pointer");
+    Check(!assets.IsScopeReady(firstScope)
+                  && !assets.IsScopeFinished(firstScope)
+                  && Near(assets.GetScopeProgress(firstScope), 0.0f),
+          "queued deduplicated models contribute correctly to scope progress");
+
+    assets.UnloadScope(firstScope);
+    Check(!assets.IsReady(first)
+                  && assets.IsFinished(first)
+                  && assets.GetModel(first) == nullptr
+                  && !assets.IsReady(distinct),
+          "scope unload invalidates queued model handles without GPU work");
+    Check(!assets.IsFinished(otherScope),
+          "unloading one scope leaves another scope's identical model request pending");
+    assets.UpdateMainThread(0.0f);
+    Check(!assets.IsReady(otherScope)
+                  && assets.IsFinished(otherScope)
+                  && assets.HasFailed(otherScope)
+                  && assets.GetModel(otherScope) == nullptr
+                  && engine::IsNull(
+                          assets.FindReadyModelByPath(
+                                  "/tmp/models/crate.glb")),
+          "main-thread model loading exposes a terminal failed state for a missing model");
+    assets.Shutdown();
+    Check(assets.IsFinished(otherScope) && assets.GetModel(otherScope) == nullptr,
+          "model shutdown safely retires remaining pending handles");
+}
+
+void TestStaticPropEditingPlacementMutationAndFloorRelativeDrag()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    game::SectorTopologySector* left = game::FindSectorTopologySector(map, 200);
+    game::SectorTopologySector* right = game::FindSectorTopologySector(map, 201);
+    Check(left != nullptr && right != nullptr,
+          "static prop editing fixture has adjacent sectors");
+    if (left == nullptr || right == nullptr) {
+        return;
+    }
+    left->floorZ = 16.0f;
+    right->floorZ = 80.0f;
+    left->ceilingZ = 160.0f;
+    right->ceilingZ = 160.0f;
+
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::RuntimeObjectEditingState editingState;
+    game::RuntimeObjectEditingUiState uiState;
+    game::SelectionState selectionState;
+    game::SectorEditorDocumentState documentState;
+    uint64_t renderRevision = 7;
+    game::SectorEditorTopologyRenderCache renderCache;
+    std::string statusText;
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+
+    game::SectorEditorRuntimeObjectEditingService editing =
+            MakeRuntimeObjectEditingServiceForTest(
+                    map,
+                    runtimeObjects,
+                    editingState,
+                    uiState,
+                    selectionState,
+                    documentState,
+                    renderRevision,
+                    renderCache,
+                    statusText,
+                    true);
+    Check(editing.AddStaticModel(Vector2{24.0f, 24.0f}),
+          "static prop placement succeeds inside a cached derived sector");
+    Check(map.runtimeObjects.size() == 1
+                  && map.runtimeObjects[0].kind == "static_model"
+                  && Near(map.runtimeObjects[0].position, Vector3{24.0f, 16.0f, 24.0f})
+                  && map.runtimeObjects[0].staticModel.modelPath.empty()
+                  && Near(map.runtimeObjects[0].staticModel.heightOffsetWorld, 0.0f)
+                  && Near(map.runtimeObjects[0].staticModel.scale, 1.0f),
+          "static prop placement creates an empty floor-anchored authored object");
+    Check(selectionState.selectedRuntimeObjectId == map.runtimeObjects[0].id,
+          "static prop placement selects the new object");
+    Check(documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && renderRevision == 8
+                  && !renderCache.valid,
+          "static prop placement dirties the document and invalidates the 2D cache");
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(editing.AssignSelectedStaticModel("assets/models/props/crate.glb"),
+          "static prop model assignment mutates through the editing service");
+    Check(map.runtimeObjects[0].staticModel.modelPath
+                  == "assets/models/props/crate.glb"
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && !renderCache.valid,
+          "static prop model assignment is serialized state and invalidates the cache");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(editing.MutateSelected(
+                  "Updated 3D prop transform",
+                  [](game::SectorPlacedRuntimeObject& object) {
+                      object.position.x = 96.0f;
+                      return true;
+                  })
+                  && Near(map.runtimeObjects[0].position.y, 80.0f),
+          "static prop inspector-style XZ edits reanchor to the cached containing-sector floor");
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(editing.MutateSelected(
+                  "Updated 3D prop transform",
+                  [](game::SectorPlacedRuntimeObject& object) {
+                      object.position.x = 24.0f;
+                      return true;
+                  })
+                  && Near(map.runtimeObjects[0].position.y, 16.0f),
+          "static prop inspector-style XZ edits can reanchor back to the original floor");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(editing.MutateSelected(
+                  "Updated 3D prop settings",
+                  [](game::SectorPlacedRuntimeObject& object) {
+                      object.yawRadians = 1.25f;
+                      object.staticModel.heightOffsetWorld = 0.75f;
+                      object.staticModel.scale = 1.5f;
+                      return true;
+                  }),
+          "static prop yaw, height offset, and scale edit through the focused service");
+    Check(Near(map.runtimeObjects[0].yawRadians, 1.25f)
+                  && Near(map.runtimeObjects[0].staticModel.heightOffsetWorld, 0.75f)
+                  && Near(map.runtimeObjects[0].staticModel.scale, 1.5f),
+          "static prop yaw, height offset, and scale edits are retained");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    const int objectId = map.runtimeObjects[0].id;
+    Check(editing.BeginDrag(objectId), "static prop drag begins");
+    editing.UpdateDrag(Vector2{96.0f, 32.0f});
+    Check(Near(map.runtimeObjects[0].position, Vector3{96.0f, 80.0f, 32.0f})
+                  && Near(map.runtimeObjects[0].staticModel.heightOffsetWorld, 0.75f),
+          "static prop drag reanchors base floor across sectors and preserves world height offset");
+    Check(!renderCache.runtimeObjects.empty()
+                  && Near(renderCache.runtimeObjects[0].map.x, 96.0f)
+                  && Near(renderCache.runtimeObjects[0].map.y, 32.0f),
+          "live static prop drag updates the cached 2D marker used for picking");
+    Check(editing.FinishDrag() && !renderCache.valid,
+          "committed static prop drag invalidates the derived 2D cache");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(editing.BeginDrag(objectId), "static prop outside-sector drag begins");
+    editing.UpdateDrag(Vector2{180.0f, 180.0f});
+    Check(Near(map.runtimeObjects[0].position, Vector3{180.0f, 80.0f, 180.0f}),
+          "static prop drag outside all cached sectors preserves the last valid base floor");
+    editing.CancelDrag("Cancelled object move");
+    Check(Near(map.runtimeObjects[0].position, Vector3{96.0f, 80.0f, 32.0f})
+                  && !editingState.drag.active,
+          "cancelled static prop drag restores the original authored transform");
+
+    game::SectorPlacedRuntimeObject billboard =
+            MakeBillboardRuntimeObject(
+                    90,
+                    "assets/sprites/test.json",
+                    Vector3{24.0f, 7.0f, 24.0f},
+                    0.0f);
+    map.runtimeObjects.push_back(billboard);
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(editing.BeginDrag(90), "existing billboard drag still begins");
+    editing.UpdateDrag(Vector2{96.0f, 24.0f});
+    Check(Near(map.runtimeObjects.back().position.y, 7.0f),
+          "existing billboard drag preserves its authored Y behavior");
+    editing.CancelDrag(nullptr);
+
+    renderCache.valid = false;
+    const size_t objectCountBeforeFailure = map.runtimeObjects.size();
+    Check(!editing.AddStaticModel(Vector2{12.0f, 12.0f})
+                  && map.runtimeObjects.size() == objectCountBeforeFailure
+                  && statusText.find("cache is unavailable") != std::string::npos,
+          "static prop placement fails clearly when the derived sector cache is unavailable");
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    game::SectorEditorRuntimeObjectEditingService staleEditing =
+            MakeRuntimeObjectEditingServiceForTest(
+                    map,
+                    runtimeObjects,
+                    editingState,
+                    uiState,
+                    selectionState,
+                    documentState,
+                    renderRevision,
+                    renderCache,
+                    statusText,
+                    false);
+    Check(!staleEditing.AddStaticModel(Vector2{12.0f, 12.0f})
+                  && map.runtimeObjects.size() == objectCountBeforeFailure
+                  && statusText.find("derivation is not current") != std::string::npos,
+          "static prop placement fails clearly when authoring derivation is stale");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(editing.AddBillboard(200, Vector2{32.0f, 32.0f}),
+          "existing billboard placement remains available through runtime-object editing service");
+    const int billboardId = selectionState.selectedRuntimeObjectId;
+    const game::SectorPlacedRuntimeObject* placedBillboard =
+            game::FindSectorPlacedRuntimeObject(map, billboardId);
+    Check(placedBillboard != nullptr
+                  && placedBillboard->kind == "billboard"
+                  && Near(placedBillboard->position.y, left->floorZ),
+          "existing billboard placement retains its kind and sector-floor base");
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(editing.BeginDrag(billboardId), "service-placed billboard remains draggable");
+    editing.UpdateDrag(Vector2{96.0f, 32.0f});
+    placedBillboard = game::FindSectorPlacedRuntimeObject(map, billboardId);
+    Check(placedBillboard != nullptr
+                  && Near(placedBillboard->position.y, left->floorZ),
+          "service-placed billboard drag retains legacy Y behavior across sectors");
+    editing.CancelDrag(nullptr);
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(editing.AddDoor(11),
+          "existing door placement remains available through runtime-object editing service");
+    const int doorId = selectionState.selectedRuntimeObjectId;
+    const game::SectorPlacedRuntimeObject* placedDoor =
+            game::FindSectorPlacedRuntimeObject(map, doorId);
+    Check(placedDoor != nullptr
+                  && placedDoor->kind == "door"
+                  && !editing.BeginDrag(doorId)
+                  && statusText.find("stay anchored") != std::string::npos,
+          "service-placed doors remain portal anchored and refuse dragging");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    editing.SelectObject(objectId);
+    const game::SectorEditorRuntimeObjectDeleteRequest deleteRequest =
+            editing.RequestDeleteSelected();
+    const uint64_t revisionBeforeDelete = renderRevision;
+    Check(deleteRequest.requested
+                  && deleteRequest.objectId == objectId
+                  && editing.DeleteById(deleteRequest.objectId),
+          "static prop deletion uses a high-level confirmation request and focused service");
+    Check(game::FindSectorPlacedRuntimeObject(map, objectId) == nullptr
+                  && selectionState.selectedRuntimeObjectId == -1
+                  && renderRevision == revisionBeforeDelete + 1
+                  && !renderCache.valid,
+          "static prop deletion clears selection, dirties the document, and invalidates cache");
+}
+
+void TestRuntimeObjectEditingServicesStayIndependentOfSectorEditor()
+{
+    std::error_code error;
+    const std::filesystem::path projectRoot =
+            std::filesystem::weakly_canonical(
+                    std::filesystem::path(ASSETS_PATH),
+                    error).parent_path();
+    Check(!error, "runtime object dependency test resolves project root");
+    const std::string runtimeServiceHeader = ReadTextFile(
+            projectRoot
+            / "sources/sector_editor/services/runtime_objects/"
+              "SectorEditorRuntimeObjectEditingService.h");
+    const std::string runtimeServiceSource = ReadTextFile(
+            projectRoot
+            / "sources/sector_editor/services/runtime_objects/"
+              "SectorEditorRuntimeObjectEditingService.cpp");
+    const std::string pickerHeader = ReadTextFile(
+            projectRoot
+            / "sources/sector_editor/services/static_model_picker/"
+              "SectorEditorStaticModelPickerService.h");
+    const std::string pickerSource = ReadTextFile(
+            projectRoot
+            / "sources/sector_editor/services/static_model_picker/"
+              "SectorEditorStaticModelPickerService.cpp");
+    const std::string staticInspectorHeader = ReadTextFile(
+            projectRoot
+            / "sources/sector_editor/tools/placed_objects/"
+              "SectorEditorStaticModelInspector.h");
+    Check(runtimeServiceHeader.find("SectorEditor.h") == std::string::npos
+                  && runtimeServiceSource.find("SectorEditor.h") == std::string::npos
+                  && runtimeServiceSource.find("SectorEditor::") == std::string::npos
+                  && pickerHeader.find("SectorEditor.h") == std::string::npos
+                  && pickerSource.find("SectorEditor.h") == std::string::npos
+                  && pickerSource.find("SectorEditor::") == std::string::npos,
+          "focused runtime-object and model-picker services do not depend on SectorEditor");
+    Check(staticInspectorHeader.find("Callbacks") == std::string::npos
+                  && pickerHeader.find("Callbacks") == std::string::npos,
+          "static prop implementation does not introduce an editor callback bundle");
+}
+
 } // namespace
 
 int main()
@@ -9905,6 +10344,10 @@ int main()
     TestEditorGraphNativeSiblingHolesRoundTripPreservesSelection();
     TestEditorGraphNativeMapLevelDataRoundTrip();
     TestEditorGraphNativeRuntimeObjectsSurviveLoadDerivation();
+    TestStaticModelPickerRecursionFilteringRefreshAndSelection();
+    TestStaticModelAssetRequestsDeduplicateAndUnloadByScope();
+    TestStaticPropEditingPlacementMutationAndFloorRelativeDrag();
+    TestRuntimeObjectEditingServicesStayIndependentOfSectorEditor();
 
     if (failures != 0) {
         std::cerr << failures << " authoring graph test(s) failed\n";

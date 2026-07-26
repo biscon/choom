@@ -55,6 +55,14 @@ struct SectorPlacedBillboard {
     bool playing = true;
 };
 
+struct SectorPlacedStaticModel {
+    std::string modelPath;
+    float heightOffsetWorld = 0.0f;
+    float scale = 1.0f;
+    // Transient bake input. Refreshed only during explicit model preparation.
+    std::string geometryFingerprint;
+};
+
 enum class SectorDoorMotionType {
     SlideVertical,
     SlideLeft,
@@ -123,6 +131,7 @@ struct SectorPlacedRuntimeObject {
     float yawRadians = 0.0f;
     std::string kind;
     SectorPlacedBillboard billboard;
+    SectorPlacedStaticModel staticModel;
     SectorPlacedDoor door;
 };
 

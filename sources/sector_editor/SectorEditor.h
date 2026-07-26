@@ -11,11 +11,11 @@
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
+#include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
+#include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogState.h"
 #include "sector_editor/preview/SectorEditorPreviewState.h"
-#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectActions.h"
-#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectDrag.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorManipulationState.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
@@ -165,6 +165,12 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font);
     void DrawSpritePickerModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
+    void DrawStaticModelPickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::Input& input,
@@ -331,6 +337,8 @@ private:
     bool SetAuthoringLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
     SectorEditorMaterialEditingService BuildMaterialEditingService();
     SectorEditorLightEditingService BuildLightEditingService();
+    SectorEditorRuntimeObjectEditingService BuildRuntimeObjectEditingService(
+            SectorEditorSelectionServiceContext* selectionService = nullptr);
     SectorEditorTextureCatalogService MakeTextureCatalogService();
     SectorEditorDocumentLifecycleAccess Lifecycle();
     SectorEditorConstDocumentLifecycleAccess Lifecycle() const;
@@ -353,9 +361,8 @@ private:
     void MarkTopologyDocumentEdited(const char* status);
     bool OpenDeleteSelectedLightConfirmation();
     SectorEditorToolContext BuildToolContext(engine::Input* input);
-    SectorEditorPlacedObjectDragContext BuildRuntimeObjectDragContext();
-    SectorEditorPlacedObjectActionContext BuildRuntimeObjectActionContext();
     void AddRuntimeObjectAt(Vector2 mapPoint);
+    void AddStaticModelAt(Vector2 mapPoint);
     void AddDoorAtPortal(Vector2 screenPoint);
     bool DeleteSelectedRuntimeObject();
     bool DeleteRuntimeObjectById(int objectId);
@@ -373,6 +380,8 @@ private:
     ManipulationState manipulationState;
     LightEditingState lightEditingState;
     SectorEditorUiState uiState;
+    RuntimeObjectEditingState runtimeObjectEditingState;
+    RuntimeObjectEditingUiState runtimeObjectEditingUiState;
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;
     MaterialEditingState materialEditingState;

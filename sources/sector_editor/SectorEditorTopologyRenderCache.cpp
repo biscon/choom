@@ -300,6 +300,28 @@ const CachedAuthoringVertexDraw* FindCachedAuthoringVertex(
 
 } // namespace
 
+void UpdateCachedSectorEditorRuntimeObjectDraw(
+        SectorEditorTopologyRenderCache& cache,
+        const SectorPlacedRuntimeObject& object)
+{
+    for (CachedRuntimeObjectDraw& cached : cache.runtimeObjects) {
+        if (cached.objectId != object.id) {
+            continue;
+        }
+        cached.definitionId = !object.kind.empty()
+                ? object.kind
+                : object.definitionId;
+        cached.map = Vector2{object.position.x, object.position.z};
+        cached.yawRadians = object.yawRadians;
+        cached.definitionKnown = object.kind == "billboard"
+                || object.kind == "door"
+                || object.kind == "static_model";
+        cached.isDoor = false;
+        cached.doorFootprintValid = false;
+        return;
+    }
+}
+
 bool ShouldDrawLegacyTopologySelectionHighlight(
         bool hasAuthoringGraphData,
         TopologySelectionKind selectionKind)
@@ -654,7 +676,9 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         cached.definitionId = !object.kind.empty() ? object.kind : object.definitionId;
         cached.map = Vector2{object.position.x, object.position.z};
         cached.yawRadians = object.yawRadians;
-        cached.definitionKnown = object.kind == "billboard" || object.kind == "door";
+        cached.definitionKnown = object.kind == "billboard"
+                || object.kind == "door"
+                || object.kind == "static_model";
         cached.isDoor = object.kind == "door";
         if (cached.isDoor) {
             const SectorResolvedDoorAnchor resolved = ResolveSectorDoorAnchor(map, object.door);

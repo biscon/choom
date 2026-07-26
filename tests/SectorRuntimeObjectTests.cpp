@@ -3,11 +3,13 @@
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorMeshTypes.h"
+#include "sector_demo/renderer/SectorStaticModelRenderer.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
 #include "util/json.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -2970,6 +2972,140 @@ void TestSpawnPlacedBillboardCopiesAuthoredPayloadToEcs()
             "non-directional generic billboard single clip starts unresolved until asset is ready");
 }
 
+void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    game::SectorPlacedRuntimeObject object;
+    object.id = 18;
+    object.kind = "static_model";
+    object.position = Vector3{2.0f, 8.0f, 2.0f};
+    object.yawRadians = 0.75f;
+    object.staticModel.modelPath = "assets/models/props/missing_fixture.glb";
+    object.staticModel.heightOffsetWorld = 0.625f;
+    object.staticModel.scale = 1.75f;
+    map.runtimeObjects.push_back(object);
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(CountSectorObjects(world) == 1,
+            "assigned static prop spawns one sector object entity");
+    Check(state.placedObjectEntities.size() == 1
+                  && state.placedObjectEntities[0].placedObjectId == 18,
+          "static prop stores placed object ID to entity mapping");
+    Check(state.spawnedObjectCount == 1 && state.skippedObjectCount == 0,
+          "static prop spawn records debug counts");
+    Check(state.staticModelRequestedCount == 1
+                  && state.staticModelPendingCount == 1
+                  && state.staticModelReadyCount == 0
+                  && state.staticModelFailedCount == 0,
+          "assigned static prop reports its queued model request");
+
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.IsAlive(entity)
+                  && world.Has<game::SectorStaticModel>(entity)
+                  && !world.Has<game::SectorObjectLighting>(entity),
+          "static prop entity has model data and does not use object probes");
+    const game::SectorObjectTransform& transform =
+            world.Get<game::SectorObjectTransform>(entity);
+    Check(Near(transform.position, Vector3{0.25f, 1.625f, 0.25f}),
+          "static prop converts authored floor position and adds world height offset");
+    Check(Near(transform.yawRadians, 0.75f),
+          "static prop copies authored yaw to ECS transform");
+    Check(!engine::IsNull(world.Get<game::SectorStaticModel>(entity).model),
+          "assigned static prop stores a model asset handle");
+    Check(world.Get<game::SectorStaticModel>(entity).placedObjectId == 18,
+          "assigned static prop stores its stable placed-object ID");
+    Check(Near(world.Get<game::SectorStaticModel>(entity).scale, 1.75f),
+          "static prop copies authored uniform scale to ECS model data");
+    Check(world.Get<game::SectorObject>(entity).currentSectorId == 10,
+          "static prop spawn assigns the containing sector used by portal culling");
+    Check(!world.Has<game::SectorDoorCollider>(entity),
+          "static prop does not participate in door collision");
+    Check(!world.Has<game::SectorBillboardSprite>(entity),
+          "static prop does not acquire billboard render components");
+}
+
+void TestSpawnUnassignedStaticModelRemainsSelectableRuntimeEntity()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    game::SectorPlacedRuntimeObject object;
+    object.id = 19;
+    object.kind = "static_model";
+    object.position = Vector3{8.0f, 0.0f, 8.0f};
+    map.runtimeObjects.push_back(object);
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(state.placedObjectEntities.size() == 1
+                  && world.IsAlive(state.placedObjectEntities[0].entity),
+          "unassigned static prop still spawns a runtime entity");
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(engine::IsNull(world.Get<game::SectorStaticModel>(entity).model),
+          "unassigned static prop stores a null model handle");
+    Check(engine::IsNull(state.runtimeObjectAssetScope),
+          "unassigned static prop does not request an asset scope");
+    Check(state.staticModelUnassignedCount == 1
+                  && state.placedObjectWarning.find("no model assigned") != std::string::npos,
+          "unassigned static prop produces an editor diagnostic without being skipped");
+}
+
+void TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures()
+{
+    std::array<
+            MaterialMap,
+            game::SectorStaticModelMaterialMapCount> maps{};
+    maps[MATERIAL_MAP_DIFFUSE].texture.id = 7;
+    maps[game::SectorStaticModelLightmapMaterialMap].texture.id = 70;
+    maps[game::SectorStaticModelShadowMap0MaterialMap].texture.id = 80;
+    maps[game::SectorStaticModelShadowMap1MaterialMap].texture.id = 90;
+    const Texture2D lightmap{101, 2048, 2048, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
+    const Texture2D shadowMap0{102, 1024, 1024, 1, PIXELFORMAT_UNCOMPRESSED_R32};
+    const Texture2D shadowMap1{103, 1024, 1024, 1, PIXELFORMAT_UNCOMPRESSED_R32};
+
+    game::ConfigureSectorStaticModelAuxiliaryMaterialMaps(
+            maps,
+            &lightmap,
+            true,
+            &shadowMap0,
+            &shadowMap1);
+    Check(maps[MATERIAL_MAP_DIFFUSE].texture.id == 7
+                  && maps[game::SectorStaticModelLightmapMaterialMap]
+                             .texture.id
+                          == lightmap.id
+                  && maps[game::SectorStaticModelShadowMap0MaterialMap]
+                             .texture.id
+                          == shadowMap0.id
+                  && maps[game::SectorStaticModelShadowMap1MaterialMap]
+                             .texture.id
+                          == shadowMap1.id,
+          "static prop DrawMesh material maps bind lightmap and spotlight shadow textures without replacing albedo");
+
+    game::ConfigureSectorStaticModelAuxiliaryMaterialMaps(
+            maps,
+            &lightmap,
+            false,
+            nullptr,
+            nullptr);
+    Check(maps[game::SectorStaticModelLightmapMaterialMap]
+                          .texture.id
+                  == 0
+                  && maps[game::SectorStaticModelShadowMap0MaterialMap]
+                             .texture.id
+                          == 0
+                  && maps[game::SectorStaticModelShadowMap1MaterialMap]
+                             .texture.id
+                          == 0,
+          "static prop fallback clears auxiliary material textures when no prop lightmap is valid");
+}
+
 void TestSpawnPlacedDirectionalBillboardCopiesClipNames()
 {
     engine::World world;
@@ -3640,6 +3776,9 @@ int main()
     TestSpawnPlacedRuntimeObjectSkipsUnsupportedKind();
     TestSpawnPlacedRuntimeObjectSkipsMissingBillboardSprite();
     TestSpawnPlacedBillboardCopiesAuthoredPayloadToEcs();
+    TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs();
+    TestSpawnUnassignedStaticModelRemainsSelectableRuntimeEntity();
+    TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();
     TestSpawnPlacedDirectionalBillboardCopiesClipNames();
     TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate();
     TestPreviewRuntimeObjectRefreshKeepsAssetScope();

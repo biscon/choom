@@ -11,6 +11,7 @@
 #include "sector_demo/renderer/SectorDoorRenderer.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorSkyRenderer.h"
+#include "sector_demo/renderer/SectorStaticModelRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
 
@@ -46,6 +47,9 @@ public:
     void ShutdownRendererResources(engine::AssetManager& assets);
 
     void AdvanceRuntime(float dt);
+    void FinalizeRuntimeObjectResources(
+            engine::AssetManager& assets,
+            engine::World& runtimeObjectWorld);
     void Render(
             engine::AssetManager& assets,
             bool useBakedAmbientOcclusion = true,
@@ -163,6 +167,7 @@ private:
     SectorSkyRenderer skyRenderer;
     SectorBloomRenderer bloomRenderer;
     SectorBillboardRenderer billboardRenderer;
+    SectorStaticModelRenderer staticModelRenderer;
     SectorDoorRenderer doorRenderer;
     SectorDynamicLightingRenderer dynamicLightState;
     float runtimeSeconds = 0.0f;

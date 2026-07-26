@@ -54,6 +54,10 @@ struct RuntimePortalVisibilityResult {
     std::string status;
 };
 
+bool ShouldDrawRuntimeSectorForVisibility(
+        int sectorId,
+        const RuntimePortalVisibilityResult& visibility);
+
 bool BuildRuntimeSectorVisibilityGraph(
         const SectorTopologyMap& map,
         RuntimeSectorVisibilityGraph& outGraph,

@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace game {
@@ -500,6 +501,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
         return false;
     }
     billboardRenderer.ResetDebugState();
+    staticModelRenderer.ResetDebugState();
 
     std::string visibilityError;
     visibilityGraphValid = BuildRuntimeSectorVisibilityGraph(map, visibilityGraph, &visibilityError);
@@ -546,12 +548,34 @@ bool SectorMeshRenderer::RebuildRendererResources(
     SectorLightmapLayout lightmapLayout;
     const SectorLightmapStatus status = GetSectorLightmapStatus(map);
     lightmapStatus = static_cast<int>(status);
-    const bool useLightmapLayout = status == SectorLightmapStatus::Valid
+    bool useLightmapLayout = status == SectorLightmapStatus::Valid
             && BuildSectorLightmapLayout(map, lightmapLayout, error);
     if (status == SectorLightmapStatus::Valid && !useLightmapLayout) {
         std::fprintf(stderr, "[SectorDemo WARNING] %s\n", error.c_str());
         error.clear();
     }
+
+    SectorStaticModelLightmapData staticModelLightmapData;
+    if (useLightmapLayout && HasAssignedSectorStaticModels(map)) {
+        std::string staticModelError;
+        if (!ReadSectorStaticModelLightmapSidecar(
+                    ResolveSectorAssetPath(
+                            map.bakedLightmap.staticModels.path),
+                    &map.bakedLightmap.staticModels,
+                    staticModelLightmapData,
+                    staticModelError)) {
+            std::fprintf(
+                    stderr,
+                    "[SectorDemo WARNING] Static model lightmap disabled: %s\n",
+                    staticModelError.c_str());
+            useLightmapLayout = false;
+            lightmapStatus =
+                    static_cast<int>(SectorLightmapStatus::Stale);
+            staticModelLightmapData = {};
+        }
+    }
+    staticModelRenderer.SetLightmapData(
+            std::move(staticModelLightmapData));
 
     if (useLightmapLayout) {
         const std::string resolvedPath = ResolveSectorAssetPath(map.bakedLightmap.path);
@@ -593,6 +617,12 @@ bool SectorMeshRenderer::RebuildRendererResources(
     if (!billboardRenderer.Load()) {
         Shutdown(assets);
         error = "Preview failed: could not load billboard cutout shader";
+        return false;
+    }
+
+    if (!staticModelRenderer.Load()) {
+        Shutdown(assets);
+        error = "Preview failed: could not load static model shader";
         return false;
     }
 
@@ -671,6 +701,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     visibilityDebugText.clear();
     renderDebugText.clear();
     billboardRenderer.ResetDebugState();
+    staticModelRenderer.ResetDebugState();
     visibilityLookupWorld = SectorCollisionWorld{};
     visibilityGraphValid = false;
     visibilityLookupWorldValid = false;
@@ -684,6 +715,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
             && !materialLoaded
             && !bloomRenderer.IsLoaded()
             && !billboardRenderer.IsLoaded()
+            && !staticModelRenderer.IsLoaded()
             && !doorRenderer.HasOpaqueResources()
             && !doorRenderer.HasCachedDoorMeshes()
             && !dynamicLightState.HasShadowMapResources()
@@ -718,6 +750,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     }
 
     billboardRenderer.Shutdown();
+    staticModelRenderer.Shutdown();
     doorRenderer.ShutdownOpaqueResources();
 
     if (!engine::IsNull(assetScope)) {
@@ -733,6 +766,15 @@ void SectorMeshRenderer::AdvanceRuntime(float dt)
     if (std::isfinite(dt) && dt > 0.0f) {
         runtimeSeconds += dt;
     }
+}
+
+void SectorMeshRenderer::FinalizeRuntimeObjectResources(
+        engine::AssetManager& assets,
+        engine::World& runtimeObjectWorld)
+{
+    staticModelRenderer.FinalizeResources(
+            assets,
+            runtimeObjectWorld);
 }
 
 void SectorMeshRenderer::Render(
@@ -867,6 +909,14 @@ void SectorMeshRenderer::DrawScene(
         doorRenderer.Draw(doorDrawContext);
 
         const SectorBillboardDynamicLightContext billboardLightContext = BuildBillboardDynamicLightContext();
+        staticModelRenderer.Draw(
+                assets,
+                *runtimeObjectWorld,
+                billboardLightContext,
+                visibilityResult,
+                lightmap,
+                useBakedAmbientOcclusion,
+                renderDebugText);
         billboardRenderer.Draw(assets, *runtimeObjectWorld, camera, billboardLightContext, renderDebugText);
     }
     EndMode3D();

@@ -30,6 +30,7 @@ enum class SectorEditorTool {
     AuthoringInsertVertex,
     AuthoringMove,
     RuntimeObject,
+    StaticModel,
     Door,
     StaticLight,
     StaticSpotLight,
@@ -79,7 +80,6 @@ struct SectorEditorState {
     PendingAuthoringLineDraw pendingAuthoringLine;
     PendingAuthoringRectangleDraw pendingAuthoringRectangle;
     PendingAuthoringInsertVertex pendingAuthoringInsertVertex;
-    RuntimeObjectDragState runtimeObjectDrag;
     float defaultSectorFloorZ = 0.0f;
     float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);
     std::string defaultFloorTextureId;
@@ -93,11 +93,6 @@ struct SectorEditorState {
     bool showSectorIds = true;
     TexturePickerState texturePicker;
     AddMapTextureState addMapTexture;
-    SectorSpriteMetadataCatalog spriteMetadataCatalog;
-    int billboardMetadataObjectId = -1;
-    std::string billboardMetadataSpriteAnimationPath;
-    bool billboardMetadataInitialRepairAttempted = false;
-    SpritePickerState spritePicker;
     SaveLevelModalState saveLevelModal;
     LoadLevelModalState loadLevelModal;
     ConfirmationModalState confirmationModal;
@@ -140,21 +135,6 @@ struct SectorEditorUiState {
     engine::UIIntInputState lightRedInput;
     engine::UIIntInputState lightGreenInput;
     engine::UIIntInputState lightBlueInput;
-    engine::UIFloatInputState runtimeObjectXInput;
-    engine::UIFloatInputState runtimeObjectYInput;
-    engine::UIFloatInputState runtimeObjectZInput;
-    engine::UIFloatInputState runtimeObjectYawInput;
-    engine::UIFloatInputState runtimeObjectWidthInput;
-    engine::UIFloatInputState runtimeObjectHeightInput;
-    engine::UIFloatInputState runtimeObjectThicknessInput;
-    engine::UIFloatInputState runtimeObjectNormalOffsetInput;
-    engine::UIFloatInputState runtimeObjectOpenDistanceInput;
-    engine::UIFloatInputState runtimeObjectSpeedInput;
-    engine::UIFloatInputState runtimeObjectInitialOpenFractionInput;
-    engine::UIFloatInputState runtimeObjectAutoOpenDistanceInput;
-    engine::UIFloatInputState runtimeObjectInteractionDistanceInput;
-    engine::UIFloatInputState runtimeObjectOriginXInput;
-    engine::UIFloatInputState runtimeObjectOriginYInput;
     engine::UIScrollState toolsScroll;
     engine::UIScrollState inspectorScroll;
     bool keyboardCaptured = false;

@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologySerialization.h"
+#include "sector_demo/SectorStaticModelLightmap.h"
 
 #include <raylib.h>
 
@@ -29,6 +30,16 @@ bool SectorDemo::Init(engine::EngineContext& context, const char* mapPath)
     if (!LoadSectorTopologyMap(mapPath, topologyMap, &error)) {
         std::fprintf(stderr, "[SectorDemo ERROR] %s\n", error.c_str());
         return false;
+    }
+    std::string fingerprintError;
+    if (!RefreshSectorStaticModelGeometryFingerprints(
+                topologyMap,
+                fingerprintError)
+            && !fingerprintError.empty()) {
+        std::fprintf(
+                stderr,
+                "[SectorDemo WARNING] %s\n",
+                fingerprintError.c_str());
     }
 
     ResetSectorRuntimeObjectsForMap(context.world, assets, runtimeObjects, topologyMap);
@@ -97,6 +108,9 @@ void SectorDemo::Update(engine::EngineContext& context, float dt)
                 });
     }
     UpdateSectorRuntimeObjects(context.world, context.assets, runtimeObjects, topologyMap, dt, &playerPosition);
+    preview.FinalizeRuntimeObjectResources(
+            context.assets,
+            context.world);
     preview.AdvanceRuntime(dt);
 
     UpdateSectorFreeflyController(freeflyController, input, dt);

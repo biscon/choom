@@ -56,12 +56,22 @@ struct BakedObjectLightingSample {
     bool valid = false;
 };
 
+struct SectorBakedStaticModelLightmapMetadata {
+    std::string path;
+    int version = 0;
+    std::string sourceHash;
+    int modelCount = 0;
+    int objectCount = 0;
+    std::string format;
+};
+
 struct SectorLightmapMetadata {
     std::string path;
     int width = 0;
     int height = 0;
     std::string sourceHash;
     SectorBakedObjectLightProbeMetadata objectProbes;
+    SectorBakedStaticModelLightmapMetadata staticModels;
 };
 
 } // namespace game

@@ -1119,6 +1119,22 @@ bool IsRuntimePortalDynamicallyBlocked(
     return false;
 }
 
+bool ShouldDrawRuntimeSectorForVisibility(
+        int sectorId,
+        const RuntimePortalVisibilityResult& visibility)
+{
+    if (!visibility.validStartSector || visibility.fallbackDrawAll) {
+        return true;
+    }
+    if (sectorId <= 0) {
+        return false;
+    }
+    return std::binary_search(
+            visibility.visibleSectorIds.begin(),
+            visibility.visibleSectorIds.end(),
+            sectorId);
+}
+
 std::string FormatRuntimePortalVisibilityDebugText(
         const RuntimePortalVisibilityResult& result)
 {

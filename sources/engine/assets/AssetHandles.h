@@ -79,6 +79,31 @@ inline bool IsNull(FontHandle handle)
     return handle.index == UINT32_MAX;
 }
 
+struct ModelHandle {
+    uint32_t index = UINT32_MAX;
+    uint32_t generation = 0;
+};
+
+inline bool operator==(ModelHandle lhs, ModelHandle rhs)
+{
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
+inline bool operator!=(ModelHandle lhs, ModelHandle rhs)
+{
+    return !(lhs == rhs);
+}
+
+inline ModelHandle NullModelHandle()
+{
+    return ModelHandle{};
+}
+
+inline bool IsNull(ModelHandle handle)
+{
+    return handle.index == UINT32_MAX;
+}
+
 struct AssetScopeHandle {
     uint32_t index = UINT32_MAX;
     uint32_t generation = 0;

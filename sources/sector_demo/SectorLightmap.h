@@ -3,6 +3,7 @@
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmapReport.h"
+#include "sector_demo/SectorStaticModelLightmap.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
@@ -117,6 +118,7 @@ struct SectorLightmapBakeResult {
     SectorLightmapRaycastStats ambientOcclusionStats;
     SectorLightmapRaycastStats indirectBounceStats;
     SectorBakedObjectLightProbeMetadata objectProbes;
+    SectorBakedStaticModelLightmapMetadata staticModels;
     int objectProbePlacementDiagnostics = 0;
     double layoutSeconds = 0.0;
     double bvhBuildSeconds = 0.0;
@@ -156,6 +158,7 @@ struct SectorBakedObjectLightProbePlacementDiagnostic {
 
 struct SectorTopologyLightmapBakeInput {
     SectorTopologyMap mapSnapshot;
+    SectorStaticModelLightmapData staticModels;
     std::string expectedSourceHash;
     std::string finalOutputPath;
     std::string temporaryOutputPath;
@@ -172,8 +175,8 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 10: baked output includes object lighting probe sidecar data.
-constexpr int kSectorLightmapBakeVersion = 10;
+// Version 11: assigned static models are baked into the shared atlas and BVH.
+constexpr int kSectorLightmapBakeVersion = 11;
 constexpr int kSectorBakedObjectLightProbeSidecarVersion = 1;
 constexpr const char* kSectorBakedObjectLightProbeSidecarFormat = "ambientCubeF32LE";
 constexpr float kObjectProbeAdjacentPortalBlendDistanceWorld = 1.0f;

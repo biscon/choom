@@ -47,6 +47,7 @@ bool SectorEditorLightmapBakeController::StartBake(SectorEditorLightmapBakeReque
 
     DeleteFileIfExists(request.temporaryOutputPath);
     DeleteFileIfExists(MakeSectorObjectProbeSidecarPathForLightmapPath(request.temporaryOutputPath));
+    DeleteFileIfExists(MakeSectorStaticModelSidecarPathForLightmapPath(request.temporaryOutputPath));
 
     state_.progress.phase.store(SectorLightmapBakePhase::Preparing);
     state_.progress.completedWork.store(0);
@@ -73,6 +74,7 @@ bool SectorEditorLightmapBakeController::StartBake(SectorEditorLightmapBakeReque
     state_.worker = std::thread([request = std::move(request), progress, resultMutex, pendingResult]() mutable {
         SectorTopologyLightmapBakeInput input;
         input.mapSnapshot = std::move(request.mapSnapshot);
+        input.staticModels = std::move(request.staticModels);
         input.expectedSourceHash = std::move(request.expectedSourceHash);
         input.finalOutputPath = std::move(request.finalOutputPath);
         input.temporaryOutputPath = std::move(request.temporaryOutputPath);
@@ -150,6 +152,7 @@ SectorEditorLightmapBakePollResult SectorEditorLightmapBakeController::Poll()
         state_.progress.phase.store(SectorLightmapBakePhase::Cancelled);
         DeleteFileIfExists(pending->temporaryOutputPath);
         DeleteFileIfExists(pending->bakeResult.objectProbes.path);
+        DeleteFileIfExists(pending->bakeResult.staticModels.path);
 
         result.status = SectorEditorLightmapBakePollStatus::Cancelled;
         result.message = "Lightmap bake cancelled";
@@ -164,6 +167,7 @@ SectorEditorLightmapBakePollResult SectorEditorLightmapBakeController::Poll()
         state_.progress.phase.store(SectorLightmapBakePhase::Failed);
         DeleteFileIfExists(pending->temporaryOutputPath);
         DeleteFileIfExists(pending->bakeResult.objectProbes.path);
+        DeleteFileIfExists(pending->bakeResult.staticModels.path);
 
         result.status = SectorEditorLightmapBakePollStatus::Failed;
         result.message = pending->errorMessage.empty() ? "Bake failed" : pending->errorMessage;
@@ -197,34 +201,99 @@ bool SectorEditorLightmapBakeController::InstallCompletedResultFiles(
     const std::string temporaryObjectProbePath = result.bakeResult.objectProbes.path.empty()
             ? MakeSectorObjectProbeSidecarPathForLightmapPath(result.temporaryOutputPath)
             : result.bakeResult.objectProbes.path;
-
-    if (IsCompletedResultStale(result, currentSourceHash)) {
+    const SectorBakedStaticModelLightmapMetadata& staticMetadata =
+            result.bakeResult.staticModels;
+    const bool hasStaticModelMetadata =
+            !staticMetadata.path.empty()
+            || staticMetadata.version != 0
+            || !staticMetadata.sourceHash.empty()
+            || staticMetadata.modelCount != 0
+            || staticMetadata.objectCount != 0
+            || !staticMetadata.format.empty();
+    const std::string temporaryStaticModelPath =
+            !hasStaticModelMetadata
+            ? std::string{}
+            : (staticMetadata.path.empty()
+                    ? MakeSectorStaticModelSidecarPathForLightmapPath(
+                            result.temporaryOutputPath)
+                    : staticMetadata.path);
+    const auto cleanupTemps = [&]() {
         DeleteFileIfExists(result.temporaryOutputPath);
         DeleteFileIfExists(temporaryObjectProbePath);
+        DeleteFileIfExists(temporaryStaticModelPath);
+    };
+
+    if (IsCompletedResultStale(result, currentSourceHash)) {
+        cleanupTemps();
         outPayload.status = "Bake discarded: document changed during bake";
+        return false;
+    }
+    if (hasStaticModelMetadata
+            && (staticMetadata.path.empty()
+                    || staticMetadata.version <= 0
+                    || staticMetadata.sourceHash.empty()
+                    || staticMetadata.modelCount <= 0
+                    || staticMetadata.objectCount <= 0
+                    || staticMetadata.format.empty())) {
+        cleanupTemps();
+        outPayload.status =
+                "Bake failed: incomplete static model lightmap metadata";
         return false;
     }
 
     std::error_code ec;
     if (!std::filesystem::exists(result.temporaryOutputPath, ec) || ec) {
-        DeleteFileIfExists(result.temporaryOutputPath);
-        DeleteFileIfExists(temporaryObjectProbePath);
+        cleanupTemps();
         outPayload.status = "Bake failed: temporary lightmap output missing";
         return false;
     }
     if (!std::filesystem::exists(temporaryObjectProbePath, ec) || ec) {
-        DeleteFileIfExists(result.temporaryOutputPath);
-        DeleteFileIfExists(temporaryObjectProbePath);
+        cleanupTemps();
         outPayload.status = "Bake failed: temporary object probe output missing";
         return false;
+    }
+    if (!temporaryStaticModelPath.empty()
+            && (!std::filesystem::exists(temporaryStaticModelPath, ec) || ec)) {
+        cleanupTemps();
+        outPayload.status =
+                "Bake failed: temporary static model lightmap output missing";
+        return false;
+    }
+
+    std::vector<SectorBakedObjectLightProbe> validatedProbes;
+    SectorBakedObjectLightProbeMetadata validatedProbeMetadata;
+    std::string validationError;
+    if (!ReadSectorBakedObjectLightProbeSidecar(
+                temporaryObjectProbePath,
+                &result.bakeResult.objectProbes,
+                validatedProbes,
+                validatedProbeMetadata,
+                validationError)) {
+        cleanupTemps();
+        outPayload.status = "Bake failed: invalid object probe sidecar: "
+                + validationError;
+        return false;
+    }
+    if (!temporaryStaticModelPath.empty()) {
+        SectorStaticModelLightmapData validatedStaticModels;
+        if (!ReadSectorStaticModelLightmapSidecar(
+                    temporaryStaticModelPath,
+                    &result.bakeResult.staticModels,
+                    validatedStaticModels,
+                    validationError)) {
+            cleanupTemps();
+            outPayload.status =
+                    "Bake failed: invalid static model lightmap sidecar: "
+                    + validationError;
+            return false;
+        }
     }
 
     const std::filesystem::path finalPath(result.finalOutputPath);
     if (!finalPath.parent_path().empty()) {
         std::filesystem::create_directories(finalPath.parent_path(), ec);
         if (ec) {
-            DeleteFileIfExists(result.temporaryOutputPath);
-            DeleteFileIfExists(temporaryObjectProbePath);
+            cleanupTemps();
             outPayload.status = TextFormat(
                     "Bake failed: could not create output directory: %s",
                     ec.message().c_str());
@@ -233,6 +302,26 @@ bool SectorEditorLightmapBakeController::InstallCompletedResultFiles(
     }
 
     const std::string finalObjectProbePath = MakeSectorObjectProbeSidecarPathForLightmapPath(result.finalOutputPath);
+    const std::string finalStaticModelPath =
+            temporaryStaticModelPath.empty()
+            ? std::string{}
+            : MakeSectorStaticModelSidecarPathForLightmapPath(
+                    result.finalOutputPath);
+    if (!temporaryStaticModelPath.empty()) {
+        std::filesystem::copy_file(
+                temporaryStaticModelPath,
+                finalStaticModelPath,
+                std::filesystem::copy_options::overwrite_existing,
+                ec);
+        if (ec) {
+            cleanupTemps();
+            outPayload.status =
+                    TextFormat(
+                            "Bake failed: could not install static model lightmap sidecar: %s",
+                            ec.message().c_str());
+            return false;
+        }
+    }
     std::filesystem::copy_file(
             temporaryObjectProbePath,
             finalObjectProbePath,
@@ -240,8 +329,8 @@ bool SectorEditorLightmapBakeController::InstallCompletedResultFiles(
             ec
     );
     if (ec) {
-        DeleteFileIfExists(result.temporaryOutputPath);
-        DeleteFileIfExists(temporaryObjectProbePath);
+        cleanupTemps();
+        DeleteFileIfExists(finalStaticModelPath);
         outPayload.status = TextFormat(
                 "Bake failed: could not install object probe sidecar: %s",
                 ec.message().c_str());
@@ -254,14 +343,13 @@ bool SectorEditorLightmapBakeController::InstallCompletedResultFiles(
             ec
     );
     if (ec) {
-        DeleteFileIfExists(result.temporaryOutputPath);
-        DeleteFileIfExists(temporaryObjectProbePath);
+        cleanupTemps();
         DeleteFileIfExists(finalObjectProbePath);
+        DeleteFileIfExists(finalStaticModelPath);
         outPayload.status = TextFormat("Bake failed: could not install lightmap: %s", ec.message().c_str());
         return false;
     }
-    DeleteFileIfExists(result.temporaryOutputPath);
-    DeleteFileIfExists(temporaryObjectProbePath);
+    cleanupTemps();
 
     outPayload.bakeResult = result.bakeResult;
     outPayload.finalLightmapPath = result.finalOutputPath;
@@ -269,6 +357,15 @@ bool SectorEditorLightmapBakeController::InstallCompletedResultFiles(
     outPayload.finalObjectProbeAssetPath = MakeSectorAssetRelativePath(finalObjectProbePath);
     outPayload.bakeResult.objectProbes.path = outPayload.finalObjectProbeAssetPath;
     outPayload.bakeResult.objectProbes.sourceHash = outPayload.bakeResult.sourceHash;
+    if (!finalStaticModelPath.empty()) {
+        outPayload.finalStaticModelPath = finalStaticModelPath;
+        outPayload.finalStaticModelAssetPath =
+                MakeSectorAssetRelativePath(finalStaticModelPath);
+        outPayload.bakeResult.staticModels.path =
+                outPayload.finalStaticModelAssetPath;
+        outPayload.bakeResult.staticModels.sourceHash =
+                outPayload.bakeResult.sourceHash;
+    }
     return true;
 }
 
@@ -297,12 +394,15 @@ void SectorEditorLightmapBakeController::Shutdown()
     JoinWorker();
     DeleteFileIfExists(state_.temporaryOutputPath);
     DeleteFileIfExists(MakeSectorObjectProbeSidecarPathForLightmapPath(state_.temporaryOutputPath));
+    DeleteFileIfExists(MakeSectorStaticModelSidecarPathForLightmapPath(state_.temporaryOutputPath));
     state_.temporaryOutputPath.clear();
     {
         std::lock_guard<std::mutex> lock(state_.resultMutex);
         if (state_.pendingResult.has_value()) {
             DeleteFileIfExists(state_.pendingResult->temporaryOutputPath);
             DeleteFileIfExists(MakeSectorObjectProbeSidecarPathForLightmapPath(
+                    state_.pendingResult->temporaryOutputPath));
+            DeleteFileIfExists(MakeSectorStaticModelSidecarPathForLightmapPath(
                     state_.pendingResult->temporaryOutputPath));
             state_.pendingResult.reset();
         }

@@ -447,6 +447,9 @@ void TestDynamicPortalBlockerTraversal()
             game::TraverseRuntimeSectorVisibility(graph, 10, &closedBlocker);
     Check(blocked.visibleSectorIds.size() == 1 && blocked.visibleSectorIds[0] == 10,
           "matching dynamic blocker prevents directed portal traversal");
+    Check(game::ShouldDrawRuntimeSectorForVisibility(20, unblocked)
+                  && !game::ShouldDrawRuntimeSectorForVisibility(20, blocked),
+          "closed dynamic portal culls runtime objects owned by the hidden sector");
     Check(blocked.traversedPortalLineDefIds.empty(),
           "blocked dynamic portal is not recorded as traversed");
 
@@ -1136,6 +1139,32 @@ void TestPointLookupVisibilityDebug()
           "outside-map lookup reports fallback reason");
 }
 
+void TestRuntimeSectorDrawVisibilityPolicy()
+{
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10, 30};
+    Check(game::ShouldDrawRuntimeSectorForVisibility(10, visible)
+                  && game::ShouldDrawRuntimeSectorForVisibility(30, visible),
+          "runtime sector draw policy includes portal-visible owner sectors");
+    Check(!game::ShouldDrawRuntimeSectorForVisibility(20, visible),
+          "runtime sector draw policy excludes hidden owner sectors");
+    Check(!game::ShouldDrawRuntimeSectorForVisibility(-1, visible)
+                  && !game::ShouldDrawRuntimeSectorForVisibility(0, visible),
+          "runtime sector draw policy excludes unresolved owners during valid visibility");
+
+    game::RuntimePortalVisibilityResult invalidStart;
+    Check(game::ShouldDrawRuntimeSectorForVisibility(20, invalidStart)
+                  && game::ShouldDrawRuntimeSectorForVisibility(-1, invalidStart),
+          "runtime sector draw policy fails open when no start sector is valid");
+
+    game::RuntimePortalVisibilityResult fallback = visible;
+    fallback.fallbackDrawAll = true;
+    Check(game::ShouldDrawRuntimeSectorForVisibility(20, fallback)
+                  && game::ShouldDrawRuntimeSectorForVisibility(-1, fallback),
+          "runtime sector draw policy honors explicit fallback draw-all");
+}
+
 void TestMalformedReferencesFailCleanly()
 {
     SectorTopologyMap map = MakeAdjacent();
@@ -1184,6 +1213,7 @@ int main()
     TestViewVerticalValidationIsTolerant();
     TestViewSolidBoundaryDoesNotCreateSeed();
     TestPointLookupVisibilityDebug();
+    TestRuntimeSectorDrawVisibilityPolicy();
     TestMalformedReferencesFailCleanly();
 
     if (failures != 0) {

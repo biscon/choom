@@ -10,6 +10,10 @@
 
 namespace game {
 
+void UpdateCachedSectorEditorRuntimeObjectDraw(
+        SectorEditorTopologyRenderCache& cache,
+        const SectorPlacedRuntimeObject& object);
+
 struct SectorEditorTopologyDrawContext {
     Rectangle canvasRect = {};
     Vector2 viewCenter = {};

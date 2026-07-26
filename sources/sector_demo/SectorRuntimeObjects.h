@@ -36,6 +36,13 @@ struct SectorObjectLighting {
     BakedObjectLightingSample baked = {};
 };
 
+struct SectorStaticModel {
+    engine::ModelHandle model = engine::NullModelHandle();
+    int placedObjectId = 0;
+    Vector3 containingSectorAmbient = {0.15f, 0.15f, 0.15f};
+    float scale = 1.0f;
+};
+
 } // namespace game
 
 #include "sector_demo/SectorDoorRuntime.h"
@@ -65,6 +72,11 @@ struct SectorRuntimeObjectState {
     size_t spriteAnimationReadyCount = 0;
     size_t spriteAnimationPendingCount = 0;
     size_t spriteAnimationFailedCount = 0;
+    size_t staticModelRequestedCount = 0;
+    size_t staticModelReadyCount = 0;
+    size_t staticModelPendingCount = 0;
+    size_t staticModelFailedCount = 0;
+    size_t staticModelUnassignedCount = 0;
     size_t directionalClipResolvedCount = 0;
     size_t directionalClipMissingCount = 0;
     size_t directionalClipFallbackCount = 0;

@@ -20,10 +20,11 @@ namespace game {
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(14);
+    world.ReserveComponentTypes(15);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
+    world.ReserveComponent<SectorStaticModel>(objectCapacity);
     world.ReserveComponent<SectorBillboardSprite>(objectCapacity);
     world.ReserveComponent<SectorBillboardAnimator>(objectCapacity);
     world.ReserveComponent<SectorBillboardDirectionalClips>(objectCapacity);
@@ -54,6 +55,22 @@ Vector3 PlacedRuntimeObjectAuthoringToWorldPosition(Vector3 authoringPosition)
             SectorAuthoringToWorldDistance(authoringPosition.z)};
 }
 
+Vector3 StaticModelSectorAmbient(
+        const SectorTopologyMap& map,
+        int sectorId)
+{
+    const SectorTopologySector* sector =
+            FindSectorTopologySector(map, sectorId);
+    if (sector == nullptr) {
+        return Vector3{0.15f, 0.15f, 0.15f};
+    }
+    const float scale = std::max(0.0f, sector->ambientIntensity) / 255.0f;
+    return Vector3{
+            static_cast<float>(sector->ambientColor.r) * scale,
+            static_cast<float>(sector->ambientColor.g) * scale,
+            static_cast<float>(sector->ambientColor.b) * scale};
+}
+
 void RefreshPlacedRuntimeObjectDiagnostics(
         engine::World& world,
         engine::AssetManager& assets,
@@ -69,6 +86,11 @@ void RefreshPlacedRuntimeObjectDiagnostics(
     size_t singleClipResolvedCount = 0;
     size_t singleClipMissingCount = 0;
     size_t singleClipFallbackCount = 0;
+    size_t modelRequestedCount = 0;
+    size_t modelReadyCount = 0;
+    size_t modelPendingCount = 0;
+    size_t modelFailedCount = 0;
+    size_t modelUnassignedCount = 0;
 
     world.ForEach<SectorObject, SectorBillboardSprite>(
             [&assets,
@@ -123,10 +145,41 @@ void RefreshPlacedRuntimeObjectDiagnostics(
                 }
             });
 
+    world.ForEach<SectorObject, SectorStaticModel>(
+            [&assets,
+             &modelRequestedCount,
+             &modelReadyCount,
+             &modelPendingCount,
+             &modelFailedCount,
+             &modelUnassignedCount](
+                    engine::Entity,
+                    SectorObject&,
+                    SectorStaticModel& staticModel) {
+                if (engine::IsNull(staticModel.model)) {
+                    ++modelUnassignedCount;
+                } else {
+                    ++modelRequestedCount;
+                    if (assets.IsReady(staticModel.model)) {
+                        ++modelReadyCount;
+                    } else if (!assets.IsFinished(staticModel.model)) {
+                        ++modelPendingCount;
+                    } else if (assets.HasFailed(staticModel.model)) {
+                        ++modelFailedCount;
+                    } else {
+                        ++modelPendingCount;
+                    }
+                }
+            });
+
     state.spriteAnimationRequestedCount = requestedCount;
     state.spriteAnimationReadyCount = readyCount;
     state.spriteAnimationPendingCount = pendingCount;
     state.spriteAnimationFailedCount = failedCount;
+    state.staticModelRequestedCount = modelRequestedCount;
+    state.staticModelReadyCount = modelReadyCount;
+    state.staticModelPendingCount = modelPendingCount;
+    state.staticModelFailedCount = modelFailedCount;
+    state.staticModelUnassignedCount = modelUnassignedCount;
     state.directionalClipResolvedCount = clipResolvedCount;
     state.directionalClipMissingCount = clipMissingCount;
     state.directionalClipFallbackCount = clipFallbackCount;
@@ -144,6 +197,14 @@ void RefreshPlacedRuntimeObjectDiagnostics(
             failedCount,
             clipResolvedCount + singleClipResolvedCount,
             clipMissingCount + singleClipMissingCount);
+    if (modelRequestedCount + modelUnassignedCount > 0) {
+        state.placedObjectStatus += TextFormat(
+                " | models %zu ready, %zu pending, %zu failed, %zu unassigned",
+                modelReadyCount,
+                modelPendingCount,
+                modelFailedCount,
+                modelUnassignedCount);
+    }
     if (state.doorObjectCount > 0) {
         state.placedObjectStatus += TextFormat(
                 " | doors %zu valid, %zu invalid anchors",
@@ -159,6 +220,14 @@ void RefreshPlacedRuntimeObjectDiagnostics(
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu door object(s) have invalid anchors",
                 state.invalidDoorAnchorCount);
+    } else if (modelFailedCount > 0) {
+        state.placedObjectWarning = TextFormat(
+                "Runtime object warnings: %zu static model asset(s) failed",
+                modelFailedCount);
+    } else if (modelUnassignedCount > 0) {
+        state.placedObjectWarning = TextFormat(
+                "Runtime object warnings: %zu static model object(s) have no model assigned",
+                modelUnassignedCount);
     } else if (failedCount > 0) {
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu sprite animation asset(s) failed",
@@ -421,6 +490,56 @@ void SpawnPlacedRuntimeObjects(
                     resolved.backSideDefId,
                     placedObject.door.initialOpenFraction <= kSectorDoorPortalBlockEpsilon});
             state.placedObjectEntities.push_back(SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
+            ++spawnedCount;
+            continue;
+        }
+
+        if (placedObject.kind == "static_model") {
+            engine::ModelHandle model = engine::NullModelHandle();
+            if (!placedObject.staticModel.modelPath.empty()) {
+                if (!EnsureSectorRuntimeObjectAssetScope(assets, state)) {
+                    recordWarning(TextFormat("asset scope unavailable for placed object %d", placedObject.id));
+                    ++skippedCount;
+                    continue;
+                }
+                const std::string modelPath = ResolveSectorAssetPath(
+                        placedObject.staticModel.modelPath);
+                model = assets.RequestModel(
+                        state.runtimeObjectAssetScope,
+                        placedObject.staticModel.modelPath.c_str(),
+                        modelPath.c_str());
+                if (engine::IsNull(model)) {
+                    const std::string warning = TextFormat(
+                            "could not request static model '%s' for placed object %d",
+                            placedObject.staticModel.modelPath.c_str(),
+                            placedObject.id);
+                    std::fprintf(stderr, "[SectorRuntimeObjects WARNING] %s\n", warning.c_str());
+                    recordWarning(warning);
+                }
+            }
+
+            Vector3 worldPosition = PlacedRuntimeObjectAuthoringToWorldPosition(
+                    placedObject.position);
+            worldPosition.y += placedObject.staticModel.heightOffsetWorld;
+            SectorObject object;
+            if (state.objectSectorLookupWorldValid) {
+                const int foundSectorId =
+                        state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
+                                Vector2{worldPosition.x, worldPosition.z},
+                                -1);
+                object.currentSectorId = foundSectorId != 0 ? foundSectorId : -1;
+            }
+
+            const engine::Entity entity = world.CreateEntity();
+            world.Add(entity, SectorObjectTransform{worldPosition, placedObject.yawRadians});
+            world.Add(entity, object);
+            world.Add(entity, SectorStaticModel{
+                    model,
+                    placedObject.id,
+                    StaticModelSectorAmbient(map, object.currentSectorId),
+                    placedObject.staticModel.scale});
+            state.placedObjectEntities.push_back(
+                    SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
             ++spawnedCount;
             continue;
         }

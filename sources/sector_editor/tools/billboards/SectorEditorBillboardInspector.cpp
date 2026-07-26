@@ -138,10 +138,9 @@ void DrawSectorEditorBillboardInspector(
   engine::AssetManager &assets = context.assets;
   const engine::FontHandle font = context.font;
   const engine::FontHandle smallFont = context.smallFont;
-  SectorEditorState &state = context.state;
-  SectorEditorUiState &uiState = context.uiState;
-  const SectorEditorPlacedObjectInspectorCallbacks &callbacks =
-      context.callbacks;
+  RuntimeObjectEditingState &state = context.editingState;
+  RuntimeObjectEditingUiState &uiState = context.uiState;
+  SectorEditorRuntimeObjectEditingService &editing = context.editing;
   const float contentW = context.contentW;
   const float rowH = context.rowH;
   const float gap = context.gap;
@@ -150,7 +149,7 @@ void DrawSectorEditorBillboardInspector(
 
   const bool isBillboard = true;
   const SectorPlacedRuntimeObject *selectedObject =
-      callbacks.selectedRuntimeObject();
+      editing.SelectedObject();
   if (selectedObject == nullptr || selectedObject->kind != "billboard") {
     return;
   }
@@ -186,7 +185,7 @@ void DrawSectorEditorBillboardInspector(
             engine::UITextJustify::Left, value, inputState, minValue, maxValue,
             decimals);
         if (result.changed && result.finite && result.value != value) {
-          callbacks.mutateSelectedRuntimeObject(
+          editing.MutateSelected(
               "Updated object transform",
               [applyValue,
                value = result.value](SectorPlacedRuntimeObject &object) {
@@ -211,7 +210,7 @@ void DrawSectorEditorBillboardInspector(
             engine::UITextJustify::Left, value, inputState, minValue, maxValue,
             decimals);
         if (result.changed && result.finite && result.value != value) {
-          callbacks.mutateSelectedRuntimeObject(
+          editing.MutateSelected(
               "Updated billboard properties",
               [applyValue,
                value = result.value](SectorPlacedRuntimeObject &object) {
@@ -224,7 +223,12 @@ void DrawSectorEditorBillboardInspector(
   auto openBillboardPickerButton = [&](const char *id, const char *label) {
     if (engine::Button(ui, config, input, assets, id,
                        Rectangle{0.0f, y, contentW, rowH}, font, label)) {
-      callbacks.openBillboardSpritePicker();
+      OpenBillboardSpritePicker(
+          state.spritePicker,
+          selectedObject != nullptr
+              ? selectedObject->billboard.spriteAnimationPath
+              : std::string{});
+      context.statusText = "Pick a billboard sprite";
     }
     y += rowH + gap;
   };
@@ -274,7 +278,7 @@ void DrawSectorEditorBillboardInspector(
     if (!state.billboardMetadataInitialRepairAttempted) {
       state.billboardMetadataInitialRepairAttempted = true;
       const int objectId = selectedObject->id;
-      callbacks.mutateSelectedRuntimeObject(
+      editing.MutateSelected(
           "Updated billboard clip defaults",
           [objectId, spritePath, metadata](SectorPlacedRuntimeObject &object) {
             if (object.id != objectId || object.kind != "billboard" ||
@@ -284,7 +288,7 @@ void DrawSectorEditorBillboardInspector(
             return RepairBillboardClipsForSpriteMetadata(object.billboard,
                                                          *metadata, false);
           });
-      selectedObject = callbacks.selectedRuntimeObject();
+      selectedObject = editing.SelectedObject();
     }
     return metadata;
   };
@@ -328,7 +332,7 @@ void DrawSectorEditorBillboardInspector(
           const std::string selectedClip =
               selectedBillboardMetadata
                   ->clipNames[static_cast<size_t>(selectedIndex)];
-          callbacks.mutateSelectedRuntimeObject(
+          editing.MutateSelected(
               "Updated billboard clip",
               [applyClip, selectedClip](SectorPlacedRuntimeObject &object) {
                 if (object.kind != "billboard") {
@@ -343,14 +347,14 @@ void DrawSectorEditorBillboardInspector(
   if (isBillboard) {
     openBillboardPickerButton("sector_editor_runtime_object_pick_sprite",
                               "Pick Sprite");
-    selectedObject = callbacks.selectedRuntimeObject();
+    selectedObject = editing.SelectedObject();
     if (selectedObject == nullptr) {
       return;
     }
   }
 
   drawObjectFloat("sector_editor_runtime_object_x", "Position X",
-                  selectedObject->position.x, uiState.runtimeObjectXInput,
+                  selectedObject->position.x, uiState.xInput,
                   -100000.0f, 100000.0f, 3,
                   [](SectorPlacedRuntimeObject &object, float value) {
                     if (object.position.x == value) {
@@ -359,12 +363,12 @@ void DrawSectorEditorBillboardInspector(
                     object.position.x = value;
                     return true;
                   });
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
   drawObjectFloat("sector_editor_runtime_object_y", "Position Y",
-                  selectedObject->position.y, uiState.runtimeObjectYInput,
+                  selectedObject->position.y, uiState.yInput,
                   -100000.0f, 100000.0f, 3,
                   [](SectorPlacedRuntimeObject &object, float value) {
                     if (object.position.y == value) {
@@ -373,12 +377,12 @@ void DrawSectorEditorBillboardInspector(
                     object.position.y = value;
                     return true;
                   });
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
   drawObjectFloat("sector_editor_runtime_object_z", "Position Z",
-                  selectedObject->position.z, uiState.runtimeObjectZInput,
+                  selectedObject->position.z, uiState.zInput,
                   -100000.0f, 100000.0f, 3,
                   [](SectorPlacedRuntimeObject &object, float value) {
                     if (object.position.z == value) {
@@ -387,7 +391,7 @@ void DrawSectorEditorBillboardInspector(
                     object.position.z = value;
                     return true;
                   });
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
@@ -396,7 +400,7 @@ void DrawSectorEditorBillboardInspector(
   drawObjectFloat(
       "sector_editor_runtime_object_yaw", "Yaw",
       selectedObject->yawRadians * radiansToDegrees,
-      uiState.runtimeObjectYawInput, -3600.0f, 3600.0f, 2,
+      uiState.yawInput, -3600.0f, 3600.0f, 2,
       [degreesToRadians](SectorPlacedRuntimeObject &object, float value) {
         const float radians = value * degreesToRadians;
         if (object.yawRadians == radians) {
@@ -405,7 +409,7 @@ void DrawSectorEditorBillboardInspector(
         object.yawRadians = radians;
         return true;
       });
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
@@ -413,7 +417,7 @@ void DrawSectorEditorBillboardInspector(
   if (isBillboard) {
     drawBillboardFloat(
         "sector_editor_runtime_object_width", "Width",
-        selectedObject->billboard.sizeWorld.x, uiState.runtimeObjectWidthInput,
+        selectedObject->billboard.sizeWorld.x, uiState.widthInput,
         BillboardSizeMin, BillboardSizeMax, 3,
         [hasBillboardAspect, selectedBillboardAspect](
             SectorPlacedRuntimeObject &object, float value) {
@@ -428,14 +432,14 @@ void DrawSectorEditorBillboardInspector(
           }
           return changed;
         });
-    selectedObject = callbacks.selectedRuntimeObject();
+    selectedObject = editing.SelectedObject();
     if (selectedObject == nullptr) {
       return;
     }
 
     drawBillboardFloat(
         "sector_editor_runtime_object_height", "Height",
-        selectedObject->billboard.sizeWorld.y, uiState.runtimeObjectHeightInput,
+        selectedObject->billboard.sizeWorld.y, uiState.heightInput,
         BillboardSizeMin, BillboardSizeMax, 3,
         [hasBillboardAspect, selectedBillboardAspect](
             SectorPlacedRuntimeObject &object, float value) {
@@ -450,7 +454,7 @@ void DrawSectorEditorBillboardInspector(
           }
           return changed;
         });
-    selectedObject = callbacks.selectedRuntimeObject();
+    selectedObject = editing.SelectedObject();
     if (selectedObject == nullptr) {
       return;
     }
@@ -460,7 +464,7 @@ void DrawSectorEditorBillboardInspector(
                          "sector_editor_runtime_object_keep_aspect",
                          Rectangle{0.0f, y, contentW, rowH}, font,
                          "Keep aspect ratio", keepAspect)) {
-      callbacks.mutateSelectedRuntimeObject(
+      editing.MutateSelected(
           keepAspect && !hasBillboardAspect
               ? "Billboard aspect unavailable until sprite metadata loads"
               : "Updated billboard aspect mode",
@@ -473,7 +477,7 @@ void DrawSectorEditorBillboardInspector(
           });
     }
     y += rowH + gap;
-    selectedObject = callbacks.selectedRuntimeObject();
+    selectedObject = editing.SelectedObject();
     if (selectedObject == nullptr) {
       return;
     }
@@ -486,7 +490,7 @@ void DrawSectorEditorBillboardInspector(
 
     drawBillboardFloat("sector_editor_runtime_object_origin_x", "Origin X",
                        selectedObject->billboard.originNormalized.x,
-                       uiState.runtimeObjectOriginXInput, 0.0f, 1.0f, 3,
+                       uiState.originXInput, 0.0f, 1.0f, 3,
                        [](SectorPlacedRuntimeObject &object, float value) {
                          const float origin = Clamp(value, 0.0f, 1.0f);
                          if (object.billboard.originNormalized.x == origin) {
@@ -495,14 +499,14 @@ void DrawSectorEditorBillboardInspector(
                          object.billboard.originNormalized.x = origin;
                          return true;
                        });
-    selectedObject = callbacks.selectedRuntimeObject();
+    selectedObject = editing.SelectedObject();
     if (selectedObject == nullptr) {
       return;
     }
 
     drawBillboardFloat("sector_editor_runtime_object_origin_y", "Origin Y",
                        selectedObject->billboard.originNormalized.y,
-                       uiState.runtimeObjectOriginYInput, 0.0f, 1.0f, 3,
+                       uiState.originYInput, 0.0f, 1.0f, 3,
                        [](SectorPlacedRuntimeObject &object, float value) {
                          const float origin = Clamp(value, 0.0f, 1.0f);
                          if (object.billboard.originNormalized.y == origin) {
@@ -511,7 +515,7 @@ void DrawSectorEditorBillboardInspector(
                          object.billboard.originNormalized.y = origin;
                          return true;
                        });
-    selectedObject = callbacks.selectedRuntimeObject();
+    selectedObject = editing.SelectedObject();
     if (selectedObject == nullptr) {
       return;
     }
@@ -521,7 +525,7 @@ void DrawSectorEditorBillboardInspector(
                          "sector_editor_runtime_object_directional",
                          Rectangle{0.0f, y, contentW, rowH}, font,
                          "Directional", directional)) {
-      callbacks.mutateSelectedRuntimeObject(
+      editing.MutateSelected(
           "Updated billboard directional mode",
           [directional](SectorPlacedRuntimeObject &object) {
             if (object.billboard.directional == directional) {
@@ -532,13 +536,13 @@ void DrawSectorEditorBillboardInspector(
           });
     }
     y += rowH + gap;
-    selectedObject = callbacks.selectedRuntimeObject();
+    selectedObject = editing.SelectedObject();
     if (selectedObject == nullptr) {
       return;
     }
 
     selectedBillboardMetadata = resolveSelectedBillboardMetadata();
-    selectedObject = callbacks.selectedRuntimeObject();
+    selectedObject = editing.SelectedObject();
     if (selectedObject == nullptr) {
       return;
     }
@@ -554,7 +558,7 @@ void DrawSectorEditorBillboardInspector(
             object.billboard.frontClip = clip;
             return true;
           });
-      selectedObject = callbacks.selectedRuntimeObject();
+      selectedObject = editing.SelectedObject();
       if (selectedObject == nullptr) {
         return;
       }
@@ -568,7 +572,7 @@ void DrawSectorEditorBillboardInspector(
             object.billboard.backClip = clip;
             return true;
           });
-      selectedObject = callbacks.selectedRuntimeObject();
+      selectedObject = editing.SelectedObject();
       if (selectedObject == nullptr) {
         return;
       }
@@ -582,7 +586,7 @@ void DrawSectorEditorBillboardInspector(
             object.billboard.leftClip = clip;
             return true;
           });
-      selectedObject = callbacks.selectedRuntimeObject();
+      selectedObject = editing.SelectedObject();
       if (selectedObject == nullptr) {
         return;
       }
@@ -596,7 +600,7 @@ void DrawSectorEditorBillboardInspector(
             object.billboard.rightClip = clip;
             return true;
           });
-      selectedObject = callbacks.selectedRuntimeObject();
+      selectedObject = editing.SelectedObject();
       if (selectedObject == nullptr) {
         return;
       }
@@ -611,7 +615,7 @@ void DrawSectorEditorBillboardInspector(
             object.billboard.clip = clip;
             return true;
           });
-      selectedObject = callbacks.selectedRuntimeObject();
+      selectedObject = editing.SelectedObject();
       if (selectedObject == nullptr) {
         return;
       }
@@ -621,7 +625,7 @@ void DrawSectorEditorBillboardInspector(
     if (engine::Checkbox(
             ui, config, input, assets, "sector_editor_runtime_object_playing",
             Rectangle{0.0f, y, contentW, rowH}, font, "Playing", playing)) {
-      callbacks.mutateSelectedRuntimeObject(
+      editing.MutateSelected(
           "Updated billboard playback",
           [playing](SectorPlacedRuntimeObject &object) {
             if (object.billboard.playing == playing) {
@@ -637,7 +641,7 @@ void DrawSectorEditorBillboardInspector(
   if (engine::Button(ui, config, input, assets,
                      "sector_editor_delete_runtime_object",
                      Rectangle{0.0f, y, contentW, rowH}, font, "Delete")) {
-    callbacks.deleteSelectedRuntimeObject();
+    context.deleteRequested = true;
   }
 }
 

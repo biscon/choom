@@ -5,35 +5,23 @@
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorTypes.h"
-
-#include <functional>
+#include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
+#include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 
 namespace game {
 
 class SectorEditorTextureCatalogService;
 struct SectorRuntimeObjectState;
 
-struct SectorEditorPlacedObjectInspectorCallbacks {
-    std::function<const SectorPlacedRuntimeObject*()> selectedRuntimeObject;
-    std::function<bool(const char*, const std::function<bool(SectorPlacedRuntimeObject&)>&)>
-            mutateSelectedRuntimeObject;
-    std::function<void()> openBillboardSpritePicker;
-    std::function<void()> openDoorTexturePicker;
-    std::function<void()> openDoorTextureSettingsModal;
-    std::function<bool()> deleteSelectedRuntimeObject;
-    std::function<bool(bool&)> selectedDoorRuntimeTargetOpen;
-    std::function<void(bool)> setSelectedDoorRuntimeTargetOpen;
-};
-
 struct SectorEditorPlacedObjectInspectorMeasureContext {
     engine::AssetManager& assets;
     engine::FontHandle smallFont;
     const engine::UIConfig& smallConfig;
-    SectorEditorState& state;
     SectorTopologyMap& topologyMap;
     SectorRuntimeObjectState& runtimeObjects;
     engine::EngineContext* engineContext = nullptr;
-    const SectorEditorPlacedObjectInspectorCallbacks& callbacks;
+    SectorEditorRuntimeObjectEditingService& editing;
+    RuntimeObjectEditingState& editingState;
     SectorEditorTextureCatalogService& textureCatalog;
     float contentW = 0.0f;
     float rowH = 0.0f;
@@ -49,11 +37,16 @@ struct SectorEditorPlacedObjectInspectorContext {
     engine::FontHandle smallFont;
     engine::UIScrollAreaResult scroll;
     SectorEditorState& state;
+    SectorAuthoringGraph& authoringGraph;
     SectorTopologyMap& topologyMap;
     SectorRuntimeObjectState& runtimeObjects;
-    SectorEditorUiState& uiState;
+    RuntimeObjectEditingUiState& uiState;
     engine::EngineContext* engineContext = nullptr;
-    const SectorEditorPlacedObjectInspectorCallbacks& callbacks;
+    SectorEditorRuntimeObjectEditingService& editing;
+    RuntimeObjectEditingState& editingState;
+    SectorEditorStaticModelPickerService& staticModelPicker;
+    std::string& statusText;
+    bool& deleteRequested;
     SectorEditorTextureCatalogService& textureCatalog;
     float contentW = 0.0f;
     float rowH = 0.0f;

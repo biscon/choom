@@ -3,6 +3,7 @@
 #include "engine/assets/AssetHandles.h"
 #include "engine/assets/FontAssets.h"
 #include "engine/assets/FontLoadFlags.h"
+#include "engine/assets/ModelAssets.h"
 #include "engine/assets/SpriteAnimationAssets.h"
 #include "engine/assets/TextureAssets.h"
 #include "engine/assets/TextureLoadFlags.h"
@@ -68,6 +69,19 @@ public:
     bool HasFailed(FontHandle handle) const;
     const FontAsset* GetFont(FontHandle handle) const;
 
+    ModelHandle RequestModel(
+            AssetScopeHandle scope,
+            const char* key,
+            const char* path);
+
+    bool IsReady(ModelHandle handle) const;
+    bool IsFinished(ModelHandle handle) const;
+    bool HasFailed(ModelHandle handle) const;
+    const Model* GetModel(ModelHandle handle) const;
+    // Returns a borrowed ready asset from any live scope. The handle does not
+    // acquire ownership; callers must consume it immediately on the main thread.
+    ModelHandle FindReadyModelByPath(const char* path) const;
+
     SpriteAnimationHandle RequestSpriteAnimation(
             AssetScopeHandle scope,
             const char* key,
@@ -120,6 +134,7 @@ private:
 
     TextureAssets textures;
     FontAssets fonts;
+    ModelAssets models;
     SpriteAnimationAssets spriteAnimations;
 
     std::thread worker;

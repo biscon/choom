@@ -95,6 +95,24 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(raylib)
 
+FetchContent_Declare(
+        xatlas
+        GIT_REPOSITORY "https://github.com/jpcy/xatlas.git"
+        GIT_TAG "f700c7790aaa030e794b52ba7791a05c085faf0c"
+        GIT_PROGRESS TRUE
+)
+FetchContent_GetProperties(xatlas)
+if(NOT xatlas_POPULATED)
+    FetchContent_Populate(xatlas)
+endif()
+add_library(xatlas STATIC
+        "${xatlas_SOURCE_DIR}/source/xatlas/xatlas.cpp"
+)
+target_include_directories(xatlas PUBLIC
+        "${xatlas_SOURCE_DIR}/source/xatlas"
+)
+target_link_libraries(${PROJECT_NAME} PRIVATE xatlas)
+
 include(CTest)
 if(BUILD_TESTING)
     add_executable(sector_utility_tests
@@ -139,12 +157,15 @@ if(BUILD_TESTING)
             sources/sector_editor/services/lights/SectorEditorLightEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
+            sources/sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.cpp
+            sources/sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.cpp
             sources/sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.cpp
             sources/sector_editor/services/texture_picker/SectorEditorTexturePickerService.cpp
             sources/sector_editor/SectorEditorTopologyActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
             sources/engine/assets/TextureAssets.cpp
             sources/sector_demo/SectorAssetPaths.cpp
@@ -152,7 +173,12 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp
+            sources/sector_demo/SectorBillboardRuntime.cpp
+            sources/sector_demo/SectorDoorRuntime.cpp
+            sources/sector_demo/SectorPortalVisibility.cpp
+            sources/sector_demo/SectorRuntimeObjects.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -162,7 +188,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(sector_authoring_graph_tests PRIVATE sources)
     target_compile_definitions(sector_authoring_graph_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
-    target_link_libraries(sector_authoring_graph_tests PRIVATE raylib)
+    target_link_libraries(sector_authoring_graph_tests PRIVATE raylib xatlas)
     add_test(NAME sector_authoring_graph COMMAND sector_authoring_graph_tests)
 
     add_executable(sector_topology_serialization_tests
@@ -205,12 +231,19 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_lightmap_tests
             tests/SectorTopologyLightmapTests.cpp
+            sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/ModelAssets.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
             sources/sector_editor/SectorEditorHelpers.cpp
             sources/sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.cpp
             sources/sector_demo/SectorAssetPaths.cpp
+            sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorLightmapReport.cpp
+            sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -219,14 +252,21 @@ if(BUILD_TESTING)
     )
     target_include_directories(sector_topology_lightmap_tests PRIVATE sources)
     target_compile_definitions(sector_topology_lightmap_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
-    target_link_libraries(sector_topology_lightmap_tests PRIVATE raylib)
+    target_link_libraries(sector_topology_lightmap_tests PRIVATE raylib xatlas)
     add_test(NAME sector_topology_lightmap COMMAND sector_topology_lightmap_tests)
 
     add_executable(sector_topology_creation_tests
             tests/SectorTopologyCreationTests.cpp
+            sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/ModelAssets.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
             sources/sector_demo/SectorAssetPaths.cpp
+            sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyCreation.cpp
             sources/sector_demo/SectorTopologyEdit.cpp
@@ -237,7 +277,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(sector_topology_creation_tests PRIVATE sources)
     target_compile_definitions(sector_topology_creation_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
-    target_link_libraries(sector_topology_creation_tests PRIVATE raylib)
+    target_link_libraries(sector_topology_creation_tests PRIVATE raylib xatlas)
     add_test(NAME sector_topology_creation COMMAND sector_topology_creation_tests)
 
     add_executable(sector_collision_world_tests
@@ -288,12 +328,14 @@ if(BUILD_TESTING)
             tests/SectorRuntimeObjectTests.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
             sources/engine/assets/TextureAssets.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorBillboardRuntime.cpp
             sources/sector_demo/SectorDoorRuntime.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
@@ -305,7 +347,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(sector_runtime_object_tests PRIVATE sources)
     target_compile_definitions(sector_runtime_object_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
-    target_link_libraries(sector_runtime_object_tests PRIVATE raylib)
+    target_link_libraries(sector_runtime_object_tests PRIVATE raylib xatlas)
     add_test(NAME sector_runtime_object COMMAND sector_runtime_object_tests)
 
     add_executable(sector_sky_cylinder_tests
@@ -319,9 +361,16 @@ if(BUILD_TESTING)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp
+            sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/ModelAssets.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
             sources/sector_demo/SectorAssetPaths.cpp
+            sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -330,7 +379,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(sector_editor_ui_layout_tests PRIVATE sources)
     target_compile_definitions(sector_editor_ui_layout_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
-    target_link_libraries(sector_editor_ui_layout_tests PRIVATE raylib)
+    target_link_libraries(sector_editor_ui_layout_tests PRIVATE raylib xatlas)
     add_test(NAME sector_editor_ui_layout COMMAND sector_editor_ui_layout_tests)
 endif()
 

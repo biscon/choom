@@ -52,35 +52,6 @@ void AppendRequest(
     }
 }
 
-void OpenSelectedBillboardSpritePickerForInspector(
-        SectorEditorState& state,
-        std::string& statusText,
-        const SectorPlacedRuntimeObject* object)
-{
-    if (object == nullptr || object->kind != "billboard") {
-        statusText = "Select a billboard first.";
-        return;
-    }
-    OpenBillboardSpritePicker(state.spritePicker, object->billboard.spriteAnimationPath);
-}
-
-void OpenSelectedDoorTexturePickerForInspector(
-        SectorEditorState& state,
-        const SectorTopologyMap& topologyMap,
-        const SectorAuthoringGraph& authoringGraph,
-        SectorEditorTextureCatalogService& textureCatalog,
-        std::string& statusText,
-        const SectorPlacedRuntimeObject* object)
-{
-    if (object == nullptr || object->kind != "door") {
-        statusText = "Select a door first.";
-        return;
-    }
-    if (!OpenRuntimeDoorTexturePicker(state, topologyMap, authoringGraph, textureCatalog, object->id)) {
-        statusText = "No door texture target";
-    }
-}
-
 bool TryRenameSelectedDerivedSectorAuthoringNameForInspector(
         SectorEditorState& state,
         SectorEditorDocumentLifecycleAccess lifecycle,
@@ -361,7 +332,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     MaterialEditingUiState& materialUiState = context.materialUiState;
     std::string& statusText = context.statusText;
     SectorEditorSelectionServiceContext& selection = context.selection;
-    SectorEditorPlacedObjectActionContext& placedObjectActions = context.placedObjectActions;
+    SectorEditorRuntimeObjectEditingService& runtimeObjectEditing =
+            context.runtimeObjectEditing;
     SectorEditorMaterialEditingService& materialEditing = context.materialEditing;
     SectorEditorTextureCatalogService& textureCatalog = context.textureCatalog;
     SectorEditorLightEditingService& lightEditing = context.lightEditing;
@@ -375,7 +347,9 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     auto selectedStaticSpotLight = [&]() { return SelectedSectorEditorTopologyStaticSpotLight(selection); };
     auto selectedDynamicLight = [&]() { return SelectedSectorEditorTopologyDynamicLight(selection); };
     auto selectedDynamicSpotLight = [&]() { return SelectedSectorEditorTopologyDynamicSpotLight(selection); };
-    auto selectedRuntimeObject = [&]() { return SelectedSectorEditorRuntimeObject(selection); };
+    auto selectedRuntimeObject = [&]() {
+        return runtimeObjectEditing.SelectedObject();
+    };
 
     const engine::UIPanelResult panel = engine::BeginPanel(
             ui,
@@ -447,66 +421,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             SectorEditorPanelScrollPaddingPx,
             false);
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
-    const SectorEditorPlacedObjectInspectorCallbacks runtimeObjectInspectorCallbacks{
-            [&]() { return selectedRuntimeObject(); },
-            [&](
-                    const char* status,
-                    const std::function<bool(SectorPlacedRuntimeObject&)>& mutate) {
-                return MutateSelectedSectorEditorPlacedObject(placedObjectActions, status, mutate);
-            },
-            [&]() { OpenSelectedBillboardSpritePickerForInspector(state, statusText, selectedRuntimeObject()); },
-            [&]() {
-                OpenSelectedDoorTexturePickerForInspector(
-                        state,
-                        context.topologyMap,
-                        context.authoringGraph,
-                        textureCatalog,
-                        statusText,
-                        selectedRuntimeObject());
-            },
-            [&]() { OpenSectorEditorDoorTextureSettingsModal(state.doorTextureSettingsModal, selectedRuntimeObject(), statusText); },
-            [&]() {
-                AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedRuntimeObject);
-                return true;
-            },
-            [&](bool& outOpen) {
-                const SectorPlacedRuntimeObject* selectedObject = selectedRuntimeObject();
-                if (selectedObject == nullptr || engineContext == nullptr) {
-                    return false;
-                }
-                for (const SectorPlacedRuntimeObjectEntity& entry : placedObjectActions.runtimeObjects.placedObjectEntities) {
-                    if (entry.placedObjectId != selectedObject->id
-                            || !engineContext->world.IsAlive(entry.entity)
-                            || !engineContext->world.Has<SectorDoorMotion>(entry.entity)) {
-                        continue;
-                    }
-                    const SectorDoorMotion& motion = engineContext->world.Get<SectorDoorMotion>(entry.entity);
-                    outOpen = std::isfinite(motion.targetOpenFraction)
-                            && motion.targetOpenFraction > 0.5f;
-                    return true;
-                }
-                return false;
-            },
-            [&](bool open) {
-                const SectorPlacedRuntimeObject* selectedObject = selectedRuntimeObject();
-                if (selectedObject == nullptr || engineContext == nullptr) {
-                    return;
-                }
-                for (const SectorPlacedRuntimeObjectEntity& entry : placedObjectActions.runtimeObjects.placedObjectEntities) {
-                    if (entry.placedObjectId != selectedObject->id
-                            || !engineContext->world.IsAlive(entry.entity)
-                            || !engineContext->world.Has<SectorDoorMotion>(entry.entity)) {
-                        continue;
-                    }
-                    SectorDoorMotion& motion = engineContext->world.Get<SectorDoorMotion>(entry.entity);
-                    motion.targetOpenFraction = open ? 1.0f : 0.0f;
-                    statusText = open
-                            ? "Door debug runtime target: open"
-                            : "Door debug runtime target: close";
-                    return;
-                }
-            }
-    };
+    bool deleteRuntimeObjectRequested = false;
     const auto inspectorContentHeight = [&]() {
         if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
             return 120.0f;
@@ -516,11 +431,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     assets,
                     smallFont,
                     smallConfig,
-                    state,
                     context.topologyMap,
-                    placedObjectActions.runtimeObjects,
+                    context.runtimeObjects,
                     engineContext,
-                    runtimeObjectInspectorCallbacks,
+                    runtimeObjectEditing,
+                    context.runtimeObjectEditingState,
                     textureCatalog,
                     scrollContentW,
                     rowH,
@@ -659,17 +574,27 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 smallFont,
                 scroll,
                 state,
+                context.authoringGraph,
                 context.topologyMap,
-                placedObjectActions.runtimeObjects,
-                uiState,
+                context.runtimeObjects,
+                context.runtimeObjectEditingUiState,
                 engineContext,
-                runtimeObjectInspectorCallbacks,
+                runtimeObjectEditing,
+                context.runtimeObjectEditingState,
+                context.staticModelPicker,
+                statusText,
+                deleteRuntimeObjectRequested,
                 textureCatalog,
                 contentW,
                 rowH,
                 gap
         };
         DrawSectorEditorPlacedObjectInspector(runtimeObjectInspectorContext);
+        if (deleteRuntimeObjectRequested) {
+            AppendRequest(
+                    result,
+                    SectorEditorInspectorPanelRequestKind::DeleteSelectedRuntimeObject);
+        }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return result;

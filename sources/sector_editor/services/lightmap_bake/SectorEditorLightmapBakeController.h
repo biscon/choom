@@ -9,6 +9,7 @@ namespace game {
 
 struct SectorEditorLightmapBakeRequest {
     SectorTopologyMap mapSnapshot;
+    SectorStaticModelLightmapData staticModels;
     std::string expectedSourceHash;
     std::string finalOutputPath;
     std::string temporaryOutputPath;
@@ -33,6 +34,8 @@ struct SectorEditorLightmapBakeInstallPayload {
     std::string finalLightmapPath;
     std::string finalObjectProbePath;
     std::string finalObjectProbeAssetPath;
+    std::string finalStaticModelPath;
+    std::string finalStaticModelAssetPath;
     std::string status;
 };
 

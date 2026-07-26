@@ -263,6 +263,95 @@ bool RasterizeSurfacePoint(
     return false;
 }
 
+Vector3 TransformStaticModelPosition(
+        Vector3 importedPosition,
+        const SectorStaticModelLightmapObject& object)
+{
+    const Matrix authoredTransform = MatrixMultiply(
+            MatrixScale(object.scale, object.scale, object.scale),
+            MatrixMultiply(
+                    MatrixRotateY(object.yawRadians),
+                    MatrixTranslate(
+                            object.worldPosition.x,
+                            object.worldPosition.y,
+                            object.worldPosition.z)));
+    return Vector3Transform(importedPosition, authoredTransform);
+}
+
+Vector3 TransformStaticModelNormal(
+        Vector3 importedNormal,
+        const SectorStaticModelLightmapObject& object)
+{
+    const float cosine = std::cos(object.yawRadians);
+    const float sine = std::sin(object.yawRadians);
+    const Vector3 rotated{
+            importedNormal.x * cosine + importedNormal.z * sine,
+            importedNormal.y,
+            -importedNormal.x * sine + importedNormal.z * cosine};
+    return Vector3LengthSqr(rotated) > BakeEpsilon
+            ? Vector3Normalize(rotated)
+            : Vector3{0.0f, 1.0f, 0.0f};
+}
+
+bool RasterizeStaticModelMeshPoint(
+        const SectorStaticModelLightmapMesh& mesh,
+        const SectorStaticModelLightmapObject& object,
+        Vector2 localUv,
+        RasterHit& outHit)
+{
+    for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
+        const uint32_t ia = mesh.indices[i];
+        const uint32_t ib = mesh.indices[i + 1];
+        const uint32_t ic = mesh.indices[i + 2];
+        if (ia >= mesh.localLightmapUvs.size()
+                || ib >= mesh.localLightmapUvs.size()
+                || ic >= mesh.localLightmapUvs.size()
+                || ia >= mesh.importedPositions.size()
+                || ib >= mesh.importedPositions.size()
+                || ic >= mesh.importedPositions.size()
+                || ia >= mesh.importedNormals.size()
+                || ib >= mesh.importedNormals.size()
+                || ic >= mesh.importedNormals.size()) {
+            continue;
+        }
+        float wa = 0.0f;
+        float wb = 0.0f;
+        float wc = 0.0f;
+        if (!Barycentric(
+                    localUv,
+                    mesh.localLightmapUvs[ia],
+                    mesh.localLightmapUvs[ib],
+                    mesh.localLightmapUvs[ic],
+                    wa,
+                    wb,
+                    wc)) {
+            continue;
+        }
+        outHit.hit = true;
+        outHit.position = TransformStaticModelPosition(
+                Interpolate(
+                        mesh.importedPositions[ia],
+                        mesh.importedPositions[ib],
+                        mesh.importedPositions[ic],
+                        wa,
+                        wb,
+                        wc),
+                object);
+        outHit.normal = TransformStaticModelNormal(
+                Vector3Normalize(Interpolate(
+                        mesh.importedNormals[ia],
+                        mesh.importedNormals[ib],
+                        mesh.importedNormals[ic],
+                        wa,
+                        wb,
+                        wc)),
+                object);
+        outHit.triangleIndex = static_cast<int>(i / 3);
+        return true;
+    }
+    return false;
+}
+
 bool RayIntersectsTriangle(Vector3 origin, Vector3 direction, const BakeTriangle& tri, float maxDistance, float& outDistance)
 {
     float barycentric0 = 0.0f;
@@ -2111,7 +2200,10 @@ float BakeAmbientOcclusion(
     return std::clamp(1.0f - strength * averageOcclusion, 0.0f, 1.0f);
 }
 
-std::vector<BakeTriangle> BuildBakeTriangles(const SectorGeneratedGeometry& geometry, const SectorLightmapLayout& layout)
+std::vector<BakeTriangle> BuildBakeTriangles(
+        const SectorGeneratedGeometry& geometry,
+        const SectorLightmapLayout& layout,
+        const SectorStaticModelLightmapData* staticModels = nullptr)
 {
     std::vector<BakeTriangle> triangles;
     for (size_t surfaceIndex = 0; surfaceIndex < geometry.surfaces.size(); ++surfaceIndex) {
@@ -2148,6 +2240,83 @@ std::vector<BakeTriangle> BuildBakeTriangles(const SectorGeneratedGeometry& geom
                     static_cast<int>(surfaceIndex),
                     static_cast<int>(i / 3)
             });
+        }
+    }
+    if (staticModels == nullptr) {
+        return triangles;
+    }
+
+    int staticSurfaceIndex = static_cast<int>(geometry.surfaces.size());
+    for (const SectorStaticModelLightmapObject& object : staticModels->objects) {
+        if (object.modelIndex < 0
+                || object.modelIndex >= static_cast<int>(staticModels->models.size())) {
+            continue;
+        }
+        const SectorStaticModelLightmapModel& model =
+                staticModels->models[static_cast<size_t>(object.modelIndex)];
+        for (size_t meshIndex = 0; meshIndex < model.meshes.size(); ++meshIndex) {
+            if (meshIndex >= object.meshPlacements.size()) {
+                ++staticSurfaceIndex;
+                continue;
+            }
+            const SectorStaticModelLightmapMesh& mesh = model.meshes[meshIndex];
+            const SectorStaticModelLightmapMeshPlacement& placement =
+                    object.meshPlacements[meshIndex];
+            const SectorGeneratedSurfaceRef surfaceRef{
+                    SectorGeneratedSurfaceKind::Middle,
+                    object.containingSectorId,
+                    -1,
+                    -1,
+                    SectorTopologySideKind::Front};
+            for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
+                const uint32_t ia = mesh.indices[i];
+                const uint32_t ib = mesh.indices[i + 1];
+                const uint32_t ic = mesh.indices[i + 2];
+                if (ia >= mesh.importedPositions.size()
+                        || ib >= mesh.importedPositions.size()
+                        || ic >= mesh.importedPositions.size()
+                        || ia >= mesh.importedNormals.size()
+                        || ib >= mesh.importedNormals.size()
+                        || ic >= mesh.importedNormals.size()
+                        || ia >= mesh.localLightmapUvs.size()
+                        || ib >= mesh.localLightmapUvs.size()
+                        || ic >= mesh.localLightmapUvs.size()) {
+                    continue;
+                }
+                const Vector3 position0 =
+                        TransformStaticModelPosition(mesh.importedPositions[ia], object);
+                const Vector3 position1 =
+                        TransformStaticModelPosition(mesh.importedPositions[ib], object);
+                const Vector3 position2 =
+                        TransformStaticModelPosition(mesh.importedPositions[ic], object);
+                Vector3 normal = Vector3Normalize(Vector3Add(
+                        Vector3Add(
+                                TransformStaticModelNormal(mesh.importedNormals[ia], object),
+                                TransformStaticModelNormal(mesh.importedNormals[ib], object)),
+                        TransformStaticModelNormal(mesh.importedNormals[ic], object)));
+                if (Vector3LengthSqr(normal) <= BakeEpsilon) {
+                    normal = Vector3Normalize(Vector3CrossProduct(
+                            Vector3Subtract(position1, position0),
+                            Vector3Subtract(position2, position0)));
+                }
+                const auto atlasUv = [&placement](Vector2 uv) {
+                    return Vector2{
+                            placement.atlasBias.x + uv.x * placement.atlasScale.x,
+                            placement.atlasBias.y + uv.y * placement.atlasScale.y};
+                };
+                triangles.push_back(BakeTriangle{
+                        position0,
+                        position1,
+                        position2,
+                        normal,
+                        atlasUv(mesh.localLightmapUvs[ia]),
+                        atlasUv(mesh.localLightmapUvs[ib]),
+                        atlasUv(mesh.localLightmapUvs[ic]),
+                        surfaceRef,
+                        staticSurfaceIndex,
+                        static_cast<int>(i / 3)});
+            }
+            ++staticSurfaceIndex;
         }
     }
     return triangles;
@@ -2447,6 +2616,43 @@ bool BuildSectorLightmapLayoutFromGeometry(
     return true;
 }
 
+SectorStaticModelLightmapPackCursor StaticModelPackCursorAfterTopology(
+        const SectorLightmapLayout& layout)
+{
+    SectorStaticModelLightmapPackCursor cursor;
+    bool found = false;
+    for (const SectorLightmapChart& chart : layout.charts) {
+        if (chart.surfaceIndex < 0 || chart.width <= 0 || chart.height <= 0) {
+            continue;
+        }
+        if (!found || chart.y > cursor.shelfY) {
+            cursor.shelfY = chart.y;
+            cursor.shelfX = chart.x + chart.width;
+            cursor.shelfHeight = chart.height;
+            found = true;
+        } else if (chart.y == cursor.shelfY) {
+            cursor.shelfX = std::max(cursor.shelfX, chart.x + chart.width);
+            cursor.shelfHeight = std::max(cursor.shelfHeight, chart.height);
+        }
+    }
+    return cursor;
+}
+
+SectorLightmapChart PlacementAsChart(
+        const SectorStaticModelLightmapMeshPlacement& placement)
+{
+    SectorLightmapChart chart;
+    chart.x = placement.x;
+    chart.y = placement.y;
+    chart.width = placement.width;
+    chart.height = placement.height;
+    chart.usableX = placement.usableX;
+    chart.usableY = placement.usableY;
+    chart.usableWidth = placement.usableWidth;
+    chart.usableHeight = placement.usableHeight;
+    return chart;
+}
+
 bool BuildLightmapGeneratedGeometryForBake(
         const SectorTopologyMap& map,
         SectorGeneratedGeometry& outGeometry,
@@ -2577,6 +2783,44 @@ std::vector<std::string> SortedReferencedLightmapTextureIds(const SectorTopology
     }
     std::sort(ids.begin(), ids.end());
     return ids;
+}
+
+void BakeObjectProbeAmbientCubesInScene(
+        const SectorTopologyMap& map,
+        const SectorLightmapBvh& bvh,
+        const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        std::vector<SectorBakedObjectLightProbe>& probes)
+{
+    std::vector<LightmapWorldPointLight> worldLights;
+    worldLights.reserve(map.staticLights.size());
+    for (const SectorTopologyStaticPointLight& light : map.staticLights) {
+        worldLights.push_back(MakeWorldSpaceLight(light));
+    }
+    std::vector<LightmapWorldSpotLight> worldSpotLights;
+    worldSpotLights.reserve(map.staticSpotLights.size());
+    for (const SectorTopologyStaticSpotLight& light : map.staticSpotLights) {
+        worldSpotLights.push_back(MakeWorldSpaceLight(light));
+    }
+    const LightmapWorldDirectionalLight directionalLight =
+            MakeWorldSpaceDirectionalLight(map.directionalLight);
+    const float directionalShadowMaxDistance = BvhSceneDiagonalWithMargin(bvh);
+    SectorLightmapAlphaMaskCache alphaMaskCache;
+    BakeRayStats stats;
+    for (SectorBakedObjectLightProbe& probe : probes) {
+        BakeProbeAmbientCube(
+                map,
+                worldLights,
+                worldSpotLights,
+                directionalLight,
+                directionalShadowMaxDistance,
+                bvh,
+                triangles,
+                alphaOccluders,
+                alphaMaskCache,
+                stats,
+                probe);
+    }
 }
 
 } // namespace
@@ -2888,39 +3132,14 @@ bool BakeSectorBakedObjectLightProbeAmbientCubes(
         return false;
     }
 
-    std::vector<LightmapWorldPointLight> worldLights;
-    worldLights.reserve(map.staticLights.size());
-    for (const SectorTopologyStaticPointLight& light : map.staticLights) {
-        worldLights.push_back(MakeWorldSpaceLight(light));
-    }
-
-    std::vector<LightmapWorldSpotLight> worldSpotLights;
-    worldSpotLights.reserve(map.staticSpotLights.size());
-    for (const SectorTopologyStaticSpotLight& light : map.staticSpotLights) {
-        worldSpotLights.push_back(MakeWorldSpaceLight(light));
-    }
-
-    const LightmapWorldDirectionalLight directionalLight =
-            MakeWorldSpaceDirectionalLight(map.directionalLight);
-    const float directionalShadowMaxDistance = BvhSceneDiagonalWithMargin(bvh);
     const std::vector<SectorLightmapAlphaOccluderTriangle> alphaOccluders =
             CollectSectorLightmapAlphaOccluders(geometry);
-    SectorLightmapAlphaMaskCache alphaMaskCache;
-    BakeRayStats stats;
-    for (SectorBakedObjectLightProbe& probe : probes) {
-        BakeProbeAmbientCube(
-                map,
-                worldLights,
-                worldSpotLights,
-                directionalLight,
-                directionalShadowMaxDistance,
-                bvh,
-                triangles,
-                alphaOccluders,
-                alphaMaskCache,
-                stats,
-                probe);
-    }
+    BakeObjectProbeAmbientCubesInScene(
+            map,
+            bvh,
+            triangles,
+            alphaOccluders,
+            probes);
 
     return true;
 }
@@ -3318,6 +3537,7 @@ template<typename MapT>
 bool BakeSectorLightmapForMap(
         const MapT& map,
         const SectorLightmapLayout& layout,
+        SectorStaticModelLightmapData* staticModels,
         const char* outputPath,
         const SectorLightmapBakeCallbacks& callbacks,
         SectorLightmapBakeResult& outResult,
@@ -3354,7 +3574,8 @@ bool BakeSectorLightmapForMap(
     const std::vector<SectorLightmapAlphaOccluderTriangle> alphaOccluders =
             CollectSectorLightmapAlphaOccluders(geometry);
     SectorLightmapAlphaMaskCache alphaMaskCache;
-    const std::vector<BakeTriangle> triangles = BuildBakeTriangles(geometry, layout);
+    const std::vector<BakeTriangle> triangles =
+            BuildBakeTriangles(geometry, layout, staticModels);
     ReportProgress(callbacks, SectorLightmapBakePhase::BuildingBvh, 0, 1);
     const auto bvhBuildStart = Clock::now();
     SectorLightmapBvh bvh;
@@ -3428,6 +3649,74 @@ bool BakeSectorLightmapForMap(
                         hit.normal
                 });
                 validChartTexel[pixelIndex] = 1;
+            }
+        }
+    }
+    if (staticModels != nullptr) {
+        int sourceSurfaceIndex = static_cast<int>(geometry.surfaces.size());
+        for (const SectorStaticModelLightmapObject& object : staticModels->objects) {
+            if (object.modelIndex < 0
+                    || object.modelIndex
+                            >= static_cast<int>(staticModels->models.size())) {
+                outError = "Bake failed: invalid prepared static model object "
+                        + std::to_string(object.objectId);
+                return false;
+            }
+            const SectorStaticModelLightmapModel& model =
+                    staticModels->models[static_cast<size_t>(object.modelIndex)];
+            for (size_t meshIndex = 0;
+                    meshIndex < model.meshes.size();
+                    ++meshIndex, ++sourceSurfaceIndex) {
+                if (meshIndex >= object.meshPlacements.size()) {
+                    outError = "Bake failed: missing lightmap chart for static model object "
+                            + std::to_string(object.objectId);
+                    return false;
+                }
+                const SectorStaticModelLightmapMesh& mesh =
+                        model.meshes[meshIndex];
+                const SectorStaticModelLightmapMeshPlacement& placement =
+                        object.meshPlacements[meshIndex];
+                allocatedChartRectanglePixels +=
+                        placement.width * placement.height;
+                const SectorGeneratedSurfaceRef surfaceRef{
+                        SectorGeneratedSurfaceKind::Middle,
+                        object.containingSectorId,
+                        -1,
+                        -1,
+                        SectorTopologySideKind::Front};
+                for (int y = placement.usableY;
+                        y < placement.usableY + placement.usableHeight;
+                        ++y) {
+                    for (int x = placement.usableX;
+                            x < placement.usableX + placement.usableWidth;
+                            ++x) {
+                        const Vector2 localUv{
+                                (static_cast<float>(x - placement.usableX) + 0.5f)
+                                        / static_cast<float>(placement.usableWidth),
+                                (static_cast<float>(y - placement.usableY) + 0.5f)
+                                        / static_cast<float>(placement.usableHeight)};
+                        RasterHit hit;
+                        if (!RasterizeStaticModelMeshPoint(
+                                    mesh,
+                                    object,
+                                    localUv,
+                                    hit)) {
+                            continue;
+                        }
+                        const size_t pixelIndex =
+                                static_cast<size_t>(y * width + x);
+                        bakeTexels.push_back(BakeTexel{
+                                x,
+                                y,
+                                pixelIndex,
+                                surfaceRef,
+                                sourceSurfaceIndex,
+                                hit.triangleIndex,
+                                hit.position,
+                                hit.normal});
+                        validChartTexel[pixelIndex] = 1;
+                    }
+                }
             }
         }
     }
@@ -3538,6 +3827,19 @@ bool BakeSectorLightmapForMap(
         for (const SectorLightmapChart& chart : layout.charts) {
             DilateChartFloat(chart, directSampleFloat, directSampleValid, width);
         }
+        if (staticModels != nullptr) {
+            for (const SectorStaticModelLightmapObject& object : staticModels->objects) {
+                for (const SectorStaticModelLightmapMeshPlacement& placement
+                        : object.meshPlacements) {
+                    const SectorLightmapChart chart = PlacementAsChart(placement);
+                    DilateChartFloat(
+                            chart,
+                            directSampleFloat,
+                            directSampleValid,
+                            width);
+                }
+            }
+        }
 
         completedTexels = 0;
         for (const BakeTexel& texel : bakeTexels) {
@@ -3589,7 +3891,19 @@ bool BakeSectorLightmapForMap(
     const auto indirectEnd = Clock::now();
 
     const auto exportStart = Clock::now();
-    ReportProgress(callbacks, SectorLightmapBakePhase::DilatingAndEncoding, 0, static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()));
+    size_t staticChartCount = 0;
+    if (staticModels != nullptr) {
+        for (const SectorStaticModelLightmapObject& object : staticModels->objects) {
+            staticChartCount += object.meshPlacements.size();
+        }
+    }
+    const uint32_t exportWorkTotal = static_cast<uint32_t>(
+            layout.charts.size() + staticChartCount + bakeTexels.size());
+    ReportProgress(
+            callbacks,
+            SectorLightmapBakePhase::DilatingAndEncoding,
+            0,
+            exportWorkTotal);
     std::vector<unsigned char> exportValid = validChartTexel;
     completedTexels = 0;
     for (const BakeTexel& texel : bakeTexels) {
@@ -3605,7 +3919,11 @@ bool BakeSectorLightmapForMap(
         };
         ++completedTexels;
         if ((completedTexels % kSectorLightmapProgressChunk) == 0) {
-            ReportProgress(callbacks, SectorLightmapBakePhase::DilatingAndEncoding, completedTexels, static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()));
+            ReportProgress(
+                    callbacks,
+                    SectorLightmapBakePhase::DilatingAndEncoding,
+                    completedTexels,
+                    exportWorkTotal);
             if (CheckBakeCancelled(callbacks, outError)) {
                 return false;
             }
@@ -3615,9 +3933,34 @@ bool BakeSectorLightmapForMap(
     for (const SectorLightmapChart& chart : layout.charts) {
         DilateChart(chart, pixels, exportValid, width);
         ++completedExportWork;
-        ReportProgress(callbacks, SectorLightmapBakePhase::DilatingAndEncoding, completedExportWork, static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()));
+        ReportProgress(
+                callbacks,
+                SectorLightmapBakePhase::DilatingAndEncoding,
+                completedExportWork,
+                exportWorkTotal);
         if (CheckBakeCancelled(callbacks, outError)) {
             return false;
+        }
+    }
+    if (staticModels != nullptr) {
+        for (const SectorStaticModelLightmapObject& object : staticModels->objects) {
+            for (const SectorStaticModelLightmapMeshPlacement& placement
+                    : object.meshPlacements) {
+                DilateChart(
+                        PlacementAsChart(placement),
+                        pixels,
+                        exportValid,
+                        width);
+                ++completedExportWork;
+                ReportProgress(
+                        callbacks,
+                        SectorLightmapBakePhase::DilatingAndEncoding,
+                        completedExportWork,
+                        exportWorkTotal);
+                if (CheckBakeCancelled(callbacks, outError)) {
+                    return false;
+                }
+            }
         }
     }
 
@@ -3642,7 +3985,11 @@ bool BakeSectorLightmapForMap(
         outError = TextFormat("Bake failed: could not export %s", outputPath);
         return false;
     }
-    ReportProgress(callbacks, SectorLightmapBakePhase::DilatingAndEncoding, static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()), static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()));
+    ReportProgress(
+            callbacks,
+            SectorLightmapBakePhase::DilatingAndEncoding,
+            exportWorkTotal,
+            exportWorkTotal);
     const auto exportEnd = Clock::now();
     if (CheckBakeCancelled(callbacks, outError)) {
         RemoveFileIfExists(outputPath);
@@ -3672,15 +4019,12 @@ bool BakeSectorLightmapForMap(
         RemoveFileIfExists(outputPath);
         return false;
     }
-    if (!BakeSectorBakedObjectLightProbeAmbientCubes(map, objectProbes, outError)) {
-        if (outError.empty()) {
-            outError = "Bake failed: could not bake object light probes";
-        } else {
-            outError = "Bake failed: " + outError;
-        }
-        RemoveFileIfExists(outputPath);
-        return false;
-    }
+    BakeObjectProbeAmbientCubesInScene(
+            map,
+            bvh,
+            triangles,
+            alphaOccluders,
+            objectProbes);
     const auto objectProbeBakeEnd = Clock::now();
     if (CheckBakeCancelled(callbacks, outError)) {
         RemoveFileIfExists(outputPath);
@@ -3705,6 +4049,27 @@ bool BakeSectorLightmapForMap(
         return false;
     }
     const auto objectProbeSidecarEnd = Clock::now();
+
+    std::string staticModelSidecarPath;
+    if (staticModels != nullptr && !staticModels->objects.empty()) {
+        staticModelSidecarPath =
+                MakeSectorStaticModelSidecarPathForLightmapPath(outputPath);
+        staticModels->sourceHash = ComputeSectorLightmapSourceHash(map);
+        if (!WriteSectorStaticModelLightmapSidecar(
+                    staticModelSidecarPath,
+                    *staticModels,
+                    outError)) {
+            if (outError.empty()) {
+                outError = "Bake failed: could not write static model lightmap sidecar";
+            } else {
+                outError = "Bake failed: " + outError;
+            }
+            RemoveFileIfExists(outputPath);
+            RemoveFileIfExists(objectProbeSidecarPath);
+            RemoveFileIfExists(staticModelSidecarPath);
+            return false;
+        }
+    }
 
     outResult.width = width;
     outResult.height = height;
@@ -3736,6 +4101,18 @@ bool BakeSectorLightmapForMap(
     outResult.objectProbes.probeSpacingWorld = objectProbeSpacingWorld;
     outResult.objectProbes.probeHeightWorld = objectProbeHeightWorld;
     outResult.objectProbes.format = kSectorBakedObjectLightProbeSidecarFormat;
+    if (staticModels != nullptr && !staticModels->objects.empty()) {
+        outResult.staticModels.path = staticModelSidecarPath;
+        outResult.staticModels.version =
+                kSectorStaticModelLightmapSidecarVersion;
+        outResult.staticModels.sourceHash = outResult.sourceHash;
+        outResult.staticModels.modelCount =
+                static_cast<int>(staticModels->models.size());
+        outResult.staticModels.objectCount =
+                static_cast<int>(staticModels->objects.size());
+        outResult.staticModels.format =
+                kSectorStaticModelLightmapSidecarFormat;
+    }
     outResult.objectProbePlacementDiagnostics = static_cast<int>(objectProbeDiagnostics.size());
     outResult.bvhBuildSeconds = std::chrono::duration<double>(bvhBuildEnd - bvhBuildStart).count();
     outResult.directLightingSeconds = std::chrono::duration<double>(directEnd - directStart).count();
@@ -3757,7 +4134,18 @@ bool BakeSectorLightmap(
         SectorLightmapBakeResult& outResult,
         std::string& outError)
 {
-    return BakeSectorLightmapForMap(map, layout, outputPath, callbacks, outResult, outError);
+    if (HasAssignedSectorStaticModels(map)) {
+        outError = "Bake failed: assigned static models were not prepared on the main thread";
+        return false;
+    }
+    return BakeSectorLightmapForMap(
+            map,
+            layout,
+            nullptr,
+            outputPath,
+            callbacks,
+            outResult,
+            outError);
 }
 
 bool BakeSectorLightmap(
@@ -3774,13 +4162,37 @@ bool BakeSectorLightmap(
     if (!BuildSectorLightmapLayout(input.mapSnapshot, layout, outError)) {
         return false;
     }
+    SectorStaticModelLightmapData staticModels = input.staticModels;
+    const bool hasAssignedStaticModels =
+            HasAssignedSectorStaticModels(input.mapSnapshot);
+    if (hasAssignedStaticModels && staticModels.objects.empty()) {
+        outError = "Bake failed: assigned static models were not prepared on the main thread";
+        return false;
+    }
+    if (!staticModels.objects.empty()
+            && !PackSectorStaticModelLightmapCharts(
+                    staticModels,
+                    layout.atlasWidth,
+                    layout.atlasHeight,
+                    layout.gutter,
+                    StaticModelPackCursorAfterTopology(layout),
+                    outError)) {
+        return false;
+    }
     ReportProgress(callbacks, SectorLightmapBakePhase::BuildingLayout, 1, 1);
     if (CheckBakeCancelled(callbacks, outError)) {
         return false;
     }
 
     const auto layoutEnd = Clock::now();
-    if (!BakeSectorLightmap(input.mapSnapshot, layout, input.temporaryOutputPath.c_str(), callbacks, outResult, outError)) {
+    if (!BakeSectorLightmapForMap(
+                input.mapSnapshot,
+                layout,
+                staticModels.objects.empty() ? nullptr : &staticModels,
+                input.temporaryOutputPath.c_str(),
+                callbacks,
+                outResult,
+                outError)) {
         return false;
     }
 
@@ -3789,6 +4201,9 @@ bool BakeSectorLightmap(
     if (!input.expectedSourceHash.empty()) {
         outResult.sourceHash = input.expectedSourceHash;
         outResult.objectProbes.sourceHash = input.expectedSourceHash;
+        if (!outResult.staticModels.path.empty()) {
+            outResult.staticModels.sourceHash = input.expectedSourceHash;
+        }
     }
     return true;
 }
@@ -3860,6 +4275,35 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
         FnvAppendTopologyWallPart(hash, sector->defaultUpper);
     }
 
+    std::vector<const SectorPlacedRuntimeObject*> staticModels;
+    for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
+        if (object.kind == "static_model"
+                && !object.staticModel.modelPath.empty()) {
+            staticModels.push_back(&object);
+        }
+    }
+    std::sort(
+            staticModels.begin(),
+            staticModels.end(),
+            [](const auto* left, const auto* right) {
+                return left->id < right->id;
+            });
+    if (!staticModels.empty()) {
+        FnvAppendString(hash, "static-models");
+        FnvAppendInt(hash, static_cast<int>(staticModels.size()));
+        for (const SectorPlacedRuntimeObject* object : staticModels) {
+            FnvAppendInt(hash, object->id);
+            FnvAppendString(hash, object->staticModel.modelPath);
+            FnvAppendVector3(hash, object->position);
+            FnvAppendFloat(hash, object->yawRadians);
+            FnvAppendFloat(hash, object->staticModel.heightOffsetWorld);
+            FnvAppendFloat(hash, object->staticModel.scale);
+            FnvAppendString(
+                    hash,
+                    object->staticModel.geometryFingerprint);
+        }
+    }
+
     const std::vector<const SectorTopologyStaticPointLight*> lights = SortedLightmapHashRecords(map.staticLights);
     FnvAppendInt(hash, static_cast<int>(lights.size()));
     for (const SectorTopologyStaticPointLight* light : lights) {
@@ -3908,6 +4352,11 @@ SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map)
     }
 
     if (!FileExistsResolved(ResolveSectorAssetPath(map.bakedLightmap.path))) {
+        return SectorLightmapStatus::Stale;
+    }
+    if (HasAssignedSectorStaticModels(map)
+            && GetSectorStaticModelLightmapStatus(map)
+                    != SectorLightmapStatus::Valid) {
         return SectorLightmapStatus::Stale;
     }
 

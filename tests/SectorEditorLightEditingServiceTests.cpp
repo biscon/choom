@@ -32,6 +32,12 @@ game::SectorEditorPreviewSelectionState& TestPreviewSelectionState()
     return previewSelectionState;
 }
 
+game::RuntimeObjectDragState& TestRuntimeObjectDragState()
+{
+    static game::RuntimeObjectDragState runtimeObjectDragState;
+    return runtimeObjectDragState;
+}
+
 game::SectorTopologyMap MakeMap()
 {
     game::SectorTopologyMap map;
@@ -55,6 +61,7 @@ game::SectorEditorLightEditingService MakeService(
         game::InspectorIdUiState& inspectorIdUiState,
         std::string& statusText)
 {
+    TestRuntimeObjectDragState() = game::RuntimeObjectDragState{};
     return game::SectorEditorLightEditingService{
             game::SectorEditorLightEditingServiceContext{
                     topologyMap,
@@ -64,7 +71,7 @@ game::SectorEditorLightEditingService MakeService(
                     state.topologyRenderCache,
                     {
                             manipulationState,
-                            state.runtimeObjectDrag,
+                            TestRuntimeObjectDragState(),
                             selectionState.topologySelectionKind,
                             selectionState.selectedTopologySectorId,
                             selectionState.selectedTopologyVertexId,

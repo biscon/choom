@@ -20,6 +20,7 @@ using Json = nlohmann::ordered_json;
 
 constexpr float Pi = 3.14159265358979323846f;
 constexpr const char* RuntimeObjectKindBillboard = "billboard";
+constexpr const char* RuntimeObjectKindStaticModel = "static_model";
 constexpr const char* RuntimeObjectKindDoor = "door";
 
 [[noreturn]] void Fail(const std::string& message)
@@ -593,6 +594,27 @@ SectorPlacedBillboard ReadPlacedBillboard(const Json& value, const std::string& 
     return billboard;
 }
 
+SectorPlacedStaticModel ReadPlacedStaticModel(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorPlacedStaticModel staticModel;
+    staticModel.modelPath = ReadOptionalString(value, "modelPath", context, staticModel.modelPath);
+    staticModel.heightOffsetWorld = ReadOptionalFloat(
+            value,
+            "heightOffsetWorld",
+            context,
+            staticModel.heightOffsetWorld);
+    staticModel.scale = ReadOptionalPositiveFloat(
+            value,
+            "scale",
+            context,
+            staticModel.scale);
+    return staticModel;
+}
+
 SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -609,17 +631,21 @@ SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string
         if (object.kind == RuntimeObjectKindBillboard) {
             object.billboard = ReadPlacedBillboard(RequireObjectField(value, "billboard", context),
                     context + ".billboard");
+        } else if (object.kind == RuntimeObjectKindStaticModel) {
+            object.staticModel = ReadPlacedStaticModel(
+                    RequireObjectField(value, "staticModel", context),
+                    context + ".staticModel");
         } else if (object.kind == RuntimeObjectKindDoor) {
             object.door = ReadPlacedDoor(RequireObjectField(value, "door", context),
                     context + ".door");
         } else {
-            Fail(context + ".kind must be 'billboard' or 'door'");
+            Fail(context + ".kind must be 'billboard', 'static_model', or 'door'");
         }
     } else {
         if (value.contains("definitionId")) {
             Fail(context + ".definitionId-only runtime objects are legacy unsupported data; use kind 'billboard'");
         }
-        Fail(context + ".kind must be 'billboard' or 'door'");
+        Fail(context + ".kind must be 'billboard', 'static_model', or 'door'");
     }
     object.position = ReadVector3(RequireField(value, "position", context), context + ".position");
     object.yawRadians = DegreesToRadians(ReadFloat(value, "yawDegrees", context));
@@ -1003,6 +1029,39 @@ SectorBakedObjectLightProbeMetadata ReadBakedObjectLightProbeMetadata(
     return metadata;
 }
 
+SectorBakedStaticModelLightmapMetadata ReadBakedStaticModelLightmapMetadata(
+        const Json& value,
+        const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorBakedStaticModelLightmapMetadata metadata;
+    metadata.path = ReadString(value, "path", context);
+    metadata.version = ReadInt(value, "version", context);
+    metadata.sourceHash = ReadString(value, "sourceHash", context);
+    metadata.modelCount = ReadInt(value, "modelCount", context);
+    metadata.objectCount = ReadInt(value, "objectCount", context);
+    metadata.format = ReadString(value, "format", context);
+    if (metadata.path.empty()) {
+        Fail(context + ".path must not be empty");
+    }
+    if (metadata.version <= 0) {
+        Fail(context + ".version must be positive");
+    }
+    if (metadata.sourceHash.empty()) {
+        Fail(context + ".sourceHash must not be empty");
+    }
+    if (metadata.modelCount <= 0 || metadata.objectCount <= 0) {
+        Fail(context + " counts must be positive");
+    }
+    if (metadata.format.empty()) {
+        Fail(context + ".format must not be empty");
+    }
+    return metadata;
+}
+
 SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -1027,6 +1086,13 @@ SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& c
     if (objectProbesIt != value.end()) {
         metadata.objectProbes =
                 ReadBakedObjectLightProbeMetadata(*objectProbesIt, context + ".objectProbes");
+    }
+    const auto staticModelsIt = value.find("staticModels");
+    if (staticModelsIt != value.end()) {
+        metadata.staticModels =
+                ReadBakedStaticModelLightmapMetadata(
+                        *staticModelsIt,
+                        context + ".staticModels");
     }
     return metadata;
 }
@@ -1266,16 +1332,34 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             {"id", object.id}
     };
     if (object.kind.empty()) {
-        Fail(context + ".kind must be 'billboard' or 'door'");
+        Fail(context + ".kind must be 'billboard', 'static_model', or 'door'");
     } else {
         if (object.kind == RuntimeObjectKindBillboard) {
             json["kind"] = object.kind;
             json["billboard"] = WritePlacedBillboard(object.billboard, context + ".billboard");
+        } else if (object.kind == RuntimeObjectKindStaticModel) {
+            RequireFinite(object.staticModel.heightOffsetWorld, context + ".staticModel.heightOffsetWorld");
+            if (!std::isfinite(object.staticModel.scale)
+                    || object.staticModel.scale <= 0.0f) {
+                Fail(context + ".staticModel.scale must be a finite positive value");
+            }
+            Json staticModel = Json::object();
+            if (!object.staticModel.modelPath.empty()) {
+                staticModel["modelPath"] = object.staticModel.modelPath;
+            }
+            if (object.staticModel.heightOffsetWorld != 0.0f) {
+                staticModel["heightOffsetWorld"] = object.staticModel.heightOffsetWorld;
+            }
+            if (object.staticModel.scale != 1.0f) {
+                staticModel["scale"] = object.staticModel.scale;
+            }
+            json["kind"] = object.kind;
+            json["staticModel"] = std::move(staticModel);
         } else if (object.kind == RuntimeObjectKindDoor) {
             json["kind"] = object.kind;
             json["door"] = WritePlacedDoor(object.door);
         } else {
-            Fail(context + ".kind must be 'billboard' or 'door'");
+            Fail(context + ".kind must be 'billboard', 'static_model', or 'door'");
         }
     }
     json["position"] = WriteVector3(object.position, context + ".position");
@@ -1618,6 +1702,19 @@ Json WriteBakedObjectLightProbeMetadata(const SectorBakedObjectLightProbeMetadat
     };
 }
 
+Json WriteBakedStaticModelLightmapMetadata(
+        const SectorBakedStaticModelLightmapMetadata& metadata)
+{
+    return Json{
+            {"path", metadata.path},
+            {"version", metadata.version},
+            {"sourceHash", metadata.sourceHash},
+            {"modelCount", metadata.modelCount},
+            {"objectCount", metadata.objectCount},
+            {"format", metadata.format}
+    };
+}
+
 Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
 {
     Json lightmap = Json{
@@ -1628,6 +1725,10 @@ Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
     };
     if (!metadata.objectProbes.path.empty()) {
         lightmap["objectProbes"] = WriteBakedObjectLightProbeMetadata(metadata.objectProbes);
+    }
+    if (!metadata.staticModels.path.empty()) {
+        lightmap["staticModels"] =
+                WriteBakedStaticModelLightmapMetadata(metadata.staticModels);
     }
     return lightmap;
 }
@@ -1678,14 +1779,22 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
             Fail(objectContext + ".id must be a positive integer");
         }
         if (object.kind.empty()) {
-            Fail(objectContext + ".kind must be 'billboard' or 'door'");
+            Fail(objectContext + ".kind must be 'billboard', 'static_model', or 'door'");
         } else {
             if (object.kind == RuntimeObjectKindBillboard) {
                 ValidatePlacedBillboard(object.billboard, objectContext + ".billboard");
+            } else if (object.kind == RuntimeObjectKindStaticModel) {
+                if (!std::isfinite(object.staticModel.heightOffsetWorld)) {
+                    Fail(objectContext + ".staticModel.heightOffsetWorld must be finite");
+                }
+                if (!std::isfinite(object.staticModel.scale)
+                        || object.staticModel.scale <= 0.0f) {
+                    Fail(objectContext + ".staticModel.scale must be a finite positive value");
+                }
             } else if (object.kind == RuntimeObjectKindDoor) {
                 ValidatePlacedDoorForSerialization(object.door, objectContext + ".door");
             } else {
-                Fail(objectContext + ".kind must be 'billboard' or 'door'");
+                Fail(objectContext + ".kind must be 'billboard', 'static_model', or 'door'");
             }
         }
         if (!std::isfinite(object.position.x)
